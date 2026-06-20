@@ -13,7 +13,7 @@ export default function Sidebar() {
 
       <div>
         <h1 className="text-3xl font-bold">
-          FirstThing.earth
+          FirsThing.earth
         </h1>
 
         <p className="text-green-300 mt-2 text-sm">

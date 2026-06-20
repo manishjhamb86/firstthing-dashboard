@@ -1,8 +1,57 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Sidebar from "../../components/layout/sidebar";
+import { supabase } from "../../lib/supabase";
 
 export default function ProfilePage() {
+
+  const [loading, setLoading] = useState(true);
+  const [society, setSociety] = useState<any>(null);
+
+  useEffect(() => {
+    loadProfile();
+  }, []);
+
+  async function loadProfile() {
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session) {
+      window.location.href = "/login";
+      return;
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", session.user.id)
+      .single();
+
+    if (!profile?.society_id) {
+      setLoading(false);
+      return;
+    }
+
+    const { data: societyData } = await supabase
+      .from("societies")
+      .select("*")
+      .eq("id", profile.society_id)
+      .single();
+
+    setSociety(societyData);
+    setLoading(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        Loading...
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 flex overflow-hidden">
@@ -15,7 +64,7 @@ export default function ProfilePage() {
           Society Profile
         </h1>
 
-        <div className="bg-white rounded-2xl p-8 shadow-sm max-w-4xl">
+        <div className="bg-white rounded-2xl p-8 shadow-sm max-w-5xl">
 
           <div className="grid grid-cols-2 gap-8">
 
@@ -25,7 +74,7 @@ export default function ProfilePage() {
               </p>
 
               <h2 className="text-2xl font-bold">
-                Arihant Arden
+                {society?.name || "-"}
               </h2>
             </div>
 
@@ -35,7 +84,7 @@ export default function ProfilePage() {
               </p>
 
               <h2 className="text-2xl font-bold">
-                Noida
+                {society?.city || "-"}
               </h2>
             </div>
 
@@ -45,7 +94,7 @@ export default function ProfilePage() {
               </p>
 
               <h2 className="text-2xl font-bold">
-                3200
+                {society?.total_lights || 0}
               </h2>
             </div>
 
@@ -55,17 +104,21 @@ export default function ProfilePage() {
               </p>
 
               <h2 className="text-2xl font-bold text-green-700">
-                64%
+                {society?.savings_percentage || 0}%
               </h2>
             </div>
 
             <div>
               <p className="text-gray-500 mb-2">
-                Contract Start
+                Registered On
               </p>
 
               <h2 className="text-2xl font-bold">
-                Jan 2026
+                {society?.created_at
+                  ? new Date(
+                      society.created_at
+                    ).toLocaleDateString()
+                  : "-"}
               </h2>
             </div>
 

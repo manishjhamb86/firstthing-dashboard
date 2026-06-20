@@ -16,10 +16,25 @@ export default function LoginPage() {
     });
 
     if (error) {
-      alert(error.message);
-    } else {
-      window.location.href = "/";
-    }
+  alert(error.message);
+} else {
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", user?.id)
+    .single();
+
+  if (profile?.role === "admin") {
+    window.location.href = "/admin";
+  } else {
+    window.location.href = "/";
+  }
+}
   }
 
   return (

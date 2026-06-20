@@ -89,12 +89,13 @@ export default function SocietiesPage() {
                 </td>
 
                 <td className="p-4">
-
-                  <button className="text-blue-600">
-                    Edit
-                  </button>
-
-                </td>
+  <Link
+    href={`/admin/societies/${society.id}`}
+    className="text-blue-600 hover:text-blue-800"
+  >
+    Edit
+  </Link>
+</td>
 
               </tr>
 

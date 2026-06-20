@@ -28,7 +28,7 @@ export default function LoginPage() {
       <div className="bg-white p-10 rounded-2xl shadow-sm w-full max-w-md">
 
         <h1 className="text-3xl font-bold mb-2">
-          FirstThing Dashboard
+          FirsThing Dashboard
         </h1>
 
         <p className="text-gray-500 mb-8">

@@ -5,7 +5,7 @@ export default function AdminPage() {
     <div className="p-8">
 
       <h1 className="text-4xl font-bold mb-8">
-        FirstThing Admin Panel
+        FirsThing Admin Panel
       </h1>
 
       <div className="grid grid-cols-4 gap-6">

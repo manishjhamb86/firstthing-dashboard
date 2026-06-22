@@ -53,16 +53,16 @@ export default function EnergyPage() {
   }
 
   return (
-    <div className="max-w-3xl">
+    <div className="w-full max-w-3xl mx-auto">
 
-      <h1 className="text-4xl font-bold mb-8">
+      <h1 className="text-2xl md:text-4xl font-bold mb-6 md:mb-8">
         Energy Data
       </h1>
 
-      <div className="bg-white rounded-2xl p-8 shadow-sm space-y-5">
+      <div className="bg-white rounded-lg md:rounded-2xl p-4 md:p-8 shadow-sm space-y-4 md:space-y-5">
 
         <select
-          className="border p-4 rounded-xl w-full"
+          className="border p-3 md:p-4 rounded-lg md:rounded-xl w-full text-sm md:text-base"
           value={societyId}
           onChange={(e) => setSocietyId(e.target.value)}
         >
@@ -82,27 +82,27 @@ export default function EnergyPage() {
 
         <input
           placeholder="Today's Consumption"
-          className="border p-4 rounded-xl w-full"
+          className="border p-3 md:p-4 rounded-lg md:rounded-xl w-full text-sm md:text-base"
           value={todayConsumption}
           onChange={(e) => setTodayConsumption(e.target.value)}
         />
 
         <input
           placeholder="Total Savings"
-          className="border p-4 rounded-xl w-full"
+          className="border p-3 md:p-4 rounded-lg md:rounded-xl w-full text-sm md:text-base"
           value={totalSavings}
           onChange={(e) => setTotalSavings(e.target.value)}
         />
 
         <input
           placeholder="Savings Percentage"
-          className="border p-4 rounded-xl w-full"
+          className="border p-3 md:p-4 rounded-lg md:rounded-xl w-full text-sm md:text-base"
           value={savingsPercentage}
           onChange={(e) => setSavingsPercentage(e.target.value)}
         />
 
         <select
-          className="border p-4 rounded-xl w-full"
+          className="border p-3 md:p-4 rounded-lg md:rounded-xl w-full text-sm md:text-base"
           value={systemStatus}
           onChange={(e) => setSystemStatus(e.target.value)}
         >
@@ -114,7 +114,7 @@ export default function EnergyPage() {
 
         <button
           onClick={saveEnergyData}
-          className="bg-green-700 text-white px-6 py-3 rounded-xl"
+          className="bg-green-700 hover:bg-green-800 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium w-full md:w-auto text-sm md:text-base"
         >
           Save Energy Data
         </button>

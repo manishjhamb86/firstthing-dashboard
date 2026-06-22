@@ -59,36 +59,36 @@ export default function TankDetailsPage() {
 
   if (!tank) {
     return (
-      <div className="text-center p-10">
+      <div className="text-center p-6 md:p-10">
         Loading Tank...
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="w-full space-y-4 md:space-y-6">
 
       <div>
 
-        <h1 className="text-4xl font-bold">
+        <h1 className="text-2xl md:text-4xl font-bold">
           {tank.tank_name}
         </h1>
 
-        <p className="text-gray-500 mt-2">
+        <p className="text-gray-500 text-xs md:text-sm mt-2">
           Tank Monitoring & Configuration
         </p>
 
       </div>
 
-      <div className="grid md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm">
+        <div className="bg-white rounded-lg md:rounded-2xl p-3 md:p-6 shadow-sm">
 
-          <div className="text-gray-500 text-sm">
+          <div className="text-gray-500 text-xs md:text-sm">
             Current Water
           </div>
 
-          <div className="text-3xl font-bold mt-2">
+          <div className="text-xl md:text-3xl font-bold mt-2">
             {latestReading
               ? Number(
                   latestReading.current_liters
@@ -99,13 +99,13 @@ export default function TankDetailsPage() {
 
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm">
+        <div className="bg-white rounded-lg md:rounded-2xl p-3 md:p-6 shadow-sm">
 
-          <div className="text-gray-500 text-sm">
+          <div className="text-gray-500 text-xs md:text-sm">
             Water Level
           </div>
 
-          <div className="text-3xl font-bold text-green-700 mt-2">
+          <div className="text-xl md:text-3xl font-bold text-green-700 mt-2">
             {latestReading?.water_level_percent ??
               0}
             %
@@ -113,13 +113,13 @@ export default function TankDetailsPage() {
 
         </div>
 
-        <div className="bg-white rounded-2xl p-6 shadow-sm">
+        <div className="bg-white rounded-lg md:rounded-2xl p-3 md:p-6 shadow-sm">
 
-          <div className="text-gray-500 text-sm">
+          <div className="text-gray-500 text-xs md:text-sm">
             Status
           </div>
 
-          <div className="text-3xl font-bold mt-2">
+          <div className="text-lg md:text-3xl font-bold mt-2">
             {latestReading?.status ??
               "No Data"}
           </div>
@@ -128,15 +128,15 @@ export default function TankDetailsPage() {
 
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-2 gap-3 md:gap-6">
 
-        <div className="bg-white rounded-2xl shadow-sm p-6">
+        <div className="bg-white rounded-lg md:rounded-2xl shadow-sm p-4 md:p-6">
 
-          <h2 className="font-bold text-xl mb-4">
+          <h2 className="font-bold text-lg md:text-xl mb-3 md:mb-4">
             Tank Information
           </h2>
 
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3 text-sm md:text-base">
 
             <p>
               <strong>Society:</strong>{" "}
@@ -170,13 +170,13 @@ export default function TankDetailsPage() {
 
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm p-6">
+        <div className="bg-white rounded-lg md:rounded-2xl shadow-sm p-4 md:p-6">
 
-          <h2 className="font-bold text-xl mb-4">
+          <h2 className="font-bold text-lg md:text-xl mb-3 md:mb-4">
             Sensor Configuration
           </h2>
 
-          <div className="space-y-3">
+          <div className="space-y-2 md:space-y-3 text-sm md:text-base">
 
             <p>
               <strong>Height:</strong>{" "}
@@ -208,13 +208,13 @@ export default function TankDetailsPage() {
 
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm p-6">
+      <div className="bg-white rounded-lg md:rounded-2xl shadow-sm p-4 md:p-6">
 
-        <h2 className="font-bold text-xl mb-4">
+        <h2 className="font-bold text-lg md:text-xl mb-3 md:mb-4">
           Vendor API Configuration
         </h2>
 
-        <div className="space-y-2">
+        <div className="space-y-1 md:space-y-2 text-xs md:text-base">
 
           <p>
             <strong>societyId:</strong>{" "}
@@ -228,9 +228,9 @@ export default function TankDetailsPage() {
 
         </div>
 
-        <div className="mt-6 bg-gray-100 rounded-xl p-4">
+        <div className="mt-4 md:mt-6 bg-gray-100 rounded-lg md:rounded-xl p-3 md:p-4 overflow-x-auto">
 
-          <pre className="text-sm overflow-auto">
+          <pre className="text-xs md:text-sm whitespace-pre-wrap break-words">
 {JSON.stringify(
 {
   apiKey: "FIRSTTHING123",
@@ -249,85 +249,86 @@ null,
 
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm p-6">
+      <div className="bg-white rounded-lg md:rounded-2xl shadow-sm p-4 md:p-6">
 
-        <h2 className="font-bold text-xl mb-4">
+        <h2 className="font-bold text-lg md:text-xl mb-3 md:mb-4">
           Recent Readings
         </h2>
 
-        <table className="w-full">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-max text-xs md:text-base">
 
-          <thead>
+            <thead>
 
-            <tr className="border-b">
+              <tr className="border-b">
 
-              <th className="text-left p-3">
-                Time
-              </th>
+                <th className="text-left p-2 md:p-3 font-semibold">
+                  Time
+                </th>
 
-              <th className="text-left p-3">
-                Water %
-              </th>
+                <th className="text-left p-2 md:p-3 font-semibold">
+                  Water %
+                </th>
 
-              <th className="text-left p-3">
-                Liters
-              </th>
+                <th className="text-left p-2 md:p-3 font-semibold hidden sm:table-cell">
+                  Liters
+                </th>
 
-              <th className="text-left p-3">
-                Distance
-              </th>
+                <th className="text-left p-2 md:p-3 font-semibold hidden md:table-cell">
+                  Distance
+                </th>
 
-              <th className="text-left p-3">
-                Status
-              </th>
+                <th className="text-left p-2 md:p-3 font-semibold">
+                  Status
+                </th>
 
-            </tr>
+              </tr>
 
-          </thead>
+            </thead>
 
-          <tbody>
+            <tbody>
 
-            {readings.map(
-              (reading) => (
+              {readings.map(
+                (reading) => (
 
-                <tr
-                  key={reading.id}
-                  className="border-b"
-                >
+                  <tr
+                    key={reading.id}
+                    className="border-b hover:bg-gray-50 transition-colors"
+                  >
 
-                  <td className="p-3">
-                    {new Date(
-                      reading.received_at
-                    ).toLocaleString()}
-                  </td>
+                    <td className="p-2 md:p-3">
+                      {new Date(
+                        reading.received_at
+                      ).toLocaleString()}
+                    </td>
 
-                  <td className="p-3">
-                    {
-                      reading.water_level_percent
-                    }
-                    %
-                  </td>
+                    <td className="p-2 md:p-3 font-semibold">
+                      {
+                        reading.water_level_percent
+                      }
+                      %
+                    </td>
 
-                  <td className="p-3">
-                    {Number(
-                      reading.current_liters
-                    ).toLocaleString()}
-                  </td>
+                    <td className="p-2 md:p-3 hidden sm:table-cell">
+                      {Number(
+                        reading.current_liters
+                      ).toLocaleString()}
+                    </td>
 
-                  <td className="p-3">
-                    {
-                      reading.sensor_distance_cm
-                    }
-                    {" cm"}
-                  </td>
+                    <td className="p-2 md:p-3 hidden md:table-cell">
+                      {
+                        reading.sensor_distance_cm
+                      }
+                      {" cm"}
+                    </td>
 
-                  <td className="p-3">
-                    {reading.status}
-                  </td>
+                    <td className="p-2 md:p-3">
+                      {reading.status}
+                    </td>
 
-                </tr>
+                  </tr>
 
-              )
+                )
             )}
 
           </tbody>

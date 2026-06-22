@@ -70,11 +70,11 @@ export default function FileUploader({
         type="file"
         accept=".pdf"
         onChange={handleUpload}
-        className="border rounded-xl p-3 w-full"
+        className="border rounded-lg md:rounded-xl p-2 md:p-3 w-full text-xs md:text-base cursor-pointer file:cursor-pointer file:bg-blue-500 file:text-white file:border-0 file:rounded-md file:px-3 file:py-1 file:text-xs md:file:text-sm"
       />
 
       {uploading && (
-        <p className="text-sm text-gray-500">
+        <p className="text-xs md:text-sm text-gray-500">
           Uploading PDF...
         </p>
       )}

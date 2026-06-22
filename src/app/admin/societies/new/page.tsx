@@ -64,59 +64,59 @@ Password: ${password}`
 }
 
   return (
-    <div className="max-w-2xl">
+    <div className="w-full max-w-2xl mx-auto">
 
-      <h1 className="text-4xl font-bold mb-8">
+      <h1 className="text-2xl md:text-4xl font-bold mb-6 md:mb-8">
         Add Society
       </h1>
 
-      <div className="bg-white p-8 rounded-2xl shadow-sm space-y-5">
+      <div className="bg-white p-4 md:p-8 rounded-lg md:rounded-2xl shadow-sm space-y-4 md:space-y-5">
 
         <div>
-          <label className="block mb-2">
+          <label className="block mb-2 text-sm md:text-base font-medium">
             Society Name
           </label>
 
           <input
-            className="border w-full p-4 rounded-xl"
+            className="border w-full p-3 md:p-4 rounded-lg md:rounded-xl text-sm md:text-base"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
         </div>
 
         <div>
-          <label className="block mb-2">
+          <label className="block mb-2 text-sm md:text-base font-medium">
             City
           </label>
 
           <input
-            className="border w-full p-4 rounded-xl"
+            className="border w-full p-3 md:p-4 rounded-lg md:rounded-xl text-sm md:text-base"
             value={city}
             onChange={(e) => setCity(e.target.value)}
           />
         </div>
 
         <div>
-          <label className="block mb-2">
+          <label className="block mb-2 text-sm md:text-base font-medium">
             Primary Email
           </label>
 
           <input
             type="email"
-            className="border w-full p-4 rounded-xl"
+            className="border w-full p-3 md:p-4 rounded-lg md:rounded-xl text-sm md:text-base"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </div>
 
         <div>
-          <label className="block mb-2">
+          <label className="block mb-2 text-sm md:text-base font-medium">
             Temporary Password
           </label>
 
           <input
             type="password"
-            className="border w-full p-4 rounded-xl"
+            className="border w-full p-3 md:p-4 rounded-lg md:rounded-xl text-sm md:text-base"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
           />
@@ -124,7 +124,7 @@ Password: ${password}`
 
         <button
           onClick={saveSociety}
-          className="bg-green-700 text-white px-5 py-3 rounded-xl"
+          className="bg-green-700 hover:bg-green-800 text-white px-4 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl font-medium w-full md:w-auto text-sm md:text-base"
         >
           Create Society
         </button>

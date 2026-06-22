@@ -87,47 +87,47 @@ export default function EditSocietyPage() {
 
   if (loading) {
     return (
-      <div className="text-xl">
+      <div className="text-lg md:text-xl">
         Loading...
       </div>
     );
   }
 
   return (
-    <div className="max-w-4xl">
+    <div className="w-full max-w-4xl mx-auto">
 
-      <h1 className="text-4xl font-bold mb-8">
+      <h1 className="text-2xl md:text-4xl font-bold mb-6 md:mb-8">
         Edit Society
       </h1>
 
-      <div className="bg-white rounded-2xl shadow-sm p-8 space-y-5">
+      <div className="bg-white rounded-lg md:rounded-2xl shadow-sm p-4 md:p-8 space-y-4 md:space-y-5">
 
         <div>
-          <label className="font-medium block mb-2">
+          <label className="font-medium block mb-2 text-sm md:text-base">
             Society Name
           </label>
 
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            className="border rounded-xl p-4 w-full"
+            className="border rounded-lg md:rounded-xl p-3 md:p-4 w-full text-sm md:text-base"
           />
         </div>
 
         <div>
-          <label className="font-medium block mb-2">
+          <label className="font-medium block mb-2 text-sm md:text-base">
             City
           </label>
 
           <input
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            className="border rounded-xl p-4 w-full"
+            className="border rounded-lg md:rounded-xl p-3 md:p-4 w-full text-sm md:text-base"
           />
         </div>
 
         <div>
-          <label className="font-medium block mb-2">
+          <label className="font-medium block mb-2 text-sm md:text-base">
             Total Lights
           </label>
 
@@ -137,12 +137,12 @@ export default function EditSocietyPage() {
             onChange={(e) =>
               setTotalLights(e.target.value)
             }
-            className="border rounded-xl p-4 w-full"
+            className="border rounded-lg md:rounded-xl p-3 md:p-4 w-full text-sm md:text-base"
           />
         </div>
 
         <div>
-          <label className="font-medium block mb-2">
+          <label className="font-medium block mb-2 text-sm md:text-base">
             Savings %
           </label>
 
@@ -152,22 +152,22 @@ export default function EditSocietyPage() {
             onChange={(e) =>
               setSavingsPercentage(e.target.value)
             }
-            className="border rounded-xl p-4 w-full"
+            className="border rounded-lg md:rounded-xl p-3 md:p-4 w-full text-sm md:text-base"
           />
         </div>
 
-        <div className="flex gap-4 pt-4">
+        <div className="flex flex-col sm:flex-row gap-3 md:gap-4 pt-4">
 
           <button
             onClick={updateSociety}
-            className="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-xl"
+            className="bg-green-700 hover:bg-green-800 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium text-sm md:text-base order-1"
           >
             Save Changes
           </button>
 
           <button
             onClick={deleteSociety}
-            className="bg-red-600 hover:bg-red-700 text-white px-6 py-3 rounded-xl"
+            className="bg-red-600 hover:bg-red-700 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium text-sm md:text-base"
           >
             Delete Society
           </button>

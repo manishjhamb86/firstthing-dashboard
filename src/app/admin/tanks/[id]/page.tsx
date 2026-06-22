@@ -231,18 +231,14 @@ export default function TankDetailsPage() {
         <div className="mt-4 md:mt-6 bg-gray-100 rounded-lg md:rounded-xl p-3 md:p-4 overflow-x-auto">
 
           <pre className="text-xs md:text-sm whitespace-pre-wrap break-words">
-{JSON.stringify(
-{
-  apiKey: "FIRSTTHING123",
-  societyId: tank.society_id,
-  tankCode: tank.tank_code,
-  currentLiters: 39000,
-  waterLevelPercent: 78,
-  sensorDistanceCm: 110
-},
-null,
-2
-)}
+            {JSON.stringify({
+              apiKey: "FIRSTTHING123",
+              societyId: tank.society_id,
+              tankCode: tank.tank_code,
+              currentLiters: 39000,
+              waterLevelPercent: 78,
+              sensorDistanceCm: 110
+            }, null, 2)}
           </pre>
 
         </div>
@@ -288,9 +284,8 @@ null,
 
             <tbody>
 
-              {readings.map(
-                (reading) => (
-
+              {readings.map((reading) => {
+                return (
                   <tr
                     key={reading.id}
                     className="border-b hover:bg-gray-50 transition-colors"
@@ -303,10 +298,7 @@ null,
                     </td>
 
                     <td className="p-2 md:p-3 font-semibold">
-                      {
-                        reading.water_level_percent
-                      }
-                      %
+                      {reading.water_level_percent}%
                     </td>
 
                     <td className="p-2 md:p-3 hidden sm:table-cell">
@@ -316,10 +308,7 @@ null,
                     </td>
 
                     <td className="p-2 md:p-3 hidden md:table-cell">
-                      {
-                        reading.sensor_distance_cm
-                      }
-                      {" cm"}
+                      {reading.sensor_distance_cm} cm
                     </td>
 
                     <td className="p-2 md:p-3">
@@ -327,13 +316,14 @@ null,
                     </td>
 
                   </tr>
+                );
+              })}
 
-                )
-            )}
+            </tbody>
 
-          </tbody>
+          </table>
 
-        </table>
+        </div>
 
       </div>
 

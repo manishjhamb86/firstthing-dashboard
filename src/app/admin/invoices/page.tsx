@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "../../../lib/supabase";
+import FileUploader from "../../../components/admin/FileUploader";
 
 type Society = {
   id: number;
@@ -20,12 +21,21 @@ export default function AdminInvoicesPage() {
   const [totalAmount, setTotalAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [status, setStatus] = useState("Pending");
+  const [pdfUrl, setPdfUrl] = useState("");
 
   useEffect(() => {
     loadSocieties();
   }, []);
 
+  useEffect(() => {
+    const amt = Number(amount || 0);
+    const gstAmt = Number(gst || 0);
+
+    setTotalAmount(String(amt + gstAmt));
+  }, [amount, gst]);
+
   async function loadSocieties() {
+
     const { data } = await supabase
       .from("societies")
       .select("*")
@@ -42,11 +52,21 @@ export default function AdminInvoicesPage() {
       (s) => s.id === Number(societyId)
     );
 
+    if (!selectedSociety) {
+      alert("Please select a society");
+      return;
+    }
+
+    if (!pdfUrl) {
+      alert("Please upload PDF first");
+      return;
+    }
+
     const { error } = await supabase
       .from("invoices")
       .insert({
         society_id: Number(societyId),
-        society_name: selectedSociety?.name,
+        society_name: selectedSociety.name,
         invoice_number: invoiceNumber,
         invoice_month: invoiceMonth,
         amount: Number(amount),
@@ -54,7 +74,7 @@ export default function AdminInvoicesPage() {
         total_amount: Number(totalAmount),
         due_date: dueDate,
         status,
-        pdf_url: "#",
+        pdf_url: pdfUrl,
       });
 
     if (error) {
@@ -62,7 +82,17 @@ export default function AdminInvoicesPage() {
       return;
     }
 
-    alert("Invoice Saved");
+    alert("Invoice Uploaded Successfully");
+
+    setSocietyId("");
+    setInvoiceNumber("");
+    setInvoiceMonth("");
+    setAmount("");
+    setGst("");
+    setTotalAmount("");
+    setDueDate("");
+    setStatus("Pending");
+    setPdfUrl("");
   }
 
   return (
@@ -101,13 +131,14 @@ export default function AdminInvoicesPage() {
         />
 
         <input
-          placeholder="Invoice Month"
+          placeholder="Invoice Month (Example: June 2026)"
           className="border p-4 rounded-xl w-full"
           value={invoiceMonth}
           onChange={(e) => setInvoiceMonth(e.target.value)}
         />
 
         <input
+          type="number"
           placeholder="Amount"
           className="border p-4 rounded-xl w-full"
           value={amount}
@@ -115,6 +146,7 @@ export default function AdminInvoicesPage() {
         />
 
         <input
+          type="number"
           placeholder="GST"
           className="border p-4 rounded-xl w-full"
           value={gst}
@@ -123,9 +155,9 @@ export default function AdminInvoicesPage() {
 
         <input
           placeholder="Total Amount"
-          className="border p-4 rounded-xl w-full"
+          className="border p-4 rounded-xl w-full bg-gray-100"
           value={totalAmount}
-          onChange={(e) => setTotalAmount(e.target.value)}
+          readOnly
         />
 
         <input
@@ -140,13 +172,32 @@ export default function AdminInvoicesPage() {
           value={status}
           onChange={(e) => setStatus(e.target.value)}
         >
-          <option>Pending</option>
-          <option>Paid</option>
+          <option value="Pending">
+            Pending
+          </option>
+
+          <option value="Paid">
+            Paid
+          </option>
         </select>
+
+        <FileUploader
+          folder="invoices"
+          onUploadComplete={(url) => {
+            console.log("Invoice URL:", url);
+            setPdfUrl(url);
+          }}
+        />
+
+        {pdfUrl && (
+          <div className="text-green-700 font-medium">
+            ✓ Invoice PDF Uploaded Successfully
+          </div>
+        )}
 
         <button
           onClick={saveInvoice}
-          className="bg-green-700 text-white px-6 py-3 rounded-xl"
+          className="bg-green-700 hover:bg-green-800 text-white px-6 py-3 rounded-xl"
         >
           Save Invoice
         </button>

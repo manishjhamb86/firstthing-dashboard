@@ -10,7 +10,15 @@ type InspectionItem = {
   area: string;
   inspection_date: string;
   inspector_name: string;
-  society_name: string;
+  society_name?: string;
+  societies?:
+    | {
+        name: string;
+      }
+    | {
+        name: string;
+      }[]
+    | null;
   total_lights_checked: number;
   faulty_lights: number;
   created_at: string;
@@ -34,7 +42,9 @@ export default function InspectionHistoryPage() {
 
     const { data } = await supabase
       .from("inspection_forms")
-      .select("*")
+      .select(
+        "id, area, inspection_date, inspector_name, society_name, total_lights_checked, faulty_lights, created_at, societies(name)"
+      )
       .eq("created_by", user.id)
       .order("inspection_date", { ascending: false });
 
@@ -96,7 +106,7 @@ export default function InspectionHistoryPage() {
                   <tr>
                     <th className="text-left p-3 md:p-4 font-semibold">Date</th>
                     <th className="text-left p-3 md:p-4 font-semibold">Area</th>
-                    <th className="text-left p-3 md:p-4 font-semibold hidden sm:table-cell">
+                    <th className="text-left p-3 md:p-4 font-semibold">
                       Society
                     </th>
                     <th className="text-left p-3 md:p-4 font-semibold">
@@ -119,6 +129,13 @@ export default function InspectionHistoryPage() {
                       key={inspection.id}
                       className="border-b hover:bg-gray-50 transition-colors"
                     >
+                      {(() => {
+                        const relationSocietyName = Array.isArray(inspection.societies)
+                          ? inspection.societies[0]?.name
+                          : inspection.societies?.name;
+
+                        return (
+                          <>
                       <td className="p-3 md:p-4">
                         {new Date(
                           inspection.inspection_date
@@ -127,8 +144,8 @@ export default function InspectionHistoryPage() {
                       <td className="p-3 md:p-4 font-medium">
                         {inspection.area}
                       </td>
-                      <td className="p-3 md:p-4 hidden sm:table-cell">
-                        {inspection.society_name}
+                      <td className="p-3 md:p-4">
+                        {relationSocietyName || inspection.society_name || "-"}
                       </td>
                       <td className="p-3 md:p-4">
                         {inspection.total_lights_checked}
@@ -151,6 +168,9 @@ export default function InspectionHistoryPage() {
                           </button>
                         </Link>
                       </td>
+                          </>
+                        );
+                      })()}
                     </tr>
                   ))}
                 </tbody>

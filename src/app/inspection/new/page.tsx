@@ -132,11 +132,6 @@ export default function NewInspectionPage() {
     setSubmitting(true);
 
     try {
-      // Get society name
-      const selectedSociety = societies.find(
-        (s) => s.id === Number(societyId)
-      );
-
       // Insert inspection form
       const { data: inspectionData, error: inspectionError } = await supabase
         .from("inspection_forms")
@@ -149,7 +144,6 @@ export default function NewInspectionPage() {
           total_lights_checked: Number(totalLightsChecked),
           faulty_lights: Number(faultyLights),
           created_by: currentUser.id,
-          society_name: selectedSociety?.name,
         })
         .select()
         .single();

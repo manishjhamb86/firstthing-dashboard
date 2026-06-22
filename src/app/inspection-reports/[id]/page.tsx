@@ -8,11 +8,20 @@ import { ArrowLeft } from "lucide-react";
 
 type InspectionForm = {
   id: number;
+  society_id: number;
   area: string;
   inspection_date: string;
   inspector_name: string;
   contact_number: string;
-  society_name: string;
+  society_name?: string;
+  societies?:
+    | {
+        name: string;
+      }
+    | {
+        name: string;
+      }[]
+    | null;
   total_lights_checked: number;
   faulty_lights: number;
   created_at: string;
@@ -62,7 +71,9 @@ export default function InspectionDetailsPage() {
     // Load inspection form
     const { data: inspectionData } = await supabase
       .from("inspection_forms")
-      .select("*")
+      .select(
+        "id, society_id, area, inspection_date, inspector_name, contact_number, society_name, total_lights_checked, faulty_lights, created_at, created_by, societies(name)"
+      )
       .eq("id", Number(inspectionId))
       .single();
 
@@ -119,27 +130,46 @@ export default function InspectionDetailsPage() {
       )
     : 0;
 
+  const isCustomerView = userRole === "customer";
+  const mobileHeaderClass = isCustomerView
+    ? "bg-green-950 text-white"
+    : "bg-blue-950 text-white";
+  const mobileHeaderTitle = isCustomerView
+    ? "Firsthing.earth"
+    : "Inspection Portal";
+  const resolvedSocietyFromRelation = Array.isArray(inspection.societies)
+    ? inspection.societies[0]?.name
+    : inspection.societies?.name;
+  const displaySocietyName =
+    resolvedSocietyFromRelation || inspection.society_name || "-";
+
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8">
-      {/* Header */}
-      <div className="flex items-center gap-4 mb-8">
-        <Link href={isOwner ? "/inspection/history" : "/inspection-reports"}>
-          <button className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium">
-            <ArrowLeft size={20} />
-            Back
-          </button>
-        </Link>
-        <div>
-          <h1 className="text-2xl md:text-4xl font-bold">
-            Inspection Details
-          </h1>
-          <p className="text-gray-500 text-xs md:text-sm mt-1">
-            {inspection.area} - {inspection.society_name}
-          </p>
-        </div>
+    <div className="min-h-screen bg-gray-100">
+      <div className={`md:hidden sticky top-0 z-30 px-4 py-3 ${mobileHeaderClass}`}>
+        <p className="text-base font-bold">{mobileHeaderTitle}</p>
+        <p className="text-xs opacity-90">Inspection Details</p>
       </div>
 
-      <div className="space-y-6">
+      <div className="w-full max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8">
+        {/* Header */}
+        <div className="flex items-center gap-4 mb-8">
+          <Link href={isOwner ? "/inspection/history" : "/inspection-reports"}>
+            <button className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium">
+              <ArrowLeft size={20} />
+              Back
+            </button>
+          </Link>
+          <div>
+            <h1 className="text-2xl md:text-4xl font-bold">
+              Inspection Details
+            </h1>
+            <p className="text-gray-500 text-xs md:text-sm mt-1">
+              {inspection.area} - {displaySocietyName}
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-6">
         {/* Inspection Header Info */}
         <div className="bg-white rounded-lg md:rounded-2xl p-4 md:p-6 shadow-sm">
           <h2 className="text-lg md:text-xl font-bold mb-4">
@@ -176,7 +206,7 @@ export default function InspectionDetailsPage() {
             <div>
               <p className="text-gray-500 font-medium">Society</p>
               <p className="text-lg font-semibold mt-1">
-                {inspection.society_name}
+                {displaySocietyName}
               </p>
             </div>
 
@@ -281,21 +311,22 @@ export default function InspectionDetailsPage() {
           )}
         </div>
 
-        {/* Footer Info */}
-        <div className="bg-blue-50 rounded-lg md:rounded-2xl p-4 md:p-6">
-          <p className="text-xs md:text-sm text-gray-600">
-            Inspection ID: <span className="font-mono font-medium">{inspection.id}</span>
-          </p>
-          {isOwner && (
-            <p className="text-xs md:text-sm text-blue-600 mt-2">
-              💡 You can view and manage this inspection from your history
+          {/* Footer Info */}
+          <div className="bg-blue-50 rounded-lg md:rounded-2xl p-4 md:p-6">
+            <p className="text-xs md:text-sm text-gray-600">
+              Inspection ID: <span className="font-mono font-medium">{inspection.id}</span>
             </p>
-          )}
-          {isCustomer && (
-            <p className="text-xs md:text-sm text-blue-600 mt-2">
-              👁️ This is an inspection submitted for your society
-            </p>
-          )}
+            {isOwner && (
+              <p className="text-xs md:text-sm text-blue-600 mt-2">
+                💡 You can view and manage this inspection from your history
+              </p>
+            )}
+            {isCustomer && (
+              <p className="text-xs md:text-sm text-blue-600 mt-2">
+                👁️ This is an inspection submitted for your society
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

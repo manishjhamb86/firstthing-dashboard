@@ -22,6 +22,15 @@ type InspectionForm = {
   inspector_name: string;
   faulty_lights: number;
   total_lights_checked: number;
+  society_name?: string;
+  societies?:
+    | {
+        name: string;
+      }
+    | {
+        name: string;
+      }[]
+    | null;
 };
 
 type Report = AdminReport | InspectionForm;
@@ -71,7 +80,9 @@ export default function InspectionReportsPage() {
     if (profile.role === "customer") {
       const { data: inspectionForms } = await supabase
         .from("inspection_forms")
-        .select("*")
+        .select(
+          "id, area, inspection_date, inspector_name, faulty_lights, total_lights_checked, society_name, societies(name)"
+        )
         .eq("society_id", profile.society_id)
         .order("inspection_date", { ascending: false });
 
@@ -166,6 +177,10 @@ export default function InspectionReportsPage() {
                   </div>
                 );
               } else {
+                const relationSocietyName = Array.isArray(report.societies)
+                  ? report.societies[0]?.name
+                  : report.societies?.name;
+
                 return (
                   <Link key={`inspection-${report.id}`} href={`/inspection-reports/${report.id}`}>
                     <div className="bg-white rounded-lg md:rounded-2xl p-4 md:p-6 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
@@ -184,6 +199,9 @@ export default function InspectionReportsPage() {
                             {new Date(
                               report.inspection_date
                             ).toLocaleDateString()}
+                          </p>
+                          <p className="text-gray-500 text-xs md:text-sm mt-1">
+                            Society: {relationSocietyName || report.society_name || "-"}
                           </p>
                           <div className="flex flex-wrap gap-4 mt-3 text-xs md:text-sm">
                             <div>

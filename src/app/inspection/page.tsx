@@ -16,7 +16,15 @@ type RecentInspection = {
   area: string;
   inspection_date: string;
   faulty_lights: number;
-  society_name: string;
+  society_name?: string;
+  societies?:
+    | {
+        name: string;
+      }
+    | {
+        name: string;
+      }[]
+    | null;
 };
 
 export default function InspectionDashboard() {
@@ -59,7 +67,7 @@ export default function InspectionDashboard() {
     // Get recent inspections
     const { data: recentData } = await supabase
       .from("inspection_forms")
-      .select("id, area, inspection_date, faulty_lights, society_name")
+      .select("id, area, inspection_date, faulty_lights, society_name, societies(name)")
       .eq("created_by", user.id)
       .order("inspection_date", { ascending: false })
       .limit(5);
@@ -201,6 +209,13 @@ export default function InspectionDashboard() {
               <tbody>
                 {recentInspections.map((inspection) => (
                   <tr key={inspection.id} className="border-b hover:bg-gray-50 transition-colors">
+                    {(() => {
+                      const relationSocietyName = Array.isArray(inspection.societies)
+                        ? inspection.societies[0]?.name
+                        : inspection.societies?.name;
+
+                      return (
+                        <>
                     <td className="p-3 md:p-4 text-xs md:text-sm">
                       {new Date(inspection.inspection_date).toLocaleDateString()}
                     </td>
@@ -208,7 +223,7 @@ export default function InspectionDashboard() {
                       {inspection.area}
                     </td>
                     <td className="p-3 md:p-4 text-xs md:text-sm hidden sm:table-cell">
-                      {inspection.society_name}
+                      {relationSocietyName || inspection.society_name || "-"}
                     </td>
                     <td className="p-3 md:p-4">
                       <span className="inline-block bg-orange-100 text-orange-700 px-2 md:px-3 py-1 rounded-full text-xs font-semibold">
@@ -222,6 +237,9 @@ export default function InspectionDashboard() {
                         </button>
                       </Link>
                     </td>
+                        </>
+                      );
+                    })()}
                   </tr>
                 ))}
               </tbody>

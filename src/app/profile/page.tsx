@@ -58,7 +58,7 @@ export default function ProfilePage() {
 
       <Sidebar />
 
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 mt-16 md:mt-0">
 
         <h1 className="text-4xl font-bold mb-8">
           Society Profile

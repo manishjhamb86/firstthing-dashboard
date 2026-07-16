@@ -336,7 +336,11 @@ export default function AdminInspectionReportsPage() {
                       className="border-b hover:bg-gray-50 transition-colors"
                     >
                       <td className="p-3 md:p-4">
-                        {new Date(item.inspection_date).toLocaleDateString()}
+                        {new Date(`${item.inspection_date}T00:00:00`).toLocaleDateString("en-GB", {
+                          day: "numeric",
+                          month: "long",
+                          year: "numeric",
+                        })}
                       </td>
                       <td className="p-3 md:p-4 font-medium">{item.inspector_name}</td>
                       <td className="p-3 md:p-4">{item.area}</td>

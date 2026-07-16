@@ -9,13 +9,22 @@ type Society = {
   name: string;
 };
 
+type SavingsReport = {
+  id: number;
+  society_id: number;
+  report_month: string;
+  pdf_url: string;
+  societies?: { name: string } | null;
+};
+
 export default function AdminReportsPage() {
   const [societies, setSocieties] = useState<Society[]>([]);
-  const [reports, setReports] = useState<any[]>([]);
+  const [reports, setReports] = useState<SavingsReport[]>([]);
 
   const [societyId, setSocietyId] = useState("");
   const [reportMonth, setReportMonth] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSocieties();
@@ -50,23 +59,32 @@ export default function AdminReportsPage() {
     console.log("Reports Error:", error);
 
     if (data) {
-      setReports(data);
+      setReports(data as SavingsReport[]);
     }
   }
 
   async function saveReport() {
+    if (!societyId || !reportMonth) {
+      alert("Please select a society and enter the report month");
+      return;
+    }
+
     if (!pdfUrl) {
       alert("Please upload PDF first");
       return;
     }
 
-    const { error } = await supabase
-      .from("savings_reports")
-      .insert({
-        society_id: Number(societyId),
-        report_month: reportMonth,
-        pdf_url: pdfUrl,
-      });
+    const values = {
+      society_id: Number(societyId),
+      report_month: reportMonth,
+      pdf_url: pdfUrl,
+    };
+
+    const query = editingId
+      ? supabase.from("savings_reports").update(values).eq("id", editingId)
+      : supabase.from("savings_reports").insert(values);
+
+    const { error } = await query;
 
     if (error) {
       console.log(error);
@@ -74,13 +92,29 @@ export default function AdminReportsPage() {
       return;
     }
 
-    alert("Report Saved");
+    alert(editingId ? "Report updated" : "Report saved");
 
+    setEditingId(null);
     setSocietyId("");
     setReportMonth("");
     setPdfUrl("");
 
     loadReports();
+  }
+
+  function editReport(report: SavingsReport) {
+    setEditingId(report.id);
+    setSocietyId(String(report.society_id));
+    setReportMonth(report.report_month || "");
+    setPdfUrl(report.pdf_url || "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setSocietyId("");
+    setReportMonth("");
+    setPdfUrl("");
   }
 
   async function deleteReport(id: number) {
@@ -162,8 +196,17 @@ export default function AdminReportsPage() {
           onClick={saveReport}
           className="bg-green-700 hover:bg-green-800 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium w-full md:w-auto text-sm md:text-base"
         >
-          Save Report
+          {editingId ? "Update Report" : "Save Report"}
         </button>
+
+        {editingId && (
+          <button
+            onClick={cancelEdit}
+            className="ml-0 md:ml-3 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium w-full md:w-auto text-sm md:text-base"
+          >
+            Cancel Edit
+          </button>
+        )}
       </div>
 
       <div className="mt-8 md:mt-10">
@@ -226,6 +269,12 @@ export default function AdminReportsPage() {
                   </td>
 
                   <td className="p-2 md:p-4">
+                    <button
+                      onClick={() => editReport(report)}
+                      className="text-blue-600 hover:text-blue-800 text-xs md:text-sm font-medium mr-4"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() =>
                         deleteReport(report.id)

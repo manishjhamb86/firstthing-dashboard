@@ -17,11 +17,8 @@ export default function EditSocietyPage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingLogin, setSavingLogin] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadSociety();
-  }, []);
 
   async function loadSociety() {
     const { data, error } = await supabase
@@ -62,6 +59,10 @@ export default function EditSocietyPage() {
 
     setLoading(false);
   }
+
+  useEffect(() => {
+    loadSociety();
+  }, []);
 
   async function updateSociety() {
     const { error } = await supabase
@@ -165,24 +166,77 @@ export default function EditSocietyPage() {
 
   async function deleteSociety() {
     const confirmed = confirm(
-      "Are you sure you want to delete this society?"
+      "Are you sure you want to delete this society? All of its details and reports will also be permanently deleted."
     );
 
     if (!confirmed) return;
 
-    const { error } = await supabase
-      .from("societies")
-      .delete()
-      .eq("id", params.id);
+    setDeleting(true);
 
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      const { data: tanks, error: tanksError } = await supabase
+        .from("tank_configurations")
+        .select("id")
+        .eq("society_id", params.id);
+
+      if (tanksError) {
+        alert(`Unable to load the society's tank configurations: ${tanksError.message}`);
+        return;
+      }
+
+      const tankIds = tanks?.map((tank) => tank.id) ?? [];
+
+      if (tankIds.length > 0) {
+        const { error: tankReadingsError } = await supabase
+          .from("tank_readings")
+          .delete()
+          .in("tank_id", tankIds);
+
+        if (tankReadingsError) {
+          alert(`Unable to delete the society's tank readings: ${tankReadingsError.message}`);
+          return;
+        }
+      }
+
+      const relatedTables = [
+        { table: "inspection_reports", label: "inspection reports" },
+        { table: "inspection_forms", label: "inspection forms" },
+        { table: "savings_reports", label: "savings reports" },
+        { table: "invoices", label: "invoices" },
+        { table: "energy_stats", label: "energy statistics" },
+        { table: "tank_configurations", label: "tank configurations" },
+        { table: "society_details", label: "society details" },
+        { table: "profiles", label: "user profiles" },
+      ];
+
+      for (const relatedTable of relatedTables) {
+        const { error } = await supabase
+          .from(relatedTable.table)
+          .delete()
+          .eq("society_id", params.id);
+
+        if (error) {
+          alert(`Unable to delete the society's ${relatedTable.label}: ${error.message}`);
+          return;
+        }
+      }
+
+      const { error: societyError } = await supabase
+        .from("societies")
+        .delete()
+        .eq("id", params.id);
+
+      if (societyError) {
+        alert(societyError.message);
+        return;
+      }
+
+      alert("Society deleted");
+
+      router.push("/admin/societies");
+    } finally {
+      setDeleting(false);
     }
-
-    alert("Society deleted");
-
-    router.push("/admin/societies");
   }
 
   if (loading) {
@@ -267,9 +321,10 @@ export default function EditSocietyPage() {
 
           <button
             onClick={deleteSociety}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium text-sm md:text-base"
+            disabled={deleting}
+            className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium text-sm md:text-base"
           >
-            Delete Society
+            {deleting ? "Deleting..." : "Delete Society"}
           </button>
 
         </div>

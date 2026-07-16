@@ -55,7 +55,7 @@ export default function FileUploader({
         publicUrlData.publicUrl
       );
 
-      alert("PDF uploaded successfully");
+      alert("PDF uploaded. Complete the form and click the save button.");
     } catch (err) {
       console.error(err);
       alert("Upload failed");

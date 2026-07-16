@@ -9,30 +9,42 @@ type Society = {
   name: string;
 };
 
+type AdminInvoice = {
+  id: number;
+  society_id: number;
+  society_name: string;
+  invoice_number: string;
+  invoice_month: string;
+  amount: number;
+  gst: number;
+  total_amount: number;
+  due_date: string;
+  status: string;
+  pdf_url: string;
+};
+
 export default function AdminInvoicesPage() {
 
   const [societies, setSocieties] = useState<Society[]>([]);
+  const [invoices, setInvoices] = useState<AdminInvoice[]>([]);
 
   const [societyId, setSocietyId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceMonth, setInvoiceMonth] = useState("");
   const [amount, setAmount] = useState("");
   const [gst, setGst] = useState("");
-  const [totalAmount, setTotalAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [status, setStatus] = useState("Pending");
   const [pdfUrl, setPdfUrl] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   useEffect(() => {
     loadSocieties();
+    loadInvoices();
   }, []);
 
-  useEffect(() => {
-    const amt = Number(amount || 0);
-    const gstAmt = Number(gst || 0);
-
-    setTotalAmount(String(amt + gstAmt));
-  }, [amount, gst]);
+  const totalAmount = String(Number(amount || 0) + Number(gst || 0));
 
   async function loadSocieties() {
 
@@ -44,6 +56,20 @@ export default function AdminInvoicesPage() {
     if (data) {
       setSocieties(data);
     }
+  }
+
+  async function loadInvoices() {
+    const { data, error } = await supabase
+      .from("invoices")
+      .select("*")
+      .order("id", { ascending: false });
+
+    if (error) {
+      alert(`Unable to load invoices: ${error.message}`);
+      return;
+    }
+
+    setInvoices((data || []) as AdminInvoice[]);
   }
 
   async function saveInvoice() {
@@ -62,37 +88,86 @@ export default function AdminInvoicesPage() {
       return;
     }
 
-    const { error } = await supabase
-      .from("invoices")
-      .insert({
-        society_id: Number(societyId),
-        society_name: selectedSociety.name,
-        invoice_number: invoiceNumber,
-        invoice_month: invoiceMonth,
-        amount: Number(amount),
-        gst: Number(gst),
-        total_amount: Number(totalAmount),
-        due_date: dueDate,
-        status,
-        pdf_url: pdfUrl,
-      });
+    setSaving(true);
 
-    if (error) {
-      alert(error.message);
-      return;
+    try {
+      const values = {
+          society_id: Number(societyId),
+          society_name: selectedSociety.name,
+          invoice_number: invoiceNumber,
+          invoice_month: invoiceMonth,
+          amount: Number(amount),
+          gst: Number(gst),
+          total_amount: Number(totalAmount),
+          due_date: dueDate,
+          status,
+          pdf_url: pdfUrl,
+      };
+
+      const query = editingId
+        ? supabase.from("invoices").update(values).eq("id", editingId)
+        : supabase.from("invoices").insert(values);
+
+      const { error } = await query;
+
+      if (error) {
+        alert(`Unable to save invoice: ${error.message}`);
+        return;
+      }
+
+      alert(editingId ? "Invoice updated." : "Invoice saved and is now available to the customer.");
+
+      setEditingId(null);
+      setSocietyId("");
+      setInvoiceNumber("");
+      setInvoiceMonth("");
+      setAmount("");
+      setGst("");
+      setDueDate("");
+      setStatus("Pending");
+      setPdfUrl("");
+      await loadInvoices();
+    } finally {
+      setSaving(false);
     }
+  }
 
-    alert("Invoice Uploaded Successfully");
+  function editInvoice(invoice: AdminInvoice) {
+    setEditingId(invoice.id);
+    setSocietyId(String(invoice.society_id));
+    setInvoiceNumber(invoice.invoice_number || "");
+    setInvoiceMonth(invoice.invoice_month || "");
+    setAmount(String(invoice.amount ?? ""));
+    setGst(String(invoice.gst ?? ""));
+    setDueDate(invoice.due_date || "");
+    setStatus(invoice.status || "Pending");
+    setPdfUrl(invoice.pdf_url || "");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
+  function resetForm() {
+    setEditingId(null);
     setSocietyId("");
     setInvoiceNumber("");
     setInvoiceMonth("");
     setAmount("");
     setGst("");
-    setTotalAmount("");
     setDueDate("");
     setStatus("Pending");
     setPdfUrl("");
+  }
+
+  async function deleteInvoice(id: number) {
+    if (!confirm("Are you sure you want to delete this invoice?")) return;
+
+    const { error } = await supabase.from("invoices").delete().eq("id", id);
+    if (error) {
+      alert(`Unable to delete invoice: ${error.message}`);
+      return;
+    }
+
+    if (editingId === id) resetForm();
+    await loadInvoices();
   }
 
   return (
@@ -191,17 +266,65 @@ export default function AdminInvoicesPage() {
 
         {pdfUrl && (
           <div className="text-green-700 font-medium text-sm md:text-base">
-            ✓ Invoice PDF Uploaded Successfully
+            ✓ PDF uploaded. Click Save Invoice to make it available to the customer.
           </div>
         )}
 
         <button
           onClick={saveInvoice}
-          className="bg-green-700 hover:bg-green-800 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium w-full md:w-auto text-sm md:text-base"
+          disabled={saving}
+          className="bg-green-700 hover:bg-green-800 disabled:bg-green-400 text-white px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium w-full md:w-auto text-sm md:text-base"
         >
-          Save Invoice
+          {saving ? "Saving Invoice..." : editingId ? "Update Invoice" : "Save Invoice"}
         </button>
 
+        {editingId && (
+          <button
+            onClick={resetForm}
+            className="ml-0 md:ml-3 bg-gray-200 hover:bg-gray-300 text-gray-800 px-4 md:px-6 py-2 md:py-3 rounded-lg md:rounded-xl font-medium w-full md:w-auto text-sm md:text-base"
+          >
+            Cancel Edit
+          </button>
+        )}
+
+      </div>
+
+      <div className="mt-8 md:mt-10">
+        <h2 className="text-xl md:text-2xl font-bold mb-4">Existing Invoices</h2>
+        <div className="bg-white rounded-lg md:rounded-2xl shadow-sm overflow-x-auto">
+          <table className="w-full min-w-max text-xs md:text-sm">
+            <thead className="bg-gray-50 border-b">
+              <tr>
+                <th className="text-left p-3 md:p-4">Society</th>
+                <th className="text-left p-3 md:p-4">Invoice</th>
+                <th className="text-left p-3 md:p-4">Month</th>
+                <th className="text-left p-3 md:p-4">Total</th>
+                <th className="text-left p-3 md:p-4">Status</th>
+                <th className="text-left p-3 md:p-4">PDF</th>
+                <th className="text-left p-3 md:p-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((invoice) => (
+                <tr key={invoice.id} className="border-t hover:bg-gray-50">
+                  <td className="p-3 md:p-4 font-medium">{invoice.society_name}</td>
+                  <td className="p-3 md:p-4">{invoice.invoice_number}</td>
+                  <td className="p-3 md:p-4">{invoice.invoice_month}</td>
+                  <td className="p-3 md:p-4">₹ {Number(invoice.total_amount).toLocaleString()}</td>
+                  <td className="p-3 md:p-4">{invoice.status}</td>
+                  <td className="p-3 md:p-4"><a href={invoice.pdf_url} target="_blank" rel="noreferrer" className="text-blue-600">View PDF</a></td>
+                  <td className="p-3 md:p-4">
+                    <button onClick={() => editInvoice(invoice)} className="text-blue-600 hover:text-blue-800 font-medium mr-4">Edit</button>
+                    <button onClick={() => deleteInvoice(invoice.id)} className="text-red-600 hover:text-red-800 font-medium">Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {invoices.length === 0 && (
+                <tr><td colSpan={7} className="p-6 text-center text-gray-500">No invoices found</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
     </div>

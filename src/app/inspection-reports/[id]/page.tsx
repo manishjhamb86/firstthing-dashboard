@@ -5,6 +5,9 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { supabase } from "../../../lib/supabase";
 import { ArrowLeft } from "lucide-react";
+import Sidebar from "../../../components/layout/sidebar";
+import AdminLayout from "../../admin/layout";
+import InspectionLayout from "../../inspection/layout";
 
 type InspectionForm = {
   id: number;
@@ -130,30 +133,22 @@ export default function InspectionDetailsPage() {
       )
     : 0;
 
-  const isCustomerView = userRole === "customer";
-  const mobileHeaderClass = isCustomerView
-    ? "bg-green-950 text-white"
-    : "bg-blue-950 text-white";
-  const mobileHeaderTitle = isCustomerView
-    ? "Firsthing.earth"
-    : "Inspection Portal";
+  const backHref = userRole === "admin"
+    ? "/admin/inspection-reports"
+    : isOwner
+      ? "/inspection/history"
+      : "/inspection-reports";
   const resolvedSocietyFromRelation = Array.isArray(inspection.societies)
     ? inspection.societies[0]?.name
     : inspection.societies?.name;
   const displaySocietyName =
     resolvedSocietyFromRelation || inspection.society_name || "-";
 
-  return (
-    <div className="min-h-screen bg-gray-100">
-      <div className={`md:hidden sticky top-0 z-30 px-4 py-3 ${mobileHeaderClass}`}>
-        <p className="text-base font-bold">{mobileHeaderTitle}</p>
-        <p className="text-xs opacity-90">Inspection Details</p>
-      </div>
-
-      <div className="w-full max-w-6xl mx-auto px-4 md:px-8 py-4 md:py-8">
+  const detailsContent = (
+      <div className="w-full max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Link href={isOwner ? "/inspection/history" : "/inspection-reports"}>
+          <Link href={backHref}>
             <button className="flex items-center gap-2 text-blue-600 hover:text-blue-800 font-medium">
               <ArrowLeft size={20} />
               Back
@@ -329,6 +324,22 @@ export default function InspectionDetailsPage() {
           </div>
         </div>
       </div>
+  );
+
+  if (userRole === "admin") {
+    return <AdminLayout>{detailsContent}</AdminLayout>;
+  }
+
+  if (userRole === "inspection") {
+    return <InspectionLayout>{detailsContent}</InspectionLayout>;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-100 flex overflow-hidden">
+      <Sidebar />
+      <main className="flex-1 overflow-y-auto p-4 pt-20 md:p-8">
+        {detailsContent}
+      </main>
     </div>
   );
 }

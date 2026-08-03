@@ -1,0 +1,38 @@
+﻿FirsThing.earth Dashboard – Team Onboarding Guide
+Version: 1.0
+
+Purpose: This document introduces the FirsThing.earth Dashboard architecture, modules, development workflow, and contribution guidelines for engineering team members.
+Project Overview
+* The dashboard manages energy efficiency projects and includes Customer Dashboard, Admin Dashboard, Society Management, Live Metering, Savings Reports, Inspection Reports, Invoice Management, Water Tank Monitoring and Society Onboarding.
+Technology Stack
+* Frontend: Next.js (App Router), TypeScript, Tailwind CSS
+* Backend: Supabase (Auth, Database, Storage, Edge Functions)
+* Hosting: AWS Lightsail + Nginx + PM2
+* Version Control: GitHub
+User Roles
+* Admin, Customer and Inspection Team (under development).
+Modules
+* Customer: Dashboard, Profile, Savings Reports, Inspection Reports, Invoices, Live Metering (Upcoming), Water Tanks (WIP).
+* Admin: Dashboard, Societies, Users, Reports, Inspection Reports, Invoices, Water Tanks, Live Metering (Upcoming).
+Authentication
+* Supabase Auth with profiles table (id, email, role, society_id, society_name).
+Society Onboarding
+* Admin creates Society → Customer User → Auth User → Profile → Customer Login.
+Reports
+* Savings Reports, Inspection Reports and Invoices uploaded by Admin. Future inspection reports will be created directly by the Inspection Team.
+Live Metering
+* Uses a representative sample of metered lights. Raw consumption is never extrapolated. Only savings are extrapolated to the total installed lights.
+Development Principles
+* Never break existing features. Reuse components. Customer UI must remain mobile responsive. Admin UI is desktop-first.
+Workflow
+* ChatGPT: Product Architecture. GitHub Copilot: Implementation. Developer: Testing, SQL, Supabase configuration and deployment.
+Deployment
+* Local Test → npm run build → Git Push → AWS Pull → npm run build → PM2 Restart.
+Coding Standards
+* Use TypeScript, avoid any, reuse components, separate business logic from UI.
+Roadmap
+* Phase 1: Live Metering, Inspection Team, User Management, Mobile UI.
+* Phase 2: Digital Inspection, PDF Generation, Photo Uploads.
+* Phase 3: AI Insights, Predictive Maintenance, WhatsApp Notifications.
+Guiding Principle
+* Build features that improve transparency, operational efficiency and customer confidence without impacting existing functionality.

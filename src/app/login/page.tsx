@@ -33,6 +33,8 @@ export default function LoginPage() {
     window.location.href = "/admin";
   } else if (profile?.role === "inspection") {
     window.location.href = "/inspection";
+  } else if (profile?.role === "socmgr") {
+    window.location.href = "/socmgr";
   } else {
     window.location.href = "/";
   }

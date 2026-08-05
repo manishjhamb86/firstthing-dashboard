@@ -1,0 +1,338 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  admin
+  customer
+  inspection
+  socmgr
+
+  @@map("role")
+}
+
+enum SocietyStatus {
+  onboarding
+  active
+  suspended
+  archived
+
+  @@map("society_status")
+}
+
+enum DeviceStatus {
+  Online
+  Offline
+
+  @@map("device_status")
+}
+
+enum InvoiceStatus {
+  Issued
+  Due
+  Overdue
+  Disputed
+  Paid
+
+  @@map("invoice_status")
+}
+
+enum TankStatus {
+  healthy
+  medium
+  critical
+
+  @@map("tank_status")
+}
+
+enum Severity {
+  critical
+  high
+  medium
+  low
+
+  @@map("severity")
+}
+
+enum TaskStatus {
+  open
+  done
+
+  @@map("task_status")
+}
+
+model Society {
+  id                Int           @id @default(autoincrement())
+  name              String
+  city              String?
+  state             String?
+  totalLights       Int           @default(0) @map("total_lights")
+  savingsPercentage Decimal       @default(0) @db.Decimal(5, 2) @map("savings_percentage")
+  status            SocietyStatus @default(active)
+  contactPerson     String?       @map("contact_person")
+  contactPhone      String?       @map("contact_phone")
+  contractStart     DateTime?     @db.Date @map("contract_start")
+  contractEnd       DateTime?     @db.Date @map("contract_end")
+  createdAt         DateTime      @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  profiles              Profile[]
+  devices               Device[]
+  meterReadings         MeterReading[]
+  energyStats           EnergyStat[]
+  invoices              Invoice[]
+  savingsReports        SavingsReport[]
+  tankConfigurations    TankConfiguration[]
+  inspectionForms       InspectionForm[]
+  inspectionReports     InspectionReport[]
+  monthlySocietyMetrics MonthlySocietyMetric[]
+  exceptions            Exception[]
+  tasks                 Task[]
+
+  @@map("societies")
+}
+
+model Profile {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String?  @unique
+  passwordHash String   @map("password_hash")
+  role         Role
+  societyId    Int?     @map("society_id")
+  societyName  String?  @map("society_name")
+  createdAt    DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society         Society?         @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  inspectionForms InspectionForm[] @relation("InspectionFormCreatedBy")
+
+  @@index([societyId])
+  @@index([role])
+  @@map("profiles")
+}
+
+model Device {
+  id          BigInt       @id @default(autoincrement())
+  societyId   Int          @map("society_id")
+  societyName String?      @map("society_name")
+  deviceName  String       @map("device_name")
+  deviceType  String?      @map("device_type")
+  status      DeviceStatus @default(Online)
+  lastSeen    DateTime?    @db.Timestamptz(6) @map("last_seen")
+  createdAt   DateTime     @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@map("devices")
+}
+
+model MeterReading {
+  id          BigInt   @id @default(autoincrement())
+  societyId   Int      @map("society_id")
+  societyName String?  @map("society_name")
+  readingTime DateTime @default(now()) @db.Timestamptz(6) @map("reading_time")
+  powerKw     Decimal? @db.Decimal(10, 2) @map("power_kw")
+  energyKwh   Decimal? @db.Decimal(12, 2) @map("energy_kwh")
+  voltage     Decimal? @db.Decimal(6, 2)
+  current     Decimal? @db.Decimal(6, 2)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@index([readingTime])
+  @@map("meter_readings")
+}
+
+model EnergyStat {
+  id                BigInt   @id @default(autoincrement())
+  societyId         Int      @map("society_id")
+  societyName       String?  @map("society_name")
+  todayConsumption  Decimal? @db.Decimal(12, 2) @map("today_consumption")
+  totalSavings      Decimal? @db.Decimal(14, 2) @map("total_savings")
+  savingsPercentage Decimal? @db.Decimal(5, 2) @map("savings_percentage")
+  systemStatus      String?  @map("system_status")
+  createdAt         DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@index([createdAt])
+  @@map("energy_stats")
+}
+
+model Invoice {
+  id            BigInt        @id @default(autoincrement())
+  societyId     Int           @map("society_id")
+  societyName   String?       @map("society_name")
+  invoiceNumber String        @map("invoice_number")
+  invoiceMonth  String?       @map("invoice_month")
+  amount        Decimal?      @db.Decimal(12, 2)
+  gst           Decimal?      @db.Decimal(12, 2)
+  totalAmount   Decimal?      @db.Decimal(12, 2) @map("total_amount")
+  dueDate       DateTime?     @db.Date @map("due_date")
+  status        InvoiceStatus @default(Issued)
+  pdfUrl        String?       @map("pdf_url")
+  createdAt     DateTime      @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@index([status])
+  @@map("invoices")
+}
+
+model SavingsReport {
+  id          BigInt   @id @default(autoincrement())
+  societyId   Int      @map("society_id")
+  reportMonth String?  @map("report_month")
+  pdfUrl      String?  @map("pdf_url")
+  createdAt   DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@map("savings_reports")
+}
+
+model TankConfiguration {
+  id                   BigInt   @id @default(autoincrement())
+  societyId            Int      @map("society_id")
+  tankName             String   @map("tank_name")
+  tankCode             String?  @map("tank_code")
+  tankType             String?  @map("tank_type")
+  location             String?
+  capacityLiters       Decimal? @db.Decimal(12, 2) @map("capacity_liters")
+  heightMeters         Decimal? @db.Decimal(6, 2) @map("height_meters")
+  sensorOffsetCm       Decimal? @db.Decimal(6, 2) @map("sensor_offset_cm")
+  lowAlertPercent      Decimal  @default(20) @db.Decimal(5, 2) @map("low_alert_percent")
+  criticalAlertPercent Decimal  @default(10) @db.Decimal(5, 2) @map("critical_alert_percent")
+  displayOrder         Int      @default(1) @map("display_order")
+  createdAt            DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society      Society       @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  tankReadings TankReading[]
+
+  @@index([societyId])
+  @@map("tank_configurations")
+}
+
+model TankReading {
+  id                BigInt      @id @default(autoincrement())
+  tankId            BigInt      @map("tank_id")
+  waterLevelPercent Decimal?    @db.Decimal(5, 2) @map("water_level_percent")
+  currentLiters     Decimal?    @db.Decimal(12, 2) @map("current_liters")
+  sensorDistanceCm  Decimal?    @db.Decimal(6, 2) @map("sensor_distance_cm")
+  status            TankStatus?
+  receivedAt        DateTime    @default(now()) @db.Timestamptz(6) @map("received_at")
+
+  tank TankConfiguration @relation(fields: [tankId], references: [id], onDelete: Cascade)
+
+  @@index([tankId])
+  @@index([receivedAt])
+  @@map("tank_readings")
+}
+
+model InspectionForm {
+  id                 BigInt   @id @default(autoincrement())
+  societyId          Int      @map("society_id")
+  societyName        String?  @map("society_name")
+  area               String   @db.VarChar(255)
+  inspectionDate     DateTime @db.Date @map("inspection_date")
+  inspectorName      String   @db.VarChar(255) @map("inspector_name")
+  contactNumber      String   @db.VarChar(20) @map("contact_number")
+  totalLightsChecked Int      @map("total_lights_checked")
+  faultyLights       Int      @map("faulty_lights")
+  createdBy          String   @db.Uuid @map("created_by")
+  createdAt          DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+  updatedAt          DateTime @default(now()) @db.Timestamptz(6) @map("updated_at")
+
+  society Society              @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  creator Profile              @relation("InspectionFormCreatedBy", fields: [createdBy], references: [id], onDelete: Cascade)
+  items   InspectionFormItem[]
+
+  @@index([societyId])
+  @@index([createdBy])
+  @@map("inspection_forms")
+}
+
+model InspectionFormItem {
+  id               BigInt   @id @default(autoincrement())
+  inspectionFormId BigInt   @map("inspection_form_id")
+  location         String   @db.VarChar(255)
+  issueType        String   @db.VarChar(100) @map("issue_type")
+  remarks          String?
+  createdAt        DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  form InspectionForm @relation(fields: [inspectionFormId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionFormId])
+  @@map("inspection_form_items")
+}
+
+model InspectionReport {
+  id         BigInt    @id @default(autoincrement())
+  societyId  Int       @map("society_id")
+  reportType String?   @map("report_type")
+  reportDate DateTime? @db.Date @map("report_date")
+  pdfUrl     String?   @map("pdf_url")
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@map("inspection_reports")
+}
+
+model MonthlySocietyMetric {
+  id                BigInt   @id @default(autoincrement())
+  societyId         Int      @map("society_id")
+  month             DateTime @db.Date
+  baselineKwh       Decimal? @map("baseline_kwh")
+  actualKwh         Decimal? @map("actual_kwh")
+  energyAvoidedKwh  Decimal? @map("energy_avoided_kwh")
+  co2AvoidedKg      Decimal? @map("co2_avoided_kg")
+  billSavingInr     Decimal? @map("bill_saving_inr")
+  isVerifiedMetered Boolean  @default(false) @map("is_verified_metered")
+  createdAt         DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@unique([societyId, month])
+  @@index([societyId])
+  @@map("monthly_society_metrics")
+}
+
+model Exception {
+  id         BigInt    @id @default(autoincrement())
+  societyId  Int?      @map("society_id")
+  severity   Severity
+  title      String
+  category   String?
+  openedAt   DateTime  @default(now()) @db.Timestamptz(6) @map("opened_at")
+  resolvedAt DateTime? @db.Timestamptz(6) @map("resolved_at")
+
+  society Society? @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@index([severity])
+  @@map("exceptions")
+}
+
+model Task {
+  id        BigInt     @id @default(autoincrement())
+  societyId Int?       @map("society_id")
+  type      String
+  title     String
+  assignee  String?
+  dueAt     DateTime?  @db.Timestamptz(6) @map("due_at")
+  status    TaskStatus @default(open)
+
+  society Society? @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@index([status])
+  @@map("tasks")
+}

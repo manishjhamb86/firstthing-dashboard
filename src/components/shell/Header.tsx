@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useReducer } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { getScreenMeta } from "@/lib/screen-meta";
@@ -61,13 +61,16 @@ export default function Header({
 }
 
 function FreshnessPill({ since }: { since: Date }) {
-  const [label, setLabel] = useState(() => formatAgo(since));
+  // "Ns ago" is derived straight from `since` during render; the tick
+  // counter's only job is forcing a re-render every 15s so that derived
+  // text keeps advancing even though `since` itself hasn't changed.
+  const [, tick] = useReducer((n: number) => n + 1, 0);
+  const label = formatAgo(since);
 
   useEffect(() => {
-    setLabel(formatAgo(since));
-    const id = setInterval(() => setLabel(formatAgo(since)), 15000);
+    const id = setInterval(tick, 15000);
     return () => clearInterval(id);
-  }, [since]);
+  }, []);
 
   return (
     <div className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5">

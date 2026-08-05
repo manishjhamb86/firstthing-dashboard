@@ -1,44 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "../../lib/supabase";
+import { signIn, getSession } from "next-auth/react";
+import { ROLE_HOME, isRole } from "../../lib/roles";
 
 export default function LoginPage() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   async function handleLogin() {
+    setSubmitting(true);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    const result = await signIn("credentials", { email, password, redirect: false });
 
-    if (error) {
-  alert(error.message);
-} else {
+    if (!result || result.error) {
+      alert("Invalid email or password.");
+      setSubmitting(false);
+      return;
+    }
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", user?.id)
-    .single();
-
-  if (profile?.role === "admin") {
-    window.location.href = "/admin";
-  } else if (profile?.role === "inspection") {
-    window.location.href = "/inspection";
-  } else if (profile?.role === "socmgr") {
-    window.location.href = "/socmgr";
-  } else {
-    window.location.href = "/";
-  }
-}
+    const session = await getSession();
+    const role = session?.user?.role;
+    window.location.href = isRole(role) ? ROLE_HOME[role] : "/login";
   }
 
   return (
@@ -74,9 +59,10 @@ export default function LoginPage() {
 
           <button
             onClick={handleLogin}
-            className="w-full bg-green-700 hover:bg-green-800 text-white rounded-xl p-4 font-semibold"
+            disabled={submitting}
+            className="w-full bg-green-700 hover:bg-green-800 text-white rounded-xl p-4 font-semibold disabled:opacity-60"
           >
-            Login
+            {submitting ? "Signing in..." : "Login"}
           </button>
 
         </div>

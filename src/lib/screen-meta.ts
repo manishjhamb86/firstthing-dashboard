@@ -7,7 +7,7 @@ export type ScreenMeta = {
 const SCREEN_META: Record<string, ScreenMeta> = {
   "/admin": {
     breadcrumb: "ADMIN / OVERVIEW",
-    title: "Portfolio dashboard",
+    title: "Portfolio operations",
     primaryAction: { label: "New society", href: "/admin/societies/new" },
   },
   "/admin/societies": {

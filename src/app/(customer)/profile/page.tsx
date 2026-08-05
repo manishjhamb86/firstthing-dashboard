@@ -1,52 +1,27 @@
-"use client";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import EmptyState from "@/components/shell/EmptyState";
 
-import { useEffect, useState } from "react";
-import { supabase } from "../../../lib/supabase";
+export default async function ProfilePage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
 
-export default function ProfilePage() {
+  const society = session.user.societyId
+    ? await db.society.findUnique({ where: { id: session.user.societyId } })
+    : null;
 
-  const [loading, setLoading] = useState(true);
-  const [society, setSociety] = useState<any>(null);
-
-  useEffect(() => {
-    loadProfile();
-  }, []);
-
-  async function loadProfile() {
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-
-    if (!session) {
-      return;
-    }
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", session.user.id)
-      .single();
-
-    if (!profile?.society_id) {
-      setLoading(false);
-      return;
-    }
-
-    const { data: societyData } = await supabase
-      .from("societies")
-      .select("*")
-      .eq("id", profile.society_id)
-      .single();
-
-    setSociety(societyData);
-    setLoading(false);
-  }
-
-  if (loading) {
+  if (!society) {
     return (
-      <div className="flex items-center justify-center py-20 text-m2">
-        Loading...
+      <div>
+        <h1 className="text-2xl font-bold text-ink mb-8">
+          Society Profile
+        </h1>
+
+        <EmptyState
+          title="No society linked"
+          description="Your account isn't linked to a society yet. Contact your admin."
+        />
       </div>
     );
   }
@@ -68,7 +43,7 @@ export default function ProfilePage() {
             </p>
 
             <h2 className="text-2xl font-bold text-ink">
-              {society?.name || "-"}
+              {society.name}
             </h2>
           </div>
 
@@ -78,7 +53,7 @@ export default function ProfilePage() {
             </p>
 
             <h2 className="text-2xl font-bold text-ink">
-              {society?.city || "-"}
+              {society.city || "-"}
             </h2>
           </div>
 
@@ -88,7 +63,7 @@ export default function ProfilePage() {
             </p>
 
             <h2 className="text-2xl font-bold text-ink">
-              {society?.total_lights || 0}
+              {society.totalLights}
             </h2>
           </div>
 
@@ -98,7 +73,7 @@ export default function ProfilePage() {
             </p>
 
             <h2 className="text-2xl font-bold text-ac">
-              {society?.savings_percentage || 0}%
+              {society.savingsPercentage.toNumber()}%
             </h2>
           </div>
 
@@ -108,11 +83,7 @@ export default function ProfilePage() {
             </p>
 
             <h2 className="text-2xl font-bold text-ink">
-              {society?.created_at
-                ? new Date(
-                    society.created_at
-                  ).toLocaleDateString()
-                : "-"}
+              {society.createdAt.toLocaleDateString()}
             </h2>
           </div>
 

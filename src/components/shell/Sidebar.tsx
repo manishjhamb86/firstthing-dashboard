@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/nav-config";
 import { useNavBadgeCounts } from "@/lib/use-nav-badge-counts";
-import { supabase } from "@/lib/supabase";
+import { signOut } from "next-auth/react";
 import type { GuardedProfile } from "@/lib/use-role-guard";
 
 const ROLE_SCOPE_LABEL: Record<GuardedProfile["role"], string> = {
@@ -23,7 +23,7 @@ export default function Sidebar({ profile }: { profile: GuardedProfile }) {
   const initials = (profile.email ?? "??").slice(0, 2).toUpperCase();
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    await signOut({ redirect: false });
     window.location.href = "/login";
   }
 

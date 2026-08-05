@@ -1,112 +1,91 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import { supabase } from "../../../lib/supabase";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import StatusChip, { type StatusTone } from "@/components/shell/StatusChip";
+import EmptyState from "@/components/shell/EmptyState";
 
-type Society = {
-  id: number;
-  name: string;
-};
+function statusTone(status: string): StatusTone {
+  if (status === "active") return "good";
+  if (status === "onboarding") return "neutral";
+  return "critical"; // suspended, archived
+}
 
-export default function SocietiesPage() {
+export default async function SocietiesPage() {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "admin") redirect("/login");
 
-  const [societies, setSocieties] = useState<Society[]>([]);
+  const societies = await db.society.findMany({
+    orderBy: { name: "asc" },
+    include: { devices: true },
+  });
 
-  useEffect(() => {
-    fetchSocieties();
-  }, []);
-
-  async function fetchSocieties() {
-    const { data } = await supabase
-      .from("societies")
-      .select("*")
-      .order("name");
-
-    if (data) {
-      setSocieties(data);
-    }
-  }
+  const counts = {
+    all: societies.length,
+    active: societies.filter((s) => s.status === "active").length,
+    onboarding: societies.filter((s) => s.status === "onboarding").length,
+    suspended: societies.filter((s) => s.status === "suspended").length,
+  };
 
   return (
-    <div className="w-full">
-
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6 md:mb-8">
-
-        <h1 className="text-2xl md:text-4xl font-bold">
-          Societies
-        </h1>
-
-        <Link href="/admin/societies/new">
-
-          <button className="bg-green-700 hover:bg-green-800 text-white px-4 md:px-5 py-2 md:py-3 rounded-lg md:rounded-xl text-sm md:text-base font-medium w-full sm:w-auto">
-            + Add Society
-          </button>
-
-        </Link>
-
+    <div className="rounded-2xl border border-border bg-card overflow-hidden">
+      <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-3.5">
+        <FilterChip label={`All ${counts.all}`} active />
+        <FilterChip label={`Active ${counts.active}`} />
+        <FilterChip label={`Onboarding ${counts.onboarding}`} />
+        <FilterChip label={`Suspended ${counts.suspended}`} />
       </div>
 
-      <div className="bg-white rounded-lg md:rounded-2xl shadow-sm overflow-x-auto">
-
-        <table className="w-full min-w-max">
-
-          <thead className="bg-gray-50 border-b">
-
-            <tr>
-
-              <th className="text-left p-3 md:p-4 text-xs md:text-sm font-semibold">
-                Society
-              </th>
-
-              <th className="text-left p-3 md:p-4 text-xs md:text-sm font-semibold hidden sm:table-cell">
-                ID
-              </th>
-
-              <th className="text-left p-3 md:p-4 text-xs md:text-sm font-semibold">
-                Actions
-              </th>
-
-            </tr>
-
-          </thead>
-
-          <tbody>
-
-            {societies.map((society) => (
-
-              <tr
-                key={society.id}
-                className="border-t hover:bg-gray-50 transition-colors"
-              >
-
-                <td className="p-3 md:p-4 text-sm md:text-base font-medium">
-                  {society.name}
-                </td>
-
-                <td className="p-3 md:p-4 text-sm md:text-base hidden sm:table-cell text-gray-600">
-                  {society.id}
-                </td>
-
-                <td className="p-3 md:p-4">
-  <Link
-    href={`/admin/societies/${society.id}`}
-    className="text-blue-600 hover:text-blue-800 text-sm md:text-base font-medium"
-  >
-    Edit
-  </Link>
-</td>
-
-              </tr>
-
-            ))}
-
-          </tbody>
-
-        </table>
-
+      <div className="hidden grid-cols-[2fr_1fr_1fr_1fr_.8fr] gap-2 bg-card-2 px-5 py-2.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-m2 sm:grid">
+        <div>Society</div>
+        <div>Units</div>
+        <div>Meters</div>
+        <div>Status</div>
+        <div />
       </div>
 
+      {societies.length === 0 && (
+        <div className="p-6">
+          <EmptyState title="No societies yet" description="Add the first society to get started." />
+        </div>
+      )}
+
+      {societies.map((society) => (
+        <div
+          key={society.id}
+          className="grid grid-cols-2 items-center gap-2 border-t border-border px-5 py-3.5 hover:bg-card-2 sm:grid-cols-[2fr_1fr_1fr_1fr_.8fr]"
+        >
+          <div className="col-span-2 sm:col-span-1">
+            <div className="text-xs font-semibold text-ink">{society.name}</div>
+            <div className="text-[10.5px] text-m2">{society.city || "-"}</div>
+          </div>
+          <div className="font-mono text-xs text-ink">{society.totalLights || "-"} units</div>
+          <div className="font-mono text-xs text-ink">{society.devices.length} meters</div>
+          <div>
+            <StatusChip tone={statusTone(society.status)}>{society.status.toUpperCase()}</StatusChip>
+          </div>
+          <div className="text-right">
+            <Link href={`/admin/societies/${society.id}`} className="text-xs font-semibold text-ac">
+              Open
+            </Link>
+          </div>
+        </div>
+      ))}
     </div>
+  );
+}
+
+function FilterChip({ label, active }: { label: string; active?: boolean }) {
+  return (
+    <span
+      className="rounded-[9px] px-3 py-1.5 text-[11px] font-semibold"
+      style={
+        active
+          ? { background: "var(--ac)", color: "var(--onac)" }
+          : { background: "var(--card)", color: "var(--m1)", border: "1px solid var(--bd)" }
+      }
+    >
+      {label}
+    </span>
   );
 }

@@ -1,49 +1,18 @@
-"use client";
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { db } from "@/lib/db";
+import EmptyState from "@/components/shell/EmptyState";
 
-import { useEffect, useState } from "react";
+export default async function ReportsPage() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
 
-import { supabase } from "../../../lib/supabase";
-
-type Report = {
-  id: number;
-  report_month: string;
-  pdf_url: string;
-};
-
-export default function ReportsPage() {
-
-  const [reports, setReports] = useState<Report[]>([]);
-
-  useEffect(() => {
-    loadReports();
-  }, []);
-
-  async function loadReports() {
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) return;
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("society_id")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile?.society_id) return;
-
-    const { data } = await supabase
-      .from("savings_reports")
-      .select("*")
-      .eq("society_id", profile.society_id)
-      .order("id", { ascending: false });
-
-    if (data) {
-      setReports(data);
-    }
-  }
+  const reports = session.user.societyId
+    ? await db.savingsReport.findMany({
+        where: { societyId: session.user.societyId },
+        orderBy: { id: "desc" },
+      })
+    : [];
 
   return (
     <div>
@@ -52,10 +21,18 @@ export default function ReportsPage() {
         Savings Reports
       </h1>
 
-      {reports.length === 0 && (
-        <div className="bg-card rounded-2xl p-8 border border-border text-m2">
-          No reports available.
-        </div>
+      {!session.user.societyId && (
+        <EmptyState
+          title="No society linked"
+          description="Your account isn't linked to a society yet. Contact your admin."
+        />
+      )}
+
+      {session.user.societyId && reports.length === 0 && (
+        <EmptyState
+          title="No reports available"
+          description="No savings reports are available for your society yet."
+        />
       )}
 
       <div className="space-y-6">
@@ -63,13 +40,13 @@ export default function ReportsPage() {
         {reports.map((report) => (
 
           <div
-            key={report.id}
+            key={report.id.toString()}
             className="bg-card rounded-2xl p-6 border border-border flex justify-between items-center"
           >
 
             <div>
               <h2 className="text-2xl font-bold text-ink">
-                {report.report_month}
+                {report.reportMonth}
               </h2>
 
               <p className="text-m2 mt-2">
@@ -77,13 +54,15 @@ export default function ReportsPage() {
               </p>
             </div>
 
-            <a
-              href={report.pdf_url}
-              target="_blank"
-              className="bg-ac text-onac px-5 py-3 rounded-xl"
-            >
-              Download Report
-            </a>
+            {report.pdfUrl && (
+              <a
+                href={report.pdfUrl}
+                target="_blank"
+                className="bg-ac text-onac px-5 py-3 rounded-xl"
+              >
+                Download Report
+              </a>
+            )}
 
           </div>
 

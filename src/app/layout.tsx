@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { THEME_IDS, DEFAULT_THEME, THEME_STORAGE_KEY } from "@/lib/theme";
+import { SessionProvider } from "next-auth/react";
 
 const jakarta = Plus_Jakarta_Sans({
   variable: "--font-jakarta",
@@ -41,7 +42,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
       </head>
       <body className="min-h-full flex flex-col">
-        {children}
+        <SessionProvider>{children}</SessionProvider>
       </body>
     </html>
   );

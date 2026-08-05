@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type StatusTone = "good" | "warning" | "critical" | "info" | "pending";
+export type StatusTone = "good" | "warning" | "critical" | "info" | "pending" | "neutral";
 
 const TONE_VARS: Record<StatusTone, { bg: string; fg: string }> = {
   good: { bg: "var(--okb)", fg: "var(--okf)" },
@@ -8,6 +8,7 @@ const TONE_VARS: Record<StatusTone, { bg: string; fg: string }> = {
   critical: { bg: "var(--bb)", fg: "var(--bf)" },
   info: { bg: "var(--ib)", fg: "var(--if)" },
   pending: { bg: "var(--pb)", fg: "var(--pf)" },
+  neutral: { bg: "var(--card3)", fg: "var(--m1)" },
 };
 
 export default function StatusChip({ tone, children }: { tone: StatusTone; children: ReactNode }) {

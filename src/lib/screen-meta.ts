@@ -16,11 +16,7 @@ const SCREEN_META: Record<string, ScreenMeta> = {
     primaryAction: { label: "Add society", href: "/admin/societies/new" },
   },
   "/admin/users": { breadcrumb: "ADMIN / USERS", title: "Users" },
-  "/admin/documents": {
-    breadcrumb: "ADMIN / DOCUMENTS",
-    title: "Documents",
-    primaryAction: { label: "Upload document", href: "/admin/documents/new" },
-  },
+  "/admin/documents": { breadcrumb: "ADMIN / DOCUMENTS", title: "Documents" },
   "/admin/documents/new": { breadcrumb: "ADMIN / DOCUMENTS / UPLOAD", title: "Upload a document" },
   "/admin/tanks": {
     breadcrumb: "ADMIN / WATER TANKS",

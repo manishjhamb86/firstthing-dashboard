@@ -111,14 +111,23 @@ export default function DocumentsListClient({
   return (
     <div className="w-full max-w-5xl space-y-6">
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
-        <div className="flex items-center gap-2.5 border-b border-border px-5 py-3.5">
-          <Files size={16} className="text-m1" />
-          <div>
-            <div className="text-sm font-bold text-ink">All Documents</div>
-            <div className="text-[11px] text-m2">
-              {sorted.length} of {documents.length} document{documents.length === 1 ? "" : "s"}
+        <div className="flex items-center justify-between gap-2.5 border-b border-border px-5 py-3.5">
+          <div className="flex items-center gap-2.5">
+            <Files size={16} className="text-m1" />
+            <div>
+              <div className="text-sm font-bold text-ink">All Documents</div>
+              <div className="text-[11px] text-m2">
+                {sorted.length} of {documents.length} document{documents.length === 1 ? "" : "s"}
+              </div>
             </div>
           </div>
+          <Link
+            href="/admin/documents/new"
+            className="flex items-center gap-1.5 rounded-[9px] bg-ac px-3.5 py-2 text-xs font-bold text-onac"
+          >
+            <UploadCloud size={13} />
+            Upload document
+          </Link>
         </div>
 
         <div className="border-b border-border bg-card-2 p-5">

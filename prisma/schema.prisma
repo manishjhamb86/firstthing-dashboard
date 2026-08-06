@@ -7,12 +7,18 @@ datasource db {
 }
 
 enum Role {
-  admin
   customer
   inspection
   socmgr
 
   @@map("role")
+}
+
+enum AdminPermission {
+  manage_admins
+  manage_users
+
+  @@map("admin_permission")
 }
 
 enum SocietyStatus {
@@ -100,6 +106,7 @@ model Profile {
   email        String?  @unique
   passwordHash String   @map("password_hash")
   role         Role
+  isActive     Boolean  @default(true) @map("is_active")
   societyId    Int?     @map("society_id")
   societyName  String?  @map("society_name")
   createdAt    DateTime @default(now()) @db.Timestamptz(6) @map("created_at")
@@ -110,6 +117,26 @@ model Profile {
   @@index([societyId])
   @@index([role])
   @@map("profiles")
+}
+
+// Deliberately a separate table from Profile, not a shared "role" column —
+// see PROJECT_CONTEXT.md. An admin session can only ever be minted by a row
+// existing here; a Profile row can never carry admin access, by construction
+// rather than by a role check that could be bypassed by a bug.
+model AdminUser {
+  id           String            @id @default(uuid()) @db.Uuid
+  email        String            @unique
+  passwordHash String            @map("password_hash")
+  name         String?
+  isActive     Boolean           @default(true) @map("is_active")
+  permissions  AdminPermission[]
+  createdById  String?           @map("created_by_id") @db.Uuid
+  createdAt    DateTime          @default(now()) @db.Timestamptz(6) @map("created_at")
+
+  createdBy AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  created   AdminUser[] @relation("AdminCreatedBy")
+
+  @@map("admin_users")
 }
 
 model Device {
@@ -172,6 +199,7 @@ model Invoice {
   amount        Decimal?      @db.Decimal(12, 2)
   gst           Decimal?      @db.Decimal(12, 2)
   totalAmount   Decimal?      @db.Decimal(12, 2) @map("total_amount")
+  issueDate     DateTime?     @db.Date @map("issue_date")
   dueDate       DateTime?     @db.Date @map("due_date")
   status        InvoiceStatus @default(Issued)
   pdfUrl        String?       @map("pdf_url")

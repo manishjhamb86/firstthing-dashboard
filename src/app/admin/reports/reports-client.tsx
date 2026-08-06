@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import FileUploader from "@/components/admin/FileUploader";
 import { deleteReport, saveReport } from "./actions";
+import { formatMonthLabel } from "@/lib/format-month";
 
 type Society = { id: number; name: string };
 
@@ -28,6 +29,7 @@ export default function ReportsClient({
   const router = useRouter();
 
   const [societyId, setSocietyId] = useState("");
+  const societyName = societies.find((s) => s.id === Number(societyId))?.name ?? "";
   const [reportMonth, setReportMonth] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -97,13 +99,20 @@ export default function ReportsClient({
         </select>
 
         <input
-          placeholder="Report Month (May 2026)"
+          type="month"
+          aria-label="Report Month"
           className={inputClass}
           value={reportMonth}
           onChange={(e) => setReportMonth(e.target.value)}
         />
 
-        <FileUploader folder="savings-reports" onUploadComplete={(url) => setPdfUrl(url)} />
+        <FileUploader
+          society={societyName}
+          month={reportMonth}
+          docType="savingsReport"
+          dateLabel={reportMonth}
+          onUploadComplete={(url) => setPdfUrl(url)}
+        />
 
         {pdfUrl && (
           <div className="text-xs font-semibold" style={{ color: "var(--okf)" }}>
@@ -141,7 +150,7 @@ export default function ReportsClient({
             className="grid grid-cols-1 gap-2 border-t border-border px-5 py-3.5 sm:grid-cols-[2fr_1fr_1fr] sm:items-center"
           >
             <div className="text-xs font-semibold text-ink">{report.societyName}</div>
-            <div className="text-xs text-m1">{report.reportMonth}</div>
+            <div className="text-xs text-m1">{formatMonthLabel(report.reportMonth)}</div>
             <div className="flex items-center gap-4 sm:justify-end">
               <a href={report.pdfUrl} target="_blank" className="text-xs font-semibold text-ac">
                 View

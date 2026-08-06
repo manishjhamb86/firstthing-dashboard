@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { toTitleCase } from "@/lib/format-text";
 
 async function requireAdmin() {
   const session = await auth();
@@ -20,7 +21,7 @@ export async function createSociety(input: {
 }) {
   await requireAdmin();
 
-  const name = input.name.trim();
+  const name = toTitleCase(input.name);
   const city = input.city.trim();
   const email = input.email.trim().toLowerCase();
   const password = input.password;
@@ -55,6 +56,32 @@ export async function createSociety(input: {
   return { success: true, societyId: society.id, email, societyName: society.name };
 }
 
+// Minimal society creation with no linked customer login — used by the
+// AI-extraction "unmatched society" quick-create flow (e.g. from the
+// invoices form), where an admin just needs a Society row to file a
+// document against, not a full onboarding (city/login/password). Adding a
+// customer login for it later is still possible from the society's own
+// edit page.
+export async function createSocietyQuick(name: string) {
+  await requireAdmin();
+
+  const formatted = toTitleCase(name);
+  if (!formatted) {
+    return { success: false as const, error: "Society name is required." };
+  }
+
+  const existing = await db.society.findFirst({ where: { name: formatted } });
+  if (existing) {
+    return { success: true as const, societyId: existing.id, name: existing.name };
+  }
+
+  const society = await db.society.create({ data: { name: formatted } });
+
+  revalidatePath("/admin/societies");
+
+  return { success: true as const, societyId: society.id, name: society.name };
+}
+
 export async function updateSociety(input: {
   id: number;
   name: string;
@@ -67,7 +94,7 @@ export async function updateSociety(input: {
   await db.society.update({
     where: { id: input.id },
     data: {
-      name: input.name,
+      name: toTitleCase(input.name),
       city: input.city,
       totalLights: input.totalLights,
       savingsPercentage: input.savingsPercentage,

@@ -1,4 +1,5 @@
 import type { DefaultSession } from "next-auth";
+import type { AdminPermission } from "@prisma/client";
 import type { Role } from "@/lib/roles";
 
 declare module "next-auth" {
@@ -8,6 +9,7 @@ declare module "next-auth" {
       role: Role;
       societyId: number | null;
       societyName: string | null;
+      adminPermissions: AdminPermission[] | null;
     } & DefaultSession["user"];
   }
 
@@ -15,6 +17,7 @@ declare module "next-auth" {
     role: Role;
     societyId: number | null;
     societyName: string | null;
+    adminPermissions: AdminPermission[] | null;
   }
 }
 
@@ -27,5 +30,6 @@ declare module "@auth/core/jwt" {
     role?: Role;
     societyId?: number | null;
     societyName?: string | null;
+    adminPermissions?: AdminPermission[] | null;
   }
 }

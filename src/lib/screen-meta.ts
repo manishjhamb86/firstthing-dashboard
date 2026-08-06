@@ -15,7 +15,7 @@ const SCREEN_META: Record<string, ScreenMeta> = {
     title: "Societies",
     primaryAction: { label: "Add society", href: "/admin/societies/new" },
   },
-  "/admin/users": { breadcrumb: "ADMIN / USERS", title: "Society Users" },
+  "/admin/users": { breadcrumb: "ADMIN / USERS", title: "Users" },
   "/admin/tanks": {
     breadcrumb: "ADMIN / WATER TANKS",
     title: "Water Tanks",

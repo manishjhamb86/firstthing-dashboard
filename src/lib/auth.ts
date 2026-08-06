@@ -18,8 +18,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const password = credentials?.password;
         if (typeof email !== "string" || typeof password !== "string") return null;
 
+        // Admin logins are resolved against their own table, never `profiles`
+        // — see PROJECT_CONTEXT.md. This makes an admin session structurally
+        // impossible to obtain via a Profile row, not just role-gated.
+        const admin = await db.adminUser.findUnique({ where: { email } });
+        if (admin) {
+          if (!admin.isActive) return null;
+          const valid = await bcrypt.compare(password, admin.passwordHash);
+          if (!valid) return null;
+
+          return {
+            id: admin.id,
+            email: admin.email,
+            role: "admin",
+            societyId: null,
+            societyName: null,
+            adminPermissions: admin.permissions,
+          };
+        }
+
         const profile = await db.profile.findUnique({ where: { email } });
-        if (!profile) return null;
+        if (!profile || !profile.isActive) return null;
 
         const valid = await bcrypt.compare(password, profile.passwordHash);
         if (!valid) return null;
@@ -30,6 +49,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           role: profile.role,
           societyId: profile.societyId,
           societyName: profile.societyName,
+          adminPermissions: null,
         };
       },
     }),
@@ -40,6 +60,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.role = user.role;
         token.societyId = user.societyId;
         token.societyName = user.societyName;
+        token.adminPermissions = user.adminPermissions ?? null;
       }
       return token;
     },
@@ -49,6 +70,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.role = token.role!;
         session.user.societyId = token.societyId ?? null;
         session.user.societyName = token.societyName ?? null;
+        session.user.adminPermissions = token.adminPermissions ?? null;
       }
       return session;
     },

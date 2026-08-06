@@ -44,6 +44,7 @@ export default function InspectionReportsClient({
   const router = useRouter();
 
   const [societyId, setSocietyId] = useState("");
+  const societyName = societies.find((s) => s.id === Number(societyId))?.name ?? "";
   const [reportType, setReportType] = useState("");
   const [reportDate, setReportDate] = useState("");
   const [pdfUrl, setPdfUrl] = useState("");
@@ -131,7 +132,13 @@ export default function InspectionReportsClient({
 
         <input type="date" className={inputClass} value={reportDate} onChange={(e) => setReportDate(e.target.value)} />
 
-        <FileUploader folder="inspection-reports" onUploadComplete={(url) => setPdfUrl(url)} />
+        <FileUploader
+          society={societyName}
+          month={reportDate.slice(0, 7)}
+          docType="inspectionReport"
+          dateLabel={reportDate}
+          onUploadComplete={(url) => setPdfUrl(url)}
+        />
 
         <div className="flex gap-3">
           <button onClick={saveInspection} className="rounded-[9px] bg-ac px-4 py-2.5 text-sm font-bold text-onac">

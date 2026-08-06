@@ -1,15 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "../../lib/supabase";
+import { uploadFileToS3 } from "@/lib/upload-to-s3";
+import type { DocType } from "@/lib/document-keys";
 
 type Props = {
-  folder: string;
+  society: string;
+  month: string; // YYYY-MM, an explicit selection made in the parent form
+  docType: DocType;
+  dateLabel: string; // YYYY-MM-DD or YYYY-MM, used in the stored filename
+  identifier?: string; // e.g. invoice number
   onUploadComplete: (url: string) => void;
 };
 
 export default function FileUploader({
-  folder,
+  society,
+  month,
+  docType,
+  dateLabel,
+  identifier,
   onUploadComplete,
 }: Props) {
   const [uploading, setUploading] = useState(false);
@@ -24,41 +33,12 @@ export default function FileUploader({
     setUploading(true);
 
     try {
-      const fileName = `${Date.now()}-${file.name}`;
-      const filePath = `${folder}/${fileName}`;
-
-      const { data: uploadData, error: uploadError } =
-        await supabase.storage
-          .from("documents")
-          .upload(filePath, file);
-
-      console.log("UPLOAD DATA:", uploadData);
-      console.log("UPLOAD ERROR:", uploadError);
-
-      if (uploadError) {
-        alert(uploadError.message);
-        setUploading(false);
-        return;
-      }
-
-      const { data: publicUrlData } =
-        supabase.storage
-          .from("documents")
-          .getPublicUrl(filePath);
-
-      console.log(
-        "PUBLIC URL:",
-        publicUrlData.publicUrl
-      );
-
-      onUploadComplete(
-        publicUrlData.publicUrl
-      );
-
+      const publicUrl = await uploadFileToS3(file, { society, month, docType, dateLabel, identifier });
+      onUploadComplete(publicUrl);
       alert("PDF uploaded. Complete the form and click the save button.");
     } catch (err) {
       console.error(err);
-      alert("Upload failed");
+      alert(err instanceof Error ? err.message : "Upload failed");
     }
 
     setUploading(false);

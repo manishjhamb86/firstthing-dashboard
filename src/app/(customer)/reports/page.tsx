@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import EmptyState from "@/components/shell/EmptyState";
+import { formatMonthLabel } from "@/lib/format-month";
 
 export default async function ReportsPage() {
   const session = await auth();
@@ -46,7 +47,7 @@ export default async function ReportsPage() {
 
             <div>
               <h2 className="text-2xl font-bold text-ink">
-                {report.reportMonth}
+                {formatMonthLabel(report.reportMonth)}
               </h2>
 
               <p className="text-m2 mt-2">

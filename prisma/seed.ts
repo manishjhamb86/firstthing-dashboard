@@ -5,8 +5,7 @@ import { db } from "../src/lib/db";
 async function seedAccounts() {
   const passwordHash = await bcrypt.hash("password123", 10);
 
-  const users: { email: string; role: "admin" | "customer" | "inspection" | "socmgr" }[] = [
-    { email: "admin@firsthing.local", role: "admin" },
+  const users: { email: string; role: "customer" | "inspection" | "socmgr" }[] = [
     { email: "customer@firsthing.local", role: "customer" },
     { email: "inspector@firsthing.local", role: "inspection" },
     { email: "socmgr@firsthing.local", role: "socmgr" },
@@ -20,13 +19,28 @@ async function seedAccounts() {
     });
   }
 
+  // Admin accounts live in their own table (see PROJECT_CONTEXT.md).
+  // admin@firsthing.local demonstrates a regular admin who can manage
+  // regular users but not create other admins; yogesh@firsthing.earth is
+  // the bootstrap "can manage admins" account.
+  await db.adminUser.upsert({
+    where: { email: "admin@firsthing.local" },
+    update: {},
+    create: { email: "admin@firsthing.local", passwordHash, permissions: ["manage_users"] },
+  });
+
   // Personal admin login for manual testing (separate password from the
   // shared "password123" seeded accounts above).
   const yogeshPasswordHash = await bcrypt.hash("Test@12345", 10);
-  await db.profile.upsert({
+  await db.adminUser.upsert({
     where: { email: "yogesh@firsthing.earth" },
     update: {},
-    create: { email: "yogesh@firsthing.earth", role: "admin", passwordHash: yogeshPasswordHash },
+    create: {
+      email: "yogesh@firsthing.earth",
+      passwordHash: yogeshPasswordHash,
+      name: "Yogesh Kumar",
+      permissions: ["manage_admins", "manage_users"],
+    },
   });
 }
 
@@ -136,7 +150,7 @@ async function seedSyntheticData() {
         societyId: s.id,
         societyName: s.name,
         invoiceNumber: `INV-2026-0${idx + 1}`,
-        invoiceMonth: "July 2026",
+        invoiceMonth: "2026-07",
         amount,
         gst,
         totalAmount: amount + gst,
@@ -150,7 +164,7 @@ async function seedSyntheticData() {
   // Savings reports for the first two active societies.
   for (const s of [nexus, insignia]) {
     await db.savingsReport.create({
-      data: { societyId: s.id, reportMonth: "July 2026", pdfUrl: PDF_PLACEHOLDER },
+      data: { societyId: s.id, reportMonth: "2026-07", pdfUrl: PDF_PLACEHOLDER },
     });
   }
 

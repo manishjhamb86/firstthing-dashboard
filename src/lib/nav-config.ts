@@ -13,7 +13,7 @@ export const NAV_ITEMS: Record<Role, NavItem[]> = {
   admin: [
     { key: "dashboard", href: "/admin", label: "Dashboard" },
     { key: "societies", href: "/admin/societies", label: "Societies", badgeKey: "societiesCount" },
-    { key: "users", href: "/admin/users", label: "Society Users" },
+    { key: "users", href: "/admin/users", label: "Users" },
     { key: "tanks", href: "/admin/tanks", label: "Water Tanks" },
     { key: "energy", href: "/admin/energy", label: "Energy Data" },
     { key: "invoices", href: "/admin/invoices", label: "Invoices", badgeKey: "unpaidInvoicesCount" },

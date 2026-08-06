@@ -24,6 +24,7 @@ export default async function AdminInvoicesPage() {
         amount: invoice.amount ? invoice.amount.toNumber() : 0,
         gst: invoice.gst ? invoice.gst.toNumber() : 0,
         totalAmount: invoice.totalAmount ? invoice.totalAmount.toNumber() : 0,
+        issueDate: invoice.issueDate ? invoice.issueDate.toISOString().slice(0, 10) : "",
         dueDate: invoice.dueDate ? invoice.dueDate.toISOString().slice(0, 10) : "",
         status: invoice.status,
         pdfUrl: invoice.pdfUrl ?? "",

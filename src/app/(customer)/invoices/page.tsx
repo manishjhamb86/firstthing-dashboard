@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import EmptyState from "@/components/shell/EmptyState";
+import { formatMonthLabel } from "@/lib/format-month";
 
 export default async function InvoicesPage() {
   const session = await auth();
@@ -61,7 +62,7 @@ export default async function InvoicesPage() {
               </h2>
 
               <p className="text-m2 mt-2">
-                {invoice.invoiceMonth}
+                {formatMonthLabel(invoice.invoiceMonth)}
               </p>
 
               <p className="text-m2 mt-1">

@@ -10,7 +10,10 @@
   },
   "dependencies": {
     "@auth/core": "0.41.3",
+    "@aws-sdk/client-s3": "^3.1102.0",
+    "@aws-sdk/s3-request-presigner": "^3.1102.0",
     "@base-ui/react": "^1.4.1",
+    "@google/genai": "^2.15.0",
     "@prisma/adapter-pg": "^7.9.1",
     "@prisma/client": "^7.9.1",
     "@supabase/supabase-js": "^2.106.0",

@@ -36,6 +36,7 @@ export default function RootLayout({
     <html
       lang="en"
       data-theme={DEFAULT_THEME}
+      suppressHydrationWarning
       className={`${jakarta.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
       <head>

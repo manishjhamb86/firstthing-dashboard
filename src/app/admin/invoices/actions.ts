@@ -24,6 +24,42 @@ type ExtractedInvoiceFields = {
   dueDate: string;
 };
 
+function normalizeForMatch(value: string): string {
+  return value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+}
+
+// Cheap pre-AI check: does this filename look like it matches an invoice
+// number we already have saved? Runs before any Gemini call so a re-upload
+// of the same PDF gets caught immediately rather than burning an API call.
+export async function checkPossibleDuplicateInvoice(filenamePrefix: string) {
+  await requireAdmin();
+
+  const normalizedPrefix = normalizeForMatch(filenamePrefix);
+  if (!normalizedPrefix) {
+    return { duplicate: false as const };
+  }
+
+  const invoices = await db.invoice.findMany({ select: { invoiceNumber: true, societyName: true } });
+
+  const match = invoices.find((inv) => {
+    const normalizedNumber = normalizeForMatch(inv.invoiceNumber);
+    return (
+      normalizedNumber.length > 0 &&
+      (normalizedPrefix.includes(normalizedNumber) || normalizedNumber.includes(normalizedPrefix))
+    );
+  });
+
+  if (!match) {
+    return { duplicate: false as const };
+  }
+
+  return {
+    duplicate: true as const,
+    invoiceNumber: match.invoiceNumber,
+    societyName: match.societyName ?? "another society",
+  };
+}
+
 export async function extractInvoiceFields(file: File) {
   await requireAdmin();
 
@@ -100,6 +136,19 @@ export async function saveInvoice(input: {
   const society = await db.society.findUnique({ where: { id: input.societyId } });
   if (!society) {
     return { success: false, error: "Society not found" };
+  }
+
+  const duplicate = await db.invoice.findFirst({
+    where: {
+      invoiceNumber: input.invoiceNumber,
+      ...(input.editingId ? { id: { not: input.editingId } } : {}),
+    },
+  });
+  if (duplicate) {
+    return {
+      success: false,
+      error: `Invoice number "${input.invoiceNumber}" already exists (for ${duplicate.societyName ?? "another society"}).`,
+    };
   }
 
   const data = {

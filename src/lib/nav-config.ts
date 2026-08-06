@@ -12,6 +12,7 @@ export type NavItem = {
 export const NAV_ITEMS: Record<Role, NavItem[]> = {
   admin: [
     { key: "dashboard", href: "/admin", label: "Dashboard" },
+    { key: "documents", href: "/admin/documents", label: "Documents" },
     { key: "societies", href: "/admin/societies", label: "Societies", badgeKey: "societiesCount" },
     { key: "users", href: "/admin/users", label: "Users" },
     { key: "tanks", href: "/admin/tanks", label: "Water Tanks" },

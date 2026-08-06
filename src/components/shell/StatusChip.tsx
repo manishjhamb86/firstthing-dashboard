@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 export type StatusTone = "good" | "warning" | "critical" | "info" | "pending" | "neutral";
 
-const TONE_VARS: Record<StatusTone, { bg: string; fg: string }> = {
+export const TONE_VARS: Record<StatusTone, { bg: string; fg: string }> = {
   good: { bg: "var(--okb)", fg: "var(--okf)" },
   warning: { bg: "var(--wb)", fg: "var(--wf)" },
   critical: { bg: "var(--bb)", fg: "var(--bf)" },

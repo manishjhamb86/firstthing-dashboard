@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import StatusChip, { type StatusTone } from "@/components/shell/StatusChip";
-import { deleteInvoice, extractInvoiceFields, saveInvoice } from "./actions";
+import { checkPossibleDuplicateInvoice, deleteInvoice, extractInvoiceFields, saveInvoice } from "./actions";
 import { createSocietyQuick } from "../societies/actions";
 import { formatMonthLabel } from "@/lib/format-month";
 import { uploadFileToS3 } from "@/lib/upload-to-s3";
@@ -28,6 +28,11 @@ type AdminInvoice = {
 
 const inputClass =
   "w-full rounded-[10px] border border-border bg-card px-3.5 py-2.5 text-sm text-ink placeholder:text-m2 focus:outline-none";
+
+function formatShortDate(value: string): string {
+  if (!value) return "—";
+  return new Date(`${value}T00:00:00`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+}
 
 function statusTone(status: InvoiceStatus): StatusTone {
   if (status === "Paid") return "good";
@@ -88,6 +93,19 @@ export default function InvoicesClient({
   async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const selected = e.target.files?.[0];
     if (!selected) return;
+
+    const filenamePrefix = selected.name.slice(0, 15);
+    const dupCheck = await checkPossibleDuplicateInvoice(filenamePrefix);
+
+    if (dupCheck.duplicate) {
+      const reupload = confirm(
+        `This looks like it may already be uploaded — it matches invoice "${dupCheck.invoiceNumber}" for ${dupCheck.societyName}. Re-upload anyway?`
+      );
+      if (!reupload) {
+        e.target.value = "";
+        return;
+      }
+    }
 
     setFile(selected);
     setExtracting(true);
@@ -383,10 +401,12 @@ export default function InvoicesClient({
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
         <div className="border-b border-border px-5 py-3.5 text-sm font-bold text-ink">Existing Invoices</div>
 
-        <div className="hidden grid-cols-[1.5fr_1fr_1fr_1fr_1fr_.8fr] gap-2 bg-card-2 px-5 py-2.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-m2 sm:grid">
+        <div className="hidden grid-cols-[1.3fr_.9fr_.8fr_.85fr_.85fr_.9fr_.8fr_.8fr] gap-2 bg-card-2 px-5 py-2.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-m2 sm:grid">
           <div>Society</div>
           <div>Invoice</div>
           <div>Month</div>
+          <div>Issue Date</div>
+          <div>Due Date</div>
           <div>Total</div>
           <div>Status</div>
           <div />
@@ -397,11 +417,13 @@ export default function InvoicesClient({
         {invoices.map((invoice) => (
           <div
             key={invoice.id}
-            className="grid grid-cols-2 gap-2 border-t border-border px-5 py-3.5 sm:grid-cols-[1.5fr_1fr_1fr_1fr_1fr_.8fr] sm:items-center"
+            className="grid grid-cols-2 gap-2 border-t border-border px-5 py-3.5 sm:grid-cols-[1.3fr_.9fr_.8fr_.85fr_.85fr_.9fr_.8fr_.8fr] sm:items-center"
           >
             <div className="col-span-2 text-xs font-semibold text-ink sm:col-span-1">{invoice.societyName}</div>
             <div className="text-xs text-m1">{invoice.invoiceNumber}</div>
             <div className="text-xs text-m1">{formatMonthLabel(invoice.invoiceMonth)}</div>
+            <div className="text-xs text-m1">{formatShortDate(invoice.issueDate)}</div>
+            <div className="text-xs text-m1">{formatShortDate(invoice.dueDate)}</div>
             <div className="font-mono text-xs font-bold text-ac">₹ {invoice.totalAmount.toLocaleString()}</div>
             <div>
               <StatusChip tone={statusTone(invoice.status)}>{invoice.status.toUpperCase()}</StatusChip>

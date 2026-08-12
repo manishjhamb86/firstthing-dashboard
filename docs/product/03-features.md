@@ -296,15 +296,16 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Surface(s):** SUR-02
 - **Problem:** Without a full lighting count by area, sales/ops can't scope a proposal beyond the single demo circuit, and CAP-06's cross-sell projection (CON-29) has no equipment baseline to work from.
 - **Description:** PER-04 records the whole-society lighting count broken out by area — basement/stilt parking (counted separately when both exist), lift lobby, staircase, and other common-area categories — distinct from the single sample `Circuit` metered for the benchmark (CON-11).
-- **Behavioral rules:** Basement and stilt parking are always two separate line items when both exist at a site, never merged (CON-28b). This is a count-only inventory (not per-fixture serialized assets) — distinct in kind from the pump equipment audit (FEAT-008), which is per-unit.
+- **Behavioral rules:** Basement and stilt parking are always two separate line items when both exist at a site, never merged (CON-28b). This is a count-only inventory (not per-fixture serialized assets) — distinct in kind from the pump equipment audit (FEAT-008), which is per-unit. **Every area row carries a light type / operating profile** (the five CON-16 profiles), because the capture axis (area — "Tower B staircase") and the billing axis (type — "staircase") differ: four towers are four area rows and one type, and the per-type sum is CON-11's `representedLightCount`. **Every area row also records how the count was obtained** — walked and counted / from the society's records / estimated — with a required note on `estimated` (added 2026-08-13 while specifying SCR-011).
 - **Acceptance criteria:**
   - AC-1 (happy): Given PER-04 is on-site, when they enter light counts per area, then a `LightingInventoryArea[]` list is saved against the `SiteSurvey`.
   - AC-2 (empty/first-run): Given no inventory yet, fields default to zero with an explicit prompt to add each area present at the site, not a silently-skippable total.
   - AC-3 (failure): Given a negative or non-numeric count is entered, rejected with a field-level error.
   - AC-4 (permission): Same as FEAT-005.
   - AC-5 (edge): Given a society has no basement or stilt parking at all, that line item is omitted rather than recorded as zero — the inventory reflects what actually exists, not a padded checklist.
+  - AC-6 (provenance, added 2026-08-13): Given an area row is saved, then it carries a light type and a count method; given the method is `estimated`, then a note is required, and that row is surfaced as an explicit weakness on FEAT-010's review (SCR-014) rather than appearing identical to a walked count. **Rationale:** FLOW-02 step 4 states a miscount here biases billing for the whole term with no downstream check, and a desk reviewer cannot re-count 1,200 lights — how the number was obtained is the only reviewable property it has.
 - **Permissions:** PER-04 (create/edit), PER-01 (view/edit).
-- **Data touched:** Creates `LightingInventoryArea[]` (area type, light count) under `SiteSurvey`.
+- **Data touched:** Creates `LightingInventoryArea[]` (area type, optional label, light count, **light type**, **count method**, note) under `SiteSurvey`.
 - **Triggers:** Manual, same visit as FEAT-005/FEAT-007.
 - **Emits:** `LightingInventoryCaptured`.
 - **Consumes:** none beyond the Pipeline gate.

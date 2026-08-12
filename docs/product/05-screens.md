@@ -1,5 +1,5 @@
 # Screens: Spec & Design
-**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — inventory proposed, awaiting confirmation
+**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — inventory proposed; theme gate cleared, per-screen loop not started
 **Last updated:** 2026-08-12 · **Mode:** Ecosystem
 
 > **Numbering:** this is *this blueprint's* Phase 5. It follows the skill's
@@ -10,16 +10,22 @@
 
 ---
 
-## 0. Gate: the theme is not yet approved
+## 0. Gate: the theme is approved
 
 The method is explicit that the visual system must be signed off **before the first screen** —
 designing on an unapproved system means reworking every screen when it changes. `00-intake.md` §11
 already committed to exploring fresh visual directions (the existing 5-theme token system among
 them) before settling one, and accepted that this may invalidate parts of the existing reskin.
 
-**That exploration has not happened yet.** No screen below can move past specification until it
-does. Specification (step 2 of the per-screen loop) does not depend on the theme and can proceed;
-research, mockup, verification, and blueprint all do.
+**That exploration is done — see `05a-theme-system.md` (Approved, 2026-08-12).** Brand direction
+settled (warm professional; credible, warm, unfussy), three directions rendered against SCR-090,
+**DIR-02 Console** chosen, then built out in full: semantic tokens in light and dark, type/space/
+elevation/motion scales, every shared component in every state, a `.roomy` density modifier for the
+society portal and the SUR-02 field surface, proved on SCR-082 and accessibility-verified with
+measured contrast ratios.
+
+The gate is therefore **open**: the per-screen loop below can run all five steps, not just
+specification.
 
 ---
 

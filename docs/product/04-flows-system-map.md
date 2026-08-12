@@ -1,5 +1,5 @@
 # Flows & System Map
-**Product:** FirsThing Platform · **Phase:** 4 — Flows & System Map · **Status:** Draft — complete, awaiting approval
+**Product:** FirsThing Platform · **Phase:** 4 — Flows & System Map · **Status:** Draft — complete, all 9 discovered features fed back, awaiting approval
 **Last updated:** 2026-08-12 · **Mode:** Ecosystem
 
 > **Numbering:** this document is *this blueprint's* Phase 4. It follows the skill's
@@ -955,20 +955,23 @@ round-trip fails — see DF-03.
 ## 8. Features discovered in this phase
 
 The method predicts flows will expose missing features, and they did — nine, almost all of them
-the connective tissue between capabilities rather than gaps inside one. **Not yet added to
-`03-features.md`**; they need acceptance criteria and would continue from FEAT-095.
+the connective tissue between capabilities rather than gaps inside one. **All nine were adopted
+and written into `03-features.md` as FEAT-095..103** with full acceptance criteria (see its §7.7b).
+Two required product decisions of their own, now recorded as **CON-40** (30-minute provisional
+gate-pass release) and **CON-41** (a dispute does not pause the arrears clock; visibility plus the
+existing extension mechanism, with the residual risk accepted as ASSUM-23).
 
 | ID | Feature | Discovered in | Why it matters | Added to Phase 3? |
 |---|---|---|---|---|
-| DF-01 | **Deal outcome & re-engagement** — `closed-lost` with a reason, and a path to re-open | FLOW-01 step 7, FLOW-06 | Nothing currently terminates a pipeline. Every dead lead sits at its last stage forever, inflating the board and corrupting CON-23's lead-health signal | no |
-| DF-02 | **Site-access coordination** | FLOW-02 step 2 | `02-users-research.md` §1 explicitly names facility/security staff as a blocker on site access and gives them no product support. Every SUR-02 flow starts with "get in" | no |
-| DF-03 | **Gate-pass approval fallback when backend is unreachable** | FLOW-03 step 3, XS-04/05 | CON-18 makes backend approval a precondition for leaving the premises. With no offline path, a connectivity failure physically strands a technician. Needs either a time-boxed provisional release or an offline-signable variant | no |
-| DF-04 | **Prospect → customer account conversion** | FLOW-06 step 7 | CON-34 creates scoped prospect logins; nothing widens them to full portal accounts at signing. Today the society would either keep a crippled login or get a second one | no |
-| DF-05 | **Bulk / multi-circuit reading upload** | FLOW-09 | FEAT-043 is single-file. At 200 societies × several typed circuits this is 800+ uploads a month, one at a time — plus the same clarifying questions repeated. Needs batch upload and a remembered per-vendor mapping | no |
-| DF-06 | **Month-close readiness cockpit** | FLOW-09 step 8 | Nothing answers "which societies are ready to bill, and what is each blocked on." Without it a forgotten circuit silently drops a society from a billing cycle | no |
-| DF-07 | **Invoice-to-calculation reconciliation** | FLOW-10 step 8 | The invoice is authored in Zoho and uploaded back. Nobody checks the uploaded total against the computed total — the one check that would catch a transcription error before it reaches a society | no |
-| DF-08 | **Disputed vs unpaid distinction** | FLOW-12, FLOW-15 | A society withholding payment over a disputed bill runs the same arrears clock toward automatic suspension as one that simply hasn't paid. Suspending a society mid-dispute is a serious escalation the product would perform automatically | no |
-| DF-09 | **Term-end hardware ownership transfer** | FLOW-17 step 5 | CON-15 states ownership passes to the society at term end. Nothing models it — it changes asset ownership, maintenance responsibility, and whether spare inventory still applies | no |
+| DF-01 | **Deal outcome & re-engagement** — `closed-lost` with a reason, and a path to re-open | FLOW-01 step 7, FLOW-06 | Nothing currently terminates a pipeline. Every dead lead sits at its last stage forever, inflating the board and corrupting CON-23's lead-health signal | **FEAT-095** |
+| DF-02 | **Site-access coordination** | FLOW-02 step 2 | `02-users-research.md` §1 explicitly names facility/security staff as a blocker on site access and gives them no product support. Every SUR-02 flow starts with "get in" | **FEAT-096** |
+| DF-03 | **Gate-pass approval fallback when backend is unreachable** | FLOW-03 step 3, XS-04/05 | CON-18 makes backend approval a precondition for leaving the premises. With no offline path, a connectivity failure physically strands a technician. Needs either a time-boxed provisional release or an offline-signable variant | **FEAT-097** |
+| DF-04 | **Prospect → customer account conversion** | FLOW-06 step 7 | CON-34 creates scoped prospect logins; nothing widens them to full portal accounts at signing. Today the society would either keep a crippled login or get a second one | **FEAT-098** |
+| DF-05 | **Bulk / multi-circuit reading upload** | FLOW-09 | FEAT-043 is single-file. At 200 societies × several typed circuits this is 800+ uploads a month, one at a time — plus the same clarifying questions repeated. Needs batch upload and a remembered per-vendor mapping | **FEAT-099** |
+| DF-06 | **Month-close readiness cockpit** | FLOW-09 step 8 | Nothing answers "which societies are ready to bill, and what is each blocked on." Without it a forgotten circuit silently drops a society from a billing cycle | **FEAT-100** |
+| DF-07 | **Invoice-to-calculation reconciliation** | FLOW-10 step 8 | The invoice is authored in Zoho and uploaded back. Nobody checks the uploaded total against the computed total — the one check that would catch a transcription error before it reaches a society | **FEAT-101** |
+| DF-08 | **Disputed vs unpaid distinction** | FLOW-12, FLOW-15 | A society withholding payment over a disputed bill runs the same arrears clock toward automatic suspension as one that simply hasn't paid. Suspending a society mid-dispute is a serious escalation the product would perform automatically | **FEAT-102** |
+| DF-09 | **Term-end hardware ownership transfer** | FLOW-17 step 5 | CON-15 states ownership passes to the society at term end. Nothing models it — it changes asset ownership, maintenance responsibility, and whether spare inventory still applies | **FEAT-103** |
 
 **Assessment:** DF-03, DF-07 and DF-08 are the three that can cause real harm rather than
 inconvenience — respectively stranding a person on site, letting a wrong invoice reach a customer,

@@ -1,6 +1,6 @@
 # Feature Definition
 **Product:** FirsThing Platform · **Phase:** 3 — Feature Definition · **Status:** Approved
-**Last updated:** 2026-08-12 (gate review: 12 open items resolved; FEAT-032/FEAT-052 rewritten after CON-24/CON-25 were corrected. **Post-gate audit sweep, same day:** CON-11's per-light-type metering and per-circuit tolerance bands applied across CAP-01/02/04/05; CAP-22 notifications added (FEAT-090..093); CAP-02's no-demo variant given its own brief (FEAT-094)) · **Mode:** Ecosystem
+**Last updated:** 2026-08-12 (gate review: 12 open items resolved; FEAT-032/FEAT-052 rewritten after CON-24/CON-25 were corrected. **Post-gate audit sweep, same day:** CON-11's per-light-type metering and per-circuit tolerance bands applied across CAP-01/02/04/05; CAP-22 notifications added (FEAT-090..093); CAP-02's no-demo variant given its own brief (FEAT-094). **Phase 4 feedback, 2026-08-12:** the flow mapping in `04-flows-system-map.md` exposed 9 missing features, added here as FEAT-095..103) · **Mode:** Ecosystem
 
 ---
 
@@ -8,13 +8,15 @@
 
 Original 14 capabilities, plus 7 new ones and 3 refinements discovered from the full lead-to-cash
 narrative (2026-08-10), plus CAP-22 (notifications) added by the post-gate audit. All 22 are
-expanded into feature briefs (FEAT-001 … FEAT-094) in §3, walked through one capability at a time
+expanded into feature briefs (FEAT-001 … FEAT-103) in §3, walked through one capability at a time
 in pipeline order per the skill's method.
 
-**Numbering note:** FEAT-001..089 are grouped by capability in pipeline order. FEAT-090..094 were
-added after that sweep (audit, 2026-08-12) and therefore sit at the end rather than inside their
-capability's block — FEAT-090..093 belong to CAP-22, FEAT-094 to CAP-02. Renumbering 89 existing
-briefs to preserve grouping would break every cross-reference in this document for no real gain.
+**Numbering note:** FEAT-001..089 are grouped by capability in pipeline order. Everything from
+FEAT-090 onward was added later and therefore sits at the end rather than inside its capability's
+block — FEAT-090..093 (CAP-22) and FEAT-094 (CAP-02) came from the post-gate audit; FEAT-095..103
+came from Phase 4's flow mapping, which is *expected* to expose missing features and did (nine,
+almost all connective tissue between capabilities rather than gaps inside one). Renumbering the
+existing briefs to preserve grouping would break every cross-reference here for no real gain.
 
 | ID | Capability | Serves | Owner surface | Consumer surface(s) | Shared contract? | Status |
 |----|-----------|--------|---------------|---------------------|-------------------|--------|
@@ -144,6 +146,15 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 | FEAT-092 | Recipient resolution & society contact directory | CAP-22 | PER-01 | CON-39 | SUR-01 | S | proposed |
 | FEAT-093 | Notification history & manual resend | CAP-22 | PER-01, PER-02 | CON-39, JTBD-03 | SUR-01 | S | proposed |
 | FEAT-094 | No-demo commissioning variant | CAP-02 | PER-04, PER-01 | JTBD-05 | SUR-02 | M | proposed |
+| FEAT-095 | Deal outcome & re-engagement | CAP-20 | PER-07 | JTBD-08 | SUR-01 | S | proposed (Phase 4) |
+| FEAT-096 | Site-access coordination | CAP-17 | PER-01, PER-03/04 | JTBD-04 | SUR-01, SUR-02 | S | proposed (Phase 4) |
+| FEAT-097 | Provisional gate-pass release | CAP-02 | PER-04, PER-01 | CON-40 | SUR-02 | M | proposed (Phase 4) |
+| FEAT-098 | Prospect-to-customer account conversion | CAP-13 | system, PER-01 | CON-34, GOAL-02 | SUR-01 | S | proposed (Phase 4) |
+| FEAT-099 | Bulk multi-circuit reading upload | CAP-03 | PER-01 | JTBD-01, GOAL-07 | SUR-01 | M | proposed (Phase 4) |
+| FEAT-100 | Month-close readiness board | CAP-04 | PER-01 | JTBD-01, GOAL-01 | SUR-01 | M | proposed (Phase 4) |
+| FEAT-101 | Invoice-to-calculation reconciliation | CAP-04 | PER-01, PER-08 | GOAL-01, GOAL-06 | SUR-01 | S | proposed (Phase 4) |
+| FEAT-102 | Billing dispute record & arrears visibility | CAP-13 | PER-05, PER-01 | CON-41 | SUR-01 | M | proposed (Phase 4) |
+| FEAT-103 | Term-end hardware ownership transfer | CAP-07 | PER-01 | CON-15 | SUR-01 | M | proposed (Phase 4, v2 horizon) |
 
 ## 3. Feature briefs
 
@@ -204,6 +215,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Surface(s):** SUR-01
 - **Problem:** Today, PER-01/backend can log on PER-07's behalf (confirmed this phase) — without a review step, "ideally self-logged" degrades silently into "backend logs everything, PER-07 never checks."
 - **Description:** A queue of backend-entered lead/proposal records awaiting PER-07's approval. Approving makes the record authoritative; PER-07 can also edit before approving.
+- **Behavioral rules:** The audit trail permanently retains **who entered** the record separately from **who approved** it, even though an approved record is operationally indistinguishable from a self-logged one — that separation is the entire point, since without it "ideally self-logged" degrades invisibly into "backend logs everything." Approval belongs to PER-07 alone and can never be self-served by the person who entered it, or the review step is theatre. A record awaiting approval is still a real lead: it counts in pipeline totals, flagged as unapproved, rather than being hidden until someone signs off — a review queue must not be a place leads go to disappear.
 - **Acceptance criteria:**
   - AC-1 (happy): Given a backend-entered lead in `pending-approval`, when PER-07 approves it, then it becomes authoritative and is indistinguishable from a self-logged record going forward except in its audit trail (which always retains who actually entered it).
   - AC-2 (empty): Given no records are pending approval, when PER-07 opens the queue, then it shows a clear "all caught up" empty state, not a blank table.
@@ -229,6 +241,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Surface(s):** SUR-01
 - **Problem:** Without a list view, there is no way to answer "how many active leads do we have, and at what stage" — which is exactly the kind of visibility GOAL-05/CAP-08's ops home is meant to surface.
 - **Description:** A filterable/sortable list of all `Pipeline` records still in pre-agreement stages (`lead`, `survey-pending` before CAP-16 takes over), with status, last-activity date, and owner. Feeds into CAP-08's aggregated priority queue as one more source alongside tickets and deviation reviews.
+- **Behavioral rules:** Scoped to **pre-agreement** stages only — once a deal reaches CAP-16's survey it is owned by the full pipeline board, and the two views must not double-count the same deal. Since FEAT-095, `closed-lost` deals drop out of this list rather than accumulating forever, which is what makes "how many active leads do we have" answerable at all. All four of INV-06's list states apply (loading, empty, error, degraded), not just empty.
 - **Acceptance criteria:**
   - AC-1 (happy): Given multiple leads exist across stages, when PER-07 opens the list, then it's sortable by stage/date and filterable by service line.
   - AC-2 (empty/first-run): Given no leads exist yet, then an `EmptyState` explains how to log the first one (links to FEAT-001).
@@ -2590,6 +2603,240 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Open questions / assumptions:** none blocking — CON-25 corrected at the Phase 3 gate, CON-25d added at the audit.
 - **Risks:** If demo-skip stops being exceptional, a growing share of the portfolio bills on agreed rather than measured percentages, which erodes GOAL-06 and the measured-savings positioning — worth watching as a business metric (also flagged on FEAT-052).
 
+### FEAT-095 — Deal outcome & re-engagement
+- **Capability:** CAP-20 · **Persona:** PER-07 · **Serves:** JTBD-08
+- **Surface(s):** SUR-01
+- **Problem:** Discovered in Phase 4 (FLOW-01 step 7, FLOW-06). **Nothing in the product ever terminates a pipeline.** A society that says no simply stays at whatever stage it reached, forever — which inflates the pipeline board, makes "how many live deals do we have" unanswerable, and actively corrupts CON-23's lead-health signal, since a dead deal accumulates stalled-step time exactly like a stuck live one.
+- **Description:** A terminal `closed-lost` state settable from any pipeline stage, carrying a reason (price, no interest, chose a competitor, society governance changed, unreachable, disqualified on size) and free-text notes. Closed-lost deals leave the active board, stop accruing follow-up counters, and appear in a separate closed view. A closed-lost deal can be re-opened, which creates a **new** pipeline for the same `(society, serviceLine)` linked to the previous one rather than resurrecting the old record.
+- **Behavioral rules:** Re-engagement creates a new record rather than reviving the old one, so the original deal's history — what was offered, what was measured, why it was lost — stays intact as evidence for the next attempt. `closed-won` is set automatically by FLOW-07's completion certificate and is never a manual choice; `closed-lost` is always manual, because no timer can know a society has decided against you. A society at `closed-lost` on one service line stays fully active on any other (CON-24).
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a society declines, when PER-07 closes the deal with a reason, then it leaves the active pipeline board, stops accruing follow-up counters, and the reason is recorded against it.
+  - AC-2 (empty): Given no closed deals yet, the closed view shows an empty state rather than an error — and the active board never hides deals merely because they are old.
+  - AC-3 (failure): Given a deal is closed by mistake, re-opening is available and creates a new linked pipeline; the mistaken closure remains visible in history rather than being erased.
+  - AC-4 (permission): Given a non-PER-07/PER-01 actor, closing a deal is unavailable — it is a commercial judgement, not an operational cleanup action.
+  - AC-5 (edge): Given a society is closed-lost on lighting while active and billing on pumps, the closure affects only the lighting pipeline; the society itself remains `active` (CON-24).
+- **Permissions:** PER-07, PER-01 (close, re-open).
+- **Data touched:** Writes `Pipeline.stage = closed-lost`, reason, closedAt, closedBy; links a re-opened pipeline to its predecessor.
+- **Triggers:** PER-07's manual action.
+- **Emits:** `DealClosedLost`, `DealReopened`.
+- **Consumes:** —
+- **Depends on:** FEAT-001 (the pipeline record), FEAT-004 (follow-up counters it must stop).
+- **Depended on by:** FEAT-004 and CAP-08's pipeline views — both currently over-count live deals without this.
+- **Failure modes:** Ops using `closed-lost` as a way to hide a stalled-but-live deal from the board would corrupt the funnel numbers in the opposite direction. The reason field is what makes that visible.
+- **Limits & scale:** Trivial.
+- **Minimum viable version:** Terminal state with a reason and removal from the active board.
+- **Complete version:** Adds re-engagement with predecessor linkage and closed-reason reporting.
+- **Open questions / assumptions:** none blocking.
+- **Risks:** Without this, every pipeline metric this product produces is wrong from the first lost deal onward — it is a small feature holding up a large amount of reporting.
+
+### FEAT-096 — Site-access coordination
+- **Capability:** CAP-17 · **Persona:** PER-01, PER-03/04 · **Serves:** JTBD-04
+- **Surface(s):** SUR-01 (arrange), SUR-02 (field)
+- **Problem:** Discovered in Phase 4 (FLOW-02 step 2). `02-users-research.md` §1 explicitly names facility/security staff as a **blocker** on physical site access, and then gives them no product support at all. Every SUR-02 flow — survey, commissioning, installation, inspection, ticket visit — begins with "get into the building", and a refused entry wastes an entire scheduled visit.
+- **Description:** Access details captured on the society record (gate contact name and number, access hours, whether prior intimation is required and how much notice, parking/entry instructions, any pass or ID requirement), surfaced on the field visit itself, plus an "access blocked" outcome on a visit that records the reason and returns the visit to scheduling rather than marking it failed.
+- **Behavioral rules:** Access details belong to the **society**, not the visit — captured once at survey (CON-28a's contact list is the natural home) and reused by every later visit. "Access blocked" is a distinct outcome from "visit completed with nothing found": one wasted a trip, the other did the work. Repeated access blocks at the same society are an escalation signal, not just a rescheduling nuisance.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a society with access details recorded, when a visit is scheduled, then the assignee sees gate contact, access hours, and notice requirements on their visit card before travelling.
+  - AC-2 (empty): Given a society with no access details yet, the visit card says so plainly rather than showing blank fields — the assignee needs to know to call ahead.
+  - AC-3 (failure): Given entry is refused on arrival, when the assignee records "access blocked" with a reason, then the visit returns to `proposed` for rescheduling and the wasted trip is counted against the society.
+  - AC-4 (permission): Given a society portal user, they may maintain their own society's access details (they are the ones who know them) but never another society's (INV-05).
+  - AC-5 (edge): Given three access blocks at one society within a period, the pattern is escalated to PER-01 rather than silently absorbed as repeated rescheduling.
+- **Permissions:** PER-01 (all), PER-05/06 (own society), PER-03/04 (read on their visits).
+- **Data touched:** Society access profile; `FieldVisit` outcome `access-blocked`.
+- **Triggers:** Survey capture; visit scheduling; on-site refusal.
+- **Emits:** `AccessBlocked`.
+- **Consumes:** CON-28a's survey profile.
+- **Depends on:** FEAT-005 (survey profile), FEAT-016/017 (visit lifecycle).
+- **Depended on by:** every SUR-02 flow.
+- **Failure modes:** Access details recorded once at survey and never refreshed will go stale exactly like contacts do (FEAT-092's known weakness) — an RWA election changes who authorises entry.
+- **Limits & scale:** Trivial.
+- **Minimum viable version:** Access fields on the society, shown on the visit card.
+- **Complete version:** Adds the `access-blocked` outcome and repeat-pattern escalation.
+- **Open questions / assumptions:** none blocking.
+- **Risks:** Low cost, and it addresses a blocker the research named explicitly — one of the clearer gaps between what the research found and what was specified.
+
+### FEAT-097 — Provisional gate-pass release
+- **Capability:** CAP-02 · **Persona:** PER-04, PER-01 · **Serves:** CON-40
+- **Surface(s):** SUR-02
+- **Problem:** Discovered in Phase 4 (FLOW-03 step 3, cross-surface contracts XS-04/XS-05). CON-18 makes backend approval a precondition for a technician **leaving the premises**, and meter installs happen in basements and pump rooms. With no fallback, a connectivity or backend failure does not degrade gracefully — it physically strands a person on site. This is the only place in the product where a software failure traps a human.
+- **Description:** Per CON-40: if backend approval has not returned within **30 minutes** of gate-pass submission, the technician may leave under a **provisional** gate pass. The submission queues for review, is flagged `provisional` and reviewed the same day. The society's physical signature and photographs — already captured — remain the binding evidence. Applies at all three of XC-01's gate-pass points (meter installation, demo-installation completion, full-installation completion).
+- **Behavioral rules:** The timeout releases the *technician*, never the *record* — the gate pass still requires approval, just not synchronously. A provisional release is always recorded as such with its timeout timestamp, so nobody can later claim it was approved in the normal way. Backend reviewing a provisional pass and finding a discrepancy raises a follow-up rather than an undo, since the equipment and the technician have both already left.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a gate pass submitted with connectivity, when backend approves within 30 minutes, then the technician is released normally and the pass is `approved` — the provisional path is never touched.
+  - AC-2 (empty/first-run): Given a site with no connectivity at all, the pass is captured entirely offline and the 30-minute timer starts from capture, not from a successful upload — otherwise the timer never starts and the fallback never fires.
+  - AC-3 (failure): Given no approval within 30 minutes, then the technician is released under a `provisional` pass, the submission is queued, and PER-01 sees it in a same-day review queue flagged distinctly from normal submissions.
+  - AC-4 (permission): Given PER-04, they cannot approve their own gate pass — provisional release is a timeout, not a self-approval, and the distinction must hold in the data.
+  - AC-5 (edge): Given backend reviews a provisional pass and finds a discrepancy, a follow-up is raised against the society and the installation record; the pass is not silently rejected, because the physical situation can no longer be changed.
+- **Permissions:** PER-04 (submit; released by timeout), PER-01 (approve, review provisional).
+- **Data touched:** `GatePass.state` gains `provisional`; records timeout timestamp and releasing mechanism.
+- **Triggers:** 30 minutes elapsed since submission with no decision.
+- **Emits:** `GatePassProvisionallyReleased`.
+- **Consumes:** XC-01's gate-pass submissions.
+- **Depends on:** XC-01, FEAT-011, FEAT-013, FEAT-037.
+- **Depended on by:** FLOW-03, FLOW-07, FLOW-08 — every on-site equipment handover.
+- **Failure modes:** A 30-minute timer running on the device clock could be gamed or simply wrong; the release should be adjudicated server-side wherever connectivity exists, and only fall back to device time when genuinely offline — the same problem FLOW-X1's 24h lockout has.
+- **Limits & scale:** Rare by design.
+- **Minimum viable version:** Timeout release with a `provisional` flag and a review queue.
+- **Complete version:** Adds server-side adjudication and discrepancy follow-up (AC-5).
+- **Open questions / assumptions:** 30 minutes is a starting figure, not a researched one — worth making configurable alongside CON-35's other SLA thresholds.
+- **Risks:** Softening a control designed to prevent unrecorded equipment movement. The mitigation is that the *evidence* (signature, photos) is unchanged; only the timing of backend's challenge moves.
+
+### FEAT-098 — Prospect-to-customer account conversion
+- **Capability:** CAP-13 · **Persona:** system, PER-01 · **Serves:** CON-34, GOAL-02
+- **Surface(s):** SUR-01
+- **Problem:** Discovered in Phase 4 (FLOW-06 step 7). CON-34 issues societies a **scoped prospect login** at survey/demo stage — demo report, queries, KYC upload, nothing else. Nothing widens it when the deal is won. As specified, a newly-signed society either keeps a crippled login that cannot see its own bills, or is issued a second unrelated account.
+- **Description:** On contract activation, the society's existing prospect account is promoted to a full customer account: scope widens to the complete portal (savings, invoices, contract, tickets), the pre-contract history it accumulated (demo report, queries, uploaded documents) carries forward, and the same credentials keep working.
+- **Behavioral rules:** Promotion is automatic on contract activation, not a manual admin step — a signed society that cannot log in properly is a bad first impression at the worst moment. Credentials never change; a society that has been using the portal for weeks during the deal should notice only that more is now visible. A society being cross-sold a second service line already has a full account and must not be re-promoted or re-issued anything.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a society with a prospect account, when its contract activates, then the same login gains full portal scope and all pre-contract history remains attached.
+  - AC-2 (empty/first-run): Given a society that never had a prospect account (documents came via WhatsApp, CON-34 is optional), a full customer account is created at activation instead — the backend-entry path must not produce a society with no login at all.
+  - AC-3 (failure): Given promotion fails, the society retains prospect scope and PER-01 is alerted — it must never leave an account in a partially-promoted state where scope and contract disagree.
+  - AC-4 (permission): Given any actor, prospect scope cannot be widened manually without an active contract; the contract is the authority, not an admin toggle.
+  - AC-5 (edge): Given a society already active on lighting signs for pumps, no new account is created and no promotion runs — the existing account simply gains the new service line's data (GOAL-02's one-login promise).
+- **Permissions:** system (automatic), PER-01 (view, remediate).
+- **Data touched:** Account scope on the society's users; links pre-contract artefacts forward.
+- **Triggers:** `ContractActivated` (FEAT-062).
+- **Emits:** `AccountPromoted`.
+- **Consumes:** contract activation.
+- **Depends on:** FEAT-062, FEAT-085, FEAT-086, CON-34.
+- **Depended on by:** FEAT-088 (portal home), FEAT-060, FEAT-065.
+- **Failure modes:** Two accounts for one society is the failure this prevents, and it is the kind that is discovered months later by a confused committee.
+- **Limits & scale:** Trivial.
+- **Minimum viable version:** Automatic scope widening on activation, history carried forward.
+- **Complete version:** Adds AC-2's no-prospect-account path and AC-5's cross-sell no-op.
+- **Open questions / assumptions:** none blocking.
+- **Risks:** none significant — cheap now, awkward to retrofit once real societies hold both account types.
+
+### FEAT-099 — Bulk multi-circuit reading upload
+- **Capability:** CAP-03 · **Persona:** PER-01 · **Serves:** JTBD-01, GOAL-07
+- **Surface(s):** SUR-01
+- **Problem:** Discovered in Phase 4 (FLOW-09). FEAT-043 uploads **one CSV at a time**, and CON-30's files are per **circuit**, not per society. Since the audit made metering per light type, a society has several circuits — so today's 22 societies mean roughly 90 uploads a month, and GOAL-07's 200 societies mean 800+, each potentially re-answering the same AI clarifying questions. This is JTBD-01's "stop reconciling by hand" failing at exactly the scale the product is aiming for.
+- **Description:** Multi-file upload that accepts a batch of CSVs, matches each to its society and circuit (by filename convention, file content, or an explicit mapping step), runs CON-30's AI normalisation across all of them, and presents one review screen listing per-file outcome: matched, normalised, anomalies found, or needs attention. Plus a **remembered per-vendor mapping** so a recognised format skips the clarifying questions entirely on subsequent months.
+- **Behavioral rules:** Every file still stores its raw original against the specific society+circuit (CON-30) — batching changes the interaction, never the evidence trail. A file that cannot be confidently matched to a circuit is never guessed: it lands in a needs-attention list, because attaching readings to the wrong benchmark surfaces only weeks later as an implausible deviation. The remembered mapping is per vendor format and is re-confirmed, not silently applied, when the format's shape changes.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a batch of CSVs for a known vendor, when uploaded, then each is matched to its circuit, normalised without re-asking mapping questions, and a single review screen shows per-file outcomes.
+  - AC-2 (empty/first-run): Given the first ever batch for a new vendor format, the clarifying questions are asked **once** and the resulting mapping is saved for reuse.
+  - AC-3 (failure): Given a file that cannot be confidently matched to a circuit, it is quarantined in a needs-attention list with the reason — never attached to a best-guess circuit.
+  - AC-4 (permission): Given a non-PER-01 actor, bulk ingest is unavailable; and no upload path may bypass the raw-file retention rule (CON-30).
+  - AC-5 (edge): Given a vendor changes its export shape mid-year, the saved mapping no longer fits and the system re-asks rather than misparsing under the old mapping — a silently wrong parse is worse than a question.
+- **Permissions:** PER-01.
+- **Data touched:** Many `RawReadingFile` + `MeterReading` sets per batch; a per-vendor mapping record.
+- **Triggers:** PER-01 uploading a batch at month close.
+- **Emits:** `BatchIngested`, `FileNeedsAttention`.
+- **Consumes:** vendor CSV exports.
+- **Depends on:** FEAT-043, FEAT-044, FEAT-045.
+- **Depended on by:** FEAT-100 (the readiness board reads batch outcomes), FEAT-048.
+- **Failure modes:** Confident mismatching is the dangerous one — a file attached to the wrong circuit produces plausible-looking readings against the wrong benchmark. AC-3's refusal to guess is the whole mitigation.
+- **Limits & scale:** This feature **is** the scale answer for CAP-03; it should be sized against 800+ files/month, with the AI normalisation cost per file worth checking at that volume.
+- **Minimum viable version:** Multi-file upload with per-file outcomes and a quarantine list.
+- **Complete version:** Adds remembered per-vendor mappings and shape-change re-confirmation.
+- **Open questions / assumptions:** whether filenames from the vendor app are reliable enough to match on is unverified — worth testing against real exports before designing the matching step.
+- **Risks:** Batching makes it easier to upload a month's data without looking at any of it; the review screen has to make anomalies and quarantines genuinely hard to skip past.
+
+### FEAT-100 — Month-close readiness board
+- **Capability:** CAP-04 · **Persona:** PER-01 · **Serves:** JTBD-01, GOAL-01
+- **Surface(s):** SUR-01
+- **Problem:** Discovered in Phase 4 (FLOW-09 step 8). Nothing in the product answers the single question that governs month close: **which societies are ready to bill, and what is each one blocked on?** Readings arrive per circuit across dozens of societies, anomalies block billing (INV-09), coverage floors flag months unusable (CON-12) — and there is no view that aggregates any of it. A forgotten circuit silently drops a society from a billing cycle, and nobody finds out until the revenue is missing.
+- **Description:** A month-scoped operations board listing every active society with its readiness state — all circuits ingested, anomalies outstanding, coverage below CON-12's 20-day floor, calculation run, awaiting accountant release, released — plus the specific blocker per society and a direct link to resolve it. Sorted so the blocked societies surface first.
+- **Behavioral rules:** Readiness is computed per society but derived per circuit, since a society is only billable when **every** one of its circuits is resolved (CON-11's fan-in). The board is the month's single source of truth for progress and must count societies, not files — an ops lead needs "18 of 22 ready", not a file list. A society with no circuits reporting at all is the most dangerous state and must be distinguishable from one with a minor anomaly.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a month in progress, when PER-01 opens the board, then every active society shows its readiness state and, where blocked, the specific reason and a link to act on it.
+  - AC-2 (empty/first-run): Given a month with no readings uploaded yet, the board shows all societies as awaiting data rather than appearing empty or broken.
+  - AC-3 (failure/degraded): Given a society where no circuit has reported at all, it is flagged distinctly from one with a resolvable anomaly — silence and a flagged problem are different failures with different causes.
+  - AC-4 (permission): Given PER-08, the board is visible read-only — the accountant needs to see the month's shape to plan the release queue (JTBD-09) without being able to alter ingest state.
+  - AC-5 (edge): Given a society whose circuits are split across two ingest batches, readiness reflects the union of both; partial progress within a society is shown as such rather than as ready or not-ready.
+- **Permissions:** PER-01 (act), PER-08 (view), management (view).
+- **Data touched:** Reads across `MeterReading` coverage, anomalies, `MonthlyCalculation`, release state. Writes nothing.
+- **Triggers:** PER-01 opening it during month close.
+- **Emits:** —
+- **Consumes:** FEAT-045/046/047's outcomes, FEAT-048's runs, FEAT-054's queue.
+- **Depends on:** FEAT-046, FEAT-047, FEAT-048, FEAT-054.
+- **Depended on by:** the whole of FLOW-10 in practice, though nothing depends on it structurally — which is exactly why it was missed.
+- **Failure modes:** A board that is merely a list rather than a worklist would be ignored during the busiest days of the month.
+- **Limits & scale:** 200 rows at GOAL-07 scale — trivial technically, and the primary defence against ingest failures scaling faster than attention.
+- **Minimum viable version:** Per-society readiness with the blocking reason.
+- **Complete version:** Adds direct resolve links, accountant read-only view, and split-batch handling.
+- **Open questions / assumptions:** none blocking.
+- **Risks:** none significant — this is a read-only view over data that already exists.
+
+### FEAT-101 — Invoice-to-calculation reconciliation
+- **Capability:** CAP-04 · **Persona:** PER-01, PER-08 · **Serves:** GOAL-01, GOAL-06
+- **Surface(s):** SUR-01
+- **Problem:** Discovered in Phase 4 (FLOW-10 step 8). The formal tax invoice is authored in **Zoho**, outside the product (CON-33), then uploaded back. **Nobody compares the uploaded invoice's total against the total the platform computed.** That comparison is the one check that would catch a transcription error before it reaches a customer — and with CON-11's per-circuit fee lines, the amount being transcribed is now a sum of several lines rather than one figure, which makes an error more likely, not less.
+- **Description:** On invoice upload, the extracted total (and where extractable, the per-line breakdown) is compared against the released `MonthlyCalculation`. A match is recorded silently; a mismatch beyond a tolerance blocks the invoice from being shared with the society until PER-01 either corrects the invoice in Zoho and re-uploads, or records an explicit reason for the difference.
+- **Behavioral rules:** The platform's computed figure is the reference, since it is the one with provenance behind it (INV-02); a divergent invoice is treated as suspect rather than authoritative. The block is on **sharing**, not on uploading — the document should still be stored and visible internally while the discrepancy is worked out. An accepted mismatch must carry a recorded reason, because "the invoice and our calculation disagreed and we sent it anyway" is precisely the kind of thing a disputing society will later ask about.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given an uploaded invoice whose total matches the released calculation, when reconciliation runs, then the match is recorded and the invoice proceeds to sharing with no interruption.
+  - AC-2 (empty): Given an invoice uploaded for a month with no completed calculation, reconciliation cannot run and says so — it does not pass by default.
+  - AC-3 (failure): Given a mismatch beyond tolerance, sharing is blocked, the difference is shown with the computed figure beside the uploaded one, and PER-01 must re-upload or record an explicit accepted reason.
+  - AC-4 (permission): Given PER-01, an accepted mismatch requires a reason; given PER-08, the mismatch is visible in the release queue since it is exactly what the accountant gate exists to catch (CON-33).
+  - AC-5 (edge): Given a legitimate divergence — a manual credit or an adjustment applied in Zoho but not in the platform — the reason path exists rather than forcing the numbers to be falsified into agreement.
+- **Permissions:** system (compare), PER-01 (resolve), PER-08 (view in release queue).
+- **Data touched:** Writes a reconciliation result and any accepted-reason record against the invoice.
+- **Triggers:** Invoice upload (FEAT-053).
+- **Emits:** `InvoiceReconciled`, `InvoiceMismatch`.
+- **Consumes:** the extraction output of FEAT-053, `MonthlyCalculation`.
+- **Depends on:** FEAT-048, FEAT-053, FEAT-054.
+- **Depended on by:** FEAT-060 (sharing is what gets blocked), FEAT-087 (the overdue clock keys off sharing).
+- **Failure modes:** A tolerance set too loose would pass the errors it exists to catch; set too tight it blocks on rounding. This needs a real figure from actual invoices rather than a guess.
+- **Limits & scale:** Trivial.
+- **Minimum viable version:** Total-level comparison with a sharing block on mismatch.
+- **Complete version:** Adds per-line comparison and the accepted-reason audit path.
+- **Open questions / assumptions:** the tolerance value is undecided; rupee-level equality may be achievable given both figures derive from the same inputs.
+- **Risks:** This is the only automated check between the platform's computed reality and the document the customer actually receives — its absence was the most consequential single gap the flows exposed.
+
+### FEAT-102 — Billing dispute record & arrears visibility
+- **Capability:** CAP-13 · **Persona:** PER-05, PER-01 · **Serves:** CON-41
+- **Surface(s):** SUR-01 (ops), SUR-01 customer (raise)
+- **Problem:** Discovered in Phase 4 (FLOW-12, FLOW-15). A society withholding payment because it disputes a bill runs **the same arrears clock** as one that simply has not paid — and CON-13's suspension fires unattended, roughly 17 days after the invoice. So the product could automatically stop field servicing at a society whose only action was questioning a charge, with no human deciding that.
+- **Description:** A formal billing dispute raised by the society against a specific invoice, with a reason and supporting detail. It starts its own resolution timer for the backend team, appears prominently against the invoice on the arrears board, and is visible on the society record and in support's 360 view. **Per CON-41 (user's explicit decision) it does not pause the arrears clock** — ops uses the existing extension mechanism (up to 5 days per request) where it judges the dispute genuine.
+- **Behavioral rules:** The dispute and the arrears countdown are deliberately independent mechanisms; the connection between them is *visibility plus an operator's judgement*, not automation. A disputed invoice must be unmistakable on the arrears board — an operator scanning for who to extend needs to see it without looking for it. Resolution records an outcome (upheld, partially upheld, rejected) so a repeat dispute has history behind it.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a society raises a dispute against an invoice, when submitted, then a resolution timer starts, PER-01 is notified, and the invoice is flagged as disputed everywhere it appears — arrears board, society record, support view.
+  - AC-2 (empty): Given a society with no disputes, the disputes panel shows an empty state; the arrears board is unchanged in appearance.
+  - AC-3 (failure): Given a dispute is resolved as rejected, the arrears clock — which never stopped — is wherever it has reached, and the society is notified of the outcome and the current arrears position together, not separately.
+  - AC-4 (permission): Given a society user, they may raise a dispute only against their own society's invoices (INV-05); only PER-01 or management may record the resolution.
+  - AC-5 (edge): Given a dispute is still open when the suspension warning stage is reached, the warning still fires as designed (CON-41) — but the arrears board must show that this society is disputing, so ops can consciously choose to extend rather than let it proceed unnoticed.
+- **Permissions:** PER-05/06 (raise, own society), PER-01/management (resolve).
+- **Data touched:** A dispute record against the invoice; flags on the society and arrears views.
+- **Triggers:** Society submitting a dispute; resolution by ops.
+- **Emits:** `DisputeRaised`, `DisputeResolved`.
+- **Consumes:** invoice and arrears state.
+- **Depends on:** FEAT-087, FEAT-060, FEAT-082 (support's 360 view).
+- **Depended on by:** FEAT-087's extension decisions in practice.
+- **Failure modes:** The dispute flag being visible but not *prominent* would leave the whole safeguard resting on an operator noticing a subtle marker during the busiest week of the month.
+- **Limits & scale:** Low volume expected.
+- **Minimum viable version:** Dispute record, resolution timer, and a prominent flag on the arrears board.
+- **Complete version:** Adds resolution outcomes and per-society dispute history.
+- **Open questions / assumptions:** **ASSUM-23** — that disputes resolve, or are extended, inside CON-13's ~17-day window.
+- **Risks:** **Known and accepted (CON-41):** the extension cap is ~10 days total, which is shorter than a dispute needing a site visit (CON-31). A slow dispute can still reach automatic suspension. The decision was to accept this rather than build a pausing mechanism; if a real dispute ever reaches the warning stage unresolved, ASSUM-23 is wrong and CON-41 should be revisited.
+
+### FEAT-103 — Term-end hardware ownership transfer
+- **Capability:** CAP-07 · **Persona:** PER-01 · **Serves:** CON-15
+- **Surface(s):** SUR-01
+- **Problem:** Discovered in Phase 4 (FLOW-17 step 5). CON-15, confirmed from the real signed Ace Aspire agreement, states that **hardware ownership transfers from FirsThing to the society at the end of the contract term**. Nothing in the product models this. It is not a status change — it alters who owns the assets, who is responsible for maintaining them, whether FirsThing's spare inventory at that site still applies, and whether the AMC is now the only commercial relationship.
+- **Description:** A term-end transition that records the ownership transfer for a society's installed hardware: an itemised transfer record of what passed to the society (mirroring CON-18's gate-pass pattern — a list, acknowledged by the society), the effective date, and the consequent changes to asset ownership, spare-stock obligation, and service entitlement. Where an AMC is agreed (FEAT-063), servicing continues under those terms; where it is not, the relationship ends and the society owns and maintains the hardware itself.
+- **Behavioral rules:** Transfer is contract-driven and effective-dated, never retroactive. The itemised acknowledgement matters for the same reason gate passes do: this is FirsThing's capital leaving its books, and "what exactly did the society receive" must be answerable years later. Spare units held on site (CON-36) need an explicit disposition at transfer — they either pass to the society or come back — rather than being silently orphaned in the inventory model.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a contract reaching term end with hardware installed, when the transfer is executed, then an itemised record is produced, acknowledged by the society, and the assets are marked society-owned from the effective date.
+  - AC-2 (empty/first-run): Given no contract has yet reached term end (true for every current society), the renewals view shows the upcoming ones rather than an empty screen — this feature's first real use is years away and it must not look broken until then.
+  - AC-3 (failure): Given the society does not acknowledge the itemised list, the transfer is recorded as disputed rather than completing silently — ownership of physical assets is not something to assume agreement on.
+  - AC-4 (permission): Given PER-01, executing a transfer requires the contract to have actually reached term end or been terminated; it is not an ad hoc action.
+  - AC-5 (edge): Given spare units are held on site at transfer, their disposition is recorded explicitly (passed to the society, or collected) — they must not remain in FirsThing's inventory against a society it no longer services.
+- **Permissions:** PER-01 (execute), management (approve), society (acknowledge).
+- **Data touched:** Asset ownership flags, transfer record, spare-unit disposition, contract state.
+- **Triggers:** Contract term end or termination (FEAT-063, FEAT-051 AC-5).
+- **Emits:** `HardwareOwnershipTransferred`.
+- **Consumes:** contract term data, asset registry, spare inventory.
+- **Depends on:** FEAT-062, FEAT-063, FEAT-075/076 (spares), FEAT-042 (pump assets).
+- **Depended on by:** the asset model's correctness after any contract ends.
+- **Failure modes:** Assets remaining marked FirsThing-owned after transfer would misstate the company's own asset position — an accounting problem, not just a data one.
+- **Limits & scale:** Rare, and genuinely distant: no current society is near term end.
+- **Minimum viable version:** Itemised transfer record with acknowledgement and asset re-flagging.
+- **Complete version:** Adds spare disposition and AMC-continuation handling.
+- **Open questions / assumptions:** whether ownership transfer has tax or accounting implications that need modelling is unexamined — worth asking the accountant (PER-08) before this is built.
+- **Risks:** **v2 horizon.** Included for completeness because CON-15 is confirmed contract evidence, not speculation — but nothing forces it for years, and Phase 6 should prioritise it accordingly rather than treating it as peer to the monthly-loop gaps.
+
 ## 4. Feature interaction matrix
 
 ### 4.1 The lead-to-cash spine
@@ -2740,22 +2987,22 @@ Carried from `00-intake.md` §2 and confirmed or added during this phase:
 ## 7. Traceability check
 
 ### 7.1 Capabilities → features
-All 22 capabilities are expanded. FEAT-001 … FEAT-094, no gaps, no duplicates:
+All 22 capabilities are expanded. FEAT-001 … FEAT-103, no gaps, no duplicates:
 
 | Capability | Features | Capability | Features |
 |---|---|---|---|
 | CAP-15 | FEAT-001–004 | CAP-01 | FEAT-039–042 |
-| CAP-16 | FEAT-005–010 | CAP-03 | FEAT-043–047 |
-| CAP-02 | FEAT-011–015, 094 | CAP-04 | FEAT-048–054 |
-| CAP-17 | FEAT-016–019 | CAP-05 | FEAT-055–058 |
+| CAP-16 | FEAT-005–010 | CAP-03 | FEAT-043–047, 099 |
+| CAP-02 | FEAT-011–015, 094, 097 | CAP-04 | FEAT-048–054, 100, 101 |
+| CAP-17 | FEAT-016–019, 096 | CAP-05 | FEAT-055–058 |
 | CAP-18 | FEAT-020–023 | CAP-06 | FEAT-059–061 |
-| CAP-19 | FEAT-024–026 | CAP-07 | FEAT-062–065 |
-| CAP-20 | FEAT-027–032 | CAP-08 | FEAT-066–069 |
+| CAP-19 | FEAT-024–026 | CAP-07 | FEAT-062–065, 103 |
+| CAP-20 | FEAT-027–032, 095 | CAP-08 | FEAT-066–069 |
 | CAP-21 | FEAT-033–038 | CAP-09 | FEAT-070–074 |
 | | | CAP-10 | FEAT-075–077 |
 | | | CAP-11 | FEAT-078–080 |
 | | | CAP-12 | FEAT-081–084 |
-| | | CAP-13 | FEAT-085–087 |
+| | | CAP-13 | FEAT-085–087, 098, 102 |
 | | | CAP-14 | FEAT-088–089 |
 | | | CAP-22 | FEAT-090–093 |
 
@@ -2811,7 +3058,9 @@ FEAT-078 · CON-27 → XC-03, FEAT-071–074 · CON-28 → FEAT-005, 006, 008, 0
 (deferred) · CON-30 → FEAT-043, 044 · CON-31 → FEAT-055–058 · CON-32 → FEAT-081–083 · CON-33 →
 FEAT-048, 053, 054, 059 · **CON-34 (prospect accounts) → FEAT-023, 025, 085** · **CON-35
 (configurable SLAs) → XC-03, FEAT-018, 073, 083** · **CON-36 (spare returns/warranty) → FEAT-076** ·
-**CON-37 (direction-dependent benchmark approval) → FEAT-058, 064** · **CON-38 (seasonality ruled
+**CON-37 (direction-dependent benchmark approval) → FEAT-058, 064** · **CON-40 (provisional
+gate-pass release) → FEAT-097** · **CON-41 (disputes do not pause the arrears clock) → FEAT-102** ·
+**CON-38 (seasonality ruled
 out as a variance driver) → no feature, deliberately — it is the *absence* of a seasonal-adjustment
 layer in FEAT-048/049; tracked as ASSUM-22** · **CON-39 (email-only notifications behind one
 capability) → CAP-22, FEAT-090–093**.
@@ -2858,6 +3107,25 @@ substantive ones needed product decisions and are recorded here:
 | D6 | GOAL-04 (Supabase cutover) had no feature briefs | Left as-is — it is technical remediation, not capability — but flagged in §7.2 as needing an explicit Phase 6 engineering workstream | §7.2 |
 | D7 | CAP-02 advertised a "no-demo variant" whose behaviour lived inside FEAT-052, a billing feature | **Given its own brief** | FEAT-094 |
 | D8 | PER-08 (Accountant) had no JTBD while all other personas did | **JTBD-09 added** | `02-users-research.md` |
+
+### 7.7b Phase 4 feedback (2026-08-12) — 9 features the flows exposed
+
+`04-flows-system-map.md` mapped all 19 flows and, as the method predicts, exposed features Phase 3
+missed — almost all of them connective tissue *between* capabilities rather than gaps inside one.
+All nine were adopted (user's decision) as FEAT-095..103. Two needed product decisions of their
+own, recorded as CON-40 and CON-41:
+
+| Was | Now | Feature |
+|---|---|---|
+| Nothing ever terminated a pipeline — dead leads sat at their last stage forever, corrupting CON-23's lead health | `closed-lost` with a reason, plus re-engagement as a new linked pipeline | FEAT-095 |
+| Facility/security staff named as an access blocker in the research, with no product support | Access details on the society, an `access-blocked` visit outcome, repeat-pattern escalation | FEAT-096 |
+| CON-18's blocking gate-pass approval could physically strand a technician on site | **CON-40:** 30-minute timeout → provisional release; evidence unchanged, only backend's challenge window moves | FEAT-097 |
+| CON-34's prospect logins never widened at signing — a signed society kept a crippled account | Automatic promotion on contract activation, history carried forward | FEAT-098 |
+| Single-file reading upload against 800+ files/month at GOAL-07 scale | Batch upload, per-file outcomes, quarantine on ambiguous match, remembered vendor mappings | FEAT-099 |
+| No answer to "which societies are ready to bill" | A month-close readiness board, per-society state with the blocking reason | FEAT-100 |
+| The Zoho invoice total was never checked against the computed total | Reconciliation on upload; mismatch blocks *sharing*, not storage | FEAT-101 |
+| A disputing society ran the same automatic suspension clock as a defaulting one | **CON-41:** dispute recorded and made prominent; clock still runs, ops uses existing extensions. Residual risk accepted — see ASSUM-23 | FEAT-102 |
+| CON-15's term-end ownership transfer was unmodelled | Itemised transfer, acknowledgement, spare disposition — flagged **v2 horizon** | FEAT-103 |
 
 ### 7.8 Genuinely still open (not blocking this phase)
 

@@ -1,6 +1,6 @@
 # Users & Research
 **Product:** FirsThing Platform · **Phase:** 2 — Users & Research · **Status:** Approved
-**Last updated:** 2026-08-12 (PER-08 Accountant added at the Phase 3 gate) · **Mode:** Ecosystem
+**Last updated:** 2026-08-12 (PER-08 Accountant + JTBD-09 added at the Phase 3 gate; §4 and §9 swept) · **Mode:** Ecosystem
 
 ---
 
@@ -181,13 +181,14 @@ site visit must account for site-access dependency.
 | ID | Job (When… I want to… so I can…) | Persona | Current solution | Pain severity | Frequency | Evidence |
 |----|----------------------------------|---------|-----------------|---------------|-----------|----------|
 | JTBD-01 | When the month closes, I want the bill and savings report generated from metered data automatically, so I can stop manually reconciling readings, benchmarks, and invoices by hand | PER-01 | Fully manual: upload readings, hand-calculate extrapolation/benchmark/savings, hand-build invoice + savings report | high | monthly, per society | evidence (direct operator experience) |
-| JTBD-02 | When a society's monthly figure lands outside ±5%, I want to review and record whether it's fixable, so the billing adjustment is correct and auditable | PER-01 | Manual review, undocumented decision | high | as needed, per off-band society | evidence |
+| JTBD-02 | When a metered circuit's monthly figure lands outside its contracted tolerance band (CON-01a), I want to review and record whether it's fixable, so the billing adjustment is correct and auditable | PER-01 | Manual review, undocumented decision | high | as needed, per off-band society | evidence |
 | JTBD-03 | When a society calls or messages with a question or dispute, I want to see their record (bill, dispute history, communication log) directly, so I don't have to relay through ops | PER-02 | Currently relies on ops/Yugesh directly (per Q12) | med | daily | inferred |
 | JTBD-04 | When I arrive for a scheduled visit, I want to see what's assigned to me (inspection, tickets, spare-swap needs) and log the outcome from my phone, so I don't need a separate desktop reporting step | PER-03 | Desktop-shaped Supabase screens, not field-optimized (per PROJECT_CONTEXT.md) | med-high | ~monthly per society | inferred |
 | JTBD-05 | When I install a new circuit, I want a guided flow to record the pre/post metering windows and get the computed benchmark savings %, so the number that governs billing for the whole contract term is captured correctly the first time | PER-04 | Not established — this role/flow doesn't exist in any form yet | high (cost of error is a whole contract term) | per new install | inferred |
 | JTBD-06 | When my monthly bill arrives, I want to see it matches a benchmark I can see and trust, so I don't have to just take FirsThing's word for it | PER-05 | Fully manual/relationship-based today | med | monthly + ad hoc | inferred |
 | JTBD-07 | When something needs fixing day-to-day (a fault, a supply issue), I want to log it and track it to resolution, so I don't have to escalate every small thing to the committee | PER-06 | Not established — `socmgr` is an unbuilt placeholder | med | weekly | inferred |
 | JTBD-08 | When I meet a prospective society, I want to log the meeting/proposal and track it through to a demo request, so the pipeline is visible without me having to report status separately | PER-07 | Entirely informal today — this role and its record-keeping don't exist in the app in any form | med | per new lead | evidence |
+| JTBD-09 | When the month's billing is calculated, I want to review every society's figures in one queue and release them in a batch, so nothing reaches a society before I've checked it and month-end doesn't become a one-at-a-time bottleneck | PER-08 | Manual review outside the app; the calculation itself is a spreadsheet, so the "review" is really a re-derivation | med-high | monthly, at billing close | evidence (CON-33 establishes the gate exists); working style inferred — ASSUM-21, RG-08 |
 
 ---
 
@@ -197,12 +198,12 @@ Primary persona (PER-01), the monthly billing cycle — the stated main pain poi
 
 | Step | What they do | Tool | Time | Pain | Opportunity |
 |------|-------------|------|------|------|-------------|
-| 1. Collect readings | Gather each society's metered-circuit readings for the month | Manual (spreadsheet/notes); moving to hourly smart-meter API fetch per the user's stated near-term plan | Unclear, likely hours across 22 societies | Readings arrive un-validated; missing days aren't flagged until calculation | INV-09 (upload-time anomaly detection) |
+| 1. Collect readings | Gather each society's metered-circuit readings for the month | CSV exported from the meter vendor's own app, one file per circuit, hourly rows aggregated to daily (CON-30). **Not** an API fetch — live telemetry is an explicitly deferred future phase (ASSUM-13, NG-07) | Unclear, likely hours across 22 societies | Readings arrive un-validated; missing days aren't flagged until calculation | INV-09 (upload-time anomaly detection) |
 | 2. Upload | Enter/upload the month's readings into the system for each society | Manual CSV upload (current); system today has no purpose-built pipeline for this | Per-society manual effort | No structured validation | Phase 3 CSV upload + validation capability |
 | 3. Compare to benchmark | Compare monthly accumulated readings to the circuit's benchmark | Manual calculation | Significant — this is the core reconciliation work | Error-prone; extrapolation math (CON-11) done by hand | Phase 3 automated calculation engine |
-| 4. Extrapolate | Scale metered-circuit reading to the society's full light count | Manual (spreadsheet formula, per the CON-11 example) | Part of step 3 | Same as above | Same engine |
+| 4. Extrapolate | Scale each metered circuit's reading across the lights of its own type, then sum (CON-11 as corrected 2026-08-12 — one metered circuit per light type, not one per society) | Manual (spreadsheet formula, per the CON-11 example) | Part of step 3 | Same as above, multiplied by the number of typed circuits per society | Same engine |
 | 5. Compute savings ₹ | Apply benchmark savings %, unit rate, and revenue-share % to get FirsThing's fee | Manual | Part of step 3 | Same as above | Same engine |
-| 6. Decide off-band cases | For any society outside ±5%, determine fixable vs. not-fixable (JTBD-02) | Manual, undocumented | Ad hoc | No audit trail (INV-03 gap) | Phase 3 review/decision capability |
+| 6. Decide off-band cases | For any circuit outside its contracted band (CON-01a), determine fixable vs. not-fixable (JTBD-02) | Manual, undocumented | Ad hoc | No audit trail (INV-03 gap) | Phase 3 review/decision capability |
 | 7. Generate invoice | Produce the monthly invoice | Manual (existing `/admin/invoices` form exists but isn't tied to the calculation above) | Per society | Disconnected from the actual calculation | Phase 3 ties invoice generation to the calculation engine |
 | 8. Generate savings report | Produce the savings report: this month, cumulative to date, future projection, optional cross-sell projection for un-adopted service lines | Manual | Per society | Same disconnect; no cross-sell projection exists today at all | New Phase 3 capability (GOAL-08-adjacent) |
 | 9. Handle disputes | If a society disputes, resolve manually via calls/WhatsApp (PER-02) | Phone/WhatsApp, outside the app entirely | Ad hoc | No system record of dispute or resolution | Phase 3: dispute/communication record, visible to PER-01 and PER-02 |
@@ -260,11 +261,22 @@ Primary persona (PER-01), the monthly billing cycle — the stated main pain poi
 
 ## 9. Assumptions raised in this phase
 
-Added to the register in `00-intake.md`: ASSUM-14 (non-payment suspension trigger, open).
-New assumptions raised in this document but not yet promoted to the central register pending
-resolution — flagged inline above as `[ASSUMPTION: ASSUM-15]` through `[ASSUMPTION: ASSUM-18]`,
-covering PER-02/03/04/06's unconfirmed technical-level/success/abandonment details. These stay
-low-priority relative to RG-01 through RG-06 above, since none currently block Phase 3 — Phase 3
-works from the confirmed constraints (CON-08 through CON-13), not from these persona-detail gaps.
+All assumptions raised in this document are now in the central register in `00-intake.md` §9 —
+the register's own rule is that every inline `[ASSUMPTION: ...]` marker resolves to a row there,
+and as of the 2026-08-12 sweep every one of them does.
+
+| Assumption | Raised for | Register status |
+|---|---|---|
+| ASSUM-14 | Non-payment suspension trigger and approval mechanics | **validated** — resolved directly into CON-13 (2026-08-10), including the 2026-08-12 suspension-semantics addition |
+| ASSUM-15 | PER-02 (support) technical level, success criteria, abandonment triggers | open — RG-03 |
+| ASSUM-16 | PER-03 (inspector) abandonment triggers | open — RG-02 |
+| ASSUM-17 | PER-04 (installer) technical level and abandonment triggers | open — RG-02 |
+| ASSUM-18 | PER-06 (society manager) success criteria and abandonment triggers | open — RG-04 |
+| ASSUM-20 | PER-07 (sales/BD) technical level and abandonment triggers | open — RG-07 |
+| ASSUM-21 | PER-08 (accountant) as a distinct role with its own login; working preferences inferred | open — RG-08 |
+
+None of these block Phase 3 — it works from the confirmed constraints, not from persona-detail
+gaps. They matter at Phase 5, where each one shapes a real screen. ASSUM-19 and ASSUM-22 were
+raised in Phase 3 rather than here and are recorded in the central register only.
 
 ---

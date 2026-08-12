@@ -1,20 +1,26 @@
 # Feature Definition
 **Product:** FirsThing Platform · **Phase:** 3 — Feature Definition · **Status:** Approved
-**Last updated:** 2026-08-12 (gate review: 12 open items resolved; FEAT-032 and FEAT-052 rewritten after CON-24/CON-25 were corrected) · **Mode:** Ecosystem
+**Last updated:** 2026-08-12 (gate review: 12 open items resolved; FEAT-032/FEAT-052 rewritten after CON-24/CON-25 were corrected. **Post-gate audit sweep, same day:** CON-11's per-light-type metering and per-circuit tolerance bands applied across CAP-01/02/04/05; CAP-22 notifications added (FEAT-090..093); CAP-02's no-demo variant given its own brief (FEAT-094)) · **Mode:** Ecosystem
 
 ---
 
 ## 1. Capability map
 
 Original 14 capabilities, plus 7 new ones and 3 refinements discovered from the full lead-to-cash
-narrative (2026-08-10). All 21 are now expanded into feature briefs (FEAT-001 … FEAT-089) in §3,
-walked through one capability at a time in pipeline order per the skill's method.
+narrative (2026-08-10), plus CAP-22 (notifications) added by the post-gate audit. All 22 are
+expanded into feature briefs (FEAT-001 … FEAT-094) in §3, walked through one capability at a time
+in pipeline order per the skill's method.
+
+**Numbering note:** FEAT-001..089 are grouped by capability in pipeline order. FEAT-090..094 were
+added after that sweep (audit, 2026-08-12) and therefore sit at the end rather than inside their
+capability's block — FEAT-090..093 belong to CAP-22, FEAT-094 to CAP-02. Renumbering 89 existing
+briefs to preserve grouping would break every cross-reference in this document for no real gain.
 
 | ID | Capability | Serves | Owner surface | Consumer surface(s) | Shared contract? | Status |
 |----|-----------|--------|---------------|---------------------|-------------------|--------|
 | CAP-15 | Sales lead & demo request (first meeting, proposal, demo agreement) | new — sales pipeline | SUR-01 | — | no | expanded (FEAT-001..004) |
 | CAP-16 | Site survey & circuit selection (CON-16 demo-circuit criteria) **+ full society/equipment profile audit (CON-28, corrected 2026-08-10)** — society governance profile, whole-society lighting inventory by area, exhaustive per-unit pump-room equipment audit with photos, historical logbook capture. Much larger than originally scoped | new | SUR-02 (field officer) | SUR-01 (backend confirms; feeds CAP-06's cross-sell projection, CON-29) | yes | expanded (FEAT-005..010) |
-| CAP-02 | Benchmark commissioning — **now much larger**: meter install + load validation (CON-17), gate pass (CON-18), 5+5-day anomaly-gated monitoring (CON-19), demo success threshold (CON-20, resolved — ASSUM-19 validated). **Two variants (Phase 3 gate, 2026-08-12):** the full demo commissioning above, and a **no-demo variant** for CON-25 deals — meter install + load validation only, with the first full post-install month becoming the reference consumption level instead of pre/post 5-day windows | JTBD-05 | SUR-02 | SUR-01 (ops sees result) | yes | expanded (FEAT-011..015) |
+| CAP-02 | Benchmark commissioning — **now much larger**: meter install + load validation (CON-17), gate pass (CON-18), 5+5-day anomaly-gated monitoring (CON-19), demo success threshold (CON-20, resolved — ASSUM-19 validated). **Two variants (Phase 3 gate, 2026-08-12):** the full demo commissioning above, and a **no-demo variant** for CON-25 deals — meter install + load validation only, with the first full post-install month becoming the reference consumption level instead of pre/post 5-day windows — **given its own brief FEAT-094 by the post-gate audit**, since the behaviour previously lived only inside FEAT-052, a *billing* feature. **Also widened by CON-11's correction:** commissioning now runs per light type, so a society has several circuits to commission, not one | JTBD-05 | SUR-02 | SUR-01 (ops sees result) | yes | expanded (FEAT-011..015, 094) |
 | CAP-17 | Field visit scheduling & coordination (reusable: demo-install and full-install scheduling; accept/reschedule/24h-lockout/escalation pattern) | new | SUR-01 (backend coordinates) | SUR-02 (field team responds) | yes | expanded (FEAT-016..019) |
 | CAP-18 | Demo savings report generation & query resolution (auto-generated after valid window, backend review/edit, share via WhatsApp/email, society views in-app) | new | SUR-01 | SUR-01 (customer portal) | no | expanded (FEAT-020..023) |
 | CAP-19 | Document collection / KYC (GST doc, electricity bill — uploaded by society or entered by backend if received via call/WhatsApp) | new | SUR-01 | SUR-01 (customer portal upload) | no | expanded (FEAT-024..026) |
@@ -33,6 +39,7 @@ walked through one capability at a time in pipeline order per the skill's method
 | CAP-12 | Customer support & communication log. **Confirmed 2026-08-10 (CON-32):** each new call/message logged as its own thread, follow-ups append to the same thread, open→close lifecycle with escalation to senior management on non-responsiveness from either side — likely shares its state-machine shape with CAP-09's ticketing, not a separate pattern | JTBD-03 | SUR-01 | — | no | expanded (FEAT-081..084) |
 | CAP-13 | Society & account management (society/user CRUD, non-payment suspension CON-13) | — | SUR-01 | all internal roles | no | expanded (FEAT-085..087) |
 | CAP-14 | Society-facing portal (committee + manager dashboards). **Confirmed 2026-08-10:** maximal visibility as a principle — cumulative savings, bill/payment status, active tickets, contract summary together, not a stripped-down view; ticket raising/tracking/resolution-timeliness available to either role | JTBD-06, JTBD-07 | SUR-01 | — | no | expanded (FEAT-088..089) |
+| CAP-22 | **Notifications (added by the post-gate audit, 2026-08-12 — CON-39).** 21 feature briefs across this document say a party "is notified" with no capability owning the mechanism. One notification service: a typed event catalogue, templates, recipient resolution, and an auditable delivery log. **Email is the only wired channel at launch**; WhatsApp and in-app are named later additions | CON-39, and indirectly every capability that notifies | SUR-01 | SUR-01 (customer), SUR-02 | yes | expanded (FEAT-090..093) |
 
 **Cross-cutting, not a numbered capability:** the gate-pass/field-document pattern (CON-18) — an
 itemized list, physically signed, photographed, re-entered as a structured form, backend-approval-
@@ -94,7 +101,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 | FEAT-049 | Tolerance-band compliance check | CAP-04 | PER-01 | GOAL-01, JTBD-02 | SUR-01 | M | proposed |
 | FEAT-050 | Billing adjustment application | CAP-04 | PER-01 | GOAL-01, JTBD-02 | SUR-01 | M | proposed |
 | FEAT-051 | Partial-month proration | CAP-04 | PER-01 | GOAL-01 | SUR-01 | S | proposed |
-| FEAT-052 | Agreed-benchmark billing with first-month reference | CAP-04 | PER-01 | GOAL-01 | SUR-01 | M | proposed |
+| FEAT-052 | Agreed-benchmark billing with first-month reference (demo-skip path) | CAP-04 | PER-01 | GOAL-01 | SUR-01 | M | proposed |
 | FEAT-053 | Zoho invoice handoff & manual invoice upload | CAP-04 | PER-01 | JTBD-01 | SUR-01 | M | proposed |
 | FEAT-054 | Accountant review & release gate | CAP-04 | PER-08 | GOAL-01, GOAL-06 | SUR-01 | M | proposed |
 | FEAT-055 | Deviation chart & initial findings | CAP-05 | PER-01 | JTBD-02 | SUR-01 | M | proposed |
@@ -132,6 +139,11 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 | FEAT-087 | Payment tracking & automatic suspension | CAP-13 | PER-01 | GOAL-01 | SUR-01 | L | proposed |
 | FEAT-088 | Society portal home & savings view | CAP-14 | PER-05, PER-06 | JTBD-06 | SUR-01 (customer) | L | proposed |
 | FEAT-089 | Society ticket raising & resolution tracking | CAP-14 | PER-05, PER-06 | JTBD-07 | SUR-01 (customer) | M | proposed |
+| FEAT-090 | Notification event catalogue & templates | CAP-22 | PER-01 | CON-39 | SUR-01 | M | proposed |
+| FEAT-091 | Email delivery & delivery log | CAP-22 | system | CON-39, GOAL-06 | SUR-01 | M | proposed |
+| FEAT-092 | Recipient resolution & society contact directory | CAP-22 | PER-01 | CON-39 | SUR-01 | S | proposed |
+| FEAT-093 | Notification history & manual resend | CAP-22 | PER-01, PER-02 | CON-39, JTBD-03 | SUR-01 | S | proposed |
+| FEAT-094 | No-demo commissioning variant | CAP-02 | PER-04, PER-01 | JTBD-05 | SUR-02 | M | proposed |
 
 ## 3. Feature briefs
 
@@ -397,8 +409,8 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Capability:** CAP-02 · **Persona:** PER-04, PER-01 · **Serves:** JTBD-05
 - **Surface(s):** SUR-02
 - **Problem:** An install where the light count, wattage, or wiring was miscounted produces a wrong theoretical load from day one — without a validation step, the error isn't caught until the benchmark itself looks wrong, by which point it's expensive to unwind (PER-04's stated goal, 02-users-research.md).
-- **Description:** PER-04 installs the smart meter on the confirmed demo circuit (FEAT-007) and validates its displayed load against the theoretical load (light count × per-light wattage). Within ±10% (CON-17), install proceeds; outside that band, the discrepancy is flagged and PER-04 must recheck (miscounted lights, an extra device, wrong per-light wattage) before proceeding. Meter installation triggers the demo-installation instance of the cross-cutting gate-pass component (§5, CON-18) — an itemized equipment list signed, photographed, and backend-approved before PER-04 leaves.
-- **Behavioral rules:** The ±10% band is a hard gate — proceeding to the baseline monitoring window (FEAT-012) is blocked until load validation passes or PER-01 records an explicit override with a reason. The gate-pass sign-off is a separate, sequential gate after load validation passes — both must complete before PER-04 can leave the site.
+- **Description:** PER-04 installs a smart meter on **each confirmed circuit** (FEAT-007) — one per distinct light type, per CON-11/CON-16, so a society commonly needs several — and validates each meter's displayed load against that circuit's theoretical load (light count × per-light wattage). Within ±10% (CON-17), install proceeds; outside that band, the discrepancy is flagged and PER-04 must recheck (miscounted lights, an extra device, wrong per-light wattage) before proceeding. Meter installation triggers the demo-installation instance of the cross-cutting gate-pass component (§5, CON-18) — an itemized equipment list signed, photographed, and backend-approved before PER-04 leaves.
+- **Behavioral rules:** The ±10% band is a hard gate, evaluated per circuit — proceeding to the baseline monitoring window (FEAT-012) is blocked for that circuit until its load validation passes or PER-01 records an explicit override with a reason. A society's circuits are commissioned independently: one failing validation does not block the others, but the deal cannot reach billing until every registered circuit has passed. The gate-pass sign-off is a separate, sequential gate after load validation passes — both must complete before PER-04 can leave the site.
 - **Acceptance criteria:**
   - AC-1 (happy): Given light count × wattage is within ±10% of the meter's displayed load, when PER-04 confirms, then the circuit moves to `meter-installed` and the gate-pass step opens.
   - AC-2 (empty/first-run): Given no reading taken yet, the validation screen prompts for both the theoretical inputs and the meter's live reading, not assuming either is pre-filled.
@@ -1151,12 +1163,12 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Capability:** CAP-01 · **Persona:** PER-01, PER-04 · **Serves:** GOAL-03, GOAL-06
 - **Surface(s):** SUR-01 (manage), SUR-02 (field reference)
 - **Problem:** The circuit — not the society — is the unit of metering, benchmarking, and verification (CON-10/CON-11), but the existing app has no first-class circuit model with that role.
-- **Description:** A circuit record per metered unit: its society and service line, physical location/area, light count and per-light wattage, working hours (metadata only, per CON-10), its meter, its eligibility checklist (FEAT-007), its benchmark (FEAT-014), and its lifecycle state from surveyed through to actively billed.
-- **Behavioral rules:** Working hours are metadata and never trigger a benchmark rescale (CON-10) — only a verified light-count change does (FEAT-041). A circuit's benchmark is written once by CAP-02 and is not hand-editable thereafter. Circuits belong to a service line, not directly to a society, so the same society can hold lighting circuits and pump-room metering independently.
+- **Description:** A circuit record per metered unit: its society and service line, physical location/area, **light type / operating profile** (basement parking, stilt parking, lift lobby, staircase, external — CON-16), light count and per-light wattage, the **represented light count** of that same type across the society (the extrapolation base, CON-11), working hours (metadata only, per CON-10), its meter, its eligibility checklist (FEAT-007), its benchmark (FEAT-014), and its lifecycle state from surveyed through to actively billed.
+- **Behavioral rules:** Working hours are metadata and never trigger a benchmark rescale (CON-10) — only a verified light-count change does (FEAT-041). A circuit's benchmark is written once by CAP-02 and is not hand-editable thereafter. Circuits belong to a service line, not directly to a society, so the same society can hold lighting circuits and pump-room metering independently. **One metered circuit per distinct light type** (CON-11 as corrected 2026-08-12): a society typically holds several, and each extrapolates only across the lights of its own type. `lightType` is therefore a billing-critical field, not a label — two circuits of the same type in one society is a data error worth flagging, since it makes the represented-count split ambiguous.
 - **Acceptance criteria:**
   - AC-1 (happy): Given a confirmed survey, when a circuit is registered with its location, light count, wattage, and working hours, then it's available for meter installation (FEAT-011) and appears in the society's circuit list.
   - AC-2 (empty/first-run): Given a society with no circuits, its circuit view shows an empty state explaining that circuits are created through the survey flow, not ad hoc.
-  - AC-3 (failure): Given a light count or wattage of zero or negative, registration is refused — these values feed CON-17's load validation and CON-11's extrapolation directly.
+  - AC-3 (failure): Given a light count or wattage of zero or negative, registration is refused — these values feed CON-17's load validation and CON-11's extrapolation directly. Given a represented light count lower than the metered light count, registration is refused: the extrapolation factor would be below 1, which is never physically meaningful.
   - AC-4 (permission): Given a non-PER-01 actor, editing circuit configuration is unavailable; PER-04 reads it in the field.
   - AC-5 (edge): Given a circuit's working hours change, the value is updated and recorded as metadata with an effective date, and no benchmark rescale is triggered (CON-10) — if it causes an off-band month, that goes through CAP-05's normal deviation review instead.
 - **Permissions:** PER-01 (create/edit), PER-04 (read, and write through the survey/commissioning flows).
@@ -1359,10 +1371,10 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Capability:** CAP-04 · **Persona:** PER-01 · **Serves:** JTBD-01, GOAL-01
 - **Surface(s):** SUR-01
 - **Problem:** This is the heart of GOAL-01 — today the extrapolation, benchmark comparison, and savings arithmetic are done by hand every month for every society, which is both the biggest ops time sink and the biggest audit risk.
-- **Description:** Once a month's readings are ingested and validated (CAP-03), the savings calculation runs **automatically** (CON-33): for each metered circuit, extrapolated consumption = (represented light count ÷ metered light count) × metered units; monthly savings (units) = extrapolated consumption × benchmark savings %; savings (₹) = that × the contracted per-unit electricity rate; FirsThing's fee = that × the contracted revenue-share % (CON-11). Where a society has multiple metered circuits, each extrapolates to its own group and the results sum.
+- **Description:** Once a month's readings are ingested and validated (CAP-03), the savings calculation runs **automatically** (CON-33): for each metered circuit, extrapolated consumption = (represented light count ÷ metered light count) × metered units; monthly savings (units) = extrapolated consumption × benchmark savings %; savings (₹) = that × the contracted per-unit electricity rate; FirsThing's fee = that × the contracted revenue-share % (CON-11). **Extrapolation is scoped per light type** (CON-11 as corrected 2026-08-12): each metered circuit's factor applies only across the lights of its own type — basement parking to basement parking, staircase to staircase — and the society's monthly total is the sum of those per-type results. One circuit is never scaled across a society's entire light count, because operating profiles differ enough between types that doing so biases every bill for the term.
 - **Behavioral rules:** Automatic on validated data — PER-01 does not trigger it manually (CON-33). Every input (represented light count, metered light count, benchmark %, unit rate, revenue-share %) is a versioned, auditable field, and the calculation records which version of each it used — this is what makes INV-02 hold for a figure computed months ago. The calculation runs against the effective-dated baseline, so a mid-term rescale (FEAT-041) doesn't retroactively change earlier months. **This computes the compliance check, not a fresh bill** (CON-01) — the amount payable is normally the contracted fixed monthly amount, and this run's output is what that amount is checked against.
 - **Acceptance criteria:**
-  - AC-1 (happy): Given a month's readings are validated with no unresolved anomalies, when the run executes, then per-circuit extrapolated consumption, savings units, savings ₹, and FirsThing's computed fee are produced with every input version recorded.
+  - AC-1 (happy): Given a month's readings are validated with no unresolved anomalies, when the run executes, then per-circuit extrapolated consumption, savings units, savings ₹, and FirsThing's computed fee are produced with every input version recorded, and the society total is the sum of the per-circuit fee lines rather than a separately-computed figure.
   - AC-2 (empty/first-run): Given a society in its first partial month, the run produces a prorated result via FEAT-051 rather than a full-month figure.
   - AC-3 (failure): Given unresolved anomalies exist for the month (FEAT-045), the run is held and the month is not billable until they're resolved — INV-09's gate, enforced here.
   - AC-4 (permission): Given any role, the computed figures cannot be hand-edited; corrections happen by fixing inputs and re-running, which is itself recorded.
@@ -1385,14 +1397,14 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Capability:** CAP-04 · **Persona:** PER-01 · **Serves:** GOAL-01, JTBD-02
 - **Surface(s):** SUR-01
 - **Problem:** CON-01 reframes the monthly reading as a compliance check rather than a repricing input — so the system's real monthly job is deciding "in band or out of band," which today is a manual judgment with no recorded rationale.
-- **Description:** The month's measured savings % is compared against the circuit's fixed benchmark, within the contract's tolerance band (CON-01a — per-contract, commonly ±5% or ±10%, never a platform constant). In-band months bill the contracted fixed amount with no further action. Out-of-band months raise a deviation for review (CAP-05).
-- **Behavioral rules:** The tolerance band is read from the contract, never hardcoded (CON-01a — the real Ace Aspire contract uses ±10% while other deals use ±5%). A single out-of-band month raises a review but never changes the bill; **"sustained" is 2 consecutive out-of-band months (CON-01c)** — month 1 is the correction window, and only month 2 can adjust. The check itself never adjusts anything. **"Approaching tolerance" is within 20% of the band edge (CON-01d)** — 4% off on a ±5% contract, 8% off on a ±10% contract — flagged amber for GOAL-08's early warning. On `negotiated-fixed` contracts the comparison is against the first-month reference rather than a measured benchmark (FEAT-052), but the band logic is identical.
+- **Description:** The month's measured savings % is compared against the circuit's fixed benchmark, within the contract's tolerance band (CON-01a — per-contract, commonly ±5% or ±10%, never a platform constant). **The check runs per metered circuit, independently** (CON-11 as corrected 2026-08-12): a society with four typed circuits gets four compliance results, not one. In-band circuits bill their contracted fixed fee line with no further action. Each out-of-band circuit raises its own deviation review (CAP-05), scoped to that circuit, while the society's other circuits continue billing normally.
+- **Behavioral rules:** The tolerance band is read from the contract, never hardcoded (CON-01a — the real Ace Aspire contract uses ±10% while other deals use ±5%). A single out-of-band month raises a review but never changes the bill; **"sustained" is 2 consecutive out-of-band months (CON-01c)** — month 1 is the correction window, and only month 2 can adjust. The check itself never adjusts anything. **"Approaching tolerance" is within 20% of the band edge (CON-01d)** — 4% off on a ±5% contract, 8% off on a ±10% contract — flagged amber for GOAL-08's early warning. On `negotiated-fixed` contracts the comparison is against the first-month reference rather than a measured benchmark (FEAT-052), but the band logic is identical. **Consecutive-month state is tracked per circuit**, not per society — circuit A's second consecutive breach flips circuit A's fee line while circuit B, breaching for the first time, does not. There is deliberately no society-level composite check: a broken circuit must not be able to hide inside a healthy average.
 - **Acceptance criteria:**
   - AC-1 (happy, in band): Given the month's measured savings sits within the contracted band, when the check runs, then the month is marked compliant and bills at the contracted fixed amount with no review raised.
   - AC-2 (empty): Given a society in a pre-billing state, no compliance check applies and its record says so rather than showing a spurious pass.
   - AC-3 (failure/out of band): Given the month falls outside the band, then a deviation review is raised (CAP-05) and the month is flagged pending that review's outcome — the invoice does not auto-adjust, and a *first* out-of-band month never adjusts at all (CON-01c).
   - AC-4 (permission): Given any role, the band value cannot be edited here — it belongs to the contract (CAP-07) and changing it is a contractual act, not an operational one.
-  - AC-5 (edge): Given a contract with a ±10% band, the check uses 10% — a society-specific value, confirmed against real contract evidence, not the ±5% that appears throughout this blueprint's prose as shorthand.
+  - AC-5 (edge): Given a contract with a ±10% band, the check uses 10% — a society-specific value, confirmed against real contract evidence, not a platform constant. Given a society with several typed circuits where one is out of band and three are in band, exactly one deviation review is raised and only that circuit's fee line is at risk.
 - **Permissions:** system (evaluate), PER-01 (view).
 - **Data touched:** Writes the compliance result onto `MonthlyCalculation`; raises deviation records.
 - **Triggers:** Automatic, following FEAT-048.
@@ -1400,18 +1412,18 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Consumes:** `MonthlyCalculationCompleted`, contract terms.
 - **Depends on:** FEAT-048, CAP-07.
 - **Depended on by:** CAP-05 (deviation review), FEAT-050, CAP-08's approaching/breached status chips (GOAL-08).
-- **Failure modes:** A hardcoded 5% anywhere in the implementation would produce silently wrong compliance results for every ±10% contract — the single most likely way this feature goes wrong.
+- **Failure modes:** A hardcoded 5% anywhere in the implementation would produce silently wrong compliance results for every ±10% contract — the single most likely way this feature goes wrong. The second most likely: evaluating the band against a society-level aggregate instead of per circuit, which silently masks a single failing light type behind three healthy ones.
 - **Limits & scale:** Trivial.
 - **Minimum viable version:** Per-contract band comparison with in/out result and consecutive-month tracking.
 - **Complete version:** Adds the CON-01d "approaching band" amber state feeding CAP-08's early-warning chips (GOAL-08 explicitly asks for flagging *as* a society approaches the band, not only on crossing).
 - **Open questions / assumptions:** none blocking — CON-01c fixed "sustained" at 2 consecutive months and CON-01d fixed "approaching" at 20% of the band edge, both at the Phase 3 gate.
-- **Risks:** Consecutive-month state means the check is no longer stateless per month — a re-run after a corrected input must recompute the streak, not just the single month.
+- **Risks:** Consecutive-month state means the check is no longer stateless per month — a re-run after a corrected input must recompute the streak, not just the single month, and it must do so per circuit. Per-circuit reviews also multiply the ops review queue by the number of typed circuits per society (CON-11); at 200 societies this is the volume assumption most worth revisiting in Phase 6.
 
 ### FEAT-050 — Billing adjustment application
 - **Capability:** CAP-04 · **Persona:** PER-01 · **Serves:** GOAL-01, JTBD-02
 - **Surface(s):** SUR-01
 - **Problem:** When a deviation review concludes, its outcome has to actually reach the invoice — and the treatment differs sharply by root cause (CON-01b, OQ-09/OQ-10), which is exactly the kind of rule that gets misapplied when it lives only in someone's head.
-- **Description:** Applies a deviation review's outcome (CAP-05) to the month's billing. Per OQ-10 (resolved), the adjustment is not a separate penalty formula: a **FirsThing-attributable** shortfall still out of band in the *second* consecutive month (CON-01c) flips that month's `pricingBasis` from `fixed` to `actual-metered`, so it bills through CON-11's standard calculation using that month's *actual measured* savings % in place of the benchmark %. An **excluded/society-caused** shortfall (CON-01b's named list: lighting-layout changes, blocked sensors, usage-pattern changes, external electrical issues, lack of society-side maintenance) leaves `pricingBasis: fixed` unchanged, with the society notified why (OQ-09).
+- **Description:** Applies a deviation review's outcome (CAP-05) to the month's billing. Per OQ-10 (resolved), the adjustment is not a separate penalty formula: a **FirsThing-attributable** shortfall still out of band in the *second* consecutive month (CON-01c) flips **that circuit's fee line** for that month from `pricingBasis: fixed` to `actual-metered`, so it bills through CON-11's standard calculation using that month's *actual measured* savings % in place of the benchmark %. An **excluded/society-caused** shortfall (CON-01b's named list: lighting-layout changes, blocked sensors, usage-pattern changes, external electrical issues, lack of society-side maintenance) leaves `pricingBasis: fixed` unchanged, with the society notified why (OQ-09).
 - **Behavioral rules:** The adjustment decision is never made here — it's applied here. CAP-05's review produces the root-cause classification and decision; this feature translates that into a billing effect, so the two can't drift. An excluded-cause month still bills in full but must generate a customer-facing explanation (OQ-09) — silence would read as an unexplained bad month.
 - **Acceptance criteria:**
   - AC-1 (happy): Given a review concludes "FirsThing-attributable, uncorrected," when applied, then the month's `pricingBasis` becomes `actual-metered`, the amount is recomputed through CON-11 using the measured savings %, and the change is recorded with its review reference.
@@ -1420,7 +1432,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
   - AC-4 (permission): Given a non-PER-01 actor, applying an adjustment is unavailable; and no adjustment can be applied without a linked completed review.
   - AC-5 (edge): Given a FirsThing-attributable issue that *was* corrected within a month, no adjustment applies (CON-01b's "corrected at no cost" path) — the correction, not the deviation, is what determines the billing outcome.
 - **Permissions:** PER-01 (apply, always against a completed review).
-- **Data touched:** Writes `pricingBasis` (`fixed | actual-metered`) and the adjustment record against `MonthlyCalculation`/invoice; generates the customer explanation.
+- **Data touched:** Writes `pricingBasis` (`fixed | actual-metered`) and the adjustment record against the **per-circuit fee line** on `MonthlyCalculation`/invoice (CON-11 — an invoice is a set of per-circuit lines summing to the total, so one circuit can be `actual-metered` while the rest stay `fixed`); generates the customer explanation.
 - **Triggers:** A completed deviation review (CAP-05).
 - **Emits:** `BillingAdjustmentApplied`, `ExcludedCauseNotified`.
 - **Consumes:** CAP-05's review outcome.
@@ -1431,7 +1443,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Minimum viable version:** `pricingBasis` switching with a mandatory review link.
 - **Complete version:** Adds the auto-generated excluded-cause explanation to the society (AC-3).
 - **Open questions / assumptions:** none blocking — OQ-10 resolved the adjustment mechanism as a `pricingBasis` flip rather than a separate formula.
-- **Risks:** A month billed `actual-metered` can be materially lower than the fixed rate; the society should be able to see clearly which basis applied and why (CAP-14), or a lower bill becomes its own confusing conversation.
+- **Risks:** A fee line billed `actual-metered` can be materially lower than the fixed rate; the society should be able to see clearly which basis applied to which circuit and why (CAP-14), or a mixed-basis invoice becomes its own confusing conversation — this is a real invoice-presentation problem for Phase 5, not just a calculation one.
 
 ### FEAT-051 — Partial-month proration
 - **Capability:** CAP-04 · **Persona:** PER-01 · **Serves:** GOAL-01
@@ -1464,15 +1476,16 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Surface(s):** SUR-01
 - **Problem:** CON-25's demo-skip path produces contracts whose benchmark % was agreed rather than measured. **Corrected at the Phase 3 gate (2026-08-12):** these contracts *are* metered — an earlier draft of this feature assumed they weren't, and would have left a whole class of contracts with no monitoring at all.
 - **Description:** For contracts marked `benchmarkSource: negotiated-fixed` (FEAT-027): the monthly amount is the flat figure derived from the **agreed** benchmark % (e.g. 65%) written into the agreement — not recomputed from readings. But the circuit is metered, and the **first full month of readings after installation becomes the reference consumption level**. Every subsequent month is compared against that reference under the contract's normal tolerance band, feeding the same compliance check (FEAT-049) and deviation review (CAP-05) as any other contract.
-- **Behavioral rules:** Two separate things, deliberately decoupled: the **fee** is agreement-derived and flat; the **monitoring** is fully metered and traceable. The first post-install month is captured once and then fixed as the reference — later months never re-baseline. Customer-facing surfaces must state the basis honestly: the savings *percentage* comes from the agreement, while the consumption figures behind it are measured (INV-02's narrowed exception).
+- **Behavioral rules:** Two separate things, deliberately decoupled: the **fee** is agreement-derived and flat; the **monitoring** is fully metered and traceable. **Pre-install readings are retained as evidence (CON-25d, resolved at the audit 2026-08-12):** the meter goes in at survey but installation may be weeks later, so genuine pre-install consumption is recorded on this path. It never becomes a benchmark and never feeds the tolerance-band comparison — but it is shown as measured before/after on the savings report (FEAT-059) and gives FirsThing an internal check on whether the agreed % was reasonable. The first post-install month is captured once and then fixed as the reference — later months never re-baseline. Customer-facing surfaces must state the basis honestly: the savings *percentage* comes from the agreement, while the consumption figures behind it are measured (INV-02's narrowed exception).
 - **Acceptance criteria:**
   - AC-1 (happy): Given a `negotiated-fixed` contract past its first post-install month, when the monthly run executes, then the flat agreed amount is billed **and** that month's metered consumption is compared against the first-month reference under the tolerance band.
   - AC-2 (empty/first-run): Given the first full post-install month, that month establishes the reference and is billed flat with no variance comparison — there is nothing to compare it against yet, and that's stated rather than shown as a pass.
   - AC-3 (failure): Given a later month's consumption varies beyond the tolerance band from the reference, a deviation review is raised exactly as for a measured-benchmark contract (FEAT-049/CAP-05) — the demo-skip path is not exempt from monitoring.
   - AC-4 (permission): Given a non-management actor, `benchmarkSource` cannot be changed — it's a contractual property (FEAT-032/CAP-07).
   - AC-5 (edge): Given the society views its savings in the portal, the basis is stated plainly: the percentage is agreement-derived, the consumption is metered. Not presented as a measured benchmark, and not presented as unmeasured either.
+  - AC-6 (edge, pre-install evidence): Given the survey→installation gap produced usable pre-install readings, when the savings report is generated, then measured before/after consumption is shown alongside the agreed percentage — clearly labelled as evidence, not as the billing basis. Given the gap was too short to produce usable readings, the report shows the agreed percentage alone and says so, rather than showing an empty chart.
 - **Permissions:** system (compute), PER-01 (view).
-- **Data touched:** Reads `Contract.benchmarkSource` and the agreed %; writes the flat monthly amount; writes/reads `Circuit.firstMonthReference`.
+- **Data touched:** Reads `Contract.benchmarkSource` and the agreed %; writes the flat monthly amount; writes/reads `Circuit.firstMonthReference`; reads retained pre-install readings for the report's evidence panel (never for billing).
 - **Triggers:** Automatic monthly; reference set once on the first complete post-install month.
 - **Emits:** `FixedMonthBilled`, `FirstMonthReferenceSet`.
 - **Consumes:** contract terms (CAP-07), monthly aggregates (FEAT-046).
@@ -1541,8 +1554,8 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Capability:** CAP-05 · **Persona:** PER-01 · **Serves:** JTBD-02
 - **Surface(s):** SUR-01
 - **Problem:** CON-31 step 1 is explicit: ops starts from raw daily readings plotted against the benchmark. Without that view, an out-of-band month is just a number, and the first diagnostic question ("is this one bad day or a sustained drift?") can't be answered.
-- **Description:** When FEAT-049 raises an out-of-band month, PER-01 opens the deviation with the circuit's raw daily readings charted against its benchmark line for the period, plus context: reading coverage, any anomalies flagged at ingest, recent inspections, recent rescales, and recent tickets for that society. From here PER-01 either resolves it directly (an ingest error, a known cause) or assigns it for field investigation (FEAT-056).
-- **Behavioral rules:** The chart shows raw daily readings, not just the monthly aggregate — the shape of the deviation is the diagnostic signal (a step change points to a physical change; a gradual drift points elsewhere; a few spike days point to an ingest problem). All context is assembled on one view rather than requiring PER-01 to cross-reference four screens.
+- **Description:** When FEAT-049 raises an out-of-band month **for a specific circuit** (CON-11 — reviews are per circuit, never per society), PER-01 opens the deviation with that circuit's raw daily readings charted against its benchmark line for the period, plus context: reading coverage, any anomalies flagged at ingest, recent inspections, recent rescales, and recent tickets for that society. From here PER-01 either resolves it directly (an ingest error, a known cause) or assigns it for field investigation (FEAT-056).
+- **Behavioral rules:** The chart shows raw daily readings, not just the monthly aggregate — the shape of the deviation is the diagnostic signal (a step change points to a physical change; a gradual drift points elsewhere; a few spike days point to an ingest problem). All context is assembled on one view rather than requiring PER-01 to cross-reference four screens. Where a society has several typed circuits, the view also shows the sibling circuits' current standing — a deviation isolated to one light type points somewhere very different from all four drifting together.
 - **Acceptance criteria:**
   - AC-1 (happy): Given an out-of-band month, when PER-01 opens the deviation, then daily readings are plotted against the benchmark with coverage, anomalies, recent inspections, rescales, and tickets shown alongside.
   - AC-2 (empty): Given no open deviations, the queue shows a caught-up state.
@@ -1646,7 +1659,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Surface(s):** SUR-01
 - **Problem:** The savings report is what makes the bill defensible — it's the artefact a committee reads to decide whether the number is trustworthy (JTBD-06). Built by hand each month, it's both a time sink and inconsistent between societies.
 - **Description:** Distinct from the invoice (which comes from Zoho, CON-33), the savings report is **generated natively by the app**: the month's metered consumption, the extrapolated society-wide figure, the benchmark comparison, savings in units and ₹, the revenue-share split, coverage, and any deviation/adjustment explanation. Generated automatically once the month's calculation completes, and released only through FEAT-054's accountant gate.
-- **Behavioral rules:** Every figure links to its provenance (INV-02) — the readings, the benchmark version, the contract terms version used. Where the month was out of band, the report says so and explains the outcome rather than presenting a clean number (an unexplained anomalous month is exactly what triggers a dispute). Where `pricingBasis` was `actual-metered` (FEAT-050) or the contract is `negotiated-fixed` (FEAT-052), the report states the basis plainly.
+- **Behavioral rules:** Every figure links to its provenance (INV-02) — the readings, the benchmark version, the contract terms version used. Where the month was out of band, the report says so and explains the outcome rather than presenting a clean number (an unexplained anomalous month is exactly what triggers a dispute). Where `pricingBasis` was `actual-metered` (FEAT-050) or the contract is `negotiated-fixed` (FEAT-052), the report states the basis plainly — and on a mixed-basis month it states it **per circuit**, since one fee line can be `actual-metered` while the rest stay fixed (CON-11). On a `negotiated-fixed` contract with retained pre-install readings (CON-25d), the report additionally shows measured before/after consumption as evidence, explicitly labelled as evidence rather than as the billing basis.
 - **Acceptance criteria:**
   - AC-1 (happy): Given a completed monthly calculation, when the report generates, then it contains metered consumption, extrapolation, benchmark comparison, savings units/₹, the share split, and coverage, each traceable to source.
   - AC-2 (empty/first-run): Given a society's first partial month, the report reflects the prorated period and says so, rather than presenting a partial month as a full one.
@@ -2374,7 +2387,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Surface(s):** SUR-01 (ops), SUR-01 customer (warnings)
 - **Problem:** CON-13 defines a precise, automatic escalation from unpaid invoice to full service suspension — and its most unusual property is that **manual intervention is only needed to stop or delay a suspension, never to trigger one**.
 - **Description:** An invoice-linked state machine: overdue tracking starts 2 days after an invoice is generated/shared; at roughly 10 days overdue (matching the standard contract payment term), a 5-day suspension-warning countdown begins and society users are notified; if still unpaid, **suspension fires fully automatically** — covering servicing, not just app login — with no approval step. The society can request an extension during the warning window; backend can grant increments of **up to 5 days per request**.
-- **Behavioral rules:** The automatic path must not be gated behind any approval (CON-13, explicitly) — every manual touchpoint in this feature is a brake, never an accelerator. **Payments are recorded manually by ops from Zoho, and suspension may only fire against a same-day-confirmed payment status** (CON-13, added at the Phase 3 gate) — a safety rule, not an approval gate: stale payment data stops the timer rather than firing on it. Suspension covers **servicing**, not merely portal access; the operational consequence is real, so the warning must be unmistakable to the society. Extensions are granted in increments of up to 5 days per request, not as an open-ended pause.
+- **Behavioral rules:** The automatic path must not be gated behind any approval (CON-13, explicitly) — every manual touchpoint in this feature is a brake, never an accelerator. **Payments are recorded manually by ops from Zoho, and suspension may only fire against a same-day-confirmed payment status** (CON-13, added at the Phase 3 gate) — a safety rule, not an approval gate: stale payment data stops the timer rather than firing on it. Suspension covers **servicing**, not merely portal access; the operational consequence is real, so the warning must be unmistakable to the society. Extensions are granted in increments of up to 5 days per request, not as an open-ended pause. **Suspension halts physical field servicing only (CON-13, resolved at the audit 2026-08-12):** meter ingest, the monthly savings calculation, invoice generation, and society portal access all keep running while suspended. Arrears continue to accrue, the record stays complete, and the committee can still see exactly what is owed next to the savings evidence — which is precisely the moment that evidence is most useful. What stops is routine inspections, ticket dispatch, and spare replacement. Suspension is therefore a society-level flag read only by the scheduling/dispatch capabilities (CAP-09, CAP-11, CAP-17); billing and portal capabilities ignore it entirely, and restoring on payment is a single state change with no backfill.
 - **Acceptance criteria:**
   - AC-1 (happy): Given an invoice paid within terms, no overdue tracking escalates and nothing is triggered.
   - AC-2 (empty): Given no societies in overdue states, the ops view is clean.
@@ -2447,13 +2460,147 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Open questions / assumptions:** none blocking.
 - **Risks:** Publishing SLA performance to customers raises the cost of a systemic SLA problem — correct for accountability, and a real operational commitment.
 
+### FEAT-090 — Notification event catalogue & templates
+- **Capability:** CAP-22 · **Persona:** PER-01 · **Serves:** CON-39
+- **Surface(s):** SUR-01
+- **Problem:** 21 briefs in this document say someone "is notified" and none of them says by what. Left unowned, each feature grows its own ad hoc email call, and nobody can answer "what does the system actually send a society?" — which matters most for CON-13's pre-suspension warning, the one message with contractual weight.
+- **Description:** A registry of typed notification events (visit assigned, offer shared, document received, deviation raised, SLA breached, suspension warning, month released, ticket updated), each with a named template, a default recipient rule (FEAT-092), and an enabled/disabled state. Templates are editable by PER-01 without a deploy, and each carries the variables it can interpolate.
+- **Behavioral rules:** Adding a new notification means registering an event, never calling an email library from a feature — this is the constraint that keeps CON-39's "add a channel later, don't rewrite" promise true. A disabled event is recorded as suppressed rather than silently skipped, so the delivery log stays a complete account of what the system decided to do. Contractually-weighted events (the suspension warning) are marked as such and cannot be disabled from this screen.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given PER-01 edits the suspension-warning template, when saved, then subsequent sends use the new copy and the previous version is retained against the events already sent with it.
+  - AC-2 (empty/first-run): Given a fresh environment, the catalogue is seeded with every event the 89 briefs reference, each disabled-by-default except the contractual ones, rather than starting empty.
+  - AC-3 (failure): Given a template references a variable the event does not provide, saving is refused with the offending variable named — a broken interpolation reaching a society is worse than a rejected save.
+  - AC-4 (permission): Given a non-PER-01 actor, templates are read-only; and no role can disable an event marked contractually required.
+  - AC-5 (edge): Given a template is edited between a month's generation and its release, the copy in force at *send* time is what goes out and what the log records — not the copy at generation time.
+- **Permissions:** PER-01 (edit), all internal roles (view).
+- **Data touched:** `NotificationEvent`, `NotificationTemplate` (versioned).
+- **Triggers:** PER-01 editing; seeded at install.
+- **Emits:** `TemplateUpdated`.
+- **Consumes:** —
+- **Depends on:** —
+- **Depended on by:** FEAT-091, FEAT-093, and every feature whose briefs say "is notified".
+- **Failure modes:** A template edited to remove a legally/contractually material line (the suspension date) would ship silently — versioning plus the contractual-event marking is the mitigation, not prevention.
+- **Limits & scale:** Small fixed catalogue; trivial.
+- **Minimum viable version:** Fixed catalogue with editable copy, no versioning.
+- **Complete version:** Adds template versioning and the contractual-event lock.
+- **Open questions / assumptions:** none blocking — CON-39 settled email-only at launch.
+- **Risks:** A catalogue that drifts out of sync with what features actually send is worse than no catalogue; FEAT-091 sending only through registered events is what prevents that.
+
+### FEAT-091 — Email delivery & delivery log
+- **Capability:** CAP-22 · **Persona:** system · **Serves:** CON-39, GOAL-06
+- **Surface(s):** SUR-01
+- **Problem:** CON-13's suspension fires unattended and halts real field servicing. Without a record of whether the warning email actually reached the society, a disputed suspension is unarguable in both directions — and email delivery genuinely fails (bounces, spam filters, stale addresses).
+- **Description:** The single send path for every registered event: renders the template, resolves recipients (FEAT-092), sends by email, and writes an immutable log row per recipient with the event, template version, address, timestamp, and provider result (queued/sent/bounced/failed). Retries transient failures with backoff; surfaces hard bounces to PER-01.
+- **Behavioral rules:** Every send goes through here — no feature sends directly. The log is append-only (XC-04): a delivery record is evidence, so it is never edited or deleted, and a resend is a new row referencing the original rather than an update. A hard bounce on a contractually-weighted event is escalated to PER-01 rather than logged and forgotten, because an undelivered suspension warning should stop the suspension clock, not run alongside it.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a registered event fires with a resolvable recipient, when sent, then the email is delivered and a log row records event, template version, address, timestamp, and provider result.
+  - AC-2 (empty/first-run): Given a society with no notification history, its notification panel shows an empty state rather than an error.
+  - AC-3 (failure): Given the email provider is unavailable, the send is queued and retried with backoff, the log shows `failed`/`retrying` rather than a false success, and a contractually-weighted event that ultimately cannot be delivered raises an operational alert to PER-01.
+  - AC-4 (permission): Given any role, log rows cannot be edited or deleted; a resend creates a new row linked to the original.
+  - AC-5 (edge): Given a hard bounce on a suspension warning, then the suspension countdown does not advance on that notification alone — PER-01 is alerted to reach the society another way (CON-13's brake, applied here).
+- **Permissions:** system (send), PER-01/PER-02 (view log).
+- **Data touched:** Writes `NotificationDelivery` (append-only); reads templates and recipients.
+- **Triggers:** Any registered event firing anywhere in the system.
+- **Emits:** `NotificationSent`, `NotificationFailed`, `NotificationBounced`.
+- **Consumes:** every `*Notified`-style event across the 89 briefs.
+- **Depends on:** FEAT-090, FEAT-092.
+- **Depended on by:** FEAT-093, FEAT-087 (suspension warning), and every notifying feature.
+- **Failure modes:** Treating a provider-accepted send as proof of receipt — it isn't. The log must distinguish "accepted by provider" from "delivered", or AC-5's brake is built on a false signal.
+- **Limits & scale:** At 200 societies with per-circuit deviation reviews, volume is modest but not trivial; the log grows unbounded and needs a retention position by Phase 7.
+- **Minimum viable version:** Send + append-only log with provider result.
+- **Complete version:** Adds retry/backoff, bounce escalation, and AC-5's suspension brake.
+- **Open questions / assumptions:** email provider is a Phase 7 architecture choice, deliberately not made here.
+- **Risks:** This becomes a single point of failure for every outbound message — its degraded state (queue backed up, provider down) is one of the few places INV-06's "degraded" state genuinely applies.
+
+### FEAT-092 — Recipient resolution & society contact directory
+- **Capability:** CAP-22 · **Persona:** PER-01 · **Serves:** CON-39
+- **Surface(s):** SUR-01
+- **Problem:** "The society is notified" is ambiguous — a society has a committee (PER-05), a manager (PER-06), and per CON-28a a contact list with posts and an RWA election date that changes who those people are. Sending to a stale address is the most likely way a suspension warning silently fails.
+- **Description:** A per-society contact directory (name, post, email, role mapping) feeding a recipient rule per notification event: which internal roles and which society contacts receive it. Sourced from CON-28a's survey capture and maintained thereafter by PER-01 or the society itself through the portal.
+- **Behavioral rules:** Recipient rules are per event, not global — a deviation review notifies ops only; a suspension warning notifies every active committee contact plus the manager. Contacts have an active/inactive state rather than being deleted, so historical delivery rows still resolve to a real person. CON-28a records the next RWA election date; contacts should be prompted for re-verification around it, since that is exactly when a committee turns over.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a society with an active committee contact list, when a suspension warning fires, then every active committee contact and the manager receive it, each as its own delivery row.
+  - AC-2 (empty): Given a society with no contacts recorded, a contractually-weighted event is not silently dropped — it raises an operational alert to PER-01 that the society is unreachable.
+  - AC-3 (failure): Given every contact for a society hard-bounces, the society is flagged unreachable and PER-01 is alerted before any unattended action (suspension) proceeds.
+  - AC-4 (permission): Given a society portal user, they may maintain their own society's contacts but never another's (INV-05); PER-01 may maintain any.
+  - AC-5 (edge): Given a committee turned over at an RWA election, prior delivery rows still resolve to the now-inactive contact they were actually sent to, rather than re-pointing at the new committee.
+- **Permissions:** PER-01 (all societies), PER-05/PER-06 (own society only).
+- **Data touched:** `SocietyContact`, per-event recipient rules.
+- **Triggers:** Survey capture (CON-28a), PER-01 or society edits.
+- **Emits:** `ContactsUpdated`, `SocietyUnreachable`.
+- **Consumes:** CON-28a's survey profile.
+- **Depends on:** FEAT-090, CAP-13.
+- **Depended on by:** FEAT-091, FEAT-087.
+- **Failure modes:** A society whose only contact left the committee — AC-2/AC-3 exist specifically because this failure is silent by nature.
+- **Limits & scale:** Handful of contacts per society; trivial.
+- **Minimum viable version:** Contact list plus per-event role rules.
+- **Complete version:** Adds unreachable-society detection and election-date re-verification prompts.
+- **Open questions / assumptions:** none blocking.
+- **Risks:** Contact data decays faster than almost anything else in this system, and nothing in the product forces it to be refreshed except the election-date prompt.
+
+### FEAT-093 — Notification history & manual resend
+- **Capability:** CAP-22 · **Persona:** PER-01, PER-02 · **Serves:** CON-39, JTBD-03
+- **Surface(s):** SUR-01
+- **Problem:** JTBD-03 is PER-02 wanting a society's full record without relaying through ops — and "what have we actually told them?" is a question support has to answer constantly during a dispute. Today that history lives in individual inboxes.
+- **Description:** A per-society notification history: every delivery row with its event, timestamp, recipients, and outcome, filterable by event type and date, with the rendered content of what was sent. PER-01 can resend a specific notification (creating a new linked delivery row, never mutating the original).
+- **Behavioral rules:** History is read-only evidence (XC-04); resend appends. Support (PER-02) can view but not resend, matching their scoped-permission profile. The rendered content shown is the version actually sent, not the current template — otherwise the history quietly rewrites itself every time copy is edited.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a society with delivery history, when PER-02 opens their record during a call, then every notification sent is listed with what it said and whether it was delivered.
+  - AC-2 (empty): Given a newly-onboarded society, the panel shows an empty state explaining no notifications have been sent yet.
+  - AC-3 (failure): Given a resend fails, the new row records the failure and the original remains untouched and clearly distinguishable from it.
+  - AC-4 (permission): Given PER-02, resend is unavailable and history is read-only; given a society portal user, they see only their own society's history (INV-05) — and only events intended for them, not internal ops notifications about them.
+  - AC-5 (edge): Given a template was edited after a notification was sent, the history shows the copy as sent at the time, not the current template.
+- **Permissions:** PER-01 (view + resend), PER-02 (view only), society users (own, filtered to society-facing events).
+- **Data touched:** Reads `NotificationDelivery`; writes new rows on resend.
+- **Triggers:** PER-01/PER-02 opening a society record.
+- **Emits:** `NotificationResent`.
+- **Consumes:** FEAT-091's log.
+- **Depends on:** FEAT-091.
+- **Depended on by:** CAP-12 (support threads), FEAT-088 (society portal panel).
+- **Failure modes:** Exposing internal ops notifications to a society portal user — AC-4's second clause is the guard, and it is easy to miss when the history is a single table.
+- **Limits & scale:** Grows with society age; needs pagination, not architecture.
+- **Minimum viable version:** Read-only per-society history with as-sent content.
+- **Complete version:** Adds resend and the society-facing filtered view.
+- **Open questions / assumptions:** none blocking.
+- **Risks:** none significant.
+
+### FEAT-094 — No-demo commissioning variant
+- **Capability:** CAP-02 · **Persona:** PER-04, PER-01 · **Serves:** JTBD-05
+- **Surface(s):** SUR-02
+- **Problem:** CON-25's demo-skip path still commissions circuits — meter install and load validation happen exactly as normal — but it skips the pre/post 5-day windows that FEAT-012/013/014 are built around. Until this brief, that behaviour lived only inside FEAT-052, a *billing* feature, which is the wrong home for a field-commissioning flow and made CAP-02's advertised "no-demo variant" untraceable.
+- **Description:** For a deal with `demoSkipped` set (FEAT-032), PER-04 runs meter installation and load validation per circuit (FEAT-011) and the gate-pass sign-off (XC-01) exactly as on the standard path, then stops — no baseline window, no light replacement as a demo, no post-install window, no measured benchmark. The circuit is marked `benchmarkSource: negotiated-fixed` and enters a `metered-awaiting-installation` state. Pre-install readings accumulate from meter install until full installation completes; they are retained as evidence (CON-25d) and never become a benchmark. On installation completion (FEAT-037), the first full post-install month sets the reference (FEAT-052).
+- **Behavioral rules:** The meter is installed on survey day or later, never before (CON-24) — the survey is what identifies the circuit. Everything CON-25 does *not* skip must genuinely run: load validation is still a hard gate, the gate pass is still required before PER-04 leaves. The variant is selected by the deal's `demoSkipped` flag, never chosen by the field operator on site, so the commissioning path is a consequence of a recorded, approved exception rather than an in-the-field decision.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a deal with an approved `demoSkipped` flag, when PER-04 completes meter install, load validation, and gate pass on each typed circuit, then each circuit reaches `metered-awaiting-installation` with no monitoring window scheduled and no benchmark computed.
+  - AC-2 (empty/first-run): Given no demo-skipped deals exist, the variant is never offered — it is not a mode PER-04 can select, only one a deal can be in.
+  - AC-3 (failure): Given load validation fails on a circuit (outside CON-17's ±10%), the variant blocks exactly as the standard path does — skipping the demo never means skipping validation.
+  - AC-4 (permission): Given PER-04 on site, they cannot set or clear `demoSkipped`; it is a management exception recorded upstream (FEAT-032).
+  - AC-5 (edge): Given the survey→installation gap yields 5+ valid days of pre-install readings, they are retained and labelled as evidence (CON-25d) — but the circuit still does **not** get a measured benchmark, because the commercial terms were agreed on the negotiated percentage and re-deriving them post-hoc would reopen a signed agreement.
+- **Permissions:** PER-04 (execute), PER-01 (monitor), management (set the upstream exception).
+- **Data touched:** Writes `Circuit.benchmarkSource: negotiated-fixed`, circuit lifecycle state; retains pre-install readings as evidence.
+- **Triggers:** A deal with `demoSkipped` reaching the meter-install stage.
+- **Emits:** `CircuitMeteredNoDemo`, `PreInstallEvidenceRetained`.
+- **Consumes:** `DemoSkipApproved` (FEAT-032), survey output (FEAT-007).
+- **Depends on:** FEAT-011, FEAT-032, XC-01.
+- **Depended on by:** FEAT-052 (first-month reference), FEAT-059 (evidence panel), FEAT-037.
+- **Failure modes:** Treating "demo skipped" as "commissioning skipped" — the exact error CON-25's correction at the Phase 3 gate exists to prevent, and the reason this brief exists separately from FEAT-052.
+- **Limits & scale:** Expected to be a small minority of deals (CON-25 calls it exceptional).
+- **Minimum viable version:** Meter install + load validation + gate pass, ending in `metered-awaiting-installation`.
+- **Complete version:** Adds pre-install evidence retention and its labelling downstream.
+- **Open questions / assumptions:** none blocking — CON-25 corrected at the Phase 3 gate, CON-25d added at the audit.
+- **Risks:** If demo-skip stops being exceptional, a growing share of the portfolio bills on agreed rather than measured percentages, which erodes GOAL-06 and the measured-savings positioning — worth watching as a business metric (also flagged on FEAT-052).
+
 ## 4. Feature interaction matrix
 
 ### 4.1 The lead-to-cash spine
 
 The dependency chain confirmed by the capability walkthrough. Each arrow is a real state handoff,
 not just a sequence. **Only the demo is skippable** (FEAT-032, CON-24 as corrected at the Phase 3
-gate); the survey is mandatory and metering happens on every deal, skip or no skip.
+gate); the survey is mandatory and metering happens on every deal, skip or no skip. Note also that
+from CAP-16 onward the spine runs **once per metered circuit, not once per society** — CON-11 as
+corrected at the post-gate audit meters one circuit per light type, so survey → commissioning →
+compliance → deviation review all fan out per circuit and reconverge at the invoice (CAP-04), which
+sums per-circuit fee lines into one monthly total.
 
 ```
 CAP-15 lead/proposal
@@ -2488,10 +2635,13 @@ investigations, ticket resolutions, and routine inspections all schedule through
 | FEAT-072 resolves a ticket using a spare | FEAT-075/076 (stock ledger, both states) | Recorded inline or not at all — a separate step gets skipped |
 | FEAT-054 releases a month | FEAT-060 (society sees it), FEAT-087 (overdue clock starts 2 days later), FEAT-069 (north-star metric) | Release, not generation, is the event everything downstream keys off |
 | Any SLA breach (CON-27) | FEAT-074's escalation, shared by FEAT-018 (visits) and FEAT-083 (threads) | Three consumers, one mechanism — not three mechanisms |
+| Any feature saying "is notified" | FEAT-091's single send path, via FEAT-090's event catalogue and FEAT-092's recipients | 21 briefs across 12 capabilities; CON-39 makes this one mechanism rather than 21 ad hoc email calls |
+| FEAT-087's suspension warning bounces | FEAT-091 AC-5 halts the countdown, FEAT-092 flags the society unreachable | The only notification with contractual weight — an undelivered warning must stop the clock, not run beside it |
+| FEAT-040 sets a circuit's `lightType` | FEAT-048's extrapolation base, FEAT-049's per-circuit band, FEAT-050's fee line, FEAT-055's review scope | Post-audit (CON-11): `lightType` and `representedLightCount` are billing-critical fields, not labels — a wrong one biases a fee line for the whole term |
 
 ### 4.3 Shared-contract capabilities (both surfaces must agree)
 
-CAP-16, CAP-02, CAP-17, CAP-21, CAP-01, CAP-05, CAP-09, CAP-10, CAP-11 each carry state that
+CAP-16, CAP-02, CAP-17, CAP-21, CAP-01, CAP-05, CAP-09, CAP-10, CAP-11, CAP-22 each carry state that
 SUR-01 and SUR-02 both read and write. For these, one underlying model with role-scoped
 projections is required — FEAT-038 (installation dashboards) is the clearest example, and
 FEAT-035's daily review gate the most consequential, since the field crew, ops, and the society
@@ -2509,6 +2659,14 @@ the technician's departure from the premises**. Applies at three named points: m
 Needs its own line-item entity and an approval-gates-departure state machine — not three
 independent implementations. Gemini-style auto-population from the photograph is a stated future
 improvement, explicitly not required now.
+
+### XC-01b — Notification delivery (CON-39, CAP-22)
+Not a pattern to reimplement per feature but a dependency to route through: every brief in this
+document that says a party "is notified" resolves to CAP-22's single send path (FEAT-091), via a
+registered event (FEAT-090) and a resolved recipient (FEAT-092). Email is the only wired channel
+at launch. Listed here rather than left implicit because the post-gate audit found 21 such
+statements across 12 capabilities with no owner — exactly the condition that produces 21 slightly
+different implementations.
 
 ### XC-02 — Offline-tolerant field capture (SUR-02)
 Every SUR-02 feature captures data in mechanical rooms, basements, and outdoors with variable
@@ -2582,13 +2740,13 @@ Carried from `00-intake.md` §2 and confirmed or added during this phase:
 ## 7. Traceability check
 
 ### 7.1 Capabilities → features
-All 21 capabilities are expanded. FEAT-001 … FEAT-089, no gaps, no duplicates:
+All 22 capabilities are expanded. FEAT-001 … FEAT-094, no gaps, no duplicates:
 
 | Capability | Features | Capability | Features |
 |---|---|---|---|
 | CAP-15 | FEAT-001–004 | CAP-01 | FEAT-039–042 |
 | CAP-16 | FEAT-005–010 | CAP-03 | FEAT-043–047 |
-| CAP-02 | FEAT-011–015 | CAP-04 | FEAT-048–054 |
+| CAP-02 | FEAT-011–015, 094 | CAP-04 | FEAT-048–054 |
 | CAP-17 | FEAT-016–019 | CAP-05 | FEAT-055–058 |
 | CAP-18 | FEAT-020–023 | CAP-06 | FEAT-059–061 |
 | CAP-19 | FEAT-024–026 | CAP-07 | FEAT-062–065 |
@@ -2599,6 +2757,7 @@ All 21 capabilities are expanded. FEAT-001 … FEAT-089, no gaps, no duplicates:
 | | | CAP-12 | FEAT-081–084 |
 | | | CAP-13 | FEAT-085–087 |
 | | | CAP-14 | FEAT-088–089 |
+| | | CAP-22 | FEAT-090–093 |
 
 ### 7.2 Strategic goals → features
 
@@ -2607,7 +2766,7 @@ All 21 capabilities are expanded. FEAT-001 … FEAT-089, no gaps, no duplicates:
 | GOAL-01 — billing decision as a system output | FEAT-048, 049, 050, 051, 053, 054, 087 | yes |
 | GOAL-02 — one login, all service lines | FEAT-039, 088, 085, 086 | yes |
 | GOAL-03 — service-line abstraction | FEAT-039, 040, 042, 005, 006 | yes |
-| GOAL-04 — replace the Supabase-backed files | CAP-11's rebuild (FEAT-078–080) is the largest remaining piece; the rest is migration work, not a feature | partial — deliberately, it's a technical goal, addressed in Phases 7-8 |
+| GOAL-04 — replace the Supabase-backed files | CAP-11's rebuild (FEAT-078–080) is the largest remaining piece; the rest is migration work, not a feature | partial — deliberately, it's a technical goal, addressed in Phases 7-8. **Flagged by the post-gate audit: this is the only MVP goal with no dedicated feature brief.** It must be carried into Phase 6 as an explicit engineering workstream with its own backlog items, or it falls through prioritisation unnoticed — nothing in the FEAT-numbered backlog will surface it |
 | GOAL-05 — single operational view, assignable work | FEAT-066, 067, 019, 074, 031 | yes |
 | GOAL-06 — every savings figure traceable | XC-04, and FEAT-047, 048, 059, 062, 065, 088 | yes |
 | GOAL-07 — 200 societies without rework | FEAT-039 (the abstraction), FEAT-069 (measuring it) | yes |
@@ -2640,17 +2799,22 @@ FEAT-032, 058, 064, and the escalation endpoints of XC-03.
 CON-01/01a/01b → FEAT-049, 050 · **CON-01c (sustained = 2 months) → FEAT-049, 050** ·
 **CON-01d (approaching = 20% of band) → FEAT-049, 067** · CON-02 → FEAT-041 · CON-03 → FEAT-039 ·
 CON-07 → FEAT-040 · CON-08 → FEAT-077, 042 · CON-09 → out of scope (§6) · CON-10 → FEAT-012, 014,
-041 · CON-11 → FEAT-048 · CON-12 (incl. the 20-day coverage floor) → FEAT-046 · CON-13 (incl. the
+041 · **CON-11 (per-light-type metering, per-circuit bands — corrected 2026-08-12) → FEAT-040, 048,
+049, 050, 055, 011, 094** · CON-12 (incl. the 20-day coverage floor) → FEAT-046 · CON-13 (incl. the
 same-day payment-confirmation rule) → FEAT-087 · CON-14 → FEAT-076 AC-5 · CON-15 (AMC renegotiated,
 no default) → FEAT-063, 075 · CON-16 → FEAT-007 · CON-17 → FEAT-011 · CON-18 → XC-01 · CON-19 →
 FEAT-012, 014 · CON-20 → FEAT-014, 015 · CON-21 → FEAT-035 · CON-22 → FEAT-051 · CON-23 →
 FEAT-030, 031 · CON-24 (demo is the only skippable stage) → FEAT-032, 002, 010 · CON-25 (metering
-always happens; first post-install month is the reference) → FEAT-052, 032, 027 · CON-26 →
+always happens; first post-install month is the reference) → FEAT-052, 032, 027, **094** ·
+**CON-25d (pre-install readings retained as evidence) → FEAT-094, 052, 059** · CON-26 →
 FEAT-078 · CON-27 → XC-03, FEAT-071–074 · CON-28 → FEAT-005, 006, 008, 009 · CON-29 → FEAT-061
 (deferred) · CON-30 → FEAT-043, 044 · CON-31 → FEAT-055–058 · CON-32 → FEAT-081–083 · CON-33 →
 FEAT-048, 053, 054, 059 · **CON-34 (prospect accounts) → FEAT-023, 025, 085** · **CON-35
 (configurable SLAs) → XC-03, FEAT-018, 073, 083** · **CON-36 (spare returns/warranty) → FEAT-076** ·
-**CON-37 (direction-dependent benchmark approval) → FEAT-058, 064**.
+**CON-37 (direction-dependent benchmark approval) → FEAT-058, 064** · **CON-38 (seasonality ruled
+out as a variance driver) → no feature, deliberately — it is the *absence* of a seasonal-adjustment
+layer in FEAT-048/049; tracked as ASSUM-22** · **CON-39 (email-only notifications behind one
+capability) → CAP-22, FEAT-090–093**.
 
 INV-02 → XC-04 · INV-03 → FEAT-057 · INV-06 → XC-05 · INV-07 → FEAT-014, 041 · INV-08 → FEAT-042
 and §6 · INV-09 → FEAT-045.
@@ -2676,7 +2840,26 @@ affected briefs; nothing below is still open.
 | AMC monthly calculation basis | **No default rate.** Renegotiated at each renewal and stored per contract; Ace Aspire's 25% is that contract's figure, not a platform constant | CON-15 (updated) | FEAT-063 |
 | Cross-sell projection formula | **Deferred by decision.** Stays in the blueprint, explicitly not to be built until a modeling pass defines how CON-29's three inputs combine; cross-sell quoting stays manual meanwhile | FEAT-061 marked deferred | FEAT-061 |
 
-### 7.7 Genuinely still open (not blocking this phase)
+### 7.7 Post-gate audit (2026-08-12) — what it changed
+
+A comprehensive review of all four blueprint documents was run immediately after the Phase 3 gate.
+It found 9 confirmed defects, 5 stale phase references, 6 places where the tolerance band was
+written as a hardcoded `±5%`, and 8 substantive gaps. Mechanical fixes were applied directly; the
+substantive ones needed product decisions and are recorded here:
+
+| # | Finding | Decision | Applied to |
+|---|---|---|---|
+| D1 | 21 briefs said "is notified"; no capability owned notifications | **Email-only at launch, behind one capability** so channels can be added later without a rewrite | CON-39, CAP-22, FEAT-090–093 |
+| D2 | A once-measured 5-day baseline is compared against for the whole term, with no seasonal normalisation — and CON-01c now flips billing after 2 consecutive out-of-band months | **Seasonality, weather and occupancy explicitly ruled out as material drivers** (owner's domain call). No adjustment layer. Recorded as ASSUM-22 so it stays revisitable | CON-38, ASSUM-22 |
+| D3 | Nothing required the sample metered circuit to be *representative*; one circuit was extrapolated across a society's entire light count | **Meter one circuit per light type**, each extrapolating only across its own type | CON-11, CON-16, FEAT-040, 048, 011, 094 |
+| D3a | With several metered circuits, where does the tolerance band apply? | **Per circuit, independently** — own benchmark, own review, own `pricingBasis`. Invoices become per-circuit fee lines; the contract carries a per-circuit benchmark table | CON-11, FEAT-049, 050, 055, 059 |
+| D4 | On the demo-skip path the meter records real pre-install consumption that nothing used | **Retained as evidence, never as the billing basis** — shown on the savings report, does not become a benchmark | CON-25d, FEAT-094, 052, 059 |
+| D5 | FEAT-087 suspended a society "including servicing" but never said what else stopped | **Field servicing only.** Ingest, calculation, invoicing and portal access all continue | CON-13, FEAT-087 |
+| D6 | GOAL-04 (Supabase cutover) had no feature briefs | Left as-is — it is technical remediation, not capability — but flagged in §7.2 as needing an explicit Phase 6 engineering workstream | §7.2 |
+| D7 | CAP-02 advertised a "no-demo variant" whose behaviour lived inside FEAT-052, a billing feature | **Given its own brief** | FEAT-094 |
+| D8 | PER-08 (Accountant) had no JTBD while all other personas did | **JTBD-09 added** | `02-users-research.md` |
+
+### 7.8 Genuinely still open (not blocking this phase)
 
 | Item | Nature | When it needs an answer |
 |---|---|---|

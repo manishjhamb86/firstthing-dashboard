@@ -2,12 +2,12 @@
 **Product:** FirsThing Platform · **Phase:** 5 — Screens (theme gate) · **Status:** Approved — DIR-02 Console, built out and accessibility-verified
 **Last updated:** 2026-08-12 · **Mode:** Ecosystem
 
-> Companion to `05-screens.md`. That file's §0 gate is now **open** — the system below is settled,
+> Companion to `05-screens/README.md`. That file's §0 gate is now **open** — the system below is settled,
 > so the per-screen loop can run research, mockup, verification and blueprint, not just
 > specification.
 >
 > **Numbering:** the method content for this document is the skill's
-> `references/phase-06-branding.md`. See `05-screens.md`'s header note and `00-intake.md` §11.
+> `references/phase-06-branding.md`. See `05-screens/README.md`'s header note and `00-intake.md` §11.
 
 ---
 
@@ -229,14 +229,63 @@ reference recomputes them live in-page).
 exemption is exactly why the token set splits `--border` from `--field-border`; anything bounding a
 control uses the latter.
 
-### 3.10 Not yet covered
+### 3.10 Charts (added 2026-08-12, when SCR-081 and SCR-110 reached for it)
 
-- **Charts and sparklines** — the portfolio and savings screens need a data-viz sub-palette that
-  reads in both themes and doesn't collide with the five status tones.
+Added to the system rather than invented per screen, per the method's rule that a screen never
+builds what the system lacks. Two parts.
+
+**Semantic roles** — reuse the status tones only where the meaning genuinely *is* that status:
+
+| Token | Job |
+|---|---|
+| `--chart-ref` | Benchmark / target line. Dashed, neutral ink — a reference is authoritative, not a series. |
+| `--chart-band` / `--chart-band-edge` | Tolerance band fill and edge. |
+| `--chart-excluded` | Hatch for excluded or missing periods. |
+| `--chart-grid` | Gridlines — decorative, exempt from 3:1. |
+| `--chart-axis` | Tick labels. |
+| `--bad-fg` | Out-of-band points — a breach *is* the danger state, so it reuses the tone. |
+
+**Series palette** — six categorical hues for comparing circuits, chosen to avoid the accent green
+and the danger red so a series is never mistaken for a status:
+
+```css
+/* light */ --chart-s1:#17558F; --chart-s2:#A9670C; --chart-s3:#7B5EA7;
+            --chart-s4:#2E8B8B; --chart-s5:#C4587C; --chart-s6:#7E8F42;
+            --chart-grid:#E9EDE8; --chart-axis:#7C857C; --chart-ref:#151A17;
+            --chart-band:rgba(22,98,74,.10); --chart-band-edge:#BFDCCE; --chart-excluded:#7C857C;
+/* dark  */ --chart-s1:#6BB6E8; --chart-s2:#E8A94A; --chart-s3:#B49AE0;
+            --chart-s4:#5CC5C5; --chart-s5:#E58AA8; --chart-s6:#A8BC6E;
+            --chart-grid:#1D231F; --chart-axis:#6B746B; --chart-ref:#E8ECE7;
+            --chart-band:rgba(69,209,142,.13); --chart-band-edge:#20402F; --chart-excluded:#6B746B;
+```
+
+All six clear 3:1 against both grounds in both themes (measured: light 3.07–7.69, dark 7.01–9.14).
+An earlier `--chart-s2` at `#C77A11` failed at 2.91 on the light ground and was darkened.
+
+**Rules, because the palette alone is not sufficient:**
+
+- **Colour never distinguishes a series on its own.** At six categories the hues cannot also be
+  separated by luminance — `s4` and `s5` sit 0.007 apart and are indistinguishable in greyscale. So
+  every series carries a **dash pattern** and a **direct label at the line's end**; the legend is a
+  convenience, never the only key. A savings report gets printed and handed round a committee.
+- **Excluded days are hatched and gapped, never zero and never interpolated** — the line breaks.
+  A direct rendering of FLOW-09 step 7.
+- **Six series maximum**, then a labelled "other". A society has at most five typed circuits
+  (CON-16), so six is a real ceiling.
+- **No pie charts** (every quantity here is a comparison or a time series), **no dual axes**,
+  y-axis from zero for consumption; a deviation chart may crop and says so on the axis.
+- **Every chart has a text equivalent** — a full `aria-label` describing shape and finding, and the
+  same facts available as figures on the same screen. The chart is the fast path, never the only one.
+
+The reference renders the SCR-110 deviation chart in full: raw daily readings against a benchmark
+line and ±10% band, three excluded days hatched, out-of-band days marked.
+
+### 3.11 Not yet covered
+
 - **The savings-report PDF** — print, not screen; needs its own paper treatment.
 - **CAP-22 email templates** — a far harsher CSS ceiling than anything here.
 
-None blocks the per-screen loop; all three should be resolved before the screens that need them.
+Neither blocks the priority-1 screen run.
 
 ---
 

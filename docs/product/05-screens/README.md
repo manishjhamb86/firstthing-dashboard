@@ -1,6 +1,21 @@
-# Screens: Spec & Design
-**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — inventory proposed; theme gate cleared, per-screen loop not started
+# Screens: Spec & Design — index
+**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — per-screen loop running on priority 1
 **Last updated:** 2026-08-12 · **Mode:** Ecosystem
+
+> **This is the index.** The method splits above ~25 screens, and there are 109, so the
+> specifications live in one file per surface alongside this one. Start here for the inventory,
+> the coverage ledger and the cross-cutting matrices; go to a surface file for the screens.
+>
+> | File | Covers |
+> |---|---|
+> | [`00-global-patterns.md`](00-global-patterns.md) | Rules every screen inherits, and the shared components specified once |
+> | [`01-back-office-monthly.md`](01-back-office-monthly.md) | SUR-01 monthly loop — the revenue spine |
+> | [`02-back-office-deal.md`](02-back-office-deal.md) | SUR-01 sales & deal loop |
+> | [`03-back-office-ops.md`](03-back-office-ops.md) | SUR-01 service loop, portfolio, registry |
+> | [`04-society-portal.md`](04-society-portal.md) | SUR-01 society portal |
+> | [`05-field.md`](05-field.md) | SUR-02 field, mobile web, offline-tolerant |
+> | [`06-cross-cutting.md`](06-cross-cutting.md) | Auth, errors, account, administration |
+> | [`07-headless.md`](07-headless.md) | HL-01..04 — no interface, still specified |
 
 > **Numbering:** this is *this blueprint's* Phase 5. It follows the skill's
 > `references/phase-07-screens.md` (screens) and `references/phase-06-branding.md` (theme), which
@@ -230,16 +245,52 @@ flows**, which is a Phase 4 coverage gap rather than a Phase 3 one:
 
 ---
 
-## 3. Screen specifications
+## 3. Coverage ledger
 
-*Not started — gated on inventory confirmation, and mockups additionally gated on §0's theme
-approval.*
+Priority 1 first, per the user's call on 2026-08-12: run the full loop on the priority-1 set, then
+reassess before touching 2s and 3s. Phase 6 prioritization may cut some of the remainder, and
+designing screens that get cut is the one real cost of interleaving (method §4).
 
-## 4. Theme & design system
+**50 priority-1 screens** (48 in §1.1–1.6 plus SCR-200 and SCR-223 in §1.7).
 
-*Not started — see §0. `00-intake.md` §11 commits to exploring fresh visual directions, the
-existing 5-theme token system among them, before one is settled.*
+| Surface group | Pri-1 screens | Specified | Mockup | Blueprint |
+|---|---|---|---|---|
+| Monthly loop | 11 | 4 | 1 partial | 0 |
+| Deal loop | 12 | 0 | 0 | 0 |
+| Service & ops | 6 | 0 | 0 | 0 |
+| Society portal | 7 | 0 | 0 | 0 |
+| Field (SUR-02) | 12 | 0 | 0 | 0 |
+| Cross-cutting | 2 | 0 | 0 | 0 |
+| **Total** | **50** | **4** | **1 partial** | **0** |
 
-## 5. Annotated blueprints
+Specified: SCR-080, 081, 082, 090. SCR-082 has a mockup inside the theme reference that needs
+promoting to its own artifact with all seven states before it counts as approved.
 
-*Not started.*
+**Order.** Monthly loop first, then deal loop, then field, portal, ops, cross-cutting. The method
+says order by flow criticality; the monthly loop is the revenue spine — it runs every month for
+every society for the life of every contract, where the deal loop runs once per society — and it
+is where the product's genuinely novel problem lives (per-circuit bands, extrapolation, the
+17-day window). Two of its screens are already drawn as part of the theme work.
+
+**Next screen:** SCR-091 — Savings report (ops view / editor).
+
+## 4. Navigation map
+
+*Written once the priority-1 set is specified — a map drawn before the screens is a guess.*
+
+## 5. Screen ↔ feature matrix
+
+*Written at the end of the priority-1 run, per the method's exit criterion that it proves no
+orphans in either direction.*
+
+## 6. Discovered in this phase
+
+Discoveries go back to the owning phase rather than living only in a screen spec (method §6).
+§2 above records what building the *inventory* exposed; this table records what **specifying and
+drawing** the screens exposes.
+
+| Type | ID | Description | Added to |
+|---|---|---|---|
+| System gap | — | Charts had no place in the theme system. SCR-081 and SCR-110 both need the deviation plot, so the chart roles, series palette and legibility rules were added to the system rather than invented per screen | `../05a-theme-system.md` §3.10 |
+| Spec rule | — | A reading file attached to the wrong circuit is FLOW-09's sharpest failure and was named but not defended. SCR-080 now specifies three defences, including a hard block when incoming readings are >3× or <⅓ of the circuit's trailing mean | `01-back-office-monthly.md` SCR-080 |
+| Risk | ASSUM-16 | The vendor CSV shape being stable is load-bearing for the whole monthly loop, and FLOW-09 step 1 has *no system visibility* if it changes. Worth a monitoring feature | flagged on SCR-080; not yet a FEAT |

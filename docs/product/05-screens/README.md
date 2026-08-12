@@ -256,20 +256,22 @@ designing screens that get cut is the one real cost of interleaving (method §4)
 | Surface group | Pri-1 screens | Specified | Mockup | Blueprint |
 |---|---|---|---|---|
 | Monthly loop | 11 | **11** | 1 partial | 0 |
-| Deal loop | 12 | 0 | 0 | 0 |
+| Deal loop | 12 | **12** | 0 | 0 |
 | Service & ops | 6 | 0 | 0 | 0 |
 | Society portal | 7 | 0 | 0 | 0 |
 | Field (SUR-02) | 12 | 0 | 0 | 0 |
 | Cross-cutting | 2 | 0 | 0 | 0 |
-| **Total** | **50** | **11** | **1 partial** | **0** |
+| **Total** | **50** | **23** | **1 partial** | **0** |
 
-**Monthly loop complete** — all 11 specified against the seven-state requirement, with entry
+**Monthly loop and deal loop complete** — 23 specified against the seven-state requirement, with entry
 points, actions with permissions and failure behaviour, inputs with real error copy, exits,
 responsive, offline and accessibility. Verified by script: 0 table-column defects, 0 missing
 required sections, 0 unresolved SCR/CMP cross-references.
 
-SCR-082 has a mockup inside the theme reference that needs promoting to its own artifact with all
-seven states before it counts as approved.
+**Mockups deliberately deferred** (user's call, 2026-08-12): specs first, mockups revisited after
+Phase 6 prioritization so nothing is drawn that then gets cut. The cost accepted is that specs go
+unverified visually until then — the step that normally catches misunderstandings early. SCR-082's
+partial mockup inside the theme reference is the only one that exists.
 
 **Order.** Monthly loop first, then deal loop, then field, portal, ops, cross-cutting. The method
 says order by flow criticality; the monthly loop is the revenue spine — it runs every month for
@@ -277,7 +279,7 @@ every society for the life of every contract, where the deal loop runs once per 
 is where the product's genuinely novel problem lives (per-circuit bands, extrapolation, the
 17-day window). Two of its screens are already drawn as part of the theme work.
 
-**Next screen:** SCR-001 — Lead form (start of the deal loop).
+**Next screen:** SCR-010 — Survey: society profile (start of the SUR-02 field surface).
 
 ## 4. Navigation map
 
@@ -302,4 +304,9 @@ drawing** the screens exposes.
 | Spec rule | — | FEAT-054's own stated risk (a one-at-a-time release gate becomes the bottleneck at 200 societies) needed a structural answer, not care. SCR-092 now defines a **routine vs needs-review triage rule** with five explicit conditions, and bulk release that structurally cannot reach a needs-review month | `01-back-office-monthly.md` SCR-092 |
 | Spec rule | — | SCR-113 enforces CON-37's direction-dependence structurally: on the FirsThing-favouring branch the apply action **does not exist**, only "raise amendment". A unilateral repricing becomes impossible rather than discouraged | `01-back-office-monthly.md` SCR-113 |
 | Spec rule | — | SCR-120's suspension countdown freezes on two conditions the flows named separately but no screen owned: payment data not confirmed same-day (CON-13), and a bounced warning email (FEAT-091 AC-5). Both are header-level states, not columns | `01-back-office-monthly.md` SCR-120 |
-| Risk | ASSUM-21 | If PER-08 turns out to be the same person as PER-01, SCR-092 is ceremony rather than a gate and should be reconsidered before it is built | flagged on SCR-092 |
+| ~~Risk~~ **Validated** | ASSUM-21 | Confirmed by the user 2026-08-12: PER-08 is a separate person with real authority to hold a month back. SCR-092 stays as specified | `02-users-research.md` §9 |
+| Decision | **CON-42** | A second-consecutive-breach flip to actual-metered now requires management sign-off rather than applying automatically on ops' classification. Raised while specifying SCR-112, decided by the user. Carries a resolved failure mode: a month that closes before sign-off bills at the unchanged fixed rate and the streak carries forward | `00-intake.md` CON-42; SCR-112, SCR-113 |
+| Spec rule | — | SCR-014's survey confirmation is the highest-leverage review in the product — FLOW-02 says a lighting miscount biases billing for the term with *no downstream check*. The confirm modal now restates the counts as the billing basis, and CON-16's typicality question is a required written answer per circuit, since the system cannot validate it | `02-back-office-deal.md` SCR-014 |
+| Spec rule | — | SCR-002's indicative savings cannot be free text — it is selected from real comparable societies' measured results, or falls back to the contracted 60–80% range and says so. A pre-demo figure is a claim, and this keeps the claim traceable | `02-back-office-deal.md` SCR-002 |
+| Spec rule | — | SCR-063 offers no path to edit `representedLightCount` directly. A mid-install count discrepancy routes to a contract amendment or a contract-permitted deterministic rescale, and states the monthly rupee effect before offering either | `02-back-office-deal.md` SCR-063 |
+| Open | Thresholds | Four invented numbers awaiting the user's values: SCR-092's routine test (10% of trailing mean, 28-day coverage), SCR-080's wrong-circuit block (3× / ⅓), SCR-081's 20-day floor (from CON-12), SCR-093's rupee-exact invoice match | asked 2026-08-12, unanswered |

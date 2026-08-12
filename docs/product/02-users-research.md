@@ -273,7 +273,7 @@ and as of the 2026-08-12 sweep every one of them does.
 | ASSUM-17 | PER-04 (installer) technical level and abandonment triggers | open — RG-02 |
 | ASSUM-18 | PER-06 (society manager) success criteria and abandonment triggers | open — RG-04 |
 | ASSUM-20 | PER-07 (sales/BD) technical level and abandonment triggers | open — RG-07 |
-| ASSUM-21 | PER-08 (accountant) as a distinct role with its own login; working preferences inferred | open — RG-08 |
+| ASSUM-21 | PER-08 (accountant) as a distinct role with its own login; working preferences inferred | **validated 2026-08-12** — user confirmed PER-08 is a separate person with real authority to hold a month back, not ops wearing a second hat. SCR-092's blocking release queue is therefore a real gate. Working *preferences* remain inferred (RG-08) |
 
 None of these block Phase 3 — it works from the confirmed constraints, not from persona-detail
 gaps. They matter at Phase 5, where each one shapes a real screen. ASSUM-19 and ASSUM-22 were

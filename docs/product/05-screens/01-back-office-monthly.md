@@ -708,14 +708,15 @@ plain terms as soon as a classification is picked, before it is saved:
 - *FirsThing-attributable, corrected this month* → "Bill unchanged. No adjustment applies."
 - *FirsThing-attributable, uncorrected, first month* → "Bill unchanged this month. If next month is
   also outside the band, this circuit moves to metered billing."
-- *FirsThing-attributable, uncorrected, second consecutive month* → "This circuit's fee line moves
-  to actual metered consumption from this month."
+- *FirsThing-attributable, uncorrected, second consecutive month* → **"This circuit qualifies to
+  move to actual metered consumption. That needs management sign-off before it applies — saving this
+  sends it to them."** The flip is *proposed* here, never applied here (CON-42).
 
 ### Actions
 
 | Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
 |---|---|---|---|---|---|---|
-| Save decision | CMP-12 | ops | Records cause, owner, timestamp; applies the billing effect | modal restating the effect | Deviation → `closed`; audit row | — |
+| Save decision | CMP-12 | ops | Records cause, owner, timestamp; applies the billing effect **except a second-month flip, which is proposed to management** | modal restating the effect | Deviation → `closed`, or `awaiting-sign-off` where a flip was proposed; audit row | — |
 | Escalate instead | CMP-12 | ops | → SCR-113 without classifying | reason required | Management notified | — |
 | Reopen | on a closed record | ops lead | Reopens with a required reason | modal | Audit row; billing effect reverted pending a new decision | Blocked once the month's invoice is issued |
 | Notify society | auto on save | system | Sends the explanation (OQ-09, CON-39) | — | Logged on SCR-180 | Bounce → ops alerted |
@@ -742,9 +743,18 @@ society as an unexplained bad month.* Notification on save is automatic, not a c
 **Live update:** none.
 **Responsive:** desk-first.
 **Offline:** blocked.
-**Open questions:** OQ-10 — whether a second-month flip is automatic or needs sign-off. Currently
-specified as automatic on save, following CON-01c. If it should need approval, this is the screen
-that changes.
+**CON-42 — decided 2026-08-12 (user's call): a second-month flip needs management sign-off.**
+Saving a second-consecutive-breach classification does not change the fee line; it raises a
+sign-off request to SCR-113. Ops' classification remains the judgement of *cause*; management owns
+the judgement of *consequence*.
+
+**The failure mode that choice creates, and how it is handled.** A sign-off that does not arrive
+before the month closes cannot be allowed to stall billing inside a 17-day window. So: **the month
+bills at the unchanged fixed rate, and the streak carries forward.** Never bill a society *more*
+without a decision — the safe direction is the society's. The pending sign-off stays open and, if
+approved later, applies from the *next* month rather than retrospectively, because an issued
+invoice is immutable (INV-03). SCR-082 shows such a society as `Ready` with a `sign-off pending`
+note, so the month is not blocked but the outstanding decision is visible.
 
 ---
 
@@ -753,9 +763,17 @@ that changes.
 **Surface:** SUR-01 · **Type:** page · **Personas:** management
 **Features:** FEAT-058 · **Flows:** FLOW-11 (steps 5b, 6)
 
-**Purpose:** the only place, other than a light-count rescale, where a contracted benchmark changes
-mid-term.
-**Primary action:** decide whether to adjust the benchmark, and in which direction.
+**Purpose:** management's decision point on the two things ops cannot decide alone — a mid-term
+benchmark change, and (since CON-42) a circuit's flip to actual-metered billing.
+**Primary action:** approve, reject, or send back.
+
+**Two case types arrive here**, and the screen handles both because they share the same evidence,
+the same reviewer and the same rarity:
+
+| Case | Raised by | Decision |
+|---|---|---|
+| **Benchmark adjustment** | ops escalation, FLOW-11 step 5b | Direction-dependent — see CON-37 below |
+| **Second-month flip to actual-metered** | SCR-112, on saving a second consecutive FirsThing-attributable breach (CON-42) | Approve → the fee line flips from the next month. Reject → the circuit stays fixed and the streak resets |
 
 **Seen rarely, so it carries its own context.** FLOW-11's own note: management sees this path
 infrequently, which means the screen cannot assume familiarity. It restates the case from the
@@ -789,6 +807,7 @@ product — which is why the case is restated in full below rather than linked t
 
 | Region | Element | Data source | Format | Notes |
 |---|---|---|---|---|
+| Header | Case type | | CMP-02 | `benchmark adjustment` or `basis flip` — they read very differently |
 | Header | Society, circuit, current benchmark, streak | | | |
 | Case | Full history restated | CMP-10 | | Deviation, investigation, findings, ops' recommendation |
 | Case | Post-investigation readings | chart | | CON-31 step 5b — the evidence the decision rests on |
@@ -803,7 +822,8 @@ product — which is why the case is restated in full below rather than linked t
 |---|---|---|---|---|---|---|
 | Approve — favours society | button, society-favouring branch only | management | Applies immediately from the stated month; society notified | modal with the figure and effective month | Benchmark updated; audit row | — |
 | Raise amendment — favours FirsThing | button, FirsThing-favouring branch only | management | Creates an amendment request; **no benchmark change** | modal explaining nothing changes until signed | → SCR-160 | — |
-| Reject | button | management | Closes with a reason; benchmark unchanged | reason required | → SCR-112 | — |
+| Approve flip | button, flip cases only | management | That circuit's fee line moves to actual-metered **from the next month** — never retrospectively, since an issued invoice is immutable (INV-03) | modal stating the effective month and the estimated change | Circuit basis updated; society notified | Blocked if the month's invoice is already issued, stating the effective month instead |
+| Reject | button | management | Closes with a reason; benchmark and basis unchanged | reason required | → SCR-112; streak resets | — |
 | Send back to ops | button | management | Returns for more evidence | note required | Ops notified | — |
 
 ### States
@@ -811,7 +831,8 @@ product — which is why the case is restated in full below rather than linked t
 | State | Trigger | What the user sees | Actions |
 |---|---|---|---|
 | Loading | on open | Skeleton | — |
-| Empty — first use | no escalations | Not reachable except from an escalation | — |
+| Empty — first use | no escalations | Not reachable except from an escalation or a flip proposal | — |
+| Empty — decision overtaken | month closed before sign-off | "July closed at the fixed rate while this was pending. Approving now applies from August." | Approve / reject |
 | Empty — filtered | n/a | — | — |
 | Partial / stale | post-investigation readings incomplete | `warn`: "Only 9 days of readings since the fix. A benchmark decision on this is premature." Approve disabled with that reason | Wait |
 | Error — network | save fails | Inline retry | Retry |

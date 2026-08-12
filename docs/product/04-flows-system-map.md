@@ -1,5 +1,5 @@
 # Flows & System Map
-**Product:** FirsThing Platform · **Phase:** 4 — Flows & System Map · **Status:** Draft — complete, all 9 discovered features fed back, awaiting approval
+**Product:** FirsThing Platform · **Phase:** 4 — Flows & System Map · **Status:** Approved
 **Last updated:** 2026-08-12 · **Mode:** Ecosystem
 
 > **Numbering:** this document is *this blueprint's* Phase 4. It follows the skill's

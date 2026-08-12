@@ -29,7 +29,7 @@ existing briefs to preserve grouping would break every cross-reference here for 
 | CAP-20 | Offer & agreement lifecycle (offer generation from demo numbers, accept/counter/reject negotiation, print/notarize, field-executive delivery/pickup logistics, per-step follow-up & lead-health tracking — CON-23) | new | SUR-01 | SUR-01 (customer sees offer/status) | no | expanded (FEAT-027..032) |
 | CAP-21 | Full installation execution & batch tracking (per-role dashboards, daily review gate CON-21, blockers, requirement changes, completion certificate) | new | SUR-01 + SUR-02 (shared live state) | both | yes | expanded (FEAT-033..038) |
 | CAP-01 | Circuit & service-line data model (lighting + pumps built; solar/wastewater modeled-only) | GOAL-03 | SUR-01 | SUR-02 | yes | expanded (FEAT-039..042) |
-| CAP-03 | Meter reading ingest & validation. **Confirmed 2026-08-10 (CON-30):** CSV downloaded directly from the meter vendor's app (per circuit, not per society), format varies by vendor, AI-assisted normalization (same pattern as Gemini invoice extraction) with clarifying questions on ambiguous shape, raw file + normalized readings both persisted. Plus missing-day handling (CON-12), upload-time anomaly detection (INV-09) | JTBD-01 | SUR-01 | — | no | expanded (FEAT-043..047) |
+| CAP-03 | Meter reading ingest & validation. **Extended 2026-08-12 (user):** two ingest paths, not one — the manual monthly CSV (CON-30) *plus* a scheduled vendor-API fetch with permission-gated on-demand refresh and three-way ingest-health alerting (CON-43, FEAT-104/105/106). **Confirmed 2026-08-10 (CON-30):** CSV downloaded directly from the meter vendor's app (per circuit, not per society), format varies by vendor, AI-assisted normalization (same pattern as Gemini invoice extraction) with clarifying questions on ambiguous shape, raw file + normalized readings both persisted. Plus missing-day handling (CON-12), upload-time anomaly detection (INV-09) | JTBD-01 | SUR-01 | — | no | expanded (FEAT-043..047) |
 | CAP-04 | Billing & savings calculation engine (extrapolation, fixed-fee model, tolerance band, light-count rescale, partial-month proration CON-22). **Confirmed 2026-08-10 (CON-33):** savings calc runs automatically once data's validated; the formal invoice is generated in **Zoho** (external), aspirational API integration, manual upload fallback (existing `/admin/invoices` flow); savings report is native to the app; accountant review gate before sending | JTBD-01 | SUR-01 | SUR-01 (customer portal) | no | expanded (FEAT-048..054) |
 | CAP-05 | Deviation review & billing decisions. **Confirmed 2026-08-10 (CON-31):** chart-first initial view → assign to inspector → inspector investigates/resolves → ops records root cause + decision → resolved-and-closed, or escalated to **management** for a benchmark/billing adjustment call if unresolved | JTBD-02 | SUR-01 | SUR-02 (inspector dispatched) | yes | expanded (FEAT-055..058) |
 | CAP-06 | Invoice & savings report generation (recurring monthly — distinct from CAP-18's one-time demo report) + cross-sell projection (CON-29) | JTBD-01, JTBD-06 | SUR-01 | SUR-01 (customer portal) | no | expanded (FEAT-059..061) |
@@ -155,6 +155,9 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 | FEAT-101 | Invoice-to-calculation reconciliation | CAP-04 | PER-01, PER-08 | GOAL-01, GOAL-06 | SUR-01 | S | proposed (Phase 4) |
 | FEAT-102 | Billing dispute record & arrears visibility | CAP-13 | PER-05, PER-01 | CON-41 | SUR-01 | M | proposed (Phase 4) |
 | FEAT-103 | Term-end hardware ownership transfer | CAP-07 | PER-01 | CON-15 | SUR-01 | M | proposed (Phase 4, v2 horizon) |
+| FEAT-104 | Scheduled vendor API reading fetch | CAP-03 | system | JTBD-01 | — | L | proposed |
+| FEAT-105 | On-demand reading refresh (permission-gated) | CAP-03 | PER-01 | JTBD-01 | SUR-01 | M | proposed |
+| FEAT-106 | Ingest health monitoring & alerting | CAP-03 | PER-01 | GOAL-01, INV-09 | SUR-01 | M | proposed |
 
 ## 3. Feature briefs
 
@@ -2836,6 +2839,87 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Complete version:** Adds spare disposition and AMC-continuation handling.
 - **Open questions / assumptions:** whether ownership transfer has tax or accounting implications that need modelling is unexamined — worth asking the accountant (PER-08) before this is built.
 - **Risks:** **v2 horizon.** Included for completeness because CON-15 is confirmed contract evidence, not speculation — but nothing forces it for years, and Phase 6 should prioritise it accordingly rather than treating it as peer to the monthly-loop gaps.
+
+### FEAT-104 — Scheduled vendor API reading fetch
+- **Capability:** CAP-03 · **Persona:** system (headless) · **Serves:** GOAL-01, GOAL-06, JTBD-01
+- **Surface(s):** — (headless; output surfaces on SUR-01)
+- **Problem:** CON-30's manual CSV path means a month's readings only exist in the system once someone downloads and uploads roughly 90 files (800+ at GOAL-07), and until then nobody knows whether a meter has been dark for three weeks. Ingest is both a labour cost and a blind spot.
+- **Description:** A scheduled job pulls readings for every active meter directly from the vendor's API, at a configurable interval (daily by default; several times a day supported). Readings land in the same normalised store as CSV-ingested rows, and the raw API response is retained exactly as CON-30 retains a raw file.
+- **Behavioral rules:** This **supplements** the manual path rather than replacing it (CON-43) — the monthly CSV remains the reconciliation artefact and the fallback when the API is unavailable. Where both paths supply the same circuit-day, **the CSV wins on conflict** and the difference is flagged, because the vendor's own export is the record a dispute would be settled against. The fetch never overwrites a reading already used in a released calculation. Fetch cadence is per-deployment configuration, not per-society.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given active meters and a reachable API, when the scheduled fetch runs, then each meter's new readings are normalised, stored with their raw response, and the meter's last-seen timestamp advances.
+  - AC-2 (empty): Given a meter with no new readings since the last fetch, no rows are written and no anomaly is raised — absence of *new* data is not the same as missing data.
+  - AC-3 (failure): Given the vendor API returns an error or times out, the run records the failure per meter, retries with backoff, and raises an ingest-health alert (FEAT-106) rather than failing silently.
+  - AC-4 (permission): The scheduled job runs as the system; no user role can alter a fetched reading, only supersede it via the CSV path.
+  - AC-5 (edge): Given a fetched reading conflicts with an already-committed CSV reading for the same circuit-day, the CSV value is retained, the conflict is recorded, and it surfaces on SCR-084.
+  - AC-6 (edge): Given a reading arrives for a period already included in a released calculation, it is stored but does not alter that calculation — INV-03 makes released figures immutable.
+- **Permissions:** None — headless.
+- **Data touched:** Writes `MeterReading` rows and raw API responses; updates per-meter last-seen and health state.
+- **Triggers:** Scheduler, at the configured interval.
+- **Emits:** `ReadingsFetched`, `FetchFailed`, `ReadingConflictDetected`.
+- **Consumes:** the vendor API; the meter registry (FEAT-040).
+- **Depends on:** FEAT-040 (circuit/meter registry), vendor API availability (ASSUM-24).
+- **Depended on by:** FEAT-105, FEAT-106, FEAT-048 (calculation), CAP-08.
+- **Failure modes:** A silently changed API contract writes plausible-but-wrong values with no human in the loop — worse than the CSV path's failure, where a person at least sees the file. FEAT-106's shape and range checks are the only defence. Fetching several times a day multiplies that exposure.
+- **Limits & scale:** ~90 meters today, 800+ at GOAL-07; at four fetches a day that is ~3,200 calls/day. Vendor rate limits are unknown (ASSUM-24).
+- **Minimum viable version:** Daily fetch, all active meters, failure alerting.
+- **Complete version:** Configurable sub-daily cadence, per-meter backoff, conflict detection against the CSV path.
+- **Open questions / assumptions:** ASSUM-24 — that the vendor exposes a usable, documented, authenticated API with per-meter reading history. **This is unverified and the whole feature rests on it.**
+- **Risks:** If the vendor's API turns out to be absent, undocumented or rate-limited below what 800 meters need, this feature does not exist and CON-30's manual path stays load-bearing — so it should not be scheduled ahead of a technical spike against the real API.
+
+### FEAT-105 — On-demand reading refresh
+- **Capability:** CAP-03 · **Persona:** PER-01 · **Serves:** JTBD-01, GOAL-06
+- **Surface(s):** SUR-01
+- **Problem:** During a month-close or a deviation investigation, the question "what is this meter reading *right now*" cannot wait for tonight's scheduled fetch.
+- **Description:** A permission-gated action that fetches the latest readings for one meter, or for a selected set, immediately. Available from the meter/circuit registry, the ingest health screen, and the deviation review.
+- **Behavioral rules:** **Gated by a named permission, not by role** — the user's explicit requirement that not every backend user can trigger it. Follows the existing `AdminPermission` pattern already used for `manage_admins`/`manage_users`, adding `fetch_readings`. Rate-limited per user and per meter to protect the vendor API. A refresh that returns nothing new says so explicitly rather than appearing to have done nothing.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a user holding `fetch_readings`, when they refresh a meter, then new readings are fetched, stored, and the screen updates with a fresh timestamp.
+  - AC-2 (empty): Given no new readings are available, the action reports "No new readings since 14:05 today" rather than failing or silently succeeding.
+  - AC-3 (failure): Given the vendor API errors, the user sees the specific failure (auth, timeout, meter not found) and the meter's health state updates.
+  - AC-4 (permission): Given a user without `fetch_readings`, the action is not rendered; the server action rejects it independently of the UI.
+  - AC-5 (edge): Given a bulk refresh of 40 meters where 3 fail, the 37 succeed and the 3 are named individually — partial success is reported, never rolled back.
+- **Permissions:** `fetch_readings` (new named permission).
+- **Data touched:** Same as FEAT-104.
+- **Triggers:** User action.
+- **Emits:** `ManualFetchRequested`, `ReadingsFetched`, `FetchFailed`.
+- **Consumes:** the vendor API.
+- **Depends on:** FEAT-104 (shares the fetch and normalisation path), the admin permission model.
+- **Depended on by:** FEAT-055 (deviation review), FEAT-047.
+- **Failure modes:** Unrestricted use during month-close could exhaust a vendor rate limit and break the scheduled fetch for everyone — hence the rate limit, which is a functional requirement rather than a nicety.
+- **Limits & scale:** Bulk selection capped at the visible page (50).
+- **Minimum viable version:** Single-meter refresh.
+- **Complete version:** Multi-select bulk refresh with per-meter partial-failure reporting.
+- **Open questions / assumptions:** Depends on ASSUM-24 exactly as FEAT-104 does.
+- **Risks:** Same vendor-API dependency; additionally, a manual refresh mid-calculation could change inputs under a running job — the calculation must pin its input versions (INV-02 already requires this).
+
+### FEAT-106 — Ingest health monitoring & alerting
+- **Capability:** CAP-03 · **Persona:** PER-01 · **Serves:** GOAL-01, GOAL-06, INV-09
+- **Surface(s):** SUR-01
+- **Problem:** ASSUM-16 is load-bearing for the entire monthly loop and today has **no system visibility at all** — a vendor export changing shape, an API failing, or a meter going dark are all discovered late, by a person noticing an absence during a 17-day window.
+- **Description:** Continuous monitoring of ingest across both paths, distinguishing the three failure types the user named: (a) the vendor API is erroring or unreachable, (b) a specific meter is offline or not reporting, (c) readings for a period are missing for a meter that is otherwise reporting. Each surfaces as an alert with its own severity and its own resolution path.
+- **Behavioral rules:** The three causes must stay **distinguishable**, because they have different owners — a vendor API failure is an integration problem, an offline meter is a field-service dispatch, and a period gap on a live meter is a data-quality investigation. Collapsing them into one "ingest failed" alert would send every case to the wrong person. Alerts are deduplicated per meter per cause so a week-long vendor outage raises one alert, not 5,600. Severity escalates with proximity to the close window: a gap on day 2 is informational; the same gap on day 12 is blocking.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given all meters reporting on schedule, the ingest health view shows a caught-up state and raises nothing.
+  - AC-2 (empty): Given a newly-commissioned meter with no history, it is shown as `awaiting first reading` and not alerted as offline until its first expected interval passes.
+  - AC-3 (failure — API): Given the vendor API fails for 3 consecutive runs, one alert is raised naming the API as the cause, with the last successful fetch time.
+  - AC-4 (failure — meter): Given one meter stops reporting while others continue, it is alerted as offline, with its last-seen timestamp and a link to raise a field visit.
+  - AC-5 (failure — period gap): Given a meter reporting normally but missing days 8–11, a gap alert is raised naming the exact dates, distinct from an offline alert.
+  - AC-6 (permission): Given a non-PER-01 actor, alerts are visible but not resolvable.
+  - AC-7 (edge): Given a CSV upload later fills a gap that was alerted, the alert resolves automatically and records what closed it.
+- **Permissions:** PER-01 (view, resolve, snooze-with-reason); read-only for others.
+- **Data touched:** Creates `IngestAlert` records; reads per-meter health state and expected-reading schedules.
+- **Triggers:** After every scheduled fetch, after every CSV commit, and on a daily sweep for period gaps.
+- **Emits:** `IngestAlertRaised`, `IngestAlertResolved`.
+- **Consumes:** FEAT-104's fetch outcomes, FEAT-043's commits, the meter registry.
+- **Depends on:** FEAT-040, FEAT-043, FEAT-104.
+- **Depended on by:** FEAT-047 (readiness), CAP-08 (ops home), FEAT-100.
+- **Failure modes:** Alert fatigue is the real risk — an ops team that sees 40 alerts every morning stops reading them. Deduplication and close-window-proportional severity are the controls, and both need tuning against real data.
+- **Limits & scale:** One health row per meter; alerts bounded by dedup.
+- **Minimum viable version:** Missing-readings alerting against the expected schedule, covering the CSV path only — this alone closes ASSUM-16's blind spot without waiting on the vendor API.
+- **Complete version:** All three causes distinguished, close-window-proportional severity, auto-resolution.
+- **Open questions / assumptions:** The expected-reading schedule per meter has to come from somewhere — currently implied by "active circuit" but not modelled. Needs a field on the circuit registry.
+- **Risks:** Depends partly on ASSUM-24 for the API-failure branch; the missing-readings branch does not, which is why it is the minimum viable version.
 
 ## 4. Feature interaction matrix
 

@@ -428,13 +428,21 @@ percentage, and re-deriving them would reopen a signed agreement (FEAT-094 AC-5)
 **Persona:** PER-01 · **Trigger:** month closes; CSVs available in the meter vendor's app ·
 **Success:** every active circuit has validated readings and the month is marked billable
 
+**Two ingest paths since 2026-08-12 (CON-43).** Path A is the manual monthly CSV below. Path B is a
+scheduled vendor-API fetch plus permission-gated on-demand refresh (steps 0/0a), which supplements
+rather than replaces it — on a same-circuit-same-day conflict the **CSV wins**, because the
+vendor's own export is what a dispute would be settled against. Path B rests on ASSUM-24, which is
+unverified; path A stays load-bearing until a spike proves the API exists and scales.
+
 **Volume note:** this flow runs **once per circuit**, not once per society. At today's 22
 societies with several typed circuits each that is roughly 90 files a month; at GOAL-07's 200
 societies it is 800+. FEAT-043 is specified as a single-file upload — see DF-05.
 
 | # | Step | Actor | Surface | Screen | System response | Decision point | Failure branch | Feature |
 |---|------|-------|---------|--------|----------------|----------------|----------------|---------|
-| 1 | Download CSVs from the vendor app | PER-01 | — (external) | — | Outside the product entirely | — | Vendor app down or export changed shape → nothing to ingest; no system visibility into this failure at all | — |
+| 0 | *(path B, added 2026-08-12)* Scheduled API fetch | system | — | SCR-084 | Pulls every active meter's readings from the vendor API on a schedule; raw response retained as CON-30 retains a raw file (CON-43) | — | API erroring, meter offline, or a period missing → three distinguishable alerts (FEAT-106), not one generic failure | FEAT-104, FEAT-106 |
+| 0a | *(path B)* On-demand refresh | PER-01 with `fetch_readings` | SUR-01 | SCR-084, SCR-251 | Fetches one meter or a selected set immediately | — | Partial failure names the failed meters individually; the rest still commit | FEAT-105 |
+| 1 | *(path A)* Download CSVs from the vendor app | PER-01 | — (external) | — | Outside the product entirely | — | Vendor app down or export changed shape → nothing to ingest. **Since 2026-08-12 this is no longer invisible** — FEAT-106 alerts on readings that fail to arrive against the expected schedule | — |
 | 2 | Upload a circuit's CSV | PER-01 | SUR-01 | SCR-080 reading upload | Stores the **raw file** against society+circuit before any interpretation (CON-30) | Which circuit is this file for? | Wrong circuit selected → readings attach to the wrong benchmark and the error surfaces only as an implausible deviation weeks later | FEAT-043 |
 | 3 | AI-assisted normalisation | system | SUR-01 | SCR-080 | Gemini analyses the file's structure and maps it to the canonical reading shape (CON-30, same pattern as invoice extraction) | — | Format unrecognised → falls through to step 4's clarifying questions rather than guessing | FEAT-043 |
 | 4 | Clarifying questions on ambiguous shape | system → PER-01 | SUR-01 | SCR-080 | Asks which column is which, what the timestamp format is | Does PER-01 actually know the answer? | Wrong answer produces confidently wrong readings — the raw file being retained (step 2) is the only recovery path | FEAT-043 |

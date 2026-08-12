@@ -48,9 +48,9 @@ specification.
 
 Two sources, per the method: every screen the Phase 4 flows touch, **plus** the screens flows
 never reach but products always need — the second list is where most missing screens are found,
-and it accounts for 49 of the 109 below.
+and it accounts for 49 of the 110 below.
 
-**Coverage ledger: 0 of 109 specified · 0 mockups approved · 0 blueprinted** (plus 4 headless units, §1.9).
+**Coverage ledger: 0 of 110 specified · 0 mockups approved · 0 blueprinted** (plus 5 headless units, §1.9).
 
 Legend — **Src:** `F` derived from a Phase 4 flow · `M` method's standard-screens checklist ·
 `X` feature with no flow and no flow-assigned screen (found while building this inventory).
@@ -84,6 +84,7 @@ Legend — **Src:** `F` derived from a Phase 4 flow · `M` method's standard-scr
 | SCR-081 | Anomaly & coverage review | F | 09 | FEAT-045, 046 | 1 | — | — |
 | SCR-082 | Month-close readiness board | F | 09 | FEAT-047, 100 | 1 | — | — |
 | SCR-083 | Quarantined / unmatched files | X | 09 | FEAT-099 | 2 | — | — |
+| SCR-084 | **Ingest health & meter status** | X | 09 | FEAT-104, 105, 106 | 1 | — | — |
 | SCR-090 | Per-circuit compliance view | F | 10 | FEAT-049 | 1 | — | — |
 | SCR-091 | Savings report (ops view / editor) | F | 10 | FEAT-059 | 1 | — | — |
 | SCR-092 | Accountant release queue | F | 10 | FEAT-054 | 1 | — | — |
@@ -224,6 +225,7 @@ their own; their *output* appears on the screens named, but their behaviour need
 | HL-02 | FEAT-052 — agreed-benchmark billing, first-month reference | Automatically monthly on `negotiated-fixed` contracts | SCR-090, SCR-091 |
 | HL-03 | FEAT-091 — notification send & delivery logging | On any registered event | SCR-180 |
 | HL-04 | XC-03 — SLA timers & escalation triggers | Continuously, across tickets, visits and threads | SCR-133 |
+| HL-05 | FEAT-104 — scheduled vendor API reading fetch | On a schedule (daily default, sub-daily supported) — CON-43 | SCR-084, SCR-080, SCR-082 |
 
 ---
 
@@ -251,19 +253,19 @@ Priority 1 first, per the user's call on 2026-08-12: run the full loop on the pr
 reassess before touching 2s and 3s. Phase 6 prioritization may cut some of the remainder, and
 designing screens that get cut is the one real cost of interleaving (method §4).
 
-**50 priority-1 screens** (48 in §1.1–1.6 plus SCR-200 and SCR-223 in §1.7).
+**51 priority-1 screens** (48 in §1.1–1.6, SCR-200 and SCR-223 in §1.7, and SCR-084 added 2026-08-12).
 
 | Surface group | Pri-1 screens | Specified | Mockup | Blueprint |
 |---|---|---|---|---|
-| Monthly loop | 11 | **11** | 1 partial | 0 |
+| Monthly loop | 12 | **12** | 1 partial | 0 |
 | Deal loop | 12 | **12** | 0 | 0 |
 | Service & ops | 6 | 0 | 0 | 0 |
 | Society portal | 7 | 0 | 0 | 0 |
 | Field (SUR-02) | 12 | 0 | 0 | 0 |
 | Cross-cutting | 2 | 0 | 0 | 0 |
-| **Total** | **50** | **23** | **1 partial** | **0** |
+| **Total** | **51** | **24** | **1 partial** | **0** |
 
-**Monthly loop and deal loop complete** — 23 specified against the seven-state requirement, with entry
+**Monthly loop and deal loop complete** — 24 specified against the seven-state requirement, with entry
 points, actions with permissions and failure behaviour, inputs with real error copy, exits,
 responsive, offline and accessibility. Verified by script: 0 table-column defects, 0 missing
 required sections, 0 unresolved SCR/CMP cross-references.
@@ -309,4 +311,6 @@ drawing** the screens exposes.
 | Spec rule | — | SCR-014's survey confirmation is the highest-leverage review in the product — FLOW-02 says a lighting miscount biases billing for the term with *no downstream check*. The confirm modal now restates the counts as the billing basis, and CON-16's typicality question is a required written answer per circuit, since the system cannot validate it | `02-back-office-deal.md` SCR-014 |
 | Spec rule | — | SCR-002's indicative savings cannot be free text — it is selected from real comparable societies' measured results, or falls back to the contracted 60–80% range and says so. A pre-demo figure is a claim, and this keeps the claim traceable | `02-back-office-deal.md` SCR-002 |
 | Spec rule | — | SCR-063 offers no path to edit `representedLightCount` directly. A mid-install count discrepancy routes to a contract amendment or a contract-permitted deterministic rescale, and states the monthly rupee effect before offering either | `02-back-office-deal.md` SCR-063 |
+| **Scope** | **CON-43** | The user specified a second ingest path on 2026-08-12: a scheduled vendor-API fetch plus permission-gated on-demand refresh, alongside the existing manual CSV. Added as FEAT-104/105/106, a new constraint, a new `fetch_readings` permission, a new headless unit HL-05, and a new priority-1 screen SCR-084. FLOW-09 gained steps 0/0a | `00-intake.md` CON-43, ASSUM-24; `03-features.md` FEAT-104–106; `04-flows-system-map.md` FLOW-09 |
+| **Risk** | **ASSUM-24** | The whole API path rests on the vendor exposing a usable, documented, rate-tolerant API — **entirely unverified**. FEAT-104/105 do not exist if it is false, so they should not be scheduled ahead of a technical spike | `00-intake.md` ASSUM-24 |
 | Open | Thresholds | Four invented numbers awaiting the user's values: SCR-092's routine test (10% of trailing mean, 28-day coverage), SCR-080's wrong-circuit block (3× / ⅓), SCR-081's 20-day floor (from CON-12), SCR-093's rupee-exact invoice match | asked 2026-08-12, unanswered |

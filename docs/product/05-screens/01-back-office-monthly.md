@@ -25,6 +25,13 @@ society or billing one wrongly.
 right circuit, without silently mis-mapping anything.
 **Primary action:** upload files and confirm the circuit each belongs to.
 
+**Two ingest paths since CON-43 (2026-08-12).** This screen is **path A** — the manual monthly CSV.
+Path B is the scheduled vendor-API fetch (SCR-084, FEAT-104). They coexist deliberately: on a
+same-circuit-same-day conflict **the CSV wins**, because the vendor's own export is what a dispute
+is settled against. The screen therefore shows, per circuit, whether readings are already present
+from the API — so an operator uploading a month knows they are reconciling rather than filling a
+void, and sees any value that will be superseded.
+
 **Volume is the design problem.** FLOW-09 runs once per *circuit*, not per society: ~90 files a
 month today, 800+ at GOAL-07. FEAT-043 was specified as single-file upload; FEAT-099 (found in
 Phase 4 as DF-05) adds the bulk path. This screen is both, because an ops person doing 800 uploads
@@ -49,6 +56,7 @@ one at a time is the single most likely place the 17-day window breaks.
 | Body | Per-file row | filename, detected society, detected circuit, status | table | One row per dropped file |
 | Body | Mapping panel | Gemini's column→field mapping | editable table | Only shown for files needing confirmation |
 | Body | Preview | first 10 normalised rows | date + kWh | Shown before commit, always |
+| Body | **Conflict list** | rows already present from the API fetch | `warn` | Names each superseded value and its difference (CON-43) |
 
 ### Actions
 
@@ -59,6 +67,7 @@ one at a time is the single most likely place the 17-day window breaks.
 | Change circuit | circuit dropdown | ops | Re-attaches the file | required if AI-detected | Row re-validates | — |
 | Commit all | header button | ops | Commits every `Ready` file in one batch | modal listing counts | Toast; redirect to SCR-081 if any anomalies | Partial failure commits the good ones and lists the rest |
 | Quarantine | Skip on a file | ops | Moves it to SCR-083 with a reason | none | Row removed | — |
+| Commit over API data | on a conflict | ops | CSV values supersede the API's for those circuit-days; the API values are retained, not deleted | modal listing the differences | Conflict recorded, visible on SCR-084 | Blocked for any day already in a released calculation (INV-03) |
 
 ### Inputs & validation
 
@@ -948,3 +957,108 @@ continue."
 **Open questions:** ASSUM-23 — that disputes resolve inside the 17-day window. If they routinely do
 not, the extension mechanism becomes load-bearing in a way nobody chose, and CON-41 should be
 revisited.
+
+---
+
+## SCR-084 — Ingest health & meter status
+
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
+**Features:** FEAT-104, FEAT-105, FEAT-106 · **Flows:** FLOW-09 (steps 0, 0a)
+
+**Purpose:** know that readings are actually arriving — and when they are not, know *which of three
+different problems* it is.
+**Primary action:** resolve an alert, or refresh a meter now.
+
+**This screen exists because ASSUM-16 had no surface.** The vendor export shape and the meter fleet
+are load-bearing for the entire monthly loop, and until CON-43 nothing in the product noticed a
+meter going dark. The 17-day window is far too late to find out.
+
+### The three-way distinction is the whole design
+
+The user's requirement was explicit that these stay separable, and they must, because each has a
+different owner and a different next action:
+
+| Cause | What it means | Owner | Action offered |
+|---|---|---|---|
+| **Vendor API failing** | The integration is erroring, timing out, or rejecting auth | Integration / engineering | Retry, view the error, fall back to the CSV path |
+| **Meter offline** | This meter has stopped reporting while others continue | Field service | Raise a visit (FLOW-X1) |
+| **Period missing** | The meter reports normally but days are absent from its history | Data quality | Refresh, or upload the CSV for that period |
+
+Collapsing these into one "ingest failed" alert would route every case to the wrong person, which is
+why the screen groups by cause before it groups by society.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-240 ops home | "Ingest alerts" card | Filtered to unresolved |
+| SCR-082 readiness | "Missing readings" on a row | Filtered to that society |
+| Sidebar → Ingest health | direct | Unresolved, all causes |
+| SCR-110 | investigating a deviation | Filtered to that circuit |
+| Email | ingest alert notification | Deep link to the alert |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Fleet summary | | `812 of 840 meters reporting` | The one-second answer |
+| Header | **Last successful fetch** | CMP-17 | `14:05 today` | If this is stale, everything below is suspect |
+| KPI strip | API status / Meters offline / Period gaps / Alerts unresolved | CMP-03 | | One tile per cause, plus the backlog |
+| Section | **Vendor API** | | CMP-13-style banner | Present only when failing; always first when present |
+| Section | Offline meters | CMP-01 | | Society, circuit, last seen, days dark |
+| Section | Period gaps | CMP-01 | | Society, circuit, the exact missing dates |
+| Section | Conflicts | CMP-01 | | Where CSV superseded API values (CON-43) |
+| Table | Meter fleet | CMP-01, filterable | | Every active meter, last seen, health, source of last reading |
+| Row | Source | `api` / `csv` | CMP-02 | Which path last supplied this circuit |
+
+**Severity rises with the close window.** A gap on day 2 of the month is informational; the same gap
+on day 12 is blocking, because it now threatens the 17-day window. The tone escalates rather than
+the alert being re-raised, so the count stays honest.
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Refresh meter | per row | **`fetch_readings`** | Fetches that meter immediately (FEAT-105) | none | Row updates with a fresh timestamp | Names the specific failure — auth, timeout, meter not found |
+| Refresh selected | bulk bar | `fetch_readings` | Fetches the selected set | modal with the count | Partial success reported per meter; **never rolled back** | The 3 that failed are named; the 37 that worked are kept |
+| Resolve alert | per alert | ops | Closes it with a recorded reason | reason required | Alert closed; audit row | — |
+| Snooze alert | per alert | ops | Suppresses until a stated date | reason + date required | Reappears on that date | Not available on a blocking-severity alert |
+| Raise field visit | on an offline meter | ops | Creates a visit (FLOW-X1) | modal | → SCR-170 | — |
+| Upload for this period | on a gap | ops | → SCR-080, pre-filtered | — | — | — |
+
+**`fetch_readings` is a named permission, not a role** — the user's explicit requirement that not
+every backend user can trigger a fetch. It follows the existing `AdminPermission` pattern already
+used for `manage_admins`/`manage_users`. The UI hiding the action is a courtesy; the server action's
+own check is the boundary, exactly as `requireAdminPermission()` already works.
+
+**Refresh is rate-limited** per user and per meter. That is a functional requirement, not a nicety:
+unrestricted refreshing during a month-close could exhaust the vendor's rate limit and break the
+scheduled fetch for every society.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton KPI strip + fleet table | — |
+| Empty — first use | no meters commissioned | "No meters yet. They appear here once a circuit is commissioned." | Go to commissioning |
+| Empty — all healthy | nothing wrong | "All 840 meters reporting. Last fetch 14:05 today." — the caught-up state, not a blank page | View fleet |
+| Empty — filtered | filter excludes all | Names the filter, offers clear | Clear |
+| Partial / stale | **fetch itself is stale** | `warn` header: "No successful fetch since 09:00 yesterday. Everything below may be out of date." | Retry / check API |
+| Error — network | screen load fails | Inline retry, keeps last data | Retry |
+| Error — permission | ops without `fetch_readings` | Full visibility; refresh actions not rendered | View, resolve |
+| Error — vendor API down | API unreachable | Dedicated banner with the last success time and the error, plus "the CSV path still works" | Fall back to upload |
+| Success | alert resolved | Toast; counts update | — |
+
+**Exits:** SCR-080, SCR-082, SCR-170, SCR-251, SCR-110.
+**Live update:** polls every 5 minutes; the fetch-freshness pill is checked on every load.
+**Responsive:** desk-first; below 768px sections stack and the fleet table becomes cards keeping
+society, circuit, last seen and health.
+**Offline:** blocked.
+**Performance:** the fleet view must handle 800+ meters — paginate at 50, aggregate the health
+counts in one query.
+**Copy:** offline meter — "Last reported 6 Aug, 11 days ago." API failure — "The vendor API has
+failed 3 times since 09:00. Readings aren't arriving. You can still upload the monthly CSV."
+**Open questions / assumptions:** **ASSUM-24** — that the vendor exposes a usable API at all. The
+offline-meter and period-gap halves of this screen work on the CSV path alone and do **not** depend
+on it; only the API-status section and the refresh actions do. That split is deliberate, so the
+screen degrades to something useful rather than nothing if the API turns out not to exist.

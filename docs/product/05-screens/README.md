@@ -255,16 +255,21 @@ designing screens that get cut is the one real cost of interleaving (method §4)
 
 | Surface group | Pri-1 screens | Specified | Mockup | Blueprint |
 |---|---|---|---|---|
-| Monthly loop | 11 | 4 | 1 partial | 0 |
+| Monthly loop | 11 | **11** | 1 partial | 0 |
 | Deal loop | 12 | 0 | 0 | 0 |
 | Service & ops | 6 | 0 | 0 | 0 |
 | Society portal | 7 | 0 | 0 | 0 |
 | Field (SUR-02) | 12 | 0 | 0 | 0 |
 | Cross-cutting | 2 | 0 | 0 | 0 |
-| **Total** | **50** | **4** | **1 partial** | **0** |
+| **Total** | **50** | **11** | **1 partial** | **0** |
 
-Specified: SCR-080, 081, 082, 090. SCR-082 has a mockup inside the theme reference that needs
-promoting to its own artifact with all seven states before it counts as approved.
+**Monthly loop complete** — all 11 specified against the seven-state requirement, with entry
+points, actions with permissions and failure behaviour, inputs with real error copy, exits,
+responsive, offline and accessibility. Verified by script: 0 table-column defects, 0 missing
+required sections, 0 unresolved SCR/CMP cross-references.
+
+SCR-082 has a mockup inside the theme reference that needs promoting to its own artifact with all
+seven states before it counts as approved.
 
 **Order.** Monthly loop first, then deal loop, then field, portal, ops, cross-cutting. The method
 says order by flow criticality; the monthly loop is the revenue spine — it runs every month for
@@ -272,7 +277,7 @@ every society for the life of every contract, where the deal loop runs once per 
 is where the product's genuinely novel problem lives (per-circuit bands, extrapolation, the
 17-day window). Two of its screens are already drawn as part of the theme work.
 
-**Next screen:** SCR-091 — Savings report (ops view / editor).
+**Next screen:** SCR-001 — Lead form (start of the deal loop).
 
 ## 4. Navigation map
 
@@ -294,3 +299,7 @@ drawing** the screens exposes.
 | System gap | — | Charts had no place in the theme system. SCR-081 and SCR-110 both need the deviation plot, so the chart roles, series palette and legibility rules were added to the system rather than invented per screen | `../05a-theme-system.md` §3.10 |
 | Spec rule | — | A reading file attached to the wrong circuit is FLOW-09's sharpest failure and was named but not defended. SCR-080 now specifies three defences, including a hard block when incoming readings are >3× or <⅓ of the circuit's trailing mean | `01-back-office-monthly.md` SCR-080 |
 | Risk | ASSUM-16 | The vendor CSV shape being stable is load-bearing for the whole monthly loop, and FLOW-09 step 1 has *no system visibility* if it changes. Worth a monitoring feature | flagged on SCR-080; not yet a FEAT |
+| Spec rule | — | FEAT-054's own stated risk (a one-at-a-time release gate becomes the bottleneck at 200 societies) needed a structural answer, not care. SCR-092 now defines a **routine vs needs-review triage rule** with five explicit conditions, and bulk release that structurally cannot reach a needs-review month | `01-back-office-monthly.md` SCR-092 |
+| Spec rule | — | SCR-113 enforces CON-37's direction-dependence structurally: on the FirsThing-favouring branch the apply action **does not exist**, only "raise amendment". A unilateral repricing becomes impossible rather than discouraged | `01-back-office-monthly.md` SCR-113 |
+| Spec rule | — | SCR-120's suspension countdown freezes on two conditions the flows named separately but no screen owned: payment data not confirmed same-day (CON-13), and a bounced warning email (FEAT-091 AC-5). Both are header-level states, not columns | `01-back-office-monthly.md` SCR-120 |
+| Risk | ASSUM-21 | If PER-08 turns out to be the same person as PER-01, SCR-092 is ceremony rather than a gate and should be reconsidered before it is built | flagged on SCR-092 |

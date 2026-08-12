@@ -1,5 +1,5 @@
 # SUR-01 back office — monthly loop
-**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — in progress
+**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — all 11 specified, mockups pending
 **Last updated:** 2026-08-12
 
 The revenue spine. Flows 09–12 run every month, for every society, for the life of every contract.
@@ -337,29 +337,593 @@ states and the provenance drawer, is not yet drawn.
 
 ## SCR-091 — Savings report (ops view / editor)
 
-*Not yet specified.*
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01, PER-08
+**Features:** FEAT-059 · **Flows:** FLOW-10 (step 5)
+
+**Purpose:** produce the document that proves the saving — the artefact an RWA committee actually
+reads, and the one thing that justifies the fee.
+**Primary action:** review the generated report and release it with the month.
+
+**Native to the app, unlike the invoice.** The invoice is produced in Zoho and uploaded back
+(CON-33); the savings report is generated here, which means every figure on it links to its
+provenance (INV-02) instead of being retyped.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-090 | "View savings report" | Society + period |
+| SCR-092 | queue row | Society + period |
+| SCR-082 | row menu | Society + period |
+| SCR-261 | ops viewing what the society sees | Society + period, read-only |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, period, status | | CMP-02 | `draft` / `released` |
+| Summary | Total saved, fee, society's share | computed | ₹ + kWh | The society's share is the headline, not the fee — this document exists to show them what they gained |
+| Summary | Cumulative saved since contract start | | ₹ | The number a committee quotes at an AGM |
+| Body | Per-circuit breakdown | CMP-09, read-only | | Basis stated **per circuit** |
+| Body | Mixed-basis explainer | conditional | `warn` banner | Only when at least one circuit is `actual-metered` |
+| Body | Method note | static + contract terms | | How the figure was reached, in plain language |
+| Body | Provenance links | INV-02 | per figure | Ops-only; stripped from the society's view |
+| Footer | Preview of the society-facing version | | `.roomy` density | What SCR-261 will show |
+
+### The mixed-basis problem
+
+FLOW-10 step 5 names it directly: **a mixed-basis month presented as one number hides why the
+total moved.** A society whose lift lobby flipped to actual-metered sees a total that changed for a
+reason no single figure explains. This screen is where that is either handled or fumbled, so:
+
+- The per-circuit table always states each circuit's basis, even in an all-fixed month, so the
+  column is not a surprise the one month it matters.
+- A mixed month carries a plain-language banner above the total: *"Three circuits billed at the
+  agreed rate. The lift lobby is billed on actual metered consumption this month, after readings
+  stayed outside its band for a second month. Here's what that changed."*
+- The total is never shown without the per-circuit table on the same screen.
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Edit commentary | inline | ops | Edits the narrative only — **never a figure** | none | Autosaved draft | — |
+| Regenerate | header | ops | Re-runs from current inputs | modal warning figures may change | Background + toast | — |
+| Release with month | header | ops lead | Marks releasable; actual release is SCR-092's gate | modal | → SCR-092 | Blocked if any circuit has an open deviation |
+| Download PDF | header | ops, PER-08 | Renders the print artefact | none | Download | — |
+| View as society | header | ops | Opens the `.roomy` society view | none | Preview | — |
+
+**Figures are never editable.** Commentary is. A savings report whose numbers can be typed over is
+not evidence, and INV-02 requires every figure to trace to its inputs.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton | — |
+| Empty — first use | not yet generated | "This report is generated once July's calculation completes." + what's outstanding | Go to compliance |
+| Empty — filtered | n/a | — | — |
+| Partial / stale | inputs changed since generation | `warn` banner: "Readings changed after this report was generated on 12 Aug. Regenerate before releasing." | Regenerate |
+| Error — network | load fails | Inline retry | Retry |
+| Error — permission | society-scoped user | SCR-221 | — |
+| Success | released | Status chip → `released`; society-visible | View as society |
+
+**Exits:** SCR-090, SCR-092, SCR-261, SCR-110.
+**Live update:** none.
+**Responsive:** desk-first for the editor; the society-facing preview is responsive to 360px.
+**Offline:** blocked.
+**Copy:** plain language throughout the society-facing half — no "deviation", no "actual-metered
+basis" without the sentence that explains it.
+**Not covered by the system:** the PDF is print, not screen (`../05a-theme-system.md` §3.11). It
+needs its own treatment before this screen is done.
+
+---
 
 ## SCR-092 — Accountant release queue
 
-*Not yet specified.*
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-08
+**Features:** FEAT-054 · **Flows:** FLOW-10 (step 6)
+
+**Purpose:** the blocking gate before any figure reaches a society (CON-33) — one accountant
+confirming a month's numbers are right.
+**Primary action:** release the months that are clean; look properly at the ones that aren't.
+
+**The stated risk is the design brief.** FEAT-054 and JTBD-09 both say it plainly: *at 200
+societies a one-at-a-time gate becomes the month-end bottleneck.* A queue that treats all 200
+identically guarantees either a rubber stamp or a missed window. So this screen's whole job is
+**triage** — surface the handful that need a human, make the rest a single confident action.
+
+### Triage rule
+
+A month is **routine** when all of: every circuit in band, no basis change from last month, total
+within 10% of the society's trailing 3-month mean, no open dispute, coverage ≥ 28 days. Anything
+else is **needs review**, and the row states which condition failed.
+
+Routine months are bulk-releasable. Needs-review months are not, ever — no bulk action reaches
+them, which is the structural guarantee that the gate stays real.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-082 | month closed | Period |
+| Sidebar → Release queue | direct | Open period |
+| Email digest | "12 months awaiting release" | Period |
+| SCR-091 | released with month | That society highlighted |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Period, days left in window | | CMP-02 | Same counter as SCR-082 |
+| KPI strip | Routine / Needs review / Released / Total value | CMP-03 | | Routine count is the one that should be large |
+| Section 1 | **Needs review** | CMP-01 | | Always first, always expanded, never collapsible |
+| Row | Society, why flagged, total, delta vs trailing mean | | | The *reason* is a column, not a tooltip |
+| Section 2 | **Routine** | CMP-01 with bulk-select | | Collapsed by default with a count |
+| Detail drawer | Per-circuit figures + provenance | CMP-09 | | Opens without leaving the queue |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Release | per row | PER-08 | Releases to the society; overdue clock starts 2 days later (FLOW-10 step 10) | modal for needs-review; none for routine | Row → released, society notified | Failure names the society and leaves it queued |
+| Release all routine | section header | PER-08 | Releases every routine row | modal with count and total value | Toast | Partial failure lists the survivors |
+| Query | per row | PER-08 | Sends back to ops with a required note | note required | Row → `queried`, ops notified | — |
+| Open figures | row click | PER-08 | Drawer with the per-circuit breakdown and provenance | — | — | — |
+| Export | header | PER-08 | CSV for their own records | none | Download | — |
+
+**Deliberately absent:** the accountant cannot edit a figure. They release or they query. Editing
+belongs to ops, upstream, and would break INV-02's provenance chain.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton, both sections | — |
+| Empty — first use | nothing calculated | "Nothing to release yet. Months appear here once ops closes them." | Go to readiness |
+| Empty — filtered | filter excludes all | Names the filter, offers clear | Clear |
+| Empty — all released | done | "All 40 societies released for July 2026." + the date and the total | View portfolio |
+| Partial / stale | ops still closing | `info` banner: "Ops is still closing July. More will appear." | Wait |
+| Error — network | load fails | Inline retry | Retry |
+| Error — permission | ops role, not PER-08 | Read-only view of the queue, release hidden | View |
+| Success | released | Toast + rows move to released | — |
+
+**Exits:** SCR-091, SCR-090, SCR-093, SCR-082.
+**Live update:** polls every 120s while ops is still closing the period.
+**Responsive:** desk-first. This is a desk task; below 768px it stacks but is not optimised for it.
+**Offline:** blocked.
+**Copy:** flag reasons in the accountant's language — "Total is 34% above the 3-month average",
+"Lift lobby switched to metered billing", not "anomaly".
+**Open questions:** ASSUM-21 (a distinct accountant persona exists and is a real gate rather than a
+formality) is load-bearing. If PER-08 turns out to be the same person as PER-01, this screen is
+ceremony and should be reconsidered rather than built.
+
+---
 
 ## SCR-093 — Invoice upload & reconciliation
 
-*Not yet specified.*
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
+**Features:** FEAT-053, FEAT-101 · **Flows:** FLOW-10 (step 8)
+
+**Purpose:** bring the formal tax invoice back from Zoho into the app and **prove it agrees with
+what the system calculated**.
+**Primary action:** upload the invoice and clear the reconciliation.
+
+**FEAT-101 exists because Phase 4 found this missing (DF-07).** FLOW-10 step 8 is explicit: *the
+uploaded invoice's total disagreeing with the computed total is the check that matters most here,
+and nothing currently performs it.* The invoice leaves the product for Zoho and comes back; that
+round trip is where a wrong number enters the record with full authority.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-092 | released month | Society + period + expected total |
+| SCR-082 | row menu | Society + period |
+| SCR-280 documents | upload flow, invoice type | Society + period |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, period, expected total | HL-01 output | ₹ | Shown **before** upload, so the reconciliation isn't circular |
+| Body | Dropzone | CMP-07 | PDF | Existing AI-extraction flow |
+| Body | Extracted fields | Gemini | editable | Invoice number, issue date, due date, total, GST |
+| Body | **Reconciliation panel** | computed vs extracted | | The reason this screen exists |
+| Body | Document preview | CMP-08 | | Side by side with the extracted fields |
+
+### Reconciliation
+
+| Comparison | Tolerance | On mismatch |
+|---|---|---|
+| Invoice total vs computed fee | exact to the rupee | **Blocks save.** Names both figures and the difference |
+| Period on invoice vs selected period | exact | Blocks save |
+| Society on invoice vs selected society | matched name | Blocks save |
+| Due date vs contract terms | must match the contract's payment terms | Warns, does not block — terms get varied by agreement |
+| GST | recomputed from the total | Warns |
+
+A blocked mismatch is resolvable two ways, both recorded: correct the invoice in Zoho and
+re-upload, or record an explicit **accepted variance** with a reason and an approver. It is never
+silently overridable, because the invoice is what the society pays against and INV-03 makes it
+immutable once accepted.
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Upload | dropzone | ops | Stores to S3 under the naming convention, extracts fields | none | Fields revealed after extraction | Gemini down → fields revealed empty for manual entry, flow not blocked |
+| Save & link | button | ops | Links the invoice to the month's calculation; **immutable thereafter** (INV-03) | modal when any variance was accepted | Toast → society can see it | Reconciliation failure blocks with the specific figures |
+| Accept variance | on a blocked mismatch | ops lead | Records reason + approver, unblocks save | modal requiring a reason | Audit row written | — |
+| Replace | on a saved invoice | ops lead | Voids and creates v2 — never edits (INV-03) | modal explaining v2 | Both versions on record | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton with the expected total already shown | — |
+| Empty — first use | no invoice yet | Dropzone + "Expected total ₹48,210 for July 2026" | Upload |
+| Empty — filtered | n/a | — | — |
+| Partial / stale | calculation changed after upload | `warn`: "The calculation changed after this invoice was uploaded. Re-reconcile." | Re-reconcile |
+| Error — network | upload fails | Retry; raw file retained | Retry |
+| Error — permission | not ops | SCR-221 | — |
+| Error — extraction | Gemini unavailable | Banner + manual entry; reconciliation still runs on the typed figures | Enter manually |
+| Success | saved | Toast; invoice visible to the society | View society |
+
+**Exits:** SCR-090, SCR-260, SCR-120, SCR-280.
+**Live update:** none.
+**Responsive:** desk-first; the side-by-side preview stacks below 1024px.
+**Offline:** blocked.
+**Copy:** mismatch — "This invoice says ₹52,400. The calculation says ₹48,210, a difference of
+₹4,190. Fix the invoice in Zoho, or record why the difference is correct."
+
+---
 
 ## SCR-110 — Deviation chart & initial findings
 
-*Not yet specified. No longer blocked — the chart system landed 2026-08-12
-(`../05a-theme-system.md` §3.10) and this screen's chart is the one rendered there.*
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
+**Features:** FEAT-055, FEAT-056 · **Flows:** FLOW-11 (steps 1–2)
+
+**Purpose:** let one person look at one circuit's month and tell, from the shape of it, what kind
+of problem this is.
+**Primary action:** resolve it from the data, or assign an inspector.
+
+**Chart-first, and the chart is raw daily.** FLOW-11 step 1 is unusually specific about why: *is
+this one bad day, a step change, or a gradual drift?* Those are three different problems with three
+different responses, and **a monthly aggregate makes the question unanswerable.** This is the one
+screen in the product where the visualisation is the feature rather than a presentation of it.
+
+Runs **per circuit** (CON-11). A society with four typed circuits can have four independent reviews
+open in one month.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-090 | "Open deviation" on an out-of-band circuit | Society + circuit + period |
+| SCR-081 | anomaly escalated to a deviation | Society + circuit + period |
+| SCR-240 | task card | The open deviation |
+| Email | deviation notification | Deep link to the review |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, circuit, period, streak | | CMP-02 | **"Second consecutive month"** must be unmissable — it is what flips the fee line (CON-01c) |
+| Chart | Raw daily readings vs benchmark, band, exclusions | `../05a-theme-system.md` §3.10 | | The screen's centre of gravity |
+| Chart overlay | Inspection visits, ticket dates, rescales | markers on the time axis | | So a step change can be lined up against an event |
+| Context | Coverage for the month | | `28 / 31` | |
+| Context | Ingest anomalies for this circuit | | list | Resolved and unresolved |
+| Context | Recent inspections | CMP-10 | | |
+| Context | Recent tickets | CMP-10 | | |
+| Context | **Sibling circuits' standing** | CMP-09 compact | | If all five circuits dropped together it is not a lighting fault — it is a metering or tariff event |
+| Context | Light-count history | FEAT-041 | | A rescale mid-month explains a step change instantly |
+| Findings | Initial note | free text | | Required before assigning |
+
+**Why the sibling panel matters:** it is the cheapest diagnostic on the screen. One circuit down is
+a circuit problem; all of them down together is a society-level or data-level event, and that
+distinction changes who gets dispatched.
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Resolve from desk | button | ops | Closes with a cause; → SCR-112 to record it | reason required | → SCR-112 | — |
+| Assign inspector | button | ops | Creates a visit via FLOW-X1 | modal: who, when, what to check | → SCR-170, deviation → `investigating` | — |
+| Exclude days | select on chart | ops | Marks days excluded; recalculates | reason required | Chart and variance update | Coverage below 20 → circuit flips to unusable (CON-12) |
+| Request re-upload | button | ops | Sends the circuit back to SCR-080 | none | Deviation → `awaiting data` | — |
+| Escalate | button | ops lead | → SCR-113 | reason required | Management notified | — |
+
+**The balance FLOW-11 step 2 names:** *assigning everything defeats the chart; resolving everything
+from the desk misses real physical faults.* Neither action is the default and neither is styled as
+primary — the screen presents the evidence and makes both equally reachable.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton chart with the axes drawn | — |
+| Empty — first use | no deviations ever | Not reachable — this screen exists only for an open deviation | — |
+| Empty — insufficient data | coverage < 20 days | Chart drawn with the gap explicit; `warn`: "18 of 31 days. Too little to diagnose a trend." | Request re-upload |
+| Partial / stale | readings still importing | `info` banner naming what is still coming | Wait |
+| Error — network | load fails | Inline retry | Retry |
+| Error — permission | not ops | SCR-221 | — |
+| Success | resolved or assigned | Status chip changes; audit row written | → SCR-112 / SCR-170 |
+
+**Exits:** SCR-112, SCR-113, SCR-170, SCR-090, SCR-081, SCR-251.
+**Live update:** none.
+**Responsive:** desk-first, and honestly so. The chart is the screen; below 1024px the context
+panels stack beneath it, and below 768px the page states that the plot needs a wider screen rather
+than rendering a 360px chart nobody can diagnose from.
+**Offline:** blocked.
+**Accessibility:** the chart carries a full `aria-label` describing shape and finding, and every
+figure on it is also available as a table via a "Show as table" toggle — per the system's rule that
+a chart is the fast path, never the only path.
+**Copy:** streak — "Second consecutive month outside the band. One more and this circuit moves to
+metered billing." Never let that arrive as a surprise the following month.
+
+---
 
 ## SCR-112 — Root-cause & decision record
 
-*Not yet specified.*
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
+**Features:** FEAT-057, FEAT-050 · **Flows:** FLOW-11 (steps 4, 5a)
+
+**Purpose:** record which side of the guarantee this deviation falls on, because that classification
+— not a fixable/not-fixable flag — is what moves the bill.
+**Primary action:** classify the root cause and record the decision.
+
+**CON-01b's list is the control.** FLOW-11 step 4 is explicit that a binary flag would be
+insufficient: the *classification* drives billing. FirsThing-attributable and excluded/society-caused
+move the money in opposite directions, and this screen is where that is chosen, by a named person,
+at a recorded time (INV-03).
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-110 | "Resolve from desk" or a returning investigation | Deviation + circuit + period |
+| SCR-111 | inspector submits findings | Deviation, findings attached |
+| SCR-113 | management sends back to ops | Deviation + management's note |
+| SCR-240 | task card "Deviation awaiting decision" | The open deviation |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Circuit, period, streak | | CMP-02 | |
+| Summary | The deviation in figures | | | Benchmark, measured, variance, days excluded |
+| Body | Evidence | chart thumbnail, inspector findings, photos | CMP-10, CMP-15 | Read-only; diagnosis happened on SCR-110/111 |
+| Body | **Cause classification** | CON-01b list | radio group, two labelled groups | FirsThing-attributable vs excluded/society-caused, visually separated |
+| Body | Sub-cause | dependent on group | select | e.g. driver failure, fitting removed by society, tariff change, metering fault |
+| Body | Narrative | free text | required | What actually happened, in a sentence someone will read a year from now |
+| Body | **Billing effect preview** | computed from the classification | | States the consequence *before* the decision is committed |
+| Footer | CMP-12 approval bar | | | Owner and timestamp recorded |
+
+### The billing effect must be shown, not implied
+
+Selecting a classification changes what the society pays. The screen states the consequence in
+plain terms as soon as a classification is picked, before it is saved:
+
+- *Excluded / society-caused* → "Bill unchanged. The society will be told why."
+- *FirsThing-attributable, corrected this month* → "Bill unchanged. No adjustment applies."
+- *FirsThing-attributable, uncorrected, first month* → "Bill unchanged this month. If next month is
+  also outside the band, this circuit moves to metered billing."
+- *FirsThing-attributable, uncorrected, second consecutive month* → "This circuit's fee line moves
+  to actual metered consumption from this month."
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Save decision | CMP-12 | ops | Records cause, owner, timestamp; applies the billing effect | modal restating the effect | Deviation → `closed`; audit row | — |
+| Escalate instead | CMP-12 | ops | → SCR-113 without classifying | reason required | Management notified | — |
+| Reopen | on a closed record | ops lead | Reopens with a required reason | modal | Audit row; billing effect reverted pending a new decision | Blocked once the month's invoice is issued |
+| Notify society | auto on save | system | Sends the explanation (OQ-09, CON-39) | — | Logged on SCR-180 | Bounce → ops alerted |
+
+**Barred:** applying an adjustment without a completed review (FEAT-050 AC-4). The adjustment is a
+consequence of saving this record, never a control someone can reach directly.
+
+**Silence is a failure mode.** FLOW-11 step 5a: *silence on an excluded-cause month reads to the
+society as an unexplained bad month.* Notification on save is automatic, not a checkbox.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton | — |
+| Empty — first use | n/a — always has a deviation | — | — |
+| Empty — awaiting investigation | inspector assigned, no findings yet | "Waiting on the site visit on 19 Aug." Classification disabled, with that reason | Chase / escalate |
+| Partial / stale | readings changed since the review opened | `warn`: "Readings changed. Re-check the chart before deciding." | → SCR-110 |
+| Error — network | save fails | Inline; the form keeps everything | Retry |
+| Error — permission | not ops | SCR-221 | — |
+| Success | saved | Effect banner + audit row + society notified | → SCR-090 |
+
+**Exits:** SCR-110, SCR-113, SCR-090, SCR-234 (audit), SCR-151.
+**Live update:** none.
+**Responsive:** desk-first.
+**Offline:** blocked.
+**Open questions:** OQ-10 — whether a second-month flip is automatic or needs sign-off. Currently
+specified as automatic on save, following CON-01c. If it should need approval, this is the screen
+that changes.
+
+---
 
 ## SCR-113 — Management escalation & benchmark adjustment
 
-*Not yet specified.*
+**Surface:** SUR-01 · **Type:** page · **Personas:** management
+**Features:** FEAT-058 · **Flows:** FLOW-11 (steps 5b, 6)
+
+**Purpose:** the only place, other than a light-count rescale, where a contracted benchmark changes
+mid-term.
+**Primary action:** decide whether to adjust the benchmark, and in which direction.
+
+**Seen rarely, so it carries its own context.** FLOW-11's own note: management sees this path
+infrequently, which means the screen cannot assume familiarity. It restates the case from the
+beginning rather than linking away to it.
+
+### CON-37 is the structural rule
+
+The decision is **direction-dependent**, and the screen enforces it rather than trusting care:
+
+| Direction | Path |
+|---|---|
+| **Favours the society** (benchmark lowered, society pays less) | Applies immediately on approval. Society notified. No amendment needed. |
+| **Favours FirsThing** (benchmark raised, society pays more) | **Cannot be applied here.** Requires a signed amendment first (FLOW-17, FEAT-064). This screen creates the amendment request and stops. |
+
+Applying a FirsThing-favouring change without the amendment would be a unilateral repricing of a
+signed contract. The screen makes that structurally impossible: on that branch the apply action
+does not exist.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-110 | ops escalates | Deviation + circuit + reason |
+| SCR-112 | "Escalate instead" of classifying | Deviation + evidence |
+| Email | escalation notification to management | Deep link to the case |
+
+Management arrives here rarely and often cold, frequently from an email rather than from inside the
+product — which is why the case is restated in full below rather than linked to.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, circuit, current benchmark, streak | | | |
+| Case | Full history restated | CMP-10 | | Deviation, investigation, findings, ops' recommendation |
+| Case | Post-investigation readings | chart | | CON-31 step 5b — the evidence the decision rests on |
+| Case | Contract terms | | | Current benchmark, band, revenue share, remaining term |
+| Case | Financial impact | computed | ₹/month and over the remaining term | Both directions modelled |
+| Decision | Proposed new benchmark | number input | | Direction computed and stated live as it is typed |
+| Decision | Direction banner | computed | CMP-02 | Changes the available actions in place |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Approve — favours society | button, society-favouring branch only | management | Applies immediately from the stated month; society notified | modal with the figure and effective month | Benchmark updated; audit row | — |
+| Raise amendment — favours FirsThing | button, FirsThing-favouring branch only | management | Creates an amendment request; **no benchmark change** | modal explaining nothing changes until signed | → SCR-160 | — |
+| Reject | button | management | Closes with a reason; benchmark unchanged | reason required | → SCR-112 | — |
+| Send back to ops | button | management | Returns for more evidence | note required | Ops notified | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton | — |
+| Empty — first use | no escalations | Not reachable except from an escalation | — |
+| Empty — filtered | n/a | — | — |
+| Partial / stale | post-investigation readings incomplete | `warn`: "Only 9 days of readings since the fix. A benchmark decision on this is premature." Approve disabled with that reason | Wait |
+| Error — network | save fails | Inline retry | Retry |
+| Error — permission | not management | SCR-221 | — |
+| Success | decided | Banner stating what happens next and when | → SCR-160 / SCR-090 |
+
+**Exits:** SCR-160, SCR-112, SCR-090, SCR-053.
+**Live update:** none.
+**Responsive:** desk-first.
+**Offline:** blocked.
+**Copy:** direction banner — "This lowers what Settlement Nexus pays. You can apply it now." /
+"This raises what Settlement Nexus pays. It needs a signed amendment before it can take effect."
+
+---
 
 ## SCR-120 — Arrears board (with dispute flags)
 
-*Not yet specified.*
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
+**Features:** FEAT-087, FEAT-102 · **Flows:** FLOW-12 (steps 2, 4–8)
+
+**Purpose:** track who owes what, how close each is to suspension, and who has an open dispute.
+**Primary action:** record a payment, or grant an extension.
+
+**The unusual property, and the one the screen must make legible:** CON-13 — *manual intervention
+is only ever a brake, never an accelerator.* Nobody can suspend a society from this screen.
+Suspension fires automatically; a person can only slow it down.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-240 ops home | "Overdue" task card | Filtered to overdue |
+| Sidebar → Arrears | direct | All unpaid |
+| SCR-151 society 360 | "See arrears" | Filtered to that society |
+| SCR-121 | society requests an extension | Filtered to extension-requested |
+| Email digest | weekly arrears summary | Filtered to overdue |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Total outstanding, count overdue | | ₹ | |
+| Header | **Payment data freshness** | CMP-17 | `Confirmed today, 09:15` | Load-bearing — see below |
+| Filters | All, Overdue, Warning, Suspended, Disputed, Extension requested | CMP-04 | | |
+| Table | One row per unpaid invoice | CMP-01, risk accent by proximity to suspension | | |
+| Row | Society, invoice, amount, days overdue, countdown, extensions used, status | | | |
+| Row | Countdown | days to suspension | CMP-02, escalating tone | A frozen countdown is shown explicitly, with its reason |
+| Row | Dispute flag | FEAT-102 | CMP-02 `info` | Visible but **does not stop the clock** (CON-41) |
+| Detail | Payment and communication history | CMP-10 | | |
+
+### The three rules the board has to encode
+
+**1 — Suspension only fires against same-day-confirmed payment data (CON-13).** Payment status
+comes from Zoho manually, so it can be stale, and firing on stale data would suspend a society that
+has already paid. If the freshness pill is not same-day, **countdowns freeze** and the board says so
+at the top: *"Payment data was last confirmed on 10 Aug. Suspensions are paused until it's
+refreshed."* This is the most important state on the screen, so it is a header banner, not a column.
+
+**2 — A bounced warning email must not advance the countdown (FEAT-091 AC-5).** A society that was
+never actually told cannot be suspended for not responding. A bounced notification freezes that
+row's countdown and raises a task for ops to reach them another way. The row states *"Warning email
+bounced 8 Aug — countdown paused"* rather than silently continuing.
+
+**3 — A dispute does not pause the arrears clock (CON-41, the user's explicit call).** The flag is
+visible so nobody is surprised, and the residual risk is accepted as ASSUM-23: a dispute that
+outlives the window is handled by ops granting an extension, not by the system pausing. The board
+therefore shows disputed rows with their countdown still running — which is exactly the situation
+extensions exist for.
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Record payment | per row | ops | Marks paid, stops the countdown, restores if suspended | modal: amount, date, reference | Row → paid; service restored | — |
+| Grant extension | per row | ops | Up to **5 days per request** (FLOW-12 step 4) | modal showing days used and remaining | Countdown extended; society notified | Blocked past the cap, stating the cap |
+| Refresh payment data | header | ops | Records that Zoho was checked today; unfreezes countdowns | modal confirming they actually checked | Freshness pill updates | — |
+| Open society | row click | ops | → SCR-151 | — | — | — |
+| Log a dispute | per row | ops | Creates a dispute record (FEAT-102) | modal: what is disputed | Row flagged; clock continues | — |
+| Restore | on a suspended row | ops | Single state change; no backfill needed | modal | Field servicing resumes | — |
+
+**Absent by design:** there is no "suspend now". CON-13 permits no accelerator, and offering the
+button would invite exactly the manual suspension the rule forbids.
+
+### What suspension actually does
+
+Stated on the screen, because it is narrower than people assume (CON-13, resolved at the audit):
+**field servicing only halts** — routine inspections, ticket dispatch, spare replacement. Meter
+ingest, monthly calculation, invoicing and portal access all continue. The suspended row says so in
+one line, so nobody believes the society has gone dark.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton | — |
+| Empty — first use | nothing overdue ever | "Nothing outstanding. Invoices appear here two days after release if they're unpaid." | — |
+| Empty — filtered | filter excludes all | Names the filter, offers clear | Clear |
+| Empty — all paid | cleared | "Everything's paid. ₹0 outstanding across 40 societies." | — |
+| Partial / stale | **payment data not same-day** | `warn` header banner; every countdown shown frozen with the reason | Refresh payment data |
+| Error — network | load fails | Inline retry | Retry |
+| Error — permission | not ops | SCR-221 | — |
+| Success | payment recorded | Toast; row clears; service restored if it was suspended | — |
+
+**Exits:** SCR-151, SCR-122, SCR-260, SCR-121, SCR-180.
+**Live update:** countdowns recompute on load and every 5 minutes; the freshness pill is checked on
+every load.
+**Responsive:** desk-first; below 768px rows become cards keeping society, amount, countdown and
+status.
+**Offline:** blocked.
+**Copy:** frozen countdown — "Paused: payment data is from 10 Aug." Extension — "Extended to 24 Aug.
+5 of 10 days used." Suspension — "Field servicing paused. Readings, billing and portal access
+continue."
+**Open questions:** ASSUM-23 — that disputes resolve inside the 17-day window. If they routinely do
+not, the extension mechanism becomes load-bearing in a way nobody chose, and CON-41 should be
+revisited.

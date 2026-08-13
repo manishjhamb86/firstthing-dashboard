@@ -1387,6 +1387,7 @@ features:
     release: R0
     depends_on: []
     status: ready
+    milestone: MS-03
     acceptance_criteria:
       - id: FEAT-001-AC-1
         type: happy
@@ -1453,6 +1454,7 @@ features:
     release: R0
     depends_on: [FEAT-001]
     status: ready
+    milestone: MS-03
     acceptance_criteria:
       - id: FEAT-002-AC-1
         type: happy
@@ -1684,6 +1686,7 @@ features:
     release: R0
     depends_on: [FEAT-002]
     status: ready
+    milestone: MS-03
     acceptance_criteria:
       - id: FEAT-006-AC-1
         type: happy
@@ -1756,6 +1759,7 @@ features:
     release: R0
     depends_on: [FEAT-002]
     status: ready
+    milestone: MS-03
     acceptance_criteria:
       - id: FEAT-007-AC-1
         type: happy
@@ -1987,6 +1991,7 @@ features:
     release: R0
     depends_on: [FEAT-007]
     status: ready
+    milestone: MS-04
     acceptance_criteria:
       - id: FEAT-011-AC-1
         type: happy
@@ -2059,6 +2064,7 @@ features:
     release: R0
     depends_on: [FEAT-011]
     status: ready
+    milestone: MS-04
     acceptance_criteria:
       - id: FEAT-012-AC-1
         type: happy
@@ -2131,6 +2137,7 @@ features:
     release: R0
     depends_on: [FEAT-012]
     status: ready
+    milestone: MS-04
     acceptance_criteria:
       - id: FEAT-013-AC-1
         type: happy
@@ -2197,6 +2204,7 @@ features:
     release: R0
     depends_on: [FEAT-013]
     status: ready
+    milestone: MS-04
     acceptance_criteria:
       - id: FEAT-014-AC-1
         type: happy
@@ -2534,6 +2542,7 @@ features:
     release: R0
     depends_on: [FEAT-006, FEAT-014]
     status: ready
+    milestone: MS-05
     acceptance_criteria:
       - id: FEAT-020-AC-1
         type: happy
@@ -2765,6 +2774,7 @@ features:
     release: R0
     depends_on: []
     status: ready
+    milestone: MS-05
     acceptance_criteria:
       - id: FEAT-024-AC-1
         type: happy
@@ -2884,6 +2894,7 @@ features:
     release: R0
     depends_on: [FEAT-024]
     status: ready
+    milestone: MS-05
     acceptance_criteria:
       - id: FEAT-026-AC-1
         type: happy
@@ -2950,6 +2961,7 @@ features:
     release: R0
     depends_on: [FEAT-006, FEAT-020]
     status: ready
+    milestone: MS-05
     acceptance_criteria:
       - id: FEAT-027-AC-1
         type: happy
@@ -3022,6 +3034,7 @@ features:
     release: R0
     depends_on: [FEAT-027]
     status: ready
+    milestone: MS-05
     acceptance_criteria:
       - id: FEAT-028-AC-1
         type: happy
@@ -3094,6 +3107,7 @@ features:
     release: R0
     depends_on: [FEAT-026, FEAT-028]
     status: ready
+    milestone: MS-05
     acceptance_criteria:
       - id: FEAT-029-AC-1
         type: happy
@@ -3325,6 +3339,7 @@ features:
     release: R0
     depends_on: [FEAT-006, FEAT-029]
     status: ready
+    milestone: MS-06
     acceptance_criteria:
       - id: FEAT-033-AC-1
         type: happy
@@ -3397,6 +3412,7 @@ features:
     release: R0
     depends_on: [FEAT-033]
     status: ready
+    milestone: MS-06
     acceptance_criteria:
       - id: FEAT-034-AC-1
         type: happy
@@ -3469,6 +3485,7 @@ features:
     release: R0
     depends_on: [FEAT-033, FEAT-034]
     status: ready
+    milestone: MS-06
     acceptance_criteria:
       - id: FEAT-035-AC-1
         type: happy
@@ -3541,6 +3558,7 @@ features:
     release: R0
     depends_on: [FEAT-033]
     status: ready
+    milestone: MS-06
     acceptance_criteria:
       - id: FEAT-036-AC-1
         type: happy
@@ -3613,6 +3631,7 @@ features:
     release: R0
     depends_on: [FEAT-035, FEAT-036]
     status: ready
+    milestone: MS-06
     acceptance_criteria:
       - id: FEAT-037-AC-1
         type: happy
@@ -3738,6 +3757,7 @@ features:
     release: R0
     depends_on: []
     status: ready
+    milestone: MS-04
     acceptance_criteria:
       - id: FEAT-039-AC-1
         type: happy
@@ -3810,6 +3830,7 @@ features:
     release: R0
     depends_on: [FEAT-007, FEAT-039]
     status: ready
+    milestone: MS-04
     acceptance_criteria:
       - id: FEAT-040-AC-1
         type: happy
@@ -3882,6 +3903,7 @@ features:
     release: R0
     depends_on: [FEAT-014, FEAT-040]
     status: ready
+    milestone: MS-04
     acceptance_criteria:
       - id: FEAT-041-AC-1
         type: happy
@@ -4007,6 +4029,7 @@ features:
     release: R0
     depends_on: [FEAT-040]
     status: ready
+    milestone: MS-07
     acceptance_criteria:
       - id: FEAT-043-AC-1
         type: happy
@@ -4079,6 +4102,7 @@ features:
     release: R0
     depends_on: [FEAT-043]
     status: ready
+    milestone: MS-07
     acceptance_criteria:
       - id: FEAT-044-AC-1
         type: happy
@@ -4151,6 +4175,7 @@ features:
     release: R0
     depends_on: [FEAT-043, FEAT-044]
     status: ready
+    milestone: MS-07
     acceptance_criteria:
       - id: FEAT-045-AC-1
         type: happy
@@ -4223,6 +4248,7 @@ features:
     release: R0
     depends_on: [FEAT-043]
     status: ready
+    milestone: MS-07
     acceptance_criteria:
       - id: FEAT-046-AC-1
         type: happy
@@ -4295,6 +4321,7 @@ features:
     release: R0
     depends_on: [FEAT-043]
     status: ready
+    milestone: MS-07
     architecture_notes: "docs/engineering/09-architecture.md §4 CONTRACT-11, §11 NFR-04 -- the provenance chain this feature exposes is the same one GATE-01 requires every write to carry; enforced structurally via the §9 query-layer convention, not per-feature."
     acceptance_criteria:
       - id: FEAT-047-AC-1
@@ -4362,6 +4389,7 @@ features:
     release: R0
     depends_on: [FEAT-040, FEAT-041]
     status: ready
+    milestone: MS-08
     backend_only: true
     architecture_notes: "docs/engineering/09-architecture.md §5.2 COMP-04, ADR-004 -- computes per-CircuitFeeLine, fanning in at MonthlyCalculation. Contract.tolerancePct's scope confirmed 2026-08-13 (one value per contract, applied independently per circuit) -- 00-intake.md CON-01a, RISK-02 closed."
     acceptance_criteria:
@@ -4436,6 +4464,7 @@ features:
     release: R0
     depends_on: [FEAT-048]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-049-AC-1
         type: happy
@@ -4508,6 +4537,7 @@ features:
     release: R0
     depends_on: [FEAT-049]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-050-AC-1
         type: happy
@@ -4580,6 +4610,7 @@ features:
     release: R0
     depends_on: [FEAT-037, FEAT-048]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-051-AC-1
         type: happy
@@ -4706,6 +4737,7 @@ features:
     release: R0
     depends_on: [FEAT-048]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-053-AC-1
         type: happy
@@ -4778,6 +4810,7 @@ features:
     release: R0
     depends_on: [FEAT-053]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-054-AC-1
         type: happy
@@ -4850,6 +4883,7 @@ features:
     release: R0
     depends_on: [FEAT-049]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-055-AC-1
         type: happy
@@ -5081,6 +5115,7 @@ features:
     release: R0
     depends_on: [FEAT-048, FEAT-050]
     status: ready
+    milestone: MS-08
     architecture_notes: "docs/engineering/09-architecture.md §5.2 SavingsReport -- immutable once released (ADR-005); provenanceLinks field carries INV-02's chain back to the readings/benchmark versions used."
     acceptance_criteria:
       - id: FEAT-059-AC-1
@@ -5154,6 +5189,7 @@ features:
     release: R0
     depends_on: [FEAT-054, FEAT-059]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-060-AC-1
         type: happy
@@ -5279,6 +5315,7 @@ features:
     release: R0
     depends_on: [FEAT-029, FEAT-039]
     status: ready
+    milestone: MS-05
     acceptance_criteria:
       - id: FEAT-062-AC-1
         type: happy
@@ -6517,6 +6554,7 @@ features:
     release: R0
     depends_on: []
     status: ready
+    milestone: MS-02
     acceptance_criteria:
       - id: FEAT-085-AC-1
         type: happy
@@ -6589,6 +6627,7 @@ features:
     release: R0
     depends_on: [FEAT-085]
     status: ready
+    milestone: MS-02
     acceptance_criteria:
       - id: FEAT-086-AC-1
         type: happy
@@ -6661,6 +6700,7 @@ features:
     release: R0
     depends_on: [FEAT-053, FEAT-054, FEAT-085]
     status: ready
+    milestone: MS-08
     acceptance_criteria:
       - id: FEAT-087-AC-1
         type: happy
@@ -7841,6 +7881,7 @@ features:
     release: R0
     depends_on: [FEAT-085]
     status: ready
+    milestone: MS-02
     architecture_notes: "docs/engineering/09-architecture.md §6 -- portalAuthority is a second, orthogonal authorization model alongside AdminUser.permissions, deliberately not unified; GATE-04's binding-act check is server-side on the action per this feature's own AC-2, matching the existing manage_admins precedent."
     acceptance_criteria:
       - id: FEAT-108-AC-1
@@ -7938,6 +7979,97 @@ spikes:
     output: "A written finding from a legal/compliance review, not a technical spike -- flagged as such so it is not scheduled as a Claude Code build session by mistake. Covers SocietyContact, Profile/AdminUser, NotificationDelivery, GatePass signature images, and field/inspection photos."
     status: proposed
     non_technical: true
+
+milestones:
+  # R0 broken into 8 sequential milestones, per docs/engineering/11-development-plan.md §3.
+  # R1-R3 are not yet decomposed to this granularity -- deferred until R0's first sessions
+  # give a real observed pace to sequence against (08-prioritization.md §10).
+  - id: MS-01
+    name: "Platform scaffold & walking-skeleton proof"
+    release: R0
+    features: []  # infra, not a backlog feature -- see the dev plan for what it covers
+    depends_on: []
+    estimate_sessions_raw: 8
+    exit_criteria:
+      - "An admin account logs in and lands on a real Server-Component page reading one row from Postgres"
+      - "The same build deploys to staging with zero console/page errors"
+      - "Prisma schema (09-architecture.md §5.2, accounts/society/circuit subset) migrates cleanly"
+    status: proposed
+  - id: MS-02
+    name: "Accounts, roles & portal authority"
+    release: R0
+    features: [FEAT-085, FEAT-086, FEAT-108]
+    depends_on: [MS-01]
+    estimate_sessions_raw: 13
+    exit_criteria:
+      - "An admin, and a society office-bearer/committee/manager account each log in with role-correct access"
+      - "A non-office-bearer account is refused a binding act server-side (GATE-04), not just hidden in the UI"
+      - "NFR-05's tenancy-scoping test suite exists and passes for Society/Profile/AdminUser"
+    status: proposed
+  - id: MS-03
+    name: "Lead to confirmed survey"
+    release: R0
+    features: [FEAT-001, FEAT-002, FEAT-006, FEAT-007]
+    depends_on: [MS-02]
+    estimate_sessions_raw: 15
+    exit_criteria:
+      - "A lead is logged, a proposal drafted and shared, and the society accepts"
+      - "A society profile and lighting inventory are captured and one eligible circuit per light type is selected (CON-16)"
+    status: proposed
+  - id: MS-04
+    name: "Circuit registry & benchmark commissioning"
+    release: R0
+    features: [FEAT-039, FEAT-040, FEAT-041, FEAT-011, FEAT-012, FEAT-013, FEAT-014]
+    depends_on: [MS-03]
+    estimate_sessions_raw: 27
+    exit_criteria:
+      - "Circuits exist in a registry keyed by light type, with a meter installed and load-validated"
+      - "A gate pass submits, and either an explicit approval or the 30-minute provisional timeout (ADR-006) resolves it -- the background job runner (ADR-003) is live and exercised for the first time here"
+      - "Baseline and post-install monitoring windows complete and a benchmark computes within CON-20's 60-80% range"
+    status: proposed
+  - id: MS-05
+    name: "Demo report, KYC, offer & agreement"
+    release: R0
+    features: [FEAT-020, FEAT-024, FEAT-026, FEAT-027, FEAT-028, FEAT-029, FEAT-062]
+    depends_on: [MS-04]
+    estimate_sessions_raw: 27
+    exit_criteria:
+      - "The society sees a demo report in its own portal and KYC clears"
+      - "An offer is generated, shared, and accepted -- acceptance is refused server-side for a non-office-bearer account (GATE-04)"
+      - "A Contract record activates carrying the per-circuit benchmark table and the confirmed tolerancePct scope (CON-01a, 00-intake.md 2026-08-13)"
+    status: proposed
+  - id: MS-06
+    name: "Full installation execution"
+    release: R0
+    features: [FEAT-033, FEAT-034, FEAT-035, FEAT-036, FEAT-037]
+    depends_on: [MS-05]
+    estimate_sessions_raw: 20
+    exit_criteria:
+      - "A daily installation batch submits, and the society's onlooker approval/dispute gate (CON-21) is enforced"
+      - "A completion certificate signs and the billing start date computes as the day after, prorated (CON-22)"
+      - "CON-44's area-claim model (ADR-007) is exercised for real, even if only single-participant in this first walk"
+    status: proposed
+  - id: MS-07
+    name: "Reading ingest"
+    release: R0
+    features: [FEAT-043, FEAT-044, FEAT-045, FEAT-046, FEAT-047]
+    depends_on: [MS-06]
+    estimate_sessions_raw: 21
+    exit_criteria:
+      - "A real CSV uploads, Gemini normalises it, and the raw file plus normalised readings are both retained (CON-30)"
+      - "Anomaly detection and the 20-day coverage floor (CON-12) both run before a month can be marked ready"
+    status: proposed
+  - id: MS-08
+    name: "Calculation, compliance, release & delivery"
+    release: R0
+    features: [FEAT-048, FEAT-049, FEAT-050, FEAT-051, FEAT-053, FEAT-054, FEAT-055, FEAT-059, FEAT-060, FEAT-087]
+    depends_on: [MS-07]
+    estimate_sessions_raw: 52
+    exit_criteria:
+      - "The month's savings calculation runs automatically per CircuitFeeLine and prorates correctly for a partial first month"
+      - "The accountant release gate (CON-33) blocks the report/invoice from reaching the society until approved"
+      - "The society sees its invoice and savings report in its own portal, and the overdue clock starts -- this is R0's own exit condition (08-prioritization.md §6), reached for real"
+    status: proposed
 
 invariants:
   - id: INV-02

@@ -103,6 +103,33 @@ either, only surfaced it. `docs/backlog.yaml` otherwise unchanged in shape — `
 added to 8 features, `phases_complete` now includes `7` — validator still 15 errors/263 warnings,
 same documented/accepted class as Phase 6, confirmed by re-running it after every edit.
 
+**Phase 8 (Development Plan) — drafted 2026-08-13, pending user approval.**
+`docs/engineering/11-development-plan.md` breaks R0 (41 features, 175 raw feature-sessions) into 8
+sequential milestones (MS-01 through MS-08, recorded in `docs/backlog.yaml`'s new `milestones:`
+section, one entry per R0 feature now carrying a `milestone:` field). **MS-01 is a genuine
+from-scratch walking skeleton, not a formality** — there is currently no `src/` on the `blueprint`
+branch at all (the pre-blueprint app is entirely in `archive/`), so this milestone covers
+initializing the Next.js app, migrating Phase 7's Prisma schema, wiring NextAuth v5, and reaching a
+staged deploy before any feature work starts. The remaining 7 milestones follow the deal-to-bill
+spine exactly (`08-prioritization.md` §3.1): accounts/authority → survey → commissioning →
+offer/agreement → installation → ingest → calculation/release, each demoable and strictly
+sequential, since R0 by design walks one deal start to finish. **A real estimation gap was found
+and corrected, not just carried forward**: `08-prioritization.md`'s own 175-session/~29-week figure
+was raw feature effort only, with no platform-scaffold or non-feature-work allowance — this plan
+adds 8 scaffold sessions and the method's own 30–50% non-feature-work allowance, producing a wider,
+more honest 238–275 session range (~24 to ~69 weeks depending on which of the three paces from
+`08-prioritization.md` §10 turns out to be real). The background job runner (COMP-11, new
+infrastructure per ADR-003) is explicitly threaded into MS-04 (gate-pass timeout) rather than given
+its own milestone, since MS-04 is the first point it's actually load-bearing, and MS-08 reuses it
+for the suspension clock rather than rebuilding it. Both spikes (SPIKE-01 vendor API, SPIKE-02 DPDP
+review) are scheduled off the R0 critical path — neither blocks a milestone, matching that neither
+is needed until R1. A five-item risk register was added at the plan level (pace being genuinely
+unobserved is named as the single highest-likelihood, highest-impact risk, with MS-01 itself
+flagged as the cheapest early signal if the whole estimate is wrong) alongside the two technical
+risks carried forward from Phase 7 that actually touch an R0 milestone (the job runner, and CON-44's
+area-claim complexity). `docs/backlog.yaml` validator re-run after every edit: still 15 errors/263
+warnings, `Milestones: 8` now reported correctly.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

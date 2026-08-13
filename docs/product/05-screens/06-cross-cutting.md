@@ -163,3 +163,20 @@ confirmation naming exactly what will be lost.
 **Copy:** healthy — "You're offline. 14 things are waiting to send. Nothing is lost — they'll go up
 as soon as you have signal." Cold start — "You're offline and nothing's downloaded yet. Get signal
 for a moment and today's visits will come down."
+
+---
+
+## Coverage
+
+**Rendered mockups:** https://claude.ai/code/artifact/a356917a-9d95-4ecb-baeb-85905a13a5d3 — both
+screens, each at both sizes, with full state sets.
+
+| Screen | Spec | Mockup | Blueprint |
+|---|---|---|---|
+| SCR-200 sign in | ✅ | ✅ | — |
+| SCR-223 offline & sync pending | ✅ | ✅ | — |
+
+Both screens span SUR-01 and SUR-02, so the mockup renders each at both sizes rather than picking
+one — SCR-200 as a desktop card beside a phone, SCR-223 as three phone frames, because it is really
+three states and the middle one (a poison item in an otherwise-draining queue) is the one that
+loses a morning's work if it is folded into a count.

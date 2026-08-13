@@ -371,11 +371,18 @@ hold. Readings and billing continue. Clear the arrears or record an exception to
 
 ## Coverage
 
+**Rendered mockups:** https://claude.ai/code/artifact/c6a8aadb-4df9-407e-872a-e5c624bfb133 — every screen below, each with its full state set.
+
 | Screen | Spec | Mockup | Blueprint |
 |---|---|---|---|
-| SCR-240 ops home | ✅ | — | — |
-| SCR-241 portfolio list | ✅ | — | — |
-| SCR-242 circuit drill-down | ✅ | — | — |
-| SCR-250 society record | ✅ | — | — |
-| SCR-251 circuit registry | ✅ | — | — |
-| SCR-170 visit scheduler | ✅ | — | — |
+| SCR-240 ops home | ✅ | ✅ | — |
+| SCR-241 portfolio list | ✅ | ✅ | — |
+| SCR-242 circuit drill-down | ✅ | ✅ | — |
+| SCR-250 society record | ✅ | ✅ | — |
+| SCR-251 circuit registry | ✅ | ✅ | — |
+| SCR-170 visit scheduler | ✅ | ✅ | — |
+
+**All 6 priority-1 ops screens are specified and mocked up.** This group is where the portfolio is
+*read* rather than advanced — every screen here is an entry point into work that happens elsewhere,
+which is why SCR-240's queue rows and SCR-241's list rows both carry the reason they are surfaced
+rather than only the fact that they are.

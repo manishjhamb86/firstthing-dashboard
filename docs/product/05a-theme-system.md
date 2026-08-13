@@ -395,6 +395,13 @@ that happened not to size it. An element selector is the right fix because it lo
 component rule that already sets a size, so it changes nothing that was correct and catches
 everything that was not.
 
+**One caveat that costs an hour if you meet it cold:** an SVG's own `width` / `height` *presentation
+attributes* lose to any CSS rule, including this one — they sit below the author stylesheet in the
+cascade, not alongside inline styles. So `<svg width="700" height="230">` collapses to 1.05em under
+the default, which is exactly what happened to the first chart drawn after the rule landed. **A
+deliberately-sized SVG must be sized in CSS** (`.chart-wrap svg { width: 700px; height: 230px }`),
+never on the element. This applies to every chart in §3.10 and to any illustration added later.
+
 ### 3.10 Charts (added 2026-08-12, when SCR-081 and SCR-110 reached for it)
 
 Added to the system rather than invented per screen, per the method's rule that a screen never

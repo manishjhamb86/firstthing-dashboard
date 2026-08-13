@@ -1,0 +1,231 @@
+/* FirsThing Console — shared token + component layer for the mockup set.
+   Mirrors docs/product/05a-theme-system.md §3.2 exactly. */
+:root{
+  --ground:#ECEFEC; --surface:#FFFFFF; --surface-sunken:#F5F7F4; --surface-raised:#FFFFFF;
+  --surface-hover:#F3F5F2; --surface-active:#EAEEE9;
+  --border:#DDE2DC; --border-subtle:#E9EDE8; --field-border:#828B82;
+  --text:#151A17; --text-muted:#586058; --text-subtle:#636C63; --text-on-accent:#FFFFFF;
+  --accent:#16624A; --accent-hover:#0F4E3A; --accent-subtle:#E3F0E9; --accent-line:#BFDCCE;
+  --signal:#B8E23F; --signal-ink:#151A17;
+  --ok-bg:#DFF0E4; --ok-fg:#12583E; --ok-line:#BEDFC9;
+  --warn-bg:#FBEED4; --warn-fg:#7E5A08; --warn-line:#F0DCA9;
+  --bad-bg:#FBE4DE; --bad-fg:#9E3F2C; --bad-line:#F2C9BF;
+  --info-bg:#DEEAF4; --info-fg:#1F5477; --info-line:#BED6E8;
+  --neu-bg:#E8EBE7; --neu-fg:#4C544C; --neu-line:#D6DBD4;
+  --e1:0 1px 2px rgba(21,26,23,.07),0 3px 8px -3px rgba(21,26,23,.09);
+  --e2:0 2px 4px rgba(21,26,23,.06),0 8px 20px -6px rgba(21,26,23,.14);
+  --e3:0 4px 8px rgba(21,26,23,.07),0 24px 48px -12px rgba(21,26,23,.22);
+  --ui:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --r-sm:5px; --r-md:9px; --r-lg:12px; --r-pill:999px;
+  --t-fast:120ms cubic-bezier(.2,0,0,1); --t-base:180ms cubic-bezier(.2,0,0,1);
+  --row-h:36px; --pad-y:9px; --pad-x:12px; --font-body:13.5px;
+  /* chrome — the navigation shell, separable from content so a theme can darken one and not the
+     other. These base values ARE Slate: light content, dark chrome, the default on every surface.
+     There is deliberately no prefers-color-scheme block anywhere in this file — see the note
+     above :root[data-theme="light"]. */
+  --chrome:#26322D; --chrome-hover:#2F3C36; --chrome-active:#38473F; --chrome-border:#38473F;
+  --chrome-text:#ECF1EB; --chrome-muted:#AEBAB1; --chrome-subtle:#9DAAA0;
+  --chrome-accent:#C6E85E; --chrome-accent-ink:#151A17;
+}
+/* Slate, stated explicitly as well as by default, so stamping data-theme="slate" is idempotent
+   and a stored choice of "slate" behaves exactly like never having chosen. Contrast measured
+   against #26322D: text 11.64:1, nav item 6.63:1, group label 5.51:1, active nav 7.05:1 on its
+   pill. The pill and the divider are decorative surfaces and are WCAG-exempt, per the same rule
+   that exempts --border. */
+:root[data-theme="slate"]{
+  --chrome:#26322D; --chrome-hover:#2F3C36; --chrome-active:#38473F; --chrome-border:#38473F;
+  --chrome-text:#ECF1EB; --chrome-muted:#AEBAB1; --chrome-subtle:#9DAAA0;
+  --chrome-accent:#C6E85E; --chrome-accent-ink:#151A17;
+}
+/* Light — content is already the base palette, so this restores the chrome to match it and
+   nothing else. Light is a chrome-only delta from Slate, which is the whole point of the split.
+
+   NOTE THE ABSENCE OF @media (prefers-color-scheme). It is deliberate and it is a product rule,
+   not an oversight: the theme must never change on its own. Following the OS would mean a
+   committee member who chose Light in the morning is handed Dark at sunset by a setting they
+   have forgotten they own — the theme changing itself, which is exactly what is forbidden. The
+   only thing that changes the theme is a person choosing one. */
+:root[data-theme="light"]{
+  --chrome:#FFFFFF; --chrome-hover:#F3F5F2; --chrome-active:#E3F0E9; --chrome-border:#DDE2DC;
+  --chrome-text:#151A17; --chrome-muted:#586058; --chrome-subtle:#636C63;
+  --chrome-accent:#16624A; --chrome-accent-ink:#FFFFFF;
+}
+:root[data-theme="dark"]{
+  --ground:#0F1311; --surface:#171C19; --surface-sunken:#131816; --surface-raised:#1E2420;
+  --surface-hover:#1C221E; --surface-active:#222925;
+  --border:#242B26; --border-subtle:#1D231F; --field-border:#68756D;
+  --text:#E8ECE7; --text-muted:#96A096; --text-subtle:#8A938A; --text-on-accent:#0B0F0C;
+  --accent:#45D18E; --accent-hover:#5EDDA0; --accent-subtle:#16281F; --accent-line:#20402F;
+  --ok-bg:#132A1F; --ok-fg:#68DCA4; --ok-line:#1E4030;
+  --warn-bg:#2B2214; --warn-fg:#DDB25C; --warn-line:#45351C;
+  --bad-bg:#2E1B16; --bad-fg:#E59683; --bad-line:#482A22;
+  --info-bg:#16232E; --info-fg:#7FB6DC; --info-line:#24384A;
+  --neu-bg:#1C221E; --neu-fg:#9AA39A; --neu-line:#2A312C;
+  --chrome:#171C19; --chrome-hover:#1C221E; --chrome-active:#16281F; --chrome-border:#242B26;
+  --chrome-text:#E8ECE7; --chrome-muted:#96A096; --chrome-subtle:#8A938A;
+  --chrome-accent:#45D18E; --chrome-accent-ink:#0B0F0C;
+  --e1:0 1px 2px rgba(0,0,0,.5),0 4px 12px -4px rgba(0,0,0,.5);
+  --e2:0 2px 4px rgba(0,0,0,.5),0 10px 24px -8px rgba(0,0,0,.62);
+  --e3:0 4px 8px rgba(0,0,0,.55),0 28px 56px -14px rgba(0,0,0,.72);
+}
+.roomy{ --row-h:48px; --pad-y:14px; --pad-x:16px; --font-body:15px; }
+*{box-sizing:border-box}
+/* Every inline icon gets a text-sized default. An <svg> with no width rule stretches to fill its
+   flex or grid track, which renders a full-width tick — twice now, in two different decks, from
+   dropping an icon into a container that happened not to size it. An element selector is the fix
+   because it has lower specificity than every component rule that already sets a size, so this
+   changes nothing that was already correct and catches everything that was not. */
+svg{width:1.05em;height:1.05em;flex:none}
+body{background:var(--ground);color:var(--text);font-family:var(--ui);font-size:var(--font-body);
+     line-height:1.5;margin:0;padding:26px 16px 70px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;display:flex;flex-direction:column;gap:26px}
+h1,h2,h3,h4{margin:0;text-wrap:balance}
+h1{font-size:clamp(24px,3.6vw,32px);line-height:1.14;font-weight:640;letter-spacing:-.022em}
+h2{font-size:18px;font-weight:640;letter-spacing:-.014em}
+h3{font-size:15px;font-weight:620;letter-spacing:-.008em}
+p{margin:0}
+.mono{font-family:var(--mono)}
+.num{font-variant-numeric:tabular-nums}
+.lbl{font-size:11px;text-transform:uppercase;letter-spacing:.07em;font-weight:650;color:var(--tone-fg,var(--text-subtle))}
+.mut{color:var(--text-muted)} .sub{color:var(--text-subtle)}
+:where(button,a,input,select,[tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-sm)}
+
+/* page chrome */
+.masthead{display:flex;flex-direction:column;gap:11px;border-bottom:1px solid var(--border);padding-bottom:20px}
+.lede{max-width:70ch;color:var(--text-muted);font-size:14.5px}
+.bar{display:flex;gap:11px;align-items:center;flex-wrap:wrap;background:var(--surface);
+     border:1px solid var(--border);border-radius:var(--r-md);padding:9px 12px;box-shadow:var(--e1)}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:var(--r-sm);overflow:hidden}
+.seg button{appearance:none;border:0;background:transparent;color:var(--text-muted);font:inherit;
+            font-size:12.5px;font-weight:580;padding:5px 13px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--border)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--text-on-accent)}
+
+/* screen frame */
+.screen{display:none;flex-direction:column;gap:14px}
+.screen.on{display:flex}
+.scrhead{display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--border-subtle);padding-bottom:10px}
+.scrid{font-family:var(--mono);font-size:11px;color:var(--text-subtle);letter-spacing:.05em}
+.scrnote{font-size:13px;color:var(--text-muted);max-width:76ch}
+.scrnote b{color:var(--text);font-weight:620}
+
+/* app shell */
+.app{border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;background:var(--ground);box-shadow:var(--e1)}
+.appbody{display:grid;grid-template-columns:180px minmax(0,1fr)}
+@media (max-width:820px){.appbody{grid-template-columns:1fr}.side{display:none}}
+.side{background:var(--chrome);border-right:1px solid var(--chrome-border);padding:11px 8px;display:flex;flex-direction:column;gap:1px}
+.brand{display:flex;align-items:center;gap:8px;padding:4px 7px 11px;font-weight:660;color:var(--chrome-text);font-size:13.5px;letter-spacing:-.01em}
+.brand .mk{width:19px;height:19px;border-radius:5px;background:var(--chrome-accent);display:grid;place-items:center;
+      color:var(--chrome-accent-ink);font-size:10.5px;font-weight:800;flex:none}
+.nv{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:var(--r-sm);font-size:12.5px;
+    color:var(--chrome-muted);text-decoration:none;cursor:pointer}
+.nv:hover{background:var(--chrome-hover);color:var(--chrome-text)}
+.nv.on{background:var(--chrome-active);color:var(--chrome-accent);font-weight:600}
+.nv svg{width:15px;height:15px;flex:none}
+.nv .ct{margin-left:auto}
+.nvg{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--chrome-subtle);font-weight:650;padding:11px 8px 3px}
+.main{display:flex;flex-direction:column;min-width:0}
+.top{display:flex;flex-wrap:wrap;gap:10px;justify-content:space-between;align-items:center;
+     padding:10px 14px;background:var(--surface);border-bottom:1px solid var(--border)}
+.crumb{font-size:11.5px;color:var(--text-subtle)}
+.body{padding:13px 14px;display:flex;flex-direction:column;gap:11px;min-width:0}
+
+/* primitives */
+.btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:12.5px;font-weight:600;
+     padding:7px 13px;border-radius:var(--r-md);border:1px solid transparent;cursor:pointer;white-space:nowrap}
+.btn-pri{background:var(--accent);color:var(--text-on-accent)}
+.btn-sec{background:var(--surface);color:var(--text);border-color:var(--field-border)}
+.btn-ghost{background:transparent;color:var(--text-muted)}
+.btn-danger{background:var(--bad-fg);color:var(--surface)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.sm{padding:5px 10px;font-size:12px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:620;padding:3px 9px;
+      border-radius:var(--r-pill);white-space:nowrap;border:1px solid transparent}
+.chip .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.chip .sq{width:6px;height:6px;background:currentColor;flex:none}
+.chip .tri{width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:7px solid currentColor;flex:none}
+.chip.ok{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-line)}
+.chip.warn{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-line)}
+.chip.bad{background:var(--bad-bg);color:var(--bad-fg);border-color:var(--bad-line)}
+.chip.info{background:var(--info-bg);color:var(--info-fg);border-color:var(--info-line)}
+.chip.neu{background:var(--neu-bg);color:var(--neu-fg);border-color:var(--neu-line)}
+.ct{display:inline-flex;min-width:18px;height:18px;padding:0 5px;border-radius:var(--r-pill);
+    background:var(--chrome-accent);color:var(--chrome-accent-ink);font-size:10.5px;font-weight:680;
+    align-items:center;justify-content:center;font-variant-numeric:tabular-nums}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+@media (max-width:700px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);min-width:0;
+      padding:11px 12px;box-shadow:var(--e1);display:flex;flex-direction:column;gap:3px}
+.card .v{font-family:var(--mono);font-size:19px;font-weight:640;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.tw{overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);box-shadow:var(--e1)}
+table.t{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+table.t th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-subtle);
+      font-weight:650;padding:8px var(--pad-x);border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface-sunken)}
+table.t td{padding:var(--pad-y) var(--pad-x);border-bottom:1px solid var(--border-subtle);font-size:13px;white-space:nowrap}
+table.t tbody tr:last-child td{border-bottom:0}
+table.t tbody tr:hover td{background:var(--surface-hover)}
+table.t tr.sel td{background:var(--accent-subtle)}
+.ta-r{text-align:right}
+.nm{font-weight:560}
+.ts{font-size:11.5px;color:var(--tone-fg,var(--text-subtle))}
+.tfoot td{border-top:1px solid var(--border);background:var(--surface-sunken);font-weight:660}
+.risk{border-left:3px solid transparent}
+.r-bad{border-left-color:var(--bad-fg)} .r-warn{border-left-color:var(--warn-fg)} .r-ok{border-left-color:var(--ok-fg)}
+.ban{display:flex;gap:9px;padding:10px 12px;border-radius:var(--r-md);border:1px solid;font-size:13px;align-items:flex-start}
+.ban b{font-weight:640}
+.ban.ok{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-line)}
+.ban.warn{background:var(--warn-bg);color:var(--warn-fg);border-color:var(--warn-line)}
+.ban.bad{background:var(--bad-bg);color:var(--bad-fg);border-color:var(--bad-line)}
+.ban.info{background:var(--info-bg);color:var(--info-fg);border-color:var(--info-line)}
+/* Subtle text sitting on a tone-tinted surface takes that tone's own foreground instead of the
+   neutral --text-subtle. Two reasons, and the second is the one that forced it. Semantically, a
+   caption inside a red card belongs to the red card. Measurably, --text-subtle is solved against
+   the neutral surfaces only, and the tinted backgrounds are darker than --surface: in light it
+   lands at 4.47:1 on --bad-bg and 4.46:1 on --info-bg, both just under AA, while every tone's own
+   -fg clears comfortably (5.39–7.11 light, 6.23–8.97 dark). Custom properties inherit, so setting
+   --tone-fg on the container is enough — no per-tone caption class, and no way to add a tinted
+   container later and forget. */
+.ban.ok,.tone-ok{--tone-fg:var(--ok-fg)}
+.ban.warn,.tone-warn{--tone-fg:var(--warn-fg)}
+.ban.bad,.tone-bad{--tone-fg:var(--bad-fg)}
+.ban.info,.tone-info{--tone-fg:var(--info-fg)}
+.ban.neu,.tone-neu{--tone-fg:var(--neu-fg)}
+.ban svg{width:15px;height:15px;flex:none;margin-top:2px}
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-md);padding:13px;min-width:0;
+       box-shadow:var(--e1);display:flex;flex-direction:column;gap:10px}
+.fil{display:flex;gap:6px;flex-wrap:wrap}
+.fc{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:5px 10px;border-radius:var(--r-pill);
+    border:1px solid var(--border);background:var(--surface);color:var(--text-muted);cursor:pointer}
+.fc.on{background:var(--accent-subtle);border-color:var(--accent-line);color:var(--accent);font-weight:600}
+.cbx{width:15px;height:15px;border-radius:4px;border:1.5px solid var(--field-border);background:var(--surface);
+     display:inline-flex;align-items:center;justify-content:center;flex:none}
+.cbx.on{background:var(--accent);border-color:var(--accent);color:var(--text-on-accent)}
+.cbx svg{width:10px;height:10px}
+.inp{font:inherit;font-size:13px;padding:7px 10px;border-radius:var(--r-sm);border:1px solid var(--field-border);
+     min-width:0;
+     background:var(--surface);color:var(--text);width:100%}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field>label{font-size:12px;font-weight:600}
+.empty{display:flex;flex-direction:column;align-items:center;gap:6px;padding:26px 16px;text-align:center;
+       background:var(--surface-sunken);border:1px dashed var(--border);border-radius:var(--r-md)}
+.drop{border:1.5px dashed var(--field-border);border-radius:var(--r-md);padding:20px;text-align:center;
+      background:var(--surface-sunken);color:var(--text-muted);font-size:13px}
+.mtr{height:6px;border-radius:var(--r-pill);background:var(--neu-bg);overflow:hidden}
+.mtr i{display:block;height:100%;background:var(--accent)}
+.slots{display:flex;gap:5px}
+.slot{width:34px;height:34px;border-radius:var(--r-sm);display:grid;place-items:center;font-size:11px;font-weight:650;
+      border:1px solid var(--border);background:var(--surface-sunken);color:var(--text-subtle);font-family:var(--mono)}
+.slot.fill{background:var(--ok-bg);color:var(--ok-fg);border-color:var(--ok-line)}
+.slot.anom{background:var(--bad-bg);color:var(--bad-fg);border-color:var(--bad-line)}
+.slot.excl{background:var(--neu-bg);color:var(--neu-fg);border-style:dashed}
+
+/* states strip */
+.states{display:flex;flex-direction:column;gap:9px}
+.stgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}
+.st{border:1px solid var(--border);border-radius:var(--r-md);background:var(--surface);overflow:hidden}
+.st .sh{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:650;color:var(--text-subtle);
+        padding:6px 10px;border-bottom:1px solid var(--border-subtle);background:var(--surface-sunken)}
+.st .sb{padding:11px;font-size:12.5px;min-height:74px;display:flex;flex-direction:column;gap:6px;justify-content:center}
+.sk{height:9px;border-radius:4px;background:var(--surface-sunken);border:1px solid var(--border-subtle)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}

@@ -825,5 +825,5 @@ an amendment or a contract-permitted deterministic rescale, and both write an au
 **Responsive:** desk-first; readable to 360px since ops may handle this away from a desk.
 **Offline:** blocked.
 **Copy:** count discrepancy — "60 more lights than surveyed in Basement B. This raises the
-represented count from 1,200 to 1,260 and the monthly fee by about ₹2,400. It needs a contract
+represented count from 1,200 to 1,260 and the monthly fee by about ₹6,700. It needs a contract
 amendment before it can take effect."

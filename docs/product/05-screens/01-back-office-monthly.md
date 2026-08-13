@@ -100,7 +100,7 @@ incoming file is classified against what is stored, and the report is what the o
 | Class | Definition | Default | How it is reported |
 |---|---|---|---|
 | **New** | No stored reading for that interval | Imported | A count: "1,104 new readings" |
-| **Identical** | Stored value equals incoming | Ignored | **Not reported at all** |
+| **Identical** | Stored value equals incoming **exactly** | Ignored | **Not reported at all** |
 | **Conflicting** | Stored value differs from incoming | **Existing value kept** | Full side-by-side list |
 | **Missing** | Inside the period, no reading from either source | Nothing imported | Gap list |
 
@@ -123,10 +123,34 @@ the expected path, not a special case.
 **Superseded values are retained, never deleted.** The prior value, its source, and who replaced it
 are kept, so a recalculation stays reproducible and INV-02's provenance survives the overwrite.
 
+**"Identical" means exactly equal** (user's decision, 2026-08-13). No rounding, no tolerance band.
+`12.4` against a stored `12.437` is a conflict, not a match. This is the strictest reading and it
+never hides a real difference — chosen over precision-rounding for exactly that reason.
+
+The cost is accepted and designed around rather than argued with: **a vendor changing their export
+precision makes every row in the month a conflict.** The panel absorbs that volume without
+resolving anything automatically —
+
+- Conflicts group by day, collapsed, with per-day counts.
+- When conflicts share a shape, the panel says so at the top: *"All 744 conflicts differ by less
+  than 0.01 kWh. This usually means the vendor changed their export precision."* That is a hint
+  about what the operator is looking at — **not** a filter, a default, or an auto-resolve.
+- Select-all still requires the same confirmation, restating the full count.
+
+The residual risk is recorded as **ASSUM-25**: that vendor export precision is stable enough for
+exact matching to stay workable. If a vendor changes it mid-contract, one month's upload becomes a
+several-thousand-row review, and this decision should be revisited rather than worked around.
+
 **Released months cannot be overwritten at all.** An interval already inside a released calculation
 is listed as blocked, with the reason, and no checkbox. INV-03 makes this absolute — confirmation
 does not unlock it, because an invoice whose underlying readings changed after issue is an invoice
 that no longer matches the evidence a dispute would be settled against.
+
+**A closed month must be reopened before it can be overwritten** (user's decision, 2026-08-13). A
+month ops has closed on SCR-082 but the accountant has not yet released through SCR-092 is **not**
+overwritable in place. The attempt is refused and points at the readiness board, where reopening is
+an explicit act that resets the accountant's review. The extra step is the point: without it, PER-08
+could approve figures that changed underneath them and never be told.
 
 **Gaps are reported, never filled.** The missing list feeds CON-12's coverage rule. The screen
 states the count and the dates; it does not interpolate, average, or carry forward.
@@ -159,6 +183,8 @@ an implausible deviation.** Three defences, all specified here rather than left 
 | Reconciled — conflicts | parse finds disagreements | `warn` panel with the side-by-side list, nothing pre-selected | Review, select, commit |
 | Reconciled — no-op | every row identical | "These readings are already in the system. Nothing to import." Commit disabled | Pick another file |
 | Blocked — released month | conflicts fall in a released calculation | Those rows listed without checkboxes and the reason stated | Commit the rest |
+| Blocked — closed month | period closed, not yet released | Overwrite refused with a link to reopen on the readiness board; new rows still importable | Reopen, or commit new only |
+| Reconciled — bulk conflict | every row differs | Grouped-by-day list plus the shape hint; nothing pre-selected | Review, select, commit |
 | Success | commit | Toast naming what was written *and what was left alone*; anomalies route to SCR-081 | Go to review |
 
 ### Exits
@@ -182,15 +208,12 @@ added. 312 already matched and were left alone."
 **Open questions:**
 - **ASSUM-16** (vendor export shape is stable) is load-bearing here — if the vendor changes their
   CSV, FLOW-09 step 1 has *no system visibility at all*. Worth a monitoring feature.
-- **What counts as "identical"** (FEAT-107 risk). If it means an exact value match, a vendor
-  re-export at a different decimal precision — `12.4` against a stored `12.437` — classifies every
-  row as a conflict and makes the reconciliation useless in exactly the case it exists for.
-  Specified provisionally as **equal when rounded to the stored precision**; needs confirming
-  against a real pair of vendor exports.
-- **Overwriting a closed-but-not-released month.** INV-03 blocks released calculations absolutely.
-  A month that is closed on SCR-082 but not yet released through SCR-092 is currently specified as
-  overwritable with the standard confirmation, which silently invalidates the accountant's review.
-  Flagged for decision.
+- **Resolved 2026-08-13 — "identical" means exactly equal.** No rounding, no tolerance. Residual
+  risk accepted as **ASSUM-25** (vendor export precision is stable); a precision change turns one
+  month into a several-thousand-row review, mitigated by grouping and a shape hint rather than by
+  auto-resolving.
+- **Resolved 2026-08-13 — a closed month must be reopened before overwrite.** Refused in place,
+  with a link to the readiness board.
 
 ---
 

@@ -2949,7 +2949,7 @@ stored changes unless the operator selects it and confirms.
 | Class | Definition | Default | Reported |
 |---|---|---|---|
 | **New** | No stored reading for that interval | Imported | Count only |
-| **Identical** | Stored value equals incoming value | Ignored | **Not reported at all** — silent |
+| **Identical** | Stored value equals incoming **exactly** | Ignored | **Not reported at all** — silent |
 | **Conflicting** | Stored value differs from incoming value | **Existing value kept** | Full side-by-side list |
 | **Missing** | Interval inside the selected period with a reading in neither | Nothing imported | Listed as a gap |
 
@@ -2967,6 +2967,14 @@ stored changes unless the operator selects it and confirms.
    survives an overwrite.
 6. **A reading already used in a released calculation cannot be overwritten at all** (INV-03), with
    or without confirmation. Those rows are listed as blocked, with the reason.
+6b. **A closed month must be reopened before overwrite** (user's decision, 2026-08-13). A period
+   closed on SCR-082 but not yet released through SCR-092 refuses overwrites in place; reopening is
+   an explicit act that resets the accountant's review, so PER-08 can never approve figures that
+   changed underneath them.
+6c. **"Identical" is exact equality** (user's decision, 2026-08-13) — no rounding, no tolerance.
+   `12.4` against a stored `12.437` is a conflict. Nothing real is ever hidden; the cost is that a
+   vendor precision change makes every row a conflict, absorbed by grouping and a shape hint rather
+   than by auto-resolving (ASSUM-25).
 7. **Missing intervals are reported, never fabricated.** The gap list feeds CON-12's coverage rule;
    it is information, not an imputation.
 8. **The report is produced on both ingest paths.** A scheduled API fetch that would change a
@@ -2991,9 +2999,9 @@ plus a reconciliation report persisted against the upload batch.
 **Depends on:** FEAT-043 (upload), FEAT-044 (normalisation), FEAT-104 (the API path it reconciles
 against).
 
-**Risks.** If "identical" means an exact value match, a vendor re-export at a different decimal
-precision would classify every row as a conflict and make the feature useless in exactly the
-situation it exists for — see the open question on SCR-080.
+**Risks.** Exact matching was chosen deliberately (rule 6c), so a vendor changing export precision
+turns one month into a several-thousand-row review. Mitigated by day-grouping and a shape hint, not
+by auto-resolving. Tracked as ASSUM-25; revisit the rule rather than work around it if it happens.
 
 ---
 

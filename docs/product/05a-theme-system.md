@@ -502,7 +502,7 @@ real problem at production size, not a rejected idea, just not applied.
 | Asset | Spec | File |
 |---|---|---|
 | Logomark | FT ligature, white on `#2E9E68` tile, lime dot | `brand/logomark.svg` |
-| Logomark, single-ink | FT ligature, dot folded into one colour, no tile, `#16624A` — print/watermark only | `brand/logomark-mono.svg` |
+| Logomark, single-ink | Same geometry as the logomark, one colour, no tile, `#16624A` — print/watermark only | `brand/logomark-mono.svg` |
 | Wordmark lockup, light | Logomark + "FirsThing" in `--text` | `brand/wordmark-lockup-light.svg` |
 | Wordmark lockup, chrome | Logomark unchanged + "FirsThing" in `--chrome-text` | `brand/wordmark-lockup-dark.svg` |
 | Favicon / app icon | `logomark.svg` itself — already tuned and confirmed legible at 16px, no separate crop needed | `brand/logomark.svg` |
@@ -524,9 +524,9 @@ same relative depth into the tick — verified by rendering all four from the ac
 side, not by re-describing the fix.
 
 **Clear space & minimum size.** Clear space equal to the dot's diameter on every side of the tile.
-Do not render the standalone logomark below 24px — under that, treat the dot-and-tick detail as a
-flat single dot rather than letting it become noise, exactly what `logomark-mono.svg` already does
-(the tick folds into the dot at r=7 instead of staying a separate stroke).
+Do not render the standalone logomark below 24px — under that, the dot-and-tick detail starts
+reading as noise rather than a shape (this is a live risk, not yet mitigated with a dedicated
+tiny-size cut of the mark — see "not yet done" below).
 
 **Misuse rules.** Never recolour the dot — it's the one place lime appears on the mark, and giving
 that up would collide with §3.2's "appears at most once per screen" rule the moment a screen shows
@@ -538,8 +538,11 @@ one.
 
 **Not yet done:** an actual multi-resolution `.ico`/PNG export pipeline and platform app-icon sizes
 with their own safe-area padding rules — `logomark.svg` is the source of truth those get generated
-from, not a replacement for doing it — and a wordmark-only lockup (no icon) for contexts too narrow
-for the full lockup.
+from, not a replacement for doing it; a wordmark-only lockup (no icon) for contexts too narrow for
+the full lockup; and a dedicated tiny-size (≤24px) simplification of the mark, since nothing today
+actually reduces the dot-and-tick detail for that range — an earlier draft claimed
+`logomark-mono.svg` did this and it was corrected once the file's real geometry was checked (see
+above) — this is a genuine, currently-unmitigated gap, not a solved one.
 
 ### 3.12 Not yet covered
 

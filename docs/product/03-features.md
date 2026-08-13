@@ -29,7 +29,7 @@ existing briefs to preserve grouping would break every cross-reference here for 
 | CAP-20 | Offer & agreement lifecycle (offer generation from demo numbers, accept/counter/reject negotiation, print/notarize, field-executive delivery/pickup logistics, per-step follow-up & lead-health tracking — CON-23) | new | SUR-01 | SUR-01 (customer sees offer/status) | no | expanded (FEAT-027..032) |
 | CAP-21 | Full installation execution & batch tracking (per-role dashboards, daily review gate CON-21, blockers, requirement changes, completion certificate) | new | SUR-01 + SUR-02 (shared live state) | both | yes | expanded (FEAT-033..038) |
 | CAP-01 | Circuit & service-line data model (lighting + pumps built; solar/wastewater modeled-only) | GOAL-03 | SUR-01 | SUR-02 | yes | expanded (FEAT-039..042) |
-| CAP-03 | Meter reading ingest & validation. **Extended 2026-08-12 (user):** two ingest paths, not one — the manual monthly CSV (CON-30) *plus* a scheduled vendor-API fetch with permission-gated on-demand refresh and three-way ingest-health alerting (CON-43, FEAT-104/105/106). **Confirmed 2026-08-10 (CON-30):** CSV downloaded directly from the meter vendor's app (per circuit, not per society), format varies by vendor, AI-assisted normalization (same pattern as Gemini invoice extraction) with clarifying questions on ambiguous shape, raw file + normalized readings both persisted. Plus missing-day handling (CON-12), upload-time anomaly detection (INV-09) | JTBD-01 | SUR-01 | — | no | expanded (FEAT-043..047) |
+| CAP-03 | Meter reading ingest & validation. **Extended again 2026-08-13 (user):** neither path overwrites a stored reading by default — every upload produces a reconciliation report and overwriting is an explicit, per-row, confirmed act (FEAT-107). **Extended 2026-08-12 (user):** two ingest paths, not one — the manual monthly CSV (CON-30) *plus* a scheduled vendor-API fetch with permission-gated on-demand refresh and three-way ingest-health alerting (CON-43, FEAT-104/105/106). **Confirmed 2026-08-10 (CON-30):** CSV downloaded directly from the meter vendor's app (per circuit, not per society), format varies by vendor, AI-assisted normalization (same pattern as Gemini invoice extraction) with clarifying questions on ambiguous shape, raw file + normalized readings both persisted. Plus missing-day handling (CON-12), upload-time anomaly detection (INV-09) | JTBD-01 | SUR-01 | — | no | expanded (FEAT-043..047) |
 | CAP-04 | Billing & savings calculation engine (extrapolation, fixed-fee model, tolerance band, light-count rescale, partial-month proration CON-22). **Confirmed 2026-08-10 (CON-33):** savings calc runs automatically once data's validated; the formal invoice is generated in **Zoho** (external), aspirational API integration, manual upload fallback (existing `/admin/invoices` flow); savings report is native to the app; accountant review gate before sending | JTBD-01 | SUR-01 | SUR-01 (customer portal) | no | expanded (FEAT-048..054) |
 | CAP-05 | Deviation review & billing decisions. **Confirmed 2026-08-10 (CON-31):** chart-first initial view → assign to inspector → inspector investigates/resolves → ops records root cause + decision → resolved-and-closed, or escalated to **management** for a benchmark/billing adjustment call if unresolved | JTBD-02 | SUR-01 | SUR-02 (inspector dispatched) | yes | expanded (FEAT-055..058) |
 | CAP-06 | Invoice & savings report generation (recurring monthly — distinct from CAP-18's one-time demo report) + cross-sell projection (CON-29) | JTBD-01, JTBD-06 | SUR-01 | SUR-01 (customer portal) | no | expanded (FEAT-059..061) |
@@ -158,6 +158,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 | FEAT-104 | Scheduled vendor API reading fetch | CAP-03 | system | JTBD-01 | — | L | proposed |
 | FEAT-105 | On-demand reading refresh (permission-gated) | CAP-03 | PER-01 | JTBD-01 | SUR-01 | M | proposed |
 | FEAT-106 | Ingest health monitoring & alerting | CAP-03 | PER-01 | GOAL-01, INV-09 | SUR-01 | M | proposed |
+| FEAT-107 | Upload reconciliation & overwrite control | CAP-03 | PER-01 | JTBD-01, INV-02 | SUR-01 | M | proposed |
 
 ## 3. Feature briefs
 
@@ -2923,6 +2924,78 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Risks:** Depends partly on ASSUM-24 for the API-failure branch; the missing-readings branch does not, which is why it is the minimum viable version.
 
 ## 4. Feature interaction matrix
+
+### FEAT-107 — Upload reconciliation & overwrite control
+
+**Capability:** CAP-03 · **Actor:** PER-01 · **JTBD:** JTBD-01 · **Surface:** SUR-01
+**Size:** M · **Status:** proposed · **Added:** 2026-08-13 (user's explicit spec)
+
+**Problem.** Once readings can arrive twice — a scheduled API fetch and a manual upload of the same
+month — every upload lands on top of data that may already be there. CON-43's original rule ("the
+CSV wins") applied the newer value automatically. That is the wrong default: it lets a routine
+re-upload silently rewrite the evidence a released invoice was calculated from, and it gives the
+operator no view of what changed. An operator uploading a month needs to know, before anything is
+written, exactly what is new, what already agrees, what disagrees, and what is still absent.
+
+**Solution.** After a file is parsed and normalised but **before anything is committed**, classify
+every interval in the incoming file against what is already stored, and report it. Nothing already
+stored changes unless the operator selects it and confirms.
+
+**Behavioral rules.**
+
+1. Classification runs at the **stored reading interval** (hourly where the vendor exports hourly)
+   and is summarised by day for legibility. Four classes, exhaustive:
+
+| Class | Definition | Default | Reported |
+|---|---|---|---|
+| **New** | No stored reading for that interval | Imported | Count only |
+| **Identical** | Stored value equals incoming value | Ignored | **Not reported at all** — silent |
+| **Conflicting** | Stored value differs from incoming value | **Existing value kept** | Full side-by-side list |
+| **Missing** | Interval inside the selected period with a reading in neither | Nothing imported | Listed as a gap |
+
+2. **Identical rows are silently ignored** — no warning, no row, no count. Re-uploading the same
+   file twice is a no-op that reports nothing, because the common case must not train operators to
+   dismiss warnings.
+3. **Conflicts are never applied automatically.** The panel lists each conflicting interval with
+   the stored value, the incoming value, the difference, and where the stored value came from (API
+   fetch, earlier upload, or manual correction).
+4. **Overwriting requires two deliberate acts:** selecting the conflicts to apply (per row, with a
+   select-all), then confirming a warning that restates the count and the affected days. Default
+   selection is empty; an unchecked conflict is left alone.
+5. **Superseded values are retained, never deleted** — the prior value, its source, and who
+   replaced it are kept, so a recalculation stays reproducible and INV-02's provenance chain
+   survives an overwrite.
+6. **A reading already used in a released calculation cannot be overwritten at all** (INV-03), with
+   or without confirmation. Those rows are listed as blocked, with the reason.
+7. **Missing intervals are reported, never fabricated.** The gap list feeds CON-12's coverage rule;
+   it is information, not an imputation.
+8. **The report is produced on both ingest paths.** A scheduled API fetch that would change a
+   stored value does not change it either — it records the conflict and surfaces it, because
+   no-silent-overwrite is a property of the data, not of the screen.
+
+**Acceptance criteria.**
+
+- AC-1 A file whose rows all match what is stored produces no warning and writes nothing.
+- AC-2 A differing value for a stored interval does not change that value on commit unless the row
+  was explicitly selected and the warning confirmed.
+- AC-3 The panel shows stored value, incoming value, difference and provenance for every conflict.
+- AC-4 Intervals inside the period with no reading from either source are listed as gaps.
+- AC-5 An overwrite retains the superseded value and records who replaced it and when.
+- AC-6 An overwrite attempt on a reading inside a released calculation is refused, and says why.
+- AC-7 The same classification runs on the API fetch path and surfaces conflicts without applying
+  them.
+
+**Data touched:** `Reading` (add `source`, `supersededValue`, `supersededAt`, `supersededByUserId`),
+plus a reconciliation report persisted against the upload batch.
+
+**Depends on:** FEAT-043 (upload), FEAT-044 (normalisation), FEAT-104 (the API path it reconciles
+against).
+
+**Risks.** If "identical" means an exact value match, a vendor re-export at a different decimal
+precision would classify every row as a conflict and make the feature useless in exactly the
+situation it exists for — see the open question on SCR-080.
+
+---
 
 ### 4.1 The lead-to-cash spine
 

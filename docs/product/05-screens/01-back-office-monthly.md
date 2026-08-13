@@ -25,12 +25,20 @@ society or billing one wrongly.
 right circuit, without silently mis-mapping anything.
 **Primary action:** upload files and confirm the circuit each belongs to.
 
-**Two ingest paths since CON-43 (2026-08-12).** This screen is **path A** — the manual monthly CSV.
-Path B is the scheduled vendor-API fetch (SCR-084, FEAT-104). They coexist deliberately: on a
-same-circuit-same-day conflict **the CSV wins**, because the vendor's own export is what a dispute
-is settled against. The screen therefore shows, per circuit, whether readings are already present
-from the API — so an operator uploading a month knows they are reconciling rather than filling a
-void, and sees any value that will be superseded.
+**Two ingest paths, and this one is primary — for now (CON-43, amended 2026-08-13).** This screen
+is **path A**, the manual upload. Path B is the scheduled vendor-API fetch (SCR-084, FEAT-104).
+Until that integration exists, **this screen carries the entire monthly volume**. Once it exists,
+the fetch becomes primary and this screen becomes the exception path — used when auto-fetch has
+failed and readings are needed urgently. Neither the screen nor its permissions change at that
+point; only which one does the routine work. The empty state and the progress metric change
+register, though, and that is specified below.
+
+**Nothing already stored is ever overwritten by default.** This is the rule the screen exists to
+enforce (CON-43, FEAT-107). An upload lands on top of data that may already be there — from the API
+fetch, from an earlier upload, or from a manual correction — and an incoming value that disagrees
+with a stored one is **not applied**. It is reported, and applying it takes two deliberate acts.
+The earlier "CSV wins" rule was replaced because automatic supersession let a routine re-upload
+silently rewrite the evidence a released invoice was calculated from.
 
 **Volume is the design problem.** FLOW-09 runs once per *circuit*, not per society: ~90 files a
 month today, 800+ at GOAL-07. FEAT-043 was specified as single-file upload; FEAT-099 (found in
@@ -56,7 +64,8 @@ one at a time is the single most likely place the 17-day window breaks.
 | Body | Per-file row | filename, detected society, detected circuit, status | table | One row per dropped file |
 | Body | Mapping panel | Gemini's column→field mapping | editable table | Only shown for files needing confirmation |
 | Body | Preview | first 10 normalised rows | date + kWh | Shown before commit, always |
-| Body | **Conflict list** | rows already present from the API fetch | `warn` | Names each superseded value and its difference (CON-43) |
+| Body | **Reconciliation report** | classification of every incoming interval against what is stored | see below | The heart of the screen (FEAT-107) |
+| Body | Circuit context | benchmark + last month's daily mean | beside the incoming data | Makes an order-of-magnitude mis-mapping visible before commit |
 
 ### Actions
 
@@ -67,7 +76,8 @@ one at a time is the single most likely place the 17-day window breaks.
 | Change circuit | circuit dropdown | ops | Re-attaches the file | required if AI-detected | Row re-validates | — |
 | Commit all | header button | ops | Commits every `Ready` file in one batch | modal listing counts | Toast; redirect to SCR-081 if any anomalies | Partial failure commits the good ones and lists the rest |
 | Quarantine | Skip on a file | ops | Moves it to SCR-083 with a reason | none | Row removed | — |
-| Commit over API data | on a conflict | ops | CSV values supersede the API's for those circuit-days; the API values are retained, not deleted | modal listing the differences | Conflict recorded, visible on SCR-084 | Blocked for any day already in a released calculation (INV-03) |
+| Select conflicts | per-row checkbox, with select-all | ops | Marks which stored values to replace. **Default is none selected** | none | Row marked; commit button restates the count | — |
+| Apply overwrites | Commit, with conflicts selected | ops | Replaces the selected stored values; the prior value, its source and the user are retained | **modal restating the count and the affected days, requiring explicit confirm** | Overwrites applied; audit rows written | Blocked per row for any interval in a released calculation (INV-03) |
 
 ### Inputs & validation
 
@@ -81,6 +91,45 @@ one at a time is the single most likely place the 17-day window breaks.
 
 **Validation timing:** on file drop (structure), then again on commit (business rules).
 **Half-completed state:** mappings persist per file for 24h; a refresh restores the queue.
+
+### Reconciliation: what an upload does to what is already there
+
+Runs after parsing and normalisation, **before anything is committed**. Every interval in the
+incoming file is classified against what is stored, and the report is what the operator acts on.
+
+| Class | Definition | Default | How it is reported |
+|---|---|---|---|
+| **New** | No stored reading for that interval | Imported | A count: "1,104 new readings" |
+| **Identical** | Stored value equals incoming | Ignored | **Not reported at all** |
+| **Conflicting** | Stored value differs from incoming | **Existing value kept** | Full side-by-side list |
+| **Missing** | Inside the period, no reading from either source | Nothing imported | Gap list |
+
+**Identical rows are silent, deliberately.** Re-uploading the same file is a no-op that says
+nothing. The common case must not produce a warning, because an operator who dismisses a warning
+ninety times a month will dismiss the ninety-first without reading it — and the ninety-first is the
+one that matters.
+
+**The conflict list is a comparison, not a notification.** Per conflicting interval: the stored
+value, the incoming value, the difference, and **where the stored value came from** — API fetch,
+an earlier upload, or a manual correction. Provenance is a column because "the API says 41.2, this
+file says 43.8" and "someone typed 41.2 last week, this file says 43.8" call for different
+decisions.
+
+**Overwriting takes two deliberate acts.** A per-row checkbox (with select-all), then a
+confirmation modal restating the count and the affected days. Nothing is pre-selected. Committing
+with no conflicts selected imports the new rows and leaves every stored value untouched — which is
+the expected path, not a special case.
+
+**Superseded values are retained, never deleted.** The prior value, its source, and who replaced it
+are kept, so a recalculation stays reproducible and INV-02's provenance survives the overwrite.
+
+**Released months cannot be overwritten at all.** An interval already inside a released calculation
+is listed as blocked, with the reason, and no checkbox. INV-03 makes this absolute — confirmation
+does not unlock it, because an invoice whose underlying readings changed after issue is an invoice
+that no longer matches the evidence a dispute would be settled against.
+
+**Gaps are reported, never filled.** The missing list feeds CON-12's coverage rule. The screen
+states the count and the dates; it does not interpolate, average, or carry forward.
 
 ### The mis-mapping problem
 
@@ -106,7 +155,11 @@ an implausible deviation.** Three defences, all specified here rather than left 
 | Error — network | upload fails | Per-file retry; other rows unaffected | Retry |
 | Error — permission | non-ops role | SCR-221 | — |
 | Error — AI unavailable | Gemini down | Banner: "Automatic column detection is unavailable. Map the columns yourself and carry on." Fields revealed for manual mapping — the flow is **not blocked** | Map manually |
-| Success | commit | Toast + progress advances; anomalies route to SCR-081 | Go to review |
+| Reconciled — clean | parse finds no conflicts | "1,104 new readings, nothing already stored disagrees." Commit is a single action | Commit |
+| Reconciled — conflicts | parse finds disagreements | `warn` panel with the side-by-side list, nothing pre-selected | Review, select, commit |
+| Reconciled — no-op | every row identical | "These readings are already in the system. Nothing to import." Commit disabled | Pick another file |
+| Blocked — released month | conflicts fall in a released calculation | Those rows listed without checkboxes and the reason stated | Commit the rest |
+| Success | commit | Toast naming what was written *and what was left alone*; anomalies route to SCR-081 | Go to review |
 
 ### Exits
 
@@ -122,9 +175,22 @@ an implausible deviation.** Three defences, all specified here rather than left 
 **Performance:** a 30-day hourly CSV normalises in ≤5s; past that it becomes a background job with
 a toast.
 **Copy:** empty — "Drop this month's meter exports here. One file per circuit; a whole folder is
-fine." Commit — "Commit 12 files?" / "12 circuits validated for July 2026."
-**Open questions:** ASSUM-16 (vendor export shape is stable) is load-bearing here — if the vendor
-changes their CSV, FLOW-09 step 1 has *no system visibility at all*. Worth a monitoring feature.
+fine." Commit — "Commit 12 files?" / "12 circuits validated for July 2026." Overwrite confirm —
+"Replace 14 stored readings across 6 days for Basement parking? The current values are kept on
+record, but this circuit's July figures will be recalculated." Clean commit — "1,104 readings
+added. 312 already matched and were left alone."
+**Open questions:**
+- **ASSUM-16** (vendor export shape is stable) is load-bearing here — if the vendor changes their
+  CSV, FLOW-09 step 1 has *no system visibility at all*. Worth a monitoring feature.
+- **What counts as "identical"** (FEAT-107 risk). If it means an exact value match, a vendor
+  re-export at a different decimal precision — `12.4` against a stored `12.437` — classifies every
+  row as a conflict and makes the reconciliation useless in exactly the case it exists for.
+  Specified provisionally as **equal when rounded to the stored precision**; needs confirming
+  against a real pair of vendor exports.
+- **Overwriting a closed-but-not-released month.** INV-03 blocks released calculations absolutely.
+  A month that is closed on SCR-082 but not yet released through SCR-092 is currently specified as
+  overwritable with the standard confirmation, which silently invalidates the accountant's review.
+  Flagged for decision.
 
 ---
 

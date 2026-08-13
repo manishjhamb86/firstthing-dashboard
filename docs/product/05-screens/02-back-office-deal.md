@@ -248,9 +248,11 @@ check catches it."* Nothing later in the system will catch an error confirmed he
 
 | Region | Element | Data source | Format | Notes |
 |---|---|---|---|---|
-| Header | Society, surveyor, date, completeness | | CMP-02 | Partial saves are flagged, not hidden |
+| Header | Society, **surveyors**, date, completeness | | CMP-02 | Partial saves are flagged, not hidden. A team survey names everyone who captured, not one surveyor (CON-44) |
+| Banner | **Contested and uncovered areas** | §0.1b reconciliation | `warn` | Present only on a team survey. Contested areas were resolved in the field before submission; this states *how* each was resolved and by whom, because that judgement is now part of the count this screen is signing off |
 | Section | Society profile | CON-28a: coordinates, committee with posts, RWA members, next election | | Election date matters — a committee changing mid-negotiation is a real risk |
 | Section | Lighting inventory by area | CON-28b per-area counts | CMP-01 | **The number that decides billing for the term** |
+| Section | Per-area capture provenance | who counted each area, and when | inline on each row | On a team survey. An area counted by one person and an area reconciled from two disagreeing counts are not equally trustworthy, and the reviewer should be able to tell them apart |
 | Section | Circuit selection, one per light type | CMP-09 | | With CON-16 eligibility per circuit |
 | Section | Pump audit | CON-28c per-unit assets with photos | CMP-15 | |
 | Section | Photos | CMP-15 | | Every count should have one |

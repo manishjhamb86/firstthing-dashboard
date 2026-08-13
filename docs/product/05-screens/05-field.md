@@ -41,7 +41,7 @@ and both are always visible.
 | **Retention** | Synced records for a society stay on the device for **7 days** after the visit closes, then are purged. Unsynced records are never purged, at any age, for any reason. |
 | **Cold start offline** | The app opens to SCR-171 from cache with the stale-data banner, and every downloaded visit remains fully workable. A cold start with an empty cache and no network is the one genuinely blocked case → SCR-223. |
 | **Two devices, one person** | Not supported concurrently. Signing in on a second device warns that unsynced work exists on another and offers nothing else — the queue does not migrate. |
-| **Two people, one survey** | Not supported at launch — see ASSUM-25. One assignee owns a survey; a second person's phone opens it read-only. |
+| **Two people, one visit** | **Supported, on every visit type** (user's decision 2026-08-13, CON-44). A visit carries a team, not an owner. See §0.1b — this is the one place the offline model gets genuinely harder. |
 
 **Conflict.** Field capture is overwhelmingly create-only, which is why this stays simple: the
 device generates the record ID, so two concurrent creates cannot collide. For the small number of
@@ -49,6 +49,63 @@ edits (a corrected count, a re-answered checklist item) the rule is **last write
 and the loser is not discarded** — it is kept as a superseded revision visible on SCR-014. Where the
 office has already acted on a value (a survey confirmed, a benchmark locked), the device's late edit
 is **rejected**, not merged, and comes back as a poison item naming what happened.
+
+### 0.1b Several people, one visit
+
+**A visit has a team, not an owner** (CON-44). A 1,500-light society is surveyed by two people —
+one walking the towers, one in the pump room — and an installation day runs three technicians in
+three blocks. "Assignee" everywhere in this document means *any member of the visit's team*; a
+phone belonging to someone not on the team still opens the visit read-only.
+
+**What is not at risk.** Record IDs are generated on the device (§0.1), so two people creating rows
+at the same time cannot collide, offline or on. There is no merge problem in the database sense and
+none is specified.
+
+**What is at risk is double-counting, and it reaches the bill.** If two people both count the
+second-floor corridor, the survey reports 60 lights where there are 30. That count sets the
+represented light count for its circuit (CON-11), which sets the benchmark, which sets the fee —
+and it is discovered, if at all, months later as an unexplained deviation. Everything below exists
+for that one failure, not for write safety.
+
+#### Area is the unit of work
+
+Work partitions by **area** — a tower, a block, a level, a basement — not by section and not by
+light type. An area is the smallest thing one person can finish alone and the natural thing two
+people divide.
+
+| Rule | Behaviour |
+|---|---|
+| **Claim** | Opening an area for capture claims it for that person. The claim is **advisory and optimistic** — it is recorded locally and synced like any other write, because a lock cannot be acquired with no network. |
+| **Visible** | Every team member's screen shows each area's state: unclaimed, claimed by *name*, or complete. Online this is near-live; offline it is as of last sync, and labelled with that time. |
+| **Claiming a claimed area** | Allowed, with an interstitial naming the person and when they claimed it: *"Priya started Tower B 40 minutes ago. Count it anyway?"* Not blocked — the other person may have left, and a hard block strands work. |
+| **Colliding claims** | Two offline claims on one area both sync successfully. Neither is rejected. The area is marked **contested** and both sets of rows are kept. |
+| **Never** | Two people's rows for one area are **never summed, never deduplicated, and never silently merged**. |
+
+#### Reconciliation at submission
+
+A survey cannot be submitted while any area is contested or any contributor has unsynced work.
+
+| Condition | Behaviour |
+|---|---|
+| **Contested area** | Submission blocked. The submitting person sees each contested area with both counts side by side and who captured each, and must choose one, or merge them by hand with a recorded reason. |
+| **Unsynced contributor** | Submission blocked, naming who and how many pending items. The submitter cannot sync another person's phone — the screen says who to chase. |
+| **Uncovered area** | Not blocked, but named. An area nobody claimed is reported as a gap on SCR-014 rather than assumed empty. |
+| **After submission** | The whole survey is read-only on every team member's device, not just the submitter's. |
+
+#### Installation batches
+
+FLOW-07's daily batches (SCR-061) partition the same way, and are the case most likely to run three
+phones at once. Two differences from a survey:
+
+- A batch is **scoped to an area from the moment it is created**, so two technicians in two towers
+  are working two separate batches and nothing is contested by construction.
+- The society's daily review (SCR-062) sees **one merged day**, not three batches — the partition
+  is an internal detail of how the work got done and should not leak into what the RWA approves.
+
+**What this costs.** Roughly: an area-claim record, a contested state, one reconciliation step
+before submit, and a team roster on the visit instead of a single assignee. What it buys is that
+the double-count is caught at submission by the person who was there, rather than in a deviation
+review four months later by someone who was not.
 
 ### 0.2 Time semantics
 
@@ -118,11 +175,14 @@ suggestion, and any section can be opened at any time.
 
 **Submit** lives on the shell, not in a section (FEAT-010). It is enabled when every section is
 `complete` or `flagged`, and blocked otherwise with the missing items named — never a generic
-"survey incomplete". Submitting sets `SiteSurvey.status = submitted`, queues the whole thing as one
-logical unit (XS-03 requires partial sync to be valid, so sections sync independently and the
-submission marker syncs last), and hands to SCR-014. After submission the survey is **read-only on
-the device**; a correction requested by the office (SCR-014's "query a count") reopens exactly the
-queried section and nothing else.
+"survey incomplete". On a team survey it is blocked by two further conditions from §0.1b: **any
+contested area**, and **any contributor with unsynced work** (named, with their pending count —
+the submitter cannot sync someone else's phone, so the screen says who to chase). Submitting sets
+`SiteSurvey.status = submitted`, queues the whole thing as one logical unit (XS-03 requires partial
+sync to be valid, so sections sync independently and the submission marker syncs last), and hands
+to SCR-014. After submission the survey is **read-only on every team member's device**, not only
+the submitter's; a correction requested by the office (SCR-014's "query a count") reopens exactly
+the queried section and nothing else, for the whole team.
 
 ### 0.6 Suspension and access, checked before travel and again on arrival
 
@@ -203,6 +263,7 @@ walking into a building.
 | Card | Access details | FEAT-096 | gate contact, hours, notice, pass/ID | Offline-available; "No access details recorded — call ahead" when absent |
 | Card | Suspension flag | XS-10 | `bad` chip | §0.6 |
 | Card | Source record | the ticket / deal / inspection that caused the visit | one line | Why this visit exists (FEAT-016: no floating visits) |
+| Card body | **Who else is on this visit** | visit team | avatars + names | Present only when the team is more than one. Shows who has accepted and who has not |
 
 ### The response gate (FEAT-017)
 
@@ -220,7 +281,7 @@ produces a phone call anyway.
 
 | Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
 |---|---|---|---|---|---|---|
-| Accept visit | card button | assignee only | `proposed` → `confirmed`; pulls the visit's data pack for offline use (§0.1) | none | Card moves to Today/Upcoming; ops sees the acknowledgement | Offline → queued, card shows "Accepting…"; server rejects (reassigned meanwhile) → card returns to a named state |
+| Accept visit | card button | any team member | `proposed` → `confirmed` **for that person**; pulls the visit's data pack for offline use (§0.1). Team members accept independently — one person's acceptance does not commit the others | none | Card moves to Today/Upcoming; ops sees who has acknowledged and who has not | Offline → queued, card shows "Accepting…"; server rejects (removed from the team meanwhile) → card returns to a named state |
 | Request reschedule | card button | assignee, >24h out | Visit → `proposed` with reason + alternative; routes to PER-01 | reason required, alternative date required | Card shows "Reschedule requested" | <24h → blocked with explanation; offline → queued and **server-adjudicated** (§0.2) |
 | Start visit | card primary | assignee, `confirmed` | Opens the visit's own screen by type | Suspension re-check (§0.6) | → SCR-010 survey · SCR-020 meter install · SCR-023 demo install · SCR-061 batch · SCR-140 inspection · SCR-132 ticket · SCR-111 deviation | Suspended → blocked, naming who to call |
 | Resume visit | card primary, work exists | assignee | Returns to the first incomplete section | none | Same targets | — |
@@ -410,15 +471,17 @@ discovery log; FEAT-006 was amended to carry it.
 | Body | **Per-type roll-up** | computed | type · areas · total lights | Labelled "Extrapolation base — one circuit will be metered per type" |
 | Body | Per-area photo | CMP-15, optional | | Encouraged on `estimated` rows |
 | Footer | Section state, next | | | Sticky |
+| Row | **Claim state** | §0.1b | unclaimed / *name* / complete / **contested** | Only when the team is more than one. As-of-last-sync offline, and labelled with that time |
 
 ### Actions
 
 | Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
 |---|---|---|---|---|---|---|
-| Add area | button | assignee | Appends a row, type first | none | Row focused | — |
+| Claim an area | opening a row for capture | any team member | Places an advisory claim (§0.1b) | none | Row shows the claimant | Already claimed → interstitial naming who and when, then permitted |
+| Add area | button | any team member | Appends a row, type first | none | Row focused | — |
 | Duplicate area | row menu | assignee | Copies type + method, clears count and label | none | Useful for four identical staircases | — |
 | Remove area | row menu | assignee | Deletes | confirm naming the area and count | Roll-up updates | — |
-| Complete section | footer | assignee | `complete`; the type list becomes SCR-012's work list | Modal restating the total and the per-type split | → SCR-012 | Any row missing a count or type → named inline |
+| Complete section | footer | any team member | `complete`; the type list becomes SCR-012's work list | Modal restating the total and the per-type split | → SCR-012 | Any row missing a count or type → named inline; **any contested area → named, and the section cannot complete until resolved** |
 | Flag section | menu | assignee | `flagged` with reason | reason required | SCR-014 names the gap | — |
 
 ### Inputs & validation
@@ -447,7 +510,8 @@ check — because the fix, another walk, is only cheap while the surveyor is sti
 | Empty — filtered | n/a | — | — |
 | Partial / stale | office edited during review | `info` naming the change | Keep / take theirs |
 | Error — network | never blocks | — | — |
-| Error — permission | non-assignee | Read-only | — |
+| Contested area | two people captured the same area | Both counts side by side with who captured each; the roll-up excludes contested areas and says so | Resolve |
+| Error — permission | not on the visit team | Read-only | — |
 | Error — validation | complete attempted with gaps | Rows with gaps scroll into view and are named | Fix |
 | Success | complete | Roll-up locks into SCR-012's work list; toast naming the type count | — |
 | Flagged | partial count (a tower inaccessible) | `warn` with the reason, and the roll-up marked provisional | Reopen |

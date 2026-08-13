@@ -312,10 +312,16 @@ collapsing — a committee needs to compare areas side by side.
 **Offline:** not supported.
 **Copy:** no authority — "Only an office-bearer can accept this. R. Menon and S. Iyer can — forward
 it to them, or ask us a question first."
-**Open questions:** whether acceptance here is legally sufficient or whether the physical signed
-agreement (FLOW-06, SCR-052) remains the binding instrument with this as an indication of intent.
-Specified as **indication of intent**, with the signed agreement binding — the safer reading, but
-it should be confirmed.
+**Resolved 2026-08-13 (user's confirmation), previously an open question:** acceptance here is an
+**indication of intent**, and the physically signed agreement (FLOW-06, SCR-052) remains the
+binding instrument. This was the spec's provisional reading and is now confirmed, so three things
+follow and are settled rather than assumed: SCR-052 stays a **mandatory gate** in the deal flow
+rather than becoming a record of something already agreed; **no signature is captured in the
+portal**, so CMP-16 stays a field-surface component only; and the screen must keep saying so in as
+many words — "Accepting here tells us to prepare the agreement. The signed agreement is what binds
+either of us — this is not a signature." A committee that believed one tap had committed them to
+seven years would have been misled by omission, which is the same failure mode CON-41's dispute
+modal exists to prevent.
 
 ---
 

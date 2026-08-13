@@ -159,6 +159,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 | FEAT-105 | On-demand reading refresh (permission-gated) | CAP-03 | PER-01 | JTBD-01 | SUR-01 | M | proposed |
 | FEAT-106 | Ingest health monitoring & alerting | CAP-03 | PER-01 | GOAL-01, INV-09 | SUR-01 | M | proposed |
 | FEAT-107 | Upload reconciliation & overwrite control | CAP-03 | PER-01 | JTBD-01, INV-02 | SUR-01 | M | proposed |
+| FEAT-108 | Society portal accounts & authority | CAP-13 | PER-05, PER-01 | GOAL-02, INV-05 | SUR-01 | M | proposed |
 
 ## 3. Feature briefs
 
@@ -3002,6 +3003,71 @@ against).
 **Risks.** Exact matching was chosen deliberately (rule 6c), so a vendor changing export precision
 turns one month into a several-thousand-row review. Mitigated by day-grouping and a shape hint, not
 by auto-resolving. Tracked as ASSUM-28; revisit the rule rather than work around it if it happens.
+
+---
+
+### FEAT-108 — Society portal accounts & authority
+
+**Capability:** CAP-13 · **Actor:** PER-05 (office-bearer), PER-01 · **Serves:** GOAL-02, INV-05
+**Size:** M · **Status:** proposed · **Added:** 2026-08-13 (user's explicit decision, CON-45)
+
+**Problem.** Three things a society does through the portal are commercially binding — accepting an
+offer, signing the completion certificate that starts billing, and formally disputing an invoice.
+A single shared society credential records that "the society" did them, which is exactly the
+evidence that fails when one of them is later contested. It also gets passed around, and survives
+the committee that was issued it.
+
+**Solution.** Named portal accounts per society, each carrying one of three authorities, with the
+binding acts reserved to office-bearers.
+
+| Authority | Who | May do |
+|---|---|---|
+| `office-bearer` | President, secretary, treasurer | Everything below, **plus** the binding acts: accept/decline an offer, sign the completion certificate, accept a contract amendment, formally dispute an invoice, and manage the society's own portal accounts |
+| `committee` | Other committee members | Full visibility; approve a daily installation batch; upload KYC documents; raise tickets |
+| `manager` | Society manager (PER-06, existing `socmgr`) | Operational only: approve a daily batch, maintain access details and contacts, raise tickets |
+
+**Behavioral rules.**
+
+1. **Binding acts are office-bearer only**, enforced server-side on the action, not by hiding a
+   button. INV-05's society scoping still applies on top: an office-bearer of one society has no
+   authority anywhere else.
+2. **At least one active office-bearer must exist at all times.** Removing or demoting the last one
+   is refused, mirroring the guard the codebase already applies to its last `manage_admins` holder.
+3. **Committee turnover is the hard case and has an explicit escape.** An office-bearer may transfer
+   the designation to another account. Where an AGM has replaced the whole committee with nobody
+   handing over, **PER-01 can re-designate** — without that, a society is permanently locked out of
+   every binding act by its own election.
+4. **Elections are visible, not enforced.** The survey captures the next election date (CON-28a);
+   the society record surfaces it as a prompt to check the account list, and never auto-expires an
+   account on it. An account that stops working on the morning of an AGM would be worse than a
+   stale one.
+5. **Approvals record the person, not the society.** Every binding act and every batch approval
+   stores the account, the authority it was held under at that moment, and `capturedAt`. The
+   authority is recorded because it can change afterwards, and the record must state what was true
+   when the act happened.
+6. **Provisioning.** PER-01 creates the first office-bearer at onboarding; that person creates the
+   rest. A society with no portal account yet is a valid, visible state, not an error.
+
+**Acceptance criteria.**
+
+- AC-1 An office-bearer can accept an offer; a committee member and a manager cannot, and are told
+  who can.
+- AC-2 A manager can approve a daily batch, and the approval records their name and authority.
+- AC-3 Removing the last active office-bearer is refused, naming the rule.
+- AC-4 An office-bearer can transfer the designation to another account of the same society.
+- AC-5 PER-01 can re-designate an office-bearer for a society that has none reachable.
+- AC-6 (permission) No account of one society can see or act on another's (INV-05).
+- AC-7 (empty) A society with no portal accounts shows that state and offers creation.
+- AC-8 An authority change does not retroactively alter what a past approval records.
+
+**Data touched:** `Profile` gains a per-society `portalAuthority` (`office-bearer | committee |
+manager`); `socmgr` maps to `manager`. Approval records gain the authority held at the time.
+
+**Depends on:** FEAT-085 (society record), the existing auth model.
+
+**Risks.** Committee turnover without handover is the realistic failure, not a security one — rule 3
+is the mitigation and it depends on ops noticing. The election-date prompt (rule 4) is the only
+early warning, and it comes from survey data that may be years old by then.
 
 ---
 

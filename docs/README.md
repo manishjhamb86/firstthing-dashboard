@@ -1,5 +1,5 @@
 # FirsThing Platform — Blueprint
-**Mode:** Ecosystem · **Status:** Phases 0–7 approved, Phases 6 (Prioritization), 8 (Dev Plan), 9 (Test Plan) drafted and built-upon but not yet formally approved · **Last updated:** 2026-08-14
+**Mode:** Ecosystem · **Status:** All ten phases (0–9) approved · **Last updated:** 2026-08-14
 
 ## What this is
 
@@ -29,11 +29,11 @@ MS-01 in the development plan is a genuine from-scratch scaffold.
 | 5 | [Theme System](product/05a-theme-system.md) | Approved | Identity, palette, type, components, tokens (DIR-02 Console) |
 | 5 | [Screens](product/05-screens/README.md) | Approved | Index + inventory + nav map + screen↔feature matrix — 6 surface files hold the 51 priority-1 screen specs |
 | — | [Brand assets](product/brand/README.md) | Approved | FT monogram logomark, wordmark lockups |
-| 6 | [Prioritization](product/08-prioritization.md) | Draft | RICE scores, dependency graph, MVP definition, 4 release slices, cut list, R0 stories |
+| 6 | [Prioritization](product/08-prioritization.md) | Approved | RICE scores, dependency graph, MVP definition, 4 release slices, cut list, R0 stories |
 | 7 | [Architecture](engineering/09-architecture.md) | Approved | 12 components, 15 NFRs, 12 cross-surface contracts, ~40-model schema design |
-| — | [ADRs](engineering/adr/) | Accepted (10/10) | 10 architecture decision records, ADR-001 through ADR-010 |
-| 8 | [Development Plan](engineering/11-development-plan.md) | Draft | 8 R0 milestones (MS-01..08), sequence, DoD, risk register |
-| 9 | [Test & Quality Plan](engineering/12-test-plan.md) | Draft | Test levels, full R0 traceability matrix, contract tests, release gates |
+| — | [ADRs](engineering/adr/) | Accepted (9/10) | 10 architecture decision records, ADR-001 through ADR-010 — ADR-008 (email provider) stays Proposed by design: low-stakes, doesn't block anything, confirm before COMP-10 (R2, notifications) is built |
+| 8 | [Development Plan](engineering/11-development-plan.md) | Approved | 8 R0 milestones (MS-01..08), sequence, DoD, risk register |
+| 9 | [Test & Quality Plan](engineering/12-test-plan.md) | Approved | Test levels, full R0 traceability matrix, contract tests, release gates |
 
 **Machine-readable backlog:** [`backlog.yaml`](../docs/backlog.yaml) — 108 features, 553 acceptance
 criteria, 116 R0 stories, 111 screens (51 specified), 8 milestones, 4 gates. Validator:
@@ -68,13 +68,11 @@ in the **Status:** line of each document, not the filename, when the two disagre
 
 ## Current state
 
-- **Phases complete (drafted):** 0–9, all ten, plus this handoff index. **Formally approved by the
-  user:** 0, 1, 2, 3, 4, 5 (screens + theme), 7 (architecture, including two decisions the user
-  resolved directly — production hosting via ADR-009, and `Contract.tolerancePct`'s per-contract
-  scope). **Drafted and built upon under this session's standing "continue unless a real decision
-  needs surfacing" instruction, but never given an explicit approval checkpoint of their own:** 6
-  (prioritization), 8 (development plan), 9 (test plan). This is a real, honest gap, not an
-  oversight buried here — see "Next action" below.
+- **Phases complete and approved:** 0–9, all ten, plus this handoff index. Phases 6, 8, and 9 were
+  drafted and built upon under this session's "continue unless a real decision needs surfacing"
+  instruction without an individual approval checkpoint of their own — closed out 2026-08-14 by a
+  full review pass across the whole blueprint (not a rubber stamp: see "Review pass" below for what
+  it actually checked and what it found).
 - **Open assumptions:** 8 genuinely open (`ASSUM-15,16,17,18,20,24,28,29` — see
   `00-intake.md` §9), plus 4 accepted working assumptions awaiting real-world validation
   (`ASSUM-22,23,26,27`). The single highest-stakes one is **ASSUM-24** — the vendor meter API's
@@ -82,23 +80,28 @@ in the **Status:** line of each document, not the filename, when the two disagre
   provider-agnostic interface (ADR-010) and scheduled off R0's critical path as SPIKE-01.
 - **Open questions:** 0 — all 10 of `00-intake.md` §10's open questions were resolved on
   2026-08-10 and kept for traceability, not deleted.
-- **Known documentation debt, found and partly fixed while assembling this index:**
-  `product/05-screens/README.md`'s status line and its own file-index table had gone stale (still
-  described the per-screen loop as in-progress at 29/51, and pointed at two filenames — including a
-  `07-headless.md` that was never created — that no longer matched the directory) despite the
-  underlying work having finished; both are corrected as of this index. `08-prioritization.md`
-  never picked up the explicit "User approval: granted/pending" line the later phase documents
-  use — left as Draft here rather than silently upgraded, per the rule that a status gets *reported*
-  as still-Draft, not rewritten to Approved without an actual approval having happened.
+- **Review pass (2026-08-14), what it actually checked:** every backlog.yaml/document-matrix seam
+  the validator can't check programmatically — milestone↔feature coverage (all 41 R0 features
+  appear in exactly one milestone, session sums match to the session), the `tests:` population
+  (all 210 R0 ACs covered, zero duplicate `TC-` ids, 7 e2e anchors matching the 7 feature-bearing
+  milestones), and the `12-test-plan.md` traceability matrix against `backlog.yaml` itself
+  (byte-exact, 210/210 rows). All of that checked out clean. **Two real defects were found and
+  fixed, not just structural gaps:** `TC-048-1` (the CON-11 billing-formula unit test) had the
+  revenue-share split inverted — computed FirsThing's fee at 58% (the society's share) instead of
+  42%, the same class of mistake `05-screens/README.md` §6 already caught once in a mockup deck;
+  corrected to ₹1,142.40. And this index's own first draft overclaimed "ADRs: Accepted (10/10)" —
+  ADR-008 (email provider) is deliberately still Proposed, not needed until R2's notification work;
+  corrected to 9/10. The `05-screens/README.md` staleness (stale "29/51" status line, a swapped
+  file-index table, a dead link to a `07-headless.md` that was never created) was found and fixed
+  in the pass just before this one — see the commit history for that detail rather than repeating
+  it here.
 - **Validator baseline:** 16 errors / 263 warnings on `backlog.yaml --check-coverage`. All expected:
   15 of the errors are pre-existing screen/inventory gaps each documented in their owning phase
   (see `08-prioritization.md` §11 and `05-screens/README.md` §2/§6); the 16th is "343 acceptance
   criteria have no test cases" — R1–R3's ACs, deliberately out of scope for `12-test-plan.md` until
   R1 is milestone-decomposed (same document, §3).
-- **Next action:** get the user's explicit approval on Phases 6, 8, and 9 (or a specific correction
-  to any of them) — everything downstream (the milestone plan, the test plan, and any code written
-  against MS-01) currently rests on prioritization and planning decisions that were never
-  individually signed off, only proceeded on by default. After that: begin MS-01.
+- **Next action:** begin MS-01 (`engineering/11-development-plan.md` §3) — Next.js init, the
+  Prisma schema, NextAuth v5, and a staged deploy. There is no `src/` on this branch yet.
 
 ## Conventions
 

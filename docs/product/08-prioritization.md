@@ -1,6 +1,6 @@
 # Prioritization & Release Plan
 
-**Product:** FirsThing Platform · **Phase:** 6 · **Status:** Draft
+**Product:** FirsThing Platform · **Phase:** 6 · **Status:** Approved (2026-08-14, after a full review pass — see `docs/README.md`)
 **Last updated:** 2026-08-13 · **Mode:** Application (greenfield rebuild)
 
 Companion file: `../backlog.yaml` — the machine-readable spine this document explains. Every

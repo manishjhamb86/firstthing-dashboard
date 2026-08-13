@@ -1,5 +1,5 @@
 # Test & Quality Plan
-**Product:** FirsThing Platform · **Phase:** 9 (skill's Phase 12 — Test & Quality Plan) · **Status:** Draft
+**Product:** FirsThing Platform · **Phase:** 9 (skill's Phase 12 — Test & Quality Plan) · **Status:** Approved (2026-08-14, after a full review pass — see `docs/README.md`)
 **Last updated:** 2026-08-13 · **Mode:** Ecosystem
 
 > **Numbering:** this is *this blueprint's* Phase 9. It follows the skill's
@@ -350,8 +350,8 @@ specified at the matrix level (§3) — writing step-by-step detail for all 210 
 ### TC-048-1 — Per-circuit extrapolation and fee formula (CON-11)
 - **Verifies:** FEAT-048 AC-1 · **Level:** unit · **Automated:** yes
 - **Preconditions:** none — pure function
-- **Steps:** call the calculation function with a fixture: metered light count 40, represented light count 200, metered units 100, benchmark 68%, unit rate ₹8, revenue share 58%
-- **Expected result:** extrapolated consumption = 500 (200÷40×100); savings units = 340 (500×68%); savings ₹ = 2,720; FirsThing's fee = 1,577.60 (2,720×58%) — every figure asserted exactly, not approximately, since this is the formula a real bill is computed from
+- **Steps:** call the calculation function with a fixture: metered light count 40, represented light count 200, metered units 100, benchmark 68%, unit rate ₹8, revenue share 58% society / 42% FirsThing
+- **Expected result:** extrapolated consumption = 500 (200÷40×100); savings units = 340 (500×68%); savings ₹ = 2,720; FirsThing's fee = 1,142.40 (2,720×42%) — every figure asserted exactly, not approximately, since this is the formula a real bill is computed from. **The split direction itself is worth asserting, not just its arithmetic** — `05-screens/README.md` §6 records a real prior defect where a mockup deck had this exact split inverted (58% FirsThing / 42% society) in nine places; a unit test that only checks the number without checking which party it belongs to would not have caught that class of bug
 - **Test data:** the fixture above, plus a second fixture with two light types to assert the society total is the **sum** of independent per-type extrapolations, never one circuit scaled across the whole society (the specific bug CON-11's correction exists to prevent)
 
 ### TC-087-3 — Suspension never fires on stale payment data
@@ -552,4 +552,9 @@ second and third society — this plan doesn't invent UAT breadth R0's own scope
 - `docs/backlog.yaml` passes `--check-coverage` in the sense that matters: 100% of the near-term
   release is covered, and the gap is a documented, expected state, not a validator failure nobody
   looked at — §13.
-- **User approval: pending.**
+- **User approval: granted 2026-08-14**, after a full review pass across the whole blueprint. One
+  real defect surfaced and fixed by that review: TC-048-1 (§4) had the CON-11 revenue-share split
+  inverted — computing FirsThing's fee at 58% (the society's share) instead of 42% — the exact
+  same class of error `05-screens/README.md` §6 already caught once in a mockup deck. Corrected to
+  1,142.40 (2,720×42%), with a note added on why the split *direction* is worth asserting on its
+  own, not just the arithmetic.

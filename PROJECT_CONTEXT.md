@@ -103,7 +103,7 @@ either, only surfaced it. `docs/backlog.yaml` otherwise unchanged in shape — `
 added to 8 features, `phases_complete` now includes `7` — validator still 15 errors/263 warnings,
 same documented/accepted class as Phase 6, confirmed by re-running it after every edit.
 
-**Phase 8 (Development Plan) — drafted 2026-08-13, pending user approval.**
+**Phase 8 (Development Plan) — drafted 2026-08-13, approved 2026-08-14.**
 `docs/engineering/11-development-plan.md` breaks R0 (41 features, 175 raw feature-sessions) into 8
 sequential milestones (MS-01 through MS-08, recorded in `docs/backlog.yaml`'s new `milestones:`
 section, one entry per R0 feature now carrying a `milestone:` field). **MS-01 is a genuine
@@ -130,7 +130,8 @@ risks carried forward from Phase 7 that actually touch an R0 milestone (the job 
 area-claim complexity). `docs/backlog.yaml` validator re-run after every edit: still 15 errors/263
 warnings, `Milestones: 8` now reported correctly.
 
-**Phase 9 (Test & Quality Plan) — drafted 2026-08-13, pending user approval.**
+**Phase 9 (Test & Quality Plan) — drafted 2026-08-13, approved 2026-08-14 (after a fix — see the
+review-pass entry below).**
 `docs/engineering/12-test-plan.md` traces all 210 of R0's acceptance criteria to a named test case
 at the cheapest level that can verify it, using a mechanical, reproducible level-assignment rule
 rather than a per-AC judgment call: CAP-02/CAP-04 (pure computation) happy/edge ACs → `unit`,
@@ -177,6 +178,26 @@ having actually happened. `AGENTS.md` also updated (per the method's "agent-exec
 step) with a new "Blueprint & Scope" section: a pointer to `docs/README.md`/`backlog.yaml`, all 9
 invariants restated as hard rules with why each exists, and the Phase 8 Definition of Done — so an
 agent starting cold in this repo finds the blueprint without being told where to look.
+
+**Full-blueprint review pass and final approval (2026-08-14).** The user asked for a genuine review
+of everything drafted so far, not a rubber stamp, before signing off Phases 6/8/9. Checked, all
+programmatically verified rather than eyeballed: milestone↔feature coverage in `backlog.yaml` (all
+41 R0 features in exactly one milestone, session sums exact to the session — 13/15/27/27/20/21/52
+plus MS-01's 8), the `tests:` population from Phase 9 (all 210 R0 ACs covered, zero duplicate `TC-`
+ids, exactly 7 `-E2E` ids matching the 7 feature-bearing milestones), and `12-test-plan.md`'s
+traceability matrix against `backlog.yaml` itself (byte-exact match, 210/210 rows, no transcription
+drift from the manual paste into the doc). All clean. **Two real defects turned up, both fixed in
+the same pass**: `TC-048-1` (the CON-11 billing-formula unit test, written in Phase 9) had the
+revenue-share split inverted — computed FirsThing's fee as 2,720×58% (₹1,577.60) when CON-11's own
+worked example is 58% *society* / 42% FirsThing, meaning the correct figure is 2,720×42%
+(₹1,142.40). This is the identical class of bug `05-screens/README.md` §6 already caught once,
+independently, in a mockup deck ("labelled the revenue share 58% FirsThing / 42% society — exactly
+inverted... nine places") — worth naming because a test suite that only asserts the number without
+asserting which party it belongs to would not have caught either instance. Separately,
+`docs/README.md`'s own first draft overclaimed "ADRs: Accepted (10/10)" — ADR-008 (email provider)
+is deliberately still Proposed (low-stakes, not needed until R2's notification work) — corrected to
+9/10. Phases 6, 8, and 9 are now marked Approved in their own document headers and in
+`docs/README.md`, closing the one open item the handoff index itself had flagged. Next action: MS-01.
 
 ## Current Phase (archived application — history)
 

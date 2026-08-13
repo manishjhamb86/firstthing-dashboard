@@ -1,5 +1,5 @@
 # Development Plan
-**Product:** FirsThing Platform · **Phase:** 8 (skill's Phase 11 — Development Plan) · **Status:** Draft
+**Product:** FirsThing Platform · **Phase:** 8 (skill's Phase 11 — Development Plan) · **Status:** Approved (2026-08-14, after a full review pass — see `docs/README.md`)
 **Last updated:** 2026-08-13 · **Mode:** Ecosystem
 
 > **Numbering:** this is *this blueprint's* Phase 8. It follows the skill's
@@ -397,4 +397,6 @@ low = directional only.
 - Estimates are ranges with the non-feature-work allowance stated — §1.
 - Risk register carries owners and contingency triggers, not just mitigations — §10.
 - Roadmap written in outcomes, with confidence levels, agreeing with the milestone plan — §12.
-- **User approval: pending.**
+- **User approval: granted 2026-08-14**, after a full review pass across the whole blueprint (see
+  `docs/README.md`'s Handoff entry and `PROJECT_CONTEXT.md`). No corrections raised against this
+  document specifically.

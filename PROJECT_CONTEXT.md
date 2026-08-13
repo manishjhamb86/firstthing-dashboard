@@ -199,11 +199,13 @@ is deliberately still Proposed (low-stakes, not needed until R2's notification w
 9/10. Phases 6, 8, and 9 are now marked Approved in their own document headers and in
 `docs/README.md`, closing the one open item the handoff index itself had flagged. Next action: MS-01.
 
-## MS-01 in progress (started 2026-08-14) — real `src/` on this branch for the first time
+## MS-01 done (2026-08-14) — real `src/` on this branch for the first time, staged and verified live
 
-**Local scaffold is built and runtime-verified; staged deploy (the milestone's third exit
-criterion) is intentionally paused pending user check-in — it touches the shared `zenovaa` box.**
-`prisma/schema.prisma` now has the accounts/society/circuit subset of `09-architecture.md` §5.2
+**All three exit criteria are now genuinely met, not just locally.** An admin logs in and lands on
+a real Server Component reading Postgres (locally and on `https://stage.firsthing.earth`), the same
+build deploys to staging with zero console/page errors, and the accounts/society/circuit Prisma
+subset migrates cleanly. `prisma/schema.prisma` now has the accounts/society/circuit subset of
+`09-architecture.md` §5.2
 (`AdminUser`, `Profile`, `Society`, `SocietyContact`, `Circuit` plus the enums each needs) — the
 full ~40-model schema is filled in milestone by milestone, not all at once, matching §5.2's own
 "representative, not exhaustive" framing. `CircuitState`'s exact values are explicitly marked
@@ -256,12 +258,61 @@ row, MS-01's own exit criterion made literal. Dev server log clean of errors on 
 (the one `MissingCSRF` line in the log is from an earlier deliberately-malformed test request, not
 a real failure). `pnpm exec tsc --noEmit`, `pnpm lint`, and `pnpm build` all pass clean.
 
-**Not yet done**: the staged deploy to `stage.firsthing.earth` (MS-01's second exit criterion) —
-paused for an explicit user check-in before touching the shared `zenovaa` server, per this session's
-own risk-based judgment (SSH access and a shared box are a different risk class than local,
-reversible file edits). `docker-compose.yml`'s `firsthing-postgres` container is running locally for
-this session; not yet decided whether local Docker Postgres stays the long-term dev convention or
-whether MS-01 should also touch the production-hosting groundwork from ADR-009.
+**Staged deploy to `stage.firsthing.earth` (2026-08-14): done, replacing the old archived-app
+deployment there, per the user's explicit choice** (offered a run-alongside-on-a-separate-port
+option first; user chose to replace it outright). Three deploy-shape decisions were surfaced to the
+user rather than picked unilaterally, since each was a genuinely different risk class from local,
+reversible file edits:
+- **How code reaches the box**: rsync of the working tree, not `git pull` — `origin`
+  (`github.com/manishjhamb86/firstthing-dashboard.git`) is a **public, third-party-owned repo**, and
+  this session's standing constraint is nothing gets pushed there. The old checkout was preserved
+  (moved aside to `firsthing-dashboard-newui-archived-20260814`, not deleted) rather than overwritten
+  in place.
+- **Whether to replace the live URL**: user chose replace-now over running the new build alongside
+  on a separate port.
+- **The database**: a `DROP DATABASE firsthing_prod` (after a `pg_dump` backup) was **blocked
+  outright by Claude Code's auto-mode safety classifier**. Per the classifier's own instruction, this
+  was not retried or worked around in any form — stopped, explained the exact command and reasoning
+  to the user, and asked how to proceed. **User's explicit instruction: "create a new db."**
+  `firsthing_prod` (the old archived app's database) was never dropped, modified, or even connected
+  to for writes — a wholly separate `firsthing_blueprint` database was created instead
+  (`CREATE DATABASE firsthing_blueprint OWNER firsthing;`), confirmed via `psql -l` to exist
+  side-by-side with the untouched `firsthing_prod`, and the server's `.env.local` `DATABASE_URL` was
+  repointed at it via a remote-only `sed` (never printing the credential locally). Migration and seed
+  ran cleanly against this fresh database.
+
+**One real bug found and fixed post-deploy, not caught by any pre-deploy check**: the login flow's
+server-side redirect resolved to `https://localhost:3005/admin` instead of
+`https://stage.firsthing.earth/admin` — the session cookie was correctly set and a manual
+`curl` straight to the correct public URL with that cookie rendered the real page fine, so this was
+purely a redirect-URL-construction bug, not an auth/session/DB defect. Root-caused by reading
+`@auth/core@0.41.3` and `next-auth@5.0.0-beta.32` source directly rather than guessing:
+`next-auth`'s Server-Action helpers (`signIn()`/`signOut()`/`getSession()`, used by
+`src/app/login/actions.ts`) build their target URL via `createActionURL()`, which correctly prefers
+`x-forwarded-host`/`x-forwarded-proto` headers — confirmed by direct testing (manually adding
+`X-Forwarded-Host` to a request produced a correct `callback-url` cookie). But the actual
+`GET`/`POST` **Route Handler** path (`src/app/api/auth/[...nextauth]/route.ts`, hit for the real
+`/api/auth/callback/credentials` POST) goes through `@auth/core`'s `toInternalRequest()`, which
+builds the request URL from `new URL(req.url)` directly — Next.js's own `NextRequest.url` for a
+self-hosted `next start` process, **not** re-derived from any proxy header, confirmed by testing
+that manually overriding `Host` alone made no difference either. So nginx not sending
+`X-Forwarded-Host` (added anyway, since it's still needed for the Server-Action code path and is
+correct practice) was a real but insufficient fix on its own. The actual, sufficient fix — and the
+officially documented pattern for exactly this deployment shape — is setting `AUTH_URL` in the
+server's `.env.local` (`AUTH_URL=https://stage.firsthing.earth`): `next-auth`'s `reqWithEnvURL()`
+rewrites the request's origin from this env var *before* it ever reaches `Auth()`, for both the
+Server Action and Route Handler code paths alike, sidestepping the proxy-header detection gap
+entirely. Applied, `pm2 restart --update-env`'d, and reverified against the live public domain:
+correct `302` to `https://stage.firsthing.earth/admin`, correct non-`localhost` cookies, and the
+admin page rendering real Postgres data ("Settlement Nexus") through the full public HTTPS path —
+not just via a bypassing curl. Full regression pass afterward (unauthenticated `/admin` → `307` to
+`/login`, `/login` → `200`, `/` → `307`) plus a flushed-and-rechecked `pm2` log came back with zero
+errors or warnings.
+
+`docker-compose.yml`'s `firsthing-postgres` container is running locally for this session; not yet
+decided whether local Docker Postgres stays the long-term dev convention or whether a future
+milestone should also touch the production-hosting groundwork from ADR-009 (this MS-01 deploy is
+staging only, not a production decision).
 
 ## Current Phase (archived application — history)
 
@@ -294,6 +345,7 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - **Auth**: Auth.js/NextAuth v5, Credentials provider, JWT session strategy, no DB adapter (Credentials-only doesn't need one). `profiles.password_hash` (bcrypt) is the new credential store, replacing Supabase Auth.
 - **Prisma 7 specifics** (worth knowing before touching the schema again): `datasource.url` can no longer live in `schema.prisma` — it's set via `prisma.config.ts`'s `defineConfig({ datasource: { url: env(...) } })`, which needs its own `import "dotenv/config"` since the Prisma CLI doesn't auto-load `.env`-style cascades the way Next.js does. `PrismaClient` now requires an explicit driver `adapter` (`@prisma/adapter-pg`'s `PrismaPg`) — there's no more "just pass a connection string to `new PrismaClient()`."
 - **`@auth/core` must be a direct dependency**, not just a transitive one via `next-auth` — pnpm's strict `node_modules` won't expose it to app code otherwise, which silently breaks the `declare module "@auth/core/jwt"` type augmentation (the `token` in the `session` callback only keeps its narrowed custom fields because of this).
+- **Every self-hosted deployment needs its own `AUTH_URL` env var set to its real public origin** (e.g. `AUTH_URL=https://stage.firsthing.earth`) — found the hard way during MS-01's staged deploy (see above). `trustHost: true` plus nginx's `X-Forwarded-Host` header is *not* sufficient on its own: `next-auth`'s Server-Action helpers (`signIn`/`signOut`/`getSession`) do correctly build their URL from forwarded headers via `@auth/core`'s `createActionURL()`, but the actual `/api/auth/[...nextauth]` Route Handler path goes through `toInternalRequest()`, which uses `new URL(req.url)` directly — Next.js's own self-hosted `NextRequest.url`, unaffected by any proxy header. `AUTH_URL` sidesteps this gap entirely (`next-auth`'s `reqWithEnvURL()` rewrites the request origin from it before either code path runs), and is the officially documented fix for reverse-proxied self-hosting, not a workaround. Set this on every new environment (next: production, whenever that's decided) — don't assume `trustHost`/`X-Forwarded-Host` alone will carry over from a framework that auto-detects its own URL differently.
 - **File storage**: AWS S3 replaces Supabase Storage's `documents` bucket for `FileUploader.tsx` — code-complete and **runtime-verified end-to-end (2026-08-05)** against the real bucket (`firsthing`, `ap-south-1`). **Upload pattern: presigned PUT, not a proxy through our server** (user's explicit choice) — `src/lib/uploads.ts`'s `getUploadUrl()` Server Action (gated the same way as every other admin action: `auth()` + `role === "admin"`) asks AWS for a short-lived (5 min) presigned PUT URL via `@aws-sdk/s3-request-presigner`, and the browser `fetch(uploadUrl, { method: "PUT", body: file })`s the file straight to S3 — AWS's own recommended pattern, keeps file bytes off the Next.js process and credentials off the client. `src/lib/s3.ts`'s `S3Client` is constructed with no explicit `credentials` — the SDK's default provider chain resolves `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from env for local dev now, and would pick up an EC2 instance role automatically instead if one's ever attached to the deploy servers later, with zero code changes either way. **Bucket is public-read** (user's explicit choice) — matches the current Supabase bucket's behavior exactly (already fetched via `getPublicUrl()`, so this isn't a privacy regression), and keeps `FileUploader`'s `onUploadComplete(url)` contract a real permanent URL with no schema changes needed, versus a private+presigned-GET model that would've meant storing S3 keys instead of URLs and regenerating a fresh signed link on every render. The IAM user (`firsthing-bucket-user`) is deliberately scoped to `s3:PutObject` only, confirmed by testing — a `DeleteObject` attempt correctly failed with `AccessDenied`.
 - **Document naming/folder convention (2026-08-05, user's explicit spec)**: every document type follows `Documents/{Society}/{YYYY-MM}/{DocTypeFolder}/{Society}_{DocTypeLabel}_{dateLabel}[_{identifier}].{ext}`, implemented in `src/lib/document-keys.ts`'s `buildDocumentKey()`. Society name comes straight from `societies.name` (slugified: non-alphanumerics → `_`), and the `{YYYY-MM}` **is always an explicit user selection at upload time, never inferred from file contents, a date range, or the upload timestamp** — this was a specific correction from the user after an initial proposal to derive it from a meter-reading CSV's date range. 8 fixed doc types are defined (`invoice`, `meterReadings`, `savingsReport`, `preDemoReport`, `postDemoReport`, `agreement`, `inspectionReport`, `gatePass`), though only 3 have upload UI wired up so far (see below) — the other 5 have no schema/UI yet. `invoiceMonth`/`reportMonth` (previously loose free-text like `"June 2026"`) were changed to `<input type="month">`, storing `"YYYY-MM"` directly — this is what now drives both the S3 folder *and* the DB column, no separate/redundant field. `src/lib/format-month.ts`'s `formatMonthLabel()` renders `"YYYY-MM"` back to a friendly `"June 2026"` at every display site (admin tables, customer-facing invoice/report pages) and gracefully passes through any old pre-convention free-text values unchanged, so existing seed/demo data doesn't break. `inspection-reports` needed no new field — its existing `reportDate` (`<input type="date">`) already gives both the exact date and, via `.slice(0, 7)`, the month.
 - **Query layer**: Prisma (not raw SQL, not Drizzle) — chosen for the migration workflow and generated types.

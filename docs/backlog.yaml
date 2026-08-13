@@ -7994,7 +7994,7 @@ milestones:
       - "An admin account logs in and lands on a real Server-Component page reading one row from Postgres"
       - "The same build deploys to staging with zero console/page errors"
       - "Prisma schema (09-architecture.md §5.2, accounts/society/circuit subset) migrates cleanly"
-    status: proposed
+    status: done
   - id: MS-02
     name: "Accounts, roles & portal authority"
     release: R0

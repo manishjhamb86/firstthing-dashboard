@@ -1,6 +1,11 @@
 # Theme & Visual System
 **Product:** FirsThing Platform · **Phase:** 5 — Screens (theme gate) · **Status:** Approved — DIR-02 Console, built out and accessibility-verified
-**Last updated:** 2026-08-12 · **Mode:** Ecosystem
+**Last updated:** 2026-08-13 · **Mode:** Ecosystem
+
+> **2026-08-13 — a third theme.** Light · **Slate** · Dark, with **Light the default** on every
+> surface regardless of the OS preference. Slate darkens only the navigation shell and leaves the
+> working surface on the light palette. See §3.1 (the chrome/content token split it required) and
+> §3.2b (the theme itself, measured).
 
 > Companion to `05-screens/README.md`. That file's §0 gate is now **open** — the system below is settled,
 > so the per-screen loop can run research, mockup, verification and blueprint, not just
@@ -100,6 +105,13 @@ Two line tokens exist deliberately: `--border` for decorative separators (exempt
 and `--field-border` for anything bounding a **control**, which must clear 3:1. Collapsing them
 into one token is what produces either invisible input fields or heavy-looking tables.
 
+**Chrome is separable from content** (added 2026-08-13, user's call, and the reason a third theme
+is possible at all). The navigation shell — sidebar, brand, nav items, nav counts, and on SUR-02
+the phone's own header bar — reads a parallel `--chrome-*` set rather than `--surface`/`--text`.
+In Light and Dark these resolve to exactly the surface values they replaced, so neither theme
+changes by a pixel. What the split buys is the ability to darken the shell without touching the
+working surface, which is precisely what Slate is.
+
 ### 3.2 Palette
 
 ```css
@@ -107,7 +119,7 @@ into one token is what produces either invisible input fields or heavy-looking t
 --ground:#ECEFEC; --surface:#FFFFFF; --surface-sunken:#F5F7F4; --surface-raised:#FFFFFF;
 --surface-hover:#F3F5F2; --surface-active:#EAEEE9;
 --border:#DDE2DC; --border-subtle:#E9EDE8; --field-border:#828B82;
---text:#151A17; --text-muted:#586058; --text-subtle:#7C857C; --text-on-accent:#FFFFFF;
+--text:#151A17; --text-muted:#586058; --text-subtle:#636C63; --text-on-accent:#FFFFFF;
 --accent:#16624A; --accent-hover:#0F4E3A; --accent-subtle:#E3F0E9; --accent-line:#BFDCCE;
 --signal:#B8E23F; --signal-ink:#151A17;
 --ok-bg:#DFF0E4;  --ok-fg:#12583E;  --ok-line:#BEDFC9;
@@ -120,7 +132,7 @@ into one token is what produces either invisible input fields or heavy-looking t
 --ground:#0F1311; --surface:#171C19; --surface-sunken:#131816; --surface-raised:#1E2420;
 --surface-hover:#1C221E; --surface-active:#222925;
 --border:#242B26; --border-subtle:#1D231F; --field-border:#68756D;
---text:#E8ECE7; --text-muted:#96A096; --text-subtle:#6B746B; --text-on-accent:#0B0F0C;
+--text:#E8ECE7; --text-muted:#96A096; --text-subtle:#8A938A; --text-on-accent:#0B0F0C;
 --accent:#45D18E; --accent-hover:#5EDDA0; --accent-subtle:#16281F; --accent-line:#20402F;
 --ok-bg:#132A1F;  --ok-fg:#68DCA4;  --ok-line:#1E4030;
 --warn-bg:#2B2214; --warn-fg:#DDB25C; --warn-line:#45351C;
@@ -129,14 +141,100 @@ into one token is what produces either invisible input fields or heavy-looking t
 --neu-bg:#1C221E;  --neu-fg:#9AA39A;  --neu-line:#2A312C;
 ```
 
-Two values changed from the DIR-02 sample after measurement, both real failures caught by
-computing rather than eyeballing: `--text-subtle` light went `#858E85` → `#7C857C` (2.92:1 on
-ground, under the 3:1 floor) and `--field-border` was introduced as a separate, much darker token
-(`#828B82` light / `#68756D` dark) because the sample's `--border` at ~1.3:1 is fine for a table
-rule and nowhere near enough for an input boundary.
+**Chrome tokens**, defined per theme alongside the list above. In Light and Dark they duplicate the
+surface values they replaced; only Slate diverges.
+
+```css
+/* light */
+--chrome:#FFFFFF; --chrome-hover:#F3F5F2; --chrome-active:#E3F0E9; --chrome-border:#DDE2DC;
+--chrome-text:#151A17; --chrome-muted:#586058; --chrome-subtle:#636C63;
+--chrome-accent:#16624A; --chrome-accent-ink:#FFFFFF;
+
+/* dark */
+--chrome:#171C19; --chrome-hover:#1C221E; --chrome-active:#16281F; --chrome-border:#242B26;
+--chrome-text:#E8ECE7; --chrome-muted:#96A096; --chrome-subtle:#8A938A;
+--chrome-accent:#45D18E; --chrome-accent-ink:#0B0F0C;
+
+/* slate — the only tokens Slate defines. Content is the light palette, untouched. */
+--chrome:#26322D; --chrome-hover:#2F3C36; --chrome-active:#38473F; --chrome-border:#38473F;
+--chrome-text:#ECF1EB; --chrome-muted:#AEBAB1; --chrome-subtle:#9DAAA0;
+--chrome-accent:#C6E85E; --chrome-accent-ink:#151A17;
+```
+
+Three values changed from the DIR-02 sample after measurement, all real failures caught by
+computing rather than eyeballing.
+
+`--field-border` was introduced as a separate, much darker token (`#828B82` light / `#68756D`
+dark) because the sample's `--border` at ~1.3:1 is fine for a table rule and nowhere near enough
+for an input boundary.
+
+`--text-subtle` was corrected **twice**, and the second correction is the one that matters. It
+first went `#858E85` → `#7C857C` against a **3:1** floor — which was the wrong floor. 3:1 is the
+large-text and non-text threshold; every consumer of this token is small text (`.lbl` 11px,
+caption 11.5px, table `th` 10.5px, nav group label 10px), so it owes **4.5:1**, and `#7C857C`
+cleared none of its four light backgrounds (3.82 / 3.54 / 3.29 / 3.17). Dark `#6B746B` failed the
+same way (3.56 / 3.71 / 3.87 / 3.34). Corrected to **`#636C63` light / `#8A938A` dark**, solved as
+the *lightest* light value and *darkest* dark value that clear 4.5:1 on every surface the token
+can land on — including `--surface-raised` and `--surface-active`, which a first pass missed and
+a rendered audit caught. Picking the extreme rather than a comfortable value is deliberate: it
+preserves the three-step hierarchy `--text` → `--text-muted` → `--text-subtle`, which a simple
+"make it darker" fix inverts. Worst case is now 4.53:1 light and 4.69:1 dark, against
+`--text-muted`'s 5.41 / 5.50. `--chrome-subtle` carries the same values in Light and Dark; Slate's
+own `#9DAAA0` on `#26322D` already cleared at 5.51:1 and is unchanged.
+
+The lesson generalises: **record the floor a token was verified against, not just that it was
+verified.** The first check was arithmetically correct and still shipped failing text, because
+the threshold was wrong for the type sizes involved.
 
 **The lime is a fill, never a text or line colour**, and appears at most once per screen — it
 marks verified saving, the one number a society cares about.
+
+### 3.2b Three themes, Light by default
+
+Decided 2026-08-13 on the user's instruction, against a reference screenshot of the shipped
+admin app. Three themes ship, and **Light is the default regardless of the operating system's
+preference** — a system-dark machine still opens on Light, and the switch is explicit.
+
+| Theme | Chrome | Content | Where it is used |
+|---|---|---|---|
+| **Light** | white | light | Default everywhere, all surfaces |
+| **Slate** | dark slate `#26322D` | **light, unchanged** | SUR-01 back office and the SUR-02 phone header. The working surface is byte-identical to Light |
+| **Dark** | dark | dark | All surfaces. Remains the SUR-02 default between 18:00 and 06:00 device time (§0.8 of `05-screens/05-field.md`) |
+
+**Slate is not a half-measure between the other two, and that is the point.** It changes exactly
+one thing: the navigation shell darkens and everything a person actually reads or edits stays on
+the light palette. A card, a table, a chart and a status chip render identically in Light and in
+Slate, which means Slate costs nothing to support — there is no third set of content values to
+maintain, no third contrast audit for semantic colour, and no screen that can look right in Light
+and wrong in Slate. It is a preference about the chrome, expressed as a preference about the
+chrome.
+
+Slate reuses the lime as its chrome accent, lifted to `#C6E85E` so it clears 4.5:1 on the active
+nav pill. This is the one place the lime is allowed to be a text colour rather than a fill (§3.2's
+rule), because on a dark shell it is the only accent that reads, and the "once per screen" limit
+is about the *content* area where the lime marks verified saving — the nav is not competing with
+that.
+
+**Measured on `#26322D`**, not asserted:
+
+| Pair | Ratio | Floor | |
+|---|---|---|---|
+| `--chrome-text` — brand, 13.5px | 11.64:1 | 4.5 | pass |
+| `--chrome-muted` — nav item, 12.5px | 6.63:1 | 4.5 | pass |
+| `--chrome-subtle` — nav group label, 10px | 5.51:1 | 4.5 | pass |
+| `--chrome-accent` on `--chrome-active` — active nav | 7.05:1 | 4.5 | pass |
+| `--chrome-muted` on `--chrome-hover` | 5.74:1 | 4.5 | pass |
+
+`--chrome-border` and `--chrome-active` sit at 1.36:1 against the shell and are **exempt** under
+the same rule that exempts `--border` (§3.1): both are decorative surfaces, and the active nav
+state is carried by colour *and* weight *and* the lime, never by the pill alone. The first
+candidate palette failed here — `--chrome-subtle` at `#8A968C` measured 4.33:1 on every shell
+colour tried, which is exactly the kind of near-miss that survives eyeballing.
+
+**The one honest limitation:** on SUR-02 the only chrome is the phone's header bar, so Slate is a
+much smaller change there than on the back office. It is not a no-op — the header darkens — but a
+field worker choosing Slate should not expect the transformation they would see on a desk.
+
 
 ### 3.3 Type
 
@@ -208,13 +306,17 @@ of the system:
 ### 3.9 Accessibility — verified, not asserted
 
 Every ratio computed from the tokens (script and full output in the session record; the rendered
-reference recomputes them live in-page).
+reference recomputes them live in-page). Ratios are additionally re-measured **as rendered** —
+walking every element of every mockup screen in all three themes, resolving each one's actual
+background through its ancestors and applying the size rule per element — because a token that
+passes on paper can still land on a surface nobody checked it against. That audit is what caught
+the `--text-subtle` failure recorded in §3.2, and the row below is its corrected result.
 
 | Check | Requirement | Result |
 |---|---|---|
 | Body text on all surfaces | 4.5:1 | 14.45–17.62:1 ✅ |
 | Secondary text on all surfaces | 4.5:1 | 5.61–6.92:1 ✅ |
-| Subtle / labels (large & bold only) | 3:1 | 3.29–3.87:1 ✅ |
+| Subtle text — labels, captions, `th` | 4.5:1 | 4.53–5.90:1 ✅ |
 | Control borders on all surfaces | 3:1 | 3.04–3.88:1 ✅ |
 | Focus ring vs control and ground | 3:1 | 6.29–9.60:1 ✅ |
 | Text on accent, default and hover | 4.5:1 | 7.29–11.33:1 ✅ |
@@ -251,12 +353,12 @@ and the danger red so a series is never mistaken for a status:
 ```css
 /* light */ --chart-s1:#17558F; --chart-s2:#A9670C; --chart-s3:#7B5EA7;
             --chart-s4:#2E8B8B; --chart-s5:#C4587C; --chart-s6:#7E8F42;
-            --chart-grid:#E9EDE8; --chart-axis:#7C857C; --chart-ref:#151A17;
-            --chart-band:rgba(22,98,74,.10); --chart-band-edge:#BFDCCE; --chart-excluded:#7C857C;
+            --chart-grid:#E9EDE8; --chart-axis:#636C63; --chart-ref:#151A17;
+            --chart-band:rgba(22,98,74,.10); --chart-band-edge:#BFDCCE; --chart-excluded:#636C63;
 /* dark  */ --chart-s1:#6BB6E8; --chart-s2:#E8A94A; --chart-s3:#B49AE0;
             --chart-s4:#5CC5C5; --chart-s5:#E58AA8; --chart-s6:#A8BC6E;
-            --chart-grid:#1D231F; --chart-axis:#6B746B; --chart-ref:#E8ECE7;
-            --chart-band:rgba(69,209,142,.13); --chart-band-edge:#20402F; --chart-excluded:#6B746B;
+            --chart-grid:#1D231F; --chart-axis:#8A938A; --chart-ref:#E8ECE7;
+            --chart-band:rgba(69,209,142,.13); --chart-band-edge:#20402F; --chart-excluded:#8A938A;
 ```
 
 All six clear 3:1 against both grounds in both themes (measured: light 3.07–7.69, dark 7.01–9.14).

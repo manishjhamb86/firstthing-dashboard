@@ -48,7 +48,22 @@ finish (lead → survey → commissioning → offer → agreement → installati
 features / 175 agent-sessions. Effort is scored in **agent-sessions**, not person-weeks — the
 user confirmed build capacity is "user + Claude Code, mostly," which also means pace is currently
 **unobserved** (§10 of the doc states this as a placeholder, not a finding, to be recalibrated
-after R0's first few sessions). Phase 7 (architecture, incl. the new build's data model) is next.
+after R0's first few sessions).
+
+**Branding-phase gap closed out (2026-08-13), found by the user, not by this phase's own exit
+check.** `05a-theme-system.md` covered palette/type/components/charts from the start but never
+produced an actual identity — the archived app's sidebar was plain text, no logomark, no favicon.
+Closed via `docs/product/brand/`: an FT monogram ("The Reading" — F's bar carries into T's
+crossbar, T's stem extends into a single lime dot reusing the system's existing "lime marks a
+verified value" rule). Explicitly **not** derived from the existing production logo (a
+circuit-board "FT" badge) — the user asked for fresh directions, not iterations on it; three were
+explored and rendered as marks, not swatches, before this one was picked. Two real, user-caught
+defects along the way, both fixed and recorded in `05a-theme-system.md` §3.11: the tile colour
+(`#2E9E68`, deliberately **not** the theme's `--accent` token) was picked only after measuring
+white-text contrast on four candidates — the shade the user was initially drawn to cleared just
+1.95:1 and would have shipped the least legible element in the product; and the dot's placement
+relative to the FT letterforms was inconsistent across the four asset files until traced to one
+canonical, scaled geometry. Phase 7 (architecture, incl. the new build's data model) is next.
 
 ## Current Phase (archived application — history)
 

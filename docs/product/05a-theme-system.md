@@ -1,5 +1,5 @@
 # Theme & Visual System
-**Product:** FirsThing Platform · **Phase:** 5 — Screens (theme gate) · **Status:** Approved — DIR-02 Console, built out and accessibility-verified
+**Product:** FirsThing Platform · **Phase:** 5 — Screens (theme gate) · **Status:** Approved — DIR-02 Console, built out and accessibility-verified; identity (FT mark) added 2026-08-13
 **Last updated:** 2026-08-13 · **Mode:** Ecosystem
 
 > **2026-08-13 — a third theme, and it is the default.** **Slate** · Light · Dark, with **Slate
@@ -453,9 +453,99 @@ An earlier `--chart-s2` at `#C77A11` failed at 2.91 on the light ground and was 
 The reference renders the SCR-110 deviation chart in full: raw daily readings against a benchmark
 line and ±10% band, three excluded days hatched, out-of-band days marked.
 
-### 3.11 Not yet covered
+### 3.11 Identity (added 2026-08-13, closing the branding-phase gap)
 
-- **The savings-report PDF** — print, not screen; needs its own paper treatment.
+This system covered palette, type, components and charts from the start but never actually
+produced a mark — the archived app's sidebar carries the name as plain text (`<span>FirsThing</span>`),
+no logomark, no favicon, no app icon. That's `phase-06-branding.md`'s own §3 ("Identity") output,
+and it was skipped; caught when the user flagged it directly rather than by this phase's own exit
+check, which is worth naming honestly rather than smoothing over.
+
+**The existing production logo was explicitly not used as a starting point.** FirsThing already
+has a mark in live use (a circuit-board "FT" badge, circular, dark ground) — the user was clear it
+shouldn't be treated as inspiration for what came next. Three fresh directions were explored
+instead and rendered as marks, not swatches — a hex code can't be evaluated, a screen fragment
+can — each grounded in what the product actually does rather than generic tech-startup iconography:
+an instrument mid-reading, a typographic checkmark, and a rising trend line. First pass:
+`https://claude.ai/code/artifact/db3752ba-d4a7-4fef-91f0-4b4f4a97e307`. All three were revised
+once more after a second round of feedback, to make sure each one actually carried the company's
+initials as real letterforms rather than an abstract shape standing in for the brand.
+
+**Chosen: the FT ligature ("The Reading"), ring dropped.** F and T share a stroke the way a real
+monogram is drawn — F's top bar carries into T's crossbar rather than the two letters being
+independently drawn and glued together. T's stem extends past the bar into a single lime dot,
+reusing the system's own rule that lime is a fill reserved for a verified value (§3.2) — the dot
+*is* the reading the initials are taking. An earlier version framed the ligature inside a full
+circular instrument ring; dropped after comparing both at 16px, the size the mark is actually seen
+most (browser tab, sidebar, favicon) — the ring added detail without adding legibility there.
+
+**Tile colour: `#2E9E68`, not the system's own `--accent` token.** The user's first reaction to
+the finished mark was that the tile's deep green (`--accent`, `#16624A`) didn't "gel" with the mark
+— traced to the artifact likely having rendered in dark mode when it was first shared, where
+`--accent` resolves to a much brighter `#45D18E`. Four candidates were rendered side by side
+(deep green / bright mint / emerald / mid-green) with measured white-text contrast for each rather
+than presented as swatches — the brightest option the user was drawn to, `#45D18E`, only cleared
+**1.95:1** for white letters against it (the system enforces 4.5:1 everywhere else), so it would
+have shipped the least legible element in the whole product. Landed on `#2E9E68` (white letters at
+**3.38:1**, clearing the large-graphic 3:1 floor) as the brighter tone the user wanted without the
+mint's legibility failure. **This tile colour is intentionally its own value, not `--accent`** —
+the mark needs to hold up as a static asset (favicon, exported app icon) independent of whichever
+theme token happens to be active, and the user's preference here was for a specific shade, not for
+"whatever the accent token currently is."
+
+**The dot has no outline, by the user's explicit choice.** At `#2E9E68`, the lime dot's own
+contrast against the tile is a weak 2.25:1 — a thin dark outline was tried and shown, and the user
+asked for it removed, accepting the reduced visibility rather than adding the extra stroke. Worth
+knowing if this is revisited: the outline is the fix on hand if the dot's legibility becomes a
+real problem at production size, not a rejected idea, just not applied.
+
+| Asset | Spec | File |
+|---|---|---|
+| Logomark | FT ligature, white on `#2E9E68` tile, lime dot | `brand/logomark.svg` |
+| Logomark, single-ink | FT ligature, dot folded into one colour, no tile, `#16624A` — print/watermark only | `brand/logomark-mono.svg` |
+| Wordmark lockup, light | Logomark + "FirsThing" in `--text` | `brand/wordmark-lockup-light.svg` |
+| Wordmark lockup, chrome | Logomark unchanged + "FirsThing" in `--chrome-text` | `brand/wordmark-lockup-dark.svg` |
+| Favicon / app icon | `logomark.svg` itself — already tuned and confirmed legible at 16px, no separate crop needed | `brand/logomark.svg` |
+
+**Why the single-ink variant stays on the deeper `#16624A` while the primary mark moved to
+`#2E9E68`.** `logomark-mono.svg` is judged against white paper (letterhead, embossing), not the
+app's tile — there, `#16624A` clears **7.29:1** against `#2E9E68`'s **3.38:1**. Nobody asked for
+that one to change, and the context it serves rewards the stronger contrast, so it was left alone
+rather than moved to match for consistency's own sake.
+
+**A real placement bug, caught by the user, not by this process.** `logomark.svg` and
+`logomark-mono.svg` had each been hand-positioned independently rather than derived from one
+shared layout, so the dot sat at a different depth into the T's tick in each — confirmed once
+the four were compared side by side. Fixed by treating the wordmark lockup's geometry as the
+canonical layout (fractions of the tile: F/T stroke positions, tick length, dot radius and
+position, all as a proportion of tile width) and scaling that same proportion up to each file's
+own tile size, rather than eyeballing new coordinates per file. All four now place the dot at the
+same relative depth into the tick — verified by rendering all four from the actual files side by
+side, not by re-describing the fix.
+
+**Clear space & minimum size.** Clear space equal to the dot's diameter on every side of the tile.
+Do not render the standalone logomark below 24px — under that, treat the dot-and-tick detail as a
+flat single dot rather than letting it become noise, exactly what `logomark-mono.svg` already does
+(the tick folds into the dot at r=7 instead of staying a separate stroke).
+
+**Misuse rules.** Never recolour the dot — it's the one place lime appears on the mark, and giving
+that up would collide with §3.2's "appears at most once per screen" rule the moment a screen shows
+both the mark and a real verified figure at once. Never stretch the tile off a 1:1 aspect. Never
+place the full-colour tile on a background its own green doesn't clear 3:1 against — use
+`logomark-mono.svg` there instead. Never remove the dot to make a "quiet" version of the mark; a
+context that needs quieter presence gets `logomark-mono.svg`, not a dot-less edit of the primary
+one.
+
+**Not yet done:** an actual multi-resolution `.ico`/PNG export pipeline and platform app-icon sizes
+with their own safe-area padding rules — `logomark.svg` is the source of truth those get generated
+from, not a replacement for doing it — and a wordmark-only lockup (no icon) for contexts too narrow
+for the full lockup.
+
+### 3.12 Not yet covered
+
+- **The savings-report PDF** — print, not screen; needs its own paper treatment, and a
+  substantially harder colour/contrast ceiling than screen (the logomark's single-ink variant in
+  §3.11 is a first step toward this, not the full treatment).
 - **CAP-22 email templates** — a far harsher CSS ceiling than anything here.
 
 Neither blocks the priority-1 screen run.

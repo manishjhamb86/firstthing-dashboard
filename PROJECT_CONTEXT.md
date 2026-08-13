@@ -199,6 +199,70 @@ is deliberately still Proposed (low-stakes, not needed until R2's notification w
 9/10. Phases 6, 8, and 9 are now marked Approved in their own document headers and in
 `docs/README.md`, closing the one open item the handoff index itself had flagged. Next action: MS-01.
 
+## MS-01 in progress (started 2026-08-14) — real `src/` on this branch for the first time
+
+**Local scaffold is built and runtime-verified; staged deploy (the milestone's third exit
+criterion) is intentionally paused pending user check-in — it touches the shared `zenovaa` box.**
+`prisma/schema.prisma` now has the accounts/society/circuit subset of `09-architecture.md` §5.2
+(`AdminUser`, `Profile`, `Society`, `SocietyContact`, `Circuit` plus the enums each needs) — the
+full ~40-model schema is filled in milestone by milestone, not all at once, matching §5.2's own
+"representative, not exhaustive" framing. `CircuitState`'s exact values are explicitly marked
+provisional in a schema comment — real commissioning-lifecycle design is MS-04's job, not MS-01's;
+MS-01 only needs the table to exist and migrate. Migrated cleanly against a **reset** local
+`firsthing-postgres` container — its volume still held the old archived-schema tables (`profiles`,
+`invoices`, `tank_readings`, etc. from before the 2026-08-13 archive move); dropped and recreated
+the database rather than trying to migrate old data forward, consistent with the standing
+migration-deferred decision (this is disposable local dev data, not customer data). Seeded with one
+`AdminUser` (`yogesh@firsthing.earth`) and one `Society` — just enough for the exit criterion,
+real seed data grows with each milestone's own tables.
+
+`src/lib/db.ts`, `auth.ts`, `roles.ts`, `types/next-auth.d.ts`, and `proxy.ts` reuse the exact
+proven patterns from `archive/src/` (separate `AdminUser` table per INV-01, JWT sessions, optimistic
+proxy-layer gating with independent per-page `auth()` checks) — `roles.ts` is deliberately scoped to
+`Role = "admin"` only for now; society-portal roles (office-bearer/committee/manager, FEAT-108) get
+added when MS-02 builds the `Profile`-based login path, not preemptively. Login page uses a Server
+Action (`useActionState` + `next-auth`'s `signIn`) rather than the archived client-side
+`signIn()` + `alert()` pattern, matching this repo's own established "writes are Server Actions"
+convention.
+
+**Two real bugs found and fixed during this milestone, not just planned-around:**
+1. **`tsconfig.json` and `eslint.config.mjs` did not exclude `archive/`.** Running `tsc --noEmit`
+   surfaced dozens of errors from dead archived code, and — more seriously — a real type-safety
+   hazard: `archive/src/types/next-auth.d.ts`'s ambient `declare module "next-auth"` augmentation
+   was merging with the new `src/types/next-auth.d.ts`, since TypeScript module augmentation is
+   global and doesn't care which folder a `.d.ts` lives in. This silently required the new
+   `authorize()` return value to carry `archive`'s old `societyId`/`societyName` fields, which don't
+   exist in the new schema at all — a bug that would have been very confusing to debug later, found
+   here instead because MS-01 happened to touch `auth.ts` directly. Fixed by excluding `archive/`
+   from both tsc's `include` and ESLint's `globalIgnores`, per `AGENTS.md`'s own rule that archive
+   is reference-only, never part of the live build.
+2. **Missing NextAuth API route handler.** `src/lib/auth.ts` exports `handlers`, but nothing
+   exposed them at `/api/auth/[...nextauth]/route.ts` — every `/api/auth/*` call (csrf, session,
+   callback) 404'd until this was added. Caught by an actual curl-driven login flow, not by
+   `tsc`/`lint`/`build` (which all passed while this was still missing, since nothing imports a
+   route handler that's never called).
+
+**Also removed**: `@supabase/supabase-js` from `package.json` — confirmed nothing in the new `src/`
+imports it (Supabase was fully replaced by standalone Postgres well before the greenfield decision,
+see Architecture Decisions below), so it was dead weight carried over from the pre-archive
+`package.json`, not a live dependency.
+
+**Verified end to end via curl** (real HTTP requests against a running dev server, not just
+`tsc`/`lint`/`build`): unauthenticated `GET /admin` redirects to `/login`; correct credentials
+create a real JWT session (`role: "admin"`, permissions carried through); a wrong password is
+rejected with no session created; an authenticated `GET /admin` returns 200 rendering "Societies in
+Postgres: 1" and "Settlement Nexus / Bengaluru" — a real Server Component reading a real Postgres
+row, MS-01's own exit criterion made literal. Dev server log clean of errors on the successful run
+(the one `MissingCSRF` line in the log is from an earlier deliberately-malformed test request, not
+a real failure). `pnpm exec tsc --noEmit`, `pnpm lint`, and `pnpm build` all pass clean.
+
+**Not yet done**: the staged deploy to `stage.firsthing.earth` (MS-01's second exit criterion) —
+paused for an explicit user check-in before touching the shared `zenovaa` server, per this session's
+own risk-based judgment (SSH access and a shared box are a different risk class than local,
+reversible file edits). `docker-compose.yml`'s `firsthing-postgres` container is running locally for
+this session; not yet decided whether local Docker Postgres stays the long-term dev convention or
+whether MS-01 should also touch the production-hosting groundwork from ADR-009.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

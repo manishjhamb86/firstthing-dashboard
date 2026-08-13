@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // archive/ is the pre-blueprint application (read-only reference, not
+    // live code — see AGENTS.md and PROJECT_CONTEXT.md). Its known,
+    // pre-existing lint debt stays there rather than being fixed or
+    // silenced per-rule; the new build starts clean and should stay that way.
+    "archive/**",
   ]),
 ]);
 

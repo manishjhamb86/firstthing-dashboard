@@ -1,0 +1,16 @@
+@import "tailwindcss";
+
+/* MS-01 walking skeleton only — a bare minimum so pages are legible.
+   The approved theme system (docs/product/05a-theme-system.md, DIR-02
+   Console: semantic tokens, type/space/elevation/motion scales) gets wired
+   in properly once real screens start landing, starting MS-02. */
+:root {
+  --background: #f7f7f5;
+  --foreground: #16181d;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}

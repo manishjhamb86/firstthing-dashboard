@@ -1,0 +1,166 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// MS-01 scope only: accounts + society + circuit subset of
+// docs/engineering/09-architecture.md §5.2, enough to migrate cleanly and
+// prove the walking skeleton (docs/backlog.yaml milestones: MS-01). The rest
+// of the ~40-model schema is filled in milestone by milestone as each one's
+// features need it — §5.2 itself says its field lists are "representative,
+// not exhaustive."
+
+enum AdminPermission {
+  manage_admins
+  manage_users
+
+  @@map("admin_permission")
+}
+
+// office-bearer | committee | manager — FEAT-108, CON-45. A society account
+// holds one of these; binding acts (accepting an offer, GATE-04) require
+// office-bearer specifically, enforced server-side, never by this field alone.
+enum PortalAuthority {
+  office_bearer
+  committee
+  manager
+
+  @@map("portal_authority")
+}
+
+enum SocietyStatus {
+  prospect
+  active
+  suspended
+  terminated
+
+  @@map("society_status")
+}
+
+// lighting | pumps | solar | wastewater — CON-24. A society engages one or
+// more service lines independently; each holds its own pipeline/contract/
+// circuits without touching another line's state.
+enum ServiceLine {
+  lighting
+  pumps
+  solar
+  wastewater
+
+  @@map("service_line")
+}
+
+// Provisional for MS-01 — only enough for the Circuit table to migrate and
+// exist. "surveyed" through "actively billed" is 03-features.md FEAT-006's
+// own stated span; the full lifecycle gets designed for real at MS-04
+// (circuit registry & benchmark commissioning), not guessed here.
+enum CircuitState {
+  surveyed
+  eligible
+  benchmarking
+  benchmark_confirmed
+  awaiting_installation
+  active_billing
+  retired
+
+  @@map("circuit_state")
+}
+
+// ── Society & account (COMP-09) ──────────────────────────────────────────
+
+model Society {
+  id               String    @id @default(cuid())
+  name             String
+  flatCount        Int       @map("flat_count")
+  location         String
+  latitude         Float?
+  longitude        Float?
+  status           SocietyStatus @default(prospect)
+  nextElectionDate DateTime? @map("next_election_date") // CON-28a — a prompt, never enforced
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  contacts SocietyContact[]
+  profiles Profile[]
+  circuits Circuit[]
+
+  @@map("societies")
+}
+
+model SocietyContact {
+  id        String  @id @default(cuid())
+  societyId String  @map("society_id")
+  name      String
+  post      String? // committee post, e.g. "Secretary"
+  email     String?
+  phone     String?
+  active    Boolean @default(true) // never deleted — FEAT-092 AC-5
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@map("society_contacts")
+}
+
+// Society-side portal login (office-bearer/committee/manager). Deliberately
+// a separate table from AdminUser — see PROJECT_CONTEXT.md and INV-01: an
+// admin session can only ever be minted from AdminUser, never from here.
+model Profile {
+  id              String           @id @default(cuid())
+  email           String           @unique
+  passwordHash    String           @map("password_hash")
+  name            String?
+  portalAuthority PortalAuthority? @map("portal_authority")
+  societyId       String?          @map("society_id")
+  isActive        Boolean          @default(true) @map("is_active")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  society Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
+
+  @@index([societyId])
+  @@map("profiles")
+}
+
+// Deliberately a separate table from Profile, not a shared "role" column —
+// see PROJECT_CONTEXT.md and 00-intake.md INV-01. An admin session can only
+// ever be minted by a row existing here; a Profile row can never carry admin
+// access, by construction rather than by a role check that could be bypassed.
+model AdminUser {
+  id           String            @id @default(cuid())
+  email        String            @unique
+  passwordHash String            @map("password_hash")
+  name         String?
+  isActive     Boolean           @default(true) @map("is_active")
+  permissions  AdminPermission[]
+  createdById  String?           @map("created_by_id")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  createdBy AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  created   AdminUser[] @relation("AdminCreatedBy")
+
+  @@map("admin_users")
+}
+
+// ── Circuit & metering (COMP-02) — registry shape only, MS-01 ───────────
+// Commissioning/benchmarking logic lands at MS-04; this milestone only needs
+// the table to exist and migrate cleanly per its own exit criteria.
+
+model Circuit {
+  id                    String       @id @default(cuid())
+  societyId             String       @map("society_id")
+  serviceLine           ServiceLine  @map("service_line")
+  lightType             String       @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
+  meteredLightCount     Int          @map("metered_light_count")
+  representedLightCount Int          @map("represented_light_count") // scoped to this lightType only — CON-11
+  wattage               Float
+  workingHours          Float?       @map("working_hours") // metadata only, never triggers a rescale — CON-10
+  eligibilityChecklist  Json?        @map("eligibility_checklist") // CON-16
+  state                 CircuitState @default(surveyed)
+  createdAt             DateTime     @default(now()) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@index([societyId])
+  @@map("circuits")
+}

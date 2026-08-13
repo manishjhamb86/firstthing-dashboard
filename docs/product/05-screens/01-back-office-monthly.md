@@ -137,7 +137,7 @@ resolving anything automatically —
   about what the operator is looking at — **not** a filter, a default, or an auto-resolve.
 - Select-all still requires the same confirmation, restating the full count.
 
-The residual risk is recorded as **ASSUM-25**: that vendor export precision is stable enough for
+The residual risk is recorded as **ASSUM-28**: that vendor export precision is stable enough for
 exact matching to stay workable. If a vendor changes it mid-contract, one month's upload becomes a
 several-thousand-row review, and this decision should be revisited rather than worked around.
 
@@ -209,7 +209,7 @@ added. 312 already matched and were left alone."
 - **ASSUM-16** (vendor export shape is stable) is load-bearing here — if the vendor changes their
   CSV, FLOW-09 step 1 has *no system visibility at all*. Worth a monitoring feature.
 - **Resolved 2026-08-13 — "identical" means exactly equal.** No rounding, no tolerance. Residual
-  risk accepted as **ASSUM-25** (vendor export precision is stable); a precision change turns one
+  risk accepted as **ASSUM-28** (vendor export precision is stable); a precision change turns one
   month into a several-thousand-row review, mitigated by grouping and a shape hint rather than by
   auto-resolving.
 - **Resolved 2026-08-13 — a closed month must be reopened before overwrite.** Refused in place,

@@ -3001,7 +3001,7 @@ against).
 
 **Risks.** Exact matching was chosen deliberately (rule 6c), so a vendor changing export precision
 turns one month into a several-thousand-row review. Mitigated by day-grouping and a shape hint, not
-by auto-resolving. Tracked as ASSUM-25; revisit the rule rather than work around it if it happens.
+by auto-resolving. Tracked as ASSUM-28; revisit the rule rather than work around it if it happens.
 
 ---
 

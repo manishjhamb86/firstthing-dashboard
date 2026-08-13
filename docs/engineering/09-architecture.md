@@ -1,5 +1,5 @@
 # Architecture & Technical Decisions
-**Product:** FirsThing Platform · **Phase:** 7 (skill's Phase 9 — Architecture) · **Status:** Draft
+**Product:** FirsThing Platform · **Phase:** 7 (skill's Phase 9 — Architecture) · **Status:** Approved
 **Last updated:** 2026-08-13 · **Mode:** Ecosystem
 
 > **Numbering:** this is *this blueprint's* Phase 7. It follows the skill's
@@ -866,11 +866,11 @@ number that would have caught the old spreadsheet-era failure mode earliest.
 | Staging | Pre-release verification against realistic data volume | `firsthing_prod` Postgres on `zenovaa`, or a fresh equivalent seeded to NFR-11's 200-society scale for load-testing | Manual deploy from `blueprint`/successor branch, mirroring the existing `stage.firsthing.earth` pattern | `git revert` + `pnpm build` + `pm2 restart`, per the already-exercised procedure (`PROJECT_CONTEXT.md`'s 2026-08-06 staging deploy) |
 | Production | `firsthing.earth` | Real customer/society data | Manual deploy, gated by staging verification | Same mechanism as staging; migrations must be additive-first (§5.1) so a code rollback never strands the DB ahead of the app |
 
-**Production hosting target is the one open item this document does not resolve unilaterally** —
-`CON-06` names it explicitly as carried into Phase 7, and it is a recurring-cost, vendor-lock-in
-decision the solo owner should confirm rather than one this document should assume. §10/ADR-009
-records a recommended default and the reasoning; see the question raised alongside this document's
-delivery.
+**Production hosting target — resolved, user-confirmed 2026-08-13 (ADR-009).** A self-managed VPS,
+either `zenovaa` promoted or an equivalent dedicated box kept separate from staging, mirroring the
+pattern already proven at `stage.firsthing.earth`: pm2 process manager, nginx reverse proxy,
+Let's Encrypt/certbot, local Postgres with WAL archiving for NFR-03's RPO target. `CON-06`'s open
+item is closed.
 
 **Per-surface release mechanics:** none of CON-46/ASSUM-12's usual mobile-app concerns apply — no
 app-store review lag, no OTA update policy, no binary signing, no staged rollout mechanism beyond
@@ -951,7 +951,7 @@ This is Phase 8 work, noted here so it isn't lost.
 | ADR-006 | Gate-pass blocking approval resolved via a 30-minute provisional-release sweep job, not a synchronous wait or a push-required design | Accepted | 2026-08-13 | costly |
 | ADR-007 | Field-visit team/area-claim model (many-to-many participants + advisory area claims) replacing a single-assignee `FieldVisit` | Accepted | 2026-08-13 | costly |
 | ADR-008 | Email provider selection for CAP-22 | Proposed | 2026-08-13 | cheap |
-| ADR-009 | Production hosting target for `firsthing.earth` | Proposed — **needs the user's confirmation** | 2026-08-13 | costly |
+| ADR-009 | Production hosting target for `firsthing.earth` — self-managed VPS, `zenovaa` pattern | Accepted (user confirmed) | 2026-08-13 | costly |
 | ADR-010 | Vendor meter API integration built behind a provider-agnostic ingest interface, pending SPIKE-01 | Accepted | 2026-08-13 | cheap |
 
 Full text of each: `docs/engineering/adr/ADR-00N-*.md`.
@@ -1006,5 +1006,8 @@ Applied below.
 - Technical risks needing spikes are flagged for Phase 8 (skill's Phase 11, this project's next
   numbered phase) — §11.
 - `docs/backlog.yaml` updated — §12.
-- **User approval: pending** — this is a first draft; see the question accompanying its delivery
-  (production hosting, ADR-009) and the open confirmation flagged in RISK-02.
+- **User approval: granted 2026-08-13.** The one item requiring the user's own call — production
+  hosting — was raised as a single question and confirmed (ADR-009, self-managed VPS). RISK-02
+  (`Contract.tolerancePct`'s per-contract-vs-per-circuit scope) remains open by design, tracked as
+  a pre-implementation confirmation rather than a blocker on this document — consistent with this
+  phase's own principle of writing down what isn't settled rather than silently resolving it.

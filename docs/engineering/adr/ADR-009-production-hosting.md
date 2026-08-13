@@ -1,5 +1,5 @@
 # ADR-009: Production hosting target for firsthing.earth
-**Status:** Proposed — needs the user's confirmation · **Date:** 2026-08-13 · **Reversibility:** costly
+**Status:** Accepted (user confirmed 2026-08-13) · **Date:** 2026-08-13 · **Reversibility:** costly
 
 ## Context
 
@@ -33,9 +33,9 @@ it matches "solo owner, no fixed deadline" — optimizing for proven-and-cheap o
 managed-but-unproven is the right tradeoff at this stage, and the option is always open to migrate
 to a managed platform later once real traffic patterns are known.
 
-**Not marked Accepted.** This carries a real recurring cost and a real operational-burden
-commitment — surfaced as the one question accompanying this document's delivery rather than
-decided unilaterally.
+**User confirmed this recommendation directly** rather than it being decided unilaterally — surfaced
+as the one question accompanying this document's delivery, per this session's standing rule to
+raise genuine decisions individually rather than bundle them.
 
 ## Consequences
 

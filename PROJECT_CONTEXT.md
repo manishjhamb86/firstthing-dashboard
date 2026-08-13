@@ -65,7 +65,7 @@ white-text contrast on four candidates — the shade the user was initially draw
 relative to the FT letterforms was inconsistent across the four asset files until traced to one
 canonical, scaled geometry.
 
-**Phase 7 (Architecture & Technical Decisions) — draft complete, pending user approval.**
+**Phase 7 (Architecture & Technical Decisions) — approved 2026-08-13.**
 `docs/engineering/09-architecture.md` (12 sections per the skill's template) plus 10 ADRs under
 `docs/engineering/adr/`. Reconfirms CON-05's stack and commits to **one Next.js deployment**, not
 microservices — the society portal stays "a role-scoped projection of SUR-01... separated by
@@ -87,10 +87,11 @@ the CON-13 suspension countdown, the gate-pass timeout, notification retries), f
 register (RISK-04) as the closest thing this design has to a new single point of failure. Vendor
 meter-API work (FEAT-104/105/106) is built behind a provider-agnostic ingest interface (ADR-010) so
 SPIKE-01's still-unverified finding (ASSUM-24) can only ever remove one implementation, never force
-a rewrite of the billing engine. **Two items deliberately left open rather than decided
-unilaterally**: production hosting for `firsthing.earth` (ADR-009, recommends continuing the
-`zenovaa`-style self-managed VPS pattern already proven in staging, but marked Proposed pending the
-user's confirmation since it's a recurring-cost commitment) and whether `Contract.tolerancePct`
+a rewrite of the billing engine. **One item was deliberately raised rather than decided
+unilaterally, and is now resolved**: production hosting for `firsthing.earth` (ADR-009) — the user
+confirmed the recommended default, continuing the `zenovaa`-style self-managed VPS pattern already
+proven in staging, closing `CON-06`'s long-open item. **One item stays open by design**: whether
+`Contract.tolerancePct`
 should be schema-level per-contract or per-circuit (RISK-02 — the source constraints (CON-01a,
 CON-11) can be read either way; the schema takes the per-contract reading as a working assumption,
 flagged for confirmation before CAP-04/CAP-05 are built rather than silently resolved). A new

@@ -48,7 +48,7 @@ specification.
 
 Two sources, per the method: every screen the Phase 4 flows touch, **plus** the screens flows
 never reach but products always need — the second list is where most missing screens are found,
-and it accounts for 49 of the 110 below.
+and it accounts for 50 of the 111 below.
 
 **Coverage ledger: 29 of 110 specified · 0 mockups approved · 0 blueprinted** (plus 5 headless units, §1.9).
 
@@ -60,39 +60,39 @@ Legend — **Src:** `F` derived from a Phase 4 flow · `M` method's standard-scr
 
 | SCR | Screen | Src | Flow | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|---|
-| SCR-001 | Lead form | F | 01 | FEAT-001 | 1 | ✅ | — |
-| SCR-002 | Proposal editor | F | 01 | FEAT-002 | 1 | ✅ | — |
-| SCR-003 | Pipeline board (incl. lead-health signal) | F | 01, 06 | FEAT-004, 031, 095 | 1 | ✅ | — |
+| SCR-001 | Lead form | F | 01 | FEAT-001 | 1 | ✅ | ✅ |
+| SCR-002 | Proposal editor | F | 01 | FEAT-002 | 1 | ✅ | ✅ |
+| SCR-003 | Pipeline board (incl. lead-health signal) | F | 01, 06 | FEAT-004, 031, 095 | 1 | ✅ | ✅ |
 | SCR-004 | Backend-entered lead approval queue | X | 01 | FEAT-003 | 2 | — | — |
 | SCR-005 | Closed / lost deals view | X | 01 | FEAT-095 | 2 | — | — |
-| SCR-014 | Survey review & circuit confirmation | F | 02 | FEAT-010 | 1 | ✅ | — |
-| SCR-025 | Deal commissioning status (per-circuit fan-out) | F | 03 | FEAT-011–014 | 1 | ✅ | — |
-| SCR-030 | Demo report editor | F | 04 | FEAT-020, 021, 022 | 1 | ✅ | — |
-| SCR-040 | KYC checklist & verification | F | 05 | FEAT-024, 026 | 1 | ✅ | — |
-| SCR-050 | Offer builder (per-circuit benchmark table) | F | 06 | FEAT-027, 028 | 1 | ✅ | — |
-| SCR-052 | Agreement tracker & physical handoff log | F | 06 | FEAT-029, 030 | 1 | ✅ | — |
-| SCR-053 | Contract record | F | 06 | FEAT-062 | 1 | ✅ | — |
-| SCR-060 | Installation plan | F | 07 | FEAT-033 | 1 | ✅ | — |
-| SCR-063 | Installation blockers & scope changes | F | 07 | FEAT-036 | 1 | ✅ | — |
+| SCR-014 | Survey review & circuit confirmation | F | 02 | FEAT-010 | 1 | ✅ | ✅ |
+| SCR-025 | Deal commissioning status (per-circuit fan-out) | F | 03 | FEAT-011–014 | 1 | ✅ | ✅ |
+| SCR-030 | Demo report editor | F | 04 | FEAT-020, 021, 022 | 1 | ✅ | ✅ |
+| SCR-040 | KYC checklist & verification | F | 05 | FEAT-024, 026 | 1 | ✅ | ✅ |
+| SCR-050 | Offer builder (per-circuit benchmark table) | F | 06 | FEAT-027, 028 | 1 | ✅ | ✅ |
+| SCR-052 | Agreement tracker & physical handoff log | F | 06 | FEAT-029, 030 | 1 | ✅ | ✅ |
+| SCR-053 | Contract record | F | 06 | FEAT-062 | 1 | ✅ | ✅ |
+| SCR-060 | Installation plan | F | 07 | FEAT-033 | 1 | ✅ | ✅ |
+| SCR-063 | Installation blockers & scope changes | F | 07 | FEAT-036 | 1 | ✅ | ✅ |
 | SCR-070 | Demo-skip exception approval | F | 08 | FEAT-032 | 3 | — | — |
 
 ### 1.2 SUR-01 back office — monthly loop
 
 | SCR | Screen | Src | Flow | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|---|
-| SCR-080 | Reading upload (single + batch) | F | 09 | FEAT-043, 044, 099 | 1 | ✅ | — |
-| SCR-081 | Anomaly & coverage review | F | 09 | FEAT-045, 046 | 1 | ✅ | — |
-| SCR-082 | Month-close readiness board | F | 09 | FEAT-047, 100 | 1 | ✅ | — |
+| SCR-080 | Reading upload (single + batch) | F | 09 | FEAT-043, 044, 099, 107 | 1 | ✅ | ✅ |
+| SCR-081 | Anomaly & coverage review | F | 09 | FEAT-045, 046 | 1 | ✅ | ✅ |
+| SCR-082 | Month-close readiness board | F | 09 | FEAT-047, 100 | 1 | ✅ | ✅ |
 | SCR-083 | Quarantined / unmatched files | X | 09 | FEAT-099 | 2 | — | — |
-| SCR-084 | **Ingest health & meter status** | X | 09 | FEAT-104, 105, 106 | 1 | ✅ | — |
-| SCR-090 | Per-circuit compliance view | F | 10 | FEAT-049 | 1 | ✅ | — |
-| SCR-091 | Savings report (ops view / editor) | F | 10 | FEAT-059 | 1 | ✅ | — |
-| SCR-092 | Accountant release queue | F | 10 | FEAT-054 | 1 | ✅ | — |
-| SCR-093 | Invoice upload & reconciliation | F | 10 | FEAT-053, 101 | 1 | ✅ | — |
-| SCR-110 | Deviation chart & initial findings | F | 11 | FEAT-055 | 1 | ✅ | — |
-| SCR-112 | Root-cause & decision record | F | 11 | FEAT-057, 050 | 1 | ✅ | — |
-| SCR-113 | Management escalation & benchmark adjustment | F | 11 | FEAT-058 | 1 | ✅ | — |
-| SCR-120 | Arrears board (with dispute flags) | F | 12 | FEAT-087, 102 | 1 | ✅ | — |
+| SCR-084 | **Ingest health & meter status** | X | 09 | FEAT-104, 105, 106 | 1 | ✅ | ✅ |
+| SCR-090 | Per-circuit compliance view | F | 10 | FEAT-049 | 1 | ✅ | ✅ |
+| SCR-091 | Savings report (ops view / editor) | F | 10 | FEAT-059 | 1 | ✅ | ✅ |
+| SCR-092 | Accountant release queue | F | 10 | FEAT-054 | 1 | ✅ | ✅ |
+| SCR-093 | Invoice upload & reconciliation | F | 10 | FEAT-053, 101 | 1 | ✅ | ✅ |
+| SCR-110 | Deviation chart & initial findings | F | 11 | FEAT-055 | 1 | ✅ | ✅ |
+| SCR-112 | Root-cause & decision record | F | 11 | FEAT-057, 050 | 1 | ✅ | ✅ |
+| SCR-113 | Management escalation & benchmark adjustment | F | 11 | FEAT-058 | 1 | ✅ | ✅ |
+| SCR-120 | Arrears board (with dispute flags) | F | 12 | FEAT-087, 102 | 1 | ✅ | ✅ |
 | SCR-122 | Payment recording | X | 12 | FEAT-087 | 2 | — | — |
 
 ### 1.3 SUR-01 back office — service loop & operations
@@ -110,7 +110,7 @@ Legend — **Src:** `F` derived from a Phase 4 flow · `M` method's standard-scr
 | SCR-162 | Renewals & AMC | F | 17 | FEAT-063 | 3 | — | — |
 | SCR-163 | Termination | F | 17 | FEAT-051 | 3 | — | — |
 | SCR-164 | Term-end hardware ownership transfer | F | 17 | FEAT-103 | 3 | — | — |
-| SCR-170 | Field visit scheduler | F | X1 | FEAT-016 | 1 | ✅ | — |
+| SCR-170 | Field visit scheduler | F | X1 | FEAT-016 | 1 | ✅ | ✅ |
 | SCR-172 | Visit board (all visits, all staff) | X | X1 | FEAT-018, 019 | 2 | — | — |
 | SCR-270 | Spare inventory rollup (ops) | X | 14 | FEAT-077 | 2 | — | — |
 | SCR-271 | Returns pool & warranty claims | X | 14 | FEAT-076, CON-36 | 3 | — | — |
@@ -122,12 +122,12 @@ It is still six real screens, and the ops home is arguably the most-used screen 
 
 | SCR | Screen | Src | Flow | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|---|
-| SCR-240 | Ops home — priority task queue | X | — | FEAT-066, 067 | 1 | ✅ | — |
-| SCR-241 | Portfolio society list & status chips | X | — | FEAT-067 | 1 | ✅ | — |
-| SCR-242 | Society → circuit drill-down (consumption vs benchmark) | X | — | FEAT-068 | 1 | ✅ | — |
+| SCR-240 | Ops home — priority task queue | X | — | FEAT-066, 067 | 1 | ✅ | ✅ |
+| SCR-241 | Portfolio society list & status chips | X | — | FEAT-067 | 1 | ✅ | ✅ |
+| SCR-242 | Society → circuit drill-down (consumption vs benchmark) | X | — | FEAT-068 | 1 | ✅ | ✅ |
 | SCR-243 | Business analytics / stats view | X | — | FEAT-069 | 2 | — | — |
-| SCR-250 | Society list & record (admin) | X | — | FEAT-085 | 1 | ✅ | — |
-| SCR-251 | Circuit registry & configuration | X | — | FEAT-040 | 1 | ✅ | — |
+| SCR-250 | Society list & record (admin) | X | — | FEAT-085, 108 | 1 | ✅ | ✅ |
+| SCR-251 | Circuit registry & configuration | X | — | FEAT-040 | 1 | ✅ | ✅ |
 | SCR-252 | Service-line registry & enrollment | X | — | FEAT-039 | 2 | — | — |
 | SCR-253 | Pump asset register (monitor-only) | X | — | FEAT-042 | 2 | — | — |
 | SCR-254 | Cross-sell savings projection | X | — | FEAT-061 (deferred) | 3 | — | — |
@@ -136,36 +136,37 @@ It is still six real screens, and the ops home is arguably the most-used screen 
 
 | SCR | Screen | Src | Flow | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|---|
-| SCR-031 | Demo report view (prospect) | F | 04 | FEAT-023 | 1 | ✅ | — |
-| SCR-041 | Document upload (KYC) | F | 05 | FEAT-025 | 1 | ✅ | — |
-| SCR-051 | Offer view & response | F | 06 | FEAT-028 | 1 | ✅ | — |
-| SCR-062 | Daily installation batch review | F | 07 | FEAT-035 | 1 | ✅ | — |
-| SCR-100 | Portal home (maximal visibility) | F | 16 | FEAT-088 | 1 | ✅ | — |
+| SCR-031 | Demo report view (prospect) | F | 04 | FEAT-023 | 1 | ✅ | ✅ |
+| SCR-041 | Document upload (KYC) | F | 05 | FEAT-025 | 1 | ✅ | ✅ |
+| SCR-051 | Offer view & response | F | 06 | FEAT-028 | 1 | ✅ | ✅ |
+| SCR-062 | Daily installation batch review | F | 07 | FEAT-035 | 1 | ✅ | ✅ |
+| SCR-100 | Portal home (maximal visibility) | F | 16 | FEAT-088 | 1 | ✅ | ✅ |
 | SCR-101 | Contract view (read-only) | F | 16 | FEAT-065 | 2 | — | — |
 | SCR-121 | Extension request | F | 12 | FEAT-087 | 2 | — | — |
 | SCR-123 | Raise a billing dispute | X | 12 | FEAT-102 | 2 | — | — |
 | SCR-130 | Raise a ticket | F | 13 | FEAT-089 | 2 | — | — |
 | SCR-134 | My tickets & resolution timeliness | F | 13 | FEAT-089 | 2 | — | — |
-| SCR-260 | Invoice list & detail | X | 16 | FEAT-060 | 1 | ✅ | — |
-| SCR-261 | Savings report list & detail (customer) | X | 16 | FEAT-060 | 1 | ✅ | — |
+| SCR-260 | Invoice list & detail | X | 16 | FEAT-060 | 1 | ✅ | ✅ |
+| SCR-261 | Savings report list & detail (customer) | X | 16 | FEAT-060 | 1 | ✅ | ✅ |
 | SCR-262 | Society profile & contacts (self-service) | X | — | FEAT-092, 096 | 3 | — | — |
+| SCR-263 | **Portal account list & authority (society self-service)** | X | — | FEAT-108, CON-45 | 2 | — | — |
 
 ### 1.6 SUR-02 field (mobile web, offline-tolerant)
 
 | SCR | Screen | Src | Flow | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|---|
-| SCR-171 | My visits (field home) | F | X1 | FEAT-017, 096 | 1 | ✅ | — |
-| SCR-010 | Survey: society profile & access | F | 02 | FEAT-005, 096 | 1 | ✅ | — |
-| SCR-011 | Survey: lighting inventory by area | F | 02 | FEAT-006 | 1 | ✅ | — |
-| SCR-012 | Survey: circuit selection per light type | F | 02 | FEAT-007 | 1 | ✅ | — |
-| SCR-013 | Survey: pump audit & logbook capture | F | 02 | FEAT-008, 009 | 1 | ✅ | — |
-| SCR-020 | Meter install & load validation | F | 03, 08 | FEAT-011, 094 | 1 | ✅ | — |
-| SCR-021 | Gate pass (incl. provisional release) | F | 03, 07 | XC-01, FEAT-097 | 1 | ✅ | — |
-| SCR-022 | Commissioning monitor (window progress) | F | 03 | FEAT-012, 014 | 1 | ✅ | — |
-| SCR-023 | Demo installation / light replacement | F | 03 | FEAT-013 | 1 | ✅ | — |
-| SCR-024 | Benchmark result & out-of-range review | F | 03 | FEAT-014, 015 | 1 | ✅ | — |
-| SCR-061 | Daily batch capture | F | 07 | FEAT-034 | 1 | ✅ | — |
-| SCR-064 | Completion certificate | F | 07 | FEAT-037 | 1 | ✅ | — |
+| SCR-171 | My visits (field home) | F | X1 | FEAT-017, 096 | 1 | ✅ | ✅ |
+| SCR-010 | Survey: society profile & access | F | 02 | FEAT-005, 096 | 1 | ✅ | ✅ |
+| SCR-011 | Survey: lighting inventory by area | F | 02 | FEAT-006 | 1 | ✅ | ✅ |
+| SCR-012 | Survey: circuit selection per light type | F | 02 | FEAT-007 | 1 | ✅ | ✅ |
+| SCR-013 | Survey: pump audit & logbook capture | F | 02 | FEAT-008, 009 | 1 | ✅ | ✅ |
+| SCR-020 | Meter install & load validation | F | 03, 08 | FEAT-011, 094 | 1 | ✅ | ✅ |
+| SCR-021 | Gate pass (incl. provisional release) | F | 03, 07 | XC-01, FEAT-097 | 1 | ✅ | ✅ |
+| SCR-022 | Commissioning monitor (window progress) | F | 03 | FEAT-012, 014 | 1 | ✅ | ✅ |
+| SCR-023 | Demo installation / light replacement | F | 03 | FEAT-013 | 1 | ✅ | ✅ |
+| SCR-024 | Benchmark result & out-of-range review | F | 03 | FEAT-014, 015 | 1 | ✅ | ✅ |
+| SCR-061 | Daily batch capture | F | 07 | FEAT-034 | 1 | ✅ | ✅ |
+| SCR-064 | Completion certificate | F | 07 | FEAT-037 | 1 | ✅ | ✅ |
 | SCR-065 | Installation dashboard (per-role, shared state) | X | 07 | FEAT-038 | 2 | — | — |
 | SCR-111 | Deviation field investigation | F | 11 | FEAT-056 | 2 | — | — |
 | SCR-132 | Ticket work (field) | F | 13 | FEAT-072, 073 | 2 | — | — |
@@ -180,7 +181,7 @@ FEAT-098, CON-34), which is itself a decision worth stating rather than an omiss
 
 | SCR | Screen | Src | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|
-| SCR-200 | Sign in | M | FEAT-086 | 1 | ✅ | — |
+| SCR-200 | Sign in | M | FEAT-086 | 1 | ✅ | ✅ |
 | SCR-201 | Password reset request → reset | M | FEAT-086 | 2 | — | — |
 | SCR-202 | Session expiry / re-authenticate | M | — | 2 | — | — |
 | SCR-203 | Account locked / disabled | M | FEAT-086 | 3 | — | — |
@@ -189,7 +190,7 @@ FEAT-098, CON-34), which is itself a decision worth stating rather than an omiss
 | SCR-220 | 404 not found | M | — | 3 | — | — |
 | SCR-221 | 403 forbidden (wrong role / wrong society) | M | INV-05 | 2 | — | — |
 | SCR-222 | 500 / unexpected error | M | — | 3 | — | — |
-| SCR-223 | **Offline & sync-pending (SUR-02)** | M | XC-02 | 1 | ✅ | — |
+| SCR-223 | **Offline & sync-pending (SUR-02)** | M | XC-02 | 1 | ✅ | ✅ |
 | SCR-224 | Maintenance / degraded | M | INV-06 | 3 | — | — |
 
 ### 1.8 Cross-cutting: account, administration, data lifecycle, help
@@ -216,7 +217,7 @@ FEAT-098, CON-34), which is itself a decision worth stating rather than an omiss
 
 The method's scope note is explicit that headless surfaces get specified here too — a system-run
 job has states, failures and permissions exactly as a page does, and specifying it now is what
-makes Phase 7's contracts concrete rather than aspirational. Four units run with no interface of
+makes Phase 7's contracts concrete rather than aspirational. Five units run with no interface of
 their own; their *output* appears on the screens named, but their behaviour needs its own spec.
 
 | Unit | Feature | Runs when | Output visible on |
@@ -257,48 +258,252 @@ designing screens that get cut is the one real cost of interleaving (method §4)
 
 | Surface group | Pri-1 screens | Specified | Mockup | Blueprint |
 |---|---|---|---|---|
-| Monthly loop | 12 | **12** | 1 partial | 0 |
-| Deal loop | 12 | **12** | 0 | 0 |
-| Service & ops | 6 | 0 | 0 | 0 |
-| Society portal | 7 | **7** | 0 | 0 |
-| Field (SUR-02) | 12 | **5** | 0 | 0 |
-| Cross-cutting | 2 | **2** | 0 | 0 |
-| **Total** | **51** | **51** | **1 partial** | **0** |
+| Monthly loop | 12 | **12** | **12** | 0 |
+| Deal loop | 12 | **12** | **12** | 0 |
+| Portfolio & ops | 6 | **6** | **6** | 0 |
+| Society portal | 7 | **7** | **7** | 0 |
+| Field (SUR-02) | 12 | **12** | **12** | 0 |
+| Cross-cutting | 2 | **2** | **2** | 0 |
+| **Total** | **51** | **51** | **51** | **0** |
 
-**Monthly loop and deal loop complete** — 24 specified against the seven-state requirement, with entry
-points, actions with permissions and failure behaviour, inputs with real error copy, exits,
-responsive, offline and accessibility. Verified by script: 0 table-column defects, 0 missing
-required sections, 0 unresolved SCR/CMP cross-references.
+**The priority-1 run is complete** — every screen specified against the seven-state requirement,
+with entry points, actions carrying permissions and failure behaviour, inputs with real error copy,
+exits, responsive, offline and accessibility; and every screen drawn. Verified by script: 0
+table-column defects, 0 missing required sections, 0 unresolved SCR/CMP cross-references.
 
-**Field surface started (2026-08-13)** — `05-field.md` opens with §0, the surface's own operating
-rules (offline write path and queue, conflict, `capturedAt` vs `receivedAt`, the photo pipeline,
-visit-scoped navigation, the survey shell, suspension and access re-checks, device/session), written
-once because twelve screens cannot each invent their own answer to "what happens when the upload
-fails." Then SCR-171 (field home) and SCR-010–013, which complete **FLOW-02's field side** — the
-survey now runs end to end from the visit card to SCR-014's review.
+### 3.1 Rendered prototypes
 
-**Mockups deliberately deferred** (user's call, 2026-08-12): specs first, mockups revisited after
-Phase 6 prioritization so nothing is drawn that then gets cut. The cost accepted is that specs go
-unverified visually until then — the step that normally catches misunderstandings early. SCR-082's
-partial mockup inside the theme reference is the only one that exists.
+Six decks, one per surface group, each screen with its full state set. All three themes work in
+every deck and the choice persists per account (see `../05a-theme-system.md` §3.2b).
 
-**Order.** Monthly loop first, then deal loop, then field, portal, ops, cross-cutting. The method
-says order by flow criticality; the monthly loop is the revenue spine — it runs every month for
-every society for the life of every contract, where the deal loop runs once per society — and it
-is where the product's genuinely novel problem lives (per-circuit bands, extrapolation, the
-17-day window). Two of its screens are already drawn as part of the theme work.
+| Deck | Screens | Artifact |
+|---|---|---|
+| Monthly loop | 12 | https://claude.ai/code/artifact/cec984c8-6007-4411-996f-3dcd3280e604 |
+| Deal loop | 12 | https://claude.ai/code/artifact/fc9984e2-3b78-4959-87ba-ac326f3862c6 |
+| Field surface | 12 | https://claude.ai/code/artifact/74300664-e56c-4ae3-80ee-8a7e85c4edb5 |
+| Society portal | 7 | https://claude.ai/code/artifact/881a2e1e-e4c9-4ec0-96a9-a55916074e8e |
+| Portfolio & dispatch | 6 | https://claude.ai/code/artifact/c6a8aadb-4df9-407e-872a-e5c624bfb133 |
+| Sign in & offline | 2 | https://claude.ai/code/artifact/a356917a-9d95-4ecb-baeb-85905a13a5d3 |
 
-**Next screen:** SCR-020 — Meter install & load validation (start of FLOW-03's commissioning run on
-the field surface).
+Sources in [`../mockups/`](../mockups/) — `python3 build_<name>.py` regenerates a deck. That folder's
+README records the rules the drawing exposed, which are worth reading before the rebuild starts.
+
+**What drawing them caught that specifying them did not.** The value of this step was not
+presentational. Four defects were substantive: the deal deck labelled the revenue share **58%
+FirsThing / 42% society**, exactly inverted against CON-11, with the rupee figures correct and the
+parties swapped — the kind of error that survives every review that does not check the arithmetic
+against the constraint. The ops deck's suspension screen named a different society than its own data
+thread. `--text-subtle` failed WCAG AA on two tinted surfaces at 4.47:1 and 4.46:1, close enough to
+pass inspection. And three separate decks clipped a table inside a two-up grid, each time cutting
+the column a reader most needs — a fee, a reason, an approver.
+
+**Mockups were deferred and then un-deferred.** The 2026-08-12 call was specs-first so nothing got
+drawn that Phase 6 then cut. That held until the priority-1 set was complete, at which point the
+argument reversed: the set is fixed, and the inverted revenue share had been sitting in a spec
+nobody could see.
 
 ## 4. Navigation map
 
-*Written once the priority-1 set is specified — a map drawn before the screens is a guess.*
+Three of the six decks each invented their own back-office sidebar, and the three disagree — one
+opens with "Portfolio / Societies", one with "Ops home / Pipeline", one with "Ops home / Portfolio /
+Month / Dispatch". That is the map's real job: there is **one** back-office console, and this is it.
+
+### 4.1 SUR-01 back office — one sidebar, filtered by role
+
+Twenty-four destinations under four group headings, plus the home. Long, but this is a console
+someone lives in for eight hours; the alternative — hiding the month behind a menu — costs more than
+the length does. **The filter is per-permission, not per-group**: an accountant sees Release queue
+and Invoices and nothing else in Month.
+
+| Group | Item | Screen | Badge | Visible to |
+|---|---|---|---|---|
+| — | **Ops home** | SCR-240 | band-1 count | PER-01, PER-02, management |
+| **Pipeline** | Pipeline | SCR-003 | open deals | PER-07, PER-01 |
+| | Surveys | SCR-014 | awaiting review | PER-01 |
+| | Commissioning | SCR-025 | in window | PER-01 |
+| | Demo reports | SCR-030 | — | PER-01, PER-07 |
+| | KYC | SCR-040 | outstanding | PER-01 |
+| | Offers | SCR-050 | awaiting response | PER-07, PER-01 |
+| | Agreements | SCR-052 | in transit | PER-01 |
+| | Installation | SCR-060 | active projects | PER-01 |
+| **Month** | Readings | SCR-080 | — | PER-01 |
+| | Ingest health | SCR-084 | alerting meters | PER-01 |
+| | Anomalies | SCR-081 | unresolved | PER-01 |
+| | Close board | SCR-082 | blocked societies | PER-01, PER-08 |
+| | Compliance | SCR-090 | — | PER-01 |
+| | Deviations | SCR-110 | open | PER-01, management |
+| | Savings reports | SCR-091 | unreleased | PER-01 |
+| | Release queue | SCR-092 | awaiting release | **PER-08**, PER-01 |
+| | Invoices | SCR-093 | unreconciled | PER-08, PER-01 |
+| | Arrears | SCR-120 | overdue | PER-01 |
+| **Portfolio** | Societies | SCR-241 | — | all internal |
+| | Circuit registry | SCR-251 | — | PER-01 |
+| **Dispatch** | Visit scheduler | SCR-170 | unaccepted | PER-01 |
+
+**Deliberately not in the sidebar.** Ten priority-1 screens are reachable only by drilling, because
+each is always *about* something and a nav entry would land on a chooser:
+
+| Screen | Reached from |
+|---|---|
+| SCR-001 lead form | "New lead" on SCR-003; "Add service line" on SCR-250 |
+| SCR-002 proposal editor | a lead on SCR-001/SCR-003 |
+| SCR-053 contract record | SCR-052, SCR-090, SCR-113, SCR-250 |
+| SCR-063 installation blockers | SCR-060, SCR-061, SCR-240 |
+| SCR-112 root-cause & decision | SCR-110, SCR-111, SCR-113, SCR-240 |
+| SCR-113 escalation & adjustment | SCR-110, SCR-112 |
+| SCR-242 circuit drill-down | a society on SCR-241, SCR-250 |
+| SCR-250 society record | a row on SCR-241 |
+| SCR-091 savings report (ops) | SCR-090, SCR-092, SCR-082, SCR-261 |
+| SCR-093 invoice reconciliation | SCR-092, SCR-082, SCR-280 |
+
+SCR-091 and SCR-093 appear in both lists on purpose — each has a monthly queue worth reaching
+directly *and* a single-society form reached from the month.
+
+### 4.2 SUR-01 society portal — four nav sets, one per lifecycle stage
+
+The portal's nav is not filtered, it is **replaced**. A prospect has no home to go to; showing them
+a greyed-out "Savings" tab advertises a thing they cannot have.
+
+| Stage | Nav | Screens reachable |
+|---|---|---|
+| **Prospect** (CON-34) | *none* — single page | SCR-031 |
+| **Pre-contract** | Your offer · Documents · Contact us | SCR-051, SCR-041 |
+| **Installing** | Home · Installation · Documents · Contact us | SCR-100, SCR-062, SCR-041 |
+| **Live** | Home · Savings · Invoices · Documents · Your contract | SCR-100, SCR-261, SCR-260, SCR-101 |
+
+Transitions are automatic on contract state (FEAT-098). "Raise a ticket" (SCR-130, priority 2) sits
+on every stage's page furniture rather than in the nav — see §4.5.
+
+### 4.3 SUR-02 field — no nav at all
+
+The field surface has **one root and no chrome**: SCR-171 (My visits). Everything else is entered
+from a visit and returns to it, which is §0.5's visit-scoped navigation rule made concrete. A
+technician on a ladder with one hand free does not browse.
+
+```
+SCR-171  My visits  ── the only root; app launch always lands here
+  └─ a visit card ──▶ by visit type:
+       survey        → SCR-010 ▸ SCR-011 ▸ SCR-012 ▸ SCR-013   (survey shell: 4 sections, 1 container)
+       meter-install → SCR-020 ──▶ SCR-021 gate pass (mandatory before leaving)
+       demo-install  → SCR-023 ──▶ SCR-021
+       monitor       → SCR-022 ──▶ SCR-024 benchmark result
+       batch         → SCR-061 ──▶ SCR-021 · SCR-064 completion certificate
+  └─ SCR-223  Offline & sync  ── reachable from anywhere; the sync pill in the header
+```
+
+The survey's four screens are **one container with a section index**, not four destinations — which
+is why they have no entry-point tables of their own.
+
+### 4.4 Cross-cutting
+
+SCR-200 (sign in) is the root of everything and belongs to no nav. It routes by account type on
+success, and honours a deep link rather than discarding it — a committee member following an email
+link to their savings report lands on the report. SCR-223 is reachable from every field screen via
+the header's sync pill.
+
+### 4.5 What a priority-1-only build cannot reach
+
+Eighteen priority-2/3 screens are linked to from priority-1 screens. Each is a dead end until built,
+and the link count is a real prioritization signal — **SCR-130 is reached from six of the seven
+portal screens**, which makes "raise a ticket" priority 1 in behaviour whatever the inventory says.
+
+| Screen | Inbound links | From |
+|---|---|---|
+| SCR-130 raise a ticket | **6** | SCR-041, SCR-051, SCR-062, SCR-100, SCR-260, SCR-261 |
+| SCR-151 society 360 | 4 | SCR-053, SCR-112, SCR-120, SCR-250 |
+| SCR-160 contract amendment | 4 | SCR-053, SCR-063, SCR-113, SCR-251 |
+| SCR-101 contract view | 3 | SCR-051, SCR-100, SCR-261 |
+| SCR-121 extension request | 2 | SCR-120, SCR-260 |
+| SCR-163 termination | 2 | SCR-053, SCR-250 |
+| SCR-180 notification log | 2 | SCR-002, SCR-120 |
+| SCR-234 audit log | 2 | SCR-053, SCR-112 |
+| SCR-280 documents | 2 | SCR-040, SCR-093 |
+| SCR-005, 111, 122, 132, 140, 172, 201, 230, 237 | 1 each | — |
+
+Six run the other way — priority-2 screens that are named as *entry points into* the priority-1 set
+(SCR-083 → SCR-080, SCR-101 → SCR-053, SCR-111 → SCR-112, SCR-121 → SCR-120, SCR-151 → SCR-053/120,
+SCR-280 → SCR-093). Those are safe to leave: the priority-1 screen is reachable another way.
 
 ## 5. Screen ↔ feature matrix
 
-*Written at the end of the priority-1 run, per the method's exit criterion that it proves no
-orphans in either direction.*
+The method's exit criterion is that the matrix proves **no orphans in either direction**. Both were
+checked by script against §1's tables, and both directions had a real finding.
+
+### 5.1 Features → screens
+
+**108 features. 104 have a screen, 4 do not — and all four are correct:**
+
+| Feature | Why it has no screen |
+|---|---|
+| FEAT-048 monthly savings calculation run | Headless. HL-01 — output on SCR-082, SCR-090, SCR-091 |
+| FEAT-052 agreed-benchmark billing | Headless. HL-02 — output on SCR-090, SCR-091 |
+| FEAT-091 notification send & delivery log | Headless. HL-03 — output on SCR-180 |
+| FEAT-104 scheduled vendor API fetch | Headless. HL-05 — output on SCR-084, SCR-080, SCR-082 |
+
+**Two orphans were found and fixed** rather than explained away. Both were features added *after*
+the inventory table was written, and neither was picked up by the row it belonged to:
+
+- **FEAT-107** (upload reconciliation & overwrite control, added 2026-08-13 with CON-43's revision)
+  is specified on SCR-080 — the reconciliation report is called "the heart of the screen" in the
+  spec — but SCR-080's inventory row still read `FEAT-043, 044, 099`. Added.
+- **FEAT-108** (society portal accounts & authority, added 2026-08-13 with CON-45) is specified in
+  `03-society-portal.md` §0.1 and surfaced on SCR-250's People panel, but appeared on no row at all.
+  Added to SCR-250 — **and it exposed a missing screen**: the portal's own "Manage accounts → account
+  list" is named as a destination that nothing owns. Now **SCR-263**, priority 2. This one matters
+  more than its priority suggests: CON-45 puts the commercially binding acts behind `office-bearer`,
+  and the screen where a society sees and changes who holds it did not exist.
+
+**41 features have a screen but not a priority-1 one** — they are the priority-2/3 backlog and are
+listed in §1's tables. The clusters are coherent rather than scattered, which is a good sign for
+Phase 6 sequencing: the whole service loop (tickets FEAT-070–074, inspections FEAT-078–080, spares
+FEAT-075–077, support threads FEAT-081–084), contract lifecycle (FEAT-063, 064, 103, 051), and
+notifications (FEAT-090–093).
+
+### 5.2 Screens → features
+
+Fifty of the 51 priority-1 screens cite at least one feature, checked by script. **One cites none:
+SCR-223** (offline & sync pending), which carries XC-02 instead — offline tolerance is a
+cross-cutting requirement, not a feature, and giving it a screen was itself a Phase 5 finding (§2).
+SCR-021 is the near miss: it is primarily XC-01, the gate-pass pattern, and picks up FEAT-097 for
+provisional release.
+
+**Density check.** Two screens carry four features and none carries more — SCR-025 (FEAT-011–014,
+the per-circuit commissioning fan-out) and SCR-080 (FEAT-043, 044, 099, 107, the two ingest
+concerns plus reconciliation). Nothing in the set looks like a feature dumping ground, which is
+usually where a screen is quietly doing two jobs.
+
+### 5.3 Flow coverage
+
+All 19 flows have screens in the inventory. **14 have a specified one; 5 have none at all** — and
+that is the sharpest thing this matrix says about what a priority-1 build is.
+
+**The 8 flows Phase 4 marked critical all have priority-1 coverage**, but only half are complete:
+
+| Flow | Coverage | Deferred |
+|---|---|---|
+| FLOW-02 survey | **complete** | — |
+| FLOW-03 commissioning | **complete** | — |
+| FLOW-06 offer → agreement | **complete** | — |
+| FLOW-10 billing run & release | **complete** | — |
+| FLOW-07 installation | one screen short | SCR-065 installation dashboard |
+| FLOW-09 ingest & validation | one screen short | SCR-083 quarantined files |
+| FLOW-11 deviation review | one screen short | SCR-111 field investigation |
+| FLOW-X1 visit scheduling | one screen short | SCR-172 visit board |
+
+Each of those four gaps is a single screen, and each is the *handling* path rather than the main
+one — which is the right thing to defer, but worth naming, because FLOW-11 without SCR-111 means a
+deviation can be opened and classified from the desk but not sent to the field, and FLOW-09 without
+SCR-083 means a file that fails to match has nowhere to go.
+
+**Five flows have no priority-1 screen whatsoever** — FLOW-13 (ticket to resolution), FLOW-14
+(routine inspection), FLOW-15 (support thread), FLOW-17 (contract lifecycle) and FLOW-X2
+(notification dispatch). This is the entire **service loop** plus contract lifecycle, and it is
+deferred wholesale, not thinned. A build of the priority-1 set can sell, commission, meter, bill and
+collect — it cannot answer a complaint, run an inspection, amend a contract or send an email. That
+is a defensible first release and an indefensible steady state; Phase 6 should treat FLOW-13 and
+FLOW-X2 as the first things after priority 1, since SCR-130 already has six inbound links from
+screens that will exist (§4.5) and notifications are how a society learns a report was released at
+all.
 
 ## 6. Discovered in this phase
 
@@ -335,4 +540,12 @@ drawing** the screens exposes.
 | Spec rule | — | SCR-013 derives the pump-audit unit list from the room's structure (towers × tanks → float-switch and actuator-valve rows, pre-named) rather than presenting CON-28c's six categories as a flat form. FEAT-008's own stated risk is that the burden gets shortcut on a phone; making most of the work *confirming* rather than *typing* is the structural answer, with copy-down for identical units and a still-mandatory per-unit photo | `05-field.md` SCR-013 |
 | **Decision** | **CON-44** | **Answered 2026-08-13: yes, on every visit type.** ASSUM-25 is invalidated — a visit carries a team, not an owner. Device-generated IDs already make concurrent creates safe, so the real exposure is **double-counting**, which reaches the bill through `representedLightCount` → benchmark → fee. Model: work partitions by **area**; claims are advisory and optimistic (no lock is possible offline); a doubly-claimed area is **contested**, never summed or deduplicated; submission is blocked while any area is contested or any contributor is unsynced | `../00-intake.md` CON-44; `05-field.md` §0.1b; SCR-011, SCR-014, SCR-171 amended |
 | Assumption | ASSUM-26 | Field photo processing: 1,600px long edge, JPEG ~0.75, ≈250–400 KB, EXIF location stripped. Legibility of a pump-room model label at that setting is untested | `../00-intake.md` ASSUM-26 |
+| **Defect** | CON-11 | The deal deck labelled the revenue share **58% FirsThing / 42% society** — exactly inverted, with the rupee figures correct and the parties swapped. Nine places. Caught by checking the drawing against the constraint, not by reading it; the monthly deck was already right, which is what confirmed the direction | `../mockups/build_deal.py`; SCR-050, SCR-053 |
+| **System gap** | — | Three decks each invented their own back-office sidebar and the three disagree. Resolved into **one console nav**, 24 destinations under four groups, filtered per permission rather than per group — an accountant sees Release queue and Invoices and nothing else in Month | §4.1 |
+| **Coverage** | FEAT-107 | Specified on SCR-080 (the reconciliation report is "the heart of the screen") but the inventory row still read `FEAT-043, 044, 099`. Added after the matrix caught it — the feature was created after the row was written | §1.2 SCR-080 |
+| **Coverage** | FEAT-108 | On no inventory row at all. Added to SCR-250 (the People panel), **and it exposed a missing screen**: the portal's own "Manage accounts → account list" is a named destination nothing owned. Now SCR-263, priority 2 — which matters more than its priority says, since CON-45 puts the binding acts behind `office-bearer` and the screen where a society sees who holds it did not exist | §1.5 SCR-263; `03-society-portal.md` §0.1 |
+| **Prioritization** | SCR-130 | Reached from **six of the seven** priority-1 portal screens. "Raise a ticket" is priority 1 in behaviour whatever the inventory says, and a priority-1-only build has six dead links to it | §4.5 |
+| **Scope** | — | **Five flows have no priority-1 screen whatsoever** — FLOW-13, 14, 15, 17 and X2, which is the entire service loop plus contract lifecycle and notifications. A priority-1 build can sell, commission, meter, bill and collect; it cannot answer a complaint, run an inspection, amend a contract or send an email. Defensible as a first release, not as a steady state | §5.3 |
+| **Scope** | — | Four of the eight critical flows are one screen short each, and in every case the deferred screen is the *handling* path: FLOW-09 without SCR-083 leaves an unmatched file nowhere to go; FLOW-11 without SCR-111 means a deviation can be classified from the desk but never sent to the field | §5.3 |
+| System caveat | — | An SVG's `width`/`height` **presentation attributes lose to any CSS rule**, so the global `svg{width:1.05em}` icon default silently collapsed the first chart drawn after it landed. A deliberately-sized SVG must be sized in CSS | `../05a-theme-system.md` §3.9 |
 | Assumption | ASSUM-27 | Personal Android phones, not company devices — which is why the device cache purges 7 days after a visit closes and sign-out is refused while work is unsynced | `../00-intake.md` ASSUM-27 |

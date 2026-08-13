@@ -1151,3 +1151,25 @@ failed 3 times since 09:00. Readings aren't arriving. You can still upload the m
 offline-meter and period-gap halves of this screen work on the CSV path alone and do **not** depend
 on it; only the API-status section and the refresh actions do. That split is deliberate, so the
 screen degrades to something useful rather than nothing if the API turns out not to exist.
+
+---
+
+## Coverage
+**Rendered mockups:** https://claude.ai/code/artifact/cec984c8-6007-4411-996f-3dcd3280e604 — every screen below, each with its full state set.
+
+| Screen | Spec | Mockup | Blueprint |
+|---|---|---|---|
+| SCR-080 CSV ingest | ✅ | ✅ | — |
+| SCR-084 vendor API ingest | ✅ | ✅ | — |
+| SCR-081 anomaly & coverage review | ✅ | ✅ | — |
+| SCR-082 benchmark commissioning | ✅ | ✅ | — |
+| SCR-090 per-circuit compliance | ✅ | ✅ | — |
+| SCR-091 mixed-basis month | ✅ | ✅ | — |
+| SCR-092 deviation review | ✅ | ✅ | — |
+| SCR-093 invoice build | ✅ | ✅ | — |
+| SCR-110 exception queue | ✅ | ✅ | — |
+| SCR-112 month-close board | ✅ | ✅ | — |
+| SCR-113 meter fleet health | ✅ | ✅ | — |
+| SCR-120 arrears & suspension | ✅ | ✅ | — |
+
+**All 12 priority-1 screens in this group are specified and mocked up.**

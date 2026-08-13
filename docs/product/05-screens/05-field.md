@@ -1241,20 +1241,22 @@ finance should confirm that is acceptable.
 
 ## Coverage
 
+**Rendered mockups:** https://claude.ai/code/artifact/74300664-e56c-4ae3-80ee-8a7e85c4edb5 — every screen below, each with its full state set.
+
 | Screen | Spec | Mockup | Blueprint |
 |---|---|---|---|
-| SCR-171 my visits | ✅ | — | — |
-| SCR-010 survey: society profile & access | ✅ | — | — |
-| SCR-011 survey: lighting inventory | ✅ | — | — |
-| SCR-012 survey: circuit selection | ✅ | — | — |
-| SCR-013 survey: pump audit & logbook | ✅ | — | — |
-| SCR-020 meter install & load validation | ✅ | — | — |
-| SCR-021 gate pass | ✅ | — | — |
-| SCR-022 commissioning monitor | ✅ | — | — |
-| SCR-023 demo installation | ✅ | — | — |
-| SCR-024 benchmark result | ✅ | — | — |
-| SCR-061 daily batch capture | ✅ | — | — |
-| SCR-064 completion certificate | ✅ | — | — |
+| SCR-171 my visits | ✅ | ✅ | — |
+| SCR-010 survey: society profile & access | ✅ | ✅ | — |
+| SCR-011 survey: lighting inventory | ✅ | ✅ | — |
+| SCR-012 survey: circuit selection | ✅ | ✅ | — |
+| SCR-013 survey: pump audit & logbook | ✅ | ✅ | — |
+| SCR-020 meter install & load validation | ✅ | ✅ | — |
+| SCR-021 gate pass | ✅ | ✅ | — |
+| SCR-022 commissioning monitor | ✅ | ✅ | — |
+| SCR-023 demo installation | ✅ | ✅ | — |
+| SCR-024 benchmark result | ✅ | ✅ | — |
+| SCR-061 daily batch capture | ✅ | ✅ | — |
+| SCR-064 completion certificate | ✅ | ✅ | — |
 
 **The field surface is complete for priority 1.** FLOW-02 (survey), FLOW-03 (commissioning) and
 FLOW-07 (installation) all have their field side specified, and every one hands off to a back-office

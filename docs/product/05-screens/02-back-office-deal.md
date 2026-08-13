@@ -827,3 +827,25 @@ an amendment or a contract-permitted deterministic rescale, and both write an au
 **Copy:** count discrepancy — "60 more lights than surveyed in Basement B. This raises the
 represented count from 1,200 to 1,260 and the monthly fee by about ₹6,700. It needs a contract
 amendment before it can take effect."
+
+---
+
+## Coverage
+**Rendered mockups:** https://claude.ai/code/artifact/fc9984e2-3b78-4959-87ba-ac326f3862c6 — every screen below, each with its full state set.
+
+| Screen | Spec | Mockup | Blueprint |
+|---|---|---|---|
+| SCR-001 new lead | ✅ | ✅ | — |
+| SCR-002 proposal builder | ✅ | ✅ | — |
+| SCR-003 pipeline | ✅ | ✅ | — |
+| SCR-014 survey review | ✅ | ✅ | — |
+| SCR-025 deal commissioning status | ✅ | ✅ | — |
+| SCR-030 demo report build | ✅ | ✅ | — |
+| SCR-040 KYC checklist | ✅ | ✅ | — |
+| SCR-050 offer builder | ✅ | ✅ | — |
+| SCR-052 agreement | ✅ | ✅ | — |
+| SCR-053 contract record | ✅ | ✅ | — |
+| SCR-060 installation plan | ✅ | ✅ | — |
+| SCR-063 installation blockers | ✅ | ✅ | — |
+
+**All 12 priority-1 screens in this group are specified and mocked up.**

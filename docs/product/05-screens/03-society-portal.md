@@ -499,15 +499,17 @@ anything automatically.
 
 ## Coverage
 
+**Rendered mockups:** https://claude.ai/code/artifact/881a2e1e-e4c9-4ec0-96a9-a55916074e8e — every screen below, each with its full state set.
+
 | Screen | Spec | Mockup | Blueprint |
 |---|---|---|---|
-| SCR-100 portal home | ✅ | — | — |
-| SCR-261 savings report (society) | ✅ | — | — |
-| SCR-260 invoices (society) | ✅ | — | — |
-| SCR-051 offer view & response | ✅ | — | — |
-| SCR-041 document upload (KYC) | ✅ | — | — |
-| SCR-062 daily batch review | ✅ | — | — |
-| SCR-031 demo report view | ✅ | — | — |
+| SCR-100 portal home | ✅ | ✅ | — |
+| SCR-261 savings report (society) | ✅ | ✅ | — |
+| SCR-260 invoices (society) | ✅ | ✅ | — |
+| SCR-051 offer view & response | ✅ | ✅ | — |
+| SCR-041 document upload (KYC) | ✅ | ✅ | — |
+| SCR-062 daily batch review | ✅ | ✅ | — |
+| SCR-031 demo report view | ✅ | ✅ | — |
 
 **All 7 priority-1 portal screens specified.** Three carry CON-45's binding-act gate (SCR-051
 accept/decline, SCR-261 and SCR-260 dispute); SCR-062's approval is open to all three authorities

@@ -8,6 +8,25 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 Before analyzing, editing, or implementing a target, read `AGENTS.md`, `PROJECT_CONTEXT.md`, and `README.md` at the repository root. If a subfolder later gets its own `AGENTS.md`, that one adds to, rather than replaces, this one unless it explicitly states otherwise.
 
+## Blueprint & Scope
+
+**`docs/README.md` is the entry point for what to build** — it indexes the full product blueprint (`docs/product/`, `docs/engineering/`) and links `docs/backlog.yaml`, the machine-readable spine (108 features, 553 acceptance criteria, 116 R0 stories, 8 milestones, and — as of Phase 9 — a `tests:` array on every R0 acceptance criterion). Start any implementation task from milestone MS-01 in `docs/engineering/11-development-plan.md` §3, not from assumptions about what the app should do — there is currently no `src/` on this branch at all.
+
+**Scope changes go through the blueprint documents, not straight into code.** If an implementation surfaces a gap, ambiguity, or a reason to deviate from a spec, resolve it in the owning `docs/product/` or `docs/engineering/` document (and `docs/backlog.yaml` if it affects a feature/AC/screen), the same way every prior phase in this blueprint recorded its decisions — not silently in a PR description. Undocumented drift is how the blueprint becomes fiction within a fortnight.
+
+**Invariants (`docs/product/00-intake.md` §4) are hard rules, not aspirations** — every one exists because of a specific failure mode:
+- **INV-01**: a non-admin account can never acquire admin access by mistake (admin logins live in their own table, not a `role` enum value).
+- **INV-02**: every "savings" figure shown to a society must trace to the readings and benchmark that produced it — a number they can't audit is a number they can dispute, and it's what they're billed on.
+- **INV-03**: any bill-changing deviation decision needs an owner and a root-cause classification recorded, not just a fixable/not-fixable flag.
+- **INV-04**: a document's period (`YYYY-MM`) is always an explicit user selection, never inferred.
+- **INV-05**: a society user can only ever see their own society's data — enforce server-side on every query; `proxy.ts` (or its equivalent) is optimistic-only and does not count as enforcement.
+- **INV-06**: every list surface defines loading, empty, error, and degraded states.
+- **INV-07**: a light-count-triggered baseline rescale is a distinct, timestamped event, never conflated with a judgment-call billing decision (INV-03).
+- **INV-08**: the platform is monitor-only for pump hardware — it reads sensor/status data but never issues actuation commands. No "start pump" / "open valve" UI, ever, in this blueprint's scope.
+- **INV-09**: every monthly meter-reading upload runs anomaly detection before that month's bill generates.
+
+**Definition of done** (`docs/engineering/11-development-plan.md` §8) — an item is done when its acceptance criteria pass (verified at the test level `docs/engineering/12-test-plan.md` assigns it), it's reviewed and merged, any invariant it touches is verified, `PROJECT_CONTEXT.md` is updated in the same change (already this repo's Research Gate convention below), and it's deployed to the milestone's target environment with no regression to a prior milestone's exit criteria.
+
 ## Research Gate
 
 Before every material architecture, security, or data-model decision (a new dependency, a schema change, an auth strategy, anything touching the Prisma schema or the proxy/route-protection layer):

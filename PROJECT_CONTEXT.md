@@ -155,6 +155,29 @@ id, plus a `-E2E` id for the 7 anchors) in the same change; validator re-run wit
 criteria have no test cases," all R1–R3) joining the existing 15, AC test coverage reported as
 210/553 (37% system-wide, 100% of R0).
 
+**Handoff — `docs/README.md` written 2026-08-14, closing out the blueprint workflow's 10th and
+final stage.** Ran the method's consistency sweep before writing the index rather than assuming
+the seams held, and it found two real, on-disk staleness defects, both fixed in the same change:
+`docs/product/05-screens/README.md`'s own status line still read "Draft — per-screen loop running
+on priority 1 (29 of 51)" despite the underlying work having finished (git history shows the loop
+completed through "all 51 priority-1 screens specified," all 6 mockup decks built, and the nav
+map/matrix drawn) — corrected to Approved. The same file's own directory index table had also gone
+stale: it named `03-back-office-ops.md`/`04-society-portal.md` in the opposite order from what's
+actually on disk (`03-society-portal.md`/`04-back-office-ops.md`), and pointed at a
+`07-headless.md` that was never created — HL-01..05 are specified inline in the README's own §1.9,
+not delegated to a surface file. Both fixed; the index table now matches the 7 files that actually
+exist. **One gap was surfaced, not silently patched over**: Phases 6 (`08-prioritization.md`), 8
+(`11-development-plan.md`), and 9 (`12-test-plan.md`) were each drafted and then built upon under
+this session's "continue unless a real decision needs surfacing" instruction, but never given an
+explicit approval checkpoint the way Phase 7 got (two individually-surfaced questions, both
+answered) — `08-prioritization.md` in particular still has no "User approval: granted/pending" line
+at all, predating that convention. `docs/README.md`'s own "Current state" section states this
+directly as the single next action, rather than marking all three Approved without an approval
+having actually happened. `AGENTS.md` also updated (per the method's "agent-executable handoff"
+step) with a new "Blueprint & Scope" section: a pointer to `docs/README.md`/`backlog.yaml`, all 9
+invariants restated as hard rules with why each exists, and the Phase 8 Definition of Done — so an
+agent starting cold in this repo finds the blueprint without being told where to look.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -1,5 +1,5 @@
 # Screens: Spec & Design — index
-**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — per-screen loop running on priority 1 (29 of 51)
+**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Approved — all 51 priority-1 screens specified, all 6 mockup decks built, navigation map and screen↔feature matrix drawn
 **Last updated:** 2026-08-13 · **Mode:** Ecosystem
 
 > **This is the index.** The method splits above ~25 screens, and there are 109, so the
@@ -11,11 +11,13 @@
 > | [`00-global-patterns.md`](00-global-patterns.md) | Rules every screen inherits, and the shared components specified once |
 > | [`01-back-office-monthly.md`](01-back-office-monthly.md) | SUR-01 monthly loop — the revenue spine |
 > | [`02-back-office-deal.md`](02-back-office-deal.md) | SUR-01 sales & deal loop |
-> | [`03-back-office-ops.md`](03-back-office-ops.md) | SUR-01 service loop, portfolio, registry |
-> | [`04-society-portal.md`](04-society-portal.md) | SUR-01 society portal |
+> | [`03-society-portal.md`](03-society-portal.md) | SUR-01 society portal |
+> | [`04-back-office-ops.md`](04-back-office-ops.md) | SUR-01 service loop, portfolio, registry |
 > | [`05-field.md`](05-field.md) | SUR-02 field, mobile web, offline-tolerant |
 > | [`06-cross-cutting.md`](06-cross-cutting.md) | Auth, errors, account, administration |
-> | [`07-headless.md`](07-headless.md) | HL-01..04 — no interface, still specified |
+>
+> HL-01..05 (headless units — no interface) are specified in §1.9 of this index, not in a
+> separate file — there's no UI surface to warrant splitting them out.
 
 > **Numbering:** this is *this blueprint's* Phase 5. It follows the skill's
 > `references/phase-07-screens.md` (screens) and `references/phase-06-branding.md` (theme), which

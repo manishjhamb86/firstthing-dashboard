@@ -3,7 +3,7 @@ meta:
   version: 0.6.0
   mode: application
   generated: 2026-08-13
-  phases_complete: [0, 1, 2, 3, 4, 5, 6]
+  phases_complete: [0, 1, 2, 3, 4, 5, 6, 7]
   source_docs:
     intake: docs/product/00-intake.md
     vision: docs/product/01-vision-strategy.md
@@ -4295,6 +4295,7 @@ features:
     release: R0
     depends_on: [FEAT-043]
     status: ready
+    architecture_notes: "docs/engineering/09-architecture.md §4 CONTRACT-11, §11 NFR-04 -- the provenance chain this feature exposes is the same one GATE-01 requires every write to carry; enforced structurally via the §9 query-layer convention, not per-feature."
     acceptance_criteria:
       - id: FEAT-047-AC-1
         type: happy
@@ -4362,6 +4363,7 @@ features:
     depends_on: [FEAT-040, FEAT-041]
     status: ready
     backend_only: true
+    architecture_notes: "docs/engineering/09-architecture.md §5.2 COMP-04, ADR-004 -- computes per-CircuitFeeLine, fanning in at MonthlyCalculation; §11 RISK-02 flags Contract.tolerancePct's scope (per-contract vs per-circuit) as needing confirmation before this is built."
     acceptance_criteria:
       - id: FEAT-048-AC-1
         type: happy
@@ -5079,6 +5081,7 @@ features:
     release: R0
     depends_on: [FEAT-048, FEAT-050]
     status: ready
+    architecture_notes: "docs/engineering/09-architecture.md §5.2 SavingsReport -- immutable once released (ADR-005); provenanceLinks field carries INV-02's chain back to the readings/benchmark versions used."
     acceptance_criteria:
       - id: FEAT-059-AC-1
         type: happy
@@ -6836,6 +6839,7 @@ features:
     release: R2
     depends_on: []
     status: proposed
+    architecture_notes: "docs/engineering/09-architecture.md §3 COMP-10, ADR-008 (email provider, proposed: AWS SES) -- catalogue enforcement is a lint/compile-time check that every notification call site references a known eventCode (CONTRACT-12), not a runtime check."
     acceptance_criteria:
       - id: FEAT-090-AC-1
         type: happy
@@ -6889,6 +6893,7 @@ features:
     release: R2
     depends_on: [FEAT-090, FEAT-092]
     status: proposed
+    architecture_notes: "docs/engineering/09-architecture.md §1 NFR-10 (send within 5min, bounce halts a contractual clock within 1h), ADR-008 (AWS SES proposed, SNS bounce webhooks feed providerResult), §11 RISK-07 (cold sending-domain deliverability -- warm the domain before this is load-bearing for a real CON-13 suspension cycle)."
     acceptance_criteria:
       - id: FEAT-091-AC-1
         type: happy
@@ -7579,6 +7584,7 @@ features:
     depends_on: [FEAT-040]
     blocked_by_spike: SPIKE-01
     status: proposed
+    architecture_notes: "docs/engineering/09-architecture.md ADR-010 -- build against the VendorReadingSource interface (COMP-03) from the start, so a negative SPIKE-01 finding removes one implementation, not a rewrite of FEAT-107's reconciliation or COMP-04's calculation engine."
     acceptance_criteria:
       - id: FEAT-104-AC-1
         type: happy
@@ -7639,6 +7645,7 @@ features:
     depends_on: [FEAT-104]
     blocked_by_spike: SPIKE-01
     status: proposed
+    architecture_notes: "docs/engineering/09-architecture.md ADR-010 -- shares FEAT-104's VendorReadingSource interface and its `fetch_readings` permission extends the existing AdminPermission array (§6), not a new authz model."
     acceptance_criteria:
       - id: FEAT-105-AC-1
         type: happy
@@ -7693,6 +7700,7 @@ features:
     depends_on: [FEAT-040, FEAT-043, FEAT-104]
     blocked_by_spike: SPIKE-01
     status: proposed
+    architecture_notes: "docs/engineering/09-architecture.md §11 RISK-06 (alert fatigue -- dedup + close-window-proportional severity need tuning against real data post-launch, not resolvable pre-build); the missing-readings branch (CSV-path only) does not depend on SPIKE-01 and can be built ahead of it, per the feature's own minimum-viable-version note."
     acceptance_criteria:
       - id: FEAT-106-AC-1
         type: happy
@@ -7833,6 +7841,7 @@ features:
     release: R0
     depends_on: [FEAT-085]
     status: ready
+    architecture_notes: "docs/engineering/09-architecture.md §6 -- portalAuthority is a second, orthogonal authorization model alongside AdminUser.permissions, deliberately not unified; GATE-04's binding-act check is server-side on the action per this feature's own AC-2, matching the existing manage_admins precedent."
     acceptance_criteria:
       - id: FEAT-108-AC-1
         type: happy
@@ -7922,6 +7931,13 @@ spikes:
     blocks: [FEAT-104, FEAT-105, FEAT-106]
     output: "A written finding: API exists and is viable / does not exist / exists but unviable at scale."
     status: proposed
+  - id: SPIKE-02
+    question: "Does India's DPDP Act (2023) impose consent, purpose-limitation, or breach-notification obligations this system's PII footprint doesn't yet meet? (docs/engineering/09-architecture.md §6, RISK-03)"
+    time_box_days: 2
+    blocks: []
+    output: "A written finding from a legal/compliance review, not a technical spike -- flagged as such so it is not scheduled as a Claude Code build session by mistake. Covers SocietyContact, Profile/AdminUser, NotificationDelivery, GatePass signature images, and field/inspection photos."
+    status: proposed
+    non_technical: true
 
 invariants:
   - id: INV-02

@@ -63,7 +63,44 @@ defects along the way, both fixed and recorded in `05a-theme-system.md` §3.11: 
 white-text contrast on four candidates — the shade the user was initially drawn to cleared just
 1.95:1 and would have shipped the least legible element in the product; and the dot's placement
 relative to the FT letterforms was inconsistent across the four asset files until traced to one
-canonical, scaled geometry. Phase 7 (architecture, incl. the new build's data model) is next.
+canonical, scaled geometry.
+
+**Phase 7 (Architecture & Technical Decisions) — draft complete, pending user approval.**
+`docs/engineering/09-architecture.md` (12 sections per the skill's template) plus 10 ADRs under
+`docs/engineering/adr/`. Reconfirms CON-05's stack and commits to **one Next.js deployment**, not
+microservices — the society portal stays "a role-scoped projection of SUR-01... separated by
+INV-05's tenancy boundary rather than by deployment" exactly as `04-flows-system-map.md` §3 already
+argued, and SUR-02 (field) is a client of the same app with an IndexedDB offline outbox rather than
+a separate service (ADR-001/002). The greenfield Prisma schema is designed at ~40 models, organized
+by the 12-component capability map, with three structural rules applied throughout: versioned-not-
+mutated entities for provenance (`Benchmark`, `MeterReading` supersession — ADR-005, serving
+INV-02/INV-03/INV-07), `CircuitFeeLine` as the first-class per-circuit billing grain that makes
+CON-11's corrected extrapolation model queryable rather than buried in JSON (ADR-004), and
+`FieldVisitParticipant`/`FieldVisitAreaClaim` replacing a single visit assignee to match CON-44's
+team/area-claim model (ADR-007). All 12 cross-surface contracts (XS-01..12) from Phase 4 are
+specified as concrete Route Handler contracts with idempotency/versioning semantics; the two
+blocking ones (gate-pass submit/approve, CON-18) are resolved by a 30-minute provisional-release
+sweep job (ADR-006) rather than an indefinite client-side wait. A new background-job component
+(Postgres-backed queue, ADR-003) is introduced as the one piece of infrastructure with no precedent
+in the current codebase — it now carries every time-driven guarantee in the product (SLA escalation,
+the CON-13 suspension countdown, the gate-pass timeout, notification retries), flagged in the risk
+register (RISK-04) as the closest thing this design has to a new single point of failure. Vendor
+meter-API work (FEAT-104/105/106) is built behind a provider-agnostic ingest interface (ADR-010) so
+SPIKE-01's still-unverified finding (ASSUM-24) can only ever remove one implementation, never force
+a rewrite of the billing engine. **Two items deliberately left open rather than decided
+unilaterally**: production hosting for `firsthing.earth` (ADR-009, recommends continuing the
+`zenovaa`-style self-managed VPS pattern already proven in staging, but marked Proposed pending the
+user's confirmation since it's a recurring-cost commitment) and whether `Contract.tolerancePct`
+should be schema-level per-contract or per-circuit (RISK-02 — the source constraints (CON-01a,
+CON-11) can be read either way; the schema takes the per-contract reading as a working assumption,
+flagged for confirmation before CAP-04/CAP-05 are built rather than silently resolved). A new
+non-technical spike (SPIKE-02) was added to `docs/backlog.yaml` for an India DPDP Act compliance
+review — the PII footprint (committee contacts, field-staff location data, signature/premises
+photos at 200-society scale) was validated against GST-only tax rules at Phase 0 (ASSUM-10) but
+never checked against data-protection law specifically, and this session did not resolve that
+either, only surfaced it. `docs/backlog.yaml` otherwise unchanged in shape — `architecture_notes`
+added to 8 features, `phases_complete` now includes `7` — validator still 15 errors/263 warnings,
+same documented/accepted class as Phase 6, confirmed by re-running it after every edit.
 
 ## Current Phase (archived application — history)
 

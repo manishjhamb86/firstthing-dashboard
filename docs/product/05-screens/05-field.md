@@ -212,8 +212,12 @@ society has none recorded the card says so plainly rather than showing blanks. R
 ### 0.8 Non-functional
 
 Load ≤2.5s on 3G for a cached screen, and a cached screen must render with **no network at all**.
-Touch targets 48px (`.roomy`). Contrast is judged for **direct sunlight and a dim basement**: the
-theme's dark mode is the default on this surface between 18:00 and 06:00 device time, overridable.
+Touch targets 48px (`.roomy`). Contrast is judged for **direct sunlight and a dim basement**, and
+every theme must hold in both — this surface gets no contrast dispensation for being outdoors.
+**Superseded 2026-08-13:** this section previously made the theme's dark mode the default here
+between 18:00 and 06:00 device time. That is a theme changing itself, which `../05a-theme-system.md`
+§3.2b now forbids outright; the default on this surface is Slate, the same as everywhere else, and
+a technician who wants Dark chooses it once and keeps it at noon and at midnight.
 Text never below 15px. No hover-only affordance exists anywhere on this surface. Screen-reader
 labels on every capture control, and every photo tile carries what it is a photo of, not "image".
 

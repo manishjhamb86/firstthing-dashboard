@@ -2,10 +2,12 @@
 **Product:** FirsThing Platform · **Phase:** 5 — Screens (theme gate) · **Status:** Approved — DIR-02 Console, built out and accessibility-verified
 **Last updated:** 2026-08-13 · **Mode:** Ecosystem
 
-> **2026-08-13 — a third theme.** Light · **Slate** · Dark, with **Light the default** on every
-> surface regardless of the OS preference. Slate darkens only the navigation shell and leaves the
-> working surface on the light palette. See §3.1 (the chrome/content token split it required) and
-> §3.2b (the theme itself, measured).
+> **2026-08-13 — a third theme, and it is the default.** **Slate** · Light · Dark, with **Slate
+> the default** on web and mobile alike. Slate darkens only the navigation shell and leaves the
+> working surface on the light palette. A chosen theme is stored on the account and is the only
+> thing that ever changes it — there is no `prefers-color-scheme` anywhere in the system, and the
+> field surface's old time-of-day dark rule is superseded. See §3.1 (the chrome/content token split
+> it required) and §3.2b (the theme, the default, and the never-changes-itself rule).
 
 > Companion to `05-screens/README.md`. That file's §0 gate is now **open** — the system below is settled,
 > so the per-screen loop can run research, mockup, verification and blueprint, not just
@@ -33,7 +35,9 @@ Settled with the user on 2026-08-12, before any pixels.
 **Themes:** light **and** dark, both first-class, driven by **semantic tokens** (`--surface`,
 `--border`, `--text-muted`, `--status-warning`) rather than the current system's 43 cryptic
 literals (`--m1`, `--card3`, `--ac`). Chosen so a token's *meaning* survives a palette change and
-so dark mode is a token remap, not a second stylesheet.
+so dark mode is a token remap, not a second stylesheet. *(A third theme, Slate, was added on
+2026-08-13 and is now the default — see §3.2b. It needed no new content values at all, which is
+the clearest evidence this token principle was the right call.)*
 
 **Why this character, grounded in the product.** The two audiences pull in opposite directions and
 the system has to serve both: an RWA committee reading a savings report needs to *trust* the
@@ -110,7 +114,11 @@ is possible at all). The navigation shell — sidebar, brand, nav items, nav cou
 the phone's own header bar — reads a parallel `--chrome-*` set rather than `--surface`/`--text`.
 In Light and Dark these resolve to exactly the surface values they replaced, so neither theme
 changes by a pixel. What the split buys is the ability to darken the shell without touching the
-working surface, which is precisely what Slate is.
+working surface, which is precisely what Slate is — and it is what makes Slate cheap enough to be
+the **default** (§3.2b) rather than a third thing to maintain. The base `:root` block carries the
+light content palette and the *Slate* chrome values; `[data-theme="light"]` restores the light
+chrome and changes nothing else, which is the clearest possible statement that Light and Slate
+differ only in the shell.
 
 ### 3.2 Palette
 
@@ -141,24 +149,30 @@ working surface, which is precisely what Slate is.
 --neu-bg:#1C221E;  --neu-fg:#9AA39A;  --neu-line:#2A312C;
 ```
 
-**Chrome tokens**, defined per theme alongside the list above. In Light and Dark they duplicate the
-surface values they replaced; only Slate diverges.
+**Chrome tokens.** Because Slate is the default (§3.2b), the Slate values sit on bare `:root`
+alongside the light content list above — the un-stamped document *is* Slate. `[data-theme="light"]`
+and `[data-theme="dark"]` are both deltas from it. In Light and Dark the chrome tokens duplicate the
+surface values they replaced, so those two themes are exactly what they were before the split.
 
 ```css
-/* light */
+/* :root — the default. Light content, Slate chrome. */
+--chrome:#26322D; --chrome-hover:#2F3C36; --chrome-active:#38473F; --chrome-border:#38473F;
+--chrome-text:#ECF1EB; --chrome-muted:#AEBAB1; --chrome-subtle:#9DAAA0;
+--chrome-accent:#C6E85E; --chrome-accent-ink:#151A17;
+
+/* [data-theme="light"] — chrome only. Nothing content-side is redefined, which is the whole
+   point: a card, a table and a chip are byte-identical in Light and Slate. */
 --chrome:#FFFFFF; --chrome-hover:#F3F5F2; --chrome-active:#E3F0E9; --chrome-border:#DDE2DC;
 --chrome-text:#151A17; --chrome-muted:#586058; --chrome-subtle:#636C63;
 --chrome-accent:#16624A; --chrome-accent-ink:#FFFFFF;
 
-/* dark */
+/* [data-theme="dark"] — the full content remap above, plus: */
 --chrome:#171C19; --chrome-hover:#1C221E; --chrome-active:#16281F; --chrome-border:#242B26;
 --chrome-text:#E8ECE7; --chrome-muted:#96A096; --chrome-subtle:#8A938A;
 --chrome-accent:#45D18E; --chrome-accent-ink:#0B0F0C;
 
-/* slate — the only tokens Slate defines. Content is the light palette, untouched. */
---chrome:#26322D; --chrome-hover:#2F3C36; --chrome-active:#38473F; --chrome-border:#38473F;
---chrome-text:#ECF1EB; --chrome-muted:#AEBAB1; --chrome-subtle:#9DAAA0;
---chrome-accent:#C6E85E; --chrome-accent-ink:#151A17;
+/* [data-theme="slate"] repeats the :root chrome values verbatim, so stamping it is idempotent
+   and a stored choice of "slate" behaves exactly like never having chosen. */
 ```
 
 Three values changed from the DIR-02 sample after measurement, all real failures caught by
@@ -189,17 +203,52 @@ the threshold was wrong for the type sizes involved.
 **The lime is a fill, never a text or line colour**, and appears at most once per screen — it
 marks verified saving, the one number a society cares about.
 
-### 3.2b Three themes, Light by default
+### 3.2b Three themes, Slate by default
 
-Decided 2026-08-13 on the user's instruction, against a reference screenshot of the shipped
-admin app. Three themes ship, and **Light is the default regardless of the operating system's
-preference** — a system-dark machine still opens on Light, and the switch is explicit.
+Decided 2026-08-13 on the user's instruction, against a reference screenshot of the shipped admin
+app, and revised the same day: **Slate is the default on every surface, web and mobile.** Light and
+Dark are both first-class and both chosen, never inferred.
 
-| Theme | Chrome | Content | Where it is used |
+| Theme | Chrome | Content | Role |
 |---|---|---|---|
-| **Light** | white | light | Default everywhere, all surfaces |
-| **Slate** | dark slate `#26322D` | **light, unchanged** | SUR-01 back office and the SUR-02 phone header. The working surface is byte-identical to Light |
-| **Dark** | dark | dark | All surfaces. Remains the SUR-02 default between 18:00 and 06:00 device time (§0.8 of `05-screens/05-field.md`) |
+| **Slate** | dark slate `#26322D` | **light** | **The default**, on SUR-01 and SUR-02 alike. Nobody has to choose it |
+| **Light** | white | light | Chosen. A chrome-only delta from Slate — the content half is already the base palette |
+| **Dark** | dark | dark | Chosen. The full palette remap |
+
+#### The theme never changes by itself
+
+This is a product rule, not an implementation note, and it has one concrete consequence worth
+stating plainly: **there is no `prefers-color-scheme` block anywhere in the system.**
+
+Following the OS looks like a courtesy and behaves like a bug. A committee member who picked Light
+in the morning gets handed Dark at sunset by a macOS schedule they have forgotten they own — the
+theme changing itself, which is exactly what the rule forbids. Removing the media query is what
+makes the guarantee real rather than best-effort, so the rule is enforced by the *absence* of code
+rather than by remembering to guard every block.
+
+The full behaviour:
+
+| Situation | What happens |
+|---|---|
+| First visit, OS set to dark | Slate |
+| First visit, OS set to light | Slate |
+| Person chooses Dark, reloads | Dark |
+| Person chooses Light, then the OS flips to dark | Light — nothing moves |
+| Person chooses Slate explicitly | Slate, stored, identical to never having chosen |
+
+The choice belongs to **the account, not the browser** — a field technician who picks Dark on their
+own phone should still get Dark on a shared tablet, and an ops user should not have to re-pick it
+per machine. It is stored server-side and stamped on the document before first paint, the same
+pre-hydration pattern the shipped app already uses (and which needed `suppressHydrationWarning` to
+survive React reconciliation — see `PROJECT_CONTEXT.md`; that fix is a prerequisite here, not an
+optional extra). `localStorage` is the fallback for a logged-out surface, where there is no account
+to hang the preference on.
+
+**This supersedes the SUR-02 time-of-day rule.** `05-screens/05-field.md` §0.8 previously had the
+field surface default to Dark between 18:00 and 06:00 device time. That is a theme changing itself
+— defensible on its own terms for someone in a dark basement at night, indefensible against the
+rule above, and it loses. A technician who wants Dark chooses Dark once and keeps it, at noon and
+at midnight.
 
 **Slate is not a half-measure between the other two, and that is the point.** It changes exactly
 one thing: the navigation shell darkens and everything a person actually reads or edits stays on
@@ -330,6 +379,21 @@ the `--text-subtle` failure recorded in §3.2, and the row below is its correcte
 `--border` at ~1.3:1 is **not** a failure — WCAG 1.4.11 exempts decorative separators. That
 exemption is exactly why the token set splits `--border` from `--field-border`; anything bounding a
 control uses the latter.
+
+**Subtle text on a tinted surface takes that tone's own foreground**, not `--text-subtle`. The
+neutral token is solved against the neutral surfaces only, and the status tints are darker than
+`--surface`: in Light it lands at 4.47:1 on `--bad-bg` and 4.46:1 on `--info-bg`, both just under
+AA, while every tone's own `-fg` clears comfortably (5.39–7.11 Light, 6.23–8.97 Dark). Implemented
+as an inherited `--tone-fg` set on the tinted container rather than a per-tone caption class, so a
+tinted container added later cannot forget it. Semantically it is also simply the right answer: a
+caption inside a red card belongs to the red card.
+
+**Icons carry a size default at the element level** (`svg { width: 1.05em; height: 1.05em }`). An
+`<svg>` with no width rule stretches to fill its flex or grid track, which renders a full-page
+tick — this happened twice, in two different prototypes, from dropping an icon into a container
+that happened not to size it. An element selector is the right fix because it loses to every
+component rule that already sets a size, so it changes nothing that was correct and catches
+everything that was not.
 
 ### 3.10 Charts (added 2026-08-12, when SCR-081 and SCR-110 reached for it)
 

@@ -1,5 +1,5 @@
 # SUR-02 field — mobile web, offline-tolerant
-**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — 5 of 12 priority-1 specified
+**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — all 12 priority-1 specified, mockups pending
 **Last updated:** 2026-08-13
 
 The only surface that runs where the network doesn't. Everything here is captured in a basement, a
@@ -413,6 +413,9 @@ the phone dying, and the visit being resumed a day later.
 staleness. Office edits surface on section open (the `stale` row above).
 **Offline:** fully available. Only the map tile needs network; without it the pin sits on a plain
 coordinate readout, which is enough.
+**Live update:** none — capture only; the society record refreshes on sync.
+**Responsive:** `.roomy`, one-handed, 360px up. The map pin and the coordinate readout stack
+below 400px rather than sitting side by side.
 **Accessibility:** every row labelled with the member's name once entered, so "remove" is never
 ambiguous to a screen reader. Map pin has a coordinate entry alternative.
 **Copy:** first-use — "Who runs this society, and how do we get in? This is the record every later
@@ -519,6 +522,8 @@ check — because the fix, another walk, is only cheap while the surveyor is sti
 **Exits:** SCR-012, shell index, SCR-010.
 **Offline:** fully available. **Responsive:** single column; the roll-up sticks under the header once
 scrolled past.
+**Live update:** on a team survey, area claim states refresh on sync (§0.1b) and are labelled
+with the time they were last known good.
 **Accessibility:** the running total is a live region — a screen-reader user gets the number changing
 as rows are added, which is the entire feedback loop of this screen.
 **Copy:** complete modal — "1,204 lights, 4 types. These counts are the billing basis for the whole
@@ -623,6 +628,9 @@ fixtures, same hours, same switching?"*
 
 **Exits:** SCR-013, SCR-011, shell index.
 **Offline:** fully available; exception requests and their approvals are asynchronous by design.
+**Live update:** exception request outcomes arrive on sync and change the circuit's state.
+**Responsive:** `.roomy`. One circuit card per screen below 480px — the five CON-16 criteria are
+never split across a scroll boundary from the circuit they belong to.
 **Copy:** hard fail — "Fixtures over 15 feet can't be serviced safely. This circuit can't be used —
 pick another one for staircase lighting." · unresolvable — "No eligible circuit for external
 lighting. Ops will either leave external lights out of this deal or approve an exception. Say what
@@ -748,6 +756,9 @@ captured it" is exactly what a silent gap destroys.
 assumed to run with no signal at all.
 **Performance:** the unit list stays in the tens (00-intake §7: 1–20 pumps), so nothing here
 virtualises. Forty queued photos at ~350 KB is ~14 MB — sized for a phone, not a desk.
+**Live update:** none.
+**Responsive:** `.roomy`, built for a pump room: large targets, high contrast, usable with one
+hand and a torch in the other.
 **Accessibility:** each unit row is announced with its full identity ("Tower B, Tank 2, float
 switch"), never as "row 14".
 **Copy:** first-use — "Start with the room: how many pumps, how many towers, how many tanks. The
@@ -755,6 +766,474 @@ equipment list builds itself from that." · no access — "Pump room locked. The
 unaffected; pump automation can't be quoted until someone gets in."
 
 ---
+
+## SCR-020 — Meter install & load validation
+
+**Features:** FEAT-011, FEAT-094 · **Flows:** FLOW-03 (steps 1–2), FLOW-08 (no-demo variant)
+**Personas:** PER-04
+
+**Purpose:** register the smart meter against the circuit and prove, before anyone leaves, that the
+meter is actually measuring the circuit that was surveyed.
+**Primary action:** pass the ±10% load check.
+
+**This is a gate, not a form.** CON-17's ±10% comparison between theoretical load (metered light
+count × per-light wattage, both from SCR-012) and the meter's own displayed load is the only
+on-site check that the survey was right. Everything downstream — the benchmark, the extrapolation,
+the fee — assumes this circuit is what the survey said it was. A failure here means one of three
+things and the screen says so: the lights were miscounted, something else is on the circuit, or the
+wattage is wrong.
+
+Runs **once per typed circuit** (CON-11). A society with five light types has five of these, and
+they can be done on different days by different people.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-171 | Start visit, type `meter-install` | Visit + the circuits due |
+| SCR-022 | "Meter faulty, reinstall" | The circuit, previous meter recorded |
+| SCR-025 | ops asks for a re-check | The circuit + the reason |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, circuit, light type | SCR-012 | CMP-02 | Names the circuit the survey chose, with its panel location |
+| Circuit card | Metered light count, per-light wattage | SCR-012, read-only | | What the survey recorded — shown before the meter reading is entered, so the check is not circular |
+| Circuit card | **Theoretical load** | computed | W | `count × wattage`, stated plainly |
+| Meter | Meter serial | scan or type | | Barcode scan preferred; manual entry always available |
+| Meter | Install photo | CMP-15 | required | The meter in place, serial legible |
+| Meter | **Displayed load** | number entry | W | Read off the meter with the circuit under normal load |
+| Result | **±10% comparison** | computed live | CMP-02 | Pass / fail stated the moment both numbers exist |
+| Result | Diagnosis prompts | on fail | | The three causes, as a checklist to work through |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Scan meter | camera button | team member | Reads the serial | none | Serial filled | Unreadable → manual entry, no friction |
+| Record displayed load | field | team member | Runs the comparison | none | Pass/fail shown immediately | — |
+| Pass and register | primary, enabled on pass only | team member | Registers the meter against the circuit; circuit → `metered` | none | → SCR-021 gate pass | — |
+| Recheck | on fail | team member | Clears the reading, keeps the diagnosis notes | none | Re-enter | — |
+| Correct the survey count | on fail | team member | Amends `meteredLightCount` with a reason; **recomputes theoretical load** | modal warning this changes the survey | Comparison re-runs | Amendment is recorded and surfaced on SCR-014, never silent |
+| Request override | on fail | team member → PER-01 | Raises a request with the two figures, photos and the diagnosis | reason required | Circuit `pending-override`; **cannot proceed until answered** | Offline → queued; the technician is told plainly they cannot finish today |
+| Report meter faulty | menu | team member | Circuit blocked, reschedule raised | reason + photo | Visit outcome recorded | — |
+
+**No local override.** CON-17's gate cannot be passed by the person on site. FLOW-03 step 2 says
+"cannot proceed without a passing result or a recorded PER-01 override", and the override is a
+backend act with a name on it — because the alternative is a technician at 6pm deciding a 30%
+discrepancy is close enough, and a benchmark built on it.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Circuit card from cache, instantly | — |
+| Empty — first use | no reading entered | The theoretical load and an empty meter field | Enter |
+| Pass | within ±10% | Green result restating both figures and the variance | Register |
+| Fail | outside ±10% | Red result, both figures, the variance, and the three-cause checklist | Recheck, correct, or request override |
+| Pending override | request queued or open | Blocked state naming who was asked and when | Call ops |
+| Partial / stale | offline, override requested | "Sent when you're back on signal. You can't finish this circuit today." | Move to another circuit |
+| Error — network | sync fails | CMP-14 queue count; capture continues | — |
+| Error — permission | not on the visit team | Read-only | — |
+| Success | registered | Circuit → `metered`; gate pass opens | → SCR-021 |
+
+**Exits:** SCR-021 (always, before leaving), SCR-022, SCR-171.
+**Live update:** override responses arrive on sync and change the blocked state.
+**Responsive:** `.roomy`, one-handed. The displayed-load field is the largest target on the screen.
+**Offline:** full capture works; override requests queue and block honestly.
+**Copy:** fail — "The meter shows 4,100 W. The survey says 3,200 W, so this is 28% over. Usually
+that means more lights on this circuit than were counted, or something else sharing it."
+
+---
+
+## SCR-021 — Gate pass (including provisional release)
+
+**Features:** XC-01, FEAT-097 · **Flows:** FLOW-03 (step 3), FLOW-07, FLOW-X1
+**Personas:** PER-04, PER-01
+
+**Purpose:** account for every piece of equipment brought in or taken out, with the society's
+signature, before anyone leaves the premises.
+**Primary action:** get the pass approved, or released provisionally.
+
+**The only synchronous cross-surface contract in the product** (Phase 4's finding, XS-04/XS-05).
+Everything else in this system tolerates delay; this one blocks a human being at a gate. CON-18
+makes backend approval a precondition of departure, which is exactly why CON-40 exists.
+
+**CON-40's 30-minute provisional release.** FLOW-03 step 3 named the failure with no escape hatch:
+*backend unreachable at approval time → PER-04 is blocked on site.* A technician in a basement at
+9pm cannot be held indefinitely by an unanswered approval. After **30 minutes** with no response,
+the pass releases **provisionally** — the technician may leave, the pass is flagged, and backend
+review happens after the fact rather than not at all. A provisional release is a recorded event
+with its own follow-up, never a silent pass.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, date, direction | | CMP-02 | `in` (bringing equipment) or `out` (removing) |
+| Items | Itemised equipment list | scanned or picked from the visit's expected list | CMP-01 | Quantity per line, editable |
+| Items | Discrepancy against expected | computed | `warn` | "You took 40 fittings; the plan said 36" |
+| Signature | Society representative name + role | text | | Who signed, not just that someone did |
+| Signature | Signature capture | canvas | required | |
+| Signature | Photo of the loaded vehicle or trolley | CMP-15 | required | The structured re-entry evidence CON-18 asks for |
+| Status | **Approval state and countdown** | live | CMP-02 | The 30-minute clock is visible from the moment the pass is submitted |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Add item | scan or pick | team member | Appends a line | none | Line added | Unknown barcode → manual entry with a free-text description |
+| Capture signature | canvas | team member | Stores signature + name + role | none | | Empty canvas → named inline |
+| Submit for approval | primary | team member | Sends to PER-01; **starts the 30-minute clock** | modal restating item count | Awaiting approval, countdown visible | Offline → the clock starts at the moment of capture, not the moment of sync (§0.2 `capturedAt`) |
+| Approve | SUR-01 | PER-01 | Releases the pass | none | Technician's phone shows released | — |
+| Query | SUR-01 | PER-01 | Sends back with a question; **pauses the clock** | note required | Technician sees the question | — |
+| **Release provisionally** | automatic at 30:00 | system | Pass → `provisional`; technician may leave | none — it fires on its own | Flagged for backend review; ops notified | — |
+| Review a provisional pass | SUR-01, after the fact | PER-01 | Confirms or raises a discrepancy | none | Closed or escalated | Unreviewed provisional passes age and are chased |
+
+**The clock runs on `capturedAt`, not `receivedAt`.** A technician who submitted at 20:40 in a
+basement with no signal and surfaced at 21:15 has already waited 35 minutes. Starting the clock at
+sync would punish them for the tunnel, which §0.2 forbids.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Expected item list from cache | — |
+| Empty — first use | nothing scanned | Scanner + the expected list to check against | Scan |
+| Awaiting approval | submitted | Countdown, plainly: "Waiting for approval — 22 minutes until you can leave provisionally" | Wait, call ops |
+| Queried | ops asked something | The question, and the clock paused with that stated | Answer |
+| **Provisional** | 30 minutes elapsed | "Released provisionally. You can leave. This will be reviewed." | Leave |
+| Partial / stale | offline since submission | The countdown still runs on device time and says it is unsynced | Wait |
+| Error — network | sync fails | Queue count; the countdown is unaffected | — |
+| Error — permission | not on the team | Read-only | — |
+| Success | approved | "Approved. You're clear to leave." | Close visit |
+
+**Exits:** SCR-171, SCR-022, SCR-061, SCR-064.
+**Live update:** approval polls every 15s while awaiting, and on regaining connectivity.
+**Responsive:** `.roomy`. The countdown is the largest element on screen while it runs.
+**Offline:** fully functional; the countdown is device-local and honest about being unsynced.
+**Copy:** provisional — "Released provisionally. Nobody answered in 30 minutes, so you're clear to
+go. The office will review this pass tomorrow."
+**Open questions:** whether a provisional release should be permitted twice at the same society in
+one week, or whether the second one should escalate instead. Currently unlimited.
+
+---
+
+## SCR-022 — Commissioning monitor (window progress)
+
+**Features:** FEAT-012, FEAT-014 · **Flows:** FLOW-03 (steps 4, 6) · **Personas:** PER-04, PER-01
+**Surface:** SUR-02 and SUR-01 — the same screen, read by both
+
+**Purpose:** show how far through a 5-consecutive-valid-day window each circuit is, and what reset
+it when it resets.
+**Primary action:** none — this is a watch screen. Its job is to make a restart visible the day it
+happens rather than a week later.
+
+**CON-19's restart is the whole design problem.** Five *consecutive valid* days, with the
+meter-install day excluded as partial and the replacement day excluded likewise. An anomaly on day
+4 does not cost one day — it costs four, because the count restarts from the midnight after the
+fix. A circuit can sit at "day 2 of 5" for three weeks and nobody notices unless the screen makes
+each restart and its cause legible.
+
+**Fans out per circuit.** Five circuits run five independent windows at five different speeds
+(FLOW-03's opening note), and one stalling does not block its siblings.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, phase | | CMP-02 | `pre-install baseline` or `post-install` |
+| Per circuit | Window progress | | 5 slots, filled/empty | Not a percentage — five discrete days, because that is what the rule counts |
+| Per circuit | Day slots | daily validity | each: valid / excluded / anomalous | Excluded days (install, replacement) are visibly different from anomalous ones |
+| Per circuit | **Restart history** | | list | Each restart: when, which day it broke, the cause, who fixed it |
+| Per circuit | Projected completion | computed | date | "If tomorrow is clean, this finishes Friday" |
+| Per circuit | Current reading trend | sparkline | | Enough to see a step change without leaving |
+| Footer | Blocking summary | | | Which circuits are holding up the deal's pricing (FLOW-06) |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Open a day | tap a slot | any | Shows that day's readings and why it was judged valid or not | — | — | — |
+| Record a fix | on an anomalous day | PER-04 | Notes what was fixed and when; the count restarts from the following midnight | reason required | Restart recorded with a cause | — |
+| Flag meter faulty | per circuit | PER-04 | → SCR-020 reinstall | reason + photo | Circuit blocked | — |
+| Exclude a day | per day | PER-01 only | Marks a day excluded rather than anomalous | reason required | Window recalculates | Not available to field staff — an exclusion changes the benchmark's basis |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton per circuit | — |
+| Empty — first use | no readings yet | "Monitoring starts tomorrow. Today's partial day doesn't count." | — |
+| Empty — filtered | n/a | — | — |
+| In progress | accumulating | Filled slots + projected date | Watch |
+| **Restarted** | anomaly detected | The reset stated prominently with its cause and the days lost | Record a fix |
+| Stalled | 3+ restarts, or 14 days without completing | `warn` escalation: "This circuit has restarted 4 times in 18 days." Routes to ops | Escalate |
+| Partial / stale | offline | Last-synced timestamp on the header | — |
+| Error — network | fetch fails | Cached view + retry | Retry |
+| Error — permission | non-team, non-ops | SCR-221 | — |
+| Success | 5 valid days | Window complete; → SCR-023 (pre) or SCR-024 (post) | Continue |
+
+**Exits:** SCR-023, SCR-024, SCR-020, SCR-025.
+**Live update:** polls every 5 minutes on SUR-01; on open and on sync on SUR-02.
+**Responsive:** the five slots are the one element that must survive 360px intact.
+**Offline:** read-only from cache, with the staleness stated.
+**Copy:** restart — "Day 4 was anomalous, so the count restarted. You're back to day 1 of 5, and
+this circuit now finishes on the 19th instead of the 15th."
+**Open questions:** the stall threshold (3 restarts / 14 days) is proposed here, not derived from
+anything. Needs a real number once there is operating history.
+
+---
+
+## SCR-023 — Demo installation / light replacement
+
+**Features:** FEAT-013 · **Flows:** FLOW-03 (step 5) · **Personas:** PER-04
+
+**Purpose:** record the swap that separates the two measurement windows.
+**Primary action:** complete the replacement — completely.
+
+**Partial replacement is the failure this screen prevents.** FLOW-03 step 5 is explicit: if stock
+runs short and only some fittings are swapped, the post-install window measures a mixed state, and
+the benchmark computed from it is meaningless — but nothing about the readings themselves would
+look wrong. The screen therefore treats "partially done" as a blocking state, not a note.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, circuit, light type | | CMP-02 | |
+| Target | Lights to replace | SCR-012 `meteredLightCount` | read-only | The number that must be matched exactly |
+| Capture | Replaced count | number | | Compared live against the target |
+| Capture | Old fitting spec | brand, model, wattage | | What came out |
+| Capture | New fitting spec | brand, model, wattage | | What went in — feeds the savings narrative |
+| Capture | Photos | CMP-15 | before + after, required | |
+| Result | **Completeness gate** | computed | CMP-02 | Complete only when replaced == target |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Record replacement | fields | team member | Saves locally | none | Progress against target | — |
+| Complete | primary, enabled only at target | team member | Ends the pre-window, starts the post-window from the following midnight (CON-19) | modal restating both counts | → SCR-021 gate pass, then SCR-022 | — |
+| Record short stock | button | team member | Marks the circuit `replacement-partial`; **the post window does not start** | count + reason required | Ops notified; a return visit is raised | The screen states plainly that measurement cannot begin until it is finished |
+| Amend the target | menu | team member | Corrects `meteredLightCount` with a reason | modal warning it changes the survey | Target recomputes; surfaced on SCR-014 | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Target from cache | — |
+| Empty — first use | nothing recorded | Target count and an empty capture form | Record |
+| In progress | some recorded | "28 of 40 replaced" with the gate stated | Continue |
+| **Blocked — partial** | short stock recorded | "Measurement can't start until all 40 are in. A return visit has been raised." | Close visit |
+| Partial / stale | offline | Queue count | — |
+| Error — network | sync fails | CMP-14 | — |
+| Error — permission | not on the team | Read-only | — |
+| Success | complete | Post-window start date stated | → SCR-021 |
+
+**Exits:** SCR-021, SCR-022, SCR-171.
+**Live update:** none.
+**Responsive:** `.roomy`.
+**Offline:** full capture.
+**Copy:** partial — "Only 28 of 40 are in. The post-install measurement can't start on a mixed
+circuit, so it'll begin once the rest are done."
+
+---
+
+## SCR-024 — Benchmark result & out-of-range review
+
+**Features:** FEAT-014, FEAT-015 · **Flows:** FLOW-03 (step 7) · **Personas:** PER-04, PER-01
+
+**Purpose:** present the measured benchmark for a circuit and route it for investigation if it
+falls outside CON-20's valid 60–80% range.
+**Primary action:** accept the figure, or send it for investigation.
+
+**The figure is never rounded** (CON-20, ASSUM-19). Whatever the two measured averages produce is
+`Circuit.benchmarkSavingsPct` exactly — this is the number the contract is written against and
+every future month is compared to, and a tidied figure is one nobody can reproduce.
+
+**Out of range is investigated, not rejected.** FLOW-03 step 7: a result outside 60–80% goes to
+backend and installation the next morning for investigation rather than being accepted or discarded
+on the spot. A 45% result usually means a measurement problem; an 85% result usually means the old
+fittings were worse than recorded. Both are findings, not errors.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, circuit, light type | | CMP-02 | |
+| Result | **Benchmark %** | computed, unrounded | large, tabular | The screen's one headline figure |
+| Result | Range verdict | CON-20 | CMP-02 | In range / below / above |
+| Working | Pre-window daily average | 5 valid days | kWh | Both windows shown, always — the figure must be reproducible from what is on screen |
+| Working | Post-window daily average | 5 valid days | kWh | |
+| Working | The two windows' day lists | | | Which dates counted, which were excluded |
+| Working | Old vs new fitting spec | SCR-023 | | The physical explanation for the number |
+| Context | Sibling circuits' benchmarks | | CMP-09 compact | A circuit far from its siblings is worth a second look |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Accept | primary, in-range only | PER-01 | Locks `benchmarkSavingsPct`; circuit → `benchmarked` | modal restating the figure | Deal progresses toward pricing | — |
+| Send for investigation | primary, out-of-range | PER-04 or PER-01 | Routes to backend + installation for the next morning | note required | Circuit `benchmark-review` | — |
+| Re-run a window | menu | PER-01 | Discards a window and restarts monitoring | modal, reason required | → SCR-022 | Costs another 5 days, and the modal says so |
+| Record an investigation finding | on review | PER-01 | Notes the cause; then accept or re-run | reason required | Audit row | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton | — |
+| Empty — first use | windows incomplete | "Waiting on the post-install window — day 3 of 5." | → SCR-022 |
+| In range | 60–80% | The figure, the working, and accept | Accept |
+| **Out of range** | outside 60–80% | The figure with the verdict, the working, and the two usual explanations | Investigate |
+| Under investigation | routed | Who is looking, since when, and any findings so far | Add finding |
+| Partial / stale | offline | Cached, timestamped | — |
+| Error — network | fetch fails | Retry | Retry |
+| Error — permission | field staff attempting accept | Accept hidden; investigate available | Investigate |
+| Success | accepted | Locked figure; the deal can price once every circuit has one | → SCR-025 |
+
+**Exits:** SCR-025, SCR-022, SCR-050.
+**Live update:** none.
+**Responsive:** `.roomy` on SUR-02; the working table scrolls.
+**Offline:** read-only.
+**Copy:** out of range — "This circuit measured 46.2%. That's below the 60–80% range, which usually
+means a measurement problem rather than a bad install. Installation and the office will look at it
+in the morning."
+
+---
+
+## SCR-061 — Daily batch capture
+
+**Features:** FEAT-034 · **Flows:** FLOW-07 (step 2) · **Personas:** PER-04
+
+**Purpose:** record a day's actual installation work and hand it to the society for same-day review.
+**Primary action:** submit the day's batch before leaving.
+
+**PER-04's highest-frequency screen** (FLOW-07's own note), and the one most likely to run three
+phones at once. **Batches are area-scoped from creation** (CON-44, §0.1b), so three technicians in
+three towers hold three separate batches and nothing is contested by construction — the area
+partition that has to be negotiated during a survey is a property of the batch here.
+
+**The 3-hour rule reaches back into this screen.** CON-21 blocks the next day's start unless the
+society approved the previous day's batch at least 3 hours before. A batch submitted at 8pm leaves
+the society very little time, and tomorrow's crew is the one that pays. The screen therefore shows
+the deadline while capture is still happening, not after submission.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, day, **area** | SCR-060 plan | CMP-02 | The area is fixed at creation and not editable here |
+| Header | **Review deadline** | CON-21, computed | countdown | "Submit by 18:00 to keep tomorrow's start" — visible during capture |
+| Plan | Today's target for this area | SCR-060 | read-only | |
+| Capture | Fittings installed | count + spec | | |
+| Capture | Location detail within the area | text | | Floor, wing, corridor — what a disputing onlooker needs to check |
+| Capture | Photos | CMP-15 | required | |
+| Capture | Removed fittings taken away | count | | Reconciles against the outbound gate pass |
+| Summary | Against plan | computed | CMP-02 | Ahead / on / behind, per area |
+| Summary | Other areas today | other batches, read-only | CMP-09 compact | So a technician can see the day as a whole without touching another team's batch |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Record work | fields | team member on this batch | Saves locally | none | Running totals | — |
+| Add a blocker | button | team member | → SCR-063 with this batch attached | reason required | Blocker recorded; plan flagged | — |
+| Submit batch | primary | team member | Batch → `awaiting-review`; notifies the onlooker (XS-06) | modal restating counts and the deadline | Society notified | Offline → queued, and the deadline warning states the risk plainly |
+| Reopen | on a submitted batch, before review | team member | Returns to capture | modal | Society's notification withdrawn | Blocked once the society has started reviewing |
+| Flag a scope change | menu | team member | More lights than surveyed → routes to FLOW-17, **never a silent edit** (FLOW-07 step 4) | reason required | Ops notified; amendment raised | — |
+
+**Scope changes never resolve here.** More fittings than the survey recorded changes
+`representedLightCount`, which changes the benchmark basis and therefore the bill. FLOW-07 step 4
+requires a contract amendment; this screen raises it and stops.
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Plan from cache | — |
+| Empty — first use | nothing recorded | Today's target for this area and the submit deadline | Record |
+| In progress | recording | Running totals against plan, deadline visible | Continue |
+| **Deadline at risk** | within 60 min of the submit-by time | `warn`: "Submit within 40 minutes or tomorrow's start is at risk." | Submit |
+| Submitted | sent | Awaiting the society's review, with their deadline shown | Watch |
+| Partial / stale | offline | Queue count; the deadline warning states that submission has not reached anyone yet | — |
+| Error — network | sync fails | CMP-14 | — |
+| Error — permission | not on this batch | Read-only, with the batch's owner named | — |
+| Success | society approved | "Approved by R. Menon at 19:12. Tomorrow's start is clear." | Close |
+
+**Exits:** SCR-062 (society's review), SCR-063, SCR-021, SCR-064, SCR-171.
+**Live update:** review status polls on sync and every 5 minutes while awaiting.
+**Responsive:** `.roomy`, one-handed, photo-heavy.
+**Offline:** full capture. The deadline countdown runs on device time and is explicit that an
+unsynced submission has not reached the society.
+**Copy:** deadline — "Tomorrow's crew can't start unless the society approves this by 18:00.
+It's 16:40."
+
+---
+
+## SCR-064 — Completion certificate
+
+**Features:** FEAT-037 · **Flows:** FLOW-07 (step 5) · **Personas:** PER-04, PER-06
+
+**Purpose:** the signature that ends installation and starts billing.
+**Primary action:** get it signed — but only against work that is actually settled.
+
+**Two rules meet here and both are money.** FLOW-07 step 5: a certificate signed while batches are
+still disputed starts billing on contested work. And CON-22: billing begins the **day after** the
+signature date, with the first month prorated on actual days — the off-by-one that CON-22's wording
+exists to prevent. The screen states the billing start date explicitly, before the signature, so
+nobody discovers it on the first invoice.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Society, installation window | | CMP-02 | |
+| Summary | Total fittings installed, by area | all batches | CMP-01 | |
+| Summary | Against contracted scope | | CMP-02 | Any variance named, with its amendment if one was raised |
+| **Gate** | Outstanding disputed batches | | `bad` if any | Blocks signature |
+| **Gate** | Unapproved batches | | `warn` | Blocks signature |
+| **Gate** | Open blockers | SCR-063 | `warn` | Blocks signature unless explicitly waived by PER-01 |
+| Billing | **Billing start date** | CON-22, computed | large, stated | "Billing starts 21 August — the day after signing" |
+| Billing | First month proration | computed | ₹ estimate | Actual days, so the first invoice is not a surprise |
+| Signature | Society representative name + role | | required | |
+| Signature | Signature capture | canvas | required | |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Sign | primary, all gates clear | PER-06 on PER-04's device | Records the certificate; billing starts the next day (CON-22) | modal restating the billing start date and the prorated first month | Contract → `active`; → SCR-021 final gate pass | Any gate unclear → blocked, naming which |
+| Resolve a dispute | on a blocked gate | routes to PER-01 | → SCR-062 / SCR-063 | — | — | — |
+| Waive a blocker | on an open blocker | PER-01 only | Records a waiver with a reason | modal | Gate clears | Not available to field staff |
+| Download the certificate | after signing | any | PDF | none | Download | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Summary from cache | — |
+| Empty — first use | installation incomplete | "3 of 11 days still to run." | → SCR-060 |
+| **Blocked** | disputes, unapproved batches, or open blockers | Each gate listed with what clears it | Resolve |
+| Ready | all gates clear | Summary, billing start date, and the signature panel | Sign |
+| Partial / stale | offline | Cached summary; signature captures locally and queues | Sign |
+| Error — network | sync fails | CMP-14; the signature is safe on device | — |
+| Error — permission | not on the team | Read-only | — |
+| Success | signed | Billing start date confirmed; final gate pass opens | → SCR-021 |
+
+**Exits:** SCR-021, SCR-053, SCR-062, SCR-063.
+**Live update:** gate status refreshes on sync.
+**Responsive:** `.roomy`. The signature canvas is full-width.
+**Offline:** signature captures and queues; the certificate is not final until synced, and the
+screen says so rather than implying billing has started.
+**Copy:** billing — "Signing today means billing starts tomorrow, 21 August. The first invoice
+covers 21–31 August, 11 days, about ₹17,200."
+**Open questions:** whether a certificate signed offline and synced two days later should start
+billing from the signature date or the sync date. Specified as the **signature date** (`capturedAt`,
+per §0.2), which favours the society — but it means a late sync backdates a billing start, and
+finance should confirm that is acceptable.
 
 ## Coverage
 
@@ -765,14 +1244,14 @@ unaffected; pump automation can't be quoted until someone gets in."
 | SCR-011 survey: lighting inventory | ✅ | — | — |
 | SCR-012 survey: circuit selection | ✅ | — | — |
 | SCR-013 survey: pump audit & logbook | ✅ | — | — |
-| SCR-020 meter install & load validation | — | — | — |
-| SCR-021 gate pass | — | — | — |
-| SCR-022 commissioning monitor | — | — | — |
-| SCR-023 demo installation | — | — | — |
-| SCR-024 benchmark result | — | — | — |
-| SCR-061 daily batch capture | — | — | — |
-| SCR-064 completion certificate | — | — | — |
+| SCR-020 meter install & load validation | ✅ | — | — |
+| SCR-021 gate pass | ✅ | — | — |
+| SCR-022 commissioning monitor | ✅ | — | — |
+| SCR-023 demo installation | ✅ | — | — |
+| SCR-024 benchmark result | ✅ | — | — |
+| SCR-061 daily batch capture | ✅ | — | — |
+| SCR-064 completion certificate | ✅ | — | — |
 
-**FLOW-02's field side is complete** — SCR-010–013 plus the shell hand a submitted survey to SCR-014,
-which was specified with the deal loop. **Next:** SCR-020 (meter install & load validation), starting
-FLOW-03's commissioning run.
+**The field surface is complete for priority 1.** FLOW-02 (survey), FLOW-03 (commissioning) and
+FLOW-07 (installation) all have their field side specified, and every one hands off to a back-office
+screen that already exists: SCR-014, SCR-025 and SCR-062 respectively.

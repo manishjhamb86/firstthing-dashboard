@@ -159,13 +159,13 @@ It is still six real screens, and the ops home is arguably the most-used screen 
 | SCR-011 | Survey: lighting inventory by area | F | 02 | FEAT-006 | 1 | ✅ | — |
 | SCR-012 | Survey: circuit selection per light type | F | 02 | FEAT-007 | 1 | ✅ | — |
 | SCR-013 | Survey: pump audit & logbook capture | F | 02 | FEAT-008, 009 | 1 | ✅ | — |
-| SCR-020 | Meter install & load validation | F | 03, 08 | FEAT-011, 094 | 1 | — | — |
-| SCR-021 | Gate pass (incl. provisional release) | F | 03, 07 | XC-01, FEAT-097 | 1 | — | — |
-| SCR-022 | Commissioning monitor (window progress) | F | 03 | FEAT-012, 014 | 1 | — | — |
-| SCR-023 | Demo installation / light replacement | F | 03 | FEAT-013 | 1 | — | — |
-| SCR-024 | Benchmark result & out-of-range review | F | 03 | FEAT-014, 015 | 1 | — | — |
-| SCR-061 | Daily batch capture | F | 07 | FEAT-034 | 1 | — | — |
-| SCR-064 | Completion certificate | F | 07 | FEAT-037 | 1 | — | — |
+| SCR-020 | Meter install & load validation | F | 03, 08 | FEAT-011, 094 | 1 | ✅ | — |
+| SCR-021 | Gate pass (incl. provisional release) | F | 03, 07 | XC-01, FEAT-097 | 1 | ✅ | — |
+| SCR-022 | Commissioning monitor (window progress) | F | 03 | FEAT-012, 014 | 1 | ✅ | — |
+| SCR-023 | Demo installation / light replacement | F | 03 | FEAT-013 | 1 | ✅ | — |
+| SCR-024 | Benchmark result & out-of-range review | F | 03 | FEAT-014, 015 | 1 | ✅ | — |
+| SCR-061 | Daily batch capture | F | 07 | FEAT-034 | 1 | ✅ | — |
+| SCR-064 | Completion certificate | F | 07 | FEAT-037 | 1 | ✅ | — |
 | SCR-065 | Installation dashboard (per-role, shared state) | X | 07 | FEAT-038 | 2 | — | — |
 | SCR-111 | Deviation field investigation | F | 11 | FEAT-056 | 2 | — | — |
 | SCR-132 | Ticket work (field) | F | 13 | FEAT-072, 073 | 2 | — | — |
@@ -263,7 +263,7 @@ designing screens that get cut is the one real cost of interleaving (method §4)
 | Society portal | 7 | 0 | 0 | 0 |
 | Field (SUR-02) | 12 | **5** | 0 | 0 |
 | Cross-cutting | 2 | 0 | 0 | 0 |
-| **Total** | **51** | **29** | **1 partial** | **0** |
+| **Total** | **51** | **36** | **1 partial** | **0** |
 
 **Monthly loop and deal loop complete** — 24 specified against the seven-state requirement, with entry
 points, actions with permissions and failure behaviour, inputs with real error copy, exits,

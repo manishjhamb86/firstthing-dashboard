@@ -130,6 +130,31 @@ risks carried forward from Phase 7 that actually touch an R0 milestone (the job 
 area-claim complexity). `docs/backlog.yaml` validator re-run after every edit: still 15 errors/263
 warnings, `Milestones: 8` now reported correctly.
 
+**Phase 9 (Test & Quality Plan) — drafted 2026-08-13, pending user approval.**
+`docs/engineering/12-test-plan.md` traces all 210 of R0's acceptance criteria to a named test case
+at the cheapest level that can verify it, using a mechanical, reproducible level-assignment rule
+rather than a per-AC judgment call: CAP-02/CAP-04 (pure computation) happy/edge ACs → `unit`,
+`permission`-type ACs → `integration` (GATE-03/04's enforcement is a real Prisma query under a real
+session, not meaningfully mockable), everything else defaults to `integration`, and 4 ACs are
+`manual` where no assertion can replace human judgment (photo/label legibility, report
+defensibility). 7 ACs — one per R0 milestone, the AC that most directly represents that milestone's
+demoable outcome — additionally get an end-to-end test on top of their base-level coverage,
+detailed in full (preconditions/steps/expected result) in §4 alongside 2 more: the CON-11 billing
+formula (FEAT-048-AC-1, asserted to the rupee, not approximately) and the CON-13 suspension-safety
+rule (FEAT-087-AC-3, the specific "never suspend on stale payment data" case the invariant exists to
+prevent). All 12 XS-01..12 cross-surface contracts get a producer/consumer test pairing (§5); all 15
+NFRs get a measurement method and pass threshold, with 2 (NFR-10 notifications, NFR-14 dashboard
+latency) honestly deferred since their owning components aren't built until R1/R2 (§6); 7 of 9
+invariants get an automated gate, the other 2 (INV-04, INV-08) correctly have no R0 write path to
+gate yet. **R1–R3's 343 acceptance criteria are explicitly out of scope, not silently skipped** —
+same "near-term release only" discipline this blueprint has applied since Phase 5's screens and
+Phase 8's milestones, with a stated plan to repeat this phase's method once R1 is
+milestone-decomposed. `docs/backlog.yaml`'s 210 R0 ACs each gained a real `tests:` array (a `TC-`
+id, plus a `-E2E` id for the 7 anchors) in the same change; validator re-run with
+`--check-coverage`: **16 errors/263 warnings**, one new expected error class ("343 acceptance
+criteria have no test cases," all R1–R3) joining the existing 15, AC test coverage reported as
+210/553 (37% system-wide, 100% of R0).
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

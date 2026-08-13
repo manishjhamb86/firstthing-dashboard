@@ -1394,31 +1394,31 @@ features:
         given: "PER-07 is logged in"
         when: "they submit a new lead with society name, contact, meeting date, and service line"
         then: "a `Pipeline` record is created at stage `lead`, marked authoritative immediately (no approval needed for self-logged entries)"
-        tests: []
+        tests: [TC-001-1]
       - id: FEAT-001-AC-2
         type: happy
         given: "PER-01 logs a lead on PER-07's behalf"
         when: "submitted"
         then: "the `Pipeline` record is created at stage `lead` in a `pending-approval` sub-state, and PER-07 is notified"
-        tests: []
+        tests: [TC-001-2]
       - id: FEAT-001-AC-3
         type: empty
         given: "no leads have ever been logged"
         when: "PER-07 opens the lead list"
         then: "an empty state explains how to log the first one"
-        tests: []
+        tests: [TC-001-3]
       - id: FEAT-001-AC-4
         type: failure
         given: "a required field (society name, service line) is missing"
         when: "the form is submitted"
         then: "it's rejected with a field-level error and no `Pipeline` record is created"
-        tests: []
+        tests: [TC-001-4]
       - id: FEAT-001-AC-5
         type: permission
         given: "a user without PER-07 or PER-01's role"
         when: "attempts to log a lead"
         then: "the action is unavailable/denied server-side, not just hidden in the UI"
-        tests: []
+        tests: [TC-001-5]
     stories:
       - id: STORY-001-1
         title: "As sales, I want to log a new lead after a first meeting, so that the deal has a system record from day one instead of living in someone's memory."
@@ -1461,31 +1461,31 @@ features:
         given: "a lead-stage `Pipeline` exists"
         when: "PER-07 records the proposal outcome as \"agreed,\""
         then: "the `Pipeline` advances to `survey-pending` and CAP-16 can now be started against it"
-        tests: []
+        tests: [TC-002-1]
       - id: FEAT-002-AC-2
         type: empty
         given: "a lead has no proposal yet"
         when: "PER-07 opens it"
         then: "the proposal form is empty and clearly prompts for an outcome"
-        tests: []
+        tests: [TC-002-2]
       - id: FEAT-002-AC-3
         type: failure
         given: "the outcome is \"declined,\" when saved"
         when: "the action is attempted"
         then: "the `Pipeline` is marked closed/lost with a reason field, and no further CAP-16+ action is possible against it without explicitly reopening as a new lead"
-        tests: []
+        tests: [TC-002-3]
       - id: FEAT-002-AC-4
         type: permission
         given: "a user other than PER-07 (or PER-01 acting on their behalf, per FEAT-001's pattern)"
         when: "attempts this"
         then: "denied server-side"
-        tests: []
+        tests: [TC-002-4]
       - id: FEAT-002-AC-5
         type: edge
         given: "the demo is marked skipped for this society (FEAT-032)"
         when: "the proposal is marked \"agreed,\""
         then: "the `Pipeline` still advances to `survey-pending` — the survey is never skipped (CON-24) — and it is the *post-survey* branch that differs, going to KYC/offer rather than to demo commissioning"
-        tests: []
+        tests: [TC-002-5]
     stories:
       - id: STORY-002-1
         title: "As sales, I want to build a proposal with a real, comparable-society savings figure, so that a pre-demo claim is never free text nobody can trace."
@@ -1693,37 +1693,37 @@ features:
         given: "PER-04 is on-site"
         when: "they enter light counts per area"
         then: "a `LightingInventoryArea[]` list is saved against the `SiteSurvey`"
-        tests: []
+        tests: [TC-006-1]
       - id: FEAT-006-AC-2
         type: empty
         given: "no inventory yet"
         when: "the screen renders"
         then: "fields default to zero with an explicit prompt to add each area present at the site, not a silently-skippable total"
-        tests: []
+        tests: [TC-006-2]
       - id: FEAT-006-AC-3
         type: failure
         given: "a negative or non-numeric count"
         when: "is entered"
         then: "rejected with a field-level error"
-        tests: []
+        tests: [TC-006-3]
       - id: FEAT-006-AC-4
         type: permission
         given: "a non-PER-04/PER-01 actor"
         when: "they attempt to edit the lighting inventory"
         then: "the action is unavailable server-side, matching FEAT-005 permission rule"
-        tests: []
+        tests: [TC-006-4]
       - id: FEAT-006-AC-5
         type: edge
         given: "a society has no basement or stilt parking at all"
         when: "the condition is evaluated"
         then: "that line item is omitted rather than recorded as zero — the inventory reflects what actually exists, not a padded checklist"
-        tests: []
+        tests: [TC-006-5]
       - id: FEAT-006-AC-6
         type: provenance
         given: "an area row"
         when: "is saved"
         then: "it carries a light type and a count method; given the method is `estimated`, then a note is required, and that row is surfaced as an explicit weakness on FEAT-010's review (SCR-014) rather than appearing identical to a walked count. **Rationale:** FLOW-02 step 4 states a miscount here biases billing for the whole term with no downstream check, and a desk reviewer cannot re-count 1,200 lights — how the number was obtained is the only reviewable property it has"
-        tests: []
+        tests: [TC-006-6]
     stories:
       - id: STORY-006-1
         title: "As the surveyor, I want to record the whole society's lighting inventory by area, with how each count was obtained, so that the highest-leverage number in the product is reviewable, not just typed."
@@ -1766,31 +1766,31 @@ features:
         given: "a circuit meeting all criteria"
         when: "PER-04 submits the checklist"
         then: "the circuit is marked `eligible` and enters `pending-confirmation`"
-        tests: []
+        tests: [TC-007-1, TC-007-1-E2E]
       - id: FEAT-007-AC-2
         type: empty
         given: "no circuit selected yet"
         when: "the screen renders"
         then: "the survey step shows a clear prompt to pick one from the site, not a blank checklist with no context"
-        tests: []
+        tests: [TC-007-2]
       - id: FEAT-007-AC-3
         type: failure/exception
         given: "light count <50"
         when: "PER-04 attempts to confirm"
         then: "it's blocked until PER-01 records an explicit exception approval with a reason"
-        tests: []
+        tests: [TC-007-3]
       - id: FEAT-007-AC-4
         type: permission
         given: "a non-PER-04/PER-01 actor"
         when: "they attempt the action"
         then: "denied server-side; only PER-01 can grant the light-count exception"
-        tests: []
+        tests: [TC-007-4]
       - id: FEAT-007-AC-5
         type: edge
         given: "a circuit fails a hard criterion (fixtures >15ft, on a driveway)"
         when: "PER-04 flags it"
         then: "that circuit is marked ineligible and a different candidate must be selected — no exception path exists for these criteria, only the light-count minimum is exception-able (CON-16)"
-        tests: []
+        tests: [TC-007-5]
     stories:
       - id: STORY-007-1
         title: "As the surveyor, I want to select which circuit per light type will be metered and confirm it's typical, so that the benchmark this circuit sets is defensible."
@@ -1998,31 +1998,31 @@ features:
         given: "light count × wattage is within ±10% of the meter's displayed load"
         when: "PER-04 confirms"
         then: "the circuit moves to `meter-installed` and the gate-pass step opens"
-        tests: []
+        tests: [TC-011-1]
       - id: FEAT-011-AC-2
         type: empty
         given: "no reading taken yet"
         when: "the screen renders"
         then: "the validation screen prompts for both the theoretical inputs and the meter's live reading, not assuming either is pre-filled"
-        tests: []
+        tests: [TC-011-2]
       - id: FEAT-011-AC-3
         type: failure
         given: "the discrepancy"
         when: "exceeds ±10%"
         then: "submission is blocked with the exact delta shown, and PER-04 must recheck inputs before resubmitting"
-        tests: []
+        tests: [TC-011-3]
       - id: FEAT-011-AC-4
         type: permission
         given: "a non-PER-04 actor"
         when: "they attempt the action"
         then: "unavailable; only PER-01 can override a persistently failed validation"
-        tests: []
+        tests: [TC-011-4]
       - id: FEAT-011-AC-5
         type: edge
         given: "PER-01 overrides an out-of-band validation (e.g. a known meter-display quirk)"
         when: "the condition is evaluated"
         then: "the override and reason are recorded and visible on the circuit's record going forward — not silently accepted as if it had passed normally"
-        tests: []
+        tests: [TC-011-5]
     stories:
       - id: STORY-011-1
         title: "As the installer, I want to install the meter and validate its load reading against the survey, so that a wrong CT ratio or wiring fault is caught before it poisons every number downstream."
@@ -2071,31 +2071,31 @@ features:
         given: "5 consecutive valid days pass with no anomaly"
         when: "the window completes"
         then: "`Circuit.preInstallBaseline` (average daily consumption) is computed and the circuit is ready for FEAT-013"
-        tests: []
+        tests: [TC-012-1]
       - id: FEAT-012-AC-2
         type: empty
         given: "the window has just started"
         when: "the screen renders"
         then: "day 1 of 5 shows clearly with no readings yet — not an ambiguous blank state"
-        tests: []
+        tests: [TC-012-2]
       - id: FEAT-012-AC-3
         type: failure/anomaly
         given: "an anomaly is flagged on day 3"
         when: "PER-04 investigates and records a fix"
         then: "the valid-day count resets to 0 starting the next midnight, and this restart event is logged"
-        tests: []
+        tests: [TC-012-3]
       - id: FEAT-012-AC-4
         type: permission
         given: "a non-PER-04/PER-01 actor"
         when: "they attempt the action"
         then: "no ability to mark a day valid/invalid or trigger a restart"
-        tests: []
+        tests: [TC-012-4]
       - id: FEAT-012-AC-5
         type: edge
         given: "a day's readings are simply missing (not anomalous"
         when: "the condition is evaluated"
         then: "just absent — an ingest gap), that day does not count toward the 5 either, but is distinguished in the record from an actively-flagged anomaly"
-        tests: []
+        tests: [TC-012-5]
     stories:
       - id: STORY-012-1
         title: "As the installer, I want a pre-install baseline monitoring window to run and complete, so that the benchmark has a real 'before' to compare against."
@@ -2144,31 +2144,31 @@ features:
         given: "the baseline window (FEAT-012) is complete"
         when: "PER-04 records the replacement date and completes the gate-pass sign-off"
         then: "the circuit moves to `post-install-pending` and FEAT-014's window starts the next calendar day"
-        tests: []
+        tests: [TC-013-1]
       - id: FEAT-013-AC-2
         type: empty
         given: "replacement hasn't happened yet"
         when: "the screen renders"
         then: "the circuit clearly shows \"awaiting installation\" rather than an ambiguous mid-state"
-        tests: []
+        tests: [TC-013-2]
       - id: FEAT-013-AC-3
         type: failure
         given: "the gate-pass sign-off isn't completed"
         when: "the action is attempted"
         then: "PER-04 cannot mark the circuit as installed — the departure-gating rule (CON-18) applies exactly as elsewhere"
-        tests: []
+        tests: [TC-013-3]
       - id: FEAT-013-AC-4
         type: permission
         given: "a non-PER-04 actor"
         when: "they attempt the action"
         then: "unavailable"
-        tests: []
+        tests: [TC-013-4]
       - id: FEAT-013-AC-5
         type: edge
         given: "the replacement spans more than one calendar day in practice (e.g. a large circuit)"
         when: "the condition is evaluated"
         then: "only the day the last light was replaced counts as the excluded pivot day — explicit, not left to interpretation"
-        tests: []
+        tests: [TC-013-5]
     stories:
       - id: STORY-013-1
         title: "As the installer, I want to record the light replacement circuit by circuit, so that the demo installation has an exact, dated record of what changed."
@@ -2211,31 +2211,31 @@ features:
         given: "5 valid post-install days complete and the result is 68% (within 60-80%)"
         when: "computed"
         then: "`Circuit.benchmarkSavingsPct = 68%` is written and the circuit moves to `benchmark-confirmed`"
-        tests: []
+        tests: [TC-014-1, TC-014-1-E2E]
       - id: FEAT-014-AC-2
         type: empty
         given: "the post window has just started"
         when: "the screen renders"
         then: "day 1 of 5 shows clearly (same pattern as FEAT-012)"
-        tests: []
+        tests: [TC-014-2]
       - id: FEAT-014-AC-3
         type: failure/anomaly
         given: "a monitoring window restarts after an anomaly"
         when: "the valid-day count resets"
         then: "the restart mechanism is identical to FEAT-012's pre-install window"
-        tests: []
+        tests: [TC-014-3]
       - id: FEAT-014-AC-4
         type: permission
         given: "a non-PER-04/PER-01 actor"
         when: "they attempt the action"
         then: "no visibility into triggering restarts; benchmark-writing is a system computation, not a manual entry, so no one can hand-edit the resulting percentage directly"
-        tests: []
+        tests: [TC-014-4]
       - id: FEAT-014-AC-5
         type: edge
         given: "the computed result is below 60% or above 80%"
         when: "the window completes"
         then: "no benchmark is written — the result instead routes to FEAT-015's next-morning investigation queue"
-        tests: []
+        tests: [TC-014-5]
     stories:
       - id: STORY-014-1
         title: "As ops, I want the post-install monitoring window to compute the benchmark automatically once it completes, so that the number the whole contract prices against is system-produced, not hand-calculated."
@@ -2549,31 +2549,31 @@ features:
         given: "`BenchmarkConfirmed` fires for a circuit"
         when: "generation runs"
         then: "a draft demo report exists containing baseline average, post-install average, measured %, the underlying daily readings, and the whole-society extrapolation"
-        tests: []
+        tests: [TC-020-1]
       - id: FEAT-020-AC-2
         type: empty
         given: "a society has no demo report yet"
         when: "the screen renders"
         then: "its record shows \"no demo report\" rather than an empty document shell"
-        tests: []
+        tests: [TC-020-2]
       - id: FEAT-020-AC-3
         type: failure
         given: "generation"
         when: "fails (e.g. missing lighting inventory from FEAT-006, so extrapolation can't be computed)"
         then: "PER-01 is alerted with the specific missing input named — not left with a silently absent report"
-        tests: []
+        tests: [TC-020-3]
       - id: FEAT-020-AC-4
         type: permission
         given: "a non-PER-01 internal actor"
         when: "they attempt the action"
         then: "the draft report is not visible until shared (FEAT-022); a society never sees a draft"
-        tests: []
+        tests: [TC-020-4]
       - id: FEAT-020-AC-5
         type: edge
         given: "the circuit's benchmark is later rescaled by a verified light-count"
         when: "change (CON-10)"
         then: "the existing demo report is not silently rewritten — it stands as the record of what was measured at the time, and any regeneration is a new versioned report"
-        tests: []
+        tests: [TC-020-5]
     stories:
       - id: STORY-020-1
         title: "As ops, I want the demo savings report to generate itself from the benchmark result, so that the report a sale hinges on isn't rebuilt by hand every time."
@@ -2781,31 +2781,31 @@ features:
         given: "a pipeline has reached the document-collection stage"
         when: "PER-01 opens it"
         then: "each required document shows as outstanding/received/verified with the received date where applicable"
-        tests: []
+        tests: [TC-024-1]
       - id: FEAT-024-AC-2
         type: empty
         given: "nothing has been collected yet"
         when: "the screen renders"
         then: "all items show as outstanding with a clear request action, not an empty panel"
-        tests: []
+        tests: [TC-024-2]
       - id: FEAT-024-AC-3
         type: failure
         given: "PER-01"
         when: "records a follow-up"
         then: "the follow-up count for this pipeline step increments and is visible in the lead-health view (CON-23) — a follow-up that isn't counted is a silent failure of the signal"
-        tests: []
+        tests: [TC-024-3]
       - id: FEAT-024-AC-4
         type: permission
         given: "a non-PER-01 internal actor"
         when: "they attempt the action"
         then: "the checklist is read-only"
-        tests: []
+        tests: [TC-024-4]
       - id: FEAT-024-AC-5
         type: edge
         given: "a document type is genuinely not applicable to a given society (e.g. no GST registration)"
         when: "the condition is evaluated"
         then: "PER-01 can mark it not-applicable with a reason rather than leaving it permanently outstanding and skewing the stall signal"
-        tests: []
+        tests: [TC-024-5]
     stories:
       - id: STORY-024-1
         title: "As ops, I want to request and track the KYC documents a society still owes, so that nothing stalls silently waiting on a document nobody's chasing."
@@ -2901,31 +2901,31 @@ features:
         given: "a document received over WhatsApp"
         when: "PER-01 uploads it against the checklist item and verifies it"
         then: "the item moves to `verified` with the channel recorded"
-        tests: []
+        tests: [TC-026-1]
       - id: FEAT-026-AC-2
         type: empty
         given: "nothing awaits verification"
         when: "the screen renders"
         then: "the queue shows a caught-up state"
-        tests: []
+        tests: [TC-026-2]
       - id: FEAT-026-AC-3
         type: failure/rejection
         given: "a document is illegible or wrong"
         when: "PER-01 rejects it with a reason"
         then: "the item returns to outstanding with the reason visible to the society (where portal access exists) and to whoever follows up"
-        tests: []
+        tests: [TC-026-3]
       - id: FEAT-026-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "verification is unavailable"
-        tests: []
+        tests: [TC-026-4]
       - id: FEAT-026-AC-5
         type: edge
         given: "the same document type"
         when: "is submitted twice through different paths (society upload plus a WhatsApp copy)"
         then: "PER-01 verifies one and the other is retained as a duplicate rather than either being silently discarded"
-        tests: []
+        tests: [TC-026-5]
     stories:
       - id: STORY-026-1
         title: "As ops, I want to enter and verify KYC documents on the society's behalf, so that a society without their own login can still move through onboarding."
@@ -2968,31 +2968,31 @@ features:
         given: "a confirmed demo report"
         when: "PER-07 generates an offer"
         then: "the benchmark %, extrapolated savings, and derived monthly fee are pre-filled from the demo data and the commercial terms are editable"
-        tests: []
+        tests: [TC-027-1]
       - id: FEAT-027-AC-2
         type: empty
         given: "no offer exists for a pipeline"
         when: "the screen renders"
         then: "the stage shows a clear \"no offer yet\" state with a generate action"
-        tests: []
+        tests: [TC-027-2]
       - id: FEAT-027-AC-3
         type: failure
         given: "required commercial terms (revenue-share %"
         when: "the action is attempted"
         then: "tolerance band, term) are left unset, the offer cannot be issued — these are the terms every downstream billing decision depends on"
-        tests: []
+        tests: [TC-027-3]
       - id: FEAT-027-AC-4
         type: permission
         given: "a non-PER-01/PER-07 actor"
         when: "they attempt the action"
         then: "offer generation is unavailable"
-        tests: []
+        tests: [TC-027-4]
       - id: FEAT-027-AC-5
         type: edge
         given: "the demo-skip path (CON-25)"
         when: "an offer is generated with a negotiated benchmark"
         then: "`benchmarkSource = negotiated-fixed` is set and the offer records that the savings **percentage** is agreement-derived while consumption is still metered and monitored against the first post-install month (FEAT-052) — INV-02's narrowed exception, made explicit on the document"
-        tests: []
+        tests: [TC-027-5]
     stories:
       - id: STORY-027-1
         title: "As ops, I want to generate an offer with the per-circuit benchmark table from the demo numbers, so that CON-11's per-circuit pricing is what the society actually negotiates against."
@@ -3041,31 +3041,31 @@ features:
         given: "an issued offer"
         when: "the society accepts"
         then: "the offer is marked accepted and the pipeline advances to agreement preparation"
-        tests: []
+        tests: [TC-028-1, TC-028-1-E2E]
       - id: FEAT-028-AC-2
         type: empty
         given: "an offer has been issued but not responded to"
         when: "the screen renders"
         then: "its state clearly shows \"awaiting response\" with elapsed time — this is a primary stall signal for FEAT-031"
-        tests: []
+        tests: [TC-028-2]
       - id: FEAT-028-AC-3
         type: failure/rejection
         given: "the society"
         when: "rejects"
         then: "the offer is marked rejected with a reason and the pipeline is flagged as stalled rather than silently closed — a rejected offer is often followed by a counter-proposal in practice"
-        tests: []
+        tests: [TC-028-3]
       - id: FEAT-028-AC-4
         type: permission
         given: "a non-PER-01/PER-07 actor"
         when: "they attempt the action"
         then: "recording an outcome is unavailable"
-        tests: []
+        tests: [TC-028-4]
       - id: FEAT-028-AC-5
         type: edge
         given: "a counter"
         when: "is recorded"
         then: "a new offer version is created carrying the requested terms, and the previous version remains retrievable exactly as issued"
-        tests: []
+        tests: [TC-028-5]
     stories:
       - id: STORY-028-1
         title: "As an office-bearer, I want to accept, counter, or reject an offer, so that the decision that commits the society is made by someone who actually holds that authority."
@@ -3114,31 +3114,31 @@ features:
         given: "an accepted offer"
         when: "PER-01 prepares the agreement"
         then: "a document carrying exactly the accepted terms is produced for printing"
-        tests: []
+        tests: [TC-029-1]
       - id: FEAT-029-AC-2
         type: empty
         given: "no agreement prepared yet"
         when: "the screen renders"
         then: "the stage shows what's outstanding (print / notarize / sign / upload) as discrete steps rather than one opaque status"
-        tests: []
+        tests: [TC-029-2]
       - id: FEAT-029-AC-3
         type: failure
         given: "the executed scan isn't uploaded"
         when: "the action is attempted"
         then: "the pipeline cannot advance to installation — a hard gate, since installation commits FirsThing's own capital (CON: hardware ownership)"
-        tests: []
+        tests: [TC-029-3]
       - id: FEAT-029-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "agreement preparation and term confirmation are unavailable"
-        tests: []
+        tests: [TC-029-4]
       - id: FEAT-029-AC-5
         type: edge
         given: "the physically-signed agreement differs from the accepted offer (a last-minute handwritten"
         when: "change"
         then: "which does happen), PER-01 must record the deviation explicitly — the system takes the executed document as authoritative but requires the difference to be visible, not silently reconciled"
-        tests: []
+        tests: [TC-029-5]
     stories:
       - id: STORY-029-1
         title: "As ops, I want to prepare and track the agreement through printing and notarization, so that a signed paper contract and its physical handoff are never invisible to the system."
@@ -3346,31 +3346,31 @@ features:
         given: "an executed agreement"
         when: "PER-01 sets up the project with scope, batches, staff, and a named onlooker"
         then: "the installation project is created and day 1 can be scheduled (via CAP-17)"
-        tests: []
+        tests: [TC-033-1]
       - id: FEAT-033-AC-2
         type: empty
         given: "no project set up yet"
         when: "the screen renders"
         then: "the pipeline's installation stage shows what setup is outstanding rather than an empty screen"
-        tests: []
+        tests: [TC-033-2]
       - id: FEAT-033-AC-3
         type: failure
         given: "no society onlooker is named"
         when: "the action is attempted"
         then: "project setup cannot complete — the daily review gate depends on it"
-        tests: []
+        tests: [TC-033-3]
       - id: FEAT-033-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "setup is unavailable"
-        tests: []
+        tests: [TC-033-4]
       - id: FEAT-033-AC-5
         type: edge
         given: "the agreed scope differs from the surveyed inventory (e.g. the society excludes one tower)"
         when: "the condition is evaluated"
         then: "the difference is recorded rather than the inventory being edited — the survey remains a record of what exists, the project records what's contracted"
-        tests: []
+        tests: [TC-033-5]
     stories:
       - id: STORY-033-1
         title: "As ops, I want to set up an installation project and its batch plan, so that a signed contract turns into a scheduled, trackable rollout instead of a loose intention."
@@ -3419,31 +3419,31 @@ features:
         given: "a day's work is finished"
         when: "PER-04 submits the batch with areas, counts, and photos"
         then: "the batch enters `awaiting-review` and the onlooker is notified"
-        tests: []
+        tests: [TC-034-1]
       - id: FEAT-034-AC-2
         type: empty
         given: "day 1 hasn't been logged"
         when: "the screen renders"
         then: "the project shows \"no batches submitted yet.\""
-        tests: []
+        tests: [TC-034-2]
       - id: FEAT-034-AC-3
         type: failure
         given: "photo evidence"
         when: "is missing"
         then: "the batch cannot be submitted — photos are what make the society's review and any dispute (FEAT-035) resolvable"
-        tests: []
+        tests: [TC-034-3]
       - id: FEAT-034-AC-4
         type: permission
         given: "a non-PER-04 actor"
         when: "they attempt the action"
         then: "batch submission is unavailable"
-        tests: []
+        tests: [TC-034-4]
       - id: FEAT-034-AC-5
         type: edge
         given: "some fixtures in an area were skipped (inaccessible flat"
         when: "the condition is evaluated"
         then: "damaged wiring), they're recorded as skipped with a reason and remain in the project's outstanding scope rather than silently reducing it"
-        tests: []
+        tests: [TC-034-5]
     stories:
       - id: STORY-034-1
         title: "As the installer, I want to log each day's installation batch from site, so that installation progress is visible the same day it happens, not reconstructed later."
@@ -3492,31 +3492,31 @@ features:
         given: "a submitted batch"
         when: "the onlooker approves it more than 3 hours before the next day's start"
         then: "the next day's work is unblocked"
-        tests: []
+        tests: [TC-035-1]
       - id: FEAT-035-AC-2
         type: empty
         given: "no batch awaits review"
         when: "the screen renders"
         then: "the onlooker's view shows a clear caught-up state"
-        tests: []
+        tests: [TC-035-2]
       - id: FEAT-035-AC-3
         type: failure/blocked
         given: "the previous day's batch is unapproved within 3 hours of the next day's planned start"
         when: "the action is attempted"
         then: "the next day is blocked and both PER-01 and PER-04 are alerted — the block is visible before the crew arrives, not on arrival"
-        tests: []
+        tests: [TC-035-3]
       - id: FEAT-035-AC-4
         type: permission
         given: "a society user who is not the designated onlooker"
         when: "they attempt the action"
         then: "they can view batches but not approve them; only the named onlooker's approval satisfies the gate"
-        tests: []
+        tests: [TC-035-4]
       - id: FEAT-035-AC-5
         type: edge
         given: "the gate is skipped with backend approval"
         when: "the condition is evaluated"
         then: "the skip is recorded against the project's once-only allowance and a second skip attempt is refused (CON-21) — a hard count, enforced here rather than by FEAT-032"
-        tests: []
+        tests: [TC-035-5]
     stories:
       - id: STORY-035-1
         title: "As an office-bearer or manager, I want to review and approve each day's installation batch, so that the society has confirmed, in the moment, what was actually installed."
@@ -3565,31 +3565,31 @@ features:
         given: "an obstacle on site"
         when: "PER-04 raises a blocker with detail and photos"
         then: "PER-01 sees it immediately with the affected batch/area context"
-        tests: []
+        tests: [TC-036-1]
       - id: FEAT-036-AC-2
         type: empty
         given: "no"
         when: "open blockers"
         then: "the project shows a clean state"
-        tests: []
+        tests: [TC-036-2]
       - id: FEAT-036-AC-3
         type: failure
         given: "a blocker remains unresolved past the planned batch date"
         when: "the action is attempted"
         then: "it's flagged as schedule-impacting rather than sitting as an ordinary open item"
-        tests: []
+        tests: [TC-036-3]
       - id: FEAT-036-AC-4
         type: permission
         given: "a non-PER-04/PER-01 actor"
         when: "they attempt the action"
         then: "raising and resolving are unavailable respectively"
-        tests: []
+        tests: [TC-036-4]
       - id: FEAT-036-AC-5
         type: edge
         given: "a requirement"
         when: "change alters the total light count"
         then: "the change is flagged as benchmark-affecting (CON-10) and cannot be closed as a routine operational note — it routes to whoever owns the contract terms"
-        tests: []
+        tests: [TC-036-5]
     stories:
       - id: STORY-036-1
         title: "As ops, I want to record installation blockers and scope changes as they happen, so that a stalled install has a reason attached instead of just going quiet."
@@ -3638,31 +3638,31 @@ features:
         given: "all batches are approved and no blockers are open"
         when: "the completion certificate is signed and its date recorded"
         then: "the pipeline moves to `active-billing` and billing is scheduled to start the next day"
-        tests: []
+        tests: [TC-037-1, TC-037-1-E2E]
       - id: FEAT-037-AC-2
         type: empty
         given: "the project isn't complete"
         when: "the screen renders"
         then: "the completion action shows exactly what's outstanding (unapproved batches, open blockers) rather than being merely disabled"
-        tests: []
+        tests: [TC-037-2]
       - id: FEAT-037-AC-3
         type: failure
         given: "an"
         when: "attempt to complete with an open blocker"
         then: "it's refused with the blocking items listed"
-        tests: []
+        tests: [TC-037-3]
       - id: FEAT-037-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "recording completion is unavailable; the society's signature is captured as evidence, not as a system action they perform"
-        tests: []
+        tests: [TC-037-4]
       - id: FEAT-037-AC-5
         type: edge
         given: "completion falls mid-month"
         when: "the condition is evaluated"
         then: "the first invoice is pro-rated for the actual remaining days in that calendar month (CON-22) — not billed as a full month and not deferred to the following month"
-        tests: []
+        tests: [TC-037-5]
     stories:
       - id: STORY-037-1
         title: "As ops, I want to issue the completion certificate once installation finishes, so that billing starts from a single, unambiguous, system-recorded event."
@@ -3764,31 +3764,31 @@ features:
         given: "a society"
         when: "PER-01 enrolls it in a service line"
         then: "an independent engagement is created that can hold its own pipeline, contract, circuits, and billing without touching any other service line's state"
-        tests: []
+        tests: [TC-039-1]
       - id: FEAT-039-AC-2
         type: empty
         given: "a society with no enrollments"
         when: "the screen renders"
         then: "its record shows available service lines to enroll rather than assuming lighting"
-        tests: []
+        tests: [TC-039-2]
       - id: FEAT-039-AC-3
         type: failure
         given: "an"
         when: "attempt to enroll a society twice in the same service line"
         then: "it's refused — one engagement per (society, service line), matching CON-24's pipeline keying exactly"
-        tests: []
+        tests: [TC-039-3]
       - id: FEAT-039-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "enrollment is unavailable"
-        tests: []
+        tests: [TC-039-4]
       - id: FEAT-039-AC-5
         type: edge
         given: "a modeled-only service line (SVC-03/04)"
         when: "the condition is evaluated"
         then: "it can be recorded against a society for planning purposes but exposes no operational capability — visible in the data model, deliberately inert in the product"
-        tests: []
+        tests: [TC-039-5]
     stories:
       - id: STORY-039-1
         title: "As ops, I want to enroll a society in a service line as its own independent engagement, so that lighting, pumps, solar and wastewater never share state that should be separate."
@@ -3837,31 +3837,31 @@ features:
         given: "a confirmed survey"
         when: "a circuit is registered with its location, light count, wattage, and working hours"
         then: "it's available for meter installation (FEAT-011) and appears in the society's circuit list"
-        tests: []
+        tests: [TC-040-1]
       - id: FEAT-040-AC-2
         type: empty
         given: "a society with no circuits"
         when: "the screen renders"
         then: "its circuit view shows an empty state explaining that circuits are created through the survey flow, not ad hoc"
-        tests: []
+        tests: [TC-040-2]
       - id: FEAT-040-AC-3
         type: failure
         given: "a light count or wattage of zero or negative"
         when: "the action is attempted"
         then: "registration is refused — these values feed CON-17's load validation and CON-11's extrapolation directly. Given a represented light count lower than the metered light count, registration is refused: the extrapolation factor would be below 1, which is never physically meaningful"
-        tests: []
+        tests: [TC-040-3]
       - id: FEAT-040-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "editing circuit configuration is unavailable; PER-04 reads it in the field"
-        tests: []
+        tests: [TC-040-4]
       - id: FEAT-040-AC-5
         type: edge
         given: "a circuit's working hours"
         when: "change"
         then: "the value is updated and recorded as metadata with an effective date, and no benchmark rescale is triggered (CON-10) — if it causes an off-band month, that goes through CAP-05's normal deviation review instead"
-        tests: []
+        tests: [TC-040-5]
     stories:
       - id: STORY-040-1
         title: "As ops, I want the circuit registry to hold one row per metered circuit with its own benchmark, band, and pricing basis, so that CON-11's per-circuit model is the data model, not a UI convention on top of a simpler one."
@@ -3910,31 +3910,31 @@ features:
         given: "a verified light-count change from 50 to 54"
         when: "recorded"
         then: "the baseline rescales proportionally, the event is dated, and future months compare against the new baseline"
-        tests: []
+        tests: [TC-041-1]
       - id: FEAT-041-AC-2
         type: empty
         given: "a circuit has never had a count"
         when: "change"
         then: "its history shows the original commissioned baseline only"
-        tests: []
+        tests: [TC-041-2]
       - id: FEAT-041-AC-3
         type: failure
         given: "a count"
         when: "change without supporting verification"
         then: "the rescale is refused — an unverified count change is exactly the dispute scenario this guards against"
-        tests: []
+        tests: [TC-041-3]
       - id: FEAT-041-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "recording a rescale is unavailable"
-        tests: []
+        tests: [TC-041-4]
       - id: FEAT-041-AC-5
         type: edge
         given: "a rescale"
         when: "is recorded with an effective date in a month already invoiced"
         then: "the prior invoice is not retroactively recomputed — the change applies forward, and the discrepancy (if any) is handled through CAP-05's review rather than silently restating history"
-        tests: []
+        tests: [TC-041-5]
     stories:
       - id: STORY-041-1
         title: "As ops, I want a light-count change to trigger a deterministic benchmark rescale, so that a real change on site changes the bill by a rule, not by someone's judgment call."
@@ -4036,31 +4036,31 @@ features:
         given: "an hourly `date,time,consumption` CSV for a known circuit"
         when: "uploaded"
         then: "the AI normalizes it and daily totals are produced and stored alongside the raw file"
-        tests: []
+        tests: [TC-043-1]
       - id: FEAT-043-AC-2
         type: empty
         given: "a circuit has never had a reading uploaded"
         when: "the screen renders"
         then: "its readings view explains how to upload rather than showing an empty chart"
-        tests: []
+        tests: [TC-043-2]
       - id: FEAT-043-AC-3
         type: failure
         given: "the AI service is unavailable"
         when: "the action is attempted"
         then: "the raw file is still stored and the upload is recorded as pending normalization — the readings are not lost because an external service was down (the same fallback shape as the existing invoice-extraction flow)"
-        tests: []
+        tests: [TC-043-3]
       - id: FEAT-043-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "uploading readings is unavailable"
-        tests: []
+        tests: [TC-043-4]
       - id: FEAT-043-AC-5
         type: edge
         given: "the same period"
         when: "is uploaded twice for the same circuit"
         then: "the duplicate is detected and PER-01 chooses to replace or discard — silent double-counting would corrupt the monthly total directly"
-        tests: []
+        tests: [TC-043-5]
     stories:
       - id: STORY-043-1
         title: "As ops, I want to upload a circuit's meter reading CSV and have it AI-normalized against the canonical shape, so that the manual ingest path can carry the full monthly volume today, correctly."
@@ -4109,31 +4109,31 @@ features:
         given: "an ambiguous file"
         when: "the AI asks which column holds consumption and PER-01 answers"
         then: "normalization completes using that mapping and the readings are committed"
-        tests: []
+        tests: [TC-044-1]
       - id: FEAT-044-AC-2
         type: empty
         given: "no"
         when: "uploads await clarification"
         then: "the queue shows a caught-up state"
-        tests: []
+        tests: [TC-044-2]
       - id: FEAT-044-AC-3
         type: failure
         given: "PER-01 can't answer (an unreadable file)"
         when: "the action is attempted"
         then: "the upload can be abandoned without leaving partial readings behind"
-        tests: []
+        tests: [TC-044-3]
       - id: FEAT-044-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "clarification answering is unavailable"
-        tests: []
+        tests: [TC-044-4]
       - id: FEAT-044-AC-5
         type: edge
         given: "PER-01 spots that the AI's confident interpretation is nonetheless wrong"
         when: "the condition is evaluated"
         then: "they can override the mapping before committing — confidence is not authority"
-        tests: []
+        tests: [TC-044-5]
     stories:
       - id: STORY-044-1
         title: "As ops, I want to confirm an ambiguous file's column mapping the first time a new format appears, so that Gemini's guess is checked once, not trusted blind."
@@ -4182,31 +4182,31 @@ features:
         given: "a clean upload"
         when: "detection runs"
         then: "no anomalies are raised and the month is eligible for billing"
-        tests: []
+        tests: [TC-045-1]
       - id: FEAT-045-AC-2
         type: empty
         given: "no anomalies pending anywhere"
         when: "the screen renders"
         then: "the review queue shows a caught-up state"
-        tests: []
+        tests: [TC-045-2]
       - id: FEAT-045-AC-3
         type: failure/flagged
         given: "a day shows a zero reading mid-month"
         when: "the action is attempted"
         then: "it's flagged with the specific reason and the month is held from billing until PER-01 resolves or explicitly accepts it with a recorded reason"
-        tests: []
+        tests: [TC-045-3]
       - id: FEAT-045-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "resolving anomalies is unavailable"
-        tests: []
+        tests: [TC-045-4]
       - id: FEAT-045-AC-5
         type: edge
         given: "an anomaly occurs during a CAP-02 monitoring window"
         when: "the condition is evaluated"
         then: "it also marks that day invalid and triggers the window restart (CON-19) — the same detection feeds both paths rather than being duplicated"
-        tests: []
+        tests: [TC-045-5]
     stories:
       - id: STORY-045-1
         title: "As ops, I want incoming readings checked for missing days and out-of-range values at upload time, so that a bad file is caught before it ever reaches a calculation."
@@ -4255,31 +4255,31 @@ features:
         given: "a full month of hourly readings"
         when: "aggregated"
         then: "daily and monthly totals are produced with coverage recorded as complete"
-        tests: []
+        tests: [TC-046-1]
       - id: FEAT-046-AC-2
         type: empty
         given: "a month with no readings at all"
         when: "the screen renders"
         then: "no monthly figure is produced — the month is explicitly \"no data,\" not zero consumption"
-        tests: []
+        tests: [TC-046-2]
       - id: FEAT-046-AC-3
         type: failure/partial
         given: "6 days"
         when: "are missing"
         then: "those days are excluded, the monthly average is computed from the remaining days (CON-12), and the coverage (24/30 days) is attached to the figure"
-        tests: []
+        tests: [TC-046-3]
       - id: FEAT-046-AC-4
         type: permission
         given: "a daily aggregate has been computed"
         when: "any role attempts to hand-edit it"
         then: "the edit is refused -- aggregation is a system computation, not a manually adjustable figure"
-        tests: []
+        tests: [TC-046-4]
       - id: FEAT-046-AC-5
         type: edge
         given: "coverage falls **below 20 days** (CON-12's floor"
         when: "the condition is evaluated"
         then: "set at the Phase 3 gate), the month is flagged as unusable for PER-01's judgment rather than silently producing a billing-grade figure — PER-01 can still accept it explicitly, but the system won't compute a comparison from it unprompted"
-        tests: []
+        tests: [TC-046-5]
     stories:
       - id: STORY-046-1
         title: "As ops, I want hourly readings aggregated to daily with missing days handled explicitly, so that a month's coverage is a real, defensible number, never an interpolated guess."
@@ -4329,31 +4329,31 @@ features:
         given: "a monthly figure"
         when: "PER-01 traces it"
         then: "they reach the daily readings, the upload that produced them, and the original raw file"
-        tests: []
+        tests: [TC-047-1, TC-047-1-E2E]
       - id: FEAT-047-AC-2
         type: empty
         given: "a circuit with no"
         when: "uploads"
         then: "the history shows an empty state"
-        tests: []
+        tests: [TC-047-2]
       - id: FEAT-047-AC-3
         type: failure/degraded
         given: "the raw file is unretrievable from storage"
         when: "the action is attempted"
         then: "the readings still display but the traceability gap is shown explicitly rather than silently omitted"
-        tests: []
+        tests: [TC-047-3]
       - id: FEAT-047-AC-4
         type: permission
         given: "a non-internal actor"
         when: "they attempt the action"
         then: "raw files aren't exposed — the society sees derived figures and their reading-level provenance (CAP-14), not vendor files"
-        tests: []
+        tests: [TC-047-4]
       - id: FEAT-047-AC-5
         type: edge
         given: "an"
         when: "upload was replaced by a corrected one"
         then: "both remain in the history with the supersession recorded, so a changed figure has a visible explanation"
-        tests: []
+        tests: [TC-047-5]
     stories:
       - id: STORY-047-1
         title: "As ops, I want every raw file and its normalized readings retained and browsable, so that any number can be traced back to the exact file it came from (INV-02)."
@@ -4398,31 +4398,31 @@ features:
         given: "a month's readings are validated with no unresolved anomalies"
         when: "the run executes"
         then: "per-circuit extrapolated consumption, savings units, savings ₹, and FirsThing's computed fee are produced with every input version recorded, and the society total is the sum of the per-circuit fee lines rather than a separately-computed figure"
-        tests: []
+        tests: [TC-048-1]
       - id: FEAT-048-AC-2
         type: empty
         given: "a society in its first partial month"
         when: "the screen renders"
         then: "the run produces a prorated result via FEAT-051 rather than a full-month figure"
-        tests: []
+        tests: [TC-048-2]
       - id: FEAT-048-AC-3
         type: failure
         given: "unresolved anomalies exist for the month (FEAT-045)"
         when: "the action is attempted"
         then: "the run is held and the month is not billable until they're resolved — INV-09's gate, enforced here"
-        tests: []
+        tests: [TC-048-3]
       - id: FEAT-048-AC-4
         type: permission
         given: "any role"
         when: "they attempt the action"
         then: "the computed figures cannot be hand-edited; corrections happen by fixing inputs and re-running, which is itself recorded"
-        tests: []
+        tests: [TC-048-4]
       - id: FEAT-048-AC-5
         type: edge
         given: "a month with partial reading coverage (CON-12)"
         when: "the condition is evaluated"
         then: "the calculation uses only the days with data and carries the coverage count through to every derived figure — a 24/30-day month is never presented as a full month"
-        tests: []
+        tests: [TC-048-5]
     stories:
       - id: STORY-048-1
         title: "As the system, I want the monthly savings calculation to run automatically once a month's readings validate, so that PER-01 stops hand-calculating extrapolation, benchmark and savings every single month."
@@ -4471,31 +4471,31 @@ features:
         given: "the month's measured savings sits within the contracted band"
         when: "the check runs"
         then: "the month is marked compliant and bills at the contracted fixed amount with no review raised"
-        tests: []
+        tests: [TC-049-1]
       - id: FEAT-049-AC-2
         type: empty
         given: "a society in a pre-billing state"
         when: "the screen renders"
         then: "no compliance check applies and its record says so rather than showing a spurious pass"
-        tests: []
+        tests: [TC-049-2]
       - id: FEAT-049-AC-3
         type: failure/out of band
         given: "the month falls outside the band"
         when: "the action is attempted"
         then: "a deviation review is raised (CAP-05) and the month is flagged pending that review's outcome — the invoice does not auto-adjust, and a *first* out-of-band month never adjusts at all (CON-01c)"
-        tests: []
+        tests: [TC-049-3]
       - id: FEAT-049-AC-4
         type: permission
         given: "any role"
         when: "they attempt the action"
         then: "the band value cannot be edited here — it belongs to the contract (CAP-07) and changing it is a contractual act, not an operational one"
-        tests: []
+        tests: [TC-049-4]
       - id: FEAT-049-AC-5
         type: edge
         given: "a contract with a ±10% band"
         when: "the condition is evaluated"
         then: "the check uses 10% — a society-specific value, confirmed against real contract evidence, not a platform constant. Given a society with several typed circuits where one is out of band and three are in band, exactly one deviation review is raised and only that circuit's fee line is at risk"
-        tests: []
+        tests: [TC-049-5]
     stories:
       - id: STORY-049-1
         title: "As the system, I want each circuit checked against its own benchmark and band independently, so that one circuit going out of band never silently drags its siblings with it (CON-01c)."
@@ -4544,31 +4544,31 @@ features:
         given: "a review concludes \"FirsThing-attributable, uncorrected,\" when applied"
         when: "the action is attempted"
         then: "the month's `pricingBasis` becomes `actual-metered`, the amount is recomputed through CON-11 using the measured savings %, and the change is recorded with its review reference"
-        tests: []
+        tests: [TC-050-1]
       - id: FEAT-050-AC-2
         type: empty
         given: "no adjustments this cycle"
         when: "the screen renders"
         then: "the billing run proceeds entirely at fixed contracted amounts"
-        tests: []
+        tests: [TC-050-2]
       - id: FEAT-050-AC-3
         type: failure/excluded cause
         given: "the root cause is on CON-01b's exclusion list"
         when: "the action is attempted"
         then: "the bill stays at the contracted fixed amount and an explanation is generated for the society (OQ-09) — not silently billed as normal"
-        tests: []
+        tests: [TC-050-3]
       - id: FEAT-050-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "applying an adjustment is unavailable; and no adjustment can be applied without a linked completed review"
-        tests: []
+        tests: [TC-050-4]
       - id: FEAT-050-AC-5
         type: edge
         given: "a FirsThing-attributable issue that *was* corrected within a month"
         when: "the condition is evaluated"
         then: "no adjustment applies (CON-01b's \"corrected at no cost\" path) — the correction, not the deviation, is what determines the billing outcome"
-        tests: []
+        tests: [TC-050-5]
     stories:
       - id: STORY-050-1
         title: "As ops, I want a second consecutive breach to apply the actual-metered adjustment only after review, so that a fee-line change is a decision, not an automatic side effect."
@@ -4617,31 +4617,31 @@ features:
         given: "a completion certificate signed on the 18th of a 31-day month"
         when: "the first bill is computed"
         then: "it's pro-rated for 12 days (the 19th onward), not the full month"
-        tests: []
+        tests: [TC-051-1]
       - id: FEAT-051-AC-2
         type: empty
         given: "a society whose billing hasn't started"
         when: "the screen renders"
         then: "no invoice is produced at all rather than a zero-value one"
-        tests: []
+        tests: [TC-051-2]
       - id: FEAT-051-AC-3
         type: failure
         given: "no completion date"
         when: "is recorded"
         then: "the proration cannot compute and the bill is held with a clear reason — the date is a hard input"
-        tests: []
+        tests: [TC-051-3]
       - id: FEAT-051-AC-4
         type: permission
         given: "a prorated figure has been computed"
         when: "any role attempts to hand-adjust it"
         then: "the edit is refused -- prorated figures are computed, never entered"
-        tests: []
+        tests: [TC-051-4]
       - id: FEAT-051-AC-5
         type: edge
         given: "billing ends mid-month (termination)"
         when: "the condition is evaluated"
         then: "the same proration applies to the final month — one mechanism, both ends of the contract"
-        tests: []
+        tests: [TC-051-5]
     stories:
       - id: STORY-051-1
         title: "As the system, I want a partial first or final month prorated by actual days automatically, so that nobody hand-adjusts the number a society's very first bill depends on."
@@ -4744,31 +4744,31 @@ features:
         given: "a finalized month"
         when: "PER-01 uploads the Zoho-generated PDF"
         then: "it's extracted, matched to that society+month's calculation, and any amount mismatch is flagged"
-        tests: []
+        tests: [TC-053-1]
       - id: FEAT-053-AC-2
         type: empty
         given: "a month with no invoice uploaded yet"
         when: "the screen renders"
         then: "the society's billing record shows \"invoice pending\" explicitly — this is the state ops chases at month end"
-        tests: []
+        tests: [TC-053-2]
       - id: FEAT-053-AC-3
         type: failure
         given: "the uploaded invoice's amount differs from the computed amount"
         when: "the action is attempted"
         then: "the discrepancy is shown and must be acknowledged or corrected before release (FEAT-054), not auto-reconciled"
-        tests: []
+        tests: [TC-053-3]
       - id: FEAT-053-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "invoice upload is unavailable"
-        tests: []
+        tests: [TC-053-4]
       - id: FEAT-053-AC-5
         type: edge
         given: "the Zoho API integration exists and"
         when: "fails mid-cycle"
         then: "the manual path remains fully available as a fallback in the same UI — no separate degraded mode to learn under pressure"
-        tests: []
+        tests: [TC-053-5]
     stories:
       - id: STORY-053-1
         title: "As ops, I want to upload the Zoho-generated invoice and link it to the month's calculation, so that the formal tax invoice and the platform's own numbers are tied together, not two disconnected artifacts."
@@ -4817,31 +4817,31 @@ features:
         given: "a finalized month with no outstanding flags"
         when: "the accountant releases it"
         then: "the invoice and savings report become visible to the society and the release is attributed"
-        tests: []
+        tests: [TC-054-1]
       - id: FEAT-054-AC-2
         type: empty
         given: "nothing awaits review"
         when: "the screen renders"
         then: "the queue shows a caught-up state"
-        tests: []
+        tests: [TC-054-2]
       - id: FEAT-054-AC-3
         type: failure
         given: "an unacknowledged invoice-amount mismatch (FEAT-053 AC-3) or an unresolved anomaly"
         when: "the action is attempted"
         then: "release is blocked with the specific reason listed"
-        tests: []
+        tests: [TC-054-3]
       - id: FEAT-054-AC-4
         type: permission
         given: "any user who is not PER-08"
         when: "they attempt the action"
         then: "release is unavailable — including PER-01. The accountant is a separate login with its own scoped access (billing data and the release queue), not an ops permission"
-        tests: []
+        tests: [TC-054-4]
       - id: FEAT-054-AC-5
         type: edge
         given: "a released month later needs correction"
         when: "the condition is evaluated"
         then: "a new version is issued and the society can see both — the original is never silently replaced"
-        tests: []
+        tests: [TC-054-5]
     stories:
       - id: STORY-054-1
         title: "As the accountant, I want a release gate before any figure reaches a society, so that nothing goes out that a second, accountable person hasn't actually checked."
@@ -4890,31 +4890,31 @@ features:
         given: "an out-of-band month"
         when: "PER-01 opens the deviation"
         then: "daily readings are plotted against the benchmark with coverage, anomalies, recent inspections, rescales, and tickets shown alongside"
-        tests: []
+        tests: [TC-055-1]
       - id: FEAT-055-AC-2
         type: empty
         given: "no"
         when: "open deviations"
         then: "the queue shows a caught-up state"
-        tests: []
+        tests: [TC-055-2]
       - id: FEAT-055-AC-3
         type: failure/degraded
         given: "readings can't be loaded for the chart"
         when: "the action is attempted"
         then: "the deviation still opens with its numeric summary and an explicit note that the chart is unavailable (INV-06)"
-        tests: []
+        tests: [TC-055-3]
       - id: FEAT-055-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "deviations are not visible — these are internal billing judgments, not customer-facing"
-        tests: []
+        tests: [TC-055-4]
       - id: FEAT-055-AC-5
         type: edge
         given: "the deviation is explained by low reading coverage (CON-12) rather than real consumption"
         when: "change"
         then: "PER-01 can resolve it as a data issue without dispatching anyone — the cheapest resolution should be the easiest one to reach"
-        tests: []
+        tests: [TC-055-5]
     stories:
       - id: STORY-055-1
         title: "As the system, I want an out-of-band circuit to raise a deviation with its chart and initial findings, so that ops sees why a number moved, not just that it did."
@@ -5123,31 +5123,31 @@ features:
         given: "a completed monthly calculation"
         when: "the report generates"
         then: "it contains metered consumption, extrapolation, benchmark comparison, savings units/₹, the share split, and coverage, each traceable to source"
-        tests: []
+        tests: [TC-059-1]
       - id: FEAT-059-AC-2
         type: empty
         given: "a society's first partial month"
         when: "the screen renders"
         then: "the report reflects the prorated period and says so, rather than presenting a partial month as a full one"
-        tests: []
+        tests: [TC-059-2]
       - id: FEAT-059-AC-3
         type: failure
         given: "the calculation is held (unresolved anomalies)"
         when: "the action is attempted"
         then: "no report generates and the reason is visible — a report from provisional data is worse than no report"
-        tests: []
+        tests: [TC-059-3]
       - id: FEAT-059-AC-4
         type: permission
         given: "any role"
         when: "they attempt the action"
         then: "report figures aren't hand-editable; narrative/commentary is, following FEAT-021's locked-figures/editable-presentation split from the demo report"
-        tests: []
+        tests: [TC-059-4]
       - id: FEAT-059-AC-5
         type: edge
         given: "a month whose bill was adjusted after a deviation review"
         when: "the condition is evaluated"
         then: "the report includes the root-cause explanation (CON-01b classification, in customer-appropriate language) rather than a bare adjusted number"
-        tests: []
+        tests: [TC-059-5]
     stories:
       - id: STORY-059-1
         title: "As the system, I want the monthly savings report to generate with every figure linked to its provenance, so that a disputed bill has a defensible answer instead of becoming an argument (GOAL-06)."
@@ -5196,31 +5196,31 @@ features:
         given: "a released month"
         when: "the committee opens the portal"
         then: "that month's savings report and invoice are both available with historical months alongside"
-        tests: []
+        tests: [TC-060-1, TC-060-1-E2E]
       - id: FEAT-060-AC-2
         type: empty
         given: "a newly-onboarded society with no released months"
         when: "the screen renders"
         then: "the portal explains that the first report arrives after the first billing month rather than showing an empty table"
-        tests: []
+        tests: [TC-060-2]
       - id: FEAT-060-AC-3
         type: failure/degraded
         given: "a report"
         when: "fails to load"
         then: "an explicit error state renders (INV-06)"
-        tests: []
+        tests: [TC-060-3]
       - id: FEAT-060-AC-4
         type: permission
         given: "a society user"
         when: "they attempt the action"
         then: "they see only their own society's released reports; unreleased months are inaccessible server-side"
-        tests: []
+        tests: [TC-060-4]
       - id: FEAT-060-AC-5
         type: edge
         given: "a released month is later corrected"
         when: "the condition is evaluated"
         then: "both versions remain visible with the correction explained — consistent with FEAT-054 AC-5"
-        tests: []
+        tests: [TC-060-5]
     stories:
       - id: STORY-060-1
         title: "As a committee member, I want the released savings report and invoice to appear together in the portal, so that a bill without its explanation never becomes a support call."
@@ -5322,31 +5322,31 @@ features:
         given: "an executed agreement"
         when: "the contract record is created"
         then: "all billing-relevant terms are populated from the accepted offer and linked to the signed document"
-        tests: []
+        tests: [TC-062-1]
       - id: FEAT-062-AC-2
         type: empty
         given: "a society with no contract for a service line"
         when: "the screen renders"
         then: "its billing cannot start and the record says why rather than defaulting any term"
-        tests: []
+        tests: [TC-062-2]
       - id: FEAT-062-AC-3
         type: failure
         given: "a required billing term"
         when: "is missing (tolerance band"
         then: "revenue-share, unit rate), the contract cannot be activated — every one of these is a hard input to FEAT-048/049"
-        tests: []
+        tests: [TC-062-3]
       - id: FEAT-062-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "contract terms are read-only; amendments require the stronger permission in FEAT-064"
-        tests: []
+        tests: [TC-062-4]
       - id: FEAT-062-AC-5
         type: edge
         given: "terms are amended mid-contract"
         when: "the condition is evaluated"
         then: "prior months remain computed against the version effective at the time, and the new version applies forward only"
-        tests: []
+        tests: [TC-062-5]
     stories:
       - id: STORY-062-1
         title: "As ops, I want a first-class, versioned contract record per (society, service line), so that every billing-relevant term has one authoritative source instead of living in the agreement PDF alone."
@@ -6561,31 +6561,31 @@ features:
         given: "a lead is logged"
         when: "a lightweight society record is created"
         then: "it exists as a prospect and can carry pipelines, surveys, and offers without a contract"
-        tests: []
+        tests: [TC-085-1]
       - id: FEAT-085-AC-2
         type: empty
         given: "no societies"
         when: "the screen renders"
         then: "the list shows an `EmptyState` (INV-06)"
-        tests: []
+        tests: [TC-085-2]
       - id: FEAT-085-AC-3
         type: failure
         given: "a duplicate society (same name/location) is created"
         when: "the action is attempted"
         then: "it's flagged for review rather than silently allowed — duplicates fracture a society's history across two records, which is hard to unpick later"
-        tests: []
+        tests: [TC-085-3]
       - id: FEAT-085-AC-4
         type: permission
         given: "a non-PER-01 actor"
         when: "they attempt the action"
         then: "society creation and editing are unavailable"
-        tests: []
+        tests: [TC-085-4]
       - id: FEAT-085-AC-5
         type: edge
         given: "a society is enrolled in multiple service lines"
         when: "the condition is evaluated"
         then: "its record shows each engagement's independent state (one active-billing, one mid-pipeline) rather than a single society-wide status — CON-24's keying, reflected in the UI"
-        tests: []
+        tests: [TC-085-5]
     stories:
       - id: STORY-085-1
         title: "As ops, I want a society record that tracks its lifecycle from prospect through active customer, so that GOAL-02's account model has one real record per society, not several inconsistent ones."
@@ -6634,31 +6634,31 @@ features:
         given: "a new ops hire"
         when: "an account is created with the appropriate role and permissions"
         then: "they can access exactly those capabilities and no others"
-        tests: []
+        tests: [TC-086-1]
       - id: FEAT-086-AC-2
         type: empty
         given: "a society with no portal users yet"
         when: "the screen renders"
         then: "the account list shows that and offers creation"
-        tests: []
+        tests: [TC-086-2]
       - id: FEAT-086-AC-3
         type: failure
         given: "an"
         when: "attempt to remove the last holder of a critical permission (e.g. the last admin-manager)"
         then: "it's refused — self-lockout is a real, hard-to-recover failure mode"
-        tests: []
+        tests: [TC-086-3]
       - id: FEAT-086-AC-4
         type: permission
         given: "a user without the manage-users permission"
         when: "they attempt the action"
         then: "account management is unavailable — including to ordinary admins"
-        tests: []
+        tests: [TC-086-4]
       - id: FEAT-086-AC-5
         type: edge
         given: "a society user's role"
         when: "changes (a committee member rotates off after an RWA election"
         then: "FEAT-005's election-date field), access can be revoked and reassigned without deleting the society's history"
-        tests: []
+        tests: [TC-086-5]
     stories:
       - id: STORY-086-1
         title: "As ops (management), I want to create and manage user accounts with real roles and permissions, so that access to the system matches who someone actually is, server-side, not just in the UI."
@@ -6707,31 +6707,31 @@ features:
         given: "an invoice paid within terms"
         when: "the action is attempted"
         then: "no overdue tracking escalates and nothing is triggered"
-        tests: []
+        tests: [TC-087-1]
       - id: FEAT-087-AC-2
         type: empty
         given: "no societies in overdue states"
         when: "the screen renders"
         then: "the ops view is clean"
-        tests: []
+        tests: [TC-087-2]
       - id: FEAT-087-AC-3
         type: failure/suspension
         given: "an invoice remains unpaid through the 5-day warning countdown with no extension granted **and payment status was confirmed today**"
         when: "the action is attempted"
         then: "suspension fires automatically without any manual approval — and the firing is recorded with its full timeline. If payment status is stale, the firing is held and ops is prompted to confirm rather than the suspension proceeding on old data"
-        tests: []
+        tests: [TC-087-3]
       - id: FEAT-087-AC-4
         type: permission
         given: "PER-01"
         when: "they attempt the action"
         then: "they can grant extensions (up to 5 days per request) and halt a suspension; nobody needs a permission to let the automatic path proceed"
-        tests: []
+        tests: [TC-087-4]
       - id: FEAT-087-AC-5
         type: edge
         given: "payment arrives during the warning countdown"
         when: "the condition is evaluated"
         then: "the countdown cancels immediately and the society is notified — a suspension firing after payment lands would be a serious customer-facing failure"
-        tests: []
+        tests: [TC-087-5]
     stories:
       - id: STORY-087-1
         title: "As the system, I want unpaid invoices to track toward automatic suspension on a fixed clock, so that non-payment has a consistent, predictable consequence instead of an ad hoc one (CON-13)."
@@ -7889,55 +7889,55 @@ features:
         given: "an account holds `office-bearer`"
         when: "they accept an offer"
         then: "it is accepted and recorded against that account"
-        tests: []
+        tests: [TC-108-1, TC-108-1-E2E]
       - id: FEAT-108-AC-2
         type: permission
         given: "an account holds `committee` or `manager`"
         when: "they open an offer"
         then: "the accept action is refused server-side and the screen names who can perform it"
-        tests: []
+        tests: [TC-108-2]
       - id: FEAT-108-AC-3
         type: happy
         given: "an account holds `manager`"
         when: "they approve a daily batch"
         then: "the approval records the account, the authority held at that moment, and `capturedAt`"
-        tests: []
+        tests: [TC-108-3]
       - id: FEAT-108-AC-4
         type: failure
         given: "a society has exactly one active `office-bearer`"
         when: "an attempt is made to remove or demote that account"
         then: "it is refused and the rule is named"
-        tests: []
+        tests: [TC-108-4]
       - id: FEAT-108-AC-5
         type: happy
         given: "an `office-bearer` holds the designation"
         when: "they transfer it to another account of the same society"
         then: "the new account holds it and the previous one keeps its other authorities"
-        tests: []
+        tests: [TC-108-5]
       - id: FEAT-108-AC-6
         type: edge
         given: "a society has no reachable `office-bearer` after an AGM"
         when: "PER-01 re-designates one"
         then: "the change is recorded with who made it and why"
-        tests: []
+        tests: [TC-108-6]
       - id: FEAT-108-AC-7
         type: permission
         given: "an account belongs to one society"
         when: "it requests any other society's data or acts on it"
         then: "the request is refused server-side (INV-05)"
-        tests: []
+        tests: [TC-108-7]
       - id: FEAT-108-AC-8
         type: empty
         given: "a society has no portal accounts"
         when: "PER-01 opens its account list"
         then: "an empty state explains the consequence and offers to create the first one"
-        tests: []
+        tests: [TC-108-8]
       - id: FEAT-108-AC-9
         type: edge
         given: "an approval was recorded under an authority that has since changed"
         when: "the record is read back"
         then: "it still states the authority held at the time of the act"
-        tests: []
+        tests: [TC-108-9]
     stories:
       - id: STORY-108-1
         title: "As ops, I want a society's portal accounts to carry named, differentiated authority, so that the binding acts CON-45 requires are only ever performed by someone who actually holds that authority."

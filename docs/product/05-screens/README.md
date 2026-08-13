@@ -110,7 +110,7 @@ Legend — **Src:** `F` derived from a Phase 4 flow · `M` method's standard-scr
 | SCR-162 | Renewals & AMC | F | 17 | FEAT-063 | 3 | — | — |
 | SCR-163 | Termination | F | 17 | FEAT-051 | 3 | — | — |
 | SCR-164 | Term-end hardware ownership transfer | F | 17 | FEAT-103 | 3 | — | — |
-| SCR-170 | Field visit scheduler | F | X1 | FEAT-016 | 1 | — | — |
+| SCR-170 | Field visit scheduler | F | X1 | FEAT-016 | 1 | ✅ | — |
 | SCR-172 | Visit board (all visits, all staff) | X | X1 | FEAT-018, 019 | 2 | — | — |
 | SCR-270 | Spare inventory rollup (ops) | X | 14 | FEAT-077 | 2 | — | — |
 | SCR-271 | Returns pool & warranty claims | X | 14 | FEAT-076, CON-36 | 3 | — | — |
@@ -122,12 +122,12 @@ It is still six real screens, and the ops home is arguably the most-used screen 
 
 | SCR | Screen | Src | Flow | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|---|
-| SCR-240 | Ops home — priority task queue | X | — | FEAT-066, 067 | 1 | — | — |
-| SCR-241 | Portfolio society list & status chips | X | — | FEAT-067 | 1 | — | — |
-| SCR-242 | Society → circuit drill-down (consumption vs benchmark) | X | — | FEAT-068 | 1 | — | — |
+| SCR-240 | Ops home — priority task queue | X | — | FEAT-066, 067 | 1 | ✅ | — |
+| SCR-241 | Portfolio society list & status chips | X | — | FEAT-067 | 1 | ✅ | — |
+| SCR-242 | Society → circuit drill-down (consumption vs benchmark) | X | — | FEAT-068 | 1 | ✅ | — |
 | SCR-243 | Business analytics / stats view | X | — | FEAT-069 | 2 | — | — |
-| SCR-250 | Society list & record (admin) | X | — | FEAT-085 | 1 | — | — |
-| SCR-251 | Circuit registry & configuration | X | — | FEAT-040 | 1 | — | — |
+| SCR-250 | Society list & record (admin) | X | — | FEAT-085 | 1 | ✅ | — |
+| SCR-251 | Circuit registry & configuration | X | — | FEAT-040 | 1 | ✅ | — |
 | SCR-252 | Service-line registry & enrollment | X | — | FEAT-039 | 2 | — | — |
 | SCR-253 | Pump asset register (monitor-only) | X | — | FEAT-042 | 2 | — | — |
 | SCR-254 | Cross-sell savings projection | X | — | FEAT-061 (deferred) | 3 | — | — |
@@ -180,7 +180,7 @@ FEAT-098, CON-34), which is itself a decision worth stating rather than an omiss
 
 | SCR | Screen | Src | Features | Pri | Spec | Design |
 |---|---|---|---|---|---|---|
-| SCR-200 | Sign in | M | FEAT-086 | 1 | — | — |
+| SCR-200 | Sign in | M | FEAT-086 | 1 | ✅ | — |
 | SCR-201 | Password reset request → reset | M | FEAT-086 | 2 | — | — |
 | SCR-202 | Session expiry / re-authenticate | M | — | 2 | — | — |
 | SCR-203 | Account locked / disabled | M | FEAT-086 | 3 | — | — |
@@ -189,7 +189,7 @@ FEAT-098, CON-34), which is itself a decision worth stating rather than an omiss
 | SCR-220 | 404 not found | M | — | 3 | — | — |
 | SCR-221 | 403 forbidden (wrong role / wrong society) | M | INV-05 | 2 | — | — |
 | SCR-222 | 500 / unexpected error | M | — | 3 | — | — |
-| SCR-223 | **Offline & sync-pending (SUR-02)** | M | XC-02 | 1 | — | — |
+| SCR-223 | **Offline & sync-pending (SUR-02)** | M | XC-02 | 1 | ✅ | — |
 | SCR-224 | Maintenance / degraded | M | INV-06 | 3 | — | — |
 
 ### 1.8 Cross-cutting: account, administration, data lifecycle, help
@@ -262,8 +262,8 @@ designing screens that get cut is the one real cost of interleaving (method §4)
 | Service & ops | 6 | 0 | 0 | 0 |
 | Society portal | 7 | **7** | 0 | 0 |
 | Field (SUR-02) | 12 | **5** | 0 | 0 |
-| Cross-cutting | 2 | 0 | 0 | 0 |
-| **Total** | **51** | **43** | **1 partial** | **0** |
+| Cross-cutting | 2 | **2** | 0 | 0 |
+| **Total** | **51** | **51** | **1 partial** | **0** |
 
 **Monthly loop and deal loop complete** — 24 specified against the seven-state requirement, with entry
 points, actions with permissions and failure behaviour, inputs with real error copy, exits,
@@ -314,6 +314,9 @@ drawing** the screens exposes.
 | Decision | — | **"Identical" is exact equality** (user, 2026-08-13) — no rounding, no tolerance. Nothing real is ever hidden; the cost of a vendor precision change is absorbed by day-grouping and a shape hint, not by auto-resolving. Residual risk = ASSUM-28 | `01-back-office-monthly.md` SCR-080; FEAT-107 rule 6c |
 | Decision | — | **A closed month must be reopened before overwrite** (user, 2026-08-13). Refused in place, so PER-08 can never approve figures that changed underneath them | `01-back-office-monthly.md` SCR-080; FEAT-107 rule 6b |
 | **Decision** | **CON-45** | **A society holds several named logins with differentiated authority**, not one shared credential (user, 2026-08-13). Resolves a real collision: GOAL-02 said "one login", FEAT-085 assumed an account list, and three portal acts are commercially binding. `office-bearer` holds the binding acts, `committee` and `manager` are operational. Guards: at least one active office-bearer always, and PER-01 can re-designate when an AGM replaces the committee with no handover | `../00-intake.md` CON-45; `03-features.md` FEAT-108; `03-society-portal.md` §0.1 |
+| **Decision** | **CON-46** | **One authentication mechanism for everyone: email and password**, as shipped (user, 2026-08-13). A per-population split (emailed sign-in link for societies) was considered and declined. Cost accepted as ASSUM-29 and mitigated without changing the mechanism: prominent self-service reset, 90-day portal sessions on a remembered device, and emailed artefacts that carry the substance so a locked-out committee still receives its month | `../00-intake.md` CON-46, ASSUM-29; `06-cross-cutting.md` SCR-200 |
+| **Risk** | **ASSUM-29** | Password friction may suppress portal usage. It does not break anything — it erodes something, and a committee that cannot get in does not file a bug, it stops checking. Metric named: sign-in rate per society per month against report releases | `../00-intake.md` ASSUM-29 |
+| Hygiene | — | A reference check found 21 apparently-dangling `CON-25d` / `CON-28a–d` references. All were valid — both parents define their sub-clauses inline — but in two different formats, so neither a reader nor the checker could resolve them reliably. Normalised to `**(a)**` and the convention documented above the constraint table | `../00-intake.md` |
 | Risk | ASSUM-16 | The vendor CSV shape being stable is load-bearing for the whole monthly loop, and FLOW-09 step 1 has *no system visibility* if it changes. Worth a monitoring feature | flagged on SCR-080; not yet a FEAT |
 | Spec rule | — | FEAT-054's own stated risk (a one-at-a-time release gate becomes the bottleneck at 200 societies) needed a structural answer, not care. SCR-092 now defines a **routine vs needs-review triage rule** with five explicit conditions, and bulk release that structurally cannot reach a needs-review month | `01-back-office-monthly.md` SCR-092 |
 | Spec rule | — | SCR-113 enforces CON-37's direction-dependence structurally: on the FirsThing-favouring branch the apply action **does not exist**, only "raise amendment". A unilateral repricing becomes impossible rather than discouraged | `01-back-office-monthly.md` SCR-113 |

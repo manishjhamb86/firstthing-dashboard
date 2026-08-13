@@ -771,14 +771,13 @@ model Job {
 }
 ```
 
-**On the `tolerancePct`-at-`Contract`-level choice:** the source constraints place this field
-differently depending on which passage is read literally — CON-01a ties it to `Society`/`Contract`
-(singular), while CON-11's "each metered circuit... is compared against its own band" could be read
-as implying a per-circuit percentage rather than a shared one evaluated per circuit independently.
-This schema takes the literal field placement (one `tolerancePct` per `Contract`, applied
-independently to each circuit's own reading) as the working assumption. **Flagged in §11 as a
-technical risk to confirm before CAP-04/CAP-05 are built**, not silently resolved by picking a
-schema and moving on.
+**On the `tolerancePct`-at-`Contract`-level choice:** the source constraints initially read
+ambiguously — CON-01a ties the field to `Society`/`Contract` (singular), while CON-11's "each
+metered circuit... is compared against its own band" could have been read as implying a per-circuit
+percentage. **Confirmed 2026-08-13 (Phase 7 gate) with the user: one `tolerancePct` per `Contract`,
+applied independently to each circuit's own reading** — CON-11's "own band" describes independent
+*evaluation*, not a distinct percentage per circuit. `00-intake.md` CON-01a updated with this scope
+confirmation; RISK-02 (§11) is closed, not just mitigated.
 
 ---
 
@@ -963,7 +962,7 @@ Full text of each: `docs/engineering/adr/ADR-00N-*.md`.
 | ID | Risk | Component | Likelihood | Impact | Mitigation | Spike needed? |
 |----|------|-----------|-----------|--------|-----------|---------------|
 | RISK-01 | Vendor meter API doesn't exist, or exists but can't sustain 800-meter scale (ASSUM-24) | COMP-03 | medium | high — FEAT-104/105/106 don't exist; CON-30's manual path stays permanently load-bearing | ADR-010's interface isolation; CON-30 already the accepted fallback | **Yes — SPIKE-01, already scheduled in `backlog.yaml`** |
-| RISK-02 | `tolerancePct`'s schema placement (Contract-level, applied per circuit) may not match the actual per-circuit intent in CON-11 | COMP-04 | low-medium | high if wrong — every out-of-band determination for every circuit under a contract would use the wrong percentage | Confirm with the user before CAP-04/CAP-05 implementation begins (Phase 8); the schema in §5.2 is a stated assumption, not a silent resolution | Recommend a short confirmation pass, not a full spike |
+| RISK-02 | ~~`tolerancePct`'s schema placement (Contract-level, applied per circuit) may not match the actual per-circuit intent in CON-11~~ **Closed 2026-08-13** — user confirmed one `tolerancePct` per `Contract`, applied independently per circuit, matching the schema as designed. `00-intake.md` CON-01a updated | COMP-04 | — | — | Resolved, no further action | No |
 | RISK-03 | India's DPDP Act obligations unassessed against the system's actual PII footprint (§6) | whole system | medium | medium-high — a compliance gap discovered post-launch is expensive to retrofit, especially consent/purpose-limitation record-keeping | A legal/compliance review before scaling past the R0 pilot society | Not a technical spike — a compliance review |
 | RISK-04 | Job runner (COMP-11) is a new single point of coordination for every time-driven guarantee (SLA timers, suspension, gate-pass timeout, notification retries) with no precedent in the current codebase | COMP-11 | medium | high — a stuck or crashed job runner silently defeats NFR-06/07/08/10 simultaneously | Separate worker process from the request-serving process; a health check on the runner's own tick (§7); alerting on queue-depth/oldest-pending-job age | Recommend a design/build spike early in Phase 8, before it becomes load-bearing for CON-13's suspension guarantee |
 | RISK-05 | CON-44's area-claim/contested-reconciliation UI is genuinely intricate to build correctly — multiple offline devices, advisory locks, a submission-blocking gate | COMP-06, COMP-12 | medium | medium — a bug here causes double-counted lights, which (per CON-11) directly biases a benchmark and therefore a bill | Build and test this in isolation before wiring it into the full FLOW-02/FLOW-07 UI | Recommend a focused build spike |
@@ -1006,8 +1005,7 @@ Applied below.
 - Technical risks needing spikes are flagged for Phase 8 (skill's Phase 11, this project's next
   numbered phase) — §11.
 - `docs/backlog.yaml` updated — §12.
-- **User approval: granted 2026-08-13.** The one item requiring the user's own call — production
-  hosting — was raised as a single question and confirmed (ADR-009, self-managed VPS). RISK-02
-  (`Contract.tolerancePct`'s per-contract-vs-per-circuit scope) remains open by design, tracked as
-  a pre-implementation confirmation rather than a blocker on this document — consistent with this
-  phase's own principle of writing down what isn't settled rather than silently resolving it.
+- **User approval: granted 2026-08-13.** Two items requiring the user's own call were raised as
+  individual questions and both resolved: production hosting (ADR-009, self-managed VPS) and
+  `Contract.tolerancePct`'s scope (RISK-02, confirmed per-contract — `00-intake.md` CON-01a
+  updated). No open items remain against this document.

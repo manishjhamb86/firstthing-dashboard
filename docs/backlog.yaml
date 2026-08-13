@@ -4363,7 +4363,7 @@ features:
     depends_on: [FEAT-040, FEAT-041]
     status: ready
     backend_only: true
-    architecture_notes: "docs/engineering/09-architecture.md §5.2 COMP-04, ADR-004 -- computes per-CircuitFeeLine, fanning in at MonthlyCalculation; §11 RISK-02 flags Contract.tolerancePct's scope (per-contract vs per-circuit) as needing confirmation before this is built."
+    architecture_notes: "docs/engineering/09-architecture.md §5.2 COMP-04, ADR-004 -- computes per-CircuitFeeLine, fanning in at MonthlyCalculation. Contract.tolerancePct's scope confirmed 2026-08-13 (one value per contract, applied independently per circuit) -- 00-intake.md CON-01a, RISK-02 closed."
     acceptance_criteria:
       - id: FEAT-048-AC-1
         type: happy

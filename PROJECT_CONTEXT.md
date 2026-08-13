@@ -87,14 +87,14 @@ the CON-13 suspension countdown, the gate-pass timeout, notification retries), f
 register (RISK-04) as the closest thing this design has to a new single point of failure. Vendor
 meter-API work (FEAT-104/105/106) is built behind a provider-agnostic ingest interface (ADR-010) so
 SPIKE-01's still-unverified finding (ASSUM-24) can only ever remove one implementation, never force
-a rewrite of the billing engine. **One item was deliberately raised rather than decided
-unilaterally, and is now resolved**: production hosting for `firsthing.earth` (ADR-009) — the user
-confirmed the recommended default, continuing the `zenovaa`-style self-managed VPS pattern already
-proven in staging, closing `CON-06`'s long-open item. **One item stays open by design**: whether
-`Contract.tolerancePct`
-should be schema-level per-contract or per-circuit (RISK-02 — the source constraints (CON-01a,
-CON-11) can be read either way; the schema takes the per-contract reading as a working assumption,
-flagged for confirmation before CAP-04/CAP-05 are built rather than silently resolved). A new
+a rewrite of the billing engine. **Two items were deliberately raised rather than decided
+unilaterally, and both are now resolved**: production hosting for `firsthing.earth` (ADR-009) — the
+user confirmed the recommended default, continuing the `zenovaa`-style self-managed VPS pattern
+already proven in staging, closing `CON-06`'s long-open item; and whether `Contract.tolerancePct`
+is schema-level per-contract or per-circuit (RISK-02 — the source constraints (CON-01a, CON-11)
+could be read either way) — user confirmed one value per contract, applied independently per
+circuit, matching the schema as already designed; `00-intake.md` CON-01a updated with the scope
+confirmation. No open items remain against the Phase 7 document. A new
 non-technical spike (SPIKE-02) was added to `docs/backlog.yaml` for an India DPDP Act compliance
 review — the PII footprint (committee contacts, field-staff location data, signature/premises
 photos at 200-society scale) was validated against GST-only tax rules at Phase 0 (ASSUM-10) but

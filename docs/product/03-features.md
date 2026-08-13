@@ -2982,17 +2982,16 @@ stored changes unless the operator selects it and confirms.
    stored value does not change it either — it records the conflict and surfaces it, because
    no-silent-overwrite is a property of the data, not of the screen.
 
-**Acceptance criteria.**
-
-- AC-1 A file whose rows all match what is stored produces no warning and writes nothing.
-- AC-2 A differing value for a stored interval does not change that value on commit unless the row
-  was explicitly selected and the warning confirmed.
-- AC-3 The panel shows stored value, incoming value, difference and provenance for every conflict.
-- AC-4 Intervals inside the period with no reading from either source are listed as gaps.
-- AC-5 An overwrite retains the superseded value and records who replaced it and when.
-- AC-6 An overwrite attempt on a reading inside a released calculation is refused, and says why.
-- AC-7 The same classification runs on the API fetch path and surfaces conflicts without applying
-  them.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given every row in an uploaded file exactly matches a stored reading, when the batch is committed, then nothing is written and no warning is shown.
+  - AC-2 (failure): Given an incoming value differs from the stored reading for the same interval, when the batch is committed without that row selected, then the stored value is left unchanged.
+  - AC-3 (happy): Given a file contains conflicting intervals, when the reconciliation report renders, then every conflict shows the stored value, the incoming value, the difference, and where the stored value came from.
+  - AC-4 (edge): Given intervals inside the period have no reading from either source, when reconciliation runs, then they are listed as gaps and nothing is imputed in their place.
+  - AC-5 (happy): Given a conflict is selected and its confirmation accepted, when the overwrite applies, then the superseded value, its source, and the user who replaced it are all retained.
+  - AC-6 (failure): Given a reading sits inside a released calculation, when an overwrite is attempted on it, then it is refused with the reason stated, with or without confirmation.
+  - AC-7 (edge): Given a scheduled API fetch returns a value that differs from a stored reading, when the fetch completes, then the conflict is recorded and surfaced without being applied.
+  - AC-8 (empty): Given a period holds no stored readings at all, when a file is committed, then every row classifies as new and no reconciliation panel is shown.
+  - AC-9 (permission): Given a user without the ops role, when they attempt to apply an overwrite, then it is refused server-side, not merely hidden in the UI.
 
 **Data touched:** `Reading` (add `source`, `supersededValue`, `supersededAt`, `supersededByUserId`),
 plus a reconciliation report persisted against the upload batch.
@@ -3048,17 +3047,16 @@ binding acts reserved to office-bearers.
 6. **Provisioning.** PER-01 creates the first office-bearer at onboarding; that person creates the
    rest. A society with no portal account yet is a valid, visible state, not an error.
 
-**Acceptance criteria.**
-
-- AC-1 An office-bearer can accept an offer; a committee member and a manager cannot, and are told
-  who can.
-- AC-2 A manager can approve a daily batch, and the approval records their name and authority.
-- AC-3 Removing the last active office-bearer is refused, naming the rule.
-- AC-4 An office-bearer can transfer the designation to another account of the same society.
-- AC-5 PER-01 can re-designate an office-bearer for a society that has none reachable.
-- AC-6 (permission) No account of one society can see or act on another's (INV-05).
-- AC-7 (empty) A society with no portal accounts shows that state and offers creation.
-- AC-8 An authority change does not retroactively alter what a past approval records.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given an account holds `office-bearer`, when they accept an offer, then it is accepted and recorded against that account.
+  - AC-2 (permission): Given an account holds `committee` or `manager`, when they open an offer, then the accept action is refused server-side and the screen names who can perform it.
+  - AC-3 (happy): Given an account holds `manager`, when they approve a daily batch, then the approval records the account, the authority held at that moment, and `capturedAt`.
+  - AC-4 (failure): Given a society has exactly one active `office-bearer`, when an attempt is made to remove or demote that account, then it is refused and the rule is named.
+  - AC-5 (happy): Given an `office-bearer` holds the designation, when they transfer it to another account of the same society, then the new account holds it and the previous one keeps its other authorities.
+  - AC-6 (edge): Given a society has no reachable `office-bearer` after an AGM, when PER-01 re-designates one, then the change is recorded with who made it and why.
+  - AC-7 (permission): Given an account belongs to one society, when it requests any other society's data or acts on it, then the request is refused server-side (INV-05).
+  - AC-8 (empty): Given a society has no portal accounts, when PER-01 opens its account list, then an empty state explains the consequence and offers to create the first one.
+  - AC-9 (edge): Given an approval was recorded under an authority that has since changed, when the record is read back, then it still states the authority held at the time of the act.
 
 **Data touched:** `Profile` gains a per-society `portalAuthority` (`office-bearer | committee |
 manager`); `socmgr` maps to `manager`. Approval records gain the authority held at the time.

@@ -31,11 +31,24 @@ record of what was built and why. It is history, not a description of the workin
 
 ## Current Phase
 
-**Product blueprint, Phase 5 (Screens).** All 51 priority-1 screens specified; 4 of 6 mockup
-prototypes built and published. See `docs/product/` — `05-screens/` for the screen specs,
-`05a-theme-system.md` for the visual system. Phases 6–9 (backlog, architecture, development plan,
-test plan) still to come, and Phase 7 is where the new build's data model and architecture get
-designed against the blueprint rather than inherited.
+**Product blueprint, Phase 6 (Prioritization & Backlog) — done.** Phase 5 closed out with all 51
+priority-1 screens specified, all 6 mockup decks built and published, and a navigation map +
+screen↔feature coverage matrix (`docs/product/05-screens/README.md` §3-§6). Phase 6 produced
+`docs/product/08-prioritization.md` (method, RICE scores for all 108 features, the dependency
+graph incl. one genuine source-spec cycle found and resolved, a walking-skeleton MVP definition
+walking JTBD-01/FLOW-09→10, four release slices R0–R3, MoSCoW, cut list, R0 story decomposition,
+an explicitly-unobserved capacity check) and `docs/backlog.yaml` (the machine-readable spine —
+108 features, 553 acceptance criteria, 116 R0 stories, 51 screens, 4 gates — validator-clean
+modulo 15 errors / 263 warnings, all one documented/accepted class each, see the doc's §11).
+**Key finding from Phase 6, not obvious before computing the closure**: JTBD-01's walking
+skeleton isn't "the monthly loop with fixture data" — FEAT-040 (circuit registry) structurally
+depends on FEAT-007 (survey-time circuit selection) in the spec as written, so there is no
+backend-only shortcut to create a billable circuit. The MVP is one real deal walked start to
+finish (lead → survey → commissioning → offer → agreement → installation → first bill), 41
+features / 175 agent-sessions. Effort is scored in **agent-sessions**, not person-weeks — the
+user confirmed build capacity is "user + Claude Code, mostly," which also means pace is currently
+**unobserved** (§10 of the doc states this as a placeholder, not a finding, to be recalibrated
+after R0's first few sessions). Phase 7 (architecture, incl. the new build's data model) is next.
 
 ## Current Phase (archived application — history)
 

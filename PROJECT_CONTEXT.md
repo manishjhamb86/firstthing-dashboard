@@ -2,9 +2,42 @@
 
 ## Last Updated
 
-2026-08-06
+2026-08-13
+
+## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
+
+**The pre-blueprint application has been archived, not migrated.** `src/`, `prisma/`, `supabase/`
+and `public/` moved to `archive/` on the `blueprint` branch. The new system is built fresh against
+the product blueprint in `docs/product/`, and **data migration is deliberately deferred until the
+new system is live** — it is not a precondition for building it.
+
+Why, in one line: the blueprint describes a system this codebase cannot be incrementally walked to.
+CON-11 alone (one metered circuit *per light type*, each with its own benchmark, band, represented
+count and pricing basis, each independently able to flip to `actual-metered`, with a monthly
+invoice as a *set of per-circuit fee lines*) is a different spine, not a column addition. INV-02
+and INV-03 — every figure traceable to the readings and version that produced it, invoices never
+edited — have to hold from the first write, and retrofitting them onto tables built to be edited
+in place is worse than starting clean. `archive/README.md` has the full reasoning and the
+consequences of the move.
+
+**What this does not mean.** The archived work was not wasted and must not be rediscovered from
+scratch. The Architecture Decisions section below stays authoritative for everything it records —
+the S3 presigned-PUT pattern, the document naming convention, the Gemini extraction approach, the
+admin/user table split, the Prisma 7 and `@auth/core` specifics, the `PORT`-in-`.env` wrapper. Each
+cost real debugging. Read them before rebuilding the equivalent.
+
+**Everything in "Current Repository State" below describes the archived application**, kept as the
+record of what was built and why. It is history, not a description of the working tree.
 
 ## Current Phase
+
+**Product blueprint, Phase 5 (Screens).** All 51 priority-1 screens specified; 4 of 6 mockup
+prototypes built and published. See `docs/product/` — `05-screens/` for the screen specs,
+`05a-theme-system.md` for the visual system. Phases 6–9 (backlog, architecture, development plan,
+test plan) still to come, and Phase 7 is where the new build's data model and architecture get
+designed against the blueprint rather than inherited.
+
+## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
 

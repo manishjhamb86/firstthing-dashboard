@@ -1484,6 +1484,44 @@ stage** — the AWS credential gap recorded in Current Blockers now covers batch
 evidence too, which is the more visible half of it: an onlooker on stage can approve a day but not
 dispute one, since a dispute requires a photo by design.
 
+## Stage credentials: S3 + Gemini copied to `zenovaa`, uploads verified live (2026-08-14)
+
+**The AWS-credential gap the MS-05 deploy found is closed** — the user supplied the keys and chose
+to have them copied. `AWS_REGION`, `AWS_S3_BUCKET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+and `GEMINI_API_KEY` (the last not needed until MS-07's CSV ingest, copied now to save a second
+trip) were appended to `/zenovaa/code/firsthing-dashboard/.env.local` by **piping the matching lines
+straight from the local `.env.local` into `ssh … 'cat >> …'`** — the values never passed through a
+printed command, a transcript, or a tracked file. The previous file was backed up first
+(`.env.local.bak-20260814_180954`). Both pm2 processes were restarted with `--update-env`, the
+worker included because it shares the generated Prisma client.
+
+**Two things worth carrying forward:**
+- **A `grep -oE '^[A-Z_]+='` audit of an env file silently misses `AWS_S3_BUCKET`** — the character
+  class has no digits. This is what made an earlier pass conclude the bucket name was absent locally
+  when it was sitting in the same file. Use `[A-Z0-9_]+`.
+- **A signed request that is *denied* still proves the credentials are real.** The IAM user is
+  `PutObject`-only by design, so a `ListObjectsV2` from the box returning `AccessDenied` (rather
+  than `InvalidAccessKeyId`/`SignatureDoesNotMatch`) authenticates the identity without writing
+  anything to the bucket. Useful whenever credentials need checking on a box and every write leaves
+  an object this app cannot delete.
+
+**Verified through the running app, not just from the box.** The write-free probe plus a direct
+presign → PUT → public GET confirmed the chain works from `zenovaa`, but that only proves the
+*machine* has the credentials — Next.js loads `.env.local` into `process.env` at runtime, so the
+only real test is a presign through the app itself. Driven over the public HTTPS path
+(Playwright/system Chrome, 6/6, zero console errors, zero page errors): logged in as a real account,
+uploaded a KYC document on the live stage pipeline, and the file row landed — the assertion being
+the rendered row and then the S3 key read straight out of `firsthing_blueprint`, not the click.
+The resulting object fetched **200 with an unauthenticated `curl`**, confirming the public-read
+policy end to end from stage. The `KycRequirement`/`KycDocumentFile` rows were deleted afterward
+(all three KYC tables back to 0); the two S3 objects can't be, and are listed in Current Blockers.
+ADR-006's job chain ran unbroken through the restart at its 5-minute cadence
+(17:59 → 18:04 → 18:09 → 18:14 → 18:19), with no duplicate seed and `unstable restarts: 0`.
+
+**Not done, and deliberately not done unilaterally**: rotating `AUTH_SECRET`, which the same
+investigation found is shared with the archived app and has been exposed — see Current Blockers.
+Rotating it signs every stage session out, so it is the user's call to make, not a mechanical step.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -1575,11 +1613,18 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - No decision yet on the *production* Postgres/hosting target for `firsthing.earth` itself (currently local Docker for dev only). A separate staging Postgres (`firsthing_prod` on `zenovaa`) now exists for `stage.firsthing.earth` — see Current Repository State — but that's explicitly a staging box, not a production hosting decision.
 - Resolved (2026-08-05): S3 is fully live — bucket `firsthing` (`ap-south-1`, `Documents/` root prefix), public-read policy + CORS + scoped IAM user all provisioned by the user and confirmed working via a real upload+public-fetch test.
 - Leftover test objects in the live bucket need manual cleanup (the app's own IAM credentials can't delete them, by design — `PutObject`-only): `Documents/ASF_Insignia_Gurugram/2026-08/Invoices/ASF_Insignia_Gurugram_Invoice_2026-08_TEST-001.pdf` (2026-08-05), plus two from MS-05's verification (2026-08-14): `Documents/Palmwood_Enclave/2026-08/KYC/Palmwood_Enclave_GSTCertificate_2026-08.pdf` and `Documents/Palmwood_Enclave/2026-08/Agreements/Palmwood_Enclave_Agreement_2026-08.pdf`.
+- Two more leftover objects, same cause and same manual cleanup, from the stage-credential
+  verification (2026-08-14): `Documents/_stage_smoketest/2026-08/stage-s3-check.txt` (14 bytes) and
+  `Documents/ASF_Insignia/2026-08/KYC/ASF_Insignia_GSTCertificate_2026-08.pdf` (a 1-line stub PDF —
+  note this is the *stage* `ASF Insignia`, distinct from the 2026-08-05 `ASF_Insignia_Gurugram`
+  invoice object above). The database rows behind the second one were deleted; the object cannot be.
 - More leftover test objects, same cause and same manual cleanup: everything under
   `Documents/Northwood_Grove/2026-08/Installation/` (MS-06's verification, 2026-08-14) — installation
   batch photos and one dispute-evidence photo, all 1×1 PNGs.
 - **KYC documents and executed agreements are stored in a public-read bucket** (user's explicit choice, 2026-08-14, made with the alternative and the reasoning in front of them — see the MS-05 section). Anyone with or guessing a URL can fetch a society's GST certificate or signed agreement without a session. Worth revisiting alongside **SPIKE-02** (India DPDP Act review), which is still unresolved. The switch is cheap by construction: the DB stores S3 keys, not URLs, so it is a change to `publicS3Url()` plus a read path, not a data migration.
-- **`stage.firsthing.earth` has no AWS credentials, so uploads fail there** (found by the MS-05 deploy, 2026-08-14). Neither `.env` nor `.env.local` on the box carries `AWS_REGION`/`AWS_S3_BUCKET`/`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, and neither does the archived checkout beside it — S3 was only ever configured on the local dev machine. Everything else on stage works; the two upload surfaces (KYC document file, executed agreement scan) throw on presign. Not fixed unilaterally because it means copying a live IAM credential onto a server — the user's call. The KYC out-of-band entry path still works on stage without a file, by design.
+- Resolved (2026-08-14): **`stage.firsthing.earth` now has AWS + Gemini credentials and uploads work there** — see "Stage credentials" below. Was open for one day after the MS-05 deploy found the gap.
+- **`AUTH_SECRET` is shared between the live stage app and the archived app, and has been exposed** (2026-08-14). Compared by hash on the box: `/zenovaa/code/firsthing-dashboard/.env.local` and the archived `firsthing-dashboard-newui-archived-20260814/.env.local` carry the *same* `AUTH_SECRET`, and the archived file's contents were pasted into a chat transcript. It is the secret currently signing every JWT session on stage. **Rotation offered and not yet actioned** — it is one line plus a `pm2 restart`, and the only user-visible effect is that everyone signs in again. The same paste also exposed `SUPABASE_SECRET_KEY` and the Supabase service-role key for project `rdgdzscmhcynluvabobz`; those are inert for this build (nothing in the new `src/` imports Supabase) but may still back the old production site.
+- **The legacy Supabase project's `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` is a misnamed hazard, though it appears never to have shipped.** `NEXT_PUBLIC_` makes Next.js inline a variable into the *browser* bundle, and a service-role key bypasses row-level security entirely. Verified 2026-08-14: no code anywhere reads that variable — the only service-role usage is the two archived Supabase Edge Functions (`archive/supabase/functions/create-society-user/index.ts:29`, `update-society-user/index.ts:66`), which read the **non**-prefixed `SUPABASE_SERVICE_ROLE_KEY` via `Deno.env.get()`, server-side. Next only inlines variables it actually sees referenced, so nothing was emitted. Worth renaming or deleting in whatever still owns that env file, since one accidental reference makes it public. Compounds the already-recorded finding that this project's RLS is off.
 - 5 of the 8 planned document types (meter readings, pre/post-demo reports, legal agreements, gate passes) have a naming convention defined but **no upload UI or schema yet** — only invoices, savings reports, and inspection reports are actually wired up.
 - The CSV meter-reading upload/validation pipeline the user described (period selection, ±5% benchmark variance flagging, review/ignore workflow, auto-generating the monthly savings report image) is **fully unbuilt** — explicitly deferred as a separate, substantial feature, not attempted alongside the naming-convention work.
 - Resolved (2026-08-05): the Postgres container naming/recreation blocker is done — `firsthing-postgres` is up under the correct name, migrated, and seeded.

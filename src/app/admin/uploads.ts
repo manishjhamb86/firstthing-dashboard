@@ -13,10 +13,16 @@ import { logger } from "@/lib/logger";
 // required permission is derived from the document type *here*, server-side,
 // rather than the action trusting whoever called it. A client choosing a
 // docType it has no permission for is simply refused.
-const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline"> = {
+const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline" | "manage_survey"> = {
   kycGstCertificate: "manage_pipeline",
   kycElectricityBill: "manage_pipeline",
   agreement: "manage_pipeline",
+  // MS-06 — batch photos are PER-04's, captured on site.
+  installationBatch: "manage_survey",
+  // The society's dispute evidence is uploaded from the portal, not from
+  // here — see src/app/portal/uploads.ts. Mapped to the strictest admin
+  // permission so this action can never be the path that serves it.
+  batchDispute: "manage_pipeline",
 };
 
 export async function getUploadUrl(input: {

@@ -3523,12 +3523,36 @@ features:
         when: "they attempt the action"
         then: "they can view batches but not approve them; only the named onlooker's approval satisfies the gate"
         tests: [TC-035-4]
+        scope_note: >-
+          Reconciled with SCR-062 on 2026-08-14 while building MS-06. The screen spec
+          lists the approval permission as "office-bearer, committee, or manager", which
+          reads as any portal role; this AC says only the named onlooker's approval
+          satisfies the gate. Both are right and they are about different things: the
+          onlooker may hold any of the three roles (SCR-060 assigns them as a society
+          contact), and it is being *named* that confers the approval right. Implemented
+          that way, and deliberately kept distinct from GATE-04, which governs binding
+          acts and does key off office-bearer authority. Requiring office-bearer here
+          would hand a hard daily deadline to the person least likely to be on site.
       - id: FEAT-035-AC-5
         type: edge
         given: "the gate is skipped with backend approval"
         when: "the condition is evaluated"
         then: "the skip is recorded against the project's once-only allowance and a second skip attempt is refused (CON-21) — a hard count, enforced here rather than by FEAT-032"
         tests: [TC-035-5]
+      - id: FEAT-035-AC-6
+        type: happy
+        given: "a batch the society has disputed"
+        when: "the field team reopens it for rework, with a recorded reason"
+        then: "the batch returns to a workable state and the dispute's review is cleared, so the redone work goes back to the society for approval — a dispute is never overridden into an approval by the back office"
+        tests: [TC-035-6]
+        scope_note: >-
+          Added to R0 on 2026-08-14, found while walking the flow rather than while reading
+          the spec. FEAT-035 lets the society dispute a day and FEAT-037-AC-3 refuses
+          completion while any batch is disputed, but nothing in either feature returned a
+          disputed batch to a workable state — so one dispute made a project permanently
+          uncompletable, which is not what "tomorrow blocked pending resolution" means. The
+          fix is deliberately a reopen for rework, not an ops override marking it approved:
+          the society's approval is the only thing CON-21's gate accepts.
     stories:
       - id: STORY-035-1
         title: "As an office-bearer or manager, I want to review and approve each day's installation batch, so that the society has confirmed, in the moment, what was actually installed."
@@ -8060,7 +8084,7 @@ milestones:
       - "A daily installation batch submits, and the society's onlooker approval/dispute gate (CON-21) is enforced"
       - "A completion certificate signs and the billing start date computes as the day after, prorated (CON-22)"
       - "CON-44's area-claim model (ADR-007) is exercised for real, even if only single-participant in this first walk"
-    status: proposed
+    status: done
   - id: MS-07
     name: "Reading ingest"
     release: R0

@@ -128,6 +128,9 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
         <Link href={`/admin/pipeline/${pipeline.id}/agreement`} className="btn-secondary">
           Agreement &amp; contract →
         </Link>
+        <Link href={`/admin/pipeline/${pipeline.id}/installation`} className="btn-secondary">
+          Installation →
+        </Link>
       </div>
     </>
   );

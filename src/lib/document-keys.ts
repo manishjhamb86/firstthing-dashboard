@@ -5,18 +5,29 @@
 // The archived list defined 8 types; only the ones MS-05 actually uploads
 // are carried over, same "grow it with the milestone that needs it" rule the
 // schema follows. The rest come back when their feature does.
-export type DocType = "kycGstCertificate" | "kycElectricityBill" | "agreement";
+export type DocType =
+  | "kycGstCertificate"
+  | "kycElectricityBill"
+  | "agreement"
+  // MS-06 — daily installation batch evidence (FEAT-034-AC-3) and the
+  // society's dispute evidence (FEAT-035).
+  | "installationBatch"
+  | "batchDispute";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
   kycElectricityBill: "KYC",
   agreement: "Agreements",
+  installationBatch: "Installation",
+  batchDispute: "Installation",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
   kycGstCertificate: "GSTCertificate",
   kycElectricityBill: "ElectricityBill",
   agreement: "Agreement",
+  installationBatch: "BatchPhoto",
+  batchDispute: "DisputeEvidence",
 };
 
 function slugifySociety(name: string): string {

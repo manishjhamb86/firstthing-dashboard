@@ -1062,7 +1062,28 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
   - AC-3 (failure/blocked): Given the previous day's batch is unapproved within 3 hours of the next day's planned start, then the next day is blocked and both PER-01 and PER-04 are alerted — the block is visible before the crew arrives, not on arrival.
   - AC-4 (permission): Given a society user who is not the designated onlooker, they can view batches but not approve them; only the named onlooker's approval satisfies the gate.
   - AC-5 (edge): Given the gate is skipped with backend approval, then the skip is recorded against the project's once-only allowance and a second skip attempt is refused (CON-21) — a hard count, enforced here rather than by FEAT-032.
-- **Permissions:** Designated society onlooker (approve/dispute), PER-01 (grant the once-per-project skip).
+  - AC-6 (happy): Given a batch the society has disputed, when the field team reopens it for rework with a recorded reason, then the batch returns to a workable state and the dispute's review is cleared, so the redone work goes back to the society for approval — a dispute is never overridden into an approval by the back office.
+
+  **Scope note (added 2026-08-14, during MS-06's build).** AC-6 was found by walking the
+  flow, not by reading the spec. This feature lets the society dispute a day and
+  FEAT-037 AC-3 refuses completion while any batch is disputed, but nothing in either
+  feature returned a disputed batch to a workable state — so a single dispute made a
+  project permanently uncompletable, which is not what "tomorrow blocked pending
+  resolution" means. The relief is deliberately a reopen for rework rather than an ops
+  override that marks the day approved: the society's approval is the only thing CON-21's
+  gate accepts, and an override would make the gate advisory.
+
+  **Reconciliation with SCR-062 (2026-08-14).** The screen spec lists the approval
+  permission as "office-bearer, committee, or manager", which reads as any portal role;
+  AC-4 says only the named onlooker's approval satisfies the gate. Both are right about
+  different things, and the build follows both: the onlooker may hold any of the three
+  roles (SCR-060 assigns them as a society contact per day), and it is being *named* that
+  confers the approval right. This is deliberately **not** GATE-04, which governs binding
+  acts and does key off office-bearer authority — requiring office-bearer here would hand
+  a hard daily deadline to the person least likely to be on site, and accepting any
+  society account would mean the gate is satisfied by someone who never agreed to watch
+  the work.
+- **Permissions:** Designated society onlooker (approve/dispute/reopen-triggering dispute), PER-04 (reopen for rework), PER-01 (grant the once-per-project skip).
 - **Data touched:** Updates `InstallationBatch` (review state, dispute evidence); records gate skips.
 - **Triggers:** `BatchSubmitted`.
 - **Emits:** `BatchApproved`, `BatchDisputed`, `NextDayBlocked`, `ReviewGateSkipped`.

@@ -20,6 +20,8 @@ export const PIPELINE_STAGE: Record<string, StatusMeta> = {
   demo_reported: { label: "Demo reported", tone: "info" },
   offered: { label: "Offer issued", tone: "warn" },
   agreed: { label: "Agreed", tone: "ok" },
+  installation: { label: "Installing", tone: "info" },
+  active_billing: { label: "Active billing", tone: "ok" },
   closed_lost: { label: "Closed / lost", tone: "bad" },
 };
 
@@ -114,3 +116,43 @@ export const PORTAL_AUTHORITY_LABEL: Record<string, string> = {
 export function statusMeta(map: Record<string, StatusMeta>, key: string): StatusMeta {
   return map[key] ?? { label: key, tone: "neu" };
 }
+
+// MS-06
+export const BATCH_STATE: Record<string, StatusMeta> = {
+  draft: { label: "In progress", tone: "neu" },
+  awaiting_review: { label: "Awaiting the society", tone: "warn" },
+  approved: { label: "Approved", tone: "ok" },
+  disputed: { label: "Disputed", tone: "bad" },
+};
+
+// CON-21's gate, as the field, ops and society surfaces each show it — one
+// mapping so "blocked" never reads as a warning on one screen and an error
+// on another.
+export const DAY_GATE_STATUS: Record<string, StatusMeta> = {
+  clear: { label: "Clear", tone: "ok" },
+  pending: { label: "Awaiting review", tone: "info" },
+  at_risk: { label: "Deadline near", tone: "warn" },
+  blocked: { label: "Blocked", tone: "bad" },
+  late_approved: { label: "Approved late", tone: "warn" },
+  skipped: { label: "Gate skipped", tone: "warn" },
+};
+
+export const BLOCKER_TYPE_LABEL: Record<string, string> = {
+  stock_shortage: "Stock shortage",
+  access_denied: "Access denied",
+  site_condition: "Site condition",
+  count_discrepancy: "Count discrepancy",
+  equipment_fault: "Equipment fault",
+};
+
+export const BLOCKER_STATUS: Record<string, StatusMeta> = {
+  open: { label: "Open", tone: "bad" },
+  resolved: { label: "Resolved", tone: "ok" },
+  waived: { label: "Waived", tone: "warn" },
+};
+
+export const INSTALLATION_PROJECT_STATE: Record<string, StatusMeta> = {
+  planning: { label: "Planning", tone: "neu" },
+  published: { label: "In progress", tone: "info" },
+  complete: { label: "Complete", tone: "ok" },
+};

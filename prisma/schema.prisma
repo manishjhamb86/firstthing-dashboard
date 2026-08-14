@@ -237,6 +237,9 @@ enum PipelineStage {
   demo_reported
   offered
   agreed
+  // MS-06
+  installation // FEAT-033 — contract executed, installation project running
+  active_billing // FEAT-037-AC-1 — completion certificate signed; billing starts the next day (CON-22)
   closed_lost
 
   @@map("pipeline_stage")
@@ -271,6 +274,10 @@ model Society {
   pipelines   Pipeline[]
   contracts   Contract[]
   engagements Engagement[]
+
+  // MS-06
+  fieldVisits          FieldVisit[]
+  installationProjects InstallationProject[]
 
   @@map("societies")
 }
@@ -327,6 +334,12 @@ model Profile {
   society         Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
   offersResponded Offer[]  @relation("OfferRespondedBy")
 
+  // MS-06 — being *named* onlooker is what confers the batch-approval right,
+  // not holding office-bearer authority (that is GATE-04's separate rule).
+  projectsWatched InstallationProject[]    @relation("ProjectOnlooker")
+  daysWatched     InstallationPlannedDay[] @relation("PlannedDayOnlooker")
+  batchesReviewed BatchReview[]            @relation("BatchReviewedBy")
+
   @@index([societyId])
   @@map("profiles")
 }
@@ -369,6 +382,18 @@ model AdminUser {
   agreementsUploaded    Agreement[]           @relation("AgreementUploadedBy")
   contractsActivated    Contract[]            @relation("ContractActivatedBy")
   contractTermsRecorded ContractTermVersion[] @relation("ContractTermRecordedBy")
+
+  // MS-06
+  fieldVisitsJoined    FieldVisitParticipant[]  @relation("FieldVisitParticipant")
+  areaClaimsMade       FieldVisitAreaClaim[]    @relation("AreaClaimClaimedBy")
+  areaClaimsResolved   FieldVisitAreaClaim[]    @relation("AreaClaimResolvedBy")
+  projectsCreated      InstallationProject[]    @relation("InstallationProjectCreatedBy")
+  gateSkipsApproved    InstallationProject[]    @relation("GateSkipApprovedBy")
+  plannedDaysAssigned  InstallationPlannedDay[] @relation("PlannedDayAssignee")
+  batchesSubmitted     InstallationBatch[]      @relation("BatchSubmittedBy")
+  blockersRaised       InstallationBlocker[]    @relation("BlockerRaisedBy")
+  blockersResolved     InstallationBlocker[]    @relation("BlockerResolvedBy")
+  certificatesRecorded CompletionCertificate[]  @relation("CertificateRecordedBy")
 
   @@map("admin_users")
 }
@@ -427,6 +452,9 @@ model Pipeline {
   offers          Offer[]
   agreement       Agreement?
   contract        Contract?
+
+  // MS-06
+  installationProject InstallationProject?
 
   @@unique([societyId, serviceLine]) // CON-24
   @@index([salesOwnerId])
@@ -925,4 +953,375 @@ model ContractTermVersion {
   @@unique([contractId, version])
   @@index([contractId, effectiveFrom])
   @@map("contract_term_versions")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MS-06 — full installation execution (CAP-21, COMP-01 + COMP-06)
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── Field operations (COMP-06) ───────────────────────────────────────────
+// CON-44/ADR-007: a field visit is worked by a *team*, not an owner. The
+// exposure is double-counting, not corruption — two people counting one
+// corridor inflates a light count, which sets the represented count, which
+// sets the benchmark, which sets the fee. Built here because MS-06 is the
+// first milestone with a real multi-day, multi-area field workload; MS-03's
+// survey and MS-04's commissioning both predate it and are untouched.
+//
+// Installation is the *easy* case for this model on purpose: batches are
+// area-scoped at creation (CON-44's own note on SCR-061), so two technicians
+// in two towers hold two claims that cannot collide. The contested path is
+// still modelled here rather than deferred, because the survey case (which
+// genuinely negotiates its partition on site) is the harder client of the
+// same tables and shouldn't have to introduce them later.
+enum FieldVisitType {
+  installation_day
+
+  @@map("field_visit_type")
+}
+
+enum FieldVisitState {
+  scheduled
+  in_progress
+  submitted
+  cancelled
+
+  @@map("field_visit_state")
+}
+
+enum AreaClaimStatus {
+  claimed
+  // Two offline claims on one area both sync. Neither wins: the area is
+  // contested and the person submitting resolves it by hand with a recorded
+  // reason. Rows are never summed, deduplicated or silently merged (CON-44).
+  contested
+  resolved
+
+  @@map("area_claim_status")
+}
+
+model FieldVisit {
+  id String @id @default(cuid())
+
+  type       FieldVisitType
+  // Polymorphic by design (09-architecture.md §5.2 note 2 / RISK-09): one
+  // scheduler serves every visit type. No DB-level FK — referential validity
+  // is asserted in the test suite instead, per §9's testing convention.
+  sourceType String         @map("source_type") // "InstallationProject" today
+  sourceId   String         @map("source_id")
+
+  societyId String          @map("society_id")
+  state     FieldVisitState @default(scheduled)
+
+  scheduledFor DateTime? @map("scheduled_for")
+  proposedAt   DateTime  @default(now()) @map("proposed_at")
+
+  society      Society                 @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  participants FieldVisitParticipant[]
+  areaClaims   FieldVisitAreaClaim[]
+  batches      InstallationBatch[]
+
+  @@index([sourceType, sourceId])
+  @@map("field_visits")
+}
+
+model FieldVisitParticipant {
+  id           String    @id @default(cuid())
+  fieldVisitId String    @map("field_visit_id")
+  userId       String    @map("user_id")
+  joinedAt     DateTime  @default(now()) @map("joined_at")
+  acceptedAt   DateTime? @map("accepted_at")
+
+  fieldVisit FieldVisit @relation(fields: [fieldVisitId], references: [id], onDelete: Cascade)
+  user       AdminUser  @relation("FieldVisitParticipant", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([fieldVisitId, userId])
+  @@map("field_visit_participants")
+}
+
+// Advisory and optimistic, never a lock — CON-44 rules out pessimistic
+// locking outright because a lock cannot be acquired offline. Claiming an
+// already-claimed area is *permitted*; the @@unique is per claimant, so two
+// claims on one area coexist and the area goes contested.
+model FieldVisitAreaClaim {
+  id           String   @id @default(cuid())
+  fieldVisitId String   @map("field_visit_id")
+  areaKey      String   @map("area_key")
+  claimedById  String   @map("claimed_by_id")
+  claimedAt    DateTime @default(now()) @map("claimed_at")
+
+  status          AreaClaimStatus @default(claimed)
+  contestedReason String?         @map("contested_reason")
+  resolvedById    String?         @map("resolved_by_id")
+  resolvedAt      DateTime?       @map("resolved_at")
+  resolutionNote  String?         @map("resolution_note")
+
+  fieldVisit FieldVisit @relation(fields: [fieldVisitId], references: [id], onDelete: Cascade)
+  claimedBy  AdminUser  @relation("AreaClaimClaimedBy", fields: [claimedById], references: [id])
+  resolvedBy AdminUser? @relation("AreaClaimResolvedBy", fields: [resolvedById], references: [id])
+
+  @@unique([fieldVisitId, areaKey, claimedById])
+  @@index([fieldVisitId, status])
+  @@map("field_visit_area_claims")
+}
+
+// ── Installation project (CAP-21) ────────────────────────────────────────
+enum InstallationProjectState {
+  planning
+  published
+  complete
+
+  @@map("installation_project_state")
+}
+
+model InstallationProject {
+  id         String @id @default(cuid())
+  pipelineId String @unique @map("pipeline_id")
+  societyId  String @map("society_id")
+
+  state InstallationProjectState @default(planning)
+
+  // FEAT-033-AC-5 — where the contracted scope differs from what the survey
+  // found (the society excludes a tower, say), the *difference is recorded*.
+  // The survey stays a record of what exists; the project records what is
+  // contracted. Editing the inventory to match would destroy the only
+  // evidence that a scope decision was ever made.
+  surveyedLightCount   Int     @map("surveyed_light_count")
+  contractedLightCount Int     @map("contracted_light_count")
+  scopeVarianceNote    String? @map("scope_variance_note")
+
+  // FEAT-033-AC-3 — CON-21's daily review gate has no meaning without a
+  // named reviewer, so a project cannot be published without one. Any of the
+  // three portal roles may hold it (SCR-060: "society contact per day,
+  // PER-06"); it is *being named*, not holding office-bearer authority, that
+  // confers the approval right — which is what makes this distinct from
+  // GATE-04's binding acts.
+  onlookerId String @map("onlooker_id")
+
+  // FEAT-035-AC-5 / CON-21 — the review gate is skippable once per project
+  // only, with explicit backend approval. A hard count, enforced here: these
+  // columns being non-null *is* the allowance spent.
+  gateSkipUsedAt     DateTime? @map("gate_skip_used_at")
+  gateSkipBatchId    String?   @map("gate_skip_batch_id")
+  gateSkipApprovedBy String?   @map("gate_skip_approved_by")
+  gateSkipReason     String?   @map("gate_skip_reason")
+
+  publishedAt DateTime? @map("published_at")
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  pipeline     Pipeline                 @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  society      Society                  @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  onlooker     Profile                  @relation("ProjectOnlooker", fields: [onlookerId], references: [id])
+  createdBy    AdminUser                @relation("InstallationProjectCreatedBy", fields: [createdById], references: [id])
+  skipApprover AdminUser?               @relation("GateSkipApprovedBy", fields: [gateSkipApprovedBy], references: [id])
+  plannedDays  InstallationPlannedDay[]
+  batches      InstallationBatch[]
+  blockers     InstallationBlocker[]
+  certificate  CompletionCertificate?
+
+  @@map("installation_projects")
+}
+
+// One planned day × area. SCR-060's plan must reconcile to the survey:
+// planned counts across all days equal the contracted scope, or publishing
+// is refused — a mismatch is either a survey error or an undocumented scope
+// change, and both are cheaper to resolve now than on site.
+model InstallationPlannedDay {
+  id        String @id @default(cuid())
+  projectId String @map("project_id")
+
+  day          Int
+  plannedDate  DateTime @map("planned_date")
+  // The crew's start time on that date — CON-21's 3-hour deadline is counted
+  // back from this, so it is stored rather than assumed.
+  startAt      DateTime @map("start_at")
+  areaKey      String   @map("area_key")
+  plannedCount Int      @map("planned_count")
+
+  assignedToId String? @map("assigned_to_id")
+  // Optional per-day override of the project's onlooker (SCR-060 assigns one
+  // "per day"); null means the project's named onlooker reviews that day.
+  onlookerId   String? @map("onlooker_id")
+
+  project    InstallationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  assignedTo AdminUser?          @relation("PlannedDayAssignee", fields: [assignedToId], references: [id])
+  onlooker   Profile?            @relation("PlannedDayOnlooker", fields: [onlookerId], references: [id])
+  batches    InstallationBatch[]
+
+  @@unique([projectId, day, areaKey])
+  @@index([projectId, plannedDate])
+  @@map("installation_planned_days")
+}
+
+enum BatchState {
+  draft
+  awaiting_review
+  approved
+  disputed
+
+  @@map("batch_state")
+}
+
+model InstallationBatch {
+  id           String  @id @default(cuid())
+  projectId    String  @map("project_id")
+  plannedDayId String? @map("planned_day_id")
+  fieldVisitId String? @map("field_visit_id")
+
+  day            Int
+  areaKey        String  @map("area_key")
+  // Floor, wing, corridor — what a disputing onlooker needs in order to go
+  // and check (SCR-061).
+  locationDetail String? @map("location_detail")
+
+  installedCount       Int     @default(0) @map("installed_count")
+  removedFittingsCount Int     @default(0) @map("removed_fittings_count")
+  // FEAT-034-AC-5 — skipped fixtures stay in the project's outstanding scope
+  // with a reason. They must not silently reduce it; an inaccessible flat is
+  // work still owed, not work that evaporated.
+  skippedCount         Int     @default(0) @map("skipped_count")
+  skippedReason        String? @map("skipped_reason")
+
+  // FEAT-034-AC-3 — photos are what make the society's review and any
+  // dispute resolvable, so a batch cannot be submitted without them.
+  photoKeys Json @default("[]") @map("photo_keys")
+
+  state         BatchState @default(draft)
+  submittedById String?    @map("submitted_by_id")
+  submittedAt   DateTime?  @map("submitted_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project     InstallationProject     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  plannedDay  InstallationPlannedDay? @relation(fields: [plannedDayId], references: [id], onDelete: SetNull)
+  fieldVisit  FieldVisit?             @relation(fields: [fieldVisitId], references: [id], onDelete: SetNull)
+  submittedBy AdminUser?              @relation("BatchSubmittedBy", fields: [submittedById], references: [id])
+  review      BatchReview?
+  blockers    InstallationBlocker[]
+
+  @@index([projectId, day])
+  @@map("installation_batches")
+}
+
+enum BatchDecision {
+  approved
+  disputed
+
+  @@map("batch_decision")
+}
+
+model BatchReview {
+  id      String @id @default(cuid())
+  batchId String @unique @map("batch_id")
+
+  decision          BatchDecision
+  // Disputing requires photo + location evidence (FEAT-035, FLOW-07 step 3):
+  // a dispute stops work and has to be actionable by someone standing in the
+  // building tomorrow. Approving is deliberately one tap — friction there
+  // costs a crew a day.
+  evidencePhotoKeys Json?         @map("evidence_photo_keys")
+  evidenceLocation  String?       @map("evidence_location")
+  note              String?
+
+  reviewedById String   @map("reviewed_by_id")
+  reviewedAt   DateTime @default(now()) @map("reviewed_at")
+
+  batch      InstallationBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  reviewedBy Profile           @relation("BatchReviewedBy", fields: [reviewedById], references: [id])
+
+  @@map("batch_reviews")
+}
+
+enum BlockerType {
+  stock_shortage
+  access_denied
+  site_condition
+  // The one with contractual consequence: more lights than surveyed changes
+  // the represented count, which changes extrapolation, which changes every
+  // future bill (FEAT-036-AC-5, CON-10).
+  count_discrepancy
+  equipment_fault
+
+  @@map("blocker_type")
+}
+
+enum BlockerStatus {
+  open
+  resolved
+  waived
+
+  @@map("blocker_status")
+}
+
+model InstallationBlocker {
+  id        String  @id @default(cuid())
+  projectId String  @map("project_id")
+  batchId   String? @map("batch_id")
+
+  type      BlockerType
+  areaKey   String?     @map("area_key")
+  detail    String
+  photoKeys Json        @default("[]") @map("photo_keys")
+
+  // The date the blocker affects — a blocker still open past it is
+  // schedule-impacting rather than an ordinary open item (FEAT-036-AC-3).
+  affectedDate DateTime? @map("affected_date")
+
+  // Count-discrepancy only: the newly-found total. Never applied here —
+  // FEAT-036-AC-5 routes it to whoever owns the contract terms (an amendment
+  // or the contract's own rescale clause, FEAT-041). There is deliberately
+  // no write path from this column to a circuit's represented count.
+  discoveredLightCount Int? @map("discovered_light_count")
+
+  status       BlockerStatus @default(open)
+  raisedById   String        @map("raised_by_id")
+  raisedAt     DateTime      @default(now()) @map("raised_at")
+  resolution   String?
+  resolvedById String?       @map("resolved_by_id")
+  resolvedAt   DateTime?     @map("resolved_at")
+
+  project    InstallationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  batch      InstallationBatch?  @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  raisedBy   AdminUser           @relation("BlockerRaisedBy", fields: [raisedById], references: [id])
+  resolvedBy AdminUser?          @relation("BlockerResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([projectId, status])
+  @@map("installation_blockers")
+}
+
+// FEAT-037 / CON-22 — the signature that ends installation and starts
+// billing. signedAt is the *signature* date, not the sync date (SCR-064's
+// own open question, specified that way because it favours the society);
+// billingStartDate is always the day after, and the first month is prorated
+// on the actual remaining days of that calendar month.
+model CompletionCertificate {
+  id        String @id @default(cuid())
+  projectId String @unique @map("project_id")
+
+  signedAt      DateTime @map("signed_at")
+  signatoryName String   @map("signatory_name")
+  signatoryRole String   @map("signatory_role")
+  signatureKey  String?  @map("signature_key")
+
+  totalInstalledCount Int @map("total_installed_count")
+
+  billingStartDate DateTime @map("billing_start_date")
+  proratedDays     Int      @map("prorated_days")
+  daysInMonth      Int      @map("days_in_month")
+
+  // Any blocker waived to clear the gate (PER-01 only, never field staff) —
+  // recorded on the certificate so a waived gate is visible on the document
+  // that started billing, not just in a log.
+  waivedBlockerIds Json?   @map("waived_blocker_ids")
+  waiverReason     String? @map("waiver_reason")
+
+  recordedById String   @map("recorded_by_id")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+
+  project    InstallationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  recordedBy AdminUser           @relation("CertificateRecordedBy", fields: [recordedById], references: [id])
+
+  @@map("completion_certificates")
 }

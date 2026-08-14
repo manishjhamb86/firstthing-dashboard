@@ -1343,6 +1343,134 @@ call to make, not a mechanical deploy step. Everything else in MS-05 is exercisa
 including the out-of-band KYC entry path that exists precisely so a document can be recorded without
 a file.
 
+## MS-06 done (2026-08-14) — full installation execution: the crew, the gate, and the day billing starts
+
+**All 5 features built** (`docs/backlog.yaml` MS-06 flipped `proposed` → `done`): FEAT-033
+(project setup & batch plan), FEAT-034 (daily batch logging), FEAT-035 (the society's daily review
+gate), FEAT-036 (blockers & requirement changes), FEAT-037 (completion certificate & billing
+start). All three exit criteria met and verified against real rows, not asserted.
+
+**The two rules that carry money here are pure functions with their own tests**, same convention as
+`benchmark-rescale.ts` and `offer.ts`:
+- `src/lib/installation-gate.ts` — CON-21's 3-hour rule, counted back from the crew's *stored*
+  planned start time rather than an assumed 09:00 day, plus FEAT-037's completion gate.
+- `src/lib/billing-start.ts` — CON-22's two off-by-ones, which point in opposite directions and
+  each cost real money: billing starts the day *after* signing, and the first month covers the
+  *actual remaining days* of that calendar month. All arithmetic is UTC, because every calendar day
+  in this schema is stored at UTC midnight and a local `getDate()` would shift a month-boundary
+  signature into the wrong month for everyone this product serves.
+- `src/lib/onlooker.ts` — who may approve a batch (below).
+
+**41 new Vitest cases** (`tests/installation-gate.test.ts`, `billing-start.test.ts`,
+`onlooker.test.ts`; suite now **97 across 7 files**), including SCR-064's own worked example
+asserted to the day (sign 20 Aug → billing starts 21 Aug → 11 of 31 days), a signature on the last
+day of a month producing a *full* first month rather than a special case, February in a leap year,
+and a deliberate no-rounding assertion on the prorated figure.
+
+**Three design decisions worth keeping:**
+
+1. **Batch approval is the named onlooker's act, not GATE-04's.** A binding act (accepting an
+   offer, transferring the office-bearer designation) requires office-bearer authority; approving a
+   day requires *being named the onlooker*, whichever of the three portal roles that person holds.
+   `05-screens/03-society-portal.md` SCR-062 lists the permission as "office-bearer, committee, or
+   manager" and FEAT-035-AC-4 says only the named onlooker satisfies the gate — these look
+   contradictory and are not, and the reconciliation is now recorded in `03-features.md` and
+   `backlog.yaml` rather than left as a silent implementation choice. Getting it wrong in either
+   direction has a real cost: requiring office-bearer authority hands a hard daily deadline to the
+   person least likely to be on site, and accepting any society account means the gate is satisfied
+   by someone who never agreed to watch the work.
+
+2. **A late approval clears the block but never reports as "clear."** CON-21's wording alone does
+   not settle what happens when approval lands after the deadline. SCR-062's own "missed" state
+   offers "approve now" as the recovery, so a late approval unblocks the day — but
+   `evaluateDayGate` returns `late_approved`, not `clear`. If a missed gate silently read as met,
+   the once-per-project skip allowance would be the only surviving trace that anything went wrong.
+   A dispute, by contrast, blocks regardless of timing: starting the next day on top of contested
+   work is exactly what FLOW-07 step 3 exists to prevent.
+
+3. **CON-44/ADR-007's area-claim model is built now, on the easy case, on purpose.** Starting a day
+   creates a `FieldVisit` with a participant roster and an advisory `FieldVisitAreaClaim` — verified
+   live, not just modelled. Installation is CON-44's *uncontested* case by construction (batches are
+   area-scoped at creation, per CON-44's own note on SCR-061), so nothing here can collide. The
+   contested path and the submission block are written anyway, because the survey case — which
+   genuinely negotiates its partition on site — is the harder client of the same tables and should
+   not have to introduce them later. `@@unique([fieldVisitId, areaKey, claimedById])` is per
+   *claimant* deliberately: two claims on one area coexist and the area goes contested, which is the
+   whole point of an advisory claim that a lock could not express offline.
+
+**A real gap in the blueprint, found by walking the flow rather than by reading it, and closed
+through the docs per `AGENTS.md`**: FEAT-035 lets the society dispute a day, and FEAT-037-AC-3
+refuses completion while any batch is disputed — but nothing in either feature returned a disputed
+batch to a workable state. One dispute made a project **permanently uncompletable**, which is not
+what "tomorrow blocked pending resolution" means. Closed with **FEAT-035-AC-6** (new, recorded in
+`03-features.md` and `backlog.yaml` with its reasoning): the field team reopens the batch for
+rework and the redone work goes back to the society. Deliberately *not* an ops override that marks
+the day approved — the society's approval is the only thing CON-21's gate accepts, and an override
+would quietly make the gate advisory.
+
+**A count discrepancy has no write path to a billable figure, by construction.**
+`InstallationBlocker.discoveredLightCount` records what was found on site and nothing anywhere
+applies it: `resolveBlocker` refuses that type outright, `waiveBlocker` refuses it too, and the
+screen states the consequence in lights against the contracted count before offering anything.
+FLOW-07 step 4's two legitimate paths (a contract amendment, or the contract's own rescale clause —
+FEAT-041/INV-07) each write their own audit row. This is the same shape as the FEAT-040 hole closed
+at MS-04: the guard belongs on the path nobody is looking at.
+
+**Scope honestly stated**: batch capture and blocker-raising are built on SUR-01 (admin), gated to
+`manage_survey`, not on SUR-02 (the field client) — that surface, with ADR-002's IndexedDB offline
+outbox, is not built on this branch at all. Same framing as MS-04's commissioning readings. The
+`FieldVisit`/claim rows the gate depends on are real either way, so SUR-02 becomes a second client
+of the same tables rather than a rewrite.
+
+**Verified end to end in a browser (Playwright/system Chrome), 51/51 checks, zero console errors,
+zero page errors** — one project walked start to finish: a plan refused for not reconciling to the
+contracted scope (95 vs 100, nothing written), refused again for having no named onlooker, then
+published; day 1 started, refused for missing photos, submitted with a real S3 upload, approved by
+the society, unblocking day 2; day 2 submitted and then **disputed with photo + location evidence**,
+blocking day 3; the once-per-project skip spent on day 3 and a second attempt refused; a count
+discrepancy raised, shown with its consequence, and refused closure; day 2 reopened, redone,
+approved; and the certificate signed for 20 Aug producing `billing_start_date 2026-08-21`,
+`prorated_days 11`, `days_in_month 31` — confirmed by direct `psql`, with the pipeline reaching
+`active_billing`.
+
+**Four gates were checked through paths the client genuinely does not pre-block**, following the
+rule this repo wrote down at MS-04 (*a client-side `disabled` bypass is not a server-side test*):
+the missing-onlooker refusal (the `required` attribute removed so the submit actually reaches the
+action); the missing-photo refusal (the client-side pre-check was **deleted** for this reason — the
+rule now lives in exactly one place, the server, so it can never be verified only against the
+browser); the non-onlooker approval (the authority reassigned in Postgres with the page still open,
+so the click reached the action — it refused, wrote nothing, and logged
+`installation.batch_review_refused`); and the second gate-skip (the allowance spent behind the open
+form, so the submit hit a server that had already used it).
+
+**Three test-harness findings, all costing real debugging time, none of them product bugs:**
+- **A fixed sleep after an upload is not a wait.** The first full run failed the batch-submit check
+  because the S3 PUT to `ap-south-1` outlasted a 6-second guess; the upload had in fact succeeded.
+  Replaced every post-action sleep with a poll on the database's own state, and the upload step with
+  a retry — the assertion is still the row, never the click.
+- **`.lbl` uppercases and `innerText` returns rendered text** — the same casing trap already recorded
+  once in this file caught an assertion again. Match case-insensitively.
+- **A `fill()` that lands before hydration is silently discarded** — the certificate date fell back
+  to today's default and the proration assertion failed against arithmetic that was actually
+  correct. The fix is the same one already used for login: assert the input holds the value before
+  acting on it.
+
+**One real accessibility gap fixed rather than worked around**: `Field` has always accepted
+`htmlFor`, but almost no caller passed it, so the labels were not programmatically associated with
+their controls. That is what made the test selectors fragile in the first place. Every MS-06 form
+control now carries a real `id`/`htmlFor` pair.
+
+**Two leftover S3 objects prefixes** from this verification, under
+`Documents/Northwood_Grove/2026-08/Installation/` — the app's own IAM user is `PutObject`-only by
+design and cannot remove them (see Current Blockers). All database fixtures (`ms06-*` society and
+everything cascading from it, plus the two `@ms06.test` profiles and the field visits) were removed
+afterward, confirmed by count query: only the 4 pre-existing societies and 4 pre-existing profiles
+remain.
+
+`tsc`/`lint`/`build`/`vitest` all clean; 25 routes. Migration
+`20260814163021_add_ms06_installation_execution` is additive apart from two new `PipelineStage`
+values (`installation`, `active_billing`).
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -1434,6 +1562,9 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - No decision yet on the *production* Postgres/hosting target for `firsthing.earth` itself (currently local Docker for dev only). A separate staging Postgres (`firsthing_prod` on `zenovaa`) now exists for `stage.firsthing.earth` — see Current Repository State — but that's explicitly a staging box, not a production hosting decision.
 - Resolved (2026-08-05): S3 is fully live — bucket `firsthing` (`ap-south-1`, `Documents/` root prefix), public-read policy + CORS + scoped IAM user all provisioned by the user and confirmed working via a real upload+public-fetch test.
 - Leftover test objects in the live bucket need manual cleanup (the app's own IAM credentials can't delete them, by design — `PutObject`-only): `Documents/ASF_Insignia_Gurugram/2026-08/Invoices/ASF_Insignia_Gurugram_Invoice_2026-08_TEST-001.pdf` (2026-08-05), plus two from MS-05's verification (2026-08-14): `Documents/Palmwood_Enclave/2026-08/KYC/Palmwood_Enclave_GSTCertificate_2026-08.pdf` and `Documents/Palmwood_Enclave/2026-08/Agreements/Palmwood_Enclave_Agreement_2026-08.pdf`.
+- More leftover test objects, same cause and same manual cleanup: everything under
+  `Documents/Northwood_Grove/2026-08/Installation/` (MS-06's verification, 2026-08-14) — installation
+  batch photos and one dispute-evidence photo, all 1×1 PNGs.
 - **KYC documents and executed agreements are stored in a public-read bucket** (user's explicit choice, 2026-08-14, made with the alternative and the reasoning in front of them — see the MS-05 section). Anyone with or guessing a URL can fetch a society's GST certificate or signed agreement without a session. Worth revisiting alongside **SPIKE-02** (India DPDP Act review), which is still unresolved. The switch is cheap by construction: the DB stores S3 keys, not URLs, so it is a change to `publicS3Url()` plus a read path, not a data migration.
 - **`stage.firsthing.earth` has no AWS credentials, so uploads fail there** (found by the MS-05 deploy, 2026-08-14). Neither `.env` nor `.env.local` on the box carries `AWS_REGION`/`AWS_S3_BUCKET`/`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, and neither does the archived checkout beside it — S3 was only ever configured on the local dev machine. Everything else on stage works; the two upload surfaces (KYC document file, executed agreement scan) throw on presign. Not fixed unilaterally because it means copying a live IAM credential onto a server — the user's call. The KYC out-of-band entry path still works on stage without a file, by design.
 - 5 of the 8 planned document types (meter readings, pre/post-demo reports, legal agreements, gate passes) have a naming convention defined but **no upload UI or schema yet** — only invoices, savings reports, and inspection reports are actually wired up.

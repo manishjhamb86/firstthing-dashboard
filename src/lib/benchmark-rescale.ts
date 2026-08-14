@@ -15,7 +15,26 @@ export type RescaleEvent = {
   previousBaseline: number;
   rescaledBaseline: number;
   effectiveDate: Date;
+  /**
+   * A voided event is struck from the replay but stays in the record.
+   *
+   * An append-only log with no correction path is a log that accumulates
+   * mistakes forever — and because these rows *replay* into the baseline a
+   * society is billed on, one mistyped count silently corrupts every figure
+   * after it. So a wrong entry is voided (soft-deleted, with an owner and a
+   * reason) rather than edited or removed: editing in place would restate a
+   * figure someone was already billed on, which is precisely what INV-02 and
+   * ADR-005 exist to prevent. A correction is a void plus a fresh event.
+   */
+  voidedAt?: Date | null;
 };
+
+/** Events that still count toward the replay, in effective-date order. */
+function liveEventsUpTo(events: RescaleEvent[], at: Date): RescaleEvent[] {
+  return events
+    .filter((e) => !e.voidedAt && e.effectiveDate.getTime() <= at.getTime())
+    .sort((a, b) => a.effectiveDate.getTime() - b.effectiveDate.getTime());
+}
 
 /**
  * CON-10's worked example, exactly: 100 units ÷ 50 lights × 54 = 108.
@@ -94,9 +113,7 @@ export function effectiveBaselineAt(
   at: Date,
 ): number | null {
   if (commissionedBaseline == null) return null;
-  const applicable = events
-    .filter((e) => e.effectiveDate.getTime() <= at.getTime())
-    .sort((a, b) => a.effectiveDate.getTime() - b.effectiveDate.getTime());
+  const applicable = liveEventsUpTo(events, at);
   if (applicable.length === 0) return commissionedBaseline;
   return applicable[applicable.length - 1].rescaledBaseline;
 }
@@ -111,9 +128,20 @@ export function effectiveLightCountAt(
   events: RescaleEvent[],
   at: Date,
 ): number {
-  const applicable = events
-    .filter((e) => e.effectiveDate.getTime() <= at.getTime())
-    .sort((a, b) => a.effectiveDate.getTime() - b.effectiveDate.getTime());
+  const applicable = liveEventsUpTo(events, at);
   if (applicable.length === 0) return commissionedLightCount;
   return applicable[applicable.length - 1].newLightCount;
+}
+
+/**
+ * A void is itself a billing-affecting act — it changes which baseline was in
+ * force — so it needs an owner and a stated reason, exactly like the rescale
+ * it strikes out (INV-03's reasoning, applied to the correction path).
+ */
+export function refuseVoid(input: { reason: string; alreadyVoided: boolean }): string | null {
+  if (input.alreadyVoided) return "This entry has already been voided.";
+  if (!input.reason.trim()) {
+    return "Voiding an entry changes which baseline was in force — record why.";
+  }
+  return null;
 }

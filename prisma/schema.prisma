@@ -21,6 +21,15 @@ enum AdminPermission {
   // (ops) typically holds both; kept separate since a real
   // deployment has different staff for sales vs. field work.
 
+  // CAP-04 / CON-33 / FEAT-054-AC-4 — the accountant's release gate, PER-08.
+  // Deliberately NOT conferred by the ops proxy (manage_pipeline +
+  // manage_survey): the gate exists to put a second pair of eyes between the
+  // calculation and the society, and an account that can run the month must
+  // not be able to release it on its own say-so. ASSUM-21 was validated by
+  // the user at the Phase 3 gate — a separate accountant with real hold
+  // authority — so this is a real separation, not ceremony.
+  release_billing
+
   @@map("admin_permission")
 }
 
@@ -279,6 +288,9 @@ model Society {
   fieldVisits          FieldVisit[]
   installationProjects InstallationProject[]
 
+  // MS-08
+  monthlyCalculations MonthlyCalculation[]
+
   @@map("societies")
 }
 
@@ -370,18 +382,30 @@ model AdminUser {
   gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
   commissioningReadingsRecorded CommissioningReading[]
   benchmarkRescalesRecorded     BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
+  benchmarkRescalesVoided       BenchmarkRescaleEvent[] @relation("BenchmarkRescaleVoidedBy")
 
   // MS-05
-  demoReportsShared     DemoReport[]          @relation("DemoReportSharedBy")
-  kycMarkedNa           KycRequirement[]      @relation("KycMarkedNaBy")
-  kycFilesUploaded      KycDocumentFile[]     @relation("KycFileUploadedBy")
-  kycFilesVerified      KycDocumentFile[]     @relation("KycFileVerifiedBy")
-  kycFollowUps          KycFollowUp[]         @relation("KycFollowUpBy")
-  offersIssued          Offer[]               @relation("OfferIssuedBy")
-  agreementsPrepared    Agreement[]           @relation("AgreementPreparedBy")
-  agreementsUploaded    Agreement[]           @relation("AgreementUploadedBy")
-  contractsActivated    Contract[]            @relation("ContractActivatedBy")
-  contractTermsRecorded ContractTermVersion[] @relation("ContractTermRecordedBy")
+  demoReportsShared  DemoReport[]      @relation("DemoReportSharedBy")
+  kycMarkedNa        KycRequirement[]  @relation("KycMarkedNaBy")
+  kycFilesUploaded   KycDocumentFile[] @relation("KycFileUploadedBy")
+  kycFilesVerified   KycDocumentFile[] @relation("KycFileVerifiedBy")
+  kycFollowUps       KycFollowUp[]     @relation("KycFollowUpBy")
+  offersIssued       Offer[]           @relation("OfferIssuedBy")
+  agreementsPrepared Agreement[]       @relation("AgreementPreparedBy")
+  agreementsUploaded Agreement[]       @relation("AgreementUploadedBy")
+  contractsActivated Contract[]        @relation("ContractActivatedBy")
+
+  // MS-08
+  calculationsReleased   MonthlyCalculation[]  @relation("CalculationReleasedBy")
+  calculationsSentBack   MonthlyCalculation[]  @relation("CalculationSentBackBy")
+  deviationsAssigned     DeviationReview[]     @relation("DeviationAssignedTo")
+  deviationsOwned        DeviationReview[]     @relation("DeviationOwner")
+  invoicesUploaded       BillingInvoice[]      @relation("InvoiceUploadedBy")
+  invoicePaymentsConfirmed BillingInvoice[]    @relation("InvoicePaymentConfirmedBy")
+  invoiceMismatchesAcked BillingInvoice[]      @relation("InvoiceMismatchAckBy")
+  paymentsRecorded       Payment[]             @relation("PaymentRecordedBy")
+  extensionsGranted      InvoiceExtension[]    @relation("ExtensionGrantedBy")
+  contractTermsRecorded  ContractTermVersion[] @relation("ContractTermRecordedBy")
 
   // MS-06
   fieldVisitsJoined    FieldVisitParticipant[]  @relation("FieldVisitParticipant")
@@ -396,9 +420,9 @@ model AdminUser {
   certificatesRecorded CompletionCertificate[]  @relation("CertificateRecordedBy")
 
   // MS-07
-  rawReadingsUploaded  RawReadingFile[]     @relation("RawReadingUploadedBy")
-  anomaliesResolved    ReadingAnomaly[]     @relation("ReadingAnomalyResolvedBy")
-  coverageAccepted     CoverageAcceptance[] @relation("CoverageAcceptedBy")
+  rawReadingsUploaded RawReadingFile[]     @relation("RawReadingUploadedBy")
+  anomaliesResolved   ReadingAnomaly[]     @relation("ReadingAnomalyResolvedBy")
+  coverageAccepted    CoverageAcceptance[] @relation("CoverageAcceptedBy")
 
   @@map("admin_users")
 }
@@ -564,10 +588,11 @@ model Circuit {
   rescaleEvents            BenchmarkRescaleEvent[]
 
   // MS-07
-  rawReadingFiles      RawReadingFile[]
-  meterReadings        MeterReading[]
-  readingAnomalies     ReadingAnomaly[]
-  coverageAcceptances  CoverageAcceptance[]
+  rawReadingFiles     RawReadingFile[]
+  meterReadings       MeterReading[]
+  readingAnomalies    ReadingAnomaly[]
+  coverageAcceptances CoverageAcceptance[]
+  feeLines            CircuitFeeLine[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -615,8 +640,26 @@ model BenchmarkRescaleEvent {
   recordedById  String   @map("recorded_by_id")
   recordedAt    DateTime @default(now()) @map("recorded_at")
 
-  circuit    Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  recordedBy AdminUser @relation("BenchmarkRescaleRecordedBy", fields: [recordedById], references: [id])
+  // Soft delete, not edit-in-place, and not a hard delete.
+  //
+  // These rows replay into the baseline a society is billed on, so a mistyped
+  // count silently corrupts every figure dated after it — an append-only log
+  // with no correction path just accumulates that forever. But editing the
+  // row would restate a figure someone was already billed on, and deleting it
+  // would erase the fact that the wrong baseline was ever in force. Voiding
+  // does neither: the entry stays visible with its owner and reason, and
+  // stops counting toward the replay. A correction is a void plus a fresh
+  // event, linked by `correctedByEventId`, in one transaction.
+  voidedAt          DateTime? @map("voided_at")
+  voidedById        String?   @map("voided_by_id")
+  voidReason        String?   @map("void_reason")
+  correctedByEventId String?  @unique @map("corrected_by_event_id")
+
+  circuit     Circuit               @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  recordedBy  AdminUser             @relation("BenchmarkRescaleRecordedBy", fields: [recordedById], references: [id])
+  voidedBy    AdminUser?            @relation("BenchmarkRescaleVoidedBy", fields: [voidedById], references: [id])
+  correctedBy BenchmarkRescaleEvent? @relation("RescaleCorrection", fields: [correctedByEventId], references: [id])
+  corrects    BenchmarkRescaleEvent? @relation("RescaleCorrection")
 
   @@index([circuitId, effectiveDate])
   @@map("benchmark_rescale_events")
@@ -960,6 +1003,8 @@ model ContractTermVersion {
 
   contract   Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
   recordedBy AdminUser @relation("ContractTermRecordedBy", fields: [recordedById], references: [id])
+
+  calculations MonthlyCalculation[]
 
   @@unique([contractId, version])
   @@index([contractId, effectiveFrom])
@@ -1393,10 +1438,10 @@ model RawReadingFile {
   // rows outside this period rather than trusting them.
   period String
 
-  s3Key       String @map("s3_key")
-  fileName    String @map("file_name")
-  contentType String @map("content_type")
-  byteSize    Int    @map("byte_size")
+  s3Key       String  @map("s3_key")
+  fileName    String  @map("file_name")
+  contentType String  @map("content_type")
+  byteSize    Int     @map("byte_size")
   vendor      String?
 
   status ReadingUploadStatus @default(pending_normalization)
@@ -1424,10 +1469,10 @@ model RawReadingFile {
   uploadedById String   @map("uploaded_by_id")
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
 
-  circuit      Circuit         @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  uploadedBy   AdminUser       @relation("RawReadingUploadedBy", fields: [uploadedById], references: [id])
-  supersededBy RawReadingFile? @relation("RawFileSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
-  supersedes   RawReadingFile? @relation("RawFileSupersession")
+  circuit      Circuit          @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  uploadedBy   AdminUser        @relation("RawReadingUploadedBy", fields: [uploadedById], references: [id])
+  supersededBy RawReadingFile?  @relation("RawFileSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   RawReadingFile?  @relation("RawFileSupersession")
   readings     MeterReading[]
   anomalies    ReadingAnomaly[]
 
@@ -1436,10 +1481,10 @@ model RawReadingFile {
 }
 
 model MeterReading {
-  id        String   @id @default(cuid())
-  circuitId String   @map("circuit_id")
+  id        String        @id @default(cuid())
+  circuitId String        @map("circuit_id")
   date      DateTime // the calendar day, at UTC midnight
-  kWh       Float    @map("kwh")
+  kWh       Float         @map("kwh")
   source    ReadingSource
 
   // Hourly→daily is the system's job (CON-30). Keeping the interval count
@@ -1479,8 +1524,8 @@ model MeterReading {
 }
 
 model ReadingAnomaly {
-  id        String  @id @default(cuid())
-  circuitId String  @map("circuit_id")
+  id        String    @id @default(cuid())
+  circuitId String    @map("circuit_id")
   period    String
   // Null for a period-scoped finding (missing days); a specific day otherwise.
   date      DateTime?
@@ -1535,4 +1580,369 @@ model CoverageAcceptance {
 
   @@unique([circuitId, period])
   @@map("coverage_acceptances")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MS-08 — calculation, compliance, release & delivery (CAP-04/05/06/13)
+// ═══════════════════════════════════════════════════════════════════════
+
+// FEAT-048-AC-3 / INV-09 — a month whose readings still carry unresolved
+// blocking anomalies is `held`, not calculated. `sent_back` is FEAT-054's
+// other outcome: the accountant returns it to ops with a note rather than
+// releasing it. A released month is terminal and immutable (GATE-02) — a
+// correction is a new version, never an edit.
+enum CalculationStatus {
+  held
+  calculated
+  released
+  sent_back
+  superseded
+
+  @@map("calculation_status")
+}
+
+enum ComplianceResult {
+  in_band
+  out_of_band
+
+  @@map("compliance_result")
+}
+
+// CON-01c / OQ-10 — the adjustment is a basis flip, not a separate penalty
+// formula. `actual_metered` bills through CON-11 using the month's own
+// measured savings % in place of the benchmark.
+enum PricingBasis {
+  fixed
+  actual_metered
+
+  @@map("pricing_basis")
+}
+
+// CON-01b's named exclusion list, plus the one cause that is FirsThing's own.
+// Only `firsthing_attributable` can ever move a bill; every other value
+// leaves it at the contracted amount however long the shortfall runs. The
+// list is an enum rather than free text precisely so that rule is checkable.
+enum DeviationRootCause {
+  firsthing_attributable
+  lighting_layout_change
+  blocked_sensors
+  usage_pattern_change
+  external_electrical
+  society_maintenance
+
+  @@map("deviation_root_cause")
+}
+
+// CON-31's chain: ops → inspector → ops → management. Deliberately not a
+// two-outcome fixable/not-fixable flag — "not resolvable" is an escalation
+// to a different decision-maker, not an ops conclusion.
+enum DeviationReviewState {
+  raised
+  assigned
+  investigated
+  decided
+  closed
+  escalated
+
+  @@map("deviation_review_state")
+}
+
+// CON-13's invoice-linked state machine. `warning` covers the 5-day
+// countdown whether or not an extension has been granted — an extension
+// moves the deadline and is recorded as its own row, rather than becoming a
+// status that would hide whether the countdown is still running. (This is a
+// deliberate narrowing of 09-architecture.md §5.2's sketched `extended`
+// status; §5.2 is representative, not exhaustive.)
+enum BillingInvoiceStatus {
+  attached
+  released
+  overdue
+  warning
+  suspended
+  paid
+
+  @@map("billing_invoice_status")
+}
+
+// FEAT-053-AC-3 — a mismatch between the app's computed amount and the Zoho
+// invoice's actual amount is surfaced and must be acknowledged, never
+// auto-reconciled.
+enum ReconciliationStatus {
+  unchecked
+  matched
+  mismatched
+  acknowledged
+
+  @@map("reconciliation_status")
+}
+
+// FEAT-048 — one row per (society, service line, period, version).
+//
+// INV-02 lives on `inputVersionSnapshot`: every figure below has to trace to
+// the readings, benchmark and contract-term version that produced it, months
+// later, without re-deriving them from tables that have since moved on.
+// FEAT-048-AC-4 is why a re-run creates a NEW version and supersedes the old
+// one rather than updating in place — "corrections happen by fixing inputs
+// and re-running, which is itself recorded."
+model MonthlyCalculation {
+  id          String      @id @default(cuid())
+  societyId   String      @map("society_id")
+  serviceLine ServiceLine @map("service_line")
+  period      String // YYYY-MM — the operator's own selection upstream (INV-04)
+  version     Int         @default(1)
+
+  status     CalculationStatus @default(held)
+  heldReason String?           @map("held_reason")
+
+  // Totals. Unrounded on purpose; rounding happens once, at presentation.
+  totalExtrapolatedKwh Float @map("total_extrapolated_kwh")
+  totalSavedKwh        Float @map("total_saved_kwh")
+  totalSavedValue      Float @map("total_saved_value")
+  subtotal             Float
+  total                Float
+
+  // CON-22 — set only on a first or final partial month.
+  proratedDays Int? @map("prorated_days")
+  daysInMonth  Int? @map("days_in_month")
+
+  // Coverage carried through to every derived figure (FEAT-048-AC-5) — a
+  // 24/30-day month is never presented as a full one.
+  coverageDays   Int @map("coverage_days")
+  coverageOfDays Int @map("coverage_of_days")
+
+  // GATE-01. The readings, benchmarks and contract version this used.
+  inputVersionSnapshot Json @map("input_version_snapshot")
+
+  contractTermVersionId String? @map("contract_term_version_id")
+
+  calculatedAt DateTime  @default(now()) @map("calculated_at")
+  releasedAt   DateTime? @map("released_at")
+  releasedById String?   @map("released_by_id")
+
+  sentBackAt   DateTime? @map("sent_back_at")
+  sentBackById String?   @map("sent_back_by_id")
+  sentBackNote String?   @map("sent_back_note")
+
+  supersededById String?   @unique @map("superseded_by_id")
+  supersededAt   DateTime? @map("superseded_at")
+
+  society             Society              @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  contractTermVersion ContractTermVersion? @relation(fields: [contractTermVersionId], references: [id])
+  releasedBy          AdminUser?           @relation("CalculationReleasedBy", fields: [releasedById], references: [id])
+  sentBackBy          AdminUser?           @relation("CalculationSentBackBy", fields: [sentBackById], references: [id])
+  supersededBy        MonthlyCalculation?  @relation("CalculationSupersession", fields: [supersededById], references: [id])
+  supersedes          MonthlyCalculation?  @relation("CalculationSupersession")
+
+  feeLines      CircuitFeeLine[]
+  savingsReport SavingsReport?
+  invoice       BillingInvoice?
+
+  @@unique([societyId, serviceLine, period, version])
+  @@index([status, period])
+  @@map("monthly_calculations")
+}
+
+// ADR-004 / CON-11 — the per-circuit billing grain. An invoice is a set of
+// these summing to a total, never a single society-level figure, and one
+// line can flip to `actual_metered` while its siblings stay fixed.
+model CircuitFeeLine {
+  id                   String @id @default(cuid())
+  monthlyCalculationId String @map("monthly_calculation_id")
+  circuitId            String @map("circuit_id")
+
+  meteredKwh              Float @map("metered_kwh")
+  meteredLightCount       Int   @map("metered_light_count")
+  representedLightCount   Int   @map("represented_light_count")
+  extrapolatedConsumption Float @map("extrapolated_consumption")
+
+  baselineKwhPerDay   Float @map("baseline_kwh_per_day")
+  benchmarkSavingsPct Float @map("benchmark_savings_pct")
+  measuredSavingsPct  Float @map("measured_savings_pct")
+  deviationPct        Float @map("deviation_pct")
+
+  complianceResult ComplianceResult @map("compliance_result")
+  // CON-01d — in band but within 20% of its edge. GOAL-08's early warning.
+  approaching      Boolean          @default(false)
+
+  pricingBasis           PricingBasis @default(fixed) @map("pricing_basis")
+  // CON-01c's streak state, per circuit. Survives a recalculation.
+  consecutiveBreachCount Int          @default(0) @map("consecutive_breach_count")
+
+  savedKwh   Float @map("saved_kwh")
+  savedValue Float @map("saved_value")
+  amount     Float
+
+  coverageDays Int @map("coverage_days")
+
+  calculation     MonthlyCalculation @relation(fields: [monthlyCalculationId], references: [id], onDelete: Cascade)
+  circuit         Circuit            @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  deviationReview DeviationReview?
+
+  @@unique([monthlyCalculationId, circuitId])
+  @@index([circuitId])
+  @@map("circuit_fee_lines")
+}
+
+// FEAT-055 / CON-31 — raised per circuit, never per society, so a broken
+// light type cannot hide inside three healthy ones.
+//
+// INV-03 is the reason `rootCause` and `ownerId` are both required before a
+// review can be decided: a revenue-affecting judgment call needs an owner
+// and a classification, not a fixable/not-fixable flag.
+model DeviationReview {
+  id               String @id @default(cuid())
+  circuitFeeLineId String @unique @map("circuit_fee_line_id")
+
+  state DeviationReviewState @default(raised)
+
+  // Set at step 4, from what the inspector reported (CON-31).
+  rootCause         DeviationRootCause? @map("root_cause")
+  decision          String?
+  // CON-01b's "corrected within a month at no cost" path — a corrected
+  // attributable shortfall does NOT adjust the bill (FEAT-050-AC-5).
+  correctedAtNoCost Boolean             @default(false) @map("corrected_at_no_cost")
+
+  // FEAT-050-AC-3 — an excluded cause still bills in full, but the society
+  // is told why. Silence reads as an unexplained bad month.
+  societyExplanation String? @map("society_explanation")
+
+  assignedToId String?   @map("assigned_to_id")
+  assignedAt   DateTime? @map("assigned_at")
+  findings     String?
+
+  ownerId String? @map("owner_id")
+
+  escalatedAt    DateTime? @map("escalated_at")
+  escalationNote String?   @map("escalation_note")
+
+  raisedAt  DateTime  @default(now()) @map("raised_at")
+  decidedAt DateTime? @map("decided_at")
+  closedAt  DateTime? @map("closed_at")
+
+  feeLine    CircuitFeeLine @relation(fields: [circuitFeeLineId], references: [id], onDelete: Cascade)
+  assignedTo AdminUser?     @relation("DeviationAssignedTo", fields: [assignedToId], references: [id])
+  owner      AdminUser?     @relation("DeviationOwner", fields: [ownerId], references: [id])
+
+  @@index([state])
+  @@map("deviation_reviews")
+}
+
+// FEAT-059 / CON-33 — distinct from the invoice, and the one of the pair
+// this app actually generates. Figures are not editable (AC-4); the
+// narrative is, which is the same locked-figures/editable-presentation split
+// FEAT-021's demo report already established.
+model SavingsReport {
+  id                   String @id @default(cuid())
+  monthlyCalculationId String @unique @map("monthly_calculation_id")
+
+  narrative  String?
+  // INV-02 — the readings, benchmark version and contract terms behind
+  // every figure on the report.
+  provenance Json
+
+  generatedAt DateTime @default(now()) @map("generated_at")
+
+  calculation MonthlyCalculation @relation(fields: [monthlyCalculationId], references: [id], onDelete: Cascade)
+
+  @@map("savings_reports")
+}
+
+// FEAT-053 / CON-33 — the tax invoice is generated in Zoho and uploaded
+// here, never generated by this app. Named `BillingInvoice` rather than
+// `Invoice` to keep it unambiguous against the archived app's own `Invoice`
+// table, which was a different thing entirely.
+model BillingInvoice {
+  id                   String @id @default(cuid())
+  monthlyCalculationId String @unique @map("monthly_calculation_id")
+
+  number    String
+  issueDate DateTime @map("issue_date")
+  dueDate   DateTime @map("due_date")
+  amount    Float
+
+  s3Key        String @map("s3_key")
+  fileName     String @map("file_name")
+  uploadedById String @map("uploaded_by_id")
+
+  // FEAT-053-AC-1/AC-3 — the app's computed total vs what Zoho actually
+  // invoiced. A mismatch blocks release until acknowledged.
+  reconciliationStatus     ReconciliationStatus @default(unchecked) @map("reconciliation_status")
+  computedAmount           Float                @map("computed_amount")
+  mismatchAcknowledgedById String?              @map("mismatch_acknowledged_by_id")
+  mismatchAcknowledgedNote String?              @map("mismatch_acknowledged_note")
+
+  status BillingInvoiceStatus @default(attached)
+
+  // CON-13's safety rule. Deliberately SEPARATE from the payments themselves:
+  // a society that has never paid anything has no `Payment` row to date-stamp,
+  // yet "we have no record of payment" still might mean "nobody has checked
+  // since Tuesday". What must be same-day fresh before a suspension fires is
+  // the *confirmation against Zoho*, which is this field. Without it the rule
+  // could not distinguish "confirmed unpaid today" from "never looked".
+  paymentStatusConfirmedAt   DateTime? @map("payment_status_confirmed_at")
+  paymentStatusConfirmedById String?   @map("payment_status_confirmed_by_id")
+
+  // CON-13's clock. Set on RELEASE, not on generation — release is the event
+  // downstream keys off (FLOW-10 step 10).
+  releasedAt        DateTime? @map("released_at")
+  overdueTrackingAt DateTime? @map("overdue_tracking_at")
+  warningStartedAt  DateTime? @map("warning_started_at")
+  suspendDueAt      DateTime? @map("suspend_due_at")
+  suspendedAt       DateTime? @map("suspended_at")
+
+  uploadedAt DateTime @default(now()) @map("uploaded_at")
+
+  calculation            MonthlyCalculation @relation(fields: [monthlyCalculationId], references: [id], onDelete: Cascade)
+  uploadedBy             AdminUser          @relation("InvoiceUploadedBy", fields: [uploadedById], references: [id])
+  mismatchAcknowledgedBy AdminUser?         @relation("InvoiceMismatchAckBy", fields: [mismatchAcknowledgedById], references: [id])
+  paymentStatusConfirmedBy AdminUser?       @relation("InvoicePaymentConfirmedBy", fields: [paymentStatusConfirmedById], references: [id])
+
+  payments   Payment[]
+  extensions InvoiceExtension[]
+
+  @@index([status, suspendDueAt])
+  @@map("billing_invoices")
+}
+
+// CON-13 — payments are recorded manually by ops from Zoho, and
+// `confirmedAsOf` is the freshness stamp the suspension job reads. A
+// suspension may only fire against a same-day-confirmed status: stale data
+// stops the clock rather than firing on it. This field is the whole safety
+// rule, which is why it is explicit rather than inferred from `recordedAt`.
+model Payment {
+  id        String @id @default(cuid())
+  invoiceId String @map("invoice_id")
+
+  amount        Float
+  confirmedAsOf DateTime @map("confirmed_as_of")
+  reference     String?
+
+  recordedById String   @map("recorded_by_id")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+
+  invoice    BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  recordedBy AdminUser      @relation("PaymentRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([invoiceId])
+  @@map("payments")
+}
+
+// CON-13 — granted in increments of up to 5 days per request. Rows rather
+// than a single mutable deadline so "up to ~10 days total across requests"
+// is auditable rather than inferred from a moved date.
+model InvoiceExtension {
+  id        String @id @default(cuid())
+  invoiceId String @map("invoice_id")
+
+  days   Int
+  reason String
+
+  grantedById String   @map("granted_by_id")
+  grantedAt   DateTime @default(now()) @map("granted_at")
+
+  invoice   BillingInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  grantedBy AdminUser      @relation("ExtensionGrantedBy", fields: [grantedById], references: [id])
+
+  @@index([invoiceId])
+  @@map("invoice_extensions")
 }

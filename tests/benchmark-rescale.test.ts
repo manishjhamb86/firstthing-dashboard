@@ -3,6 +3,7 @@ import {
   effectiveBaselineAt,
   effectiveLightCountAt,
   refuseRescale,
+  refuseVoid,
   rescaleBaseline,
   type RescaleEvent,
 } from "@/lib/benchmark-rescale";
@@ -127,5 +128,76 @@ describe("TC-041-5 — effectiveBaselineAt applies forward only (FEAT-041-AC-5)"
     expect(effectiveBaselineAt(100, events, d("2026-12-01"))).toBe(108);
     expect(effectiveBaselineAt(100, events, d("2027-06-01"))).toBe(120);
     expect(effectiveLightCountAt(50, events, d("2027-06-01"))).toBe(60);
+  });
+});
+
+describe("voided entries — soft delete, and what it does to the replay", () => {
+  const commissioned = 100;
+  const ev = (
+    prev: number,
+    next: number,
+    prevBase: number,
+    date: string,
+    voidedAt: Date | null = null,
+  ) => ({
+    previousLightCount: prev,
+    newLightCount: next,
+    previousBaseline: prevBase,
+    rescaledBaseline: rescaleBaseline(prevBase, prev, next),
+    effectiveDate: new Date(date),
+    voidedAt,
+  });
+
+  it("strikes a voided entry out of the baseline replay", () => {
+    const events = [ev(50, 54, 100, "2026-09-01", new Date("2026-09-05"))];
+    // Voided: the circuit is back on its commissioned baseline, not 108.
+    expect(effectiveBaselineAt(commissioned, events, new Date("2026-09-30"))).toBe(100);
+    expect(effectiveLightCountAt(50, events, new Date("2026-09-30"))).toBe(50);
+  });
+
+  it("falls back to the surviving entry when a later one is voided", () => {
+    const events = [
+      ev(50, 54, 100, "2026-09-01"),
+      ev(54, 1500, 108, "2026-09-15", new Date("2026-09-20")), // the fat-finger
+    ];
+    expect(effectiveBaselineAt(commissioned, events, new Date("2026-09-30"))).toBe(108);
+    expect(effectiveLightCountAt(50, events, new Date("2026-09-30"))).toBe(54);
+  });
+
+  it("ignores a voided entry even when it is the most recent live-dated one", () => {
+    // Order matters: the void must be applied before "latest wins", or a
+    // struck-out entry would still decide the baseline purely by being last.
+    const events = [
+      ev(50, 54, 100, "2026-09-01"),
+      ev(54, 60, 108, "2026-09-20", new Date("2026-09-21")),
+    ];
+    expect(effectiveBaselineAt(commissioned, events, new Date("2026-10-01"))).toBe(108);
+  });
+
+  it("keeps the voided entry available as a record — it is not deleted", () => {
+    const voided = ev(50, 1500, 100, "2026-09-01", new Date("2026-09-02"));
+    // The row still carries what was entered and what it would have produced,
+    // which is what makes the mistake auditable after the fact.
+    expect(voided.newLightCount).toBe(1500);
+    expect(voided.rescaledBaseline).toBe(3000);
+  });
+
+  it("treats an absent voidedAt as live, so existing rows are unaffected", () => {
+    const events = [{ ...ev(50, 54, 100, "2026-09-01"), voidedAt: undefined }];
+    expect(effectiveBaselineAt(commissioned, events, new Date("2026-09-30"))).toBe(108);
+  });
+});
+
+describe("refuseVoid", () => {
+  it("requires a reason — a void changes which baseline was in force", () => {
+    expect(refuseVoid({ reason: "  ", alreadyVoided: false })).toMatch(/record why/i);
+  });
+
+  it("refuses to void the same entry twice", () => {
+    expect(refuseVoid({ reason: "wrong circuit", alreadyVoided: true })).toMatch(/already been voided/);
+  });
+
+  it("permits a voided entry with a stated reason", () => {
+    expect(refuseVoid({ reason: "count entered against the wrong circuit", alreadyVoided: false })).toBeNull();
   });
 });

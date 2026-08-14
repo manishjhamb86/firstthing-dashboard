@@ -1736,6 +1736,103 @@ so the forks were harmless in themselves — but MS-08 reuses this queue for the
 countdown, where a doubled run is a society suspended on a clock that ran twice as fast. The bug was
 in the queue's recurring-job primitive, not in the sweep, so every future job type inherited it.
 
+## A rescale entry can be corrected or voided (2026-08-15) — user-caught, and an INV-07 gap the append-only design had left open
+
+**Found by the user looking at a real circuit's rescale history on stage**: it held obviously-wrong
+test entries (`1500 → 50`, then `50 → 1500` producing a baseline of 731.40) and there was no way to
+remove or fix any of them. The ask was "for admins there should be edit soft delete option."
+
+**Why this was a real defect and not a convenience gap.** `BenchmarkRescaleEvent` was built at MS-04
+as a strictly append-only log, deliberately, because `effectiveBaselineAt()` *replays* those rows to
+decide the baseline a society is billed against. That design is right — but with no correction path
+at all, one mistyped light count silently corrupts every figure dated after it, forever, and MS-08's
+monthly calculation reads exactly that replay. An append-only log with no way to strike an entry is
+not stricter, it just accumulates errors. The local dev database had the same problem independently
+(`600 → 10000`, then `60 → 600` — a chain whose second entry doesn't even follow from the first).
+
+**What was deliberately NOT built, and why** — the one part of the request that was answered
+differently rather than silently narrowed, stated to the user at the time:
+- **No edit-in-place.** Rewriting a stored entry restates a figure someone was already billed on,
+  which is precisely what INV-02 and ADR-005's versioned-not-mutated rule exist to prevent.
+- **No hard delete.** Removing the row erases the fact that a wrong baseline was ever in force —
+  the thing a society would dispute.
+
+**What was built instead**: `voidedAt`/`voidedById`/`voidReason`/`correctedByEventId` on the event,
+and two actions. **Void** is the soft delete: the row stays, struck through, with its owner and
+reason, and stops counting toward the replay. **Correct** is the edit the operator actually wants,
+built the only way it can be safely — void the wrong entry and write the corrected one in a single
+transaction, linked by `correctedByEventId`. The visible outcome is an edited entry; the record
+underneath keeps both. Two details that matter: the corrected entry scales from the **same
+"previous" state as the entry it replaces**, not from the wrong figure that entry produced, so a
+mistake is undone rather than compounded; and the baseline is always recomputed by `rescaleBaseline`
+— a correction is never an opportunity to type a baseline in by hand. `Circuit.meteredLightCount` is
+re-derived from whichever entries survive, so voiding the newest one can't leave the count sitting
+at a value no live event supports. `preInstallBaseline` is untouched throughout, as ever.
+
+The filtering lives in one place — `liveEventsUpTo()` in `src/lib/benchmark-rescale.ts` — so both
+`effectiveBaselineAt` and `effectiveLightCountAt` exclude voided entries by construction rather than
+by each remembering to. A missing `voidedAt` reads as live, so nothing already stored changes
+meaning.
+
+**A second defect fixed in the same file, not part of the ask**: `recordLightCountChange`'s
+permission gate used `requireAdminPermission`, which **throws** — so a PER-04 user hitting it got a
+bare 500, and in a production build Next replaces a thrown Server Action's message with an opaque
+digest, meaning they'd be told nothing at all. Same defect class already found and fixed in MS-07's
+presign action. Now returns a typed error like every other refusal here.
+
+**Verified in a browser against the real corrupt rows** (Playwright/system Chrome, 10/10, zero
+console errors, zero page errors), then confirmed by direct query rather than by the screen:
+`600 → 10000` corrected to `600 → 64` and `60 → 600` voided; **three rows still in the table
+afterwards** (nothing hard-deleted), the correction linked to the entry it replaced;
+`pre_install_baseline` still 120.2, untouched; the effective baseline replaying to 12.82
+(= 120.2 ÷ 600 × 64) and the effective count to 64.
+
+**The refusal was checked through a path the client genuinely does not pre-block**, per this repo's
+own standing rule that a client-side `disabled` bypass is not a server-side test. The reason field
+carries no `required` attribute, so a correction submitted with a blank reason really does reach the
+action: it refused, wrote nothing (row count unchanged), and emitted
+`circuit.rescale_correction_refused`. **That log line had to be added first** — the branch returned
+its error without logging, so the original passing check ("the message appeared") could not
+distinguish a server refusal from a client that never submitted. Worth remembering as the general
+shape: a refusal with no log line is a refusal you cannot verify.
+
+**9 new unit cases** in `tests/benchmark-rescale.test.ts` (26 in that file), including the ordering
+trap — a voided entry that is still the most recent live-*dated* one must not decide the baseline
+merely by being last, so the void filter has to be applied before "latest wins."
+
+Migration `20260815021500_add_rescale_void_and_payment_confirmation` is purely additive (4 columns,
+1 index, 3 FKs; it also carries MS-08's `BillingInvoice.paymentStatusConfirmedAt` — see below).
+`tsc`/`lint`/`build` clean; suite at **215 across 12 files**.
+
+## MS-08 in progress (2026-08-15) — the calculation engine, the arrears clock, and their schema
+
+Not complete and not claimed as such: `docs/backlog.yaml` MS-08 stays `proposed`. What exists is the
+backend spine, unit-tested and migrated; **no billing UI is built yet**, so nothing in the running
+app routes to any of it — it deploys dormant.
+
+- **`src/lib/monthly-calculation.ts`** — CON-11's per-circuit extrapolation, CON-01's fixed-fee
+  default, CON-01c's two-consecutive-month breach streak, CON-01d's "approaching" band, and CON-22's
+  proration. 34 cases including TC-048-1's exact fixture asserted **with the party named**
+  (`expect(fee).toBe(1142.40); expect(fee).not.toBeCloseTo(1577.6)`) — this project has shipped that
+  58/42 inversion twice, and both times the number alone looked right.
+- **`src/lib/arrears.ts`** — CON-13's clock and, most consequentially, its safety rule: a suspension
+  may only fire against **same-day-confirmed** payment status. `paymentStatusConfirmedAt` is
+  deliberately a separate column from the payments themselves, because a society that has never paid
+  has no `Payment` row to date-stamp, yet "no record of payment" can still mean "nobody has checked
+  since Tuesday" — what must be fresh is the *confirmation*. Stale data stops the clock rather than
+  suspending real field servicing on data nobody looked at. It is a safety rule, **not** an approval
+  gate: with fresh data the automatic path still needs nobody's permission, which is CON-13's whole
+  design (every human touchpoint is a brake, never a trigger). Also holds SCR-092's release-queue
+  triage, where a needs-review month is never bulk-releasable. 31 cases.
+- **`src/app/admin/billing/access.ts`** — `requireAccountant()` checks `release_billing` **only**.
+  Holding every ops permission deliberately does not confer it: an account that can run the month
+  must not be able to release its own output (CON-33, FEAT-054-AC-4). This is the one place in this
+  codebase where the standing PER-01 ops proxy buys nothing, and it is intentional.
+- Schema: `MonthlyCalculation` (versioned, with an `inputVersionSnapshot` for INV-02),
+  `CircuitFeeLine` (ADR-004's per-circuit grain), `DeviationReview`, `SavingsReport`,
+  `BillingInvoice`, `Payment`, `InvoiceExtension`, plus a new `release_billing` admin permission.
+  Migration `20260814202511_add_ms08_calculation_release_billing`, 254 statements, zero destructive.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

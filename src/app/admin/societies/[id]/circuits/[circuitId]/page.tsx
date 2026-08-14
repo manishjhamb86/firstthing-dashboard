@@ -8,6 +8,7 @@ import { GatePassForm } from "./gate-pass-form";
 import { GatePassApproval } from "./gate-pass-approval";
 import { MonitoringWindowPanel } from "./monitoring-window-panel";
 import { LightReplacementForm } from "./light-replacement-form";
+import { RescaleRowActions } from "./rescale-row-actions";
 import { RescaleForm } from "./rescale-form";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -73,7 +74,7 @@ export default async function CircuitDetailPage({
       society: true,
       gatePasses: { orderBy: { submittedAt: "desc" } },
       commissioningReadings: { orderBy: { date: "asc" } },
-      rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true } },
+      rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
     },
   });
   if (!circuit || circuit.societyId !== id) notFound();
@@ -284,16 +285,17 @@ export default async function CircuitDetailPage({
                     <th>Baseline (kWh/day)</th>
                     <th>Verification</th>
                     <th>Recorded by</th>
+                    {canOverride && <th>{""}</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {circuit.rescaleEvents.map((e) => (
-                    <tr key={e.id}>
+                    <tr key={e.id} style={e.voidedAt ? { opacity: 0.55 } : undefined}>
                       <td className="num">{e.effectiveDate.toISOString().slice(0, 10)}</td>
-                      <td className="num">
+                      <td className="num" style={e.voidedAt ? { textDecoration: "line-through" } : undefined}>
                         {e.previousLightCount} → {e.newLightCount}
                       </td>
-                      <td className="num">
+                      <td className="num" style={e.voidedAt ? { textDecoration: "line-through" } : undefined}>
                         {e.previousBaseline.toFixed(2)} → {e.rescaledBaseline.toFixed(2)}
                       </td>
                       <td className="text-[var(--text-muted)]">
@@ -306,12 +308,36 @@ export default async function CircuitDetailPage({
                             </a>
                           </>
                         )}
+                        {/* A void is itself a recorded act, with its own owner
+                            and reason — the entry is struck out, never erased. */}
+                        {e.voidedAt && (
+                          <span className="block text-xs mt-1" style={{ color: "var(--warn-fg)" }}>
+                            Voided{e.correctedByEventId ? " and corrected" : ""} by{" "}
+                            {e.voidedBy?.name ?? e.voidedBy?.email ?? "—"} — {e.voidReason}
+                          </span>
+                        )}
                       </td>
                       <td className="text-[var(--text-muted)]">
                         {e.recordedBy.name ?? e.recordedBy.email}
                         <br />
                         <span className="num text-xs">{e.recordedAt.toISOString().slice(0, 10)}</span>
                       </td>
+                      {canOverride && (
+                        <td>
+                          {e.voidedAt ? (
+                            <span className="text-xs text-[var(--text-muted)]">Voided</span>
+                          ) : (
+                            <RescaleRowActions
+                              eventId={e.id}
+                              previousLightCount={e.previousLightCount}
+                              newLightCount={e.newLightCount}
+                              previousBaseline={e.previousBaseline}
+                              effectiveDate={e.effectiveDate.toISOString().slice(0, 10)}
+                              verificationNote={e.verificationNote}
+                            />
+                          )}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>

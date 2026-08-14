@@ -60,6 +60,27 @@ export function prorateFirstMonth(signedAt: Date): Proration {
 }
 
 /**
+ * FEAT-051-AC-5 — the contract's other end.
+ *
+ * "One mechanism, both ends of the contract": a mid-month termination
+ * prorates by the days actually served, against that same calendar month's
+ * own denominator. The final day is billed (the service was provided that
+ * day), which is why this is inclusive of `endsOn` — the mirror of
+ * `prorateFirstMonth` being inclusive of its start day, and the same
+ * off-by-one waiting in the same place.
+ */
+export function prorateFinalMonth(endsOn: Date): Proration {
+  const day = utcMidnight(endsOn);
+  const daysInMonth = daysInMonthOf(day);
+  return {
+    billingStart: new Date(Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), 1)),
+    proratedDays: day.getUTCDate(),
+    daysInMonth,
+    fraction: day.getUTCDate() / daysInMonth,
+  };
+}
+
+/**
  * The rupee estimate the society is shown before signing. Deliberately takes
  * the *monthly* fee and applies the fraction, rather than recomputing a fee
  * from daily figures — so this can never disagree with the monthly number on

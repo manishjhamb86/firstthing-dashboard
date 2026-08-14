@@ -642,6 +642,15 @@ the user's second screenshot round was the only thing that caught the pushed-dow
 consistent with the pattern already recorded above for the hardcoded-`BrandMark`-variant bug this
 same session.
 
+**A third, smaller user-caught bug in the same round**: a screenshot flagged "uneven width of
+cards" on `/admin/users` — `new-admin-form.tsx` carried its own `max-w-md`, nested inside the
+page's already-constraining `max-w-xl` wrapper, while its sibling admin-list `<ul>` had no width
+cap of its own and filled the full `max-w-xl` — the two cards rendered at visibly different widths.
+Fixed by dropping the form's redundant `max-w-md` (`d2c711a`); both other form/card pairs in the
+app (`societies/new`'s standalone form, and the society-detail page's list+form sharing one
+container) were checked and don't have the same double-constraint. Verified both locally and on
+stage: both cards measure identically (310px at 390px viewport, 576px at 1280px).
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

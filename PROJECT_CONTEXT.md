@@ -1210,6 +1210,111 @@ hydrates discards the values on submit (the controlled-input equivalent of the R
 bug already documented here), which reads as an intermittently dead button; the fix is to assert
 the input actually holds the value before clicking, not to add a longer sleep.
 
+## MS-05 done (2026-08-14) — demo report, KYC, offer, agreement, contract: the deal becomes something a society signs
+
+**All 7 features built** (`docs/backlog.yaml` MS-05 → `done`): FEAT-020 (demo savings report),
+FEAT-024 (KYC checklist & follow-ups), FEAT-026 (document entry & verification), FEAT-027 (offer
+generation), FEAT-028 (accept/counter/reject), FEAT-029 (agreement preparation through execution),
+FEAT-062 (contract record & versioned terms). All three exit criteria met and verified live. This
+is the milestone where the deal stops being internal: the society sees its own demo report, accepts
+its own offer, and a `Contract` exists for MS-06+ to bill against.
+
+**Three decisions were put to the user rather than taken unilaterally**, because each changed the
+work materially:
+1. **Document storage** — the archived S3 presigned-PUT pipeline was portable (creds and SDK still
+   present), but that bucket is **public-read**, and KYC documents (GST certificates, electricity
+   bills) plus executed agreements are materially more sensitive than the invoices that policy was
+   set for; the key convention also makes URLs fairly guessable, and SPIKE-02 (India DPDP review)
+   is still open. Offered private-objects-plus-presigned-GET as the recommendation. **User chose
+   public-read, same as the archived app** — recorded here as their explicit call with the residual
+   risk stated, not as drift. Mitigation actually taken: the DB stores the **S3 key**, never a URL
+   (which is also what `09-architecture.md` §5.2's own `Document` sketch specifies), so flipping the
+   bucket to private later is a change to `publicS3Url()` and a read path — not a data migration.
+2. **MS-05's first exit criterion contradicted its own feature set** — it requires the society to
+   see the demo report in its portal, but FEAT-020-AC-4 defers portal visibility to FEAT-022, which
+   is **R1**. As scoped, the milestone could not meet its own exit criterion. User chose to add the
+   minimum to R0: a new **FEAT-020-AC-6**, a `draft → shared` state flip, recorded in
+   `docs/backlog.yaml` (with a `scope_note`) and `docs/product/03-features.md` per AGENTS.md's
+   "scope changes go through the blueprint documents" rule. FEAT-022 is untouched and still owns
+   R1's delivery tracking.
+3. **The printable agreement** (FEAT-029-AC-1) is a **print-styled HTML route**, not a generated
+   PDF — user's choice. It renders straight from the accepted offer, so the paper and the record
+   cannot disagree, which matters more here than the file format. `globals.css` gained an
+   `@media print` block forcing white/black and dropping the shell chrome, since paper has no theme.
+
+**Schema** (migration `20260814152505_add_ms05_demo_kyc_offer_agreement_contract`, 46 statements,
+**purely additive** — no destructive enum edit this time, unlike MS-04's `CircuitState` expansion).
+Shapes follow `09-architecture.md` §5.2's own `Offer`/`Contract`/`Document` sketches, extended only
+where an AC needed a field the sketch didn't carry. **One deliberate departure, and why**: the
+sketch's single `Document` row per type cannot express FEAT-026-AC-5 (the same document arriving
+twice by different routes, one verified, the other *retained* rather than discarded), so it is split
+into `KycRequirement` (the checklist item, one per pipeline+type) and `KycDocumentFile` (the things
+actually received, many per item), with `KycFollowUp` as a row-per-chase rather than an integer
+counter — CON-23's lead-health signal is unauditable if it's a bare number. `PipelineStage` grew
+`demo_reported`/`offered`/`agreed`, names taken from `04-flows-system-map.md`'s own Pipeline state
+table, and only the stages a built feature actually sets — same milestone-by-milestone growth rule
+as `CircuitState`.
+
+**Versioned-not-mutated, applied three more times** (ADR-005, the same rule as `BenchmarkRescaleEvent`):
+a regenerated demo report is a **new version** and the shared one still stands as what the society
+was shown (FEAT-020-AC-5); a counter-offer is a **new version** with the issued one retrievable
+exactly as issued (FEAT-028-AC-5); and `ContractTermVersion` carries effective-dated terms so an
+amendment applies forward only and a prior month stays computed against the version in force at the
+time (FEAT-062-AC-5). Nothing in this milestone edits an issued commercial document in place.
+
+**The revenue-share split is party-named everywhere it appears** — `projectedMonthlyFee()`'s
+parameter is `societyRevenueSharePct`, and the UI, the printed agreement and the contract record all
+read "58% society / 42% FirsThing" rather than a bare percentage. This project has now shipped that
+exact inversion **twice** (nine places in a mockup deck; the Phase 9 `TC-048-1` unit test), and both
+times the number alone looked right. The unit test asserts the party too:
+`expect(fee).toBe(10_080); expect(fee).not.toBe(13_920);`.
+
+**32 new Vitest cases** (`tests/demo-report.test.ts`, `tests/offer.test.ts`; suite now **56 across 4
+files**) covering CON-11's per-circuit extrapolation (70 kWh × 200/50 = 280, each circuit by its own
+factor and never a society-wide average), a no-rounding assertion to 10 places, every named
+generation blocker (FEAT-020-AC-3), CON-20's 60–80% bound on a negotiated benchmark, and all of
+GATE-04's refusal branches.
+
+**Verified end to end in a browser** (Playwright/system Chrome — 41 checks across 3 scripts, zero
+console errors, zero page errors), walking one deal from a confirmed benchmark to an active
+contract: report generated at exactly 70.00% with the CON-11 extrapolation and both windows' daily
+readings; **the society could not see the draft**, then saw it the moment it was shared; a KYC
+document uploaded through a **real presigned PUT to the live bucket**, recorded with its WhatsApp
+channel and verified; the electricity bill marked not-applicable with a reason; an offer generated,
+priced at **₹28,224/month** (280 kWh × 30 × ₹8 × 42%), issued, and accepted **by the society's own
+office-bearer in its own portal**; the agreement prepared, printed/notarized/signed as three
+separately-stamped steps, the executed scan uploaded, and the contract activated with a v1 term set
+carrying the per-circuit benchmark table. Both S3 objects were then fetched with an **unauthenticated
+`curl` — 200** — confirming the presign → PUT → public-read chain works exactly as the archived app's.
+
+**GATE-04 was verified genuinely server-side, not by the control being absent.** MS-05's exit
+criterion says acceptance is *refused server-side* for a non-office-bearer, and the obvious test —
+"the committee member isn't offered the button" — proves nothing about the server, exactly the trap
+FEAT-041's AC-3 fell into earlier this session. Tested instead through a path the client cannot
+pre-block: signed in as the office-bearer so the control genuinely rendered, revoked the authority
+in Postgres **with the page still open**, then clicked. The server refused with GATE-04's own
+message, wrote nothing, and emitted `gate04.binding_act_refused` with `actorRole: "committee"` —
+the log line being the proof the action actually ran. This doubles as a live demonstration of the
+DB-resolved-authority fix made earlier today.
+
+**Three harness bugs, no app bugs, worth recording since two are recurring shapes**: a page
+assertion read before the RSC revalidation landed (the row *was* written — confirmed by the next
+check passing and by direct `psql`); `psql -t -A` prints booleans as `t`/`f`, not `true`/`false`,
+which broke the same assertion twice; and `integer||integer` is not string concatenation in Postgres
+(use `concat()`). None of these were app defects, and each was confirmed against the database rather
+than assumed.
+
+**Two test objects now sit in the live S3 bucket** and **cannot be deleted by this app's own
+credentials** — the IAM user is deliberately `PutObject`-only, which is correct and was confirmed
+by testing back in 2026-08-05. They need manual cleanup (see Current Blockers):
+`Documents/Palmwood_Enclave/2026-08/KYC/Palmwood_Enclave_GSTCertificate_2026-08.pdf` and
+`Documents/Palmwood_Enclave/2026-08/Agreements/Palmwood_Enclave_Agreement_2026-08.pdf`. All database
+fixtures (both societies and everything cascading from them) were removed afterward, confirmed by
+count query; nothing pre-existing was touched.
+
+`tsc`/`lint`/`build`/`vitest` all clean; 5 new routes. Backlog validator: **16 errors / 263
+warnings**, unchanged documented baseline.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -1300,7 +1405,8 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - The remaining Supabase-backed files (`inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) still depend on the Supabase project referenced by `NEXT_PUBLIC_SUPABASE_URL` — that project's RLS is off (confirmed live: its anon key reads `profiles`/`invoices`/etc. with no session at all), a real, separate security issue worth flagging to whoever owns that project.
 - No decision yet on the *production* Postgres/hosting target for `firsthing.earth` itself (currently local Docker for dev only). A separate staging Postgres (`firsthing_prod` on `zenovaa`) now exists for `stage.firsthing.earth` — see Current Repository State — but that's explicitly a staging box, not a production hosting decision.
 - Resolved (2026-08-05): S3 is fully live — bucket `firsthing` (`ap-south-1`, `Documents/` root prefix), public-read policy + CORS + scoped IAM user all provisioned by the user and confirmed working via a real upload+public-fetch test.
-- One leftover test object in the live bucket needs manual cleanup (the app's own IAM credentials can't delete it, by design): `Documents/ASF_Insignia_Gurugram/2026-08/Invoices/ASF_Insignia_Gurugram_Invoice_2026-08_TEST-001.pdf`.
+- Leftover test objects in the live bucket need manual cleanup (the app's own IAM credentials can't delete them, by design — `PutObject`-only): `Documents/ASF_Insignia_Gurugram/2026-08/Invoices/ASF_Insignia_Gurugram_Invoice_2026-08_TEST-001.pdf` (2026-08-05), plus two from MS-05's verification (2026-08-14): `Documents/Palmwood_Enclave/2026-08/KYC/Palmwood_Enclave_GSTCertificate_2026-08.pdf` and `Documents/Palmwood_Enclave/2026-08/Agreements/Palmwood_Enclave_Agreement_2026-08.pdf`.
+- **KYC documents and executed agreements are stored in a public-read bucket** (user's explicit choice, 2026-08-14, made with the alternative and the reasoning in front of them — see the MS-05 section). Anyone with or guessing a URL can fetch a society's GST certificate or signed agreement without a session. Worth revisiting alongside **SPIKE-02** (India DPDP Act review), which is still unresolved. The switch is cheap by construction: the DB stores S3 keys, not URLs, so it is a change to `publicS3Url()` plus a read path, not a data migration.
 - 5 of the 8 planned document types (meter readings, pre/post-demo reports, legal agreements, gate passes) have a naming convention defined but **no upload UI or schema yet** — only invoices, savings reports, and inspection reports are actually wired up.
 - The CSV meter-reading upload/validation pipeline the user described (period selection, ±5% benchmark variance flagging, review/ignore workflow, auto-generating the monthly savings report image) is **fully unbuilt** — explicitly deferred as a separate, substantial feature, not attempted alongside the naming-convention work.
 - Resolved (2026-08-05): the Postgres container naming/recreation blocker is done — `firsthing-postgres` is up under the correct name, migrated, and seeded.

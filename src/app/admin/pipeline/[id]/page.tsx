@@ -106,11 +106,29 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
 
       {pipeline.stage === "lead" && pipeline.authoritative && <ProposalForm pipelineId={pipeline.id} />}
 
-      {pipeline.stage === "survey_pending" && pipeline.siteSurvey && (
-        <Link href={`/admin/pipeline/${pipeline.id}/survey`} className="btn-primary">
-          Open site survey →
+      {/* The deal's stages, always all visible rather than only the current
+          one: the work is not strictly sequential in practice (KYC is
+          collected alongside the demo), and hiding a stage until its
+          predecessor completes is how a chase-able task goes unnoticed. */}
+      <div className="flex flex-wrap gap-3">
+        {pipeline.siteSurvey && (
+          <Link href={`/admin/pipeline/${pipeline.id}/survey`} className="btn-primary">
+            Site survey →
+          </Link>
+        )}
+        <Link href={`/admin/pipeline/${pipeline.id}/report`} className="btn-secondary">
+          Demo report →
         </Link>
-      )}
+        <Link href={`/admin/pipeline/${pipeline.id}/kyc`} className="btn-secondary">
+          KYC documents →
+        </Link>
+        <Link href={`/admin/pipeline/${pipeline.id}/offer`} className="btn-secondary">
+          Offer →
+        </Link>
+        <Link href={`/admin/pipeline/${pipeline.id}/agreement`} className="btn-secondary">
+          Agreement &amp; contract →
+        </Link>
+      </div>
     </>
   );
 }

@@ -5,6 +5,7 @@ import type { CommissioningWindowType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { generateDemoReportInternal } from "@/app/admin/pipeline/[id]/report/actions";
 import {
   getWindowProgress,
   recordDailyReading,
@@ -104,6 +105,19 @@ async function applyCommissioningReading(
         },
       });
       logger.info("commissioning.post_install_window_complete", { circuitId, savingsPct, withinBand });
+
+      // FEAT-020-AC-1 — generation is automatic on BenchmarkConfirmed, not
+      // something PER-01 has to remember to run. It self-refuses while any
+      // sibling circuit is still commissioning, so calling it on every
+      // confirmation is correct rather than premature; a blocked attempt is
+      // logged and surfaced on the report screen (AC-3), never silent.
+      if (withinBand && circuit.siteSurveyId) {
+        const survey = await db.siteSurvey.findUnique({
+          where: { id: circuit.siteSurveyId },
+          select: { pipelineId: true },
+        });
+        if (survey) await generateDemoReportInternal(survey.pipelineId, null);
+      }
     }
   }
 

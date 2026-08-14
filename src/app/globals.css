@@ -373,3 +373,43 @@ body {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* The printable agreement (FEAT-029-AC-1). It renders inside the admin shell
+   for navigation, but paper has no sidebar, no chrome and no dark theme —
+   so print forces a plain white page with black text regardless of which
+   theme the operator happens to be using. */
+.print-doc {
+  background: var(--surface);
+  color: var(--text);
+}
+
+@media print {
+  aside,
+  nav,
+  header.app-header,
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body,
+  main,
+  .print-doc {
+    background: #fff !important;
+    color: #000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .print-doc {
+    max-width: none;
+    padding: 0 !important;
+  }
+  .tbl th,
+  .tbl td {
+    border-color: #ccc !important;
+    color: #000 !important;
+  }
+  a {
+    text-decoration: none !important;
+    color: #000 !important;
+  }
+}

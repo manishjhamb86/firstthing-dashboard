@@ -670,7 +670,9 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
   - AC-3 (failure): Given generation fails (e.g. missing lighting inventory from FEAT-006, so extrapolation can't be computed), then PER-01 is alerted with the specific missing input named — not left with a silently absent report.
   - AC-4 (permission): Given a non-PER-01 internal actor, the draft report is not visible until shared (FEAT-022); a society never sees a draft.
   - AC-5 (edge): Given the circuit's benchmark is later rescaled by a verified light-count change (CON-10), the existing demo report is not silently rewritten — it stands as the record of what was measured at the time, and any regeneration is a new versioned report.
-- **Permissions:** PER-01 (view draft), system (generate).
+  - AC-6 (happy, **added to R0 2026-08-14**): Given a draft demo report PER-01 is satisfied with, when PER-01 shares it, then the report becomes visible to that society's portal accounts and only then — the draft state is never portal-visible, and the share is recorded with who shared it and when.
+- **Scope note (2026-08-14, user's call):** AC-6 was added because MS-05's own exit criterion ("the society sees a demo report in its own portal") could not be met by the milestone as scoped — AC-4 defers portal visibility to FEAT-022, which is R1. AC-6 is deliberately the minimum that closes that gap: a `draft → shared` state flip plus a portal read. **FEAT-022 is unchanged and still owns R1's delivery tracking** (WhatsApp/email dispatch, delivery/read state, resend) — this does not pull that feature forward, and the "Complete version" below still describes the rendered shareable artefact as out of R0 scope.
+- **Permissions:** PER-01 (view draft), PER-01 (share), system (generate).
 - **Data touched:** Creates `DemoSavingsReport` (linked circuit, both window averages, measured %, extrapolated projection, source reading refs).
 - **Triggers:** Automatic on `BenchmarkConfirmed` (FEAT-014).
 - **Emits:** `DemoReportGenerated`, `DemoReportGenerationFailed`.

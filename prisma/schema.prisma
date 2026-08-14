@@ -17,9 +17,9 @@ enum AdminPermission {
   manage_admins
   manage_users
   manage_pipeline // CAP-15 — sales lead/proposal actions (FEAT-001/002), PER-07
-  manage_survey   // CAP-16 — field survey actions (FEAT-006/007), PER-04. PER-01
-                  // (ops) typically holds both; kept separate since a real
-                  // deployment has different staff for sales vs. field work.
+  manage_survey // CAP-16 — field survey actions (FEAT-006/007), PER-04. PER-01
+  // (ops) typically holds both; kept separate since a real
+  // deployment has different staff for sales vs. field work.
 
   @@map("admin_permission")
 }
@@ -112,18 +112,18 @@ enum CommissioningReadingStatus {
 }
 
 model CommissioningReading {
-  id             String                      @id @default(cuid())
-  circuitId      String                      @map("circuit_id")
-  windowType     CommissioningWindowType     @map("window_type")
-  date           DateTime                    @map("date") // calendar day, stored at midnight UTC
-  consumptionKwh Float?                      @map("consumption_kwh")
+  id             String                     @id @default(cuid())
+  circuitId      String                     @map("circuit_id")
+  windowType     CommissioningWindowType    @map("window_type")
+  date           DateTime                   @map("date") // calendar day, stored at midnight UTC
+  consumptionKwh Float?                     @map("consumption_kwh")
   status         CommissioningReadingStatus
-  anomalyNote    String?                     @map("anomaly_note")
-  recordedById   String                      @map("recorded_by_id")
-  createdAt      DateTime                    @default(now()) @map("created_at")
+  anomalyNote    String?                    @map("anomaly_note")
+  recordedById   String                     @map("recorded_by_id")
+  createdAt      DateTime                   @default(now()) @map("created_at")
 
-  circuit     Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  recordedBy  AdminUser @relation(fields: [recordedById], references: [id])
+  circuit    Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  recordedBy AdminUser @relation(fields: [recordedById], references: [id])
 
   @@unique([circuitId, windowType, date])
   @@index([circuitId, windowType])
@@ -205,8 +205,8 @@ model GatePass {
   approvedAt     DateTime?      @map("approved_at")
   rejectedReason String?        @map("rejected_reason")
 
-  circuit     Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  submittedBy AdminUser @relation("GatePassSubmittedBy", fields: [submittedById], references: [id])
+  circuit     Circuit    @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  submittedBy AdminUser  @relation("GatePassSubmittedBy", fields: [submittedById], references: [id])
   approvedBy  AdminUser? @relation("GatePassApprovedBy", fields: [approvedById], references: [id])
 
   @@index([circuitId])
@@ -231,6 +231,12 @@ enum EngagementStatus {
 enum PipelineStage {
   lead
   survey_pending
+  // MS-05. Names follow 04-flows-system-map.md's Pipeline state table; only
+  // the stages a built feature actually sets are added, same convention as
+  // CircuitState's milestone-by-milestone growth.
+  demo_reported
+  offered
+  agreed
   closed_lost
 
   @@map("pipeline_stage")
@@ -249,20 +255,21 @@ enum LightCountMethod {
 // ── Society & account (COMP-09) ──────────────────────────────────────────
 
 model Society {
-  id               String    @id @default(cuid())
+  id               String        @id @default(cuid())
   name             String
-  flatCount        Int       @map("flat_count")
+  flatCount        Int           @map("flat_count")
   location         String
   latitude         Float?
   longitude        Float?
   status           SocietyStatus @default(prospect)
-  nextElectionDate DateTime? @map("next_election_date") // CON-28a — a prompt, never enforced
-  createdAt        DateTime  @default(now()) @map("created_at")
+  nextElectionDate DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
+  createdAt        DateTime      @default(now()) @map("created_at")
 
   contacts    SocietyContact[]
   profiles    Profile[]
   circuits    Circuit[]
   pipelines   Pipeline[]
+  contracts   Contract[]
   engagements Engagement[]
 
   @@map("societies")
@@ -317,7 +324,8 @@ model Profile {
   themePreference Theme?           @map("theme_preference")
   createdAt       DateTime         @default(now()) @map("created_at")
 
-  society Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  society         Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  offersResponded Offer[]  @relation("OfferRespondedBy")
 
   @@index([societyId])
   @@map("profiles")
@@ -341,14 +349,26 @@ model AdminUser {
   createdBy AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   created   AdminUser[] @relation("AdminCreatedBy")
 
-  pipelinesOwned Pipeline[] @relation("PipelineSalesOwner")
+  pipelinesOwned  Pipeline[] @relation("PipelineSalesOwner")
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
 
-  circuitLoadOverrides Circuit[] @relation("CircuitLoadOverrideBy")
-  gatePassSubmissions  GatePass[] @relation("GatePassSubmittedBy")
-  gatePassApprovals    GatePass[] @relation("GatePassApprovedBy")
+  circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
+  gatePassSubmissions           GatePass[]              @relation("GatePassSubmittedBy")
+  gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
   commissioningReadingsRecorded CommissioningReading[]
-  benchmarkRescalesRecorded BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
+  benchmarkRescalesRecorded     BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
+
+  // MS-05
+  demoReportsShared     DemoReport[]          @relation("DemoReportSharedBy")
+  kycMarkedNa           KycRequirement[]      @relation("KycMarkedNaBy")
+  kycFilesUploaded      KycDocumentFile[]     @relation("KycFileUploadedBy")
+  kycFilesVerified      KycDocumentFile[]     @relation("KycFileVerifiedBy")
+  kycFollowUps          KycFollowUp[]         @relation("KycFollowUpBy")
+  offersIssued          Offer[]               @relation("OfferIssuedBy")
+  agreementsPrepared    Agreement[]           @relation("AgreementPreparedBy")
+  agreementsUploaded    Agreement[]           @relation("AgreementUploadedBy")
+  contractsActivated    Contract[]            @relation("ContractActivatedBy")
+  contractTermsRecorded ContractTermVersion[] @relation("ContractTermRecordedBy")
 
   @@map("admin_users")
 }
@@ -388,18 +408,25 @@ model Pipeline {
   demoSkipDate       DateTime? @map("demo_skip_date")
 
   // FEAT-002 proposal fields
-  proposalSummary    String?   @map("proposal_summary")
-  proposalOutcome    String?   @map("proposal_outcome") // "agreed" | "declined" | "undecided"
-  proposalDecidedAt  DateTime? @map("proposal_decided_at")
-  closedLostReason   String?   @map("closed_lost_reason")
+  proposalSummary   String?   @map("proposal_summary")
+  proposalOutcome   String?   @map("proposal_outcome") // "agreed" | "declined" | "undecided"
+  proposalDecidedAt DateTime? @map("proposal_decided_at")
+  closedLostReason  String?   @map("closed_lost_reason")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  society    Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  salesOwner AdminUser  @relation("PipelineSalesOwner", fields: [salesOwnerId], references: [id])
-  loggedBy   AdminUser  @relation("PipelineLoggedBy", fields: [loggedById], references: [id])
+  society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  salesOwner AdminUser   @relation("PipelineSalesOwner", fields: [salesOwnerId], references: [id])
+  loggedBy   AdminUser   @relation("PipelineLoggedBy", fields: [loggedById], references: [id])
   siteSurvey SiteSurvey?
+
+  // MS-05
+  demoReports     DemoReport[]
+  kycRequirements KycRequirement[]
+  offers          Offer[]
+  agreement       Agreement?
+  contract        Contract?
 
   @@unique([societyId, serviceLine]) // CON-24
   @@index([salesOwnerId])
@@ -417,7 +444,7 @@ model SiteSurvey {
   pipelineId String   @unique @map("pipeline_id")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  pipeline Pipeline               @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  pipeline Pipeline                @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   areas    LightingInventoryArea[]
   circuits Circuit[]
 
@@ -431,11 +458,11 @@ model SiteSurvey {
 model LightingInventoryArea {
   id           String           @id @default(cuid())
   siteSurveyId String           @map("site_survey_id")
-  area         String           // basement | stilt | lift-lobby | staircase | other — CON-11's category set
+  area         String // basement | stilt | lift-lobby | staircase | other — CON-11's category set
   lightType    String           @map("light_type")
   count        Int
   method       LightCountMethod @default(walked)
-  note         String?          // required in the app layer when method = estimated (FEAT-006-AC-6)
+  note         String? // required in the app layer when method = estimated (FEAT-006-AC-6)
   createdAt    DateTime         @default(now()) @map("created_at")
 
   siteSurvey SiteSurvey @relation(fields: [siteSurveyId], references: [id], onDelete: Cascade)
@@ -449,59 +476,59 @@ model LightingInventoryArea {
 // the table to exist and migrate cleanly per its own exit criteria.
 
 model Circuit {
-  id                    String       @id @default(cuid())
-  societyId             String       @map("society_id")
-  siteSurveyId          String?      @map("site_survey_id") // FEAT-007 — which survey this candidate was selected during
-  serviceLine           ServiceLine  @map("service_line")
-  location              String?      // FEAT-040 — physical area/location, set during registry configuration
-  lightType             String       @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
-  meteredLightCount     Int          @map("metered_light_count")
-  representedLightCount Int          @map("represented_light_count") // scoped to this lightType only — CON-11
-  wattage               Float
-  workingHours          Float?       @map("working_hours") // metadata only, never triggers a rescale — CON-10
+  id                            String       @id @default(cuid())
+  societyId                     String       @map("society_id")
+  siteSurveyId                  String?      @map("site_survey_id") // FEAT-007 — which survey this candidate was selected during
+  serviceLine                   ServiceLine  @map("service_line")
+  location                      String? // FEAT-040 — physical area/location, set during registry configuration
+  lightType                     String       @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
+  meteredLightCount             Int          @map("metered_light_count")
+  representedLightCount         Int          @map("represented_light_count") // scoped to this lightType only — CON-11
+  wattage                       Float
+  workingHours                  Float?       @map("working_hours") // metadata only, never triggers a rescale — CON-10
   // FEAT-040-AC-5 — when workingHours last changed; recorded so a later
   // off-band month can be traced to a metadata change vs. a real anomaly,
   // without that change itself ever triggering a benchmark rescale (CON-10).
-  workingHoursEffectiveAt DateTime? @map("working_hours_effective_at")
-  eligibilityChecklist  Json?        @map("eligibility_checklist") // CON-16 — per-criterion pass/fail, FEAT-007
+  workingHoursEffectiveAt       DateTime?    @map("working_hours_effective_at")
+  eligibilityChecklist          Json?        @map("eligibility_checklist") // CON-16 — per-criterion pass/fail, FEAT-007
   // FEAT-007-AC-3 — the one exception-able criterion (light count < 50);
   // every other hard criterion (fixtures >15ft, driveway) has no override.
-  lightCountExceptionApprovedBy String? @map("light_count_exception_approved_by")
-  lightCountExceptionReason     String? @map("light_count_exception_reason")
+  lightCountExceptionApprovedBy String?      @map("light_count_exception_approved_by")
+  lightCountExceptionReason     String?      @map("light_count_exception_reason")
   // FEAT-011 — CON-17 load validation: the meter's displayed load vs.
   // (light count × wattage), and the resulting delta. A persistently
   // failed validation can only be overridden by PER-01 (FEAT-011-AC-5),
   // recorded here rather than silently accepted as a normal pass.
-  meterDisplayedLoad            Float?    @map("meter_displayed_load")
-  meterInstalledAt              DateTime? @map("meter_installed_at")
-  loadDiscrepancyPct            Float?    @map("load_discrepancy_pct")
-  loadValidationOverrideById    String?   @map("load_validation_override_by_id")
-  loadValidationOverrideReason  String?   @map("load_validation_override_reason")
+  meterDisplayedLoad            Float?       @map("meter_displayed_load")
+  meterInstalledAt              DateTime?    @map("meter_installed_at")
+  loadDiscrepancyPct            Float?       @map("load_discrepancy_pct")
+  loadValidationOverrideById    String?      @map("load_validation_override_by_id")
+  loadValidationOverrideReason  String?      @map("load_validation_override_reason")
   // FEAT-012/014 — pre/post monitoring windows. windowStartAt is the
   // calendar day valid-day counting begins from; an anomaly fix (AC-3)
   // bumps it forward to the midnight after the fix rather than mutating
   // past readings, so evaluation is always just "valid readings on/after
   // windowStartAt". Baselines are the resulting averages once each window
   // completes (FEAT-012-AC-1/FEAT-014-AC-1).
-  preInstallWindowStartAt  DateTime? @map("pre_install_window_start_at")
-  preInstallBaseline       Float?    @map("pre_install_baseline")
-  lightReplacementDate     DateTime? @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
-  postInstallWindowStartAt DateTime? @map("post_install_window_start_at")
-  postInstallBaseline      Float?    @map("post_install_baseline")
+  preInstallWindowStartAt       DateTime?    @map("pre_install_window_start_at")
+  preInstallBaseline            Float?       @map("pre_install_baseline")
+  lightReplacementDate          DateTime?    @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
+  postInstallWindowStartAt      DateTime?    @map("post_install_window_start_at")
+  postInstallBaseline           Float?       @map("post_install_baseline")
   // FEAT-014 — the number the contract prices against (CON-20's 60-80%
   // band). System-computed only; FEAT-014-AC-4 requires no manual entry
   // path exists for it, so there is deliberately no action in this
   // codebase that sets this field directly from user input.
-  benchmarkSavingsPct       Float?    @map("benchmark_savings_pct")
-  state                 CircuitState @default(surveyed)
-  createdAt             DateTime     @default(now()) @map("created_at")
+  benchmarkSavingsPct           Float?       @map("benchmark_savings_pct")
+  state                         CircuitState @default(surveyed)
+  createdAt                     DateTime     @default(now()) @map("created_at")
 
-  society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  siteSurvey SiteSurvey? @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
-  loadValidationOverrideBy AdminUser? @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
-  gatePasses GatePass[]
-  commissioningReadings CommissioningReading[]
-  rescaleEvents BenchmarkRescaleEvent[]
+  society                  Society                 @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  siteSurvey               SiteSurvey?             @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
+  loadValidationOverrideBy AdminUser?              @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
+  gatePasses               GatePass[]
+  commissioningReadings    CommissioningReading[]
+  rescaleEvents            BenchmarkRescaleEvent[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -534,8 +561,8 @@ model BenchmarkRescaleEvent {
   // figure a society is billed on to be traceable to what produced it, and
   // recomputing "what was the baseline before this event" from the event
   // chain is exactly the kind of derivation that goes wrong under dispute.
-  previousBaseline Float @map("previous_baseline")
-  rescaledBaseline Float @map("rescaled_baseline")
+  previousBaseline   Float @map("previous_baseline")
+  rescaledBaseline   Float @map("rescaled_baseline")
 
   // FEAT-041-AC-3 — an unverified count change is refused outright, so
   // this is non-nullable by construction, not merely validated in the
@@ -554,4 +581,348 @@ model BenchmarkRescaleEvent {
 
   @@index([circuitId, effectiveDate])
   @@map("benchmark_rescale_events")
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// MS-05 — demo report, KYC, offer & agreement (FEAT-020/024/026/027/028/
+// 029/062). Shapes follow 09-architecture.md §5.2's own Offer/Contract/
+// Document sketches, extended only where an acceptance criterion needs a
+// field the sketch didn't carry (each such extension is commented).
+// ════════════════════════════════════════════════════════════════════════
+
+// FEAT-020 — the demo savings report. Versioned rather than mutated: AC-5
+// requires that a later benchmark rescale (INV-07) never rewrites an
+// existing report, so a regeneration is a new version and the old one
+// stands as the record of what was measured at the time. Same
+// versioned-not-mutated rule as BenchmarkRescaleEvent (ADR-005).
+enum DemoReportStatus {
+  draft
+  shared
+
+  @@map("demo_report_status")
+}
+
+model DemoReport {
+  id         String           @id @default(cuid())
+  pipelineId String           @map("pipeline_id")
+  version    Int
+  status     DemoReportStatus @default(draft)
+
+  // Measured figures, snapshotted at generation. INV-02: every one of these
+  // has to trace to the readings that produced it, which is what
+  // circuitSnapshot carries — a society disputing this number can be shown
+  // the days behind it, not just the result.
+  preInstallBaselineTotal Float @map("pre_install_baseline_total")
+  postInstallAverageTotal Float @map("post_install_average_total")
+  measuredSavingsPct      Float @map("measured_savings_pct")
+
+  // CON-11 extrapolation across the society's full inventory (FEAT-006).
+  societyLightCount         Int   @map("society_light_count")
+  meteredLightCount         Int   @map("metered_light_count")
+  extrapolationFactor       Float @map("extrapolation_factor")
+  projectedSavingsKwhPerDay Float @map("projected_savings_kwh_per_day")
+
+  // Per-circuit table: benchmark %, both window averages, and the daily
+  // readings behind each window. Json because it is a frozen snapshot, not
+  // a queryable working set — the live rows stay in their own tables.
+  circuitSnapshot Json @map("circuit_snapshot")
+
+  generatedAt DateTime  @default(now()) @map("generated_at")
+  // FEAT-020-AC-6 (added to R0 2026-08-14 — see docs/backlog.yaml's scope
+  // note). Draft is never portal-visible; sharing is what makes it so.
+  sharedAt    DateTime? @map("shared_at")
+  sharedById  String?   @map("shared_by_id")
+
+  pipeline Pipeline   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  sharedBy AdminUser? @relation("DemoReportSharedBy", fields: [sharedById], references: [id])
+  offers   Offer[]
+
+  @@unique([pipelineId, version])
+  @@map("demo_reports")
+}
+
+// FEAT-024/026 — KYC. Split into a *requirement* (the checklist item, one
+// per type per pipeline) and its *files* (the things actually received),
+// rather than the architecture sketch's single Document row, because
+// FEAT-026-AC-5 requires the same type to arrive twice by different routes
+// with one verified and the other retained rather than silently discarded.
+// One row per (pipeline, type) cannot express that; this can.
+enum KycDocumentType {
+  gst_certificate
+  electricity_bill
+
+  @@map("kyc_document_type")
+}
+
+enum KycRequirementStatus {
+  outstanding
+  received
+  verified
+  not_applicable
+
+  @@map("kyc_requirement_status")
+}
+
+enum ReceiptChannel {
+  portal
+  whatsapp
+  email
+  call
+  in_person
+
+  @@map("receipt_channel")
+}
+
+enum KycFileState {
+  pending
+  verified
+  rejected
+
+  @@map("kyc_file_state")
+}
+
+model KycRequirement {
+  id         String               @id @default(cuid())
+  pipelineId String               @map("pipeline_id")
+  type       KycDocumentType
+  status     KycRequirementStatus @default(outstanding)
+
+  // FEAT-024-AC-5 — a type that genuinely doesn't apply (no GST
+  // registration) is marked not-applicable *with a reason*, so it stops
+  // skewing CON-23's stall signal instead of sitting outstanding forever.
+  notApplicableReason String?   @map("not_applicable_reason")
+  markedNaById        String?   @map("marked_na_by_id")
+  markedNaAt          DateTime? @map("marked_na_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  pipeline   Pipeline          @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  markedNaBy AdminUser?        @relation("KycMarkedNaBy", fields: [markedNaById], references: [id])
+  files      KycDocumentFile[]
+  followUps  KycFollowUp[]
+
+  @@unique([pipelineId, type])
+  @@map("kyc_requirements")
+}
+
+model KycDocumentFile {
+  id             String         @id @default(cuid())
+  requirementId  String         @map("requirement_id")
+  s3Key          String         @map("s3_key")
+  fileName       String         @map("file_name")
+  // FEAT-026-AC-1 — how it arrived is part of the record, not incidental.
+  receiptChannel ReceiptChannel @map("receipt_channel")
+  state          KycFileState   @default(pending)
+
+  rejectionReason String?   @map("rejection_reason")
+  verifiedById    String?   @map("verified_by_id")
+  verifiedAt      DateTime? @map("verified_at")
+
+  uploadedById String   @map("uploaded_by_id")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  requirement KycRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  uploadedBy  AdminUser      @relation("KycFileUploadedBy", fields: [uploadedById], references: [id])
+  verifiedBy  AdminUser?     @relation("KycFileVerifiedBy", fields: [verifiedById], references: [id])
+
+  @@index([requirementId])
+  @@map("kyc_document_files")
+}
+
+// FEAT-024-AC-3 — CON-23's per-step follow-up count. A row per follow-up
+// rather than an integer counter, so "how many times did we chase this, and
+// when" is answerable; a bare counter would make the lead-health signal
+// unauditable.
+model KycFollowUp {
+  id            String   @id @default(cuid())
+  requirementId String   @map("requirement_id")
+  note          String
+  recordedById  String   @map("recorded_by_id")
+  recordedAt    DateTime @default(now()) @map("recorded_at")
+
+  requirement KycRequirement @relation(fields: [requirementId], references: [id], onDelete: Cascade)
+  recordedBy  AdminUser      @relation("KycFollowUpBy", fields: [recordedById], references: [id])
+
+  @@index([requirementId])
+  @@map("kyc_follow_ups")
+}
+
+// FEAT-027/028 — the offer. Versioned: FEAT-028-AC-5 requires a counter to
+// produce a new version with the previous one still retrievable exactly as
+// issued, so an issued offer is never edited in place.
+enum OfferStatus {
+  draft
+  issued
+  countered
+  accepted
+  rejected
+
+  @@map("offer_status")
+}
+
+// CON-25's demo-skip path. `measured` comes from a real benchmark;
+// `negotiated_fixed` is INV-02's narrowed exception — the savings
+// *percentage* is agreement-derived, while consumption is still metered.
+enum BenchmarkSource {
+  measured
+  negotiated_fixed
+
+  @@map("benchmark_source")
+}
+
+model Offer {
+  id         String      @id @default(cuid())
+  pipelineId String      @map("pipeline_id")
+  version    Int
+  status     OfferStatus @default(draft)
+
+  benchmarkSource BenchmarkSource @map("benchmark_source")
+  // Per-circuit benchmark table snapshotted at offer time (CON-11) — the
+  // offer must say what it was priced on even if a circuit is rescaled later.
+  circuitTerms    Json            @map("circuit_terms")
+
+  // Commercial terms. FEAT-027-AC-3 makes tolerance/revenue-share/term hard
+  // requirements to issue, since every downstream billing decision reads them.
+  tolerancePct        Float @map("tolerance_pct")
+  revenueSharePct     Float @map("revenue_share_pct")
+  unitElectricityRate Float @map("unit_electricity_rate")
+  termMonths          Int   @map("term_months")
+  exclusions          Json?
+  amcTerms            Json? @map("amc_terms")
+  spareStockCount     Int   @default(0) @map("spare_stock_count")
+
+  // Derived at generation from the demo numbers, shown on the offer.
+  projectedMonthlyFee Float? @map("projected_monthly_fee")
+
+  demoReportId String? @map("demo_report_id")
+
+  issuedAt   DateTime? @map("issued_at")
+  issuedById String?   @map("issued_by_id")
+
+  // GATE-04 is enforced server-side in the action; this records *who*
+  // responded, it does not authorize them.
+  respondedAt     DateTime? @map("responded_at")
+  respondedById   String?   @map("responded_by_id")
+  responseNote    String?   @map("response_note")
+  // FEAT-028-AC-5 — the terms the society asked for, on the version their
+  // counter produced.
+  counteredFromId String?   @unique @map("countered_from_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pipeline      Pipeline    @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  demoReport    DemoReport? @relation(fields: [demoReportId], references: [id])
+  issuedBy      AdminUser?  @relation("OfferIssuedBy", fields: [issuedById], references: [id])
+  respondedBy   Profile?    @relation("OfferRespondedBy", fields: [respondedById], references: [id])
+  counteredFrom Offer?      @relation("OfferCounter", fields: [counteredFromId], references: [id])
+  counterOf     Offer?      @relation("OfferCounter")
+  agreement     Agreement?
+
+  @@unique([pipelineId, version])
+  @@map("offers")
+}
+
+// FEAT-029 — agreement preparation through execution. AC-2 requires the
+// outstanding work to show as discrete steps rather than one opaque status,
+// which is why these are four nullable timestamps and not a single enum.
+model Agreement {
+  id         String @id @default(cuid())
+  pipelineId String @unique @map("pipeline_id")
+  offerId    String @unique @map("offer_id")
+
+  preparedAt   DateTime  @default(now()) @map("prepared_at")
+  preparedById String    @map("prepared_by_id")
+  printedAt    DateTime? @map("printed_at")
+  notarizedAt  DateTime? @map("notarized_at")
+  signedAt     DateTime? @map("signed_at")
+
+  // AC-3's hard gate: without the executed scan the pipeline cannot advance
+  // to installation, because installation commits FirsThing's own capital.
+  executedS3Key    String?   @map("executed_s3_key")
+  executedFileName String?   @map("executed_file_name")
+  uploadedAt       DateTime? @map("uploaded_at")
+  uploadedById     String?   @map("uploaded_by_id")
+
+  // AC-5 — the physically-signed document is authoritative, but where it
+  // differs from the accepted offer that difference must be visible rather
+  // than silently reconciled.
+  hasDeviation  Boolean @default(false) @map("has_deviation")
+  deviationNote String? @map("deviation_note")
+
+  pipeline   Pipeline   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  offer      Offer      @relation(fields: [offerId], references: [id])
+  preparedBy AdminUser  @relation("AgreementPreparedBy", fields: [preparedById], references: [id])
+  uploadedBy AdminUser? @relation("AgreementUploadedBy", fields: [uploadedById], references: [id])
+  contract   Contract?
+
+  @@map("agreements")
+}
+
+// FEAT-062 — the contract record. CON-01a (confirmed 2026-08-13): one
+// tolerancePct per contract, applied independently per circuit.
+enum ContractStatus {
+  draft
+  active
+  amended
+  expired
+  terminated
+
+  @@map("contract_status")
+}
+
+model Contract {
+  id          String         @id @default(cuid())
+  pipelineId  String         @unique @map("pipeline_id")
+  societyId   String         @map("society_id")
+  serviceLine ServiceLine    @map("service_line")
+  agreementId String         @unique @map("agreement_id")
+  status      ContractStatus @default(draft)
+
+  termStart DateTime @map("term_start")
+  termEnd   DateTime @map("term_end")
+
+  activatedAt   DateTime? @map("activated_at")
+  activatedById String?   @map("activated_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  pipeline    Pipeline              @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  society     Society               @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  agreement   Agreement             @relation(fields: [agreementId], references: [id])
+  activatedBy AdminUser?            @relation("ContractActivatedBy", fields: [activatedById], references: [id])
+  versions    ContractTermVersion[]
+
+  @@map("contracts")
+}
+
+// FEAT-062-AC-5 — terms are versioned and effective-dated, and an amendment
+// applies forward only: prior months stay computed against the version in
+// force at the time. Same replay-from-events rule as BenchmarkRescaleEvent
+// (ADR-005), for the same reason — a restated invoice is a disputed invoice.
+model ContractTermVersion {
+  id            String   @id @default(cuid())
+  contractId    String   @map("contract_id")
+  version       Int
+  effectiveFrom DateTime @map("effective_from")
+
+  benchmarkSource     BenchmarkSource @map("benchmark_source")
+  tolerancePct        Float           @map("tolerance_pct")
+  revenueSharePct     Float           @map("revenue_share_pct")
+  unitElectricityRate Float           @map("unit_electricity_rate")
+  exclusions          Json?
+  amcTerms            Json?           @map("amc_terms")
+  spareStockCount     Int             @default(0) @map("spare_stock_count")
+  // Per-circuit benchmark table this version bills against (CON-11).
+  circuitBenchmarks   Json            @map("circuit_benchmarks")
+
+  recordedById String   @map("recorded_by_id")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+
+  contract   Contract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  recordedBy AdminUser @relation("ContractTermRecordedBy", fields: [recordedById], references: [id])
+
+  @@unique([contractId, version])
+  @@index([contractId, effectiveFrom])
+  @@map("contract_term_versions")
 }

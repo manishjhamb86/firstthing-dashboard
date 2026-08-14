@@ -2568,6 +2568,18 @@ features:
         when: "they attempt the action"
         then: "the draft report is not visible until shared (FEAT-022); a society never sees a draft"
         tests: [TC-020-4]
+      - id: FEAT-020-AC-6
+        type: happy
+        given: "a draft demo report PER-01 is satisfied with"
+        when: "PER-01 shares it"
+        then: "the report becomes visible to that society's portal accounts and only then — the draft state is never portal-visible, and the share is recorded with who shared it and when"
+        tests: [TC-020-6]
+        scope_note: >-
+          Added to R0 on 2026-08-14 (user's call). MS-05's own exit criterion requires the society
+          to see its demo report in the portal, but the sharing feature FEAT-020-AC-4 points at
+          (FEAT-022) is R1 — so the milestone as written could not meet its own exit criterion.
+          This is the minimal draft->shared state flip needed to close that gap honestly; FEAT-022
+          still owns delivery tracking (channel, read receipts, resend) in R1 and is unchanged.
       - id: FEAT-020-AC-5
         type: edge
         given: "the circuit's benchmark is later rescaled by a verified light-count"
@@ -8037,7 +8049,7 @@ milestones:
       - "The society sees a demo report in its own portal and KYC clears"
       - "An offer is generated, shared, and accepted -- acceptance is refused server-side for a non-office-bearer account (GATE-04)"
       - "A Contract record activates carrying the per-circuit benchmark table and the confirmed tolerancePct scope (CON-01a, 00-intake.md 2026-08-13)"
-    status: proposed
+    status: done
   - id: MS-06
     name: "Full installation execution"
     release: R0

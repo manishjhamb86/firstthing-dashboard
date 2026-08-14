@@ -9,6 +9,8 @@ import { SignOutButton } from "@/components/sign-out-button";
 import { resolveTheme } from "@/lib/resolve-theme";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
+import { DemoReportView } from "@/components/demo-report-view";
+import { OfferCard } from "./offer-card";
 
 // MS-02's demoable outcome, made literal: a society office-bearer/committee/
 // manager account logs in and lands on a role-scoped page reading its own
@@ -24,11 +26,26 @@ export default async function PortalHomePage() {
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
 
   const societyId = viewer.societyId;
-  const [society, accounts] = await Promise.all([
+  const [society, accounts, sharedReports, openOffer] = await Promise.all([
     db.society.findUnique({ where: { id: societyId } }),
     db.profile.findMany({
       where: { societyId, isActive: true },
       orderBy: { name: "asc" },
+    }),
+    // INV-05 — scoped to this viewer's own society, server-side. FEAT-020-AC-4
+    // is the other half: `status: "shared"` is a hard filter here, so a draft
+    // is not merely un-linked from the portal, it is unreachable through it.
+    db.demoReport.findMany({
+      where: { status: "shared", pipeline: { societyId } },
+      orderBy: { version: "desc" },
+      include: { pipeline: true },
+    }),
+    // Only an *issued* offer is ever visible to the society — a draft the
+    // back office is still editing is not theirs to see. INV-05 scopes it
+    // to their own society server-side, as with everything else here.
+    db.offer.findFirst({
+      where: { status: "issued", pipeline: { societyId } },
+      orderBy: { version: "desc" },
     }),
   ]);
 
@@ -57,6 +74,36 @@ export default async function PortalHomePage() {
           title={society.name}
           subtitle={`Signed in as ${viewer.email} · ${PORTAL_AUTHORITY_LABEL[viewer.role]}`}
         />
+
+        {/* MS-05's first exit criterion: the society sees its demo report in
+            its own portal. Only shared versions ever reach here. */}
+        {sharedReports.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-[15px] font-semibold mb-1">Your demo savings report</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-4">
+              Measured on the metered demo circuits, with the daily readings behind every figure.
+            </p>
+            <DemoReportView report={sharedReports[0]} />
+          </section>
+        )}
+
+        {openOffer && (
+          <div className="mb-8">
+            <OfferCard
+              offer={{
+                id: openOffer.id,
+                version: openOffer.version,
+                tolerancePct: openOffer.tolerancePct,
+                revenueSharePct: openOffer.revenueSharePct,
+                unitElectricityRate: openOffer.unitElectricityRate,
+                termMonths: openOffer.termMonths,
+                projectedMonthlyFee: openOffer.projectedMonthlyFee,
+                exclusions: (openOffer.exclusions as string[]) ?? [],
+              }}
+              canRespond={isOfficeBearer}
+            />
+          </div>
+        )}
 
         <Card className="p-6">
           <CardTitle>Portal accounts</CardTitle>

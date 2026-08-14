@@ -17,7 +17,58 @@ export const SOCIETY_STATUS: Record<string, StatusMeta> = {
 export const PIPELINE_STAGE: Record<string, StatusMeta> = {
   lead: { label: "Lead", tone: "info" },
   survey_pending: { label: "Survey pending", tone: "warn" },
+  demo_reported: { label: "Demo reported", tone: "info" },
+  offered: { label: "Offer issued", tone: "warn" },
+  agreed: { label: "Agreed", tone: "ok" },
   closed_lost: { label: "Closed / lost", tone: "bad" },
+};
+
+// MS-05
+export const KYC_REQUIREMENT_STATUS: Record<string, StatusMeta> = {
+  outstanding: { label: "Outstanding", tone: "warn" },
+  received: { label: "Received — awaiting verification", tone: "info" },
+  verified: { label: "Verified", tone: "ok" },
+  not_applicable: { label: "Not applicable", tone: "neu" },
+};
+
+export const KYC_FILE_STATE: Record<string, StatusMeta> = {
+  pending: { label: "Awaiting verification", tone: "warn" },
+  verified: { label: "Verified", tone: "ok" },
+  rejected: { label: "Rejected", tone: "bad" },
+};
+
+export const RECEIPT_CHANNEL_LABEL: Record<string, string> = {
+  portal: "Society portal",
+  whatsapp: "WhatsApp",
+  email: "Email",
+  call: "Phone call",
+  in_person: "In person",
+};
+
+export const OFFER_STATUS: Record<string, StatusMeta> = {
+  draft: { label: "Draft", tone: "neu" },
+  issued: { label: "Issued — awaiting response", tone: "warn" },
+  countered: { label: "Countered", tone: "info" },
+  accepted: { label: "Accepted", tone: "ok" },
+  rejected: { label: "Rejected", tone: "bad" },
+};
+
+export const DEMO_REPORT_STATUS: Record<string, StatusMeta> = {
+  draft: { label: "Draft — internal only", tone: "neu" },
+  shared: { label: "Shared with the society", tone: "ok" },
+};
+
+export const CONTRACT_STATUS: Record<string, StatusMeta> = {
+  draft: { label: "Draft", tone: "neu" },
+  active: { label: "Active", tone: "ok" },
+  amended: { label: "Amended", tone: "info" },
+  expired: { label: "Expired", tone: "neu" },
+  terminated: { label: "Terminated", tone: "bad" },
+};
+
+export const BENCHMARK_SOURCE_LABEL: Record<string, string> = {
+  measured: "Measured from the demo",
+  negotiated_fixed: "Negotiated fixed (CON-25)",
 };
 
 export const CIRCUIT_STATE: Record<string, StatusMeta> = {

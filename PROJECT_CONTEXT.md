@@ -514,6 +514,81 @@ on its own. Fixed by adding the same `auth()` + role check both pages' siblings 
 forces per-request dynamic rendering as a side effect (confirmed: the route table now shows `ƒ` for
 `/admin/societies`), with no separate `export const dynamic` needed.
 
+## Theme system: Light/Dark/Slate wired in (2026-08-14) — user-caught gap, closed same day
+
+**The approved theme system (`docs/product/05a-theme-system.md`) had been designed since the
+branding phase but never actually implemented** — `globals.css` had carried a one-line placeholder
+since MS-01 ("gets wired in properly once real screens start landing, starting MS-02"). Real MS-02
+screens landed, but the theme system itself stayed unbuilt until the user asked directly: "where is
+the theme switcher, that's missing." Closed in the same session as a real gap, not a cosmetic
+add-on — matching the doc's own explicit intent, not a new design decision.
+
+**What's implemented**: the full palette (content + chrome tokens for Light/Dark/Slate, `globals.css`)
+and the switcher itself. **Deliberately not yet adopted**, and said so in `globals.css`'s own
+comment rather than silently: the type scale, space steps, elevation, and the `.roomy` density
+modifier (§3.3/3.4/3.6) — existing pages still use Tailwind's default scale for those. A full
+component-library build-out (buttons/chips/tables/etc., §3.7) is a bigger lift than a switcher needs
+and stays open for whenever a screen actually requires one of those components.
+
+**Persistence matches §3.2b exactly, including the part that's easy to get wrong**: "the choice
+belongs to the account, not the browser." `AdminUser.themePreference` / `Profile.themePreference`
+(new nullable `Theme` enum column on both, migration `20260814043557_add_theme_preference`) —
+**not** the JWT session, and not `localStorage` for logged-in surfaces. The reason is the exact
+staleness bug already documented for `portalAuthority` in this file's MS-02 section: a JWT field
+written once at login would drift the moment the switcher persists a new choice. `src/lib/
+resolve-theme.ts`'s `resolveTheme()` reads the DB fresh every request instead (wrapped in React's
+`cache()` so the root layout and `AdminNav`/the portal header share one lookup per request, not
+three). `src/app/layout.tsx` stamps `data-theme` server-side before first paint — no flash, no
+client bootstrap script needed, unlike the archived app's `localStorage`-only approach (still the
+right fallback for a genuinely logged-out surface, but every surface that exists today is
+authenticated). Per **`prefers-color-scheme` is explicitly absent** — the doc calls this out as a
+product rule, not an implementation detail ("a committee member who picked Light in the morning
+gets handed Dark at sunset... which is exactly what the rule forbids"), so there is no media query
+anywhere in `globals.css`, deliberately.
+
+**`src/components/theme-switcher.tsx`** — three `lucide-react` icons (Sun/Contrast/Moon) in a
+`role="radiogroup"`, wired into `AdminNav` and the portal page header (both rebuilt as dark chrome
+bars per §3.2b, previously a plain text nav with no background at all). On click: applies
+`data-theme` to `<html>` immediately (no wait for the round trip), calls the new `setThemePreference`
+Server Action (`src/app/theme-actions.ts`, writes to whichever table minted the session — the same
+`AdminUser`/`Profile` split every other action in this codebase respects), then `router.refresh()`
+to re-sync the SSR-resolved value from the DB.
+
+**One real bug found by the user's own screenshot, not by this session's own (headless, so
+visually blind) Playwright checks**: `AdminNav` and the portal header hardcoded
+`<BrandMark variant="dark">`, correct for Slate/Dark (dark chrome, needs light wordmark text) but
+silently wrong for Light — Light's chrome is white, so the light-text wordmark variant rendered as
+barely-visible light-gray-on-white, exactly what the user's screenshot showed. All of this session's
+own automated checks passed regardless, because they asserted `data-theme` attributes and computed
+background colors, never wordmark legibility. Fixed by deriving the variant from the actual resolved
+theme (`variant={theme === "light" ? "light" : "dark"}`) instead of hardcoding it, in both places.
+**Worth remembering**: an automated check that the right CSS variable is set is not the same claim
+as "this is legible" — the two only diverged here because a two-asset variant swap (wordmark
+light/dark SVGs) was a manual `variant="dark"` prop, not itself driven by the same theme state the
+rest of the component already read correctly.
+
+**Retrofit scope**: every page built so far (`login`, `admin` Portfolio/Societies/Users, `portal`)
+had its hardcoded Tailwind grays/emeralds/reds replaced with the token set — confirmed by grepping
+the whole `src/app`/`src/components` tree for `text-black`/`bg-white`/`emerald-`/`red-`/`amber-`
+afterward and finding zero matches. A `.btn-primary` utility class was added to `globals.css` for
+the handful of primary-action buttons, since inline `style` props can't express `:hover` — everything
+else uses Tailwind's arbitrary-value syntax (`bg-[var(--surface)]`) directly, which does support
+`hover:`/`focus:` variants natively.
+
+**Verified end to end via a browser** (Playwright/system Chrome): defaults to Slate on first visit
+for a never-chosen account; clicking Dark applies `data-theme` instantly and the computed body
+background actually changes color (not just the attribute); Light/Dark both persist across a reload
+(server-rendered, confirmed no flash by checking the attribute is present in the initial HTML, not
+patched in after hydration); the theme carries across navigation to a different admin route;
+choosing Slate explicitly renders identically to never having chosen (no attribute either way); a
+second, independent portal account defaults to Slate on its own first visit and can choose Dark
+without affecting the admin account's separately-stored Slate choice — the account-not-browser
+requirement, actually exercised across two real accounts, not just asserted. Zero console errors,
+zero page errors. `tsc`/`lint`/`build`/`vitest` all clean; the route table shows every page as `ƒ`
+(dynamic) now except `/icon.svg`, since the root layout's `resolveTheme()` call forces the whole
+tree dynamic — a stricter default than the per-page `auth()` calls alone provided, and a nice side
+effect for the exact class of static-rendering bug found and fixed earlier this session.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -546,6 +621,7 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - **Prisma 7 specifics** (worth knowing before touching the schema again): `datasource.url` can no longer live in `schema.prisma` — it's set via `prisma.config.ts`'s `defineConfig({ datasource: { url: env(...) } })`, which needs its own `import "dotenv/config"` since the Prisma CLI doesn't auto-load `.env`-style cascades the way Next.js does. `PrismaClient` now requires an explicit driver `adapter` (`@prisma/adapter-pg`'s `PrismaPg`) — there's no more "just pass a connection string to `new PrismaClient()`."
 - **`@auth/core` must be a direct dependency**, not just a transitive one via `next-auth` — pnpm's strict `node_modules` won't expose it to app code otherwise, which silently breaks the `declare module "@auth/core/jwt"` type augmentation (the `token` in the `session` callback only keeps its narrowed custom fields because of this).
 - **Testing**: Vitest, not Jest — `12-test-plan.md` deferred this choice to MS-01/02 explicitly; decided at MS-02 (see MS-02 section above) once a real test was actually needed (NFR-05's first slice). Server Actions and Route Handlers that call `auth()` internally (`cookies()`/`headers()` from `next/headers`) can't be unit-tested directly outside a live request context — the established pattern going forward is to factor the actual authorization/business decision into a pure function (e.g. `src/lib/portal-authority.ts`) that the thin Server Action wraps, and unit-test the pure function. Full request-level integration testing (hitting a running `next dev`/`next start` over HTTP) remains the fallback for what a pure function can't cover, same as the browser-driven verification this repo has used since the archived app.
+- **Theme preference: resolved fresh from the DB every request via React `cache()`, never stored in the JWT session.** Same reasoning as the already-documented `portalAuthority` staleness gap (MS-02 section) — a JWT field only refreshes at next login, so a switcher click would appear to work but silently not survive whatever set the token. `src/lib/resolve-theme.ts`'s `resolveTheme()` is the one place this is decided; both the root layout (for the `data-theme` stamp) and any nav component needing the current value call it, deduped per-request by `cache()` rather than each issuing its own query.
 - **Observability**: `src/lib/logger.ts` — structured JSON lines to stdout (`{ts, level, event, ...fields}`), per `09-architecture.md` §7's design, captured by `pm2 logs` with no additional infrastructure. Established at MS-02 once the first real access-control decisions (GATE-04, INV-05) existed to log; call `logger.info`/`.warn`/`.error` at every future access-control decision and every future binding act, not just these two, so `pm2 logs` stays the real audit trail the architecture doc commits to rather than an aspiration.
 - **Every self-hosted deployment needs its own `AUTH_URL` env var set to its real public origin** (e.g. `AUTH_URL=https://stage.firsthing.earth`) — found the hard way during MS-01's staged deploy (see above). `trustHost: true` plus nginx's `X-Forwarded-Host` header is *not* sufficient on its own: `next-auth`'s Server-Action helpers (`signIn`/`signOut`/`getSession`) do correctly build their URL from forwarded headers via `@auth/core`'s `createActionURL()`, but the actual `/api/auth/[...nextauth]` Route Handler path goes through `toInternalRequest()`, which uses `new URL(req.url)` directly — Next.js's own self-hosted `NextRequest.url`, unaffected by any proxy header. `AUTH_URL` sidesteps this gap entirely (`next-auth`'s `reqWithEnvURL()` rewrites the request origin from it before either code path runs), and is the officially documented fix for reverse-proxied self-hosting, not a workaround. Set this on every new environment (next: production, whenever that's decided) — don't assume `trustHost`/`X-Forwarded-Host` alone will carry over from a framework that auto-detects its own URL differently.
 - **File storage**: AWS S3 replaces Supabase Storage's `documents` bucket for `FileUploader.tsx` — code-complete and **runtime-verified end-to-end (2026-08-05)** against the real bucket (`firsthing`, `ap-south-1`). **Upload pattern: presigned PUT, not a proxy through our server** (user's explicit choice) — `src/lib/uploads.ts`'s `getUploadUrl()` Server Action (gated the same way as every other admin action: `auth()` + `role === "admin"`) asks AWS for a short-lived (5 min) presigned PUT URL via `@aws-sdk/s3-request-presigner`, and the browser `fetch(uploadUrl, { method: "PUT", body: file })`s the file straight to S3 — AWS's own recommended pattern, keeps file bytes off the Next.js process and credentials off the client. `src/lib/s3.ts`'s `S3Client` is constructed with no explicit `credentials` — the SDK's default provider chain resolves `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from env for local dev now, and would pick up an EC2 instance role automatically instead if one's ever attached to the deploy servers later, with zero code changes either way. **Bucket is public-read** (user's explicit choice) — matches the current Supabase bucket's behavior exactly (already fetched via `getPublicUrl()`, so this isn't a privacy regression), and keeps `FileUploader`'s `onUploadComplete(url)` contract a real permanent URL with no schema changes needed, versus a private+presigned-GET model that would've meant storing S3 keys instead of URLs and regenerating a fresh signed link on every render. The IAM user (`firsthing-bucket-user`) is deliberately scoped to `s3:PutObject` only, confirmed by testing — a `DeleteObject` attempt correctly failed with `AccessDenied`.

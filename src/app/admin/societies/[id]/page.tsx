@@ -37,19 +37,19 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         <h1 className="text-2xl font-bold">{society.name}</h1>
         <StatusControl societyId={society.id} status={society.status} />
       </div>
-      <p className="text-black/50 mb-8">
+      <p className="mb-8 text-[var(--text-muted)]">
         {society.location} · {society.flatCount} flats
       </p>
 
-      <div className="bg-white border border-black/5 rounded-2xl p-6 max-w-xl">
-        <p className="text-sm text-black/50 mb-4">Portal accounts</p>
+      <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6 max-w-xl">
+        <p className="text-sm mb-4 text-[var(--text-muted)]">Portal accounts</p>
 
         {accounts.length === 0 ? (
           // FEAT-108-AC-8: empty state explains the consequence and offers
           // to create the first one.
-          <div className="border border-dashed border-black/15 rounded-xl p-6 text-center mb-4">
+          <div className="border border-dashed border-[var(--border)] rounded-[var(--r-md)] p-6 text-center mb-4">
             <p className="font-medium mb-1">No portal accounts yet</p>
-            <p className="text-sm text-black/50">
+            <p className="text-sm text-[var(--text-muted)]">
               This society has no one who can sign in, view its data, or accept binding acts (GATE-04).
               Create the first account — usually the office-bearer — below.
             </p>
@@ -57,10 +57,13 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         ) : (
           <ul className="space-y-3">
             {accounts.map((a) => (
-              <li key={a.id} className="flex items-center justify-between border-t border-black/5 pt-3 first:border-t-0 first:pt-0">
+              <li
+                key={a.id}
+                className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+              >
                 <div>
                   <p className="font-medium">{a.name ?? a.email}</p>
-                  <p className="text-sm text-black/50">
+                  <p className="text-sm text-[var(--text-muted)]">
                     {a.portalAuthority ? AUTHORITY_LABEL[a.portalAuthority] : "—"} · {a.email}
                   </p>
                 </div>

@@ -26,7 +26,7 @@ export function PortalAccountForm({ societyId }: { societyId: string }) {
   const [password, setPassword] = useState("");
 
   return (
-    <form action={formAction} className="space-y-3 border-t border-black/5 pt-4 mt-4">
+    <form action={formAction} className="space-y-3 border-t border-[var(--border-subtle)] pt-4 mt-4">
       <input type="hidden" name="societyId" value={societyId} />
       <div className="grid grid-cols-2 gap-3">
         <input
@@ -35,14 +35,16 @@ export function PortalAccountForm({ societyId }: { societyId: string }) {
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="border rounded-lg p-2 text-sm"
+          className="border rounded-[var(--r-sm)] p-2 text-sm"
+          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
         />
         <select
           name="portalAuthority"
           required
           value={portalAuthority}
           onChange={(e) => setPortalAuthority(e.target.value as typeof portalAuthority)}
-          className="border rounded-lg p-2 text-sm"
+          className="border rounded-[var(--r-sm)] p-2 text-sm"
+          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
         >
           <option value="office_bearer">Office-bearer</option>
           <option value="committee">Committee</option>
@@ -56,7 +58,8 @@ export function PortalAccountForm({ societyId }: { societyId: string }) {
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full border rounded-lg p-2 text-sm"
+        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
+        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
       />
       <input
         name="password"
@@ -65,13 +68,19 @@ export function PortalAccountForm({ societyId }: { societyId: string }) {
         required
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="w-full border rounded-lg p-2 text-sm"
+        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
+        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
       />
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && (
+        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
+          {error}
+        </p>
+      )}
       <button
         type="submit"
         disabled={pending}
-        className="text-sm font-semibold text-emerald-700 hover:text-emerald-800 disabled:opacity-60"
+        className="text-sm font-semibold disabled:opacity-60"
+        style={{ color: "var(--accent)" }}
       >
         {pending ? "Creating…" : "Create portal account"}
       </button>

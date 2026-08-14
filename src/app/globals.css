@@ -1,16 +1,155 @@
 @import "tailwindcss";
 
-/* MS-01 walking skeleton only — a bare minimum so pages are legible.
-   The approved theme system (docs/product/05a-theme-system.md, DIR-02
-   Console: semantic tokens, type/space/elevation/motion scales) gets wired
-   in properly once real screens start landing, starting MS-02. */
+/*
+ * The approved theme system (docs/product/05a-theme-system.md §3.2/3.2b).
+ * Three themes — Light, Dark, Slate (default) — never `prefers-color-scheme`;
+ * the doc is explicit that the theme never changes itself. Slate is a
+ * chrome-only delta from Light (nav shell darkens, content stays light), so
+ * it costs nothing extra to maintain: a card is byte-identical in Light and
+ * Slate.
+ *
+ * Adopted here: the full color palette (content + chrome) and the radius
+ * scale. NOT yet adopted: the type scale, space steps, elevation, motion,
+ * and `.roomy` density modifier (§3.3/3.4/3.6) — existing pages still use
+ * Tailwind's default scale for those; left for whenever a screen actually
+ * needs them, same "wire in as real screens land" approach this file's
+ * predecessor comment used.
+ */
+
 :root {
-  --background: #f7f7f5;
-  --foreground: #16181d;
+  /* content — light (also the base for Slate, which reuses these) */
+  --ground: #ECEFEC;
+  --surface: #FFFFFF;
+  --surface-sunken: #F5F7F4;
+  --surface-raised: #FFFFFF;
+  --surface-hover: #F3F5F2;
+  --surface-active: #EAEEE9;
+  --border: #DDE2DC;
+  --border-subtle: #E9EDE8;
+  --field-border: #828B82;
+  --text: #151A17;
+  --text-muted: #586058;
+  --text-subtle: #636C63;
+  --text-on-accent: #FFFFFF;
+  --accent: #16624A;
+  --accent-hover: #0F4E3A;
+  --accent-subtle: #E3F0E9;
+  --accent-line: #BFDCCE;
+  --signal: #B8E23F;
+  --signal-ink: #151A17;
+  --ok-bg: #DFF0E4;
+  --ok-fg: #12583E;
+  --ok-line: #BEDFC9;
+  --warn-bg: #FBEED4;
+  --warn-fg: #7E5A08;
+  --warn-line: #F0DCA9;
+  --bad-bg: #FBE4DE;
+  --bad-fg: #9E3F2C;
+  --bad-line: #F2C9BF;
+  --info-bg: #DEEAF4;
+  --info-fg: #1F5477;
+  --info-line: #BED6E8;
+  --neu-bg: #E8EBE7;
+  --neu-fg: #4C544C;
+  --neu-line: #D6DBD4;
+
+  /* chrome — Slate is the un-stamped default: dark slate shell, light content */
+  --chrome: #26322D;
+  --chrome-hover: #2F3C36;
+  --chrome-active: #38473F;
+  --chrome-border: #38473F;
+  --chrome-text: #ECF1EB;
+  --chrome-muted: #AEBAB1;
+  --chrome-subtle: #9DAAA0;
+  --chrome-accent: #C6E85E;
+  --chrome-accent-ink: #151A17;
+
+  /* radius (§3.4) */
+  --r-sm: 5px;
+  --r-md: 9px;
+  --r-lg: 12px;
+  --r-pill: 999px;
 }
 
+/* Light — a chrome-only delta from Slate. Nothing content-side is
+   redefined, so a card/table/chip render byte-identical to Slate. */
+:root[data-theme="light"] {
+  --chrome: #FFFFFF;
+  --chrome-hover: #F3F5F2;
+  --chrome-active: #E3F0E9;
+  --chrome-border: #DDE2DC;
+  --chrome-text: #151A17;
+  --chrome-muted: #586058;
+  --chrome-subtle: #636C63;
+  --chrome-accent: #16624A;
+  --chrome-accent-ink: #FFFFFF;
+}
+
+/* Dark — the full palette remap, content and chrome alike. */
+:root[data-theme="dark"] {
+  --ground: #0F1311;
+  --surface: #171C19;
+  --surface-sunken: #131816;
+  --surface-raised: #1E2420;
+  --surface-hover: #1C221E;
+  --surface-active: #222925;
+  --border: #242B26;
+  --border-subtle: #1D231F;
+  --field-border: #68756D;
+  --text: #E8ECE7;
+  --text-muted: #96A096;
+  --text-subtle: #8A938A;
+  --text-on-accent: #0B0F0C;
+  --accent: #45D18E;
+  --accent-hover: #5EDDA0;
+  --accent-subtle: #16281F;
+  --accent-line: #20402F;
+  --ok-bg: #132A1F;
+  --ok-fg: #68DCA4;
+  --ok-line: #1E4030;
+  --warn-bg: #2B2214;
+  --warn-fg: #DDB25C;
+  --warn-line: #45351C;
+  --bad-bg: #2E1B16;
+  --bad-fg: #E59683;
+  --bad-line: #482A22;
+  --info-bg: #16232E;
+  --info-fg: #7FB6DC;
+  --info-line: #24384A;
+  --neu-bg: #1C221E;
+  --neu-fg: #9AA39A;
+  --neu-line: #2A312C;
+
+  --chrome: #171C19;
+  --chrome-hover: #1C221E;
+  --chrome-active: #16281F;
+  --chrome-border: #242B26;
+  --chrome-text: #E8ECE7;
+  --chrome-muted: #96A096;
+  --chrome-subtle: #8A938A;
+  --chrome-accent: #45D18E;
+  --chrome-accent-ink: #0B0F0C;
+}
+
+/* Slate repeats :root verbatim — stamping it is idempotent, same as never
+   having chosen. No rules needed; :root already is Slate. */
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--ground);
+  color: var(--text);
+  font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+/* A couple of tiny reusable primitives — full "buttons ×
+   default/hover/focus/disabled/loading" coverage (§3.7) is a bigger lift
+   than this pass needs; this just gets hover working without a style prop
+   per instance. */
+.btn-primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border-radius: var(--r-md);
+  transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
 }

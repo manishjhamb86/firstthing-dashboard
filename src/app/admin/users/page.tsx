@@ -20,21 +20,21 @@ export default async function UsersPage() {
     <div className="min-h-screen p-10">
       <AdminNav />
       <h1 className="text-2xl font-bold mb-1">Admin users</h1>
-      <p className="text-black/50 mb-8">Internal ops/support/management accounts.</p>
+      <p className="mb-8 text-[var(--text-muted)]">Internal ops/support/management accounts.</p>
 
       {!canManageAdmins ? (
-        <p className="text-black/50 max-w-xl">
+        <p className="max-w-xl text-[var(--text-muted)]">
           You don&apos;t have the <code>manage_admins</code> permission, so admin account management isn&apos;t
           available to you.
         </p>
       ) : (
         <div className="space-y-8 max-w-xl">
           {admins.length === 0 ? (
-            <div className="border border-dashed border-black/15 rounded-2xl p-10 text-center">
+            <div className="border border-dashed border-[var(--border)] rounded-[var(--r-lg)] p-10 text-center">
               <p className="font-semibold">No admin accounts</p>
             </div>
           ) : (
-            <ul className="bg-white border border-black/5 rounded-2xl p-6 space-y-3">
+            <ul className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6 space-y-3">
               {admins.map((a) => (
                 <AdminRow key={a.id} admin={a} isSelf={a.id === session.user.id} />
               ))}

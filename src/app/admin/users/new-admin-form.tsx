@@ -26,7 +26,10 @@ export function NewAdminForm() {
   const [manageUsers, setManageUsers] = useState(false);
 
   return (
-    <form action={formAction} className="space-y-3 max-w-md bg-white border border-black/5 rounded-2xl p-6">
+    <form
+      action={formAction}
+      className="space-y-3 max-w-md bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6"
+    >
       <p className="text-sm font-semibold mb-1">New admin</p>
       <input
         name="name"
@@ -34,7 +37,8 @@ export function NewAdminForm() {
         required
         value={name}
         onChange={(e) => setName(e.target.value)}
-        className="w-full border rounded-lg p-2 text-sm"
+        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
+        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
       />
       <input
         name="email"
@@ -43,7 +47,8 @@ export function NewAdminForm() {
         required
         value={email}
         onChange={(e) => setEmail(e.target.value)}
-        className="w-full border rounded-lg p-2 text-sm"
+        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
+        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
       />
       <input
         name="password"
@@ -52,7 +57,8 @@ export function NewAdminForm() {
         required
         value={password}
         onChange={(e) => setPassword(e.target.value)}
-        className="w-full border rounded-lg p-2 text-sm"
+        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
+        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
       />
       <div className="flex gap-4 text-sm">
         <label className="flex items-center gap-2">
@@ -76,12 +82,12 @@ export function NewAdminForm() {
           Manage users
         </label>
       </div>
-      {error && <p className="text-xs text-red-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={pending}
-        className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-60"
-      >
+      {error && (
+        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
+          {error}
+        </p>
+      )}
+      <button type="submit" disabled={pending} className="btn-primary px-4 py-2 text-sm font-semibold disabled:opacity-60">
         {pending ? "Creating…" : "Create admin"}
       </button>
     </form>

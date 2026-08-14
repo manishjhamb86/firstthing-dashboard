@@ -4,6 +4,8 @@ import { db } from "@/lib/db";
 import { isPortalRole } from "@/lib/roles";
 import { TransferButton } from "./transfer-button";
 import { BrandMark } from "@/components/brand-mark";
+import { ThemeSwitcher } from "@/components/theme-switcher";
+import { resolveTheme } from "@/lib/resolve-theme";
 
 const AUTHORITY_LABEL: Record<string, string> = {
   office_bearer: "Office-bearer",
@@ -35,17 +37,24 @@ export default async function PortalHomePage() {
   if (!society) redirect("/login");
 
   const isOfficeBearer = session.user.role === "office_bearer";
+  const theme = await resolveTheme();
 
   return (
     <div className="min-h-screen p-10">
-      <BrandMark className="h-7 mb-6" />
+      <div
+        className="flex items-center justify-between px-6 py-3 mb-8 rounded-[var(--r-lg)]"
+        style={{ background: "var(--chrome)", color: "var(--chrome-text)" }}
+      >
+        <BrandMark variant={theme === "light" ? "light" : "dark"} className="h-7" />
+        <ThemeSwitcher current={theme} />
+      </div>
       <h1 className="text-2xl font-bold mb-1">{society.name}</h1>
-      <p className="text-black/50 mb-8">
+      <p className="mb-8 text-[var(--text-muted)]">
         Signed in as {session.user.email} · {AUTHORITY_LABEL[session.user.role]}
       </p>
 
-      <div className="bg-white border border-black/5 rounded-2xl p-6 max-w-xl">
-        <p className="text-sm text-black/50 mb-4">Portal accounts</p>
+      <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6 max-w-xl">
+        <p className="text-sm mb-4 text-[var(--text-muted)]">Portal accounts</p>
         <ul className="space-y-3">
           {accounts.map((account) => {
             const isSelf = account.id === session.user.id;
@@ -53,13 +62,14 @@ export default async function PortalHomePage() {
             return (
               <li
                 key={account.id}
-                className="flex items-center justify-between border-t border-black/5 pt-3 first:border-t-0 first:pt-0"
+                className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
               >
                 <div>
                   <p className="font-medium">
-                    {account.name ?? account.email} {isSelf && <span className="text-black/40">(you)</span>}
+                    {account.name ?? account.email}{" "}
+                    {isSelf && <span className="text-[var(--text-subtle)]">(you)</span>}
                   </p>
-                  <p className="text-sm text-black/50">
+                  <p className="text-sm text-[var(--text-muted)]">
                     {account.portalAuthority ? AUTHORITY_LABEL[account.portalAuthority] : "—"}
                   </p>
                 </div>
@@ -67,7 +77,7 @@ export default async function PortalHomePage() {
                   (isOfficeBearer ? (
                     <TransferButton profileId={account.id} />
                   ) : (
-                    <p className="text-xs text-black/40">Only the office-bearer can change this</p>
+                    <p className="text-xs text-[var(--text-subtle)]">Only the office-bearer can change this</p>
                   ))}
               </li>
             );

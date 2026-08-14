@@ -17,11 +17,15 @@ export function DeactivatePortalButton({ profileId, societyId }: { profileId: st
             setError(result.error);
           })
         }
-        className="text-xs font-semibold text-black/40 hover:text-red-600 disabled:opacity-60"
+        className="text-xs font-semibold text-[var(--text-subtle)] hover:text-[var(--bad-fg)] disabled:opacity-60"
       >
         {pending ? "…" : "Deactivate"}
       </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && (
+        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
+          {error}
+        </p>
+      )}
     </div>
   );
 }

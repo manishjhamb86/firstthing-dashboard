@@ -30,7 +30,8 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full border rounded-xl p-3"
+          className="w-full border rounded-[var(--r-md)] p-3"
+          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
         />
       </div>
       <div className="space-y-1">
@@ -44,19 +45,16 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border rounded-xl p-3"
+          className="w-full border rounded-[var(--r-md)] p-3"
+          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
         />
       </div>
       {error && (
-        <p role="alert" className="text-sm text-red-600">
+        <p role="alert" className="text-sm" style={{ color: "var(--bad-fg)" }}>
           {error}
         </p>
       )}
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl p-3 font-semibold disabled:opacity-60"
-      >
+      <button type="submit" disabled={pending} className="btn-primary w-full p-3 font-semibold disabled:opacity-60">
         {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>

@@ -30,13 +30,13 @@ export function AdminRow({ admin, isSelf }: { admin: Admin; isSelf: boolean }) {
   }
 
   return (
-    <li className="border-t border-black/5 pt-3 first:border-t-0 first:pt-0">
+    <li className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0">
       <div className="flex items-center justify-between">
         <div>
           <p className="font-medium">
-            {admin.name ?? admin.email} {isSelf && <span className="text-black/40">(you)</span>}
+            {admin.name ?? admin.email} {isSelf && <span className="text-[var(--text-subtle)]">(you)</span>}
           </p>
-          <p className="text-sm text-black/50">{admin.email}</p>
+          <p className="text-sm text-[var(--text-muted)]">{admin.email}</p>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <label className="flex items-center gap-1">
@@ -66,7 +66,12 @@ export function AdminRow({ admin, isSelf }: { admin: Admin; isSelf: boolean }) {
             />
             Active
           </label>
-          <button onClick={save} disabled={pending} className="font-semibold text-emerald-700 disabled:opacity-60">
+          <button
+            onClick={save}
+            disabled={pending}
+            className="font-semibold disabled:opacity-60"
+            style={{ color: "var(--accent)" }}
+          >
             Save
           </button>
           {!isSelf && (
@@ -78,14 +83,18 @@ export function AdminRow({ admin, isSelf }: { admin: Admin; isSelf: boolean }) {
                 })
               }
               disabled={pending}
-              className="text-black/40 hover:text-red-600 disabled:opacity-60"
+              className="text-[var(--text-subtle)] hover:text-[var(--bad-fg)] disabled:opacity-60"
             >
               Delete
             </button>
           )}
         </div>
       </div>
-      {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
+      {error && (
+        <p className="text-xs mt-1" style={{ color: "var(--bad-fg)" }}>
+          {error}
+        </p>
+      )}
     </li>
   );
 }

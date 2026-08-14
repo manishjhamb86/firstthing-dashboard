@@ -39,7 +39,8 @@ export function NewSocietyForm() {
           required
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="w-full border rounded-xl p-3"
+          className="w-full border rounded-[var(--r-md)] p-3"
+          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
         />
       </div>
       <div className="space-y-1">
@@ -52,7 +53,8 @@ export function NewSocietyForm() {
           required
           value={location}
           onChange={(e) => setLocation(e.target.value)}
-          className="w-full border rounded-xl p-3"
+          className="w-full border rounded-[var(--r-md)] p-3"
+          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
         />
       </div>
       <div className="space-y-1">
@@ -67,15 +69,21 @@ export function NewSocietyForm() {
           required
           value={flatCount}
           onChange={(e) => setFlatCount(e.target.value)}
-          className="w-full border rounded-xl p-3"
+          className="w-full border rounded-[var(--r-md)] p-3"
+          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
         />
       </div>
 
       {state?.error && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">
-          <p className="text-amber-900 mb-2">{state.error}</p>
+        <div
+          className="rounded-[var(--r-md)] border p-4 text-sm"
+          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
+        >
+          <p className="mb-2" style={{ color: "var(--warn-fg)" }}>
+            {state.error}
+          </p>
           {state.duplicateOf && (
-            <label className="flex items-center gap-2 text-amber-900">
+            <label className="flex items-center gap-2" style={{ color: "var(--warn-fg)" }}>
               <input
                 type="checkbox"
                 name="confirmDuplicate"
@@ -89,11 +97,7 @@ export function NewSocietyForm() {
         </div>
       )}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl p-3 font-semibold disabled:opacity-60"
-      >
+      <button type="submit" disabled={pending} className="btn-primary w-full p-3 font-semibold disabled:opacity-60">
         {pending ? "Creating…" : "Create society"}
       </button>
     </form>

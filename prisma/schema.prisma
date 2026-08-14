@@ -31,6 +31,19 @@ enum PortalAuthority {
   @@map("portal_authority")
 }
 
+// docs/product/05a-theme-system.md §3.2b: the choice belongs to the account,
+// not the browser or the OS — stored server-side, never inferred from
+// prefers-color-scheme (the doc is explicit that the theme never changes by
+// itself). Nullable on both account tables; null means "never chosen," which
+// renders identically to explicitly choosing slate (§3.2b's own table).
+enum Theme {
+  light
+  dark
+  slate
+
+  @@map("theme")
+}
+
 enum SocietyStatus {
   prospect
   active
@@ -114,6 +127,7 @@ model Profile {
   portalAuthority PortalAuthority? @map("portal_authority")
   societyId       String?          @map("society_id")
   isActive        Boolean          @default(true) @map("is_active")
+  themePreference Theme?           @map("theme_preference")
   createdAt       DateTime         @default(now()) @map("created_at")
 
   society Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
@@ -127,14 +141,15 @@ model Profile {
 // ever be minted by a row existing here; a Profile row can never carry admin
 // access, by construction rather than by a role check that could be bypassed.
 model AdminUser {
-  id           String            @id @default(cuid())
-  email        String            @unique
-  passwordHash String            @map("password_hash")
-  name         String?
-  isActive     Boolean           @default(true) @map("is_active")
-  permissions  AdminPermission[]
-  createdById  String?           @map("created_by_id")
-  createdAt    DateTime          @default(now()) @map("created_at")
+  id              String            @id @default(cuid())
+  email           String            @unique
+  passwordHash    String            @map("password_hash")
+  name            String?
+  isActive        Boolean           @default(true) @map("is_active")
+  permissions     AdminPermission[]
+  themePreference Theme?            @map("theme_preference")
+  createdById     String?           @map("created_by_id")
+  createdAt       DateTime          @default(now()) @map("created_at")
 
   createdBy AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   created   AdminUser[] @relation("AdminCreatedBy")

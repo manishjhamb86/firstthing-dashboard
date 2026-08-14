@@ -24,7 +24,7 @@ export function StatusControl({ societyId, status }: { societyId: string; status
           updateSocietyStatus(societyId, next);
         });
       }}
-      className="border rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-60"
+      className="border border-[var(--field-border)] bg-[var(--surface)] text-[var(--text)] rounded-[var(--r-sm)] px-3 py-1.5 text-sm font-semibold disabled:opacity-60"
     >
       {STATUSES.map((s) => (
         <option key={s} value={s}>

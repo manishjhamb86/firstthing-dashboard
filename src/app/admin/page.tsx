@@ -22,20 +22,20 @@ export default async function AdminHomePage() {
     <div className="min-h-screen p-10">
       <AdminNav />
       <h1 className="text-2xl font-bold mb-1">Portfolio</h1>
-      <p className="text-black/50 mb-8">Signed in as {session.user.email}</p>
+      <p className="mb-8 text-[var(--text-muted)]">Signed in as {session.user.email}</p>
 
-      <div className="bg-white border border-black/5 rounded-2xl p-6 max-w-xl">
-        <p className="text-sm text-black/50 mb-1">Societies in Postgres</p>
+      <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6 max-w-xl">
+        <p className="text-sm mb-1 text-[var(--text-muted)]">Societies in Postgres</p>
         <p className="text-3xl font-bold mb-4">{societyCount}</p>
 
         {societies.length === 0 ? (
-          <p className="text-black/50">No societies yet.</p>
+          <p className="text-[var(--text-muted)]">No societies yet.</p>
         ) : (
           <ul className="space-y-2">
             {societies.map((s) => (
-              <li key={s.id} className="flex justify-between border-t border-black/5 pt-2">
+              <li key={s.id} className="flex justify-between border-t border-[var(--border-subtle)] pt-2">
                 <span>{s.name}</span>
-                <span className="text-black/50">{s.location}</span>
+                <span className="text-[var(--text-muted)]">{s.location}</span>
               </li>
             ))}
           </ul>

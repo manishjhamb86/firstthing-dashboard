@@ -18,11 +18,16 @@ export function TransferButton({ profileId }: { profileId: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="text-xs font-semibold text-emerald-700 hover:text-emerald-800 disabled:opacity-60"
+        className="text-xs font-semibold disabled:opacity-60"
+        style={{ color: "var(--accent)" }}
       >
         {pending ? "Transferring…" : "Make office-bearer"}
       </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && (
+        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
+          {error}
+        </p>
+      )}
     </form>
   );
 }

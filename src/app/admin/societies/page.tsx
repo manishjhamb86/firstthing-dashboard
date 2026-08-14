@@ -34,7 +34,7 @@ export default async function SocietiesPage() {
         <h1 className="text-2xl font-bold">Societies</h1>
         <Link
           href="/admin/societies/new"
-          className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl px-4 py-2 text-sm font-semibold"
+          className="bg-[var(--accent)] hover:bg-[var(--accent-hover)] text-[var(--text-on-accent)] rounded-[var(--r-md)] px-4 py-2 text-sm font-semibold transition-colors"
         >
           New society
         </Link>
@@ -42,28 +42,28 @@ export default async function SocietiesPage() {
 
       {societies.length === 0 ? (
         // FEAT-085-AC-2 / INV-06: every list surface defines an empty state.
-        <div className="border border-dashed border-black/15 rounded-2xl p-10 text-center max-w-xl">
+        <div className="border border-dashed border-[var(--border)] rounded-[var(--r-lg)] p-10 text-center max-w-xl">
           <p className="font-semibold mb-1">No societies yet</p>
-          <p className="text-sm text-black/50 mb-4">Create one from a lead to get started.</p>
-          <Link href="/admin/societies/new" className="text-emerald-700 font-semibold text-sm">
+          <p className="text-sm mb-4 text-[var(--text-muted)]">Create one from a lead to get started.</p>
+          <Link href="/admin/societies/new" className="text-[var(--accent)] font-semibold text-sm">
             New society →
           </Link>
         </div>
       ) : (
-        <div className="bg-white border border-black/5 rounded-2xl max-w-2xl divide-y divide-black/5">
+        <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] max-w-2xl divide-y divide-[var(--border-subtle)]">
           {societies.map((s) => (
             <Link
               key={s.id}
               href={`/admin/societies/${s.id}`}
-              className="flex items-center justify-between p-4 hover:bg-black/[0.02]"
+              className="flex items-center justify-between p-4 hover:bg-[var(--surface-hover)]"
             >
               <div>
                 <p className="font-medium">{s.name}</p>
-                <p className="text-sm text-black/50">
+                <p className="text-sm text-[var(--text-muted)]">
                   {s.location} · {s.flatCount} flats
                 </p>
               </div>
-              <span className="text-xs font-semibold uppercase tracking-wide text-black/40">
+              <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
                 {STATUS_LABEL[s.status] ?? s.status}
               </span>
             </Link>

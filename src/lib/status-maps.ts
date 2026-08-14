@@ -156,3 +156,27 @@ export const INSTALLATION_PROJECT_STATE: Record<string, StatusMeta> = {
   published: { label: "In progress", tone: "info" },
   complete: { label: "Complete", tone: "ok" },
 };
+
+// MS-07
+export const READING_UPLOAD_STATUS: Record<string, StatusMeta> = {
+  pending_normalization: { label: "Awaiting mapping", tone: "warn" },
+  awaiting_mapping: { label: "Confirm the mapping", tone: "warn" },
+  ready: { label: "Ready to commit", tone: "info" },
+  committed: { label: "Committed", tone: "ok" },
+  abandoned: { label: "Abandoned", tone: "neu" },
+  superseded: { label: "Superseded", tone: "neu" },
+};
+
+export const READING_ANOMALY_KIND: Record<string, StatusMeta> = {
+  zero_reading: { label: "Zero reading", tone: "bad" },
+  out_of_range: { label: "Out of range", tone: "bad" },
+  day_over_day_jump: { label: "Day-over-day jump", tone: "bad" },
+  missing_days: { label: "Missing days", tone: "warn" },
+};
+
+export const READING_ANOMALY_STATUS: Record<string, StatusMeta> = {
+  open: { label: "Open", tone: "bad" },
+  accepted: { label: "Accepted as real", tone: "ok" },
+  excluded: { label: "Days excluded", tone: "info" },
+  sent_back: { label: "Sent back for re-upload", tone: "warn" },
+};

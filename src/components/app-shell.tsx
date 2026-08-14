@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, Target, Activity, Users, Menu, X } from "lucide-react";
+import { LayoutDashboard, Building2, Target, Activity, Gauge, Users, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -25,6 +25,7 @@ export function AppShell({
   email,
   showPipeline,
   showMonitoring,
+  showReadings,
   showUsers,
   children,
 }: {
@@ -32,6 +33,7 @@ export function AppShell({
   email: string;
   showPipeline: boolean;
   showMonitoring: boolean;
+  showReadings: boolean;
   showUsers: boolean;
   children: ReactNode;
 }) {
@@ -43,6 +45,7 @@ export function AppShell({
     { href: "/admin/societies", label: "Societies", icon: Building2 },
     ...(showPipeline ? [{ href: "/admin/pipeline", label: "Leads & pipeline", icon: Target }] : []),
     ...(showMonitoring ? [{ href: "/admin/monitoring", label: "Monitoring", icon: Activity }] : []),
+    ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
     ...(showUsers ? [{ href: "/admin/users", label: "Admin users", icon: Users }] : []),
   ];
 

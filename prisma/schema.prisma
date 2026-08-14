@@ -395,6 +395,11 @@ model AdminUser {
   blockersResolved     InstallationBlocker[]    @relation("BlockerResolvedBy")
   certificatesRecorded CompletionCertificate[]  @relation("CertificateRecordedBy")
 
+  // MS-07
+  rawReadingsUploaded  RawReadingFile[]     @relation("RawReadingUploadedBy")
+  anomaliesResolved    ReadingAnomaly[]     @relation("ReadingAnomalyResolvedBy")
+  coverageAccepted     CoverageAcceptance[] @relation("CoverageAcceptedBy")
+
   @@map("admin_users")
 }
 
@@ -557,6 +562,12 @@ model Circuit {
   gatePasses               GatePass[]
   commissioningReadings    CommissioningReading[]
   rescaleEvents            BenchmarkRescaleEvent[]
+
+  // MS-07
+  rawReadingFiles      RawReadingFile[]
+  meterReadings        MeterReading[]
+  readingAnomalies     ReadingAnomaly[]
+  coverageAcceptances  CoverageAcceptance[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -1324,4 +1335,204 @@ model CompletionCertificate {
   recordedBy AdminUser           @relation("CertificateRecordedBy", fields: [recordedById], references: [id])
 
   @@map("completion_certificates")
+}
+
+// ── Reading ingest (COMP-03, MS-07) ───────────────────────────────────────
+//
+// CON-30's shape, made concrete. The vendor CSV is the *evidence*; the
+// readings are an interpretation of it. Both are persisted, and the
+// interpretation is replayable — see `src/lib/gemini.ts` for why the model
+// only ever proposes a mapping and never transforms the rows itself.
+
+enum ReadingSource {
+  csv
+  // FEAT-104's scheduled vendor fetch is R1 and nothing writes this value
+  // yet. It exists now because §5.2 makes a reading's identity
+  // (circuit, date, source) — adding the value later would mean rewriting
+  // that unique constraint against live rows.
+  api
+
+  @@map("reading_source")
+}
+
+enum ReadingUploadStatus {
+  pending_normalization // raw file stored, AI unavailable or not yet run — FEAT-043-AC-3
+  awaiting_mapping // AI proposed a mapping, or asked a question — FEAT-044
+  ready // mapping confirmed and the whole file parsed; nothing committed yet
+  committed
+  abandoned // FEAT-044-AC-3 — walked away without leaving partial readings
+  superseded // replaced by a later upload for the same circuit+period — FEAT-043-AC-5
+
+  @@map("reading_upload_status")
+}
+
+enum ReadingAnomalyKind {
+  zero_reading
+  out_of_range
+  day_over_day_jump
+  missing_days
+
+  @@map("reading_anomaly_kind")
+}
+
+enum ReadingAnomalyStatus {
+  open
+  accepted // accepted as real consumption, reason recorded
+  excluded // the days are excluded from the calculation — never interpolated
+  sent_back // returned to the upload queue for a corrected file
+
+  @@map("reading_anomaly_status")
+}
+
+model RawReadingFile {
+  id        String @id @default(cuid())
+  circuitId String @map("circuit_id")
+
+  // INV-04 / CON-25 — always an explicit operator selection at upload time,
+  // never inferred from the file's own contents. The parser in fact refuses
+  // rows outside this period rather than trusting them.
+  period String
+
+  s3Key       String @map("s3_key")
+  fileName    String @map("file_name")
+  contentType String @map("content_type")
+  byteSize    Int    @map("byte_size")
+  vendor      String?
+
+  status ReadingUploadStatus @default(pending_normalization)
+
+  // The mapping the model proposed, and the one actually used. Both are kept:
+  // FEAT-047-AC-1 needs the mapping in the provenance chain, and keeping the
+  // proposal beside the confirmed version is what makes FEAT-044-AC-5's
+  // override visible after the fact rather than indistinguishable from
+  // agreement.
+  proposedMapping   Json?   @map("proposed_mapping")
+  confirmedMapping  Json?   @map("confirmed_mapping")
+  clarifications    Json? // FEAT-044 — the questions asked and the answers given
+  aiConfidence      String? @map("ai_confidence")
+  aiError           String? @map("ai_error") // FEAT-043-AC-3 — why normalisation could not run
+  mappingOverridden Boolean @default(false) @map("mapping_overridden")
+
+  rowsParsed   Int? @map("rows_parsed")
+  daysProduced Int? @map("days_produced")
+
+  // FEAT-047-AC-5 — a replaced upload stays in the history with the
+  // supersession recorded, so a figure that changed has a visible reason.
+  supersededById String?   @unique @map("superseded_by_id")
+  supersededAt   DateTime? @map("superseded_at")
+
+  uploadedById String   @map("uploaded_by_id")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  circuit      Circuit         @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  uploadedBy   AdminUser       @relation("RawReadingUploadedBy", fields: [uploadedById], references: [id])
+  supersededBy RawReadingFile? @relation("RawFileSupersession", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   RawReadingFile? @relation("RawFileSupersession")
+  readings     MeterReading[]
+  anomalies    ReadingAnomaly[]
+
+  @@index([circuitId, period])
+  @@map("raw_reading_files")
+}
+
+model MeterReading {
+  id        String   @id @default(cuid())
+  circuitId String   @map("circuit_id")
+  date      DateTime // the calendar day, at UTC midnight
+  kWh       Float    @map("kwh")
+  source    ReadingSource
+
+  // Hourly→daily is the system's job (CON-30). Keeping the interval count
+  // makes a partial day visible as a partial day rather than as a low
+  // reading — 6 hours of data and a genuinely quiet night look identical
+  // once they are both a single number.
+  intervalCount Int? @map("interval_count")
+
+  validityFlag Boolean @default(true) @map("validity_flag")
+  anomalyFlag  Boolean @default(false) @map("anomaly_flag")
+
+  // Excluded days are excluded, never interpolated (FLOW-09 step 7, CON-12).
+  excludedAt     DateTime? @map("excluded_at")
+  excludedById   String?   @map("excluded_by_id")
+  excludedReason String?   @map("excluded_reason")
+
+  // ADR-005 — a value is superseded, never silently overwritten.
+  supersededValue    Float?    @map("superseded_value")
+  supersededAt       DateTime? @map("superseded_at")
+  supersededByUserId String?   @map("superseded_by_user_id")
+
+  // Set once a released MonthlyCalculation has consumed it (MS-08). Blocks
+  // any further overwrite outright — INV-03.
+  usedInCalculationId String? @map("used_in_calculation_id")
+
+  rawFileId String @map("raw_file_id")
+
+  circuit Circuit        @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  rawFile RawReadingFile @relation(fields: [rawFileId], references: [id], onDelete: Cascade)
+
+  // §5.2 — interval-level identity. Two sources may each hold a value for
+  // the same day; that is a conflict to report (FEAT-107, R1), not a
+  // constraint violation.
+  @@unique([circuitId, date, source])
+  @@index([circuitId, date])
+  @@map("meter_readings")
+}
+
+model ReadingAnomaly {
+  id        String  @id @default(cuid())
+  circuitId String  @map("circuit_id")
+  period    String
+  // Null for a period-scoped finding (missing days); a specific day otherwise.
+  date      DateTime?
+
+  kind   ReadingAnomalyKind
+  detail String // the specific reason, in words, not a code
+
+  observedValue Float? @map("observed_value")
+  expectedValue Float? @map("expected_value")
+  deviationPct  Float? @map("deviation_pct")
+
+  // INV-09 / FEAT-048-AC-3 — an open anomaly holds the month out of billing.
+  blocksBilling Boolean              @default(true) @map("blocks_billing")
+  status        ReadingAnomalyStatus @default(open)
+
+  resolutionReason String?   @map("resolution_reason")
+  resolvedById     String?   @map("resolved_by_id")
+  resolvedAt       DateTime? @map("resolved_at")
+
+  rawFileId String? @map("raw_file_id")
+
+  detectedAt DateTime @default(now()) @map("detected_at")
+
+  circuit    Circuit         @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  rawFile    RawReadingFile? @relation(fields: [rawFileId], references: [id], onDelete: SetNull)
+  resolvedBy AdminUser?      @relation("ReadingAnomalyResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([circuitId, period])
+  @@index([status])
+  @@map("reading_anomalies")
+}
+
+// CON-12's floor is 20 days. Below it the system will not compute a
+// billing-grade comparison unprompted — but PER-01 can accept the month
+// explicitly, and that acceptance is a recorded act with an owner, not a
+// flag someone flipped. One row per circuit-month is the point: accepting
+// twice is the same acceptance.
+model CoverageAcceptance {
+  id        String @id @default(cuid())
+  circuitId String @map("circuit_id")
+  period    String
+
+  coverageDays Int @map("coverage_days")
+  daysInMonth  Int @map("days_in_month")
+
+  reason       String
+  acceptedById String   @map("accepted_by_id")
+  acceptedAt   DateTime @default(now()) @map("accepted_at")
+
+  circuit    Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  acceptedBy AdminUser @relation("CoverageAcceptedBy", fields: [acceptedById], references: [id])
+
+  @@unique([circuitId, period])
+  @@map("coverage_acceptances")
 }

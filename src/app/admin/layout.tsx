@@ -17,6 +17,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       email={session?.user.email ?? ""}
       showPipeline={perms.includes("manage_pipeline")}
       showMonitoring={perms.includes("manage_survey")}
+      // The readings area is readable by anyone who can see a pipeline;
+      // ingesting into it needs both permissions (the PER-01 proxy), which
+      // each action checks for itself.
+      showReadings={perms.includes("manage_pipeline")}
       showUsers={perms.includes("manage_admins")}
     >
       {children}

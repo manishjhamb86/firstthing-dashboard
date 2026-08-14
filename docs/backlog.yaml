@@ -4212,6 +4212,16 @@ features:
     depends_on: [FEAT-043, FEAT-044]
     status: ready
     milestone: MS-07
+    scope_note: >-
+      Detection threshold set to ±5% on 2026-08-14 at MS-07 (user's explicit choice), as a
+      platform constant and deliberately NOT CON-01a's per-contract tolerance band. The two
+      answer different questions: this one asks whether a day's reading is believable, CON-01a
+      asks whether a month complies with the contracted benchmark. Wiring them together would
+      make a ±10% contract stop flagging implausible days, and would turn any future tuning of
+      a data-quality rule into a commercial renegotiation. FEAT-045's own risk line left this
+      number open pending real data; this is the first value, held in one named constant
+      (ANOMALY_TOLERANCE_PCT) so retuning stays a one-line change. Full reasoning in
+      docs/product/03-features.md FEAT-045.
     acceptance_criteria:
       - id: FEAT-045-AC-1
         type: happy
@@ -8094,7 +8104,7 @@ milestones:
     exit_criteria:
       - "A real CSV uploads, Gemini normalises it, and the raw file plus normalised readings are both retained (CON-30)"
       - "Anomaly detection and the 20-day coverage floor (CON-12) both run before a month can be marked ready"
-    status: proposed
+    status: done
   - id: MS-08
     name: "Calculation, compliance, release & delivery"
     release: R0

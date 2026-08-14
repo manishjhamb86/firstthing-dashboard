@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-14
+2026-08-15
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -1522,6 +1522,175 @@ ADR-006's job chain ran unbroken through the restart at its 5-minute cadence
 investigation found is shared with the archived app and has been exposed — see Current Blockers.
 Rotating it signs every stage session out, so it is the user's call to make, not a mechanical step.
 
+## MS-07 done (2026-08-14/15) — reading ingest: a vendor's export becomes evidence a bill can rest on
+
+**All 5 features built** (`docs/backlog.yaml` MS-07 → `done`): FEAT-043 (meter CSV upload &
+AI-assisted normalisation), FEAT-044 (clarify-and-confirm the mapping), FEAT-045 (upload-time
+anomaly detection), FEAT-046 (aggregation & missing-day handling), FEAT-047 (raw-file retention &
+provenance). Both exit criteria met and verified against real rows, real Gemini calls and real S3
+objects. This is the milestone where CON-30's pipeline — the thing the archived app's "Next
+Actions" listed as *"fully unbuilt… needs its own design pass"* since 2026-08-05 — actually exists.
+
+**Two decisions were put to the user rather than taken unilaterally:**
+1. **Raw vendor files are stored private, under their own `Ingest/` prefix** — user chose "scope the
+   policy, store raw files private" over reusing the public-read `Documents/` tree. A meter export
+   is a month of a society's consumption at hourly resolution, which is a different sensitivity
+   class from the invoices that policy was set for, and FEAT-047-AC-4 says outright that raw files
+   are not exposed to a non-internal actor. Reads go through a short-lived presigned GET minted by
+   a gated Server Action. **This needs one AWS change the user still has to make** — see Current
+   Blockers; until the bucket policy is narrowed the prefix is private by convention only.
+2. **The anomaly threshold is ±5%** — typed by the user directly, tighter than any of the three
+   options offered, and matching the spec they originally gave for this pipeline. Recorded in
+   `03-features.md` FEAT-045 and `backlog.yaml`, per AGENTS.md's "scope changes go through the
+   blueprint documents" rule, **with the distinction that makes it safe**: this is a platform
+   constant and deliberately *not* CON-01a's per-contract tolerance band. The two answer different
+   questions — is this *day's reading* believable, versus does this *month* comply with the
+   contracted benchmark — and wiring them together would make a ±10% contract stop flagging
+   implausible days while turning every future tuning of a data-quality rule into a commercial
+   renegotiation. FEAT-045's own risk line ("threshold tuning is the whole game here") left the
+   number open; it now lives in one named constant, `ANOMALY_TOLERANCE_PCT`.
+
+**Where the AI boundary sits, and why it sits there.** `src/lib/gemini.ts` (ported fresh into this
+`src/`, not lifted from `archive/`) exposes one function: `inferStructure()` proposes a *mapping* —
+delimiter, header row, which column is the date/time/value, the unit, whether the value column is
+interval consumption or a cumulative register. It never sees a number that reaches the database.
+All the arithmetic is in `src/lib/reading-normalize.ts`, pure and deterministic, so normalisation
+replays from the raw file plus the stored mapping alone. Two reasons, both load-bearing: volume (a
+circuit-month is ~720 hourly rows, and R0's own scale assumption is 800+ circuits — asking a model
+to transcribe that is neither affordable nor checkable), and INV-02, which needs a figure to trace
+to something reproducible rather than to a one-off model response. The model is sent a head+tail
+sample, not the file. `mappingOverridden` records whether the operator accepted the proposal or
+changed it, so a systematically bad inference is visible in the data rather than inferred from
+complaints.
+
+**The prompt refuses to guess.** It is told not to choose between DD/MM and MM/DD without evidence
+in the sample (a file whose days never exceed 12 is genuinely ambiguous, and it asks), and it is
+told explicitly that a cumulative register read as interval consumption is the costliest available
+mistake — it produces a monthly total roughly a thousand times too large, and it looks like a
+plausible number in a column of plausible numbers. `timeColumn` uses `-1` rather than null for
+"none", because a nullable integer is the field most likely to come back as the string `"null"`.
+
+**Three pure modules, 48 new Vitest cases** (suite now **145 across 10 files**, was 97/7):
+`reading-normalize.ts` (mapping application, hourly→daily, unit conversion, cumulative
+differencing, a ≥95% parse-rate floor before a mapping is accepted), `reading-anomaly.ts` (the four
+detectors), `reading-coverage.ts` (CON-12's floor and the monthly figure). Assertions that matter:
+1234.5 Wh is 1.2345 kWh to ten places (rounding here lands in a rupee figure — INV-02); a blank
+cell is unreadable, never a zero, because zeros are a separately-detected anomaly and manufacturing
+one would fabricate evidence of a meter fault; `2026-02-31` is rejected rather than rolled into
+March, which `Date.UTC` would do silently; a backwards register step is dropped rather than becoming
+negative consumption; and a month at 25 of 31 days averages 40 kWh, not 32 — dividing by the
+calendar rather than by the days that reported understates the daily figure by exactly the shape of
+the gap.
+
+**Design decisions worth keeping:**
+- **The period is the operator's selection, and rows outside it are counted and dropped** (INV-04 /
+  CON-25). A vendor export spanning a month boundary is normal; importing the overhang would put
+  readings into a month nobody chose, possibly a closed one.
+- **The anomaly reference is the median of non-zero days.** A dead meter's run of zeros would
+  otherwise drag the reference down until the *working* days started looking like the anomalies.
+- **`missing_days` is informational, not blocking.** CON-12's coverage floor is the real gate; a
+  second blocking flag over the same fact would just train the operator to dismiss flags.
+- **The bytes reach S3 before anything interprets them** (CON-30's dual storage). If normalisation,
+  Gemini or the commit falls over, the evidence is already safe.
+- **Supersession, not overwrite** (ADR-005): a replaced day keeps `supersededValue`, when, and by
+  whom; the replaced *file* stays in the history with a link to what replaced it.
+
+**Two real bugs found by the end-to-end pass, neither by inspection, both fixed:**
+1. **A non-ISO date cell carrying its time inline** (`01/07/2026 00:00`, a real second-vendor shape)
+   made *every* row of the file unparseable — only the ISO branch extracted a time. Caught because
+   the second fixture used a different vendor's shape on purpose. Fixed in `parseTimestamp` with a
+   unit test.
+2. **A replaced month silently under-reported by exactly the days that had been excluded.** An
+   operator excludes a dead-meter day, uploads a corrected file, and the corrected day is still
+   suppressed — coverage read 30/31 and the month came out 900 kWh instead of 930. The exclusion
+   was a judgment about a number that no longer existed. Now a superseded value clears the
+   exclusion and the stale anomaly flag, while the `ReadingAnomaly` row that recorded the decision
+   stays, pointing at the superseded file — the decision is auditable, it just no longer suppresses
+   a number it was never made about. **The general shape**: a resolution recorded against a value
+   has to be re-examined when that value is replaced, and the place that forgets is the write path
+   nobody is looking at while building the new one — the same class as the FEAT-040 hole closed at
+   MS-04.
+
+**A third defect, in how a refusal reported rather than in the refusal itself**: `getReadingUploadUrl`
+*threw* on a failed permission check while every sibling action returns a typed error. The gate was
+right and nothing was written, but the browser got a bare 500 — and in a production build Next
+replaces a thrown Server Action's message with an opaque digest, so the operator on stage would
+have been told nothing at all. Found by revoking the permission mid-session and watching the
+refusal arrive as a 500 in the console. Now returns `{ error }` like the rest.
+
+**Also fixed while verifying FEAT-047-AC-3**: presigning is a local signature computation that
+contacts S3 for nothing, so signing an object that no longer exists "succeeds" and the operator
+gets a link that opens an XML error page. The degraded case was unreachable in practice. A
+`HeadObject` now runs before the URL is minted, so an untraceable file is *stated* — the readings
+still display and the page says the chain is broken here.
+
+**A prior conclusion corrected**: an earlier probe in this session concluded the app's IAM user
+lacks `s3:GetObject`, because a GET of a nonexistent key returned `AccessDenied` rather than
+`NoSuchKey`. That is wrong, and it is a documented S3 behaviour worth remembering — S3 returns
+`AccessDenied` for a missing key when the caller lacks **`s3:ListBucket`**, which is a different
+grant. Verified directly: `HeadObject` on a real raw file succeeds (16,394 bytes), on a missing one
+returns 403. So **no second AWS change is needed** — presigned reads work today, and the only
+outstanding request is narrowing the bucket policy.
+
+**Verified end to end in a browser (Playwright/system Chrome) across two passes — 42/42 and 27/28,
+zero console errors, zero page errors.** The single failing check is `FEAT-047-AC-4`: an
+unauthenticated `curl` of a raw file still returns **200**, because the bucket policy is still
+bucket-wide public-read. That is the pending AWS change, not a code defect, and the check is
+deliberately left asserting the correct end state so it flips to passing the moment the policy is
+narrowed. Two genuinely different vendor shapes were driven through the real Gemini API: the
+hourly `date,time,consumption/kWh` sample (inferred correctly), and a semicolon-delimited
+`Timestamp;Meter;Energy (Wh)` export with a trailing `TOTAL` row — where the model independently
+got the delimiter, `DD/MM/YYYY` **from evidence in the sample**, `Wh` rather than kWh, and
+`footerRowsToIgnore: 1`. Then: 696 hourly rows → 29 daily rows with 1.25 × 24 = 30.000 exactly;
+all four detectors firing; accept / exclude / send-back / bulk-resolve each resolving the *right*
+finding; a sent-back flag still counting as unresolved because it owes a corrected file; 937.5 Wh ×
+24 = 22.5 kWh converted without rounding; and CON-12's floor refusing a 15-day month until an
+explicit acceptance — recorded with an owner, a reason and the coverage it was accepting at —
+after which the figure computes as 337.5 kWh from the days that exist.
+
+**Four gates were checked through paths the client genuinely does not pre-block**, following this
+repo's own rule that *a client-side `disabled` bypass is not a server-side test*:
+- **The duplicate month** (FEAT-043-AC-5): committing a second file for the same circuit+period
+  stops and requires a choice — neither replace nor discard is a default — and nothing is written
+  while the choice is open. Both branches were then walked: discard keeps the existing 29 days and
+  the discarded upload stays in the history; replace fills the month to 31, supersedes 45.60 → 30.00
+  with the actor recorded, marks the prior file `superseded` with the link, clears the previous
+  file's *open* flags while leaving its *resolved* decisions intact, and the history renders
+  "Replaced by ms07-c.csv".
+- **The PER-01 gate** (FEAT-043-AC-4): the permission was revoked in Postgres with the upload form
+  open, then the button clicked — so the request genuinely reached the action. It refused by name
+  ("Reading ingest is an operations lead action…"), wrote nothing, and the raw-file count was
+  unchanged.
+- **Abandon** (FEAT-044-AC-3): an unreadable file is abandoned with a reason and leaves no partial
+  readings behind.
+- **FEAT-045-AC-5's shared detector**: three steady commissioning days recorded as valid, then a
+  +40% day auto-flagged as an anomaly by the *same* `detectAnomalies` the CSV path uses — with the
+  detector's own words in the note — and CON-19's window correctly held until it is fixed. This is
+  the AC's "the same detection feeds both paths rather than being duplicated", made literal.
+
+Separately asserted: no page in the readings area ever renders an S3 URL into its HTML (checked by
+regex over the served markup on all three routes), so a signed link is never a five-minute window
+handed to anyone who can view source.
+
+**R1 scope was reconciled, not silently absorbed**: SCR-080/081/082 describe bulk upload
+(FEAT-099), a readiness board (FEAT-100) and vendor-API reconciliation (FEAT-107). All three are
+R1 and stay out — same near-term-only discipline this blueprint has applied since Phase 5.
+
+`next.config.ts` gained `serverActions.bodySizeLimit: "25mb"` — a circuit-month of hourly rows is
+~15 KB but a year, or a coarser vendor's export, is not, and the alternative (parsing in the
+browser and posting the result) would put the arithmetic INV-02 depends on outside the server.
+**Worth remembering**: after changing `next.config.ts`, the Turbopack `.next` cache does not
+invalidate — `/login` began 404ing until `rm -rf .next` and a dev-server restart. `tsc`/`lint`/
+`build`/`vitest` all clean; 28 routes. Migration `20260814190428_add_ms07_reading_ingest` is purely
+additive. Backlog validator: **16 errors / 263 warnings**, the same documented baseline
+(AC count is now 555 with coverage 212/555, reflecting the ACs MS-05 and MS-06 added).
+
+All `ms07-*` fixtures were removed afterward via `psql` — the Cypress Court society and everything
+cascading from it — confirmed by count query: back to the 4 pre-existing societies, 4 profiles and
+1 circuit, with `manage_survey` restored on the account the permission test revoked it from. The S3
+objects under `Ingest/Cypress_Court/` cannot be deleted by this app's `PutObject`-only credentials
+and are listed in Current Blockers.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -1564,6 +1733,20 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
   reading `session.user.adminPermissions`/`role` directly. A viewer whose row no longer backs their
   token is sent to `/api/session-ended` to have the session actually cleared — redirecting them to
   `/login` instead causes an infinite proxy bounce (see the "Stale sessions" section above).
+- **The AI proposes a mapping; it never touches a number (2026-08-14, MS-07).** `src/lib/gemini.ts`'s
+  `inferStructure()` is sent a head+tail *sample* of a vendor meter export and returns a structural
+  description — delimiter, header row, which column is date/time/value, the unit, interval vs
+  cumulative. Every arithmetic operation happens afterward in `src/lib/reading-normalize.ts`, which
+  is pure, so normalisation replays from the raw file plus the stored mapping alone. Two reasons,
+  and both apply to any future extraction this codebase adds: **volume** (one circuit-month is ~720
+  hourly rows and R0 assumes 800+ circuits, so transcription by a model is neither affordable nor
+  checkable) and **INV-02** (a billed figure has to trace to something reproducible, not to a
+  one-off model response). Where a model must decide something, the schema is designed so that
+  *not knowing* is expressible — the prompt is told to ask rather than guess between DD/MM and
+  MM/DD — and `mappingOverridden` records whether the operator accepted the proposal, so a
+  systematically bad inference shows up in the data. Contrast the archived invoice extraction,
+  where the model does return field values: that is a one-page document with a handful of fields a
+  human reviews on screen before saving, which is a different risk shape entirely.
 - **Observability**: `src/lib/logger.ts` — structured JSON lines to stdout (`{ts, level, event, ...fields}`), per `09-architecture.md` §7's design, captured by `pm2 logs` with no additional infrastructure. Established at MS-02 once the first real access-control decisions (GATE-04, INV-05) existed to log; call `logger.info`/`.warn`/`.error` at every future access-control decision and every future binding act, not just these two, so `pm2 logs` stays the real audit trail the architecture doc commits to rather than an aspiration.
 - **Every self-hosted deployment needs its own `AUTH_URL` env var set to its real public origin** (e.g. `AUTH_URL=https://stage.firsthing.earth`) — found the hard way during MS-01's staged deploy (see above). `trustHost: true` plus nginx's `X-Forwarded-Host` header is *not* sufficient on its own: `next-auth`'s Server-Action helpers (`signIn`/`signOut`/`getSession`) do correctly build their URL from forwarded headers via `@auth/core`'s `createActionURL()`, but the actual `/api/auth/[...nextauth]` Route Handler path goes through `toInternalRequest()`, which uses `new URL(req.url)` directly — Next.js's own self-hosted `NextRequest.url`, unaffected by any proxy header. `AUTH_URL` sidesteps this gap entirely (`next-auth`'s `reqWithEnvURL()` rewrites the request origin from it before either code path runs), and is the officially documented fix for reverse-proxied self-hosting, not a workaround. Set this on every new environment (next: production, whenever that's decided) — don't assume `trustHost`/`X-Forwarded-Host` alone will carry over from a framework that auto-detects its own URL differently.
 - **File storage**: AWS S3 replaces Supabase Storage's `documents` bucket for `FileUploader.tsx` — code-complete and **runtime-verified end-to-end (2026-08-05)** against the real bucket (`firsthing`, `ap-south-1`). **Upload pattern: presigned PUT, not a proxy through our server** (user's explicit choice) — `src/lib/uploads.ts`'s `getUploadUrl()` Server Action (gated the same way as every other admin action: `auth()` + `role === "admin"`) asks AWS for a short-lived (5 min) presigned PUT URL via `@aws-sdk/s3-request-presigner`, and the browser `fetch(uploadUrl, { method: "PUT", body: file })`s the file straight to S3 — AWS's own recommended pattern, keeps file bytes off the Next.js process and credentials off the client. `src/lib/s3.ts`'s `S3Client` is constructed with no explicit `credentials` — the SDK's default provider chain resolves `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from env for local dev now, and would pick up an EC2 instance role automatically instead if one's ever attached to the deploy servers later, with zero code changes either way. **Bucket is public-read** (user's explicit choice) — matches the current Supabase bucket's behavior exactly (already fetched via `getPublicUrl()`, so this isn't a privacy regression), and keeps `FileUploader`'s `onUploadComplete(url)` contract a real permanent URL with no schema changes needed, versus a private+presigned-GET model that would've meant storing S3 keys instead of URLs and regenerating a fresh signed link on every render. The IAM user (`firsthing-bucket-user`) is deliberately scoped to `s3:PutObject` only, confirmed by testing — a `DeleteObject` attempt correctly failed with `AccessDenied`.
@@ -1620,13 +1803,30 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
   invoice object above). The database rows behind the second one were deleted; the object cannot be.
 - More leftover test objects, same cause and same manual cleanup: everything under
   `Documents/Northwood_Grove/2026-08/Installation/` (MS-06's verification, 2026-08-14) — installation
-  batch photos and one dispute-evidence photo, all 1×1 PNGs.
+  batch photos and one dispute-evidence photo, all 1×1 PNGs — and everything under
+  `Ingest/Cypress_Court/` (MS-07's verification, 2026-08-14) — a handful of small meter-export CSVs
+  from two full end-to-end passes.
+- **One AWS change is outstanding and only the user can make it: narrow the bucket policy's
+  public-read statement from `arn:aws:s3:::firsthing/*` to `arn:aws:s3:::firsthing/Documents/*`**
+  (agreed 2026-08-14 when MS-07's raw-file storage was scoped). Until then the `Ingest/` prefix is
+  private by convention only — the app never renders or stores a raw-file URL and serves every read
+  through a gated, short-lived presigned GET, but an unauthenticated `curl` of a known key still
+  returns 200, verified. This is the one deliberately-failing check in MS-07's verification suite,
+  left asserting the correct end state so it flips to passing the moment the policy changes.
+  **No second change is needed** — an earlier conclusion in the same session that the IAM user
+  lacks `s3:GetObject` was wrong (S3 returns `AccessDenied` for a missing key when the caller lacks
+  `s3:ListBucket`, which is a different grant); `HeadObject` and presigned reads both work today.
 - **KYC documents and executed agreements are stored in a public-read bucket** (user's explicit choice, 2026-08-14, made with the alternative and the reasoning in front of them — see the MS-05 section). Anyone with or guessing a URL can fetch a society's GST certificate or signed agreement without a session. Worth revisiting alongside **SPIKE-02** (India DPDP Act review), which is still unresolved. The switch is cheap by construction: the DB stores S3 keys, not URLs, so it is a change to `publicS3Url()` plus a read path, not a data migration.
 - Resolved (2026-08-14): **`stage.firsthing.earth` now has AWS + Gemini credentials and uploads work there** — see "Stage credentials" below. Was open for one day after the MS-05 deploy found the gap.
 - **`AUTH_SECRET` is shared between the live stage app and the archived app, and has been exposed** (2026-08-14). Compared by hash on the box: `/zenovaa/code/firsthing-dashboard/.env.local` and the archived `firsthing-dashboard-newui-archived-20260814/.env.local` carry the *same* `AUTH_SECRET`, and the archived file's contents were pasted into a chat transcript. It is the secret currently signing every JWT session on stage. **Rotation offered and not yet actioned** — it is one line plus a `pm2 restart`, and the only user-visible effect is that everyone signs in again. The same paste also exposed `SUPABASE_SECRET_KEY` and the Supabase service-role key for project `rdgdzscmhcynluvabobz`; those are inert for this build (nothing in the new `src/` imports Supabase) but may still back the old production site.
 - **The legacy Supabase project's `NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY` is a misnamed hazard, though it appears never to have shipped.** `NEXT_PUBLIC_` makes Next.js inline a variable into the *browser* bundle, and a service-role key bypasses row-level security entirely. Verified 2026-08-14: no code anywhere reads that variable — the only service-role usage is the two archived Supabase Edge Functions (`archive/supabase/functions/create-society-user/index.ts:29`, `update-society-user/index.ts:66`), which read the **non**-prefixed `SUPABASE_SERVICE_ROLE_KEY` via `Deno.env.get()`, server-side. Next only inlines variables it actually sees referenced, so nothing was emitted. Worth renaming or deleting in whatever still owns that env file, since one accidental reference makes it public. Compounds the already-recorded finding that this project's RLS is off.
 - 5 of the 8 planned document types (meter readings, pre/post-demo reports, legal agreements, gate passes) have a naming convention defined but **no upload UI or schema yet** — only invoices, savings reports, and inspection reports are actually wired up.
-- The CSV meter-reading upload/validation pipeline the user described (period selection, ±5% benchmark variance flagging, review/ignore workflow, auto-generating the monthly savings report image) is **fully unbuilt** — explicitly deferred as a separate, substantial feature, not attempted alongside the naming-convention work.
+- Mostly resolved (2026-08-14, MS-07): the CSV meter-reading upload/validation pipeline the user
+  described back on 2026-08-05 — explicit period selection, ±5% variance flagging, a review/ignore
+  workflow — is **built in the new `src/`** (FEAT-043..047, see the MS-07 section). The one part of
+  that original description still unbuilt is auto-generating the monthly savings-report image,
+  which belongs to MS-08's delivery work, not to ingest. The archived app's own version of this
+  pipeline remains, as it always was, unbuilt and now irrelevant.
 - Resolved (2026-08-05): the Postgres container naming/recreation blocker is done — `firsthing-postgres` is up under the correct name, migrated, and seeded.
 
 ## Last Completed Work

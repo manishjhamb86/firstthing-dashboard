@@ -14,6 +14,7 @@ import {
   parseCommissioningCsv,
   REQUIRED_VALID_DAYS,
 } from "@/lib/monitoring-window";
+import { detectAnomalies } from "@/lib/reading-anomaly";
 
 const BENCHMARK_MIN_PCT = 60; // CON-20
 const BENCHMARK_MAX_PCT = 80;
@@ -53,13 +54,41 @@ async function applyCommissioningReading(
     return { error: `${date}: consumption must be a non-negative number.` };
   }
 
+  // FEAT-045-AC-5 — the same detection that gates a billing month also feeds
+  // the commissioning windows, "rather than being duplicated". Until MS-07
+  // this path only ever flagged what PER-04 flagged by hand; a day that was
+  // numerically implausible but reported in good faith went straight into a
+  // baseline. Now a blocking finding about *this* day marks it invalid, which
+  // is what triggers CON-19's window restart through the existing mechanism —
+  // no second restart rule, just one more way for a day to be an anomaly.
+  let autoAnomalyNote = anomalyNote;
+  if (consumptionKwh != null && !anomalyNote?.trim()) {
+    const day = new Date(date);
+    const findings = detectAnomalies([
+      ...before.readings
+        .filter((r) => r.status === "valid" && r.consumptionKwh != null)
+        .map((r) => ({ date: r.date, kWh: r.consumptionKwh as number })),
+      { date: day, kWh: consumptionKwh },
+    ]);
+    const hit = findings.find(
+      (f) => f.blocksBilling && f.date?.toISOString().slice(0, 10) === day.toISOString().slice(0, 10),
+    );
+    if (hit) {
+      autoAnomalyNote = `Flagged automatically: ${hit.detail}`;
+      logger.info("commissioning.auto_anomaly", { circuitId, windowType, date, kind: hit.kind });
+    }
+  }
+
   await recordDailyReading({
     circuitId,
     windowType,
     date: new Date(date),
     recordedById,
-    consumptionKwh,
-    anomalyNote,
+    // An automatically-flagged day keeps its reading — the value is real
+    // evidence and throwing it away would make the flag unauditable. It is
+    // the status that makes it not count.
+    consumptionKwh: autoAnomalyNote && autoAnomalyNote !== anomalyNote ? undefined : consumptionKwh,
+    anomalyNote: autoAnomalyNote,
   });
 
   // The circuit's state reflects "a window is actively running" from the

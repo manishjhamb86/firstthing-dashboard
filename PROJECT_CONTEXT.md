@@ -422,6 +422,81 @@ society's data, never Settlement Nexus's (INV-05); unauthenticated `/portal` red
 admin login is unaffected (no regression); an admin session hitting `/portal` is correctly refused.
 Zero browser console errors, zero page errors, across all five scenarios.
 
+## MS-02 done (2026-08-14) — FEAT-085/086 real screens, a systemic form-reset bug, and the missing logo
+
+**`docs/backlog.yaml`'s MS-02 status flipped from `proposed` to `done`.** The previous session left
+it `proposed` specifically because FEAT-085 (society lifecycle) and FEAT-086 (internal account
+management) had no real screens yet, even though the milestone's own three literal exit criteria
+were already met. Both now have real, runtime-verified screens: `/admin/societies` (list +
+`EmptyState` per INV-06/FEAT-085-AC-2),  `/admin/societies/new` (create, defaulting to
+`prospect` per FEAT-085-AC-1), `/admin/societies/[id]` (status control + portal-account
+management), and `/admin/users` (admin account CRUD, permission-gated). **One AC is a known,
+explicit gap, not silently skipped**: FEAT-085-AC-5 (a society's per-service-line independent
+engagement state) needs an `Engagement` entity this milestone's schema doesn't have — documented
+inline in `src/app/admin/societies/actions.ts`'s own comment, left for whichever future milestone
+actually builds multi-service-line societies, same "state the gap honestly" discipline as
+`12-test-plan.md`'s NFR-10/14 deferrals.
+
+**What's new**, built by porting proven patterns from `archive/src/app/admin/` rather than
+reinventing them (per `AGENTS.md`'s own "read archive, don't treat it as convention" guidance):
+`src/lib/admin-permissions.ts` (`requireAdmin`/`requireAdminPermission`), `src/app/admin/
+societies/actions.ts` (`createSociety` with FEAT-085-AC-3's duplicate-flag-not-silently-create
+check, `updateSocietyStatus`), `src/app/admin/societies/[id]/portal-actions.ts`
+(`createPortalAccount`, `deactivatePortalAccount` — refuses deactivating a society's sole active
+office-bearer), `src/app/admin/users/admin-actions.ts` (`createAdminUser`/`updateAdminUser`/
+`deleteAdminUser`, both self-lockout guards from the archived `AdminPermission` pattern: can't
+remove the last `manage_admins` holder, can't self-delete). Every mutation logs through
+`src/lib/logger.ts` (the structured-JSON logger MS-02's first slice introduced), continuing the
+"every access-control decision is a greppable `pm2 logs` line" convention.
+
+**A critical, systemic bug found while browser-verifying FEAT-085's duplicate-confirm retry flow,
+not something anyone was looking for**: submitting `new-society-form.tsx` with a duplicate name,
+checking "create it anyway," and resubmitting did **nothing** — no network request, no error, no
+loading state. Root-caused through a rigorous elimination process (a temporary `/admin/debug-form`
+diagnostic route, testing `pnpm dev` and a production `pnpm build && pnpm start` server alike to
+rule out a dev-mode/HMR artifact) to **React 19's own documented behavior**: `useActionState` +
+`<form action={formAction}>` resets every *uncontrolled* field to its default (empty, absent a
+`defaultValue`) after **every** submission, success or failure. Combined with HTML5 `required`,
+the browser's native validation then silently blocks the next submit attempt before it ever reaches
+the Server Action — no error, no console warning, nothing, which reads exactly like "the button is
+broken." **This affected every form in the app that used uncontrolled inputs, including the very
+first one every user touches**: `login-form.tsx` (a mistyped password wiped both fields, so retry
+silently did nothing), plus `new-society-form.tsx`, `portal-account-form.tsx`, and
+`new-admin-form.tsx`. Fixed in all four by converting to controlled inputs (`useState` +
+`value`/`onChange` instead of bare `defaultValue`-less `<input required>`) — confirmed via a
+dedicated retry-scenario browser suite (10/10 checks: values survive a failed submit, and a
+corrected resubmit succeeds, for all four forms) that this is now correct. **Any new form added to
+this codebase going forward must use controlled inputs if it can fail and be resubmitted** — an
+uncontrolled `required` field is not just a style preference here, it's a latent version of this
+exact bug.
+
+**A second real gap, this one user-caught rather than found during verification**: the approved FT
+wordmark (`docs/product/brand/`, picked and contrast-tested in the branding phase) had only ever
+been wired in as the browser-tab favicon (`src/app/icon.svg`, MS-01) — it never actually appeared
+*inside* the product itself. Login, admin, and portal all rendered plain text ("FirsThing" as an
+`<h1>`, or nothing at all in `admin-nav.tsx`). Fixed by copying `wordmark-lockup-light.svg` (icon +
+"FirsThing" text, the variant `docs/product/brand/README.md` specifies for light/Slate working
+surfaces) into a new `public/brand/` (the first `public/` directory on this branch — didn't exist
+post-archive) and a shared `src/components/brand-mark.tsx`, used in `login/page.tsx`,
+`admin/admin-nav.tsx` (now a header bar, not a bare text-link row), and `portal/page.tsx`. The
+redundant plain-text "FirsThing admin" `<h1>` on the admin Portfolio page was simplified to just
+"Portfolio" now that the mark itself carries the brand name.
+
+**Full regression + retry-scenario verification (2026-08-14)**: 17/17 checks on the FEAT-085/086/
+108 regression suite, 10/10 on the new retry-scenario suite, `tsc`/`lint`/`build`/`vitest` all
+clean. **One verification-process finding worth recording**: a prior, interrupted verification run
+had left real drift in the local dev database — a leftover test `AdminUser` row, `yogesh@firsthing.
+earth`'s `manage_admins` permission actually stripped (a side effect of that earlier, never-reset
+self-lockout test), and two seeded portal accounts' `portalAuthority` left swapped from an earlier
+GATE-04 transfer test. This silently produced 3 false test failures on the first re-run of this
+session (traced and confirmed via direct `psql` inspection and isolated manual reproduction of each
+flow — the underlying app logic was correct in all three cases) before being identified as stale
+data, not a code defect, and reset via `psql` back to `prisma/seed.ts`'s canonical state. Two of the
+test script's own wait conditions (`page.waitForLoadState("networkidle")` after a Server-Action
+redirect, and a URL regex that incidentally matched the literal path segment `new`) were also
+tightened (`page.waitForURL` with a `(?!new$)` exclusion) — the same class of RSC-navigation-timing
+issue already fixed once for the login-retry check, now generalized.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

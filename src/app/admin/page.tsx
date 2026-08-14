@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { AdminNav } from "./admin-nav";
 
 // MS-01's own exit criterion, made literal: an admin account logs in and
 // lands on a real Server Component reading a row from Postgres. Real
@@ -19,7 +20,8 @@ export default async function AdminHomePage() {
 
   return (
     <div className="min-h-screen p-10">
-      <h1 className="text-2xl font-bold mb-1">FirsThing admin</h1>
+      <AdminNav />
+      <h1 className="text-2xl font-bold mb-1">Portfolio</h1>
       <p className="text-black/50 mb-8">Signed in as {session.user.email}</p>
 
       <div className="bg-white border border-black/5 rounded-2xl p-6 max-w-xl">

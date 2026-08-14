@@ -8005,7 +8005,7 @@ milestones:
       - "An admin, and a society office-bearer/committee/manager account each log in with role-correct access"
       - "A non-office-bearer account is refused a binding act server-side (GATE-04), not just hidden in the UI"
       - "NFR-05's tenancy-scoping test suite exists and passes for Society/Profile/AdminUser"
-    status: proposed
+    status: done
   - id: MS-03
     name: "Lead to confirmed survey"
     release: R0

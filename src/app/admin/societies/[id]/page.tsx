@@ -1,0 +1,68 @@
+import { notFound } from "next/navigation";
+import { db } from "@/lib/db";
+import { AdminNav } from "../../admin-nav";
+import { StatusControl } from "./status-control";
+import { PortalAccountForm } from "./portal-account-form";
+import { DeactivatePortalButton } from "./deactivate-portal-button";
+
+const AUTHORITY_LABEL: Record<string, string> = {
+  office_bearer: "Office-bearer",
+  committee: "Committee",
+  manager: "Manager",
+};
+
+export default async function SocietyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const society = await db.society.findUnique({ where: { id } });
+  if (!society) notFound();
+
+  const accounts = await db.profile.findMany({
+    where: { societyId: id, isActive: true },
+    orderBy: { name: "asc" },
+  });
+
+  return (
+    <div className="min-h-screen p-10">
+      <AdminNav />
+      <div className="flex items-center justify-between mb-1">
+        <h1 className="text-2xl font-bold">{society.name}</h1>
+        <StatusControl societyId={society.id} status={society.status} />
+      </div>
+      <p className="text-black/50 mb-8">
+        {society.location} · {society.flatCount} flats
+      </p>
+
+      <div className="bg-white border border-black/5 rounded-2xl p-6 max-w-xl">
+        <p className="text-sm text-black/50 mb-4">Portal accounts</p>
+
+        {accounts.length === 0 ? (
+          // FEAT-108-AC-8: empty state explains the consequence and offers
+          // to create the first one.
+          <div className="border border-dashed border-black/15 rounded-xl p-6 text-center mb-4">
+            <p className="font-medium mb-1">No portal accounts yet</p>
+            <p className="text-sm text-black/50">
+              This society has no one who can sign in, view its data, or accept binding acts (GATE-04).
+              Create the first account — usually the office-bearer — below.
+            </p>
+          </div>
+        ) : (
+          <ul className="space-y-3">
+            {accounts.map((a) => (
+              <li key={a.id} className="flex items-center justify-between border-t border-black/5 pt-3 first:border-t-0 first:pt-0">
+                <div>
+                  <p className="font-medium">{a.name ?? a.email}</p>
+                  <p className="text-sm text-black/50">
+                    {a.portalAuthority ? AUTHORITY_LABEL[a.portalAuthority] : "—"} · {a.email}
+                  </p>
+                </div>
+                <DeactivatePortalButton profileId={a.id} societyId={society.id} />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <PortalAccountForm societyId={society.id} />
+      </div>
+    </div>
+  );
+}

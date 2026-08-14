@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { isPortalRole } from "@/lib/roles";
 import { TransferButton } from "./transfer-button";
+import { BrandMark } from "@/components/brand-mark";
 
 const AUTHORITY_LABEL: Record<string, string> = {
   office_bearer: "Office-bearer",
@@ -37,6 +38,7 @@ export default async function PortalHomePage() {
 
   return (
     <div className="min-h-screen p-10">
+      <BrandMark className="h-7 mb-6" />
       <h1 className="text-2xl font-bold mb-1">{society.name}</h1>
       <p className="text-black/50 mb-8">
         Signed in as {session.user.email} · {AUTHORITY_LABEL[session.user.role]}

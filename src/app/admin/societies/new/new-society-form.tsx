@@ -1,0 +1,101 @@
+"use client";
+
+import { useActionState, useState } from "react";
+import { createSociety } from "../actions";
+
+type FormState = { error?: string; duplicateOf?: string } | undefined;
+
+async function action(_prev: FormState, formData: FormData): Promise<FormState> {
+  const result = await createSociety({
+    name: formData.get("name") as string,
+    location: formData.get("location") as string,
+    flatCount: Number(formData.get("flatCount")),
+    confirmDuplicate: formData.get("confirmDuplicate") === "true",
+  });
+  // createSociety redirects on success, so reaching here means an error.
+  return result;
+}
+
+// Controlled inputs — React 19 resets uncontrolled fields after every
+// submission including a failed one, which would otherwise wipe everything
+// the operator typed right as the duplicate-review prompt appears (see
+// login-form.tsx's comment for the full finding).
+export function NewSocietyForm() {
+  const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
+  const [name, setName] = useState("");
+  const [location, setLocation] = useState("");
+  const [flatCount, setFlatCount] = useState("");
+  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+
+  return (
+    <form action={formAction} className="space-y-5 max-w-md">
+      <div className="space-y-1">
+        <label htmlFor="name" className="text-sm font-medium">
+          Society name
+        </label>
+        <input
+          id="name"
+          name="name"
+          required
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="w-full border rounded-xl p-3"
+        />
+      </div>
+      <div className="space-y-1">
+        <label htmlFor="location" className="text-sm font-medium">
+          Location
+        </label>
+        <input
+          id="location"
+          name="location"
+          required
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          className="w-full border rounded-xl p-3"
+        />
+      </div>
+      <div className="space-y-1">
+        <label htmlFor="flatCount" className="text-sm font-medium">
+          Flat count
+        </label>
+        <input
+          id="flatCount"
+          name="flatCount"
+          type="number"
+          min={1}
+          required
+          value={flatCount}
+          onChange={(e) => setFlatCount(e.target.value)}
+          className="w-full border rounded-xl p-3"
+        />
+      </div>
+
+      {state?.error && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">
+          <p className="text-amber-900 mb-2">{state.error}</p>
+          {state.duplicateOf && (
+            <label className="flex items-center gap-2 text-amber-900">
+              <input
+                type="checkbox"
+                name="confirmDuplicate"
+                value="true"
+                checked={confirmDuplicate}
+                onChange={(e) => setConfirmDuplicate(e.target.checked)}
+              />
+              This is a genuinely different society — create it anyway
+            </label>
+          )}
+        </div>
+      )}
+
+      <button
+        type="submit"
+        disabled={pending}
+        className="w-full bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl p-3 font-semibold disabled:opacity-60"
+      >
+        {pending ? "Creating…" : "Create society"}
+      </button>
+    </form>
+  );
+}

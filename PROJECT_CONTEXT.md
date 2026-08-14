@@ -1691,6 +1691,51 @@ cascading from it — confirmed by count query: back to the 4 pre-existing socie
 objects under `Ingest/Cypress_Court/` cannot be deleted by this app's `PutObject`-only credentials
 and are listed in Current Blockers.
 
+## The job queue was forking its own recurring chain (2026-08-15) — found by the MS-07 deploy check
+
+**Found by the routine post-deploy `jobs` query, not by anything looking for it**: stage had **three
+concurrent `gatepass_sweep` chains**, each internally consistent at ADR-006's 5-minute cadence
+(19:49:36 → 19:54:36 → 19:59:36, alongside 19:52:06 → 19:57:06 → 20:02:07, alongside
+19:54:21 → 19:59:21). Every prior deploy in this file checked "did the chain survive the restart"
+and correctly answered yes — the question nobody had asked was *how many chains there are*.
+
+**Root cause: `findMany` then `update` is not a claim.** `tick()` read the due jobs and then flipped
+each to `running` in a separate statement, so two processes reading the same pending row both
+proceeded to run it — and because `runGatepassSweep()` creates its successor unconditionally, each
+run spawned a link. Two runs of one job means two chains, permanently. The window is not
+hypothetical: `pm2 restart` genuinely overlaps the outgoing and incoming worker for a moment, which
+is precisely when both are polling. That matches the observed forks landing on restart boundaries.
+
+**Fixed with the standard compare-and-set**: `claimJob()` issues a single
+`updateMany({ where: { id, status: "pending" }, data: { status: "running" } })` and only proceeds on
+`count === 1` — the loser matches zero rows and skips the job. `scheduleGatepassSweep()` is the
+second line: it refuses to create a successor while one is already pending, and logs
+`job.gatepass_sweep_duplicate_suppressed` rather than doing it silently.
+
+**A second, opposite defect fixed in the same pass, found by reasoning about the first**: a job left
+`running` by a process killed mid-run sat there forever. It never reached `done`, so it never
+scheduled a successor — and it still looked scheduled to `ensureGatepassSweepScheduled`, so the
+worker would never re-seed either. **A single unlucky kill would silently kill the sweep entirely**,
+and nothing would report it. `reclaimStaleJobs()` now releases anything claimed more than 10 minutes
+ago, on startup and on every tick, logging `job.reclaimed_stale`.
+
+**Verified against the real database, three ways**, not by reading the diff:
+- **Two workers, one due job, run concurrently** — exactly one successor exists afterward. Under the
+  previous code this is the case that produced two.
+- **The claim admits one winner** — the identical compare-and-set issued twice against one row
+  returns `UPDATE 1` then `UPDATE 0`.
+- **A job stranded in `running` with a 20-minute-old `updatedAt`** was reclaimed and processed
+  (`job.reclaimed_stale` in the log, status `done`), and its reschedule correctly did *not* fork the
+  chain — `job.gatepass_sweep_duplicate_suppressed` fired and the queue still held exactly one
+  pending job.
+
+**Why this mattered enough to fix now rather than note**: ADR-003's queue carries every time-driven
+guarantee in the product, and `09-architecture.md`'s own risk register (RISK-04) already names it as
+the closest thing this design has to a new single point of failure. `gatepass_sweep` is idempotent,
+so the forks were harmless in themselves — but MS-08 reuses this queue for the CON-13 suspension
+countdown, where a doubled run is a society suspended on a clock that ran twice as fast. The bug was
+in the queue's recurring-job primitive, not in the sweep, so every future job type inherited it.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

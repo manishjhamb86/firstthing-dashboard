@@ -6,7 +6,8 @@
     "dev": "node scripts/run-next.mjs dev",
     "build": "next build",
     "start": "node scripts/run-next.mjs start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@auth/core": "0.41.3",
@@ -42,6 +43,7 @@
     "prisma": "^7.9.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

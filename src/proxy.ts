@@ -2,10 +2,10 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { ROLE_HOME, isRole } from "@/lib/roles";
 
-// Route-prefix -> roles allowed. `null` would mean any authenticated role;
-// MS-01 only has "admin" to protect.
+// Route-prefix -> roles allowed. `null` would mean any authenticated role.
 const ROUTE_ROLES: Record<string, string[] | null> = {
   "/admin": ["admin"],
+  "/portal": ["office_bearer", "committee", "manager"],
 };
 
 function matchRoute(pathname: string): string[] | null | undefined {

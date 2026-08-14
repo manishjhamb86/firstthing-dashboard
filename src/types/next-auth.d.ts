@@ -8,12 +8,14 @@ declare module "next-auth" {
       id: string;
       role: Role;
       adminPermissions: AdminPermission[] | null;
+      societyId: string | null;
     } & DefaultSession["user"];
   }
 
   interface User {
     role: Role;
     adminPermissions: AdminPermission[] | null;
+    societyId: string | null;
   }
 }
 
@@ -26,5 +28,6 @@ declare module "@auth/core/jwt" {
   interface JWT {
     role?: Role;
     adminPermissions?: AdminPermission[] | null;
+    societyId?: string | null;
   }
 }

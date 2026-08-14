@@ -2,11 +2,10 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { db } from "../src/lib/db";
 
-// MS-01 walking-skeleton seed only: one admin account and one society, just
-// enough for the exit criterion "an admin account logs in and lands on a
-// real Server-Component page reading one row from Postgres." Real seed data
-// (multiple societies, portal accounts, circuits) grows milestone by
-// milestone as each one's own tables land.
+// MS-01 seeded one admin + one society. MS-02 adds a second society (so
+// NFR-05's tenancy tests have a real foreign society to probe against) and
+// portal accounts (office-bearer + committee) on each, enough to log in as
+// either authority and exercise GATE-04's binding-act check for real.
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 10);
 
@@ -30,6 +29,54 @@ async function main() {
       flatCount: 240,
       location: "Bengaluru",
       status: "active",
+    },
+  });
+
+  await db.society.upsert({
+    where: { id: "seed-society-2" },
+    update: {},
+    create: {
+      id: "seed-society-2",
+      name: "ASF Insignia",
+      flatCount: 180,
+      location: "Gurugram",
+      status: "active",
+    },
+  });
+
+  await db.profile.upsert({
+    where: { email: "bearer@settlement-nexus.test" },
+    update: {},
+    create: {
+      email: "bearer@settlement-nexus.test",
+      passwordHash,
+      name: "Asha Rao",
+      portalAuthority: "office_bearer",
+      societyId: "seed-society-1",
+    },
+  });
+
+  await db.profile.upsert({
+    where: { email: "committee@settlement-nexus.test" },
+    update: {},
+    create: {
+      email: "committee@settlement-nexus.test",
+      passwordHash,
+      name: "Vikram Singh",
+      portalAuthority: "committee",
+      societyId: "seed-society-1",
+    },
+  });
+
+  await db.profile.upsert({
+    where: { email: "bearer@asf-insignia.test" },
+    update: {},
+    create: {
+      email: "bearer@asf-insignia.test",
+      passwordHash,
+      name: "Neha Kapoor",
+      portalAuthority: "office_bearer",
+      societyId: "seed-society-2",
     },
   });
 }

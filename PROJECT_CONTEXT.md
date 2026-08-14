@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-13
+2026-08-14
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -314,6 +314,114 @@ decided whether local Docker Postgres stays the long-term dev convention or whet
 milestone should also touch the production-hosting groundwork from ADR-009 (this MS-01 deploy is
 staging only, not a production decision).
 
+## MS-02 (partial, 2026-08-14) — portal login, GATE-04's binding act, and NFR-05's first slice
+
+**Honest framing up front: this is MS-02's exit-criteria slice, not the full milestone.**
+`docs/backlog.yaml` MS-02 lists three features (FEAT-085 society lifecycle, FEAT-086 internal
+ops/support account management, FEAT-108 portal accounts & authority) and this session built none
+of FEAT-085's or FEAT-086's screens at all — no society-lifecycle CRUD, no internal-user
+management UI. What it did build, fully and runtime-verified, is the milestone's own three literal
+exit criteria (`docs/backlog.yaml`): an admin and a society office-bearer/committee/manager account
+each log in with role-correct access; a non-office-bearer is refused a binding act server-side
+(GATE-04), not just hidden in the UI; and NFR-05's tenancy-scoping test suite exists and passes —
+a first slice, not full coverage. **`docs/backlog.yaml`'s MS-02 status is deliberately left
+`proposed`, not flipped to `done`** — flipping it would overstate FEAT-085/086 progress that
+didn't happen. Follow-up work (the two features' actual screens) is still open.
+
+**Why this slice, not the full milestone**: prompted by the user asking to "finish off one flow
+completely" after seeing MS-01's bare admin page. FEAT-108's binding-act check (GATE-04) is the
+smallest genuinely complete, demoable vertical slice available at this point in the build — it
+doesn't depend on any entity later milestones haven't built yet (unlike FEAT-108-AC-1's "accept an
+offer", which needs the Offer entity from MS-05+). The concrete binding act implemented is
+FEAT-108-AC-5 (an office-bearer transfers the designation to another account of the same society)
+— a real existing AC, not a fabricated stand-in, chosen because it's the one binding act fully
+expressible against MS-01's existing schema.
+
+**What's new:**
+- `src/lib/logger.ts` — structured JSON-to-stdout logging, implementing `09-architecture.md` §7's
+  "Structured JSON logs to stdout, captured by pm2" design, which nothing in `src/` had used until
+  now (the user caught this gap directly: "the logs that we designed are still not used anywhere").
+  Wired into `auth.ts` (every login success/failure, with reason) and the GATE-04/INV-05 refusal
+  paths in `portal/actions.ts` — every access-control decision this milestone makes is now a real,
+  greppable `pm2 logs` line, not silent.
+- `src/lib/roles.ts` — `Role` extended from `admin`-only to `admin | office_bearer | committee |
+  manager`; `ROLE_HOME` and a new `isPortalRole()` guard added.
+- `src/lib/auth.ts` — a second `authorize()` branch resolving `Profile` (checked only after
+  `AdminUser` misses, per the existing INV-01 pattern) — a `Profile` row can still never mint an
+  admin session, by construction. `portalAuthority` becomes the session `role` directly.
+- `src/lib/portal-authority.ts` — the GATE-04 + INV-05 authorization decision for the transfer act,
+  factored out as a **pure function** deliberately so it's unit-testable without a live Next.js
+  request context (`auth()`'s `cookies()`/`headers()` calls only work inside one) — this is what
+  `tests/portal-authority.test.ts` (NFR-05's first slice, 8 cases, Vitest) actually exercises.
+  `src/app/portal/actions.ts`'s `transferOfficeBearer` Server Action is a thin DB/logging shell
+  around it.
+- `src/app/portal/` — a role-scoped landing page (society name, the viewer's own authority, the
+  society's other portal accounts) plus the transfer control, rendered only for an office-bearer
+  viewer; a committee/manager viewer sees "Only the office-bearer can change this" instead
+  (FEAT-108-AC-2's "the screen names who can perform it," reused for the transfer act since no
+  Offer exists yet to test the AC's literal wording against).
+- `src/proxy.ts` — `/portal` added to `ROUTE_ROLES`, gated to the three portal roles.
+- **Vitest chosen over Jest** — `12-test-plan.md` line 42 explicitly deferred this pick to
+  MS-01/02 ("decide at MS-01, not a Phase 9 concern"). Chosen here: named first throughout the
+  test plan, ESM/TS work with no transform config alongside this repo's Turbopack-based Next.js
+  setup. `vitest.config.mts` (the `.mts` extension, not `.ts`, avoids a config-loader ESM/CJS
+  warning without touching `package.json`'s module type — `next.config`/PostCSS config elsewhere in
+  the repo still assume CommonJS).
+- `prisma/seed.ts` — a second society (ASF Insignia) and 3 `Profile` rows (2 office-bearers, one
+  per society, plus a committee account) — enough to log in as either authority and to prove INV-05
+  against a real foreign society, not just an assertion.
+
+**Three real bugs found and fixed while browser-verifying this, not just planned around:**
+1. **`transfer-button.tsx` called `useActionState`'s dispatch function directly from an `onClick`
+   handler** (`formAction(profileId)`), outside a `<form>` and outside `startTransition` — React
+   warned "called outside of a transition" in the browser console, and the click's effect was
+   unreliable. Fixed by switching to the same `<form action={formAction}>` + hidden-input pattern
+   `login-form.tsx` already established, rather than inventing a second convention.
+2. **A real, pre-existing routing bug, only exposed now that a second role exists**: `src/app/
+   page.tsx` unconditionally `redirect("/admin")`ed, and `login/page.tsx`/`login/actions.ts`
+   defaulted `callbackUrl` to `"/admin"` whenever none was supplied — harmless while admin was the
+   only role, wrong the moment a portal account logs in without an explicit `callbackUrl` (e.g.
+   navigating straight to `/login`). `proxy.ts`'s own mismatch-redirect does correct the *content*
+   shown (confirmed via curl: a direct `GET /admin` with a portal session correctly 307s to
+   `/portal`), but a client-side Server Action redirect into a route the session doesn't hold
+   didn't keep the browser's URL bar in sync with the corrected content — confusing regardless of
+   whether it's a security hole. Fixed at the root: `page.tsx` now reads the session and redirects
+   via `ROLE_HOME[role]`; the login fallback changed from `"/admin"` to `"/"`. This avoids ever
+   routing a session to a role it doesn't hold, rather than relying on `proxy.ts` to catch it after
+   the fact.
+3. **No favicon** — every page 404'd on `/favicon.ico` (a pre-existing gap, not introduced this
+   session, but caught by the browser-console-errors check this milestone's verification added).
+   Fixed properly rather than stubbed: `docs/product/brand/logomark.svg` (the approved FT monogram
+   from the branding-phase work, 2026-08-13) copied to `src/app/icon.svg`, which Next.js's App
+   Router auto-detects as the favicon with no route file needed.
+
+**One real limitation found and deliberately left open, not silently shipped**: the transfer test
+surfaced that a JWT session's `role` doesn't refresh when the underlying `Profile.portalAuthority`
+changes — immediately after Asha Rao transfers the office-bearer designation away from herself, her
+*existing* browser session still carries the stale `role: "office_bearer"` claim (confirmed: her
+own now-`committee` row still rendered a transfer button, since the page's render check reads the
+stale session, not a fresh DB lookup) and could, in principle, transfer it back to herself before
+the JWT naturally expires. This isn't a cross-account privilege escalation — she's not gaining an
+authority she never had — but it does mean a just-revoked authority stays exercisable from that
+session until expiry, which is a real gap for a *binding* act specifically. `09-architecture.md`
+NFR-13 already sets portal session lifetime at 90 days, meaning this window could be long. Not
+fixed here — the right fix (force a session refresh/invalidation on a portal authority change, or
+re-verify `portalAuthority` against the DB per binding-act request rather than trusting the JWT)
+is a real architectural decision, not a one-line patch, and belongs in `09-architecture.md` §6 or a
+new ADR before FEAT-108's other binding acts (offer acceptance, batch approval) are built on the
+same session model.
+
+**Verified end to end via a browser** (Playwright driving system Chrome from a scratchpad project,
+same proven pattern as the archived app's write-flow verification — not just `tsc`/`lint`/`build`,
+which also all pass clean, nor `pnpm test`'s 8 Vitest cases, which also all pass): 19/19 checks —
+office-bearer login lands on `/portal` and sees the society, itself, and the committee account;
+clicking "Make office-bearer" actually flips both accounts' authority in Postgres and the page
+re-renders it correctly; the now-demoted account no longer sees the transfer control and instead
+sees who can perform it; a foreign society's office-bearer (ASF Insignia) sees only their own
+society's data, never Settlement Nexus's (INV-05); unauthenticated `/portal` redirects to `/login`;
+admin login is unaffected (no regression); an admin session hitting `/portal` is correctly refused.
+Zero browser console errors, zero page errors, across all five scenarios.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -345,6 +453,8 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - **Auth**: Auth.js/NextAuth v5, Credentials provider, JWT session strategy, no DB adapter (Credentials-only doesn't need one). `profiles.password_hash` (bcrypt) is the new credential store, replacing Supabase Auth.
 - **Prisma 7 specifics** (worth knowing before touching the schema again): `datasource.url` can no longer live in `schema.prisma` — it's set via `prisma.config.ts`'s `defineConfig({ datasource: { url: env(...) } })`, which needs its own `import "dotenv/config"` since the Prisma CLI doesn't auto-load `.env`-style cascades the way Next.js does. `PrismaClient` now requires an explicit driver `adapter` (`@prisma/adapter-pg`'s `PrismaPg`) — there's no more "just pass a connection string to `new PrismaClient()`."
 - **`@auth/core` must be a direct dependency**, not just a transitive one via `next-auth` — pnpm's strict `node_modules` won't expose it to app code otherwise, which silently breaks the `declare module "@auth/core/jwt"` type augmentation (the `token` in the `session` callback only keeps its narrowed custom fields because of this).
+- **Testing**: Vitest, not Jest — `12-test-plan.md` deferred this choice to MS-01/02 explicitly; decided at MS-02 (see MS-02 section above) once a real test was actually needed (NFR-05's first slice). Server Actions and Route Handlers that call `auth()` internally (`cookies()`/`headers()` from `next/headers`) can't be unit-tested directly outside a live request context — the established pattern going forward is to factor the actual authorization/business decision into a pure function (e.g. `src/lib/portal-authority.ts`) that the thin Server Action wraps, and unit-test the pure function. Full request-level integration testing (hitting a running `next dev`/`next start` over HTTP) remains the fallback for what a pure function can't cover, same as the browser-driven verification this repo has used since the archived app.
+- **Observability**: `src/lib/logger.ts` — structured JSON lines to stdout (`{ts, level, event, ...fields}`), per `09-architecture.md` §7's design, captured by `pm2 logs` with no additional infrastructure. Established at MS-02 once the first real access-control decisions (GATE-04, INV-05) existed to log; call `logger.info`/`.warn`/`.error` at every future access-control decision and every future binding act, not just these two, so `pm2 logs` stays the real audit trail the architecture doc commits to rather than an aspiration.
 - **Every self-hosted deployment needs its own `AUTH_URL` env var set to its real public origin** (e.g. `AUTH_URL=https://stage.firsthing.earth`) — found the hard way during MS-01's staged deploy (see above). `trustHost: true` plus nginx's `X-Forwarded-Host` header is *not* sufficient on its own: `next-auth`'s Server-Action helpers (`signIn`/`signOut`/`getSession`) do correctly build their URL from forwarded headers via `@auth/core`'s `createActionURL()`, but the actual `/api/auth/[...nextauth]` Route Handler path goes through `toInternalRequest()`, which uses `new URL(req.url)` directly — Next.js's own self-hosted `NextRequest.url`, unaffected by any proxy header. `AUTH_URL` sidesteps this gap entirely (`next-auth`'s `reqWithEnvURL()` rewrites the request origin from it before either code path runs), and is the officially documented fix for reverse-proxied self-hosting, not a workaround. Set this on every new environment (next: production, whenever that's decided) — don't assume `trustHost`/`X-Forwarded-Host` alone will carry over from a framework that auto-detects its own URL differently.
 - **File storage**: AWS S3 replaces Supabase Storage's `documents` bucket for `FileUploader.tsx` — code-complete and **runtime-verified end-to-end (2026-08-05)** against the real bucket (`firsthing`, `ap-south-1`). **Upload pattern: presigned PUT, not a proxy through our server** (user's explicit choice) — `src/lib/uploads.ts`'s `getUploadUrl()` Server Action (gated the same way as every other admin action: `auth()` + `role === "admin"`) asks AWS for a short-lived (5 min) presigned PUT URL via `@aws-sdk/s3-request-presigner`, and the browser `fetch(uploadUrl, { method: "PUT", body: file })`s the file straight to S3 — AWS's own recommended pattern, keeps file bytes off the Next.js process and credentials off the client. `src/lib/s3.ts`'s `S3Client` is constructed with no explicit `credentials` — the SDK's default provider chain resolves `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from env for local dev now, and would pick up an EC2 instance role automatically instead if one's ever attached to the deploy servers later, with zero code changes either way. **Bucket is public-read** (user's explicit choice) — matches the current Supabase bucket's behavior exactly (already fetched via `getPublicUrl()`, so this isn't a privacy regression), and keeps `FileUploader`'s `onUploadComplete(url)` contract a real permanent URL with no schema changes needed, versus a private+presigned-GET model that would've meant storing S3 keys instead of URLs and regenerating a fresh signed link on every render. The IAM user (`firsthing-bucket-user`) is deliberately scoped to `s3:PutObject` only, confirmed by testing — a `DeleteObject` attempt correctly failed with `AccessDenied`.
 - **Document naming/folder convention (2026-08-05, user's explicit spec)**: every document type follows `Documents/{Society}/{YYYY-MM}/{DocTypeFolder}/{Society}_{DocTypeLabel}_{dateLabel}[_{identifier}].{ext}`, implemented in `src/lib/document-keys.ts`'s `buildDocumentKey()`. Society name comes straight from `societies.name` (slugified: non-alphanumerics → `_`), and the `{YYYY-MM}` **is always an explicit user selection at upload time, never inferred from file contents, a date range, or the upload timestamp** — this was a specific correction from the user after an initial proposal to derive it from a meter-reading CSV's date range. 8 fixed doc types are defined (`invoice`, `meterReadings`, `savingsReport`, `preDemoReport`, `postDemoReport`, `agreement`, `inspectionReport`, `gatePass`), though only 3 have upload UI wired up so far (see below) — the other 5 have no schema/UI yet. `invoiceMonth`/`reportMonth` (previously loose free-text like `"June 2026"`) were changed to `<input type="month">`, storing `"YYYY-MM"` directly — this is what now drives both the S3 folder *and* the DB column, no separate/redundant field. `src/lib/format-month.ts`'s `formatMonthLabel()` renders `"YYYY-MM"` back to a friendly `"June 2026"` at every display site (admin tables, customer-facing invoice/report pages) and gracefully passes through any old pre-convention free-text values unchanged, so existing seed/demo data doesn't break. `inspection-reports` needed no new field — its existing `reportDate` (`<input type="date">`) already gives both the exact date and, via `.slice(0, 7)`, the month.

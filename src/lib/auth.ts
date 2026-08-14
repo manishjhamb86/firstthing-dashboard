@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
+import { logger } from "./logger";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
@@ -23,16 +24,56 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // This makes an admin session structurally impossible to obtain any
         // other way, not just role-gated.
         const admin = await db.adminUser.findUnique({ where: { email } });
-        if (!admin || !admin.isActive) return null;
+        if (admin) {
+          if (!admin.isActive) {
+            logger.warn("auth.login_failed", { email, reason: "admin_inactive" });
+            return null;
+          }
+          const valid = await bcrypt.compare(password, admin.passwordHash);
+          if (!valid) {
+            logger.warn("auth.login_failed", { email, reason: "bad_password", table: "admin_users" });
+            return null;
+          }
 
-        const valid = await bcrypt.compare(password, admin.passwordHash);
-        if (!valid) return null;
+          logger.info("auth.login_succeeded", { userId: admin.id, email, role: "admin" });
+          return {
+            id: admin.id,
+            email: admin.email,
+            role: "admin",
+            adminPermissions: admin.permissions,
+            societyId: null,
+          };
+        }
 
+        // Society-portal logins (FEAT-108) — resolved from Profile, never
+        // able to carry admin access since AdminUser was already checked and
+        // missed. portalAuthority (office-bearer/committee/manager) becomes
+        // the session role; binding acts still re-check it server-side per
+        // action (GATE-04), this is only who's allowed to sign in at all.
+        const profile = await db.profile.findUnique({ where: { email } });
+        if (!profile || !profile.isActive || !profile.portalAuthority) {
+          logger.warn("auth.login_failed", { email, reason: "no_matching_account" });
+          return null;
+        }
+
+        const valid = await bcrypt.compare(password, profile.passwordHash);
+        if (!valid) {
+          logger.warn("auth.login_failed", { email, reason: "bad_password", table: "profiles" });
+          return null;
+        }
+
+        logger.info("auth.login_succeeded", {
+          userId: profile.id,
+          email,
+          role: profile.portalAuthority,
+          societyId: profile.societyId,
+        });
         return {
-          id: admin.id,
-          email: admin.email,
-          role: "admin",
-          adminPermissions: admin.permissions,
+          id: profile.id,
+          email: profile.email,
+          role: profile.portalAuthority,
+          adminPermissions: null,
+          societyId: profile.societyId,
         };
       },
     }),
@@ -42,6 +83,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (user) {
         token.role = user.role;
         token.adminPermissions = user.adminPermissions ?? null;
+        token.societyId = user.societyId ?? null;
       }
       return token;
     },
@@ -50,6 +92,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.id = token.sub!;
         session.user.role = token.role!;
         session.user.adminPermissions = token.adminPermissions ?? null;
+        session.user.societyId = token.societyId ?? null;
       }
       return session;
     },

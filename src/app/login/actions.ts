@@ -4,7 +4,7 @@ import { AuthError } from "next-auth";
 import { signIn } from "@/lib/auth";
 
 export async function loginAction(_prevState: string | undefined, formData: FormData) {
-  const callbackUrl = (formData.get("callbackUrl") as string) || "/admin";
+  const callbackUrl = (formData.get("callbackUrl") as string) || "/";
 
   try {
     await signIn("credentials", {

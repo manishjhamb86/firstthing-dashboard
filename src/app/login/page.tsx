@@ -12,7 +12,7 @@ export default async function LoginPage({
       <div className="bg-white p-10 rounded-2xl shadow-sm w-full max-w-md border border-black/5">
         <h1 className="text-2xl font-bold mb-1">FirsThing</h1>
         <p className="text-black/50 mb-8">Sign in to continue</p>
-        <LoginForm callbackUrl={callbackUrl ?? "/admin"} />
+        <LoginForm callbackUrl={callbackUrl ?? "/"} />
       </div>
     </div>
   );

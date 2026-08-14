@@ -201,3 +201,38 @@ describe("refuseVoid", () => {
     expect(refuseVoid({ reason: "count entered against the wrong circuit", alreadyVoided: false })).toBeNull();
   });
 });
+
+describe("a correction that changes nothing", () => {
+  // The bug this pins: `refuseRescale` compares the submitted count to the
+  // entry's PREVIOUS count (the state being scaled from), so re-submitting the
+  // entry's own current count passes it and writes a no-op duplicate — while
+  // voiding a perfectly good entry to do it. The guard has to compare against
+  // what the entry already says, which is why it lives in the action rather
+  // than inside refuseRescale.
+  it("is NOT caught by refuseRescale — which is why the action checks separately", () => {
+    const entry = { previousLightCount: 53, newLightCount: 54 };
+    expect(
+      refuseRescale({
+        commissionedBaseline: 24.38,
+        currentLightCount: entry.previousLightCount, // 53, the state scaled from
+        newLightCount: entry.newLightCount, // 54, unchanged — yet allowed
+        verificationNote: "walked",
+        effectiveDate: new Date("2026-09-01"),
+      }),
+    ).toBeNull();
+  });
+
+  it("still refuses a genuine same-count rescale on the record path", () => {
+    // The original guard is untouched: recording 54 -> 54 on a circuit that
+    // already sits at 54 is a no-op and stays refused.
+    expect(
+      refuseRescale({
+        commissionedBaseline: 24.38,
+        currentLightCount: 54,
+        newLightCount: 54,
+        verificationNote: "walked",
+        effectiveDate: new Date("2026-09-01"),
+      }),
+    ).toBe("same-count");
+  });
+});

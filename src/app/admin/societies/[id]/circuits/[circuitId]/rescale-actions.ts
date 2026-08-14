@@ -215,6 +215,32 @@ export async function correctRescaleEvent(
 
   const effectiveDate = input.effectiveDate ? startOfDayUTC(new Date(input.effectiveDate)) : null;
 
+  // A correction that corrects nothing must be refused, or it writes a
+  // no-op duplicate and voids a perfectly good entry to do it.
+  //
+  // `refuseRescale` below cannot catch this: it compares the new count to the
+  // entry's PREVIOUS count (the state being scaled from), so re-submitting the
+  // entry's own current count sails through as a legitimate change. The check
+  // has to be against what this entry already says. All three editable fields
+  // count — moving only the date or fixing only the verification note is a
+  // real correction.
+  const unchanged =
+    input.newLightCount === event.newLightCount &&
+    input.verificationNote.trim() === event.verificationNote &&
+    effectiveDate != null &&
+    effectiveDate.getTime() === event.effectiveDate.getTime();
+  if (unchanged) {
+    logger.warn("circuit.rescale_correction_refused", {
+      actorId: gate.actorId,
+      eventId,
+      reason: "no-change",
+    });
+    return {
+      error:
+        "Nothing was changed — this entry already reads that count, date and verification. Change a value, or use Void to strike the entry out.",
+    };
+  }
+
   // The corrected entry scales from the SAME "previous" state as the entry it
   // replaces, not from the wrong figure that entry produced — otherwise the
   // mistake compounds instead of being undone.

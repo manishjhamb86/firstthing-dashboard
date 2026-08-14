@@ -82,6 +82,10 @@ export default async function CircuitDetailPage({
   // FEAT-041 — preInstallBaseline stays as commissioned; the baseline in
   // force today is replayed from the rescale events (INV-07/ADR-005).
   const effectiveBaseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
+  // The table shows what is in force; voided entries are kept but collapsed,
+  // so a corrected entry doesn't read as a duplicate of the one it replaced.
+  const liveRescaleEvents = circuit.rescaleEvents.filter((e) => !e.voidedAt);
+  const voidedRescaleEvents = circuit.rescaleEvents.filter((e) => e.voidedAt);
 
   const state = statusMeta(CIRCUIT_STATE, circuit.state);
   const installGatePass = circuit.gatePasses.find((g) => g.kind === "demo_install");
@@ -179,7 +183,10 @@ export default async function CircuitDetailPage({
             {circuit.rescaleEvents[0]?.previousLightCount ?? circuit.meteredLightCount}
           </span>{" "}
           lights
-          {circuit.rescaleEvents.length > 0 && effectiveBaseline != null && (
+          {/* Only a LIVE entry moves the baseline — a circuit whose entries
+              were all voided is back on its commissioned figure, and saying
+              "in force now" there would contradict the replay. */}
+          {liveRescaleEvents.length > 0 && effectiveBaseline != null && (
             <>
               {" · in force now: "}
               <span className="num font-semibold" style={{ color: "var(--text)" }}>
@@ -266,11 +273,13 @@ export default async function CircuitDetailPage({
             formula apart from someone&apos;s judgment call.
           </p>
 
-          {circuit.rescaleEvents.length === 0 ? (
+          {liveRescaleEvents.length === 0 ? (
             // FEAT-041-AC-2 — never changed: history is the original only.
+            // A circuit whose only entries were all voided reads the same way,
+            // which is correct: nothing is in force.
             <div className="mb-4">
-              <EmptyState title="No count changes recorded">
-                This circuit still runs on its original commissioned baseline of{" "}
+              <EmptyState title="No count changes in force">
+                This circuit runs on its original commissioned baseline of{" "}
                 <span className="num">{circuit.preInstallBaseline.toFixed(2)}</span> kWh/day at{" "}
                 <span className="num">{circuit.meteredLightCount}</span> lights.
               </EmptyState>
@@ -289,13 +298,13 @@ export default async function CircuitDetailPage({
                   </tr>
                 </thead>
                 <tbody>
-                  {circuit.rescaleEvents.map((e) => (
-                    <tr key={e.id} style={e.voidedAt ? { opacity: 0.55 } : undefined}>
+                  {liveRescaleEvents.map((e) => (
+                    <tr key={e.id}>
                       <td className="num">{e.effectiveDate.toISOString().slice(0, 10)}</td>
-                      <td className="num" style={e.voidedAt ? { textDecoration: "line-through" } : undefined}>
+                      <td className="num">
                         {e.previousLightCount} → {e.newLightCount}
                       </td>
-                      <td className="num" style={e.voidedAt ? { textDecoration: "line-through" } : undefined}>
+                      <td className="num">
                         {e.previousBaseline.toFixed(2)} → {e.rescaledBaseline.toFixed(2)}
                       </td>
                       <td className="text-[var(--text-muted)]">
@@ -308,14 +317,6 @@ export default async function CircuitDetailPage({
                             </a>
                           </>
                         )}
-                        {/* A void is itself a recorded act, with its own owner
-                            and reason — the entry is struck out, never erased. */}
-                        {e.voidedAt && (
-                          <span className="block text-xs mt-1" style={{ color: "var(--warn-fg)" }}>
-                            Voided{e.correctedByEventId ? " and corrected" : ""} by{" "}
-                            {e.voidedBy?.name ?? e.voidedBy?.email ?? "—"} — {e.voidReason}
-                          </span>
-                        )}
                       </td>
                       <td className="text-[var(--text-muted)]">
                         {e.recordedBy.name ?? e.recordedBy.email}
@@ -324,18 +325,14 @@ export default async function CircuitDetailPage({
                       </td>
                       {canOverride && (
                         <td>
-                          {e.voidedAt ? (
-                            <span className="text-xs text-[var(--text-muted)]">Voided</span>
-                          ) : (
-                            <RescaleRowActions
-                              eventId={e.id}
-                              previousLightCount={e.previousLightCount}
-                              newLightCount={e.newLightCount}
-                              previousBaseline={e.previousBaseline}
-                              effectiveDate={e.effectiveDate.toISOString().slice(0, 10)}
-                              verificationNote={e.verificationNote}
-                            />
-                          )}
+                          <RescaleRowActions
+                            eventId={e.id}
+                            previousLightCount={e.previousLightCount}
+                            newLightCount={e.newLightCount}
+                            previousBaseline={e.previousBaseline}
+                            effectiveDate={e.effectiveDate.toISOString().slice(0, 10)}
+                            verificationNote={e.verificationNote}
+                          />
                         </td>
                       )}
                     </tr>
@@ -343,6 +340,49 @@ export default async function CircuitDetailPage({
                 </tbody>
               </table>
             </Card>
+          )}
+
+          {/* Voided entries are kept — a void is itself a recorded act with an
+              owner and a reason — but they are not the current truth, so they
+              sit behind a disclosure rather than competing for a row with the
+              entries actually in force. */}
+          {voidedRescaleEvents.length > 0 && (
+            <details className="mb-4">
+              <summary className="text-sm text-[var(--text-muted)] cursor-pointer select-none">
+                {voidedRescaleEvents.length} voided{" "}
+                {voidedRescaleEvents.length === 1 ? "entry" : "entries"} — kept for audit, not counted
+                toward the baseline
+              </summary>
+              <Card className="mt-3 overflow-x-auto">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Effective</th>
+                      <th>Lights</th>
+                      <th>Baseline (kWh/day)</th>
+                      <th>Why it was voided</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {voidedRescaleEvents.map((e) => (
+                      <tr key={e.id} style={{ opacity: 0.7 }}>
+                        <td className="num">{e.effectiveDate.toISOString().slice(0, 10)}</td>
+                        <td className="num" style={{ textDecoration: "line-through" }}>
+                          {e.previousLightCount} → {e.newLightCount}
+                        </td>
+                        <td className="num" style={{ textDecoration: "line-through" }}>
+                          {e.previousBaseline.toFixed(2)} → {e.rescaledBaseline.toFixed(2)}
+                        </td>
+                        <td className="text-[var(--text-muted)]">
+                          {e.correctedByEventId ? "Corrected" : "Voided"} by{" "}
+                          {e.voidedBy?.name ?? e.voidedBy?.email ?? "—"} — {e.voidReason}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </Card>
+            </details>
           )}
 
           {canOverride ? (

@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { CommissioningWindowType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireAdminPermission } from "@/lib/admin-permissions";
+import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import { generateDemoReportInternal } from "@/app/admin/pipeline/[id]/report/actions";
 import {
@@ -15,9 +15,12 @@ import {
   REQUIRED_VALID_DAYS,
 } from "@/lib/monitoring-window";
 import { detectAnomalies } from "@/lib/reading-anomaly";
-
-const BENCHMARK_MIN_PCT = 60; // CON-20
-const BENCHMARK_MAX_PCT = 80;
+import {
+  BENCHMARK_MAX_PCT,
+  BENCHMARK_MIN_PCT,
+  judgePostInstallDay,
+} from "@/lib/commissioning-anomaly";
+import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 
 // The row-level rules (anomaly gating, completion/benchmark computation)
 // used by both a single day's submission and the CSV bulk upload below —
@@ -54,41 +57,74 @@ async function applyCommissioningReading(
     return { error: `${date}: consumption must be a non-negative number.` };
   }
 
-  // FEAT-045-AC-5 — the same detection that gates a billing month also feeds
-  // the commissioning windows, "rather than being duplicated". Until MS-07
-  // this path only ever flagged what PER-04 flagged by hand; a day that was
-  // numerically implausible but reported in good faith went straight into a
-  // baseline. Now a blocking finding about *this* day marks it invalid, which
-  // is what triggers CON-19's window restart through the existing mechanism —
-  // no second restart rule, just one more way for a day to be an anomaly.
+  // The two windows ask different questions, so they get different rules —
+  // see src/lib/commissioning-anomaly.ts for the full reasoning.
+  //
+  // PRE-INSTALL has no baseline yet (producing one is the point), so the only
+  // available question is self-consistency: MS-07's ±5%-against-the-median
+  // detector, shared with the billing path exactly as FEAT-045-AC-5 requires.
+  //
+  // POST-INSTALL has a baseline, and CON-20 says what a plausible day looks
+  // like against it. That question is strictly more informative, and running
+  // ±5% here flagged ordinary jitter — which, because an anomaly restarts
+  // CON-19's count, meant a healthy circuit could never finish its window.
   let autoAnomalyNote = anomalyNote;
   if (consumptionKwh != null && !anomalyNote?.trim()) {
     const day = new Date(date);
-    const findings = detectAnomalies([
-      ...before.readings
-        .filter((r) => r.status === "valid" && r.consumptionKwh != null)
-        .map((r) => ({ date: r.date, kWh: r.consumptionKwh as number })),
-      { date: day, kWh: consumptionKwh },
-    ]);
-    const hit = findings.find(
-      (f) => f.blocksBilling && f.date?.toISOString().slice(0, 10) === day.toISOString().slice(0, 10),
-    );
-    if (hit) {
-      autoAnomalyNote = `Flagged automatically: ${hit.detail}`;
-      logger.info("commissioning.auto_anomaly", { circuitId, windowType, date, kind: hit.kind });
+
+    if (windowType === "post_install") {
+      // The baseline in force on that day, replayed through any rescale
+      // events (INV-07) rather than read straight off the circuit.
+      const baseline = effectiveBaselineAt(
+        circuit.preInstallBaseline,
+        await db.benchmarkRescaleEvent.findMany({
+          where: { circuitId, voidedAt: null },
+          orderBy: { effectiveDate: "asc" },
+        }),
+        day,
+      );
+      const verdict = judgePostInstallDay(consumptionKwh, baseline ?? 0);
+      if (verdict.anomaly) {
+        autoAnomalyNote = `Flagged automatically: ${verdict.detail}`;
+        logger.info("commissioning.auto_anomaly", {
+          circuitId,
+          windowType,
+          date,
+          kind: "outside_con20_band",
+          savingsPct: verdict.savingsPct,
+        });
+      }
+    } else {
+      const findings = detectAnomalies([
+        ...before.readings
+          .filter((r) => r.status === "valid" && r.consumptionKwh != null)
+          .map((r) => ({ date: r.date, kWh: r.consumptionKwh as number })),
+        { date: day, kWh: consumptionKwh },
+      ]);
+      const hit = findings.find(
+        (f) => f.blocksBilling && f.date?.toISOString().slice(0, 10) === day.toISOString().slice(0, 10),
+      );
+      if (hit) {
+        autoAnomalyNote = `Flagged automatically: ${hit.detail}`;
+        logger.info("commissioning.auto_anomaly", { circuitId, windowType, date, kind: hit.kind });
+      }
     }
   }
+
+  const autoFlagged = !!autoAnomalyNote && autoAnomalyNote !== anomalyNote;
 
   await recordDailyReading({
     circuitId,
     windowType,
     date: new Date(date),
     recordedById,
-    // An automatically-flagged day keeps its reading — the value is real
-    // evidence and throwing it away would make the flag unauditable. It is
-    // the status that makes it not count.
-    consumptionKwh: autoAnomalyNote && autoAnomalyNote !== anomalyNote ? undefined : consumptionKwh,
+    // An automatically-flagged day keeps its reading — the value is what the
+    // flag is *about*, and dropping it would leave a flag nobody can check,
+    // and nothing for FEAT-015's review to rest on. The status is what makes
+    // it not count toward the window.
+    consumptionKwh,
     anomalyNote: autoAnomalyNote,
+    status: autoFlagged ? "anomaly" : undefined,
   });
 
   // The circuit's state reflects "a window is actively running" from the
@@ -118,11 +154,23 @@ async function applyCommissioningReading(
         logger.error("commissioning.post_install_missing_baseline", { circuitId });
         return { error: "No pre-install baseline recorded — cannot compute savings." };
       }
-      // CON-10 — % savings between the baseline and post-install averages.
-      const savingsPct = ((fresh.preInstallBaseline - average) / fresh.preInstallBaseline) * 100;
+      // CON-10 — % savings between the baseline and post-install averages,
+      // against the baseline *in force* (INV-07), which is the same figure
+      // the day-level check used. Reading the raw commissioned baseline here
+      // would let a mid-window rescale make the two disagree, so a set of
+      // days each judged in-band could complete out of band.
+      const completionBaseline = effectiveBaselineAt(
+        fresh.preInstallBaseline,
+        await db.benchmarkRescaleEvent.findMany({
+          where: { circuitId, voidedAt: null },
+          orderBy: { effectiveDate: "asc" },
+        }),
+        new Date(),
+      ) as number;
+      const savingsPct = ((completionBaseline - average) / completionBaseline) * 100;
       // CON-20 — only a result inside 60-80% becomes the fixed
-      // benchmarkSavingsPct; outside it, FEAT-014-AC-5 routes to FEAT-015
-      // (not built) instead of writing a benchmark.
+      // benchmarkSavingsPct; outside it, FEAT-014-AC-5 routes to FEAT-015's
+      // review queue instead of writing a benchmark.
       const withinBand = savingsPct >= BENCHMARK_MIN_PCT && savingsPct <= BENCHMARK_MAX_PCT;
       await db.circuit.update({
         where: { id: circuitId },
@@ -134,6 +182,29 @@ async function applyCommissioningReading(
         },
       });
       logger.info("commissioning.post_install_window_complete", { circuitId, savingsPct, withinBand });
+
+      // FEAT-015 — an out-of-range result opens a real review item rather
+      // than parking the circuit in a state with nothing to act on. AC-5's
+      // "repeat failure" is the count of prior reviews on this circuit, so a
+      // second failure after a restart is ranked differently from a first.
+      if (!withinBand) {
+        const priorReviews = await db.demoResultReview.count({ where: { circuitId } });
+        const review = await db.demoResultReview.create({
+          data: {
+            circuitId,
+            occurrence: priorReviews + 1,
+            measuredSavingsPct: savingsPct,
+            preInstallBaseline: completionBaseline,
+            postInstallAverage: average,
+          },
+        });
+        logger.info("commissioning.demo_result_review_raised", {
+          circuitId,
+          reviewId: review.id,
+          occurrence: priorReviews + 1,
+          savingsPct,
+        });
+      }
 
       // FEAT-020-AC-1 — generation is automatic on BenchmarkConfirmed, not
       // something PER-01 has to remember to run. It self-refuses while any
@@ -224,10 +295,96 @@ export async function uploadCommissioningReadingsCsv(circuitId: string, windowTy
   };
 }
 
+/**
+ * FEAT-015 — the day-level rule is CON-20's band, so a circuit that simply
+ * isn't performing gets flagged every single day and its window can never
+ * finish. "Record fix & restart" is the wrong answer there: nothing was
+ * fixed. This is the other door out — the reading is real, the shortfall is
+ * real, and it becomes a review item with an owner.
+ *
+ * Raising is PER-04's call (they are the one on site recording days);
+ * FEAT-015-AC-4 gates *resolving* it to PER-01.
+ */
+export async function escalateOutOfBandResult(circuitId: string) {
+  const gate = await resolveAdmin();
+  if (!gate) return { error: "Your session is no longer valid. Sign in again." };
+  if (!gate.permissions.includes("manage_survey")) {
+    logger.warn("commissioning.escalate_refused", { actorId: gate.id, circuitId, gate: "manage_survey" });
+    return { error: "Recording a commissioning result is a field-survey action." };
+  }
+
+  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  if (!circuit) return { error: "Circuit not found." };
+  if (circuit.preInstallBaseline == null || circuit.preInstallBaseline === 0) {
+    return { error: "No pre-install baseline recorded — there is nothing to measure this against." };
+  }
+
+  const open = await db.demoResultReview.findFirst({ where: { circuitId, state: "open" } });
+  if (open) return { error: "A review is already open for this circuit." };
+
+  // The flagged days themselves are the evidence: their readings are kept
+  // (status, not absence, is what excludes them from the window), so the
+  // review records what was actually measured rather than a re-derivation.
+  const flagged = await db.commissioningReading.findMany({
+    where: {
+      circuitId,
+      windowType: "post_install",
+      status: "anomaly",
+      consumptionKwh: { not: null },
+      ...(circuit.postInstallWindowStartAt ? { date: { gte: circuit.postInstallWindowStartAt } } : {}),
+    },
+    orderBy: { date: "asc" },
+  });
+  if (flagged.length === 0) {
+    return { error: "No out-of-range day is recorded on this window — nothing to escalate." };
+  }
+
+  const measuredAverage =
+    flagged.reduce((sum, r) => sum + (r.consumptionKwh as number), 0) / flagged.length;
+  const baseline = effectiveBaselineAt(
+    circuit.preInstallBaseline,
+    await db.benchmarkRescaleEvent.findMany({ where: { circuitId, voidedAt: null }, orderBy: { effectiveDate: "asc" } }),
+    new Date(),
+  ) as number;
+  const savingsPct = ((baseline - measuredAverage) / baseline) * 100;
+
+  const priorReviews = await db.demoResultReview.count({ where: { circuitId } });
+  const review = await db.demoResultReview.create({
+    data: {
+      circuitId,
+      occurrence: priorReviews + 1,
+      measuredSavingsPct: savingsPct,
+      preInstallBaseline: baseline,
+      postInstallAverage: measuredAverage,
+    },
+  });
+  await db.circuit.update({ where: { id: circuitId }, data: { state: "benchmark_review" } });
+
+  logger.info("commissioning.demo_result_review_raised", {
+    circuitId,
+    reviewId: review.id,
+    occurrence: priorReviews + 1,
+    savingsPct,
+    via: "flagged_days",
+    dayCount: flagged.length,
+    raisedBy: gate.id,
+  });
+
+  await revalidateCircuit(circuitId);
+  revalidatePath("/admin/monitoring");
+  return {};
+}
+
 // FEAT-012-AC-3/FEAT-014-AC-3 — the restart takes effect the midnight
 // after the fix is recorded, logged as a distinct event.
 export async function fixCommissioningAnomaly(circuitId: string, windowType: CommissioningWindowType) {
-  const session = await requireAdminPermission("manage_survey");
+  const gate = await resolveAdmin();
+  if (!gate) return { error: "Your session is no longer valid. Sign in again." };
+  if (!gate.permissions.includes("manage_survey")) {
+    logger.warn("commissioning.fix_refused", { actorId: gate.id, circuitId, gate: "manage_survey" });
+    return { error: "Recording a commissioning fix is a field-survey action." };
+  }
+  const session = { user: { id: gate.id } };
 
   const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
   if (!circuit) return { error: "Circuit not found." };

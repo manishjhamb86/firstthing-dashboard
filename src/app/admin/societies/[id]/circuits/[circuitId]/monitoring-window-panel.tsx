@@ -1,7 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { recordCommissioningReading, fixCommissioningAnomaly } from "./monitoring-actions";
+import {
+  recordCommissioningReading,
+  fixCommissioningAnomaly,
+  escalateOutOfBandResult,
+} from "./monitoring-actions";
 import { CsvUploadForm } from "./csv-upload-form";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
 
@@ -67,6 +71,13 @@ export function MonitoringWindowPanel({
     });
   }
 
+  function escalate() {
+    startTransition(async () => {
+      const result = await escalateOutOfBandResult(circuitId);
+      setError(result?.error);
+    });
+  }
+
   const complete = validCount >= REQUIRED_VALID_DAYS;
 
   return (
@@ -110,7 +121,16 @@ export function MonitoringWindowPanel({
                         <span className="num">{r.consumptionKwh}</span> kWh
                       </>
                     ) : (
-                      <span style={{ color: "var(--warn-fg)" }}>Anomaly — {r.anomalyNote}</span>
+                      <span style={{ color: "var(--warn-fg)" }}>
+                        {/* The flagged reading is shown, not hidden — it is
+                            what the flag is about. It just doesn't count. */}
+                        {r.consumptionKwh != null && (
+                          <>
+                            <span className="num">{r.consumptionKwh}</span> kWh —{" "}
+                          </>
+                        )}
+                        {r.anomalyNote}
+                      </span>
                     )}
                   </td>
                 </tr>
@@ -130,9 +150,20 @@ export function MonitoringWindowPanel({
             An anomaly is open — investigate on site, then record the fix to restart the 5-day count at the next
             midnight.
           </p>
-          <button type="button" onClick={fix} disabled={pending} className="btn-primary">
-            {pending ? "Recording…" : "Record fix & restart"}
-          </button>
+          {error && <ErrorText>{error}</ErrorText>}
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={fix} disabled={pending} className="btn-primary">
+              {pending ? "Recording…" : "Record fix & restart"}
+            </button>
+            {/* FEAT-015 — the other door out. Restarting the window assumes
+                something was fixed; when the shortfall is real, measuring
+                again just flags the same day tomorrow. */}
+            {windowType === "post_install" && (
+              <button type="button" onClick={escalate} disabled={pending} className="btn-secondary">
+                Nothing to fix — escalate for review
+              </button>
+            )}
+          </div>
         </Card>
       )}
 

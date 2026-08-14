@@ -10,7 +10,9 @@ import { MonitoringWindowPanel } from "./monitoring-window-panel";
 import { LightReplacementForm } from "./light-replacement-form";
 import { RescaleRowActions } from "./rescale-row-actions";
 import { RescaleForm } from "./rescale-form";
+import { DemoReviewPanel } from "./demo-review-panel";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
 function GatePassCard({
@@ -76,9 +78,19 @@ export default async function CircuitDetailPage({
       commissioningReadings: { orderBy: { date: "asc" } },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
       voidedBy: { select: { name: true, email: true } },
+      demoResultReviews: {
+        orderBy: { raisedAt: "desc" },
+        include: { resolvedBy: { select: { name: true, email: true } } },
+      },
     },
   });
   if (!circuit || circuit.societyId !== id) notFound();
+
+  // FEAT-015 — at most one review is open at a time: a review is only raised
+  // when a window completes, and a completed window can't complete again
+  // until this one resolves and restarts it.
+  const openReview = circuit.demoResultReviews.find((r) => r.state === "open") ?? null;
+  const resolvedReviews = circuit.demoResultReviews.filter((r) => r.state === "resolved");
 
   // FEAT-041 — preInstallBaseline stays as commissioned; the baseline in
   // force today is replayed from the rescale events (INV-07/ADR-005).
@@ -268,13 +280,65 @@ export default async function CircuitDetailPage({
           savings, fixed for the contract term.
         </div>
       )}
-      {circuit.state === "benchmark_review" && (
+      {/* FEAT-015 — the out-of-range result is reviewed here rather than
+          parking the circuit forever. */}
+      {openReview && (
+        <DemoReviewPanel
+          reviewId={openReview.id}
+          measuredSavingsPct={openReview.measuredSavingsPct}
+          preInstallBaseline={openReview.preInstallBaseline}
+          postInstallAverage={openReview.postInstallAverage}
+          occurrence={openReview.occurrence}
+          urgencyLabel={reviewUrgency({
+            raisedAt: openReview.raisedAt,
+            occurrence: openReview.occurrence,
+            now: new Date(),
+          }).label}
+          urgencyTone={
+            reviewUrgency({ raisedAt: openReview.raisedAt, occurrence: openReview.occurrence, now: new Date() })
+              .tone
+          }
+          canResolve={canOverride}
+        />
+      )}
+      {resolvedReviews.length > 0 && (
+        <section className="max-w-2xl mb-10">
+          <h2 className="text-[15px] font-semibold mb-3">Out-of-range result history</h2>
+          <Card className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Attempt</th>
+                  <th>Measured</th>
+                  <th>Resolution</th>
+                  <th>Found</th>
+                  <th>Recorded by</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resolvedReviews.map((r) => (
+                  <tr key={r.id}>
+                    <td className="num">{r.occurrence}</td>
+                    <td className="num">{r.measuredSavingsPct.toFixed(1)}%</td>
+                    <td>{r.resolution ? RESOLUTION_LABEL[r.resolution] : "—"}</td>
+                    <td className="text-[var(--text-muted)]">{r.resolutionNote ?? "—"}</td>
+                    <td className="text-[var(--text-muted)]">
+                      {r.resolvedBy?.name ?? r.resolvedBy?.email ?? "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </section>
+      )}
+      {circuit.state === "benchmark_review" && !openReview && (
         <div
           className="max-w-md rounded-[var(--r-md)] border p-4 text-sm"
           style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
         >
-          The measured result fell outside CON-20&apos;s 60-80% band — routed to FEAT-015&apos;s investigation
-          queue (not yet built) instead of being written as the benchmark.
+          The measured result fell outside CON-20&apos;s 60-80% band, and the review was escalated for a manual
+          benchmark decision — so it is not written by this screen.
         </div>
       )}
 

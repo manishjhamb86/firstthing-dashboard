@@ -3,6 +3,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
+import { reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
 const REQUIRED_VALID_DAYS = 5;
@@ -33,10 +34,22 @@ export default async function MonitoringDashboardPage() {
     session.user.adminPermissions?.includes("manage_pipeline");
   if (!canView) redirect("/admin");
 
+  // One clock for the whole render, so two rows can't land on either side of
+  // an SLA boundary in the same table.
+  const now = new Date();
+
   // FEAT-012/014 — every circuit currently mid-window, across every
   // society, in one place: the bird's-eye "what needs a reading today"
   // view that drilling into one circuit at a time doesn't give.
-  const [preInstallActive, postInstallActive, recentlyResolved] = await Promise.all([
+  const [openReviews, preInstallActive, postInstallActive, recentlyResolved] = await Promise.all([
+    // FEAT-015 — the investigation queue. Ordered by occurrence first, so a
+    // circuit that has already failed a re-run outranks one nobody has looked
+    // at yet (AC-5), then oldest-first within that.
+    db.demoResultReview.findMany({
+      where: { state: "open", circuit: { voidedAt: null } },
+      include: { circuit: { include: { society: true } } },
+      orderBy: [{ occurrence: "desc" }, { raisedAt: "asc" }],
+    }),
     db.circuit.findMany({
       where: { voidedAt: null, preInstallWindowStartAt: { not: null }, preInstallBaseline: null },
       include: {
@@ -96,6 +109,59 @@ export default async function MonitoringDashboardPage() {
         title="Metering monitoring"
         subtitle="Daily status of every circuit currently in a commissioning window."
       />
+
+      {/* FEAT-015 — sits first because it is the only section here holding
+          work that is stuck rather than merely in progress. */}
+      <section className="mb-8">
+        <h2 className="text-[15px] font-semibold mb-3">Out-of-range demo results</h2>
+        {openReviews.length === 0 ? (
+          // FEAT-015-AC-2 — an empty queue states it plainly.
+          <EmptyState title="No demo results awaiting review">
+            Every completed post-install window has landed inside CON-20&apos;s 60-80% band.
+          </EmptyState>
+        ) : (
+          <Card className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Circuit</th>
+                  <th>Measured</th>
+                  <th>Baseline</th>
+                  <th>Raised</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {openReviews.map((r) => {
+                  const u = reviewUrgency({ raisedAt: r.raisedAt, occurrence: r.occurrence, now });
+                  return (
+                    <tr key={r.id}>
+                      <td>{r.circuit.society.name}</td>
+                      <td>
+                        <Link
+                          href={`/admin/societies/${r.circuit.societyId}/circuits/${r.circuitId}`}
+                          className="underline"
+                        >
+                          {r.circuit.location || r.circuit.lightType}
+                        </Link>
+                      </td>
+                      <td className="num">{r.measuredSavingsPct.toFixed(1)}%</td>
+                      <td className="num">{r.preInstallBaseline.toFixed(2)} kWh/day</td>
+                      <td className="num text-[var(--text-muted)]">
+                        {r.raisedAt.toISOString().slice(0, 10)}
+                      </td>
+                      <td>
+                        <StatusChip tone={u.tone}>{u.label}</StatusChip>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </section>
 
       <section className="mb-8">
         <h2 className="text-[15px] font-semibold mb-3">Pre-install baseline windows</h2>

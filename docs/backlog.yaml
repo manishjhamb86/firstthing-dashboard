@@ -2222,8 +2222,9 @@ features:
         type: failure/anomaly
         given: "a monitoring window restarts after an anomaly"
         when: "the valid-day count resets"
-        then: "the restart mechanism is identical to FEAT-012's pre-install window"
+        then: "the restart mechanism is identical to FEAT-012's pre-install window, but the DETECTION rule is not: a post-install day is anomalous when its implied savings against the in-force baseline falls outside CON-20's 60-80% band, not when it varies >±5% from the running average"
         tests: [TC-014-3]
+        scope_note: "Changed 2026-08-15. ±5% is a self-consistency check — the only question available pre-install, where no baseline exists yet. Post-install there is a baseline and CON-20 already defines a plausible day against it. Running ±5% here flagged ordinary jitter between good days, and since an anomaly resets the count, a healthy circuit could never finish its window. The band subsumes the data-quality cases the ±5% rule caught (a dead meter reads as 100% savings; a 10x transcription error as negative savings). FEAT-045's ±5% is unchanged — different question, different path."
       - id: FEAT-014-AC-4
         type: permission
         given: "a non-PER-04/PER-01 actor"
@@ -2236,6 +2237,13 @@ features:
         when: "the window completes"
         then: "no benchmark is written — the result instead routes to FEAT-015's next-morning investigation queue"
         tests: [TC-014-5]
+      - id: FEAT-014-AC-6
+        type: edge
+        given: "a circuit is genuinely under-performing, so every post-install day flags under AC-3 and the window can never complete"
+        when: "PER-04 escalates the recorded out-of-band days"
+        then: "a FEAT-015 review is raised carrying those readings and the baseline they were judged against — 'record the fix and restart' is refused as an answer, because nothing was fixed"
+        tests: []
+        scope_note: "Added 2026-08-15 alongside the AC-3 detection change. Without it FEAT-015's queue is unreachable in practice: five days each judged in-band can only ever average in-band, so AC-5's completion path alone cannot raise a review."
     stories:
       - id: STORY-014-1
         title: "As ops, I want the post-install monitoring window to compute the benchmark automatically once it completes, so that the number the whole contract prices against is system-produced, not hand-calculated."
@@ -2275,8 +2283,9 @@ features:
       note: "Out-of-range demo result review"
       override_reason: null
     release: R1
+    release_note: "Scored R1, BUILT in R0 (2026-08-15). The state it resolves is reachable the moment a post-install window runs, and without it an out-of-band circuit parks permanently with nothing to act on. Pulled forward rather than left as a dead end — same call as FEAT-035-AC-6 at MS-06. Release stays R1 so the R0 scope figures in 08-prioritization.md remain comparable."
     depends_on: [FEAT-014]
-    status: proposed
+    status: done
     acceptance_criteria:
       - id: FEAT-015-AC-1
         type: happy
@@ -2307,6 +2316,12 @@ features:
         given: "the same circuit produces a second out-of-range result after a restart"
         when: "the condition is evaluated"
         then: "it's flagged more prominently (repeat failure) rather than treated identically to a first-time occurrence"
+        tests: []
+      - id: FEAT-015-AC-6
+        type: happy
+        given: "a circuit has recorded out-of-band days under FEAT-014-AC-3 that a restart cannot resolve"
+        when: "PER-04 escalates them"
+        then: "a review is raised carrying those readings and the baseline they were judged against; raising is PER-04's, resolving remains PER-01's under AC-4"
         tests: []
   - id: FEAT-016
     title: "Schedule a field visit"

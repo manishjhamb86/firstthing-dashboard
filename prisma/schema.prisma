@@ -380,6 +380,7 @@ model AdminUser {
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
   circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
   circuitsVoided                Circuit[]               @relation("CircuitVoidedBy")
+  demoResultsResolved           DemoResultReview[]      @relation("DemoResultResolvedBy")
   gatePassSubmissions           GatePass[]              @relation("GatePassSubmittedBy")
   gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
   commissioningReadingsRecorded CommissioningReading[]
@@ -604,6 +605,7 @@ model Circuit {
   gatePasses               GatePass[]
   commissioningReadings    CommissioningReading[]
   rescaleEvents            BenchmarkRescaleEvent[]
+  demoResultReviews        DemoResultReview[]
 
   // MS-07
   rawReadingFiles     RawReadingFile[]
@@ -681,6 +683,68 @@ model BenchmarkRescaleEvent {
 
   @@index([circuitId, effectiveDate])
   @@map("benchmark_rescale_events")
+}
+
+// FEAT-015 — out-of-range demo result review.
+//
+// A post-install window that completes outside CON-20's 60-80% band does not
+// write a benchmark (FEAT-014-AC-5). Before this existed the circuit parked in
+// `benchmark_review` with nothing to act on, which quietly stranded the deal —
+// the benchmark is what the contract prices against. R1 pulled forward,
+// because R0 can reach the state today.
+
+enum DemoResultReviewState {
+  open
+  resolved
+
+  @@map("demo_result_review_state")
+}
+
+// The three outcomes FEAT-015's own description names. Deliberately an enum:
+// AC-5's "repeat failure" and any later reporting on why demos fail both need
+// this to be countable, not free text.
+enum DemoResultResolution {
+  rerun_window
+  installation_defect
+  escalate_manual_benchmark
+
+  @@map("demo_result_resolution")
+}
+
+model DemoResultReview {
+  id        String @id @default(cuid())
+  circuitId String @map("circuit_id")
+
+  // FEAT-015-AC-5 — 1 for a first failure, 2+ for one that recurred after a
+  // restart. Stored rather than counted at read time so the queue can rank on
+  // it without a correlated subquery per row.
+  occurrence Int @default(1)
+
+  // The figures that produced the out-of-range verdict, kept alongside the
+  // review (INV-02) — recomputing them later from tables that have since moved
+  // on is exactly the derivation that goes wrong under dispute.
+  measuredSavingsPct Float @map("measured_savings_pct")
+  preInstallBaseline Float @map("pre_install_baseline")
+  postInstallAverage Float @map("post_install_average")
+
+  state      DemoResultReviewState  @default(open)
+  resolution DemoResultResolution?
+  // FEAT-015-AC-1 — what was actually found on site.
+  resolutionNote String? @map("resolution_note")
+  // The description's "re-validates load (may re-trigger FEAT-011-style
+  // checks)" — recorded when PER-01 actually did it, null when they didn't.
+  loadRevalidatedPct Float? @map("load_revalidated_pct")
+
+  resolvedById String?   @map("resolved_by_id")
+  resolvedAt   DateTime? @map("resolved_at")
+  raisedAt     DateTime  @default(now()) @map("raised_at")
+
+  circuit    Circuit    @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  resolvedBy AdminUser? @relation("DemoResultResolvedBy", fields: [resolvedById], references: [id])
+
+  @@index([state, raisedAt])
+  @@index([circuitId])
+  @@map("demo_result_reviews")
 }
 
 // ════════════════════════════════════════════════════════════════════════

@@ -1902,6 +1902,90 @@ app routes to any of it — it deploys dormant.
   `BillingInvoice`, `Payment`, `InvoiceExtension`, plus a new `release_billing` admin permission.
   Migration `20260814202511_add_ms08_calculation_release_billing`, 254 statements, zero destructive.
 
+## The post-install anomaly rule was asking the wrong question (2026-08-15) — user-caught, and it made FEAT-015 reachable
+
+**Three things the user reported after testing stage, all real, all one thread.**
+
+**1. The anomaly rule.** "We are comparing anomaly by comparing previous days average reading and if
+varying more than 5%. but here anomaly logic is that if it is out of range and not between 60-80% of
+previous average reading before light install." Correct, and the reason it matters is not a
+preference: ±5% is a *self-consistency* check — the only question available pre-install, where the
+whole point is that no baseline exists yet. Post-install there **is** a baseline, and CON-20 already
+says what a plausible day looks like against it. Running ±5% there flagged ordinary jitter between
+four perfectly good days (7.5 / 7.5 / 7.4 / 8.0 kWh), and because an anomaly resets CON-19's count,
+**a healthy circuit could never finish its window**. The rule now splits by window type in
+`src/lib/commissioning-anomaly.ts`: pre-install keeps MS-07's shared ±5% detector (still satisfying
+FEAT-045-AC-5's "the same detection feeds both paths"), post-install judges each day against the
+in-force baseline replayed through any rescale events (INV-07). The band **subsumes** every
+data-quality case the old rule caught, which is why nothing is lost: a dead meter reads as 100%
+savings, a 10× transcription error as negative savings — both outside 60-80% by a wide margin.
+FEAT-045's ±5% on the billing-ingest path is untouched; it answers a different question about a
+different artefact. Recorded as a scope change in `03-features.md` FEAT-014-AC-3 and
+`docs/backlog.yaml` with a `scope_note`, per AGENTS.md.
+
+**2. "Record and fix button is not working."** Real, and the diagnosis is worth keeping because
+nothing about the button was wrong. `restartWindow` set the new window start to *tomorrow*
+(`2026-08-15`), but the anomaly being cleared was dated `2026-08-24` — a day recorded ahead of
+today, which the date field allows and which is ordinary when catching up on a sheet. `2026-08-24 >=
+2026-08-15`, so the anomaly stayed inside the restarted window, `pendingAnomaly` stayed true, and the
+page re-rendered identically. The action ran, wrote a row, logged its line, and looked completely
+inert. Fixed with `restartFromDate(now, latestReadingDate)` — the later of tomorrow and the midnight
+after the last recorded day. **The shape**: a "restart from now" that ignores data already recorded
+past now is not a restart, and it fails silently rather than loudly.
+
+**3. FEAT-015 built** — the user's third item was, verbatim, to implement the dead-end banner's own
+text. `/admin/monitoring` gains the investigation queue (AC-2's empty state, AC-3's 24h overdue
+flag, AC-5 ranking a repeat failure above an overdue first attempt — a repeat outranks a stopwatch,
+because the second time a circuit measures out of band, measuring again is unlikely to be the
+answer), and the circuit page gains the resolution form with the three closed-set outcomes. Scored
+R1; **built in R0** because the state it resolves is reachable the moment a post-install window runs
+— same call as FEAT-035-AC-6 at MS-06, recorded as a `release_note` rather than by silently
+rewriting the release.
+
+**A structural consequence of (1) that had to be designed for, not discovered later.** Savings % is
+linear in consumption, so the average of five in-band days is *necessarily* in band — which means
+FEAT-014-AC-5's out-of-band **completion** path, the only thing that raised a review, became
+unreachable the moment the day-level band check landed. A circuit that simply under-performs flags
+every single day and never completes at all. So FEAT-015's queue would have shipped correct,
+tested, and permanently empty. Closed with a new **FEAT-014-AC-6 / FEAT-015-AC-6**: PER-04 escalates
+the recorded out-of-band days directly, carrying the readings and the baseline they were judged
+against. "Record fix & restart" is deliberately *not* the answer there — nothing was fixed, and
+restarting just re-flags the same day tomorrow. **Worth remembering as a class**: tightening a
+detection rule can silently orphan the workflow that consumed its output, and the orphaned path
+still passes every test written against it.
+
+**Two real defects found while building this, neither reported:**
+- **An auto-flagged day was discarding the reading it flagged**, directly contradicting the comment
+  sitting above the line claiming it kept it. `recordDailyReading` derived status from *absence* of
+  a value (`isAnomaly = consumptionKwh == null`), so flagging necessarily meant dropping the number.
+  That leaves a flag nobody can check — and it left FEAT-015's escalation with no evidence to rest
+  on. Status is now explicit; every aggregate already filters on it, so a stored anomaly value can
+  never reach a baseline or a benchmark.
+- **Completion computed savings against the raw commissioned baseline while the day check used the
+  in-force one.** A rescale during a post-install window (possible — FEAT-041 needs a commissioned
+  baseline, which exists by then) would make the two disagree, so five days each judged in-band
+  could complete out of band. Both read `effectiveBaselineAt` now.
+
+Also converted `fixCommissioningAnomaly` and the new escalate action off `requireAdminPermission`
+(which throws — an opaque digest in production) onto `resolveAdmin` + a typed return, the same fix
+already made for `getReadingUploadUrl` at MS-07.
+
+**Verified end to end in a browser (Playwright/system Chrome), 35/35, zero console errors, zero page
+errors.** The four-day jitter case records as valid throughout; an 18 kWh day against a 30 kWh/day
+baseline (40% savings) flags, *keeps its reading*, and names CON-20 rather than a generic variance;
+the restart works for a past-dated anomaly (→ 2026-08-15) **and for the reported future-dated one
+(→ 2026-08-25, not 2026-08-15)**, with the anomaly card actually gone; escalation raises a review
+storing 40.00% / 30 / 18 exactly; the queue shows it, then ranks the second one as "Repeat failure —
+attempt 2"; resolving as a corrected defect clears the measured average, returns the circuit to
+`post_install_monitoring` and restarts after the last recorded day. **Two gates checked through
+paths the client cannot pre-block**: a resolution with no stated basis (submitted with the note
+empty — refused, nothing written, the refusal actually shown) and FEAT-015-AC-4 (the ops permission
+revoked behind the open form, so the click genuinely reached the action — refused by name, review
+still `open`). 30 new Vitest cases across `commissioning-anomaly` and `demo-result-review`; suite now
+**262 across 15 files**. `tsc`/`lint`/`build` clean. Migration
+`20260815031500_add_demo_result_review` is purely additive. Backlog validator: **16 errors / 263
+warnings**, the same documented baseline, AC count 555 → 557.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

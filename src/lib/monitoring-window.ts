@@ -1,6 +1,7 @@
-import type { CommissioningWindowType } from "@prisma/client";
+import type { CommissioningReadingStatus, CommissioningWindowType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { restartFromDate } from "@/lib/commissioning-anomaly";
 
 // FEAT-012/FEAT-014 — the two windows mirror each other exactly (per
 // FEAT-014's own description), so the mechanism lives here once rather
@@ -40,9 +41,18 @@ export async function recordDailyReading(input: {
   recordedById: string;
   consumptionKwh?: number;
   anomalyNote?: string;
+  /**
+   * Normally derived from whether a value was supplied — a day recorded
+   * without a number is an anomaly by definition. An automatically-flagged
+   * day passes "anomaly" explicitly *with* its reading: the number is the
+   * evidence the flag rests on, and FEAT-015's review needs it. Every
+   * aggregate below filters on status, so a stored anomaly value can never
+   * reach a baseline or a benchmark.
+   */
+  status?: CommissioningReadingStatus;
 }) {
   const date = startOfDayUTC(input.date);
-  const isAnomaly = input.consumptionKwh == null;
+  const isAnomaly = input.status ? input.status === "anomaly" : input.consumptionKwh == null;
 
   await db.commissioningReading.upsert({
     where: { circuitId_windowType_date: { circuitId: input.circuitId, windowType: input.windowType, date } },
@@ -73,9 +83,26 @@ export async function recordDailyReading(input: {
 
 // FEAT-012-AC-3 — restart takes effect the midnight *following* the fix,
 // logged as a distinct event, not folded silently into the next reading.
+//
+// "The next midnight" is only the right boundary when every recorded day is
+// in the past. A day dated ahead of today — a batch entered in advance, a
+// back-office correction, or test data — would otherwise sit inside the
+// restarted window, leaving the anomaly open and making the restart look
+// like it did nothing at all. So the new start clears the last recorded day
+// too (see restartFromDate).
 export async function restartWindow(circuitId: string, windowType: CommissioningWindowType) {
-  const restartFrom = nextDayUTC(new Date());
-  logger.info("commissioning.window_restarted", { circuitId, windowType, restartFrom });
+  const latest = await db.commissioningReading.findFirst({
+    where: { circuitId, windowType },
+    orderBy: { date: "desc" },
+    select: { date: true },
+  });
+  const restartFrom = restartFromDate(new Date(), latest?.date ?? null);
+  logger.info("commissioning.window_restarted", {
+    circuitId,
+    windowType,
+    restartFrom,
+    latestReading: latest?.date ?? null,
+  });
   return restartFrom;
 }
 

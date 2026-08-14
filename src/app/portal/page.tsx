@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { isPortalRole } from "@/lib/roles";
+import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
+import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { TransferButton } from "./transfer-button";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
@@ -17,12 +17,13 @@ import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 // the account that actually holds it, checked server-side in actions.ts, not
 // just by this page choosing not to render the button.
 export default async function PortalHomePage() {
-  const session = await auth();
-  if (!session?.user || !isPortalRole(session.user.role) || !session.user.societyId) {
-    redirect("/login");
-  }
+  // Resolved from the Profile row, not the token — see src/lib/portal-viewer.ts:
+  // the authority this page renders for must be the one in force now, or the
+  // screen and the Server Action disagree about who may act.
+  const viewer = await resolvePortalViewer();
+  if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
 
-  const societyId = session.user.societyId;
+  const societyId = viewer.societyId;
   const [society, accounts] = await Promise.all([
     db.society.findUnique({ where: { id: societyId } }),
     db.profile.findMany({
@@ -33,7 +34,7 @@ export default async function PortalHomePage() {
 
   if (!society) redirect("/login");
 
-  const isOfficeBearer = session.user.role === "office_bearer";
+  const isOfficeBearer = viewer.role === "office_bearer";
   const theme = await resolveTheme();
 
   return (
@@ -54,14 +55,14 @@ export default async function PortalHomePage() {
       <div className="mx-auto max-w-3xl p-5 sm:p-8">
         <PageHeader
           title={society.name}
-          subtitle={`Signed in as ${session.user.email} · ${PORTAL_AUTHORITY_LABEL[session.user.role]}`}
+          subtitle={`Signed in as ${viewer.email} · ${PORTAL_AUTHORITY_LABEL[viewer.role]}`}
         />
 
         <Card className="p-6">
           <CardTitle>Portal accounts</CardTitle>
           <ul className="space-y-3">
             {accounts.map((account) => {
-              const isSelf = account.id === session.user.id;
+              const isSelf = account.id === viewer.id;
               const isTargetOfficeBearer = account.portalAuthority === "office_bearer";
               return (
                 <li

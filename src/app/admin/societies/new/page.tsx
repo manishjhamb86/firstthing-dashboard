@@ -1,11 +1,9 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { PageHeader } from "@/components/ui";
 import { NewSocietyForm } from "./new-society-form";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 export default async function NewSocietyPage() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  await requireAdminPage();
 
   return (
     <>

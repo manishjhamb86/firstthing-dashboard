@@ -409,7 +409,9 @@ fixed here — the right fix (force a session refresh/invalidation on a portal a
 re-verify `portalAuthority` against the DB per binding-act request rather than trusting the JWT)
 is a real architectural decision, not a one-line patch, and belongs in `09-architecture.md` §6 or a
 new ADR before FEAT-108's other binding acts (offer acceptance, batch approval) are built on the
-same session model.
+same session model. **Closed 2026-08-14** — see "Stale sessions" below; the decision was made
+rather than deferred again, because the identical root cause turned out to be crashing the admin
+side too.
 
 **Verified end to end via a browser** (Playwright driving system Chrome from a scratchpad project,
 same proven pattern as the archived app's write-flow verification — not just `tsc`/`lint`/`build`,
@@ -1142,6 +1144,72 @@ client would have thrown. `\d benchmark_rescale_events` on the stage DB confirms
 gated on a commissioned baseline existing, which is also exactly when the light count stops being
 free-form config.
 
+## Stale sessions: authority now resolved from the row, not the token (2026-08-14) — user-caught crash
+
+**Found by the user hitting a raw `PrismaClientKnownRequestError` in the browser**: a
+`commissioning_readings_recorded_by_id_fkey` foreign-key violation on an ordinary reading entry.
+The proximate cause was mine — FEAT-041's AC-4 test needed a PER-04-equivalent account, and my
+cleanup deleted that `AdminUser` row while the user's browser was still signed in as it. But the
+crash exposed something bigger than the fixture: **every authorization gate in this codebase read
+the JWT and nothing else**, so an account that no longer existed kept a fully working session until
+the token expired, and the first write using `session.user.id` as a foreign key died deep inside
+Prisma instead of being refused at the boundary.
+
+**One root cause, three real defects** — the FK crash was only the loudest:
+1. A **deleted** admin kept a working session (the reported crash).
+2. `/admin/users`' **"Inactive" toggle did not actually revoke access.** `isActive` was checked only
+   in `authorize()` at login, so deactivating a signed-in admin did nothing until their token
+   expired — the screen offers a control that silently didn't do its job.
+3. A **revoked permission** likewise took effect only at next login.
+
+**The fix** (`src/lib/admin-permissions.ts`, `src/lib/portal-viewer.ts`): a `resolveAdmin()` /
+`resolvePortalViewer()` pair that reads the `AdminUser`/`Profile` row fresh and returns null if it's
+gone, inactive, or no longer holds the authority — wrapped in React's `cache()` so the several
+gates that fire in one request share a single lookup. This is Next's own prescribed shape, not an
+invention: `node_modules/next/dist/docs/01-app/02-guides/authentication.md` ("Creating a Data
+Access Layer") specifies exactly a `cache()`-memoized session verifier invoked from Server Actions,
+Route Handlers and pages, with checks "as close as possible to your data source" — and it's the
+same DB-fresh-per-request trade `resolveTheme()` already makes. `proxy.ts` is untouched and stays
+optimistic-only by design. **The rule going forward: the token proves who signed in; the row proves
+what they may do now.** `requireAdmin`/`requireAdminPermission` (31 call sites) now return
+DB-sourced permissions, and all 12 admin pages moved from an inline `auth()` + role check to
+`requireAdminPage()`, so a deactivated admin also stops *seeing* the admin area rather than merely
+being unable to write in it.
+
+**This also closes the `portalAuthority` staleness gap MS-02 recorded and explicitly left open** —
+an office-bearer who transferred the designation away could, from that still-live session, transfer
+it back, and NFR-13's 90-day portal session lifetime made that window long. The portal page and
+`transferOfficeBearer` both resolve the viewer from the `Profile` row now. MS-02's entry called the
+right fix "a real architectural decision, not a one-line patch" and deferred it; it's decided here,
+because it turned out to be the same decision the admin crash was already forcing.
+
+**A real bug in the first version of this fix, found only in the browser**: sending a stale session
+to `/login` produced `ERR_TOO_MANY_REDIRECTS`. `proxy.ts` still sees a perfectly valid JWT, so it
+bounced `/login` straight back to the role's home, which re-ran the page check, which redirected to
+`/login` again — forever. **A stale session has to be *ended*, not redirected**: pages now send it
+to `src/app/api/session-ended/route.ts`, a Route Handler that calls `signOut()` (only handlers and
+actions may write cookies — a render pass cannot) and then lands on `/login?reason=session-ended`.
+It sits under `/api`, which `proxy.ts`'s matcher deliberately excludes, so it can never be caught
+in the loop it exists to break. `tsc`/`lint`/`build` all passed while this loop existed — it is
+only observable by actually navigating.
+
+**Verified in a browser against real DB mutations** (9/9, plus an 11-check regression pass over
+every swept route and the portal): deactivating an admin mid-session revokes access on the very
+next request and genuinely ends the session (no loop); a revoked `manage_admins` stops rendering
+the admin-management panel immediately while the session itself keeps working — permission lost,
+not access; a deleted admin lands on `/login` instead of a runtime error, with **zero** page errors
+and nothing written; and, on the portal, a just-demoted office-bearer can no longer exercise the
+authority from their live session, which is the MS-02 gap made literal. All fixtures removed
+afterward and the seeded portal authorities restored to `prisma/seed.ts`'s canonical state,
+confirmed by query.
+
+**Two test-harness findings worth keeping**: a bcrypt hash passed through a shell `-c` string gets
+its `$2b$10$` segments eaten by expansion, silently storing a corrupt hash that presents as
+"Invalid email or password" — pass SQL via stdin instead. And filling a login form before React
+hydrates discards the values on submit (the controlled-input equivalent of the React 19 form-reset
+bug already documented here), which reads as an intermittently dead button; the fix is to assert
+the input actually holds the value before clicking, not to add a longer sleep.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -1175,6 +1243,15 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - **`@auth/core` must be a direct dependency**, not just a transitive one via `next-auth` — pnpm's strict `node_modules` won't expose it to app code otherwise, which silently breaks the `declare module "@auth/core/jwt"` type augmentation (the `token` in the `session` callback only keeps its narrowed custom fields because of this).
 - **Testing**: Vitest, not Jest — `12-test-plan.md` deferred this choice to MS-01/02 explicitly; decided at MS-02 (see MS-02 section above) once a real test was actually needed (NFR-05's first slice). Server Actions and Route Handlers that call `auth()` internally (`cookies()`/`headers()` from `next/headers`) can't be unit-tested directly outside a live request context — the established pattern going forward is to factor the actual authorization/business decision into a pure function (e.g. `src/lib/portal-authority.ts`) that the thin Server Action wraps, and unit-test the pure function. Full request-level integration testing (hitting a running `next dev`/`next start` over HTTP) remains the fallback for what a pure function can't cover, same as the browser-driven verification this repo has used since the archived app.
 - **Theme preference: resolved fresh from the DB every request via React `cache()`, never stored in the JWT session.** Same reasoning as the already-documented `portalAuthority` staleness gap (MS-02 section) — a JWT field only refreshes at next login, so a switcher click would appear to work but silently not survive whatever set the token. `src/lib/resolve-theme.ts`'s `resolveTheme()` is the one place this is decided; both the root layout (for the `data-theme` stamp) and any nav component needing the current value call it, deduped per-request by `cache()` rather than each issuing its own query.
+- **Authorization reads the row, not the token (2026-08-14).** Every gate resolves the current
+  `AdminUser`/`Profile` from the DB via `resolveAdmin()`/`resolvePortalViewer()`, memoized with
+  React `cache()` — Next's own "Data Access Layer" pattern
+  (`node_modules/next/dist/docs/01-app/02-guides/authentication.md`). A JWT proves *who* signed in
+  and can never prove the account still exists, is still active, or still holds its authority; all
+  three change after the token is minted. Any new gate must go through these helpers rather than
+  reading `session.user.adminPermissions`/`role` directly. A viewer whose row no longer backs their
+  token is sent to `/api/session-ended` to have the session actually cleared — redirecting them to
+  `/login` instead causes an infinite proxy bounce (see the "Stale sessions" section above).
 - **Observability**: `src/lib/logger.ts` — structured JSON lines to stdout (`{ts, level, event, ...fields}`), per `09-architecture.md` §7's design, captured by `pm2 logs` with no additional infrastructure. Established at MS-02 once the first real access-control decisions (GATE-04, INV-05) existed to log; call `logger.info`/`.warn`/`.error` at every future access-control decision and every future binding act, not just these two, so `pm2 logs` stays the real audit trail the architecture doc commits to rather than an aspiration.
 - **Every self-hosted deployment needs its own `AUTH_URL` env var set to its real public origin** (e.g. `AUTH_URL=https://stage.firsthing.earth`) — found the hard way during MS-01's staged deploy (see above). `trustHost: true` plus nginx's `X-Forwarded-Host` header is *not* sufficient on its own: `next-auth`'s Server-Action helpers (`signIn`/`signOut`/`getSession`) do correctly build their URL from forwarded headers via `@auth/core`'s `createActionURL()`, but the actual `/api/auth/[...nextauth]` Route Handler path goes through `toInternalRequest()`, which uses `new URL(req.url)` directly — Next.js's own self-hosted `NextRequest.url`, unaffected by any proxy header. `AUTH_URL` sidesteps this gap entirely (`next-auth`'s `reqWithEnvURL()` rewrites the request origin from it before either code path runs), and is the officially documented fix for reverse-proxied self-hosting, not a workaround. Set this on every new environment (next: production, whenever that's decided) — don't assume `trustHost`/`X-Forwarded-Host` alone will carry over from a framework that auto-detects its own URL differently.
 - **File storage**: AWS S3 replaces Supabase Storage's `documents` bucket for `FileUploader.tsx` — code-complete and **runtime-verified end-to-end (2026-08-05)** against the real bucket (`firsthing`, `ap-south-1`). **Upload pattern: presigned PUT, not a proxy through our server** (user's explicit choice) — `src/lib/uploads.ts`'s `getUploadUrl()` Server Action (gated the same way as every other admin action: `auth()` + `role === "admin"`) asks AWS for a short-lived (5 min) presigned PUT URL via `@aws-sdk/s3-request-presigner`, and the browser `fetch(uploadUrl, { method: "PUT", body: file })`s the file straight to S3 — AWS's own recommended pattern, keeps file bytes off the Next.js process and credentials off the client. `src/lib/s3.ts`'s `S3Client` is constructed with no explicit `credentials` — the SDK's default provider chain resolves `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` from env for local dev now, and would pick up an EC2 instance role automatically instead if one's ever attached to the deploy servers later, with zero code changes either way. **Bucket is public-read** (user's explicit choice) — matches the current Supabase bucket's behavior exactly (already fetched via `getPublicUrl()`, so this isn't a privacy regression), and keeps `FileUploader`'s `onUploadComplete(url)` contract a real permanent URL with no schema changes needed, versus a private+presigned-GET model that would've meant storing S3 keys instead of URLs and regenerating a fresh signed link on every render. The IAM user (`firsthing-bucket-user`) is deliberately scoped to `s3:PutObject` only, confirmed by testing — a `DeleteObject` attempt correctly failed with `AccessDenied`.

@@ -1,6 +1,5 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import {
@@ -13,6 +12,7 @@ import { StatusControl } from "./status-control";
 import { PortalAccountForm } from "./portal-account-form";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
 import { EnrollServiceLineForm } from "./enroll-service-line-form";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 
@@ -20,8 +20,7 @@ const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 // optimistic matcher — see societies/page.tsx's comment for the full
 // reasoning.
 export default async function SocietyDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  await requireAdminPage();
 
   const { id } = await params;
   const society = await db.society.findUnique({ where: { id } });

@@ -1,12 +1,11 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { NewLeadForm } from "./new-lead-form";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 export default async function NewLeadPage() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
   if (!session.user.adminPermissions?.includes("manage_pipeline")) redirect("/admin/pipeline");
 
   const [societies, salesOwners] = await Promise.all([

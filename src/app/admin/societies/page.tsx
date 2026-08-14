@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { SOCIETY_STATUS, statusMeta } from "@/lib/status-maps";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 // FEAT-085: society record & lifecycle list. proxy.ts's own matcher is
 // optimistic-only (AGENTS.md) — this page independently checks auth(). The
@@ -11,8 +10,7 @@ import { SOCIETY_STATUS, statusMeta } from "@/lib/status-maps";
 // page was once prerendered static at build time and served frozen data on
 // stage (see PROJECT_CONTEXT.md, MS-02).
 export default async function SocietiesPage() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  await requireAdminPage();
 
   const societies = await db.society.findMany({ orderBy: { createdAt: "desc" } });
 

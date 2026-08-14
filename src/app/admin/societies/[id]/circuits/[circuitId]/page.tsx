@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
@@ -11,6 +10,7 @@ import { MonitoringWindowPanel } from "./monitoring-window-panel";
 import { LightReplacementForm } from "./light-replacement-form";
 import { RescaleForm } from "./rescale-form";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 function GatePassCard({
   gatePass,
@@ -55,8 +55,7 @@ export default async function CircuitDetailPage({
 }: {
   params: Promise<{ id: string; circuitId: string }>;
 }) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
 
   const canView =
     session.user.adminPermissions?.includes("manage_survey") ||

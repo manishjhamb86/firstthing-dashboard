@@ -1,17 +1,15 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 // FEAT-001-AC-3: an empty state explains how to log the first lead. This is
 // a minimal list, not FEAT-004's own filterable/sortable pipeline view
 // (FEAT-004 is un-milestoned — out of MS-03's scope, documented honestly
 // rather than silently built here).
 export default async function PipelinePage() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
 
   const canManagePipeline = session.user.adminPermissions?.includes("manage_pipeline") ?? false;
 

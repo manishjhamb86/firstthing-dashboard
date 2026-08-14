@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 const REQUIRED_VALID_DAYS = 5;
 
@@ -26,8 +26,7 @@ function DayStrip({ validCount }: { validCount: number }) {
 }
 
 export default async function MonitoringDashboardPage() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
 
   const canView =
     session.user.adminPermissions?.includes("manage_survey") ||

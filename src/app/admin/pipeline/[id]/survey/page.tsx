@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
@@ -8,10 +7,10 @@ import { LightingInventoryForm } from "./lighting-inventory-form";
 import { CircuitEligibilityForm } from "./circuit-eligibility-form";
 import { ExceptionApprovalButton } from "./exception-approval-button";
 import { DeleteAreaButton } from "./delete-area-button";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 export default async function SiteSurveyPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
   const canView =
     session.user.adminPermissions?.includes("manage_survey") ||
     session.user.adminPermissions?.includes("manage_pipeline");

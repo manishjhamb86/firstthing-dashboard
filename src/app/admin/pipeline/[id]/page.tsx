@@ -1,11 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 const OUTCOME_LABEL: Record<string, string> = {
   agreed: "Agreed — advanced to survey",
@@ -14,8 +14,7 @@ const OUTCOME_LABEL: Record<string, string> = {
 };
 
 export default async function PipelineDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
   if (!session.user.adminPermissions?.includes("manage_pipeline")) redirect("/admin/pipeline");
 
   const { id } = await params;

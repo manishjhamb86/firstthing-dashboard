@@ -1,9 +1,8 @@
-import { redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, KpiTile, PageHeader, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 // The Portfolio overview. Replaces MS-01's walking-skeleton stub ("Societies
 // in Postgres: 1"), which was a proof that a Server Component could read a
@@ -11,8 +10,7 @@ import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@
 // fabricated, and anything the schema can't yet answer is simply absent
 // rather than shown as a placeholder number.
 export default async function AdminHomePage() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
 
   const perms = session.user.adminPermissions ?? [];
   const canSeePipeline = perms.includes("manage_pipeline");

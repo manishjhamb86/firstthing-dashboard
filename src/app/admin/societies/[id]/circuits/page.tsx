@@ -1,13 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { EmptyState, PageHeader } from "@/components/ui";
 import { CircuitList } from "./circuit-list";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 export default async function CircuitRegistryPage({ params }: { params: Promise<{ id: string }> }) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
 
   // FEAT-040-AC-4 — PER-04 (manage_survey) can read the registry in the
   // field; editing is PER-01-only, gated inside CircuitList/the edit action.

@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { checkOfficeBearerTransfer } from "@/lib/portal-authority";
+import { resolvePortalViewer } from "@/lib/portal-viewer";
 
 // FEAT-108-AC-5 (office-bearer transfers the designation to another account
 // of the same society) — this is R0's stand-in "binding act" for GATE-04,
@@ -13,21 +13,24 @@ import { checkOfficeBearerTransfer } from "@/lib/portal-authority";
 // lives in src/lib/portal-authority.ts (unit-tested, NFR-05's first slice) —
 // this action is just the Next.js/DB shell around it.
 export async function transferOfficeBearer(targetProfileId: string): Promise<{ error?: string }> {
-  const session = await auth();
-  if (!session?.user) return { error: "Not signed in." };
+  // Resolved from the Profile row, not the session's claims — an authority
+  // transferred away mid-session must stop being exercisable immediately,
+  // which a JWT minted at login cannot express. See src/lib/portal-viewer.ts.
+  const viewer = await resolvePortalViewer();
+  if (!viewer) return { error: "Your session is no longer valid — please sign in again." };
 
   const target = await db.profile.findUnique({ where: { id: targetProfileId } });
 
   const check = checkOfficeBearerTransfer(
-    { id: session.user.id, role: session.user.role, societyId: session.user.societyId },
+    { id: viewer.id, role: viewer.role, societyId: viewer.societyId },
     target,
   );
 
   if (!check.ok) {
     logger.warn("gate04.binding_act_refused", {
-      actorId: session.user.id,
-      actorRole: session.user.role,
-      actorSocietyId: session.user.societyId,
+      actorId: viewer.id,
+      actorRole: viewer.role,
+      actorSocietyId: viewer.societyId,
       targetProfileId,
       targetSocietyId: target?.societyId ?? null,
       act: "transfer_office_bearer",
@@ -43,13 +46,13 @@ export async function transferOfficeBearer(targetProfileId: string): Promise<{ e
   // Real multi-authority-per-account modeling, if ever needed, is a later
   // schema decision, not guessed here.
   await db.$transaction([
-    db.profile.update({ where: { id: session.user.id }, data: { portalAuthority: "committee" } }),
+    db.profile.update({ where: { id: viewer.id }, data: { portalAuthority: "committee" } }),
     db.profile.update({ where: { id: target!.id }, data: { portalAuthority: "office_bearer" } }),
   ]);
 
   logger.info("portal.office_bearer_transferred", {
-    societyId: session.user.societyId,
-    fromProfileId: session.user.id,
+    societyId: viewer.societyId,
+    fromProfileId: viewer.id,
     toProfileId: target!.id,
   });
 

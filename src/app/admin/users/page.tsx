@@ -1,17 +1,15 @@
-import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { AdminRow } from "./admin-row";
 import { NewAdminForm } from "./new-admin-form";
+import { requireAdminPage } from "@/lib/admin-permissions";
 
 // FEAT-086: internal (AdminUser) account management. Gated to admins who
 // hold `manage_admins` — checked here for what to render, and independently
 // re-checked inside every Server Action in admin-actions.ts (FEAT-086-AC-4:
 // "including to ordinary admins" — the UI check alone is never the gate).
 export default async function UsersPage() {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  const session = await requireAdminPage();
 
   const canManageAdmins = session.user.adminPermissions?.includes("manage_admins") ?? false;
   const admins = await db.adminUser.findMany({ orderBy: { createdAt: "asc" } });

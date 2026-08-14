@@ -1,4 +1,5 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { AdminNav } from "../../admin-nav";
 import { StatusControl } from "./status-control";
@@ -11,7 +12,15 @@ const AUTHORITY_LABEL: Record<string, string> = {
   manager: "Manager",
 };
 
+// Independently checks auth() rather than relying solely on proxy.ts's
+// optimistic matcher — see societies/page.tsx's comment for the full
+// reasoning (also applies here: this route happened to render dynamically
+// already since Next doesn't prerender an unlisted [id] param by default,
+// but the missing server-side check itself was still a real gap).
 export default async function SocietyDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "admin") redirect("/login");
+
   const { id } = await params;
   const society = await db.society.findUnique({ where: { id } });
   if (!society) notFound();

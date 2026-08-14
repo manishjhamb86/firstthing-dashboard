@@ -1,4 +1,6 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
+import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { AdminNav } from "../admin-nav";
 
@@ -9,11 +11,20 @@ const STATUS_LABEL: Record<string, string> = {
   terminated: "Terminated",
 };
 
-// FEAT-085: society record & lifecycle list. proxy.ts already gates
-// /admin/** to the admin role; this page additionally reads the session
-// itself lower down where a Server Action is involved, matching the rest of
-// this repo's "every action independently checks auth()" convention.
+// FEAT-085: society record & lifecycle list. proxy.ts's own matcher is
+// optimistic-only (AGENTS.md) — this page independently checks auth(),
+// matching admin/page.tsx and admin/users/page.tsx, rather than relying
+// solely on the proxy. This also has a real side effect worth knowing:
+// without any cookies()/auth() call, Next.js's static analysis had been
+// prerendering this page at *build* time (confirmed live on stage —
+// `pnpm build`'s route table showed it as `○` static, and it served
+// build-time-frozen society data until the next deploy, a real bug found
+// verifying MS-02 against stage, not local dev). auth() forces per-request
+// dynamic rendering as a side effect, same as it does on the other two.
 export default async function SocietiesPage() {
+  const session = await auth();
+  if (!session?.user || session.user.role !== "admin") redirect("/login");
+
   const societies = await db.society.findMany({ orderBy: { createdAt: "desc" } });
 
   return (

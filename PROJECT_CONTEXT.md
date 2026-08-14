@@ -497,6 +497,23 @@ redirect, and a URL regex that incidentally matched the literal path segment `ne
 tightened (`page.waitForURL` with a `(?!new$)` exclusion) — the same class of RSC-navigation-timing
 issue already fixed once for the login-retry check, now generalized.
 
+**A fourth real bug, this one only surfaced by deploying to stage — never visible under `pnpm
+dev`**: `/admin/societies` (and, for the same reason, `/admin/societies/[id]`) had no `auth()` call
+of their own, unlike `admin/page.tsx` and `admin/users/page.tsx`, which both independently check the
+session (proxy.ts's own matcher is documented as optimistic-only, per `AGENTS.md`). Consequence
+beyond the consistency gap: with no `cookies()`/`auth()` call anywhere in the page, Next.js's static
+analysis had been silently prerendering `/admin/societies` as a **static** route at `pnpm build`
+time (`○` in the build's route table, confirmed by re-reading it after the fact) — so every visitor
+was served whatever society list existed *at the moment of the last build*, not a live query. Caught
+live on stage: reseeded a second society, restarted, and the deployed `/admin/societies` still
+showed only the first one, while `/admin` (Portfolio, which does call `auth()`) correctly showed
+both. `next dev` never exposes this class of bug (dev always re-renders), which is exactly why
+`pnpm build` is in this repo's own required validation set for structural changes, not just `tsc`/
+`lint` — worth remembering the next time a page reads live data but has no reason to call `auth()`
+on its own. Fixed by adding the same `auth()` + role check both pages' siblings already had; this
+forces per-request dynamic rendering as a side effect (confirmed: the route table now shows `ƒ` for
+`/admin/societies`), with no separate `export const dynamic` needed.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

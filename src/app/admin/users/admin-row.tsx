@@ -31,14 +31,14 @@ export function AdminRow({ admin, isSelf }: { admin: Admin; isSelf: boolean }) {
 
   return (
     <li className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div>
           <p className="font-medium">
             {admin.name ?? admin.email} {isSelf && <span className="text-[var(--text-subtle)]">(you)</span>}
           </p>
           <p className="text-sm text-[var(--text-muted)]">{admin.email}</p>
         </div>
-        <div className="flex items-center gap-4 text-sm">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
           <label className="flex items-center gap-1">
             <input
               type="checkbox"

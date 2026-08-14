@@ -42,7 +42,7 @@ export default async function PortalHomePage() {
   return (
     <div className="min-h-screen p-10">
       <div
-        className="flex items-center justify-between px-6 py-3 mb-8 rounded-[var(--r-lg)]"
+        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 sm:px-6 py-3 mb-8 rounded-[var(--r-lg)]"
         style={{ background: "var(--chrome)", color: "var(--chrome-text)" }}
       >
         <BrandMark variant={theme === "light" ? "light" : "dark"} className="h-7" />
@@ -62,7 +62,7 @@ export default async function PortalHomePage() {
             return (
               <li
                 key={account.id}
-                className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
               >
                 <div>
                   <p className="font-medium">

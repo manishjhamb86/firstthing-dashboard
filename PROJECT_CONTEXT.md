@@ -589,6 +589,59 @@ zero page errors. `tsc`/`lint`/`build`/`vitest` all clean; the route table shows
 tree dynamic — a stricter default than the per-page `auth()` calls alone provided, and a nice side
 effect for the exact class of static-rendering bug found and fixed earlier this session.
 
+## Mobile responsive fix, two rounds (2026-08-14) — user-caught, twice, in the same session
+
+**Round 1: real overflow bug, `flex-wrap` fix.** The user sent 3 mobile-viewport screenshots
+("In mobile its looking like this.") showing `AdminNav` and several list-row layouts clipping
+content on narrow viewports — the theme switcher pushed off-screen entirely, nav links and row
+content cut off. Root cause: every `flex items-center justify-between` header/row layout added
+during the theme-system and FEAT-085/086 work had no `flex-wrap`, so content overflowed the
+viewport instead of reflowing. Fixed across all 6 affected files (`admin-nav.tsx`,
+`admin/users/admin-row.tsx`, `admin/page.tsx`, `admin/societies/page.tsx`,
+`admin/societies/[id]/page.tsx`, `portal/page.tsx`) by adding `flex-wrap` +
+`gap-x-*`/`gap-y-*` (replacing single `gap-*`) so items reflow onto new lines instead of
+clipping. `tsc`/`lint`/`build`/`vitest` clean; Playwright-verified at 390px (iPhone-width)
+viewport across `/admin`, `/admin/societies`, `/admin/societies/[id]`, `/admin/users` — zero
+horizontal overflow, zero page errors, no desktop regression at 1280px.
+
+**Round 2: the fix itself was a real regression, caught immediately by the user, not by any
+automated check.** Screenshotting the "fixed" `/admin/users` page and sending it back, the user
+correctly identified that `flex-wrap` alone was the wrong fix — it stopped clipping but grew
+`AdminNav` into 2–3 stacked rows on mobile (brand mark, then nav links, then the theme switcher,
+each wrapping separately), which (a) doesn't match the design system's actual intent
+(`05a-theme-system.md` §3.7 lists "sidebar nav with counts" as the real target component —
+`AdminNav`'s own comment already documented it as "minimal, not the full shell," a placeholder
+top bar, not the designed nav) and (b) pushed page content — specifically the "New admin" form on
+`/admin/users` — below the fold, requiring a scroll that wasn't there on desktop. A wrap-based fix
+that avoids clipping but silently regresses on vertical space is a real defect, not just an
+aesthetic complaint — this is exactly the kind of gap only a real screenshot catches, since my own
+automated checks only asserted "no horizontal overflow," never total header height or scroll
+position. **Fixed by replacing wrap with a proper mobile collapse**, following the archived app's
+already-proven pattern (`archive/src/components/shell/Sidebar.tsx` — a compact bar with a
+"Menu"/"Close" toggle below `md`, an off-canvas panel above it) rather than reinventing one.
+`admin-nav.tsx` split into a thin server shell (`resolveTheme()` lookup only) and a new client
+component, `admin-nav-client.tsx` (nav links + `ThemeSwitcher`, `useState`-driven open/closed):
+below `sm`, the header collapses to brand mark + a "Menu" toggle in one compact row, with links and
+the switcher hidden behind it until tapped, appearing as a dropdown panel below the bar rather than
+pushing it; at `sm` and above, everything renders inline as before, matching desktop exactly. The
+simpler 2-item `portal/page.tsx` header (brand mark + switcher only, no nav links) was left on the
+Round-1 `flex-wrap` fix — verified it never actually wraps at 390px since two items comfortably fit
+one row, so the collapse treatment wasn't needed there.
+
+**Re-verified end to end** (Playwright/system Chrome, 390px viewport): `/admin` and `/admin/users`
+both render as a single compact header row by default; tapping "Menu" reveals nav links + theme
+switcher in a dropdown, tapping again (or a link) closes it; the "New admin" form on `/admin/users`
+is now fully visible with zero scrolling; `/admin/societies/[id]` and `/portal` (logged in as a
+real seeded portal account, `bearer@settlement-nexus.test`) both render correctly at the same
+width. Zero console errors, zero page errors, across every page checked. `tsc`/`lint`/`build`/
+`vitest` all clean; route table unchanged (`AdminNav`'s client-component split doesn't affect which
+routes render statically vs dynamically — that's still governed by each page's own `auth()`/
+`resolveTheme()` calls). **Worth remembering**: a fix that resolves the literal bug report
+(clipping) can still be visually and functionally wrong in a way no automated assertion catches —
+the user's second screenshot round was the only thing that caught the pushed-down-form regression,
+consistent with the pattern already recorded above for the hardcoded-`BrandMark`-variant bug this
+same session.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

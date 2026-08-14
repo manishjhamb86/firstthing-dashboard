@@ -30,7 +30,7 @@ export default async function SocietiesPage() {
   return (
     <div className="min-h-screen p-10">
       <AdminNav />
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 mb-8">
         <h1 className="text-2xl font-bold">Societies</h1>
         <Link
           href="/admin/societies/new"
@@ -55,7 +55,7 @@ export default async function SocietiesPage() {
             <Link
               key={s.id}
               href={`/admin/societies/${s.id}`}
-              className="flex items-center justify-between p-4 hover:bg-[var(--surface-hover)]"
+              className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-4 hover:bg-[var(--surface-hover)]"
             >
               <div>
                 <p className="font-medium">{s.name}</p>

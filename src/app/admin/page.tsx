@@ -33,7 +33,7 @@ export default async function AdminHomePage() {
         ) : (
           <ul className="space-y-2">
             {societies.map((s) => (
-              <li key={s.id} className="flex justify-between border-t border-[var(--border-subtle)] pt-2">
+              <li key={s.id} className="flex flex-wrap justify-between gap-x-4 gap-y-1 border-t border-[var(--border-subtle)] pt-2">
                 <span>{s.name}</span>
                 <span className="text-[var(--text-muted)]">{s.location}</span>
               </li>

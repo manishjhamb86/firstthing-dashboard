@@ -33,7 +33,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   return (
     <div className="min-h-screen p-10">
       <AdminNav />
-      <div className="flex items-center justify-between mb-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-1">
         <h1 className="text-2xl font-bold">{society.name}</h1>
         <StatusControl societyId={society.id} status={society.status} />
       </div>
@@ -59,7 +59,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             {accounts.map((a) => (
               <li
                 key={a.id}
-                className="flex items-center justify-between border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
               >
                 <div>
                   <p className="font-medium">{a.name ?? a.email}</p>

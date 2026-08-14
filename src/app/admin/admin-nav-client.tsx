@@ -7,11 +7,12 @@ import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
 import type { ThemeId } from "@/lib/theme";
 
-const LINKS = [
+const BASE_LINKS = [
   { href: "/admin", label: "Portfolio" },
   { href: "/admin/societies", label: "Societies" },
   { href: "/admin/users", label: "Users" },
 ];
+const PIPELINE_LINK = { href: "/admin/pipeline", label: "Leads" };
 
 // Mobile gets a collapsed toggle rather than a wrapped multi-row bar — an
 // earlier flex-wrap fix technically stopped content clipping, but on a
@@ -21,8 +22,9 @@ const LINKS = [
 // header stays one compact row by default, matching the archived shell's
 // proven mobile pattern (archive/src/components/shell/Sidebar.tsx) even
 // though this is a top bar, not that component's off-canvas sidebar.
-export function AdminNavClient({ theme }: { theme: ThemeId }) {
+export function AdminNavClient({ theme, showPipeline }: { theme: ThemeId; showPipeline: boolean }) {
   const [open, setOpen] = useState(false);
+  const links = showPipeline ? [...BASE_LINKS, PIPELINE_LINK] : BASE_LINKS;
 
   return (
     <div className="mb-8 rounded-[var(--r-lg)]" style={{ background: "var(--chrome)", color: "var(--chrome-text)" }}>
@@ -31,7 +33,7 @@ export function AdminNavClient({ theme }: { theme: ThemeId }) {
 
         <div className="hidden sm:flex items-center gap-6">
           <nav className="flex gap-4 text-sm font-medium">
-            {LINKS.map((l) => (
+            {links.map((l) => (
               <Link key={l.href} href={l.href} className="hover:opacity-80" style={{ color: "var(--chrome-muted)" }}>
                 {l.label}
               </Link>
@@ -59,7 +61,7 @@ export function AdminNavClient({ theme }: { theme: ThemeId }) {
           style={{ borderTop: "1px solid var(--chrome-border)" }}
         >
           <nav className="flex flex-col gap-3 text-sm font-medium">
-            {LINKS.map((l) => (
+            {links.map((l) => (
               <Link
                 key={l.href}
                 href={l.href}

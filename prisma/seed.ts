@@ -16,7 +16,7 @@ async function main() {
       email: "yogesh@firsthing.earth",
       passwordHash,
       name: "Yogesh Kumar",
-      permissions: ["manage_admins", "manage_users"],
+      permissions: ["manage_admins", "manage_users", "manage_pipeline", "manage_survey"],
     },
   });
 

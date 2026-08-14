@@ -1,4 +1,5 @@
 import { resolveTheme } from "@/lib/resolve-theme";
+import { auth } from "@/lib/auth";
 import { AdminNavClient } from "./admin-nav-client";
 
 // Minimal, not the approved theme system's full shell (05a-theme-system.md
@@ -9,6 +10,7 @@ import { AdminNavClient } from "./admin-nav-client";
 // mobile toggle interaction — see admin-nav-client.tsx for why a collapse
 // toggle replaced an earlier flex-wrap-only approach.
 export async function AdminNav() {
-  const theme = await resolveTheme();
-  return <AdminNavClient theme={theme} />;
+  const [theme, session] = await Promise.all([resolveTheme(), auth()]);
+  const showPipeline = session?.user.adminPermissions?.includes("manage_pipeline") ?? false;
+  return <AdminNavClient theme={theme} showPipeline={showPipeline} />;
 }

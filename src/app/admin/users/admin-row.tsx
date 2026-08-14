@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { AdminPermission } from "@prisma/client";
 import { updateAdminUser, deleteAdminUser } from "./admin-actions";
+import { PERMISSION_OPTIONS } from "./permission-options";
 
 type Admin = {
   id: string;
@@ -39,24 +40,17 @@ export function AdminRow({ admin, isSelf }: { admin: Admin; isSelf: boolean }) {
           <p className="text-sm text-[var(--text-muted)]">{admin.email}</p>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-          <label className="flex items-center gap-1">
-            <input
-              type="checkbox"
-              checked={permissions.includes("manage_admins")}
-              onChange={() => toggle("manage_admins")}
-              disabled={pending}
-            />
-            Manage admins
-          </label>
-          <label className="flex items-center gap-1">
-            <input
-              type="checkbox"
-              checked={permissions.includes("manage_users")}
-              onChange={() => toggle("manage_users")}
-              disabled={pending}
-            />
-            Manage users
-          </label>
+          {PERMISSION_OPTIONS.map((p) => (
+            <label key={p.value} className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={permissions.includes(p.value)}
+                onChange={() => toggle(p.value)}
+                disabled={pending}
+              />
+              {p.label}
+            </label>
+          ))}
           <label className="flex items-center gap-1">
             <input
               type="checkbox"

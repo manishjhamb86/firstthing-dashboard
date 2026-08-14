@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import type { AdminPermission } from "@prisma/client";
 import { createAdminUser } from "./admin-actions";
+import { PERMISSION_OPTIONS } from "./permission-options";
 
 async function action(_prev: string | undefined, formData: FormData) {
   const permissions = formData.getAll("permissions") as AdminPermission[];
@@ -22,8 +23,11 @@ export function NewAdminForm() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [manageAdmins, setManageAdmins] = useState(false);
-  const [manageUsers, setManageUsers] = useState(false);
+  const [permissions, setPermissions] = useState<AdminPermission[]>([]);
+
+  function toggle(p: AdminPermission) {
+    setPermissions((prev) => (prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p]));
+  }
 
   return (
     <form
@@ -60,27 +64,19 @@ export function NewAdminForm() {
         className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
         style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
       />
-      <div className="flex gap-4 text-sm">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="permissions"
-            value="manage_admins"
-            checked={manageAdmins}
-            onChange={(e) => setManageAdmins(e.target.checked)}
-          />{" "}
-          Manage admins
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="permissions"
-            value="manage_users"
-            checked={manageUsers}
-            onChange={(e) => setManageUsers(e.target.checked)}
-          />{" "}
-          Manage users
-        </label>
+      <div className="flex flex-wrap gap-4 text-sm">
+        {PERMISSION_OPTIONS.map((p) => (
+          <label key={p.value} className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              name="permissions"
+              value={p.value}
+              checked={permissions.includes(p.value)}
+              onChange={() => toggle(p.value)}
+            />{" "}
+            {p.label}
+          </label>
+        ))}
       </div>
       {error && (
         <p className="text-xs" style={{ color: "var(--bad-fg)" }}>

@@ -16,6 +16,10 @@ datasource db {
 enum AdminPermission {
   manage_admins
   manage_users
+  manage_pipeline // CAP-15 — sales lead/proposal actions (FEAT-001/002), PER-07
+  manage_survey   // CAP-16 — field survey actions (FEAT-006/007), PER-04. PER-01
+                  // (ops) typically holds both; kept separate since a real
+                  // deployment has different staff for sales vs. field work.
 
   @@map("admin_permission")
 }
@@ -72,6 +76,7 @@ enum ServiceLine {
 enum CircuitState {
   surveyed
   eligible
+  ineligible // CON-16 hard-criterion failure (FEAT-007-AC-5) — no exception path
   benchmarking
   benchmark_confirmed
   awaiting_installation
@@ -79,6 +84,29 @@ enum CircuitState {
   retired
 
   @@map("circuit_state")
+}
+
+// CAP-15 — CON-24's earliest pipeline stages. MS-03's own scope is lead
+// through survey-pending/closed-lost; offer/agreement/installation/active
+// stages get added when the milestones that build them (MS-05+) need them —
+// same "fill in the enum as each milestone needs it" convention as
+// CircuitState above.
+enum PipelineStage {
+  lead
+  survey_pending
+  closed_lost
+
+  @@map("pipeline_stage")
+}
+
+// FEAT-006-AC-6 — how an area's light count was obtained. "estimated" rows
+// require a note and are surfaced as a review weakness (FEAT-010, not yet
+// built) rather than looking identical to a walked count.
+enum LightCountMethod {
+  walked
+  estimated
+
+  @@map("light_count_method")
 }
 
 // ── Society & account (COMP-09) ──────────────────────────────────────────
@@ -94,9 +122,10 @@ model Society {
   nextElectionDate DateTime? @map("next_election_date") // CON-28a — a prompt, never enforced
   createdAt        DateTime  @default(now()) @map("created_at")
 
-  contacts SocietyContact[]
-  profiles Profile[]
-  circuits Circuit[]
+  contacts  SocietyContact[]
+  profiles  Profile[]
+  circuits  Circuit[]
+  pipelines Pipeline[]
 
   @@map("societies")
 }
@@ -154,7 +183,101 @@ model AdminUser {
   createdBy AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   created   AdminUser[] @relation("AdminCreatedBy")
 
+  pipelinesOwned Pipeline[] @relation("PipelineSalesOwner")
+  pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
+
   @@map("admin_users")
+}
+
+// ── Deal & pipeline (COMP-01), MS-03 scope only ──────────────────────────
+// CON-24: one Pipeline per (society, serviceLine) — the @@unique below is
+// the structural guarantee, not just an application check. Field list is
+// MS-03's own scope (FEAT-001/002) — offers/contracts/follow-ups arrive
+// with the milestones that build them (09-architecture.md §5.2's "field
+// lists are representative, not exhaustive").
+model Pipeline {
+  id          String        @id @default(cuid())
+  societyId   String        @map("society_id")
+  serviceLine ServiceLine   @map("service_line")
+  stage       PipelineStage @default(lead)
+
+  // FEAT-001 lead-capture fields
+  contactName  String   @map("contact_name")
+  contactPhone String?  @map("contact_phone")
+  meetingDate  DateTime @map("meeting_date")
+  notes        String?
+
+  // FEAT-001-AC-1/2 — self-logged vs. entered-on-behalf-of. salesOwnerId is
+  // who the lead belongs to; loggedById is who actually submitted it. Equal
+  // => authoritative immediately. Different => pending-approval, and
+  // salesOwner is notified (logged via logger.ts — see PROJECT_CONTEXT.md;
+  // real notification delivery is NFR-10/R1, not built yet).
+  salesOwnerId  String  @map("sales_owner_id")
+  loggedById    String  @map("logged_by_id")
+  authoritative Boolean @default(true)
+
+  // FEAT-002-AC-5 / FEAT-032 (not yet built) — demo-skip is recorded here
+  // so the schema is ready for it; nothing in MS-03 sets these true yet.
+  demoSkipped        Boolean   @default(false) @map("demo_skipped")
+  demoSkipApprovedBy String?   @map("demo_skip_approved_by")
+  demoSkipReason     String?   @map("demo_skip_reason")
+  demoSkipDate       DateTime? @map("demo_skip_date")
+
+  // FEAT-002 proposal fields
+  proposalSummary    String?   @map("proposal_summary")
+  proposalOutcome    String?   @map("proposal_outcome") // "agreed" | "declined" | "undecided"
+  proposalDecidedAt  DateTime? @map("proposal_decided_at")
+  closedLostReason   String?   @map("closed_lost_reason")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  society    Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  salesOwner AdminUser  @relation("PipelineSalesOwner", fields: [salesOwnerId], references: [id])
+  loggedBy   AdminUser  @relation("PipelineLoggedBy", fields: [loggedById], references: [id])
+  siteSurvey SiteSurvey?
+
+  @@unique([societyId, serviceLine]) // CON-24
+  @@index([salesOwnerId])
+  @@map("pipelines")
+}
+
+// ── Site survey (CAP-16), MS-03 scope only (FEAT-006/007) ────────────────
+// The umbrella record a field survey's captured data attaches to. CAP-16's
+// full scope (governance profile, pump-room audit, logbook — FEAT-005/008/
+// 009/010) is much larger and explicitly not built here; this table only
+// carries what FEAT-006/007 need. One per Pipeline (a survey happens once
+// per deal, matching CON-24 — re-surveys are a later, separate concern).
+model SiteSurvey {
+  id         String   @id @default(cuid())
+  pipelineId String   @unique @map("pipeline_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  pipeline Pipeline               @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  areas    LightingInventoryArea[]
+  circuits Circuit[]
+
+  @@map("site_surveys")
+}
+
+// FEAT-006 — whole-society count by area, distinct from the single sample
+// Circuit metered for the benchmark (CON-11). FEAT-006-AC-5: a category the
+// society doesn't have (no basement, say) is simply never rowed here, not
+// recorded as zero.
+model LightingInventoryArea {
+  id           String           @id @default(cuid())
+  siteSurveyId String           @map("site_survey_id")
+  area         String           // basement | stilt | lift-lobby | staircase | other — CON-11's category set
+  lightType    String           @map("light_type")
+  count        Int
+  method       LightCountMethod @default(walked)
+  note         String?          // required in the app layer when method = estimated (FEAT-006-AC-6)
+  createdAt    DateTime         @default(now()) @map("created_at")
+
+  siteSurvey SiteSurvey @relation(fields: [siteSurveyId], references: [id], onDelete: Cascade)
+
+  @@index([siteSurveyId])
+  @@map("lighting_inventory_areas")
 }
 
 // ── Circuit & metering (COMP-02) — registry shape only, MS-01 ───────────
@@ -164,18 +287,25 @@ model AdminUser {
 model Circuit {
   id                    String       @id @default(cuid())
   societyId             String       @map("society_id")
+  siteSurveyId          String?      @map("site_survey_id") // FEAT-007 — which survey this candidate was selected during
   serviceLine           ServiceLine  @map("service_line")
   lightType             String       @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
   meteredLightCount     Int          @map("metered_light_count")
   representedLightCount Int          @map("represented_light_count") // scoped to this lightType only — CON-11
   wattage               Float
   workingHours          Float?       @map("working_hours") // metadata only, never triggers a rescale — CON-10
-  eligibilityChecklist  Json?        @map("eligibility_checklist") // CON-16
+  eligibilityChecklist  Json?        @map("eligibility_checklist") // CON-16 — per-criterion pass/fail, FEAT-007
+  // FEAT-007-AC-3 — the one exception-able criterion (light count < 50);
+  // every other hard criterion (fixtures >15ft, driveway) has no override.
+  lightCountExceptionApprovedBy String? @map("light_count_exception_approved_by")
+  lightCountExceptionReason     String? @map("light_count_exception_reason")
   state                 CircuitState @default(surveyed)
   createdAt             DateTime     @default(now()) @map("created_at")
 
-  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  siteSurvey SiteSurvey? @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
 
   @@index([societyId])
+  @@index([siteSurveyId])
   @@map("circuits")
 }

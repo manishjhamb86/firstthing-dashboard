@@ -2,8 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { submitProposal } from "../actions";
-
-const fieldStyle = { borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" };
+import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 
 type Outcome = "agreed" | "declined" | "undecided";
 
@@ -28,67 +27,59 @@ export function ProposalForm({ pipelineId }: { pipelineId: string }) {
   const [closedLostReason, setClosedLostReason] = useState("");
 
   return (
-    <form
-      action={formAction}
-      className="space-y-4 max-w-xl bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6"
-    >
-      <p className="text-sm font-semibold">Demo proposal</p>
-      <input type="hidden" name="pipelineId" value={pipelineId} />
+    <Card className="max-w-xl p-6">
+      <CardTitle>Demo proposal</CardTitle>
+      <form action={formAction} className="space-y-4">
+        <input type="hidden" name="pipelineId" value={pipelineId} />
 
-      <div>
-        <label className="block text-sm font-medium mb-1">What was pitched (optional)</label>
-        <textarea
-          name="summary"
-          rows={3}
-          value={summary}
-          onChange={(e) => setSummary(e.target.value)}
-          className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium mb-1">Demo request outcome</label>
-        <select
-          name="outcome"
-          value={outcome}
-          onChange={(e) => setOutcome(e.target.value as Outcome)}
-          required
-          className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        >
-          <option value="" disabled>
-            Choose an outcome…
-          </option>
-          <option value="agreed">Agreed — advance to survey</option>
-          <option value="undecided">Undecided — still following up</option>
-          <option value="declined">Declined — close as lost</option>
-        </select>
-      </div>
-
-      {outcome === "declined" && (
-        <div>
-          <label className="block text-sm font-medium mb-1">Reason</label>
-          <input
-            name="closedLostReason"
-            required
-            value={closedLostReason}
-            onChange={(e) => setClosedLostReason(e.target.value)}
-            className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-            style={fieldStyle}
+        <Field label="What was pitched (optional)" htmlFor="summary">
+          <textarea
+            id="summary"
+            name="summary"
+            rows={3}
+            value={summary}
+            onChange={(e) => setSummary(e.target.value)}
+            className="field"
           />
-        </div>
-      )}
+        </Field>
 
-      {error && (
-        <p className="text-sm" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
+        <Field label="Demo request outcome" htmlFor="outcome">
+          <select
+            id="outcome"
+            name="outcome"
+            value={outcome}
+            onChange={(e) => setOutcome(e.target.value as Outcome)}
+            required
+            className="field"
+          >
+            <option value="" disabled>
+              Choose an outcome…
+            </option>
+            <option value="agreed">Agreed — advance to survey</option>
+            <option value="undecided">Undecided — still following up</option>
+            <option value="declined">Declined — close as lost</option>
+          </select>
+        </Field>
 
-      <button type="submit" disabled={pending} className="btn-primary px-4 py-2 text-sm font-semibold disabled:opacity-60">
-        {pending ? "Saving…" : "Save proposal"}
-      </button>
-    </form>
+        {outcome === "declined" && (
+          <Field label="Reason" htmlFor="closedLostReason">
+            <input
+              id="closedLostReason"
+              name="closedLostReason"
+              required
+              value={closedLostReason}
+              onChange={(e) => setClosedLostReason(e.target.value)}
+              className="field"
+            />
+          </Field>
+        )}
+
+        {error && <ErrorText>{error}</ErrorText>}
+
+        <button type="submit" disabled={pending} className="btn-primary">
+          {pending ? "Saving…" : "Save proposal"}
+        </button>
+      </form>
+    </Card>
   );
 }

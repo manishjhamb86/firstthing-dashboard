@@ -3,7 +3,13 @@
 import { useRef, useState, useTransition } from "react";
 import { uploadCommissioningReadingsCsv } from "./monitoring-actions";
 
-export function CsvUploadForm({ circuitId, windowType }: { circuitId: string; windowType: "pre_install" | "post_install" }) {
+export function CsvUploadForm({
+  circuitId,
+  windowType,
+}: {
+  circuitId: string;
+  windowType: "pre_install" | "post_install";
+}) {
   const [fileName, setFileName] = useState<string | undefined>();
   const [result, setResult] = useState<{ succeeded: number; total: number; error?: string } | undefined>();
   const [pending, startTransition] = useTransition();
@@ -21,19 +27,25 @@ export function CsvUploadForm({ circuitId, windowType }: { circuitId: string; wi
     });
   }
 
+  const inputId = `csv-${windowType}-${circuitId}`;
+
   return (
-    <div className="mt-4 pt-4 border-t border-[var(--border-subtle)] space-y-2">
+    <div className="pt-4 border-t border-[var(--border-subtle)] space-y-2">
+      <label htmlFor={inputId} className="lbl">
+        Or upload a sheet
+      </label>
       <p className="text-xs text-[var(--text-muted)]">
-        Or upload a sheet — a CSV with <code>date,consumption_kwh</code> columns (add
-        <code>anomaly_note</code> for anomaly rows, leaving consumption_kwh blank).
+        A CSV with <code>date,consumption_kwh</code> columns (add <code>anomaly_note</code> for anomaly rows,
+        leaving consumption_kwh blank).
       </p>
       <input
+        id={inputId}
         ref={inputRef}
         type="file"
         accept=".csv,text/csv"
         onChange={onFileSelected}
         disabled={pending}
-        className="text-sm"
+        className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-[var(--r-sm)] file:border file:border-[var(--field-border)] file:bg-[var(--surface)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--surface-hover)]"
       />
       {pending && <p className="text-xs text-[var(--text-muted)]">Uploading {fileName}…</p>}
       {result && !pending && (

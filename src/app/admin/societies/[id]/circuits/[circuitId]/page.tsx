@@ -2,34 +2,15 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { AdminNav } from "../../../../admin-nav";
+import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { LoadValidationForm } from "./load-validation-form";
 import { GatePassForm } from "./gate-pass-form";
 import { GatePassApproval } from "./gate-pass-approval";
 import { MonitoringWindowPanel } from "./monitoring-window-panel";
 import { LightReplacementForm } from "./light-replacement-form";
-
-const STATE_LABEL: Record<string, string> = {
-  surveyed: "Surveyed",
-  eligible: "Eligible",
-  ineligible: "Ineligible",
-  meter_installed: "Meter installed",
-  pre_install_monitoring: "Pre-install monitoring",
-  awaiting_installation: "Awaiting installation",
-  post_install_pending: "Post-install pending",
-  post_install_monitoring: "Post-install monitoring",
-  benchmark_confirmed: "Benchmark confirmed",
-  benchmark_review: "Benchmark under review",
-  active_billing: "Active billing",
-  retired: "Retired",
-};
-
-const GATE_PASS_STATUS_LABEL: Record<string, string> = {
-  submitted: "Submitted — awaiting backend approval",
-  provisional: "Provisionally released (30-minute timeout)",
-  approved: "Approved",
-  rejected: "Rejected",
-};
+import { RescaleForm } from "./rescale-form";
+import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 
 function GatePassCard({
   gatePass,
@@ -44,9 +25,10 @@ function GatePassCard({
   };
   canOverride: boolean;
 }) {
+  const status = statusMeta(GATE_PASS_STATUS, gatePass.status);
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-4 text-sm space-y-2">
-      <p className="font-medium">{GATE_PASS_STATUS_LABEL[gatePass.status] ?? gatePass.status}</p>
+    <Card className="p-5 text-sm space-y-3">
+      <StatusChip tone={status.tone}>{status.label}</StatusChip>
       <ul className="list-disc list-inside text-[var(--text-muted)]">
         {(gatePass.itemsJson as string[]).map((item, i) => (
           <li key={i}>{item}</li>
@@ -64,7 +46,7 @@ function GatePassCard({
       {(gatePass.status === "submitted" || gatePass.status === "provisional") && canOverride && (
         <GatePassApproval gatePassId={gatePass.id} />
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -92,41 +74,52 @@ export default async function CircuitDetailPage({
       society: true,
       gatePasses: { orderBy: { submittedAt: "desc" } },
       commissioningReadings: { orderBy: { date: "asc" } },
+      rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true } },
     },
   });
   if (!circuit || circuit.societyId !== id) notFound();
 
+  // FEAT-041 — preInstallBaseline stays as commissioned; the baseline in
+  // force today is replayed from the rescale events (INV-07/ADR-005).
+  const effectiveBaseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
+
+  const state = statusMeta(CIRCUIT_STATE, circuit.state);
   const installGatePass = circuit.gatePasses.find((g) => g.kind === "demo_install");
   const completionGatePass = circuit.gatePasses.find((g) => g.kind === "demo_install_completion");
   const preInstallReadings = circuit.commissioningReadings
-    .filter((r) => r.windowType === "pre_install" && circuit.preInstallWindowStartAt && r.date >= circuit.preInstallWindowStartAt)
+    .filter(
+      (r) =>
+        r.windowType === "pre_install" && circuit.preInstallWindowStartAt && r.date >= circuit.preInstallWindowStartAt,
+    )
     .map((r) => ({ ...r, date: r.date.toISOString() }));
   const preInstallValidCount = preInstallReadings.filter((r) => r.status === "valid").length;
   const preInstallPendingAnomaly = preInstallReadings.some((r) => r.status === "anomaly");
   const postInstallReadings = circuit.commissioningReadings
-    .filter((r) => r.windowType === "post_install" && circuit.postInstallWindowStartAt && r.date >= circuit.postInstallWindowStartAt)
+    .filter(
+      (r) =>
+        r.windowType === "post_install" &&
+        circuit.postInstallWindowStartAt &&
+        r.date >= circuit.postInstallWindowStartAt,
+    )
     .map((r) => ({ ...r, date: r.date.toISOString() }));
   const postInstallValidCount = postInstallReadings.filter((r) => r.status === "valid").length;
   const postInstallPendingAnomaly = postInstallReadings.some((r) => r.status === "anomaly");
 
   return (
-    <div className="min-h-screen p-10">
-      <AdminNav />
-      <p className="mb-1 text-sm">
-        <Link href={`/admin/societies/${id}/circuits`} className="text-[var(--text-subtle)] hover:underline">
-          {circuit.society.name} · Circuit registry
-        </Link>
-      </p>
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-8">
-        <h1 className="text-2xl font-bold">{circuit.location || circuit.lightType}</h1>
-        <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
-          {STATE_LABEL[circuit.state] ?? circuit.state}
-        </span>
-      </div>
+    <>
+      <PageHeader
+        breadcrumb={
+          <Link href={`/admin/societies/${id}/circuits`} className="hover:underline">
+            {circuit.society.name} · Circuit registry
+          </Link>
+        }
+        title={circuit.location || circuit.lightType}
+        chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
+      />
 
       {circuit.state === "eligible" && canEdit && (
         <section className="max-w-md mb-10">
-          <h2 className="text-lg font-semibold mb-3">Meter installation & load validation</h2>
+          <h2 className="text-[15px] font-semibold mb-3">Meter installation &amp; load validation</h2>
           <LoadValidationForm
             circuitId={circuit.id}
             meteredLightCount={circuit.meteredLightCount}
@@ -152,7 +145,7 @@ export default async function CircuitDetailPage({
       {/* FEAT-011/CON-18 — the demo-installation gate pass. */}
       {circuit.state === "meter_installed" && !installGatePass && (
         <section className="max-w-md mb-10">
-          <h2 className="text-lg font-semibold mb-3">Install gate pass</h2>
+          <h2 className="text-[15px] font-semibold mb-3">Install gate pass</h2>
           {canEdit ? (
             <GatePassForm circuitId={circuit.id} />
           ) : (
@@ -162,7 +155,7 @@ export default async function CircuitDetailPage({
       )}
       {installGatePass && (
         <section className="max-w-md mb-10">
-          <h2 className="text-lg font-semibold mb-3">Install gate pass</h2>
+          <h2 className="text-[15px] font-semibold mb-3">Install gate pass</h2>
           <GatePassCard gatePass={installGatePass} canOverride={canOverride} />
         </section>
       )}
@@ -181,14 +174,27 @@ export default async function CircuitDetailPage({
       )}
       {circuit.preInstallBaseline != null && (
         <p className="text-sm text-[var(--text-muted)] max-w-md -mt-6 mb-10">
-          Baseline: {circuit.preInstallBaseline.toFixed(2)} kWh/day
+          Commissioned baseline: <span className="num">{circuit.preInstallBaseline.toFixed(2)}</span> kWh/day at{" "}
+          <span className="num">
+            {circuit.rescaleEvents[0]?.previousLightCount ?? circuit.meteredLightCount}
+          </span>{" "}
+          lights
+          {circuit.rescaleEvents.length > 0 && effectiveBaseline != null && (
+            <>
+              {" · in force now: "}
+              <span className="num font-semibold" style={{ color: "var(--text)" }}>
+                {effectiveBaseline.toFixed(2)}
+              </span>{" "}
+              kWh/day at <span className="num">{circuit.meteredLightCount}</span> lights
+            </>
+          )}
         </p>
       )}
 
       {/* FEAT-013 — light replacement / demo installation. */}
       {circuit.state === "awaiting_installation" && !completionGatePass && (
         <section className="max-w-md mb-10">
-          <h2 className="text-lg font-semibold mb-3">Completion gate pass</h2>
+          <h2 className="text-[15px] font-semibold mb-3">Completion gate pass</h2>
           {canEdit ? (
             <GatePassForm circuitId={circuit.id} kind="demo_install_completion" />
           ) : (
@@ -198,13 +204,13 @@ export default async function CircuitDetailPage({
       )}
       {completionGatePass && (
         <section className="max-w-md mb-10">
-          <h2 className="text-lg font-semibold mb-3">Completion gate pass</h2>
+          <h2 className="text-[15px] font-semibold mb-3">Completion gate pass</h2>
           <GatePassCard gatePass={completionGatePass} canOverride={canOverride} />
         </section>
       )}
       {circuit.state === "awaiting_installation" && completionGatePass && (
         <section className="max-w-md mb-10">
-          <h2 className="text-lg font-semibold mb-3">Light replacement</h2>
+          <h2 className="text-[15px] font-semibold mb-3">Light replacement</h2>
           {canEdit ? (
             <LightReplacementForm circuitId={circuit.id} />
           ) : (
@@ -214,7 +220,7 @@ export default async function CircuitDetailPage({
       )}
       {circuit.lightReplacementDate && (
         <p className="text-sm text-[var(--text-muted)] max-w-md -mt-6 mb-10">
-          Lights replaced: {circuit.lightReplacementDate.toISOString().slice(0, 10)}
+          Lights replaced: <span className="num">{circuit.lightReplacementDate.toISOString().slice(0, 10)}</span>
         </p>
       )}
 
@@ -231,16 +237,103 @@ export default async function CircuitDetailPage({
         />
       )}
       {circuit.state === "benchmark_confirmed" && circuit.benchmarkSavingsPct != null && (
-        <p className="text-sm max-w-md" style={{ color: "var(--ok-fg)" }}>
-          Benchmark confirmed — {circuit.benchmarkSavingsPct.toFixed(1)}% savings, fixed for the contract term.
-        </p>
+        <div
+          className="max-w-md rounded-[var(--r-md)] border p-4 text-sm"
+          style={{ borderColor: "var(--ok-line)", background: "var(--ok-bg)", color: "var(--ok-fg)" }}
+        >
+          Benchmark confirmed — <span className="num font-semibold">{circuit.benchmarkSavingsPct.toFixed(1)}%</span>{" "}
+          savings, fixed for the contract term.
+        </div>
       )}
       {circuit.state === "benchmark_review" && (
-        <p className="text-sm text-[var(--text-muted)] max-w-md">
+        <div
+          className="max-w-md rounded-[var(--r-md)] border p-4 text-sm"
+          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+        >
           The measured result fell outside CON-20&apos;s 60-80% band — routed to FEAT-015&apos;s investigation
           queue (not yet built) instead of being written as the benchmark.
-        </p>
+        </div>
       )}
-    </div>
+
+      {/* FEAT-041 / INV-07 — light-count change & baseline rescale. Only
+          meaningful once a baseline exists to rescale, which is also
+          exactly when the count stops being free-form config. */}
+      {circuit.preInstallBaseline != null && effectiveBaseline != null && (
+        <section className="max-w-2xl mt-10">
+          <h2 className="text-[15px] font-semibold mb-1">Light-count changes &amp; baseline rescales</h2>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            Recorded as dated events, separate from any billing decision — so a dispute can tell a reapplied
+            formula apart from someone&apos;s judgment call.
+          </p>
+
+          {circuit.rescaleEvents.length === 0 ? (
+            // FEAT-041-AC-2 — never changed: history is the original only.
+            <div className="mb-4">
+              <EmptyState title="No count changes recorded">
+                This circuit still runs on its original commissioned baseline of{" "}
+                <span className="num">{circuit.preInstallBaseline.toFixed(2)}</span> kWh/day at{" "}
+                <span className="num">{circuit.meteredLightCount}</span> lights.
+              </EmptyState>
+            </div>
+          ) : (
+            <Card className="mb-4 overflow-x-auto">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Effective</th>
+                    <th>Lights</th>
+                    <th>Baseline (kWh/day)</th>
+                    <th>Verification</th>
+                    <th>Recorded by</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {circuit.rescaleEvents.map((e) => (
+                    <tr key={e.id}>
+                      <td className="num">{e.effectiveDate.toISOString().slice(0, 10)}</td>
+                      <td className="num">
+                        {e.previousLightCount} → {e.newLightCount}
+                      </td>
+                      <td className="num">
+                        {e.previousBaseline.toFixed(2)} → {e.rescaledBaseline.toFixed(2)}
+                      </td>
+                      <td className="text-[var(--text-muted)]">
+                        {e.verificationNote}
+                        {e.verificationPhotoUrl && (
+                          <>
+                            {" "}
+                            <a href={e.verificationPhotoUrl} target="_blank" rel="noreferrer" className="underline">
+                              photo
+                            </a>
+                          </>
+                        )}
+                      </td>
+                      <td className="text-[var(--text-muted)]">
+                        {e.recordedBy.name ?? e.recordedBy.email}
+                        <br />
+                        <span className="num text-xs">{e.recordedAt.toISOString().slice(0, 10)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+
+          {canOverride ? (
+            <RescaleForm
+              circuitId={circuit.id}
+              currentLightCount={circuit.meteredLightCount}
+              effectiveBaseline={effectiveBaseline}
+            />
+          ) : (
+            // FEAT-041-AC-4 — PER-04 reads this history but cannot record one.
+            <p className="text-sm text-[var(--text-muted)]">
+              Recording a verified light-count change is PER-01&apos;s action.
+            </p>
+          )}
+        </section>
+      )}
+    </>
   );
 }

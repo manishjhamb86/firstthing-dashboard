@@ -15,16 +15,11 @@ export function TransferButton({ profileId }: { profileId: string }) {
   return (
     <form action={formAction} className="flex flex-col items-end gap-1">
       <input type="hidden" name="profileId" value={profileId} />
-      <button
-        type="submit"
-        disabled={pending}
-        className="text-xs font-semibold disabled:opacity-60"
-        style={{ color: "var(--accent)" }}
-      >
+      <button type="submit" disabled={pending} className="btn-secondary btn-sm">
         {pending ? "Transferring…" : "Make office-bearer"}
       </button>
       {error && (
-        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
+        <p role="alert" className="text-xs" style={{ color: "var(--bad-fg)" }}>
           {error}
         </p>
       )}

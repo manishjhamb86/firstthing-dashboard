@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { submitLoadValidation, overrideLoadValidation } from "./actions";
+import { Card, ErrorText, Field } from "@/components/ui";
 
 export function LoadValidationForm({
   circuitId,
@@ -47,58 +48,52 @@ export function LoadValidationForm({
     });
   }
 
-  const fieldStyle = { borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" };
-
   return (
-    <div className="max-w-md space-y-3">
+    <Card className="p-5 space-y-4">
       <p className="text-sm text-[var(--text-muted)]">
-        Theoretical load (recorded): {meteredLightCount} lights × {wattage}W = {theoreticalLoad}W
+        Theoretical load (recorded): <span className="num">{meteredLightCount}</span> lights ×{" "}
+        <span className="num">{wattage}</span>W = <span className="num">{theoreticalLoad}</span>W
       </p>
-      <label className="block text-sm">
-        Meter&apos;s displayed load (W)
+      <Field label="Meter's displayed load (W)" htmlFor="lv-load">
         <input
+          id="lv-load"
           type="number"
           value={meterDisplayedLoad}
           onChange={(e) => setMeterDisplayedLoad(e.target.value)}
           disabled={pending}
-          className="w-full border rounded-[var(--r-sm)] p-2 text-sm mt-1"
-          style={fieldStyle}
+          className="field"
         />
-      </label>
-      {error && (
-        <p className="text-sm" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
+      </Field>
+      {error && <ErrorText>{error}</ErrorText>}
       <button
         type="button"
         onClick={submit}
         disabled={pending || !meterDisplayedLoad.trim()}
-        className="btn-primary text-sm disabled:opacity-60"
+        className="btn-primary"
       >
         {pending ? "Validating…" : "Validate & confirm install"}
       </button>
 
       {failed && canOverride && (
-        <div className="pt-3 mt-3 border-t border-[var(--border-subtle)] space-y-2">
+        <div className="pt-4 border-t border-[var(--border-subtle)] space-y-3">
           <p className="text-xs text-[var(--text-muted)]">
             PER-01 override (e.g. a known meter-display quirk) — recorded on the circuit&apos;s record, not
             silently accepted as a normal pass.
           </p>
-          <input
-            placeholder="Override reason"
-            value={overrideReason}
-            onChange={(e) => setOverrideReason(e.target.value)}
-            disabled={pending}
-            className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-            style={fieldStyle}
-          />
+          <Field label="Override reason" htmlFor="lv-override">
+            <input
+              id="lv-override"
+              value={overrideReason}
+              onChange={(e) => setOverrideReason(e.target.value)}
+              disabled={pending}
+              className="field"
+            />
+          </Field>
           <button
             type="button"
             onClick={submitOverride}
             disabled={pending || !overrideReason.trim()}
-            className="text-sm font-semibold disabled:opacity-60"
-            style={{ color: "var(--accent)" }}
+            className="btn-secondary"
           >
             Override & proceed
           </button>
@@ -107,6 +102,6 @@ export function LoadValidationForm({
       {failed && !canOverride && (
         <p className="text-xs text-[var(--text-muted)]">Only PER-01 can override a persistently failed validation.</p>
       )}
-    </div>
+    </Card>
   );
 }

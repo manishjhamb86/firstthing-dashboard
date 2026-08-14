@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { createSociety } from "../actions";
+import { Card, Field } from "@/components/ui";
 
 type FormState = { error?: string; duplicateOf?: string } | undefined;
 
@@ -28,78 +29,68 @@ export function NewSocietyForm() {
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
 
   return (
-    <form action={formAction} className="space-y-5 max-w-md">
-      <div className="space-y-1">
-        <label htmlFor="name" className="text-sm font-medium">
-          Society name
-        </label>
-        <input
-          id="name"
-          name="name"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full border rounded-[var(--r-md)] p-3"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-        />
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="location" className="text-sm font-medium">
-          Location
-        </label>
-        <input
-          id="location"
-          name="location"
-          required
-          value={location}
-          onChange={(e) => setLocation(e.target.value)}
-          className="w-full border rounded-[var(--r-md)] p-3"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-        />
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="flatCount" className="text-sm font-medium">
-          Flat count
-        </label>
-        <input
-          id="flatCount"
-          name="flatCount"
-          type="number"
-          min={1}
-          required
-          value={flatCount}
-          onChange={(e) => setFlatCount(e.target.value)}
-          className="w-full border rounded-[var(--r-md)] p-3"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-        />
-      </div>
+    <Card className="max-w-md p-6">
+      <form action={formAction} className="space-y-5">
+        <Field label="Society name" htmlFor="name">
+          <input
+            id="name"
+            name="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="field"
+          />
+        </Field>
+        <Field label="Location" htmlFor="location">
+          <input
+            id="location"
+            name="location"
+            required
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="field"
+          />
+        </Field>
+        <Field label="Flat count" htmlFor="flatCount">
+          <input
+            id="flatCount"
+            name="flatCount"
+            type="number"
+            min={1}
+            required
+            value={flatCount}
+            onChange={(e) => setFlatCount(e.target.value)}
+            className="field"
+          />
+        </Field>
 
-      {state?.error && (
-        <div
-          className="rounded-[var(--r-md)] border p-4 text-sm"
-          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
-        >
-          <p className="mb-2" style={{ color: "var(--warn-fg)" }}>
-            {state.error}
-          </p>
-          {state.duplicateOf && (
-            <label className="flex items-center gap-2" style={{ color: "var(--warn-fg)" }}>
-              <input
-                type="checkbox"
-                name="confirmDuplicate"
-                value="true"
-                checked={confirmDuplicate}
-                onChange={(e) => setConfirmDuplicate(e.target.checked)}
-              />
-              This is a genuinely different society — create it anyway
-            </label>
-          )}
-        </div>
-      )}
+        {state?.error && (
+          <div
+            className="rounded-[var(--r-md)] border p-4 text-sm"
+            style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
+          >
+            <p className="mb-2" style={{ color: "var(--warn-fg)" }}>
+              {state.error}
+            </p>
+            {state.duplicateOf && (
+              <label className="flex items-center gap-2" style={{ color: "var(--warn-fg)" }}>
+                <input
+                  type="checkbox"
+                  name="confirmDuplicate"
+                  value="true"
+                  checked={confirmDuplicate}
+                  onChange={(e) => setConfirmDuplicate(e.target.checked)}
+                />
+                This is a genuinely different society — create it anyway
+              </label>
+            )}
+          </div>
+        )}
 
-      <button type="submit" disabled={pending} className="btn-primary w-full p-3 font-semibold disabled:opacity-60">
-        {pending ? "Creating…" : "Create society"}
-      </button>
-    </form>
+        <button type="submit" disabled={pending} className="btn-primary w-full">
+          {pending ? "Creating…" : "Create society"}
+        </button>
+      </form>
+    </Card>
   );
 }

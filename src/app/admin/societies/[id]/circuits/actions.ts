@@ -40,6 +40,23 @@ export async function updateCircuitConfiguration(
   const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
   if (!circuit) return { error: "Circuit not found." };
 
+  // INV-07 — once a circuit has a commissioned baseline, its metered light
+  // count is no longer free-form config: changing it rescales a billable
+  // figure (CON-10), so it has to go through FEAT-041's verified, dated,
+  // evented path instead. This route existed before FEAT-041 did and would
+  // otherwise let the count move with no verification and no rescale
+  // event at all — silently detaching the baseline from the count that
+  // produced it, which is precisely what the invariant guards against.
+  if (
+    circuit.preInstallBaseline != null &&
+    input.meteredLightCount !== circuit.meteredLightCount
+  ) {
+    return {
+      error:
+        "This circuit is commissioned — a metered light-count change rescales its baseline, so record it as a verified light-count change instead.",
+    };
+  }
+
   // FEAT-040-AC-5 — a working-hours change is metadata only, stamped with
   // an effective date; it never triggers a benchmark rescale on its own
   // (CON-10). An off-band month caused by it goes through CAP-05's normal

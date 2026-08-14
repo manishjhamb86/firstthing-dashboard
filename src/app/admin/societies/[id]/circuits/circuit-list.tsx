@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CircuitEditForm } from "./circuit-edit-form";
+import { Card, StatusChip } from "@/components/ui";
+import { CIRCUIT_STATE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 
 type Circuit = {
   id: string;
@@ -16,21 +18,6 @@ type Circuit = {
   workingHours: number | null;
   workingHoursEffectiveAt: Date | null;
   state: string;
-};
-
-const STATE_LABEL: Record<string, string> = {
-  surveyed: "Surveyed",
-  eligible: "Eligible",
-  ineligible: "Ineligible",
-  meter_installed: "Meter installed",
-  pre_install_monitoring: "Pre-install monitoring",
-  awaiting_installation: "Awaiting installation",
-  post_install_pending: "Post-install pending",
-  post_install_monitoring: "Post-install monitoring",
-  benchmark_confirmed: "Benchmark confirmed",
-  benchmark_review: "Benchmark under review",
-  active_billing: "Active billing",
-  retired: "Retired",
 };
 
 export function CircuitList({
@@ -46,49 +33,54 @@ export function CircuitList({
   const router = useRouter();
 
   return (
-    <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] divide-y divide-[var(--border-subtle)]">
-      {circuits.map((c) => (
-        <div key={c.id} className="p-3 text-sm">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <div>
-              <Link href={`/admin/societies/${societyId}/circuits/${c.id}`} className="font-medium hover:underline">
-                {c.location || c.lightType}
-              </Link>
-              <span className="text-[var(--text-muted)]">
-                {" "}
-                · {c.lightType} · {c.serviceLine} · {c.meteredLightCount} lights (
-                {c.representedLightCount} represented) · {c.wattage}W
-                {c.workingHours != null && ` · ${c.workingHours}h/day`}
-              </span>
-            </div>
-            <span className="text-xs font-semibold uppercase tracking-wide text-[var(--text-subtle)]">
-              {STATE_LABEL[c.state] ?? c.state}
-            </span>
-          </div>
-          {canEdit && (
-            <div className="mt-2">
-              {editingId === c.id ? (
-                <CircuitEditForm
-                  circuit={c}
-                  onDone={() => {
-                    setEditingId(null);
-                    router.refresh();
-                  }}
-                />
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => setEditingId(c.id)}
-                  className="text-xs font-semibold"
-                  style={{ color: "var(--accent)" }}
+    <Card className="divide-y divide-[var(--border-subtle)]">
+      {circuits.map((c) => {
+        const state = statusMeta(CIRCUIT_STATE, c.state);
+        return (
+          <div key={c.id} className="p-4 text-sm">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <div>
+                <Link
+                  href={`/admin/societies/${societyId}/circuits/${c.id}`}
+                  className="font-medium hover:underline"
                 >
-                  Edit configuration
-                </button>
-              )}
+                  {c.location || c.lightType}
+                </Link>
+                <p className="text-[var(--text-muted)]">
+                  {c.lightType} · {SERVICE_LINE_LABEL[c.serviceLine] ?? c.serviceLine} ·{" "}
+                  <span className="num">{c.meteredLightCount}</span> lights (
+                  <span className="num">{c.representedLightCount}</span> represented) ·{" "}
+                  <span className="num">{c.wattage}</span>W
+                  {c.workingHours != null && (
+                    <>
+                      {" "}
+                      · <span className="num">{c.workingHours}</span>h/day
+                    </>
+                  )}
+                </p>
+              </div>
+              <StatusChip tone={state.tone}>{state.label}</StatusChip>
             </div>
-          )}
-        </div>
-      ))}
-    </div>
+            {canEdit && (
+              <div className="mt-2">
+                {editingId === c.id ? (
+                  <CircuitEditForm
+                    circuit={c}
+                    onDone={() => {
+                      setEditingId(null);
+                      router.refresh();
+                    }}
+                  />
+                ) : (
+                  <button type="button" onClick={() => setEditingId(c.id)} className="btn-ghost btn-sm">
+                    Edit configuration
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </Card>
   );
 }

@@ -876,6 +876,272 @@ every prior verification pass in this file.
 **`docs/backlog.yaml` unchanged this round** — this was additive UI/UX on top of already-built
 FEAT-012/014, not a new tracked feature or milestone shift.
 
+## Deployed to `stage.firsthing.earth` (2026-08-14) — MS-03, MS-04 (partial), commissioning monitoring, and ADR-003's worker live for the first time
+
+**What went out**: everything built this session — MS-03 (lead-to-survey), MS-04's partial slice
+(circuit registry through benchmark confirmation, FEAT-041 still open), and the commissioning
+monitoring follow-on (CSV sheet upload, the `/admin/monitoring` dashboard). Same rsync-based deploy
+convention as every prior deploy in this file (origin is a public third-party repo — nothing gets
+pushed there; code reaches `zenovaa` via `rsync -az --delete`, excluding `.git`/`node_modules`/
+`.next`/`.env*`/`archive`). All 6 pending migrations
+(`20260814072148_add_pipeline_survey` through `20260814074730_add_commissioning_monitoring_windows`)
+applied cleanly against `firsthing_blueprint` via `prisma migrate deploy` — the same database MS-01
+created, still correctly separate from the old archived app's `firsthing_prod` on the same box.
+`pnpm install --frozen-lockfile` reported "Already up to date" (no new dependencies this session).
+`pnpm build` succeeded, all 13 routes built including the new `/admin/monitoring`. No `.env.local`
+changes needed — `AUTH_URL`/`AUTH_TRUST_HOST` were already set correctly from the MS-01 deploy.
+
+**ADR-003's background job runner is now live infrastructure, not just local-verified code** —
+started as its own pm2 process, `firsthing-job-worker` (`pm2 start "pnpm worker" --name
+firsthing-job-worker --cwd /zenovaa/code/firsthing-dashboard`, saved via `pm2 save` alongside the
+existing `firsthing-dashboard` process). Confirmed genuinely running, not just started: its own
+stdout log showed `job.worker_started` then `job.gatepass_sweep_seeded` within half a second of
+boot, and a direct `psql` query against `firsthing_blueprint` moments later showed the seeded
+`gatepass_sweep` job already flipped to `status: done` with a fresh `pending` one rescheduled 5
+minutes out — the same self-rescheduling behavior already verified locally, now proven against the
+real staging database and a real pm2-managed process, not a dev-only script run.
+
+**Verified end to end, logged in over the public HTTPS path** (Playwright/system Chrome against
+`https://stage.firsthing.earth`, not a bypassing curl): `yogesh@firsthing.earth` login succeeds,
+redirects to `/admin`, and `/admin`, `/admin/pipeline`, `/admin/monitoring`, `/admin/societies` all
+return 200 with zero console errors and zero page errors. `pm2 logs firsthing-dashboard` reviewed
+specifically for lines *after* this restart (not the pre-existing, already-documented
+`[ELIFECYCLE] Command failed` artifact from earlier restarts on this box, harmless and
+self-stabilizing per the 2026-08-06 deploy entry above) — clean, only expected `info`-level
+auth/theme/pipeline events, no errors or stack traces. `pm2 describe firsthing-dashboard` confirmed
+`status: online`, `unstable restarts: 0`.
+
+**`docs/backlog.yaml`/`MEMORY.md` unchanged this round** — this was a deploy of already-recorded
+work (MS-03 done, MS-04 still `proposed` pending FEAT-041), not a new decision or milestone shift.
+
+## Missing lead-approval action (2026-08-14) — user-caught on stage, FEAT-001-AC-2 half-built
+
+**A real gap, found by the user testing the live deployment, not by any prior verification pass**:
+FEAT-001-AC-2 (a lead logged by PER-01 on PER-07's behalf goes into a `pending-approval` sub-state
+and PER-07 is notified) was only ever half-implemented — `Pipeline.authoritative: false` and the
+`pipeline.pending_approval_notify` log line both existed, and both the pipeline list and detail
+pages correctly *showed* the "Pending approval" banner, but nothing anywhere let the actual sales
+owner (PER-07) act on it. A lead logged on someone's behalf was stuck not-authoritative forever —
+exactly the state the user hit: a lead they'd had logged for them, now sitting at `survey_pending`
+with no way to clear the pending-approval flag. This was a real, silent gap in FEAT-001, not a
+misunderstanding of intended scope — MS-03's own "done" status was premature on this one AC.
+
+**Fixed**: `approveLead(pipelineId)` (`src/app/admin/pipeline/actions.ts`) — deliberately gated to
+`session.user.id === pipeline.salesOwnerId`, not `manage_pipeline` in general, since this is PER-07's
+own approval to give, not a broader permission check (every possible `salesOwnerId` already holds
+`manage_pipeline` by construction, since `new-lead-form.tsx`'s owner picker only ever lists such
+accounts). `ApproveLeadButton` (`src/app/admin/pipeline/[id]/approve-lead-button.tsx`) follows the
+established `useTransition` + plain `onClick` pattern from `exception-approval-button.tsx`, not the
+`useActionState`-in-`onClick` anti-pattern already documented as a bug class earlier in this file —
+rendered inside the existing pending-approval banner on `/admin/pipeline/[id]`, visible only to the
+signed-in sales owner viewing their own pending lead.
+
+**Verified directly against the live stage deployment** (rsync + `pnpm build` + `pm2 restart`, no
+schema change needed) — the exact pipeline the user was looking at
+(`cmssu1xww0001n4qsrzg69vjt`, logged by `admin@firsthing.earth` for `yogesh@firsthing.earth`,
+already at `survey_pending`) was used as the live test case: logged in as the sales owner, banner
+and approve control both present, clicked approve, banner cleared with zero console/page errors,
+and a direct `psql` check against `firsthing_blueprint` confirmed `authoritative` flipped to `true`.
+`tsc`/`lint` clean.
+
+## Design-system build-out + flow-review pass (2026-08-14) — user-caught: "the screens look very childish"
+
+**The user asked for a full review — flow issues and visual quality alike — after testing the live
+stage deployment.** Both halves were real. The visual half traces to a specific, documented shortcut:
+the theme system was wired in as *palette tokens only*, with `globals.css` itself stating that the
+type scale, space steps, elevation, density modifier and the whole §3.7 component library were
+"deliberately not yet adopted." Every screen since MS-02 was then built out of raw Tailwind
+utilities against that half-adopted system — which is exactly how it ends up reading as unstyled.
+This pass closes that gap rather than restyling screen by screen.
+
+**What was actually wrong, visually** — not opinion, mechanically checkable:
+- **`.btn-primary` had no padding of its own.** Every button that didn't happen to also carry
+  `px-4 py-2` utilities rendered with its label flush against the button's own background. This
+  affected ~10 buttons across the circuit/monitoring/society screens — the exact screens the user
+  was looking at.
+- **No elevation anywhere.** `05a-theme-system.md` §3.4 defines `--e1`/`--e2` and DIR-02 ("Console")
+  is explicitly elevation-led; nothing in `src/` had a `box-shadow`. Flat bordered rectangles on a
+  flat ground is the single biggest reason the screens read as unfinished.
+- **No focus-visible treatment**, no `accent-color` (so every checkbox rendered browser-default
+  blue against a green system), no tabular figures for the numeric columns the whole product is
+  about, and inputs styled ad hoc — 14 files carried their own copy-pasted
+  `style={{borderColor: "var(--field-border)", background: …, color: …}}` object.
+- **Placeholder-as-label throughout.** `new-society-form`, `portal-account-form`, the survey forms
+  and others used bare placeholders, which vanish the moment a field has a value — a real
+  accessibility problem, and one this repo had already fixed once in the archived app.
+- **`AdminNav` was a self-described placeholder** ("minimal, not the full shell") — a text top bar,
+  where §3.7's actual target component is a sidebar nav.
+
+**What was built**: a real component layer, not per-screen patches. `globals.css` now carries the
+full DIR-02 token set (content + chrome for all three themes, radius, elevation, plus `.card`,
+`.field`, four button variants, `.chip`, `.tbl`, `.lbl`, `.num`, a global `:focus-visible` ring and
+`accent-color`). `src/components/ui.tsx` adds the presentational primitives (`Card`, `CardTitle`,
+`PageHeader`, `EmptyState`, `Field`, `ErrorText`, `StatusChip`, `KpiTile`) — deliberately hook-free
+so Server and Client Components share them. `src/lib/status-maps.ts` centralises every status →
+label + chip-tone pairing. `src/components/app-shell.tsx` + a new `src/app/admin/layout.tsx` replace
+the per-page `<AdminNav />` with one sidebar shell (`admin-nav.tsx`/`admin-nav-client.tsx` deleted).
+**Every admin/portal/login screen was then swept onto that layer** — the 14 duplicated inline field
+styles are gone, tables replaced the flex-row lists on list surfaces, and `/admin` (still MS-01's
+"Societies in Postgres: 1" walking-skeleton stub) was rebuilt as a real Portfolio overview: 4 KPI
+tiles, recent leads, and a "needs a decision" queue, all real queries with no fabricated figures.
+
+**Four real functional bugs found by reading the flow against `docs/backlog.yaml`, not by
+looking at the UI:**
+1. **The pending-approval sub-state was purely cosmetic (FEAT-001-AC-2).** `submitProposal` never
+   checked `authoritative`, so a lead logged on someone's behalf advanced straight through the
+   proposal to `survey_pending` while still awaiting its owner's approval — which is exactly the
+   state the user's own stage lead was sitting in. The approve action added earlier this session
+   gave PER-07 a way to *clear* the flag; it never made the flag *mean* anything. Now the proposal
+   is refused with a named owner until approved, and the proposal form isn't rendered at all.
+2. **The lead flow's quick-create had no duplicate-society check.** `/admin/societies/new` has had
+   FEAT-085-AC-3's check since MS-02, but `createLead`'s own inline society creation didn't — so the
+   lead path could silently create a second society with the same name and location. **This had
+   already happened in real data**: two separate "Mahagun Puram / Noida" rows, visible in the
+   societies list. Now the same flag-and-confirm flow as the other path.
+3. **`Engagement` was never created by the lead flow (FEAT-039-AC-1).** MS-03 built the entity and
+   a manual "Enroll service line" control, but logging a lead — which *is* the act of engaging a
+   society on a service line — never created one, so the society-detail service-lines panel stayed
+   empty for every society that arrived through the pipeline. Now auto-enrolled, logged as
+   `society.service_line_enrolled` with `via: "lead"`.
+4. **A decided-proposal record vanished from the UI.** The outcome, summary and closed-lost reason
+   were written to the DB and then never rendered anywhere once the stage moved on. Now shown as its
+   own card. Also fixed: `proposalDecidedAt` was being stamped for the "undecided" outcome, claiming
+   a decision that hadn't happened, and `createLead` accepted any string as a service line and any
+   unparseable string as a meeting date.
+
+**One real CSS bug found only by screenshotting** (the class the design skill warns about, and the
+same class as this file's earlier hardcoded-`BrandMark`-variant finding): the society-detail status
+`<select>` rendered full-bleed across the page header. Cause is a cascade-layer collision —
+Tailwind v4 puts utilities in a `@layer`, so an unlayered `.field { width: 100% }` beats
+`w-auto` regardless of class order. Fixed with an explicit `.field-auto` opt-out declared after
+`.field`, not by reordering classes (which would not have worked).
+
+**Verified end to end in a browser** (Playwright/system Chrome — 24 checks across four scripts, all
+passing, zero page errors, zero console errors): the full deal spine walked live — duplicate-society
+refusal on the lead path *and* the create-anyway confirm, a genuinely new lead creating its
+engagement, proposal → `survey_pending`, lighting inventory, a CON-16 candidate reaching `eligible`,
+load validation at 1100W against a 1080W theoretical load (1.85%, inside CON-17) advancing to
+`meter_installed` and opening the pre-install window; plus all three themes actually repainting
+(asserted on computed `background-color`, not just the `data-theme` attribute), zero horizontal
+overflow at 390px on every screen including the two deep ones, the users page's save button
+correctly disabled until something changes, and the portal still rendering its office-bearer
+transfer control. `tsc`/`lint`/`build`/`vitest` (8 cases) all clean. All test data created during
+verification (the "Vista Greens" society and its pipeline/survey/circuit/engagement/area rows) was
+deleted via `psql` afterward.
+
+**Two test-harness findings worth keeping** — both cost real debugging time here:
+`page.click('button[type="submit"]')` now matches the shell's **Sign out** button, since the sidebar
+renders before `<main>` in the DOM — a submit-selector that worked for two milestones silently
+started logging the test out mid-flow (confirmed from the dev server's own log showing
+`logoutAction()` firing on a `POST /admin/pipeline/new`). Use `getByRole("button", { name })`.
+Separately, `.lbl` applies `text-transform: uppercase`, and `innerText` returns the *rendered* text
+— so an assertion matching a `CardTitle`'s source casing now fails; match case-insensitively.
+
+**Deployed to `stage.firsthing.earth`** — rsync + `pnpm build` + `pm2 restart` (no schema change, so
+no migration). Re-verified over the public HTTPS path logged in as a real account: all 5 admin routes
+200, the sidebar shell live, zero console/page errors, `status: online` with 0 unstable restarts, and
+the `firsthing-job-worker` process still online and untouched.
+
+## MS-04 done (2026-08-14) — FEAT-041's benchmark rescale, and an INV-07 hole FEAT-040 had left open
+
+**`docs/backlog.yaml` MS-04 status flipped from `proposed` to `done`.** The earlier partial entry
+above deliberately left it `proposed` because FEAT-041 (light-count change & benchmark rescale) was
+the one unbuilt feature of the seven, even though all three of the milestone's own exit criteria
+were already met. It's now built, unit-tested, browser-verified, and the milestone is honestly
+complete.
+
+**The design decision that makes INV-07 true by construction, not by discipline**: a rescale writes
+a new `BenchmarkRescaleEvent` row and **never touches `Circuit.preInstallBaseline`**. The
+commissioned baseline stays as commissioned forever; the baseline actually in force on any given
+date is *replayed* from the event log (`effectiveBaselineAt()`), exactly ADR-005's
+versioned-not-mutated rule. This is what makes FEAT-041-AC-2 ("a circuit that has never had a count
+change compares against its original baseline") and AC-5 ("forward-only — an already-invoiced month
+is never restated") true for free rather than as separate code paths that could drift. It also
+means INV-07's own requirement — that a rescale is a *distinct, timestamped event*, never conflated
+with INV-03's judgment-call billing adjustment — is a property of the schema, not of remembering to
+log something: `benchmark_rescale_events` carries the old and new counts, both baselines, the
+verification note/photo, the effective date, and who recorded it, and there is no other write path
+to a rescaled baseline anywhere in the codebase.
+
+**All the arithmetic and every refusal rule live in one pure module**, `src/lib/benchmark-rescale.ts`
+(`rescaleBaseline`, `refuseRescale`, `REFUSAL_MESSAGE`, `effectiveBaselineAt`,
+`effectiveLightCountAt`) — the same "factor the real decision into a pure function, make the Server
+Action a thin shell" convention established at MS-02 for `portal-authority.ts`, and the reason
+`12-test-plan.md`'s `unit` level assignment for AC-1/AC-5 is actually satisfiable. **18 new Vitest
+cases** (`tests/benchmark-rescale.test.ts`, suite now 26 across 2 files) including CON-10's worked
+example asserted exactly (`100 ÷ 50 × 54 = 108`), a deliberate no-rounding assertion
+(`1078 ÷ 60 × 64 = 1149.8666…` to 10 places — rounding here would push error straight into a rupee
+figure the society is billed on, INV-02), an inclusive effective-date boundary, a rescale backdated
+into an already-invoiced month leaving that month's figure alone, and a multi-event replay ordered
+by effective date rather than insertion order.
+
+**A real INV-07 hole in already-shipped code, found by building FEAT-041 rather than by testing
+it**: `updateCircuitConfiguration` (FEAT-040, MS-03) let `meteredLightCount` be edited freely as
+ordinary registry config — which was correct when it was written, since FEAT-041 didn't exist and
+neither did the concept of a commissioned baseline being *attached* to a count. Once a circuit has
+a `preInstallBaseline`, that same edit silently detaches the baseline from the count that produced
+it: no verification, no event, no rescale, and no way to tell afterward that it happened. Closed by
+refusing the edit outright once a baseline exists, pointing the operator at the verified path
+instead. **Worth remembering as a class**: a field that is safe to edit freely at one lifecycle
+stage can become a billing-integrity hazard at a later one, and the guard belongs on the *old* write
+path, which nobody is looking at while building the new one.
+
+**`workingHours` is deliberately still freely editable on that same action** — CON-10 is explicit
+that a working-hours change is metadata only and never triggers a rescale, so it correctly stays
+outside this guard (it stamps `workingHoursEffectiveAt` and routes any resulting off-band month
+through CAP-05's normal deviation review instead).
+
+**Verified end to end (Playwright/system Chrome), plus the two gates checked through paths the
+client genuinely does not pre-block:**
+- Happy path, 8/8 — against a CON-10-exact fixture (50 lights, baseline 100), recording a verified
+  change to 54 produced `previous_baseline 100 → rescaled_baseline 108`, effective 2026-09-01, with
+  the circuit's `metered_light_count` moving to 54 and `pre_install_baseline` confirmed **still 100**
+  by direct `psql` query — the versioned-not-mutated rule proven against real rows, not asserted.
+- AC-4 (PER-01 only), 3/3 — a purpose-made PER-04-equivalent admin (`manage_survey` alone) can read
+  the rescale history, is not offered the form, and the screen names who can perform it.
+- AC-3 (refusal) — the first attempt at this was a **bad test, not a bug**: it force-removed the
+  submit button's `disabled` attribute via `page.evaluate` and expected a server refusal. Nothing
+  was written, but no `circuit.rescale_refused` log line appeared either, which is what gave it
+  away — the action was never invoked at all, so the check proved nothing about the server. Redone
+  through a refusal the client deliberately doesn't pre-block (a no-op same-count change): the
+  server returned `REFUSAL_MESSAGE["same-count"]`, a string that exists only in the server module,
+  and wrote nothing. Combined with the unit test covering the whitespace-note `"unverified"` branch
+  of the same `refuseRescale` call, that's the gate genuinely verified. **The general point**: a
+  client-side `disabled` bypass is not a server-side test — check for the action's own log line
+  before believing one.
+- The FEAT-040 hole closure was verified the same way, through the real config-edit form: changing
+  the metered count on a commissioned circuit is refused with the "record it as a verified
+  light-count change instead" message.
+
+`tsc`/`lint`/`build`/`vitest` all clean. Migration `20260814200551_add_benchmark_rescale_events` is
+purely additive (one CREATE TABLE, one index, two FKs) — no destructive enum edit this time, unlike
+MS-04's earlier `CircuitState` expansion. All fixtures (`rescale-soc`, `rescale-ckt`, its event row,
+and the `per04@test.local` admin) removed via a single `psql` transaction afterward, confirmed by
+count query; nothing pre-existing was touched. Backlog validator re-run: **16 errors / 263
+warnings**, the same documented/accepted baseline, `Milestones: 8` unchanged.
+
+**Deployed to `stage.firsthing.earth`** — the first deploy since MS-01 that carried a schema change,
+so `prisma migrate deploy` ran for real (`pg_dump` backup taken first, to
+`/tmp/firsthing_blueprint_pre_feat041_*.sql` on the box). Two things worth carrying forward from it:
+- **`DATABASE_URL` lives in `.env` on that server, not `.env.local`** — the backup silently produced
+  a 0-byte file on the first attempt because the grep found nothing and `pg_dump` fell through to
+  its own defaults (`role "ubuntu" does not exist`). A backup command that "succeeds" into an empty
+  file is worse than one that fails loudly; check the file size, not just the exit code.
+- **`firsthing-job-worker` was restarted alongside the app, not left running.** It shares the
+  generated Prisma client, and a long-lived process holding a stale client is the exact bug this
+  session already hit locally. Confirmed the restart didn't break or duplicate ADR-006's
+  self-rescheduling chain: the worker correctly did *not* re-seed a sweep (one was already pending),
+  and `jobs` shows an unbroken 5-minute cadence straight through the restart.
+
+Verified over the public HTTPS path: all 5 admin routes 200, the circuit registry and circuit detail
+both 200 with zero console/page errors — and the detail page's 200 is itself the meaningful check,
+since its Prisma query `include`s `rescaleEvents` unconditionally, so a missing table or stale
+client would have thrown. `\d benchmark_rescale_events` on the stage DB confirms the table, its
+`(circuit_id, effective_date)` index, and both foreign keys. Stage's three circuits are all still
+`eligible` with no baseline, so the rescale section correctly does not render there — the section is
+gated on a commissioned baseline existing, which is also exactly when the light count stops being
+free-form config.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

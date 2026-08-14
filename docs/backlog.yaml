@@ -8026,7 +8026,7 @@ milestones:
       - "Circuits exist in a registry keyed by light type, with a meter installed and load-validated"
       - "A gate pass submits, and either an explicit approval or the 30-minute provisional timeout (ADR-006) resolves it -- the background job runner (ADR-003) is live and exercised for the first time here"
       - "Baseline and post-install monitoring windows complete and a benchmark computes within CON-20's 60-80% range"
-    status: proposed
+    status: done
   - id: MS-05
     name: "Demo report, KYC, offer & agreement"
     release: R0

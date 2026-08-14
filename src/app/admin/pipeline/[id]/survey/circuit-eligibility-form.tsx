@@ -2,8 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { submitCircuitCandidate } from "./actions";
-
-const fieldStyle = { borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" };
+import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 
 async function action(_prev: string | undefined, formData: FormData) {
   const result = await submitCircuitCandidate({
@@ -23,6 +22,13 @@ async function action(_prev: string | undefined, formData: FormData) {
   return result?.error;
 }
 
+const CHECKLIST = [
+  { name: "noSharedAppliances", label: "No non-installation appliances share this circuit" },
+  { name: "wifiReachable", label: "WiFi/LAN reachable within 20–40m" },
+  { name: "fixturesUnder15ft", label: "Fixtures ≤15 feet high" },
+  { name: "notOnDrivewayOrRamp", label: "Not on a driveway/ramp" },
+] as const;
+
 // FEAT-007: CON-16's eligibility checklist. Controlled inputs throughout
 // (React 19 form-reset finding, see login-form.tsx).
 export function CircuitEligibilityForm({
@@ -40,125 +46,97 @@ export function CircuitEligibilityForm({
   const [representedLightCount, setRepresentedLightCount] = useState("");
   const [wattage, setWattage] = useState("");
   const [workingHours, setWorkingHours] = useState("");
-  const [noSharedAppliances, setNoSharedAppliances] = useState(false);
-  const [wifiReachable, setWifiReachable] = useState(false);
-  const [fixturesUnder15ft, setFixturesUnder15ft] = useState(false);
-  const [notOnDrivewayOrRamp, setNotOnDrivewayOrRamp] = useState(false);
+  const [checks, setChecks] = useState<Record<string, boolean>>({});
 
   return (
-    <form
-      action={formAction}
-      className="space-y-3 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-4"
-    >
-      <input type="hidden" name="siteSurveyId" value={siteSurveyId} />
-      <input type="hidden" name="societyId" value={societyId} />
-      <input type="hidden" name="serviceLine" value={serviceLine} />
-      <p className="text-sm font-semibold">Add a candidate circuit</p>
-      <div className="grid grid-cols-2 gap-3">
-        <input
-          name="lightType"
-          placeholder="Light type"
-          required
-          value={lightType}
-          onChange={(e) => setLightType(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-        <input
-          name="wattage"
-          type="number"
-          step="0.1"
-          min="0"
-          placeholder="Wattage per light"
-          required
-          value={wattage}
-          onChange={(e) => setWattage(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-        <input
-          name="meteredLightCount"
-          type="number"
-          min="1"
-          placeholder="Metered light count"
-          required
-          value={meteredLightCount}
-          onChange={(e) => setMeteredLightCount(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-        <input
-          name="representedLightCount"
-          type="number"
-          min="1"
-          placeholder="Represented light count (society-wide)"
-          required
-          value={representedLightCount}
-          onChange={(e) => setRepresentedLightCount(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-        <input
-          name="workingHours"
-          type="number"
-          step="0.1"
-          min="0"
-          placeholder="Working hours/day (optional)"
-          value={workingHours}
-          onChange={(e) => setWorkingHours(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm col-span-2"
-          style={fieldStyle}
-        />
-      </div>
+    <Card className="p-5">
+      <CardTitle>Add a candidate circuit</CardTitle>
+      <form action={formAction} className="space-y-4">
+        <input type="hidden" name="siteSurveyId" value={siteSurveyId} />
+        <input type="hidden" name="societyId" value={societyId} />
+        <input type="hidden" name="serviceLine" value={serviceLine} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Light type" htmlFor="cand-lightType">
+            <input
+              id="cand-lightType"
+              name="lightType"
+              required
+              value={lightType}
+              onChange={(e) => setLightType(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <Field label="Wattage per light" htmlFor="cand-wattage">
+            <input
+              id="cand-wattage"
+              name="wattage"
+              type="number"
+              step="0.1"
+              min="0"
+              required
+              value={wattage}
+              onChange={(e) => setWattage(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <Field label="Metered light count" htmlFor="cand-metered">
+            <input
+              id="cand-metered"
+              name="meteredLightCount"
+              type="number"
+              min="1"
+              required
+              value={meteredLightCount}
+              onChange={(e) => setMeteredLightCount(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <Field label="Represented count (society-wide)" htmlFor="cand-represented">
+            <input
+              id="cand-represented"
+              name="representedLightCount"
+              type="number"
+              min="1"
+              required
+              value={representedLightCount}
+              onChange={(e) => setRepresentedLightCount(e.target.value)}
+              className="field"
+            />
+          </Field>
+        </div>
+        <Field label="Working hours / day (optional)" htmlFor="cand-hours">
+          <input
+            id="cand-hours"
+            name="workingHours"
+            type="number"
+            step="0.1"
+            min="0"
+            value={workingHours}
+            onChange={(e) => setWorkingHours(e.target.value)}
+            className="field"
+          />
+        </Field>
 
-      <div className="space-y-2 text-sm">
-        <p className="font-medium">CON-16 eligibility checklist</p>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="noSharedAppliances"
-            checked={noSharedAppliances}
-            onChange={(e) => setNoSharedAppliances(e.target.checked)}
-          />
-          No non-installation appliances share this circuit
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="wifiReachable"
-            checked={wifiReachable}
-            onChange={(e) => setWifiReachable(e.target.checked)}
-          />
-          WiFi/LAN reachable within 20–40m
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="fixturesUnder15ft"
-            checked={fixturesUnder15ft}
-            onChange={(e) => setFixturesUnder15ft(e.target.checked)}
-          />
-          Fixtures ≤15 feet high
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            name="notOnDrivewayOrRamp"
-            checked={notOnDrivewayOrRamp}
-            onChange={(e) => setNotOnDrivewayOrRamp(e.target.checked)}
-          />
-          Not on a driveway/ramp
-        </label>
-      </div>
+        <fieldset className="space-y-2.5">
+          <legend className="lbl mb-2">CON-16 eligibility checklist</legend>
+          {CHECKLIST.map((item) => (
+            <label key={item.name} className="flex items-center gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                name={item.name}
+                checked={checks[item.name] ?? false}
+                onChange={(e) => setChecks((prev) => ({ ...prev, [item.name]: e.target.checked }))}
+              />
+              {item.label}
+            </label>
+          ))}
+        </fieldset>
 
-      {error && (
-        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
-      <button type="submit" disabled={pending} className="btn-primary px-4 py-2 text-sm font-semibold disabled:opacity-60">
-        {pending ? "Submitting…" : "Submit checklist"}
-      </button>
-    </form>
+        {error && <ErrorText>{error}</ErrorText>}
+        <button type="submit" disabled={pending} className="btn-primary">
+          {pending ? "Submitting…" : "Submit checklist"}
+        </button>
+      </form>
+    </Card>
   );
 }

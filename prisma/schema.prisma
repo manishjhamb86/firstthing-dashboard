@@ -348,6 +348,7 @@ model AdminUser {
   gatePassSubmissions  GatePass[] @relation("GatePassSubmittedBy")
   gatePassApprovals    GatePass[] @relation("GatePassApprovedBy")
   commissioningReadingsRecorded CommissioningReading[]
+  benchmarkRescalesRecorded BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
 
   @@map("admin_users")
 }
@@ -500,8 +501,57 @@ model Circuit {
   loadValidationOverrideBy AdminUser? @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
   gatePasses GatePass[]
   commissioningReadings CommissioningReading[]
+  rescaleEvents BenchmarkRescaleEvent[]
 
   @@index([societyId])
   @@index([siteSurveyId])
   @@map("circuits")
+}
+
+// FEAT-041 / INV-07 / CON-10 — a light-count-triggered baseline rescale is
+// its own timestamped event type, deliberately NOT a mutation of
+// Circuit.preInstallBaseline and deliberately NOT the same entity as a
+// judgment-call billing adjustment (INV-03). The invariant exists so a
+// dispute can always tell "the formula was reapplied" apart from "someone
+// made a call" — conflating them in one table is precisely the failure
+// mode it guards against.
+//
+// preInstallBaseline therefore stays exactly as commissioned, forever
+// (ADR-005's versioned-not-mutated rule). The baseline in force at any
+// date is derived by replaying these events — see src/lib/benchmark-
+// rescale.ts, which is where the arithmetic lives and is unit-tested.
+//
+// FEAT-041-AC-5: effectiveDate is what forward-application keys off. A
+// rescale dated into an already-invoiced month never restates that
+// invoice; the difference goes through CAP-05's deviation review instead.
+model BenchmarkRescaleEvent {
+  id        String @id @default(cuid())
+  circuitId String @map("circuit_id")
+
+  previousLightCount Int   @map("previous_light_count")
+  newLightCount      Int   @map("new_light_count")
+  // Both baselines are stored, not just the result: INV-02 requires every
+  // figure a society is billed on to be traceable to what produced it, and
+  // recomputing "what was the baseline before this event" from the event
+  // chain is exactly the kind of derivation that goes wrong under dispute.
+  previousBaseline Float @map("previous_baseline")
+  rescaledBaseline Float @map("rescaled_baseline")
+
+  // FEAT-041-AC-3 — an unverified count change is refused outright, so
+  // this is non-nullable by construction, not merely validated in the
+  // action. verificationPhotoUrl stays optional for the same reason gate
+  // passes' photo does: no file-storage infrastructure exists in this
+  // src/ yet (see PROJECT_CONTEXT.md, MS-04).
+  verificationNote     String  @map("verification_note")
+  verificationPhotoUrl String? @map("verification_photo_url")
+
+  effectiveDate DateTime @map("effective_date") // explicit user selection, never inferred (INV-04's spirit)
+  recordedById  String   @map("recorded_by_id")
+  recordedAt    DateTime @default(now()) @map("recorded_at")
+
+  circuit    Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  recordedBy AdminUser @relation("BenchmarkRescaleRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([circuitId, effectiveDate])
+  @@map("benchmark_rescale_events")
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { approveGatePass, rejectGatePass } from "./actions";
+import { ErrorText } from "@/components/ui";
 
 export function GatePassApproval({ gatePassId }: { gatePassId: string }) {
   const [reason, setReason] = useState("");
@@ -23,37 +24,31 @@ export function GatePassApproval({ gatePassId }: { gatePassId: string }) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button
-        type="button"
-        onClick={approve}
-        disabled={pending}
-        className="text-xs font-semibold disabled:opacity-60"
-        style={{ color: "var(--ok-fg)" }}
-      >
+    <div className="flex flex-wrap items-center gap-2 pt-1">
+      <button type="button" onClick={approve} disabled={pending} className="btn-primary btn-sm">
         Approve
       </button>
       <input
         placeholder="Rejection reason"
+        aria-label="Rejection reason"
         value={reason}
         onChange={(e) => setReason(e.target.value)}
         disabled={pending}
-        className="border rounded-[var(--r-sm)] p-1 text-xs"
-        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
+        className="field max-w-52"
+        style={{ padding: "6px 10px", fontSize: "12.5px" }}
       />
       <button
         type="button"
         onClick={reject}
         disabled={pending || !reason.trim()}
-        className="text-xs font-semibold disabled:opacity-60"
-        style={{ color: "var(--bad-fg)" }}
+        className="btn-danger btn-sm"
       >
         Reject
       </button>
       {error && (
-        <p className="text-xs w-full" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
+        <div className="w-full">
+          <ErrorText>{error}</ErrorText>
+        </div>
       )}
     </div>
   );

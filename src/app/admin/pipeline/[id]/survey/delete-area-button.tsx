@@ -15,7 +15,7 @@ export function DeleteAreaButton({ id, siteSurveyId }: { id: string; siteSurveyI
           await deleteLightingInventoryArea(id, siteSurveyId);
         })
       }
-      className="text-xs text-[var(--text-subtle)] hover:text-[var(--bad-fg)] disabled:opacity-60"
+      className="text-xs font-semibold text-[var(--text-subtle)] hover:text-[var(--bad-fg)] disabled:opacity-60"
     >
       Remove
     </button>

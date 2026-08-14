@@ -10,15 +10,15 @@ export default async function LoginPage({
 
   return (
     <div className="min-h-screen flex items-center justify-center p-6">
-      <div
-        className="p-10 rounded-[var(--r-lg)] shadow-sm w-full max-w-md border"
-        style={{ background: "var(--surface)", borderColor: "var(--border-subtle)" }}
-      >
-        <BrandMark className="h-9 mb-6" />
-        <p className="mb-8" style={{ color: "var(--text-muted)" }}>
-          Sign in to continue
-        </p>
-        <LoginForm callbackUrl={callbackUrl ?? "/"} />
+      <div className="w-full max-w-sm">
+        <div className="card p-8">
+          <BrandMark className="h-8 mb-6" />
+          <h1 className="text-lg font-semibold mb-1">Sign in</h1>
+          <p className="mb-6 text-sm text-[var(--text-muted)]">
+            Energy savings operations for residential societies.
+          </p>
+          <LoginForm callbackUrl={callbackUrl ?? "/"} />
+        </div>
       </div>
     </div>
   );

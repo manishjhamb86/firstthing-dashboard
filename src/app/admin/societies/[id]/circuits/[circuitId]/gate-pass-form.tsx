@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { submitGatePass } from "./actions";
+import { Card, ErrorText, Field } from "@/components/ui";
 
 export function GatePassForm({
   circuitId,
@@ -23,46 +24,45 @@ export function GatePassForm({
     });
   }
 
-  const fieldStyle = { borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" };
-
   return (
-    <div className="max-w-md space-y-3">
+    <Card className="p-5 space-y-4">
       <p className="text-sm text-[var(--text-muted)]">
         List every item left on site, one per line (CON-18) — the meter, its mounting hardware, wiring, etc.
       </p>
-      <textarea
-        value={itemsText}
-        onChange={(e) => setItemsText(e.target.value)}
-        disabled={pending}
-        rows={4}
-        placeholder={"Smart meter, unit #4412\nDIN rail mount\n3m armored cable"}
-        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-        style={fieldStyle}
-      />
-      <label className="block text-sm">
-        Photo URL
+      <Field label="Items" htmlFor={`gp-items-${kind}`}>
+        <textarea
+          id={`gp-items-${kind}`}
+          value={itemsText}
+          onChange={(e) => setItemsText(e.target.value)}
+          disabled={pending}
+          rows={4}
+          placeholder={"Smart meter, unit #4412\nDIN rail mount\n3m armored cable"}
+          className="field"
+        />
+      </Field>
+      <Field
+        label="Photo URL"
+        htmlFor={`gp-photo-${kind}`}
+        hint="A link for now — in-app photo upload arrives with the file-storage work."
+      >
         <input
+          id={`gp-photo-${kind}`}
           value={photoUrl}
           onChange={(e) => setPhotoUrl(e.target.value)}
           disabled={pending}
           placeholder="https://…"
-          className="w-full border rounded-[var(--r-sm)] p-2 text-sm mt-1"
-          style={fieldStyle}
+          className="field"
         />
-      </label>
-      {error && (
-        <p className="text-sm" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
+      </Field>
+      {error && <ErrorText>{error}</ErrorText>}
       <button
         type="button"
         onClick={submit}
         disabled={pending || !itemsText.trim()}
-        className="btn-primary text-sm disabled:opacity-60"
+        className="btn-primary"
       >
         {pending ? "Submitting…" : "Submit gate pass"}
       </button>
-    </div>
+    </Card>
   );
 }

@@ -2,6 +2,8 @@
 
 import { useActionState, useState } from "react";
 import { createPortalAccount } from "./portal-actions";
+import { ErrorText, Field } from "@/components/ui";
+import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 
 async function action(_prev: string | undefined, formData: FormData) {
   const result = await createPortalAccount({
@@ -26,62 +28,61 @@ export function PortalAccountForm({ societyId }: { societyId: string }) {
   const [password, setPassword] = useState("");
 
   return (
-    <form action={formAction} className="space-y-3 border-t border-[var(--border-subtle)] pt-4 mt-4">
+    <form action={formAction} className="space-y-4 border-t border-[var(--border-subtle)] pt-4 mt-4">
       <input type="hidden" name="societyId" value={societyId} />
-      <div className="grid grid-cols-2 gap-3">
-        <input
-          name="name"
-          placeholder="Name"
-          required
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-        />
-        <select
-          name="portalAuthority"
-          required
-          value={portalAuthority}
-          onChange={(e) => setPortalAuthority(e.target.value as typeof portalAuthority)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-        >
-          <option value="office_bearer">Office-bearer</option>
-          <option value="committee">Committee</option>
-          <option value="manager">Manager</option>
-        </select>
+      <p className="lbl">New portal account</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Name" htmlFor={`pa-name-${societyId}`}>
+          <input
+            id={`pa-name-${societyId}`}
+            name="name"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="field"
+          />
+        </Field>
+        <Field label="Authority" htmlFor={`pa-authority-${societyId}`}>
+          <select
+            id={`pa-authority-${societyId}`}
+            name="portalAuthority"
+            required
+            value={portalAuthority}
+            onChange={(e) => setPortalAuthority(e.target.value as typeof portalAuthority)}
+            className="field"
+          >
+            {Object.entries(PORTAL_AUTHORITY_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
       </div>
-      <input
-        name="email"
-        type="email"
-        placeholder="Email"
-        required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-      />
-      <input
-        name="password"
-        type="password"
-        placeholder="Password (min 8 characters)"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-      />
-      {error && (
-        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={pending}
-        className="text-sm font-semibold disabled:opacity-60"
-        style={{ color: "var(--accent)" }}
-      >
+      <Field label="Email" htmlFor={`pa-email-${societyId}`}>
+        <input
+          id={`pa-email-${societyId}`}
+          name="email"
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="field"
+        />
+      </Field>
+      <Field label="Password" htmlFor={`pa-password-${societyId}`} hint="Minimum 8 characters.">
+        <input
+          id={`pa-password-${societyId}`}
+          name="password"
+          type="password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="field"
+        />
+      </Field>
+      {error && <ErrorText>{error}</ErrorText>}
+      <button type="submit" disabled={pending} className="btn-secondary">
         {pending ? "Creating…" : "Create portal account"}
       </button>
     </form>

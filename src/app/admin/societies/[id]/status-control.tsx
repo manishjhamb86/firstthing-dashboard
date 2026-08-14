@@ -2,14 +2,9 @@
 
 import { useTransition } from "react";
 import { updateSocietyStatus } from "../actions";
+import { SOCIETY_STATUS } from "@/lib/status-maps";
 
 const STATUSES = ["prospect", "active", "suspended", "terminated"] as const;
-const LABEL: Record<(typeof STATUSES)[number], string> = {
-  prospect: "Prospect",
-  active: "Active",
-  suspended: "Suspended",
-  terminated: "Terminated",
-};
 
 export function StatusControl({ societyId, status }: { societyId: string; status: string }) {
   const [pending, startTransition] = useTransition();
@@ -18,17 +13,18 @@ export function StatusControl({ societyId, status }: { societyId: string; status
     <select
       value={status}
       disabled={pending}
+      aria-label="Society status"
       onChange={(e) => {
         const next = e.target.value as (typeof STATUSES)[number];
         startTransition(() => {
           updateSocietyStatus(societyId, next);
         });
       }}
-      className="border border-[var(--field-border)] bg-[var(--surface)] text-[var(--text)] rounded-[var(--r-sm)] px-3 py-1.5 text-sm font-semibold disabled:opacity-60"
+      className="field field-auto font-semibold"
     >
       {STATUSES.map((s) => (
         <option key={s} value={s}>
-          {LABEL[s]}
+          {SOCIETY_STATUS[s].label}
         </option>
       ))}
     </select>

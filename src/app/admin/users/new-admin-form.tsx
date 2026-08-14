@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import type { AdminPermission } from "@prisma/client";
 import { createAdminUser } from "./admin-actions";
 import { PERMISSION_OPTIONS } from "./permission-options";
+import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 
 async function action(_prev: string | undefined, formData: FormData) {
   const permissions = formData.getAll("permissions") as AdminPermission[];
@@ -30,62 +31,65 @@ export function NewAdminForm() {
   }
 
   return (
-    <form
-      action={formAction}
-      className="space-y-3 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6"
-    >
-      <p className="text-sm font-semibold mb-1">New admin</p>
-      <input
-        name="name"
-        placeholder="Name"
-        required
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-      />
-      <input
-        name="email"
-        type="email"
-        placeholder="Email"
-        required
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-      />
-      <input
-        name="password"
-        type="password"
-        placeholder="Password (min 8 characters)"
-        required
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-        style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
-      />
-      <div className="flex flex-wrap gap-4 text-sm">
-        {PERMISSION_OPTIONS.map((p) => (
-          <label key={p.value} className="flex items-center gap-2">
+    <Card className="p-6">
+      <CardTitle>New admin</CardTitle>
+      <form action={formAction} className="space-y-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Name" htmlFor="na-name">
             <input
-              type="checkbox"
-              name="permissions"
-              value={p.value}
-              checked={permissions.includes(p.value)}
-              onChange={() => toggle(p.value)}
-            />{" "}
-            {p.label}
-          </label>
-        ))}
-      </div>
-      {error && (
-        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
-      <button type="submit" disabled={pending} className="btn-primary px-4 py-2 text-sm font-semibold disabled:opacity-60">
-        {pending ? "Creating…" : "Create admin"}
-      </button>
-    </form>
+              id="na-name"
+              name="name"
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <Field label="Email" htmlFor="na-email">
+            <input
+              id="na-email"
+              name="email"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="field"
+            />
+          </Field>
+        </div>
+        <Field label="Password" htmlFor="na-password" hint="Minimum 8 characters.">
+          <input
+            id="na-password"
+            name="password"
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="field"
+          />
+        </Field>
+        <fieldset>
+          <legend className="lbl mb-2">Permissions</legend>
+          <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+            {PERMISSION_OPTIONS.map((p) => (
+              <label key={p.value} className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="permissions"
+                  value={p.value}
+                  checked={permissions.includes(p.value)}
+                  onChange={() => toggle(p.value)}
+                />
+                {p.label}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        {error && <ErrorText>{error}</ErrorText>}
+        <button type="submit" disabled={pending} className="btn-primary">
+          {pending ? "Creating…" : "Create admin"}
+        </button>
+      </form>
+    </Card>
   );
 }

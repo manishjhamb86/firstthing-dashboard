@@ -22,7 +22,7 @@ export function DeactivatePortalButton({ profileId, societyId }: { profileId: st
         {pending ? "…" : "Deactivate"}
       </button>
       {error && (
-        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
+        <p role="alert" className="text-xs" style={{ color: "var(--bad-fg)" }}>
           {error}
         </p>
       )}

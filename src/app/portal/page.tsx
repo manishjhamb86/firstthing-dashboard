@@ -7,12 +7,8 @@ import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
 import { resolveTheme } from "@/lib/resolve-theme";
-
-const AUTHORITY_LABEL: Record<string, string> = {
-  office_bearer: "Office-bearer",
-  committee: "Committee",
-  manager: "Manager",
-};
+import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
+import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 
 // MS-02's demoable outcome, made literal: a society office-bearer/committee/
 // manager account logs in and lands on a role-scoped page reading its own
@@ -41,52 +37,64 @@ export default async function PortalHomePage() {
   const theme = await resolveTheme();
 
   return (
-    <div className="min-h-screen p-10">
+    <div className="min-h-screen">
       <div
-        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 sm:px-6 py-3 mb-8 rounded-[var(--r-lg)]"
-        style={{ background: "var(--chrome)", color: "var(--chrome-text)" }}
+        className="sticky top-0 z-20"
+        style={{ background: "var(--chrome)", borderBottom: "1px solid var(--chrome-border)" }}
       >
-        <BrandMark variant={theme === "light" ? "light" : "dark"} className="h-7" />
-        <div className="flex items-center gap-4">
-          <ThemeSwitcher current={theme} />
-          <SignOutButton className="text-sm font-medium hover:opacity-80" style={{ color: "var(--chrome-muted)" }} />
+        <div className="mx-auto max-w-3xl flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 sm:px-8 py-3">
+          <BrandMark variant={theme === "light" ? "light" : "dark"} className="h-7" />
+          <div className="flex items-center gap-4">
+            <ThemeSwitcher current={theme} />
+            <SignOutButton className="text-sm font-medium hover:opacity-80" style={{ color: "var(--chrome-muted)" }} />
+          </div>
         </div>
       </div>
-      <h1 className="text-2xl font-bold mb-1">{society.name}</h1>
-      <p className="mb-8 text-[var(--text-muted)]">
-        Signed in as {session.user.email} · {AUTHORITY_LABEL[session.user.role]}
-      </p>
 
-      <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6 max-w-xl">
-        <p className="text-sm mb-4 text-[var(--text-muted)]">Portal accounts</p>
-        <ul className="space-y-3">
-          {accounts.map((account) => {
-            const isSelf = account.id === session.user.id;
-            const isTargetOfficeBearer = account.portalAuthority === "office_bearer";
-            return (
-              <li
-                key={account.id}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
-              >
-                <div>
-                  <p className="font-medium">
-                    {account.name ?? account.email}{" "}
-                    {isSelf && <span className="text-[var(--text-subtle)]">(you)</span>}
-                  </p>
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {account.portalAuthority ? AUTHORITY_LABEL[account.portalAuthority] : "—"}
-                  </p>
-                </div>
-                {!isTargetOfficeBearer &&
-                  (isOfficeBearer ? (
-                    <TransferButton profileId={account.id} />
-                  ) : (
-                    <p className="text-xs text-[var(--text-subtle)]">Only the office-bearer can change this</p>
-                  ))}
-              </li>
-            );
-          })}
-        </ul>
+      <div className="mx-auto max-w-3xl p-5 sm:p-8">
+        <PageHeader
+          title={society.name}
+          subtitle={`Signed in as ${session.user.email} · ${PORTAL_AUTHORITY_LABEL[session.user.role]}`}
+        />
+
+        <Card className="p-6">
+          <CardTitle>Portal accounts</CardTitle>
+          <ul className="space-y-3">
+            {accounts.map((account) => {
+              const isSelf = account.id === session.user.id;
+              const isTargetOfficeBearer = account.portalAuthority === "office_bearer";
+              return (
+                <li
+                  key={account.id}
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                >
+                  <div>
+                    <p className="font-medium">
+                      {account.name ?? account.email}{" "}
+                      {isSelf && <span className="text-[var(--text-subtle)]">(you)</span>}
+                    </p>
+                    <p className="text-sm text-[var(--text-muted)]">{account.email}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {isTargetOfficeBearer ? (
+                      <StatusChip tone="ok">Office-bearer</StatusChip>
+                    ) : (
+                      <StatusChip tone="neu">
+                        {account.portalAuthority ? PORTAL_AUTHORITY_LABEL[account.portalAuthority] : "—"}
+                      </StatusChip>
+                    )}
+                    {!isTargetOfficeBearer &&
+                      (isOfficeBearer ? (
+                        <TransferButton profileId={account.id} />
+                      ) : (
+                        <p className="text-xs text-[var(--text-subtle)]">Only the office-bearer can change this</p>
+                      ))}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       </div>
     </div>
   );

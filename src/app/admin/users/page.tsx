@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { AdminNav } from "../admin-nav";
+import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { AdminRow } from "./admin-row";
 import { NewAdminForm } from "./new-admin-form";
 
@@ -17,10 +17,8 @@ export default async function UsersPage() {
   const admins = await db.adminUser.findMany({ orderBy: { createdAt: "asc" } });
 
   return (
-    <div className="min-h-screen p-10">
-      <AdminNav />
-      <h1 className="text-2xl font-bold mb-1">Admin users</h1>
-      <p className="mb-8 text-[var(--text-muted)]">Internal ops/support/management accounts.</p>
+    <>
+      <PageHeader title="Admin users" subtitle="Internal ops/support/management accounts." />
 
       {!canManageAdmins ? (
         <p className="max-w-xl text-[var(--text-muted)]">
@@ -28,22 +26,22 @@ export default async function UsersPage() {
           available to you.
         </p>
       ) : (
-        <div className="space-y-8 max-w-xl">
+        <div className="space-y-6 max-w-2xl">
           {admins.length === 0 ? (
-            <div className="border border-dashed border-[var(--border)] rounded-[var(--r-lg)] p-10 text-center">
-              <p className="font-semibold">No admin accounts</p>
-            </div>
+            <EmptyState title="No admin accounts">Create the first internal account below.</EmptyState>
           ) : (
-            <ul className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6 space-y-3">
-              {admins.map((a) => (
-                <AdminRow key={a.id} admin={a} isSelf={a.id === session.user.id} />
-              ))}
-            </ul>
+            <Card className="p-6">
+              <ul className="space-y-4">
+                {admins.map((a) => (
+                  <AdminRow key={a.id} admin={a} isSelf={a.id === session.user.id} />
+                ))}
+              </ul>
+            </Card>
           )}
 
           <NewAdminForm />
         </div>
       )}
-    </div>
+    </>
   );
 }

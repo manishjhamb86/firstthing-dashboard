@@ -2,13 +2,27 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { AdminNav } from "../admin-nav";
+import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
 
 const REQUIRED_VALID_DAYS = 5;
 
 function dayCount(readings: { status: string }[]) {
   return readings.filter((r) => r.status === "valid").length;
+}
+
+function DayStrip({ validCount }: { validCount: number }) {
+  return (
+    <span className="inline-flex gap-1 align-middle" aria-hidden>
+      {Array.from({ length: REQUIRED_VALID_DAYS }, (_, i) => (
+        <span
+          key={i}
+          className="h-1.5 w-4 rounded-full"
+          style={{ background: i < validCount ? "var(--accent)" : "var(--surface-active)" }}
+        />
+      ))}
+    </span>
+  );
 }
 
 export default async function MonitoringDashboardPage() {
@@ -49,140 +63,202 @@ export default async function MonitoringDashboardPage() {
   ]);
 
   const preRows = preInstallActive.map((c) => {
-    const readings = c.commissioningReadings.filter((r) => c.preInstallWindowStartAt && r.date >= c.preInstallWindowStartAt);
+    const readings = c.commissioningReadings.filter(
+      (r) => c.preInstallWindowStartAt && r.date >= c.preInstallWindowStartAt,
+    );
     return {
       circuit: c,
       validCount: dayCount(readings),
       pendingAnomaly: readings.some((r) => r.status === "anomaly"),
       variancePct: latestVarianceFromAveragePct(readings),
-      latest: readings[readings.length - 1],
     };
   });
 
   const postRows = postInstallActive.map((c) => {
-    const readings = c.commissioningReadings.filter((r) => c.postInstallWindowStartAt && r.date >= c.postInstallWindowStartAt);
+    const readings = c.commissioningReadings.filter(
+      (r) => c.postInstallWindowStartAt && r.date >= c.postInstallWindowStartAt,
+    );
     const avgSoFar = averageOfValid(readings);
     const projectedSavingsPct =
-      avgSoFar != null && c.preInstallBaseline ? ((c.preInstallBaseline - avgSoFar) / c.preInstallBaseline) * 100 : null;
+      avgSoFar != null && c.preInstallBaseline
+        ? ((c.preInstallBaseline - avgSoFar) / c.preInstallBaseline) * 100
+        : null;
     return {
       circuit: c,
       validCount: dayCount(readings),
       pendingAnomaly: readings.some((r) => r.status === "anomaly"),
       projectedSavingsPct,
-      latest: readings[readings.length - 1],
     };
   });
 
   return (
-    <div className="min-h-screen p-10">
-      <AdminNav />
-      <h1 className="text-2xl font-bold mb-1">Metering monitoring</h1>
-      <p className="mb-8 text-[var(--text-muted)]">Daily status of every circuit currently in a commissioning window.</p>
+    <>
+      <PageHeader
+        title="Metering monitoring"
+        subtitle="Daily status of every circuit currently in a commissioning window."
+      />
 
-      <section className="mb-10">
-        <h2 className="text-lg font-semibold mb-3">Pre-install baseline windows</h2>
+      <section className="mb-8">
+        <h2 className="text-[15px] font-semibold mb-3">Pre-install baseline windows</h2>
         {preRows.length === 0 ? (
-          <div className="border border-dashed border-[var(--border)] rounded-[var(--r-lg)] p-6 text-center max-w-2xl">
-            <p className="text-sm text-[var(--text-muted)]">No circuits are currently in a pre-install monitoring window.</p>
-          </div>
+          <EmptyState title="No active pre-install windows">
+            A circuit appears here once its meter is installed and load-validated.
+          </EmptyState>
         ) : (
-          <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] divide-y divide-[var(--border-subtle)] max-w-3xl">
-            {preRows.map((row) => (
-              <Link
-                key={row.circuit.id}
-                href={`/admin/societies/${row.circuit.societyId}/circuits/${row.circuit.id}`}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm hover:bg-[var(--surface-hover)]"
-              >
-                <div>
-                  <span className="font-medium">{row.circuit.society.name}</span>
-                  <span className="text-[var(--text-muted)]"> · {row.circuit.location || row.circuit.lightType}</span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-                  <span>
-                    Day {row.validCount} of {REQUIRED_VALID_DAYS}
-                  </span>
-                  {row.pendingAnomaly ? (
-                    <span style={{ color: "var(--warn-fg)" }}>Anomaly open</span>
-                  ) : row.variancePct != null ? (
-                    <span>{row.variancePct >= 0 ? "+" : ""}{row.variancePct.toFixed(1)}% vs. avg</span>
-                  ) : (
-                    <span>Awaiting first reading</span>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
+          <Card className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Circuit</th>
+                  <th>Progress</th>
+                  <th>Latest vs. average</th>
+                </tr>
+              </thead>
+              <tbody>
+                {preRows.map((row) => (
+                  <tr key={row.circuit.id}>
+                    <td>
+                      <Link
+                        href={`/admin/societies/${row.circuit.societyId}/circuits/${row.circuit.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {row.circuit.society.name}
+                      </Link>
+                    </td>
+                    <td className="text-[var(--text-muted)]">{row.circuit.location || row.circuit.lightType}</td>
+                    <td>
+                      <span className="flex items-center gap-2">
+                        <DayStrip validCount={row.validCount} />
+                        <span className="num text-xs text-[var(--text-muted)]">
+                          {row.validCount}/{REQUIRED_VALID_DAYS}
+                        </span>
+                      </span>
+                    </td>
+                    <td>
+                      {row.pendingAnomaly ? (
+                        <StatusChip tone="warn">Anomaly open</StatusChip>
+                      ) : row.variancePct != null ? (
+                        <span className="num">
+                          {row.variancePct >= 0 ? "+" : ""}
+                          {row.variancePct.toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-[var(--text-muted)]">Awaiting first reading</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
         )}
       </section>
 
-      <section className="mb-10">
-        <h2 className="text-lg font-semibold mb-3">Post-install windows — live benchmark trend</h2>
+      <section className="mb-8">
+        <h2 className="text-[15px] font-semibold mb-3">Post-install windows — live benchmark trend</h2>
         {postRows.length === 0 ? (
-          <div className="border border-dashed border-[var(--border)] rounded-[var(--r-lg)] p-6 text-center max-w-2xl">
-            <p className="text-sm text-[var(--text-muted)]">No circuits are currently in a post-install monitoring window.</p>
-          </div>
+          <EmptyState title="No active post-install windows">
+            A circuit appears here once its lights are replaced and the completion gate pass is submitted.
+          </EmptyState>
         ) : (
-          <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] divide-y divide-[var(--border-subtle)] max-w-3xl">
-            {postRows.map((row) => (
-              <Link
-                key={row.circuit.id}
-                href={`/admin/societies/${row.circuit.societyId}/circuits/${row.circuit.id}`}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm hover:bg-[var(--surface-hover)]"
-              >
-                <div>
-                  <span className="font-medium">{row.circuit.society.name}</span>
-                  <span className="text-[var(--text-muted)]"> · {row.circuit.location || row.circuit.lightType}</span>
-                </div>
-                <div className="flex items-center gap-3 text-xs text-[var(--text-muted)]">
-                  <span>
-                    Day {row.validCount} of {REQUIRED_VALID_DAYS}
-                  </span>
-                  {row.pendingAnomaly ? (
-                    <span style={{ color: "var(--warn-fg)" }}>Anomaly open</span>
-                  ) : row.projectedSavingsPct != null ? (
-                    <span>{row.projectedSavingsPct.toFixed(1)}% projected savings so far</span>
-                  ) : (
-                    <span>Awaiting first reading</span>
-                  )}
-                </div>
-              </Link>
-            ))}
-          </div>
+          <Card className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Circuit</th>
+                  <th>Progress</th>
+                  <th>Projected savings</th>
+                </tr>
+              </thead>
+              <tbody>
+                {postRows.map((row) => {
+                  const inBand =
+                    row.projectedSavingsPct != null &&
+                    row.projectedSavingsPct >= 60 &&
+                    row.projectedSavingsPct <= 80;
+                  return (
+                    <tr key={row.circuit.id}>
+                      <td>
+                        <Link
+                          href={`/admin/societies/${row.circuit.societyId}/circuits/${row.circuit.id}`}
+                          className="font-medium hover:underline"
+                        >
+                          {row.circuit.society.name}
+                        </Link>
+                      </td>
+                      <td className="text-[var(--text-muted)]">{row.circuit.location || row.circuit.lightType}</td>
+                      <td>
+                        <span className="flex items-center gap-2">
+                          <DayStrip validCount={row.validCount} />
+                          <span className="num text-xs text-[var(--text-muted)]">
+                            {row.validCount}/{REQUIRED_VALID_DAYS}
+                          </span>
+                        </span>
+                      </td>
+                      <td>
+                        {row.pendingAnomaly ? (
+                          <StatusChip tone="warn">Anomaly open</StatusChip>
+                        ) : row.projectedSavingsPct != null ? (
+                          <StatusChip tone={inBand ? "ok" : "warn"}>
+                            {row.projectedSavingsPct.toFixed(1)}% so far
+                          </StatusChip>
+                        ) : (
+                          <span className="text-[var(--text-muted)]">Awaiting first reading</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
         )}
       </section>
 
       <section>
-        <h2 className="text-lg font-semibold mb-3">Recently resolved</h2>
+        <h2 className="text-[15px] font-semibold mb-3">Recently resolved</h2>
         {recentlyResolved.length === 0 ? (
-          <div className="border border-dashed border-[var(--border)] rounded-[var(--r-lg)] p-6 text-center max-w-2xl">
-            <p className="text-sm text-[var(--text-muted)]">No circuit has completed benchmark commissioning yet.</p>
-          </div>
+          <EmptyState title="Nothing commissioned yet">
+            No circuit has completed benchmark commissioning yet.
+          </EmptyState>
         ) : (
-          <div className="bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] divide-y divide-[var(--border-subtle)] max-w-3xl">
-            {recentlyResolved.map((c) => (
-              <Link
-                key={c.id}
-                href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 p-3 text-sm hover:bg-[var(--surface-hover)]"
-              >
-                <div>
-                  <span className="font-medium">{c.society.name}</span>
-                  <span className="text-[var(--text-muted)]"> · {c.location || c.lightType}</span>
-                </div>
-                {c.state === "benchmark_confirmed" && c.benchmarkSavingsPct != null ? (
-                  <span className="text-xs font-semibold" style={{ color: "var(--ok-fg)" }}>
-                    {c.benchmarkSavingsPct.toFixed(1)}% confirmed
-                  </span>
-                ) : (
-                  <span className="text-xs font-semibold" style={{ color: "var(--warn-fg)" }}>
-                    Outside CON-20 band — under review
-                  </span>
-                )}
-              </Link>
-            ))}
-          </div>
+          <Card className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Circuit</th>
+                  <th>Outcome</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentlyResolved.map((c) => (
+                  <tr key={c.id}>
+                    <td>
+                      <Link
+                        href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
+                        className="font-medium hover:underline"
+                      >
+                        {c.society.name}
+                      </Link>
+                    </td>
+                    <td className="text-[var(--text-muted)]">{c.location || c.lightType}</td>
+                    <td>
+                      {c.state === "benchmark_confirmed" && c.benchmarkSavingsPct != null ? (
+                        <StatusChip tone="ok">{c.benchmarkSavingsPct.toFixed(1)}% confirmed</StatusChip>
+                      ) : (
+                        <StatusChip tone="warn">Outside CON-20 band — under review</StatusChip>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
         )}
       </section>
-    </div>
+    </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { updateCircuitConfiguration } from "./actions";
+import { ErrorText, Field } from "@/components/ui";
 
 type Circuit = {
   id: string;
@@ -38,85 +39,65 @@ export function CircuitEditForm({ circuit, onDone }: { circuit: Circuit; onDone:
     });
   }
 
-  const fieldStyle = {
-    borderColor: "var(--field-border)",
-    background: "var(--surface)",
-    color: "var(--text)",
-  };
-
   return (
-    <div className="mt-2 p-3 rounded-[var(--r-md)] border border-[var(--border-subtle)] space-y-2">
-      <label className="block text-xs">
-        Location / area
+    <div className="mt-2 p-4 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-sunken)] space-y-4">
+      <Field label="Location / area" htmlFor={`ce-location-${circuit.id}`}>
         <input
+          id={`ce-location-${circuit.id}`}
           value={location}
           onChange={(e) => setLocation(e.target.value)}
           disabled={pending}
-          className="w-full border rounded-[var(--r-sm)] p-2 text-sm mt-1"
-          style={fieldStyle}
+          className="field"
         />
-      </label>
-      <div className="grid grid-cols-2 gap-2">
-        <label className="block text-xs">
-          Metered light count
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Metered light count" htmlFor={`ce-metered-${circuit.id}`}>
           <input
+            id={`ce-metered-${circuit.id}`}
             type="number"
             value={meteredLightCount}
             onChange={(e) => setMeteredLightCount(e.target.value)}
             disabled={pending}
-            className="w-full border rounded-[var(--r-sm)] p-2 text-sm mt-1"
-            style={fieldStyle}
+            className="field"
           />
-        </label>
-        <label className="block text-xs">
-          Represented light count
+        </Field>
+        <Field label="Represented light count" htmlFor={`ce-represented-${circuit.id}`}>
           <input
+            id={`ce-represented-${circuit.id}`}
             type="number"
             value={representedLightCount}
             onChange={(e) => setRepresentedLightCount(e.target.value)}
             disabled={pending}
-            className="w-full border rounded-[var(--r-sm)] p-2 text-sm mt-1"
-            style={fieldStyle}
+            className="field"
           />
-        </label>
-        <label className="block text-xs">
-          Wattage (per light)
+        </Field>
+        <Field label="Wattage (per light)" htmlFor={`ce-wattage-${circuit.id}`}>
           <input
+            id={`ce-wattage-${circuit.id}`}
             type="number"
             value={wattage}
             onChange={(e) => setWattage(e.target.value)}
             disabled={pending}
-            className="w-full border rounded-[var(--r-sm)] p-2 text-sm mt-1"
-            style={fieldStyle}
+            className="field"
           />
-        </label>
-        <label className="block text-xs">
-          Working hours / day
+        </Field>
+        <Field label="Working hours / day" htmlFor={`ce-hours-${circuit.id}`}>
           <input
+            id={`ce-hours-${circuit.id}`}
             type="number"
             value={workingHours}
             onChange={(e) => setWorkingHours(e.target.value)}
             disabled={pending}
-            className="w-full border rounded-[var(--r-sm)] p-2 text-sm mt-1"
-            style={fieldStyle}
+            className="field"
           />
-        </label>
+        </Field>
       </div>
-      {error && (
-        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
+      {error && <ErrorText>{error}</ErrorText>}
       <div className="flex gap-2">
-        <button type="button" onClick={submit} disabled={pending} className="btn-primary text-xs disabled:opacity-60">
+        <button type="button" onClick={submit} disabled={pending} className="btn-primary btn-sm">
           {pending ? "Saving…" : "Save"}
         </button>
-        <button
-          type="button"
-          onClick={onDone}
-          disabled={pending}
-          className="text-xs text-[var(--text-subtle)]"
-        >
+        <button type="button" onClick={onDone} disabled={pending} className="btn-secondary btn-sm">
           Cancel
         </button>
       </div>

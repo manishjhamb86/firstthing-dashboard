@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 56">
   <!-- For light and Slate working-surface grounds (the surface / card-bg tokens). -->
   <rect x="2" y="2" width="52" height="52" rx="12" fill="#2E9E68"/>
-  <path d="M 20 20 L 20 38 M 20 20 L 38 20 M 20 29 L 30 29"
+  <path d="M 20 20 L 20 38 M 20 20 L 38 20 M 20 29 L 27 29"
         stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
   <path d="M 34 20 L 34 38 M 34 15 L 34 20"
         stroke="#FFFFFF" stroke-width="5.5" stroke-linecap="round" fill="none"/>

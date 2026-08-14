@@ -2,13 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { enrollServiceLine } from "../actions";
-
-const SERVICE_LINE_OPTIONS = [
-  { value: "lighting", label: "Lighting" },
-  { value: "pumps", label: "Pumps" },
-  { value: "solar", label: "Solar" },
-  { value: "wastewater", label: "Wastewater" },
-];
+import { ErrorText } from "@/components/ui";
+import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 
 export function EnrollServiceLineForm({
   societyId,
@@ -37,23 +32,23 @@ export function EnrollServiceLineForm({
           value={serviceLine}
           onChange={(e) => setServiceLine(e.target.value)}
           disabled={pending}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
+          aria-label="Service line to enroll"
+          className="field max-w-48"
         >
-          {SERVICE_LINE_OPTIONS.filter((o) => available.includes(o.value)).map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label}
+          {available.map((value) => (
+            <option key={value} value={value}>
+              {SERVICE_LINE_LABEL[value] ?? value}
             </option>
           ))}
         </select>
-        <button type="button" onClick={submit} disabled={pending} className="btn-primary text-sm disabled:opacity-60">
+        <button type="button" onClick={submit} disabled={pending} className="btn-secondary">
           {pending ? "Enrolling…" : "Enroll service line"}
         </button>
       </div>
       {error && (
-        <p className="text-xs mt-2" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
+        <div className="mt-2">
+          <ErrorText>{error}</ErrorText>
+        </div>
       )}
     </div>
   );

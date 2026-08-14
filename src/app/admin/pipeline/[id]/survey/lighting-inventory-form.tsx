@@ -2,8 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { addLightingInventoryArea } from "./actions";
-
-const fieldStyle = { borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" };
+import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 
 async function action(_prev: string | undefined, formData: FormData) {
   const result = await addLightingInventoryArea({
@@ -28,71 +27,75 @@ export function LightingInventoryForm({ siteSurveyId }: { siteSurveyId: string }
   const [note, setNote] = useState("");
 
   return (
-    <form
-      action={formAction}
-      className="space-y-3 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-4"
-    >
-      <input type="hidden" name="siteSurveyId" value={siteSurveyId} />
-      <p className="text-sm font-semibold">Add an area</p>
-      <div className="grid grid-cols-2 gap-3">
-        <input
-          name="area"
-          placeholder="Area (e.g. Basement parking)"
-          required
-          value={area}
-          onChange={(e) => setArea(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-        <input
-          name="lightType"
-          placeholder="Light type"
-          required
-          value={lightType}
-          onChange={(e) => setLightType(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-        <input
-          name="count"
-          type="number"
-          min="0"
-          required
-          value={count}
-          onChange={(e) => setCount(e.target.value)}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-        <select
-          name="method"
-          value={method}
-          onChange={(e) => setMethod(e.target.value as "walked" | "estimated")}
-          className="border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        >
-          <option value="walked">Walked count</option>
-          <option value="estimated">Estimated</option>
-        </select>
-      </div>
-      {method === "estimated" && (
-        <input
-          name="note"
-          placeholder="Why estimated, not walked?"
-          required
-          value={note}
-          onChange={(e) => setNote(e.target.value)}
-          className="w-full border rounded-[var(--r-sm)] p-2 text-sm"
-          style={fieldStyle}
-        />
-      )}
-      {error && (
-        <p className="text-xs" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
-      <button type="submit" disabled={pending} className="btn-primary px-4 py-2 text-sm font-semibold disabled:opacity-60">
-        {pending ? "Adding…" : "Add area"}
-      </button>
-    </form>
+    <Card className="p-5">
+      <CardTitle>Add an area</CardTitle>
+      <form action={formAction} className="space-y-4">
+        <input type="hidden" name="siteSurveyId" value={siteSurveyId} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Area" htmlFor="inv-area">
+            <input
+              id="inv-area"
+              name="area"
+              placeholder="e.g. Basement parking"
+              required
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <Field label="Light type" htmlFor="inv-lightType">
+            <input
+              id="inv-lightType"
+              name="lightType"
+              placeholder="e.g. Tube light"
+              required
+              value={lightType}
+              onChange={(e) => setLightType(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <Field label="Light count" htmlFor="inv-count">
+            <input
+              id="inv-count"
+              name="count"
+              type="number"
+              min="0"
+              required
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+              className="field"
+            />
+          </Field>
+          <Field label="Count method" htmlFor="inv-method">
+            <select
+              id="inv-method"
+              name="method"
+              value={method}
+              onChange={(e) => setMethod(e.target.value as "walked" | "estimated")}
+              className="field"
+            >
+              <option value="walked">Walked count</option>
+              <option value="estimated">Estimated</option>
+            </select>
+          </Field>
+        </div>
+        {method === "estimated" && (
+          <Field label="Why estimated, not walked?" htmlFor="inv-note">
+            <input
+              id="inv-note"
+              name="note"
+              required
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              className="field"
+            />
+          </Field>
+        )}
+        {error && <ErrorText>{error}</ErrorText>}
+        <button type="submit" disabled={pending} className="btn-primary">
+          {pending ? "Adding…" : "Add area"}
+        </button>
+      </form>
+    </Card>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useActionState, useState } from "react";
 import { loginAction } from "./actions";
+import { ErrorText, Field } from "@/components/ui";
 
 // Controlled inputs, deliberately — React 19 resets a form's *uncontrolled*
 // fields after every submission, success or failure (confirmed by direct
@@ -19,42 +20,32 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
   return (
     <form action={formAction} className="space-y-5">
       <input type="hidden" name="callbackUrl" value={callbackUrl} />
-      <div className="space-y-1">
-        <label htmlFor="email" className="text-sm font-medium">
-          Email
-        </label>
+      <Field label="Email" htmlFor="email">
         <input
           id="email"
           name="email"
           type="email"
+          autoComplete="email"
           required
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full border rounded-[var(--r-md)] p-3"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
+          className="field"
         />
-      </div>
-      <div className="space-y-1">
-        <label htmlFor="password" className="text-sm font-medium">
-          Password
-        </label>
+      </Field>
+      <Field label="Password" htmlFor="password">
         <input
           id="password"
           name="password"
           type="password"
+          autoComplete="current-password"
           required
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full border rounded-[var(--r-md)] p-3"
-          style={{ borderColor: "var(--field-border)", background: "var(--surface)", color: "var(--text)" }}
+          className="field"
         />
-      </div>
-      {error && (
-        <p role="alert" className="text-sm" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
-      )}
-      <button type="submit" disabled={pending} className="btn-primary w-full p-3 font-semibold disabled:opacity-60">
+      </Field>
+      {error && <ErrorText>{error}</ErrorText>}
+      <button type="submit" disabled={pending} className="btn-primary w-full">
         {pending ? "Signing in…" : "Sign in"}
       </button>
     </form>

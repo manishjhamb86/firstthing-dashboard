@@ -52,7 +52,9 @@ Two sources, per the method: every screen the Phase 4 flows touch, **plus** the 
 never reach but products always need — the second list is where most missing screens are found,
 and it accounts for 50 of the 111 below.
 
-**Coverage ledger: 29 of 110 specified · 0 mockups approved · 0 blueprinted** (plus 5 headless units, §1.9).
+**Coverage ledger: 51 of 111 specified · 51 mockups approved · 0 blueprinted** (plus 5 headless units, §1.9).
+The 51 are the whole priority-1 set (§3); the remaining 60 are priority 2 and 3, deliberately not
+run — see §3's note on deferring them until after prioritization.
 
 Legend — **Src:** `F` derived from a Phase 4 flow · `M` method's standard-screens checklist ·
 `X` feature with no flow and no flow-assigned screen (found while building this inventory).

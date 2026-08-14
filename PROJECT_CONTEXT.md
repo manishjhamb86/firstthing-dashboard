@@ -1315,6 +1315,34 @@ count query; nothing pre-existing was touched.
 `tsc`/`lint`/`build`/`vitest` all clean; 5 new routes. Backlog validator: **16 errors / 263
 warnings**, unchanged documented baseline.
 
+**Deployed to `stage.firsthing.earth` (2026-08-14, commit `f0c54ad`)** — same rsync convention as
+every prior deploy. Migration `20260814152505_add_ms05_demo_kyc_offer_agreement_contract` applied
+via `prisma migrate deploy`, backed up first to
+`/tmp/firsthing_blueprint_pre_ms05_20260814_161816.sql` on the box (41,534 bytes with a real dump
+header — the size was checked, per the 0-byte lesson from the FEAT-041 deploy; note also that
+`pg_dump` rejects Prisma's `?schema=public` query string, so the URL needs it stripped). Both pm2
+processes restarted with `--update-env`, the worker included because it shares the generated Prisma
+client. Verified over the public HTTPS path logged in as a real account: all 5 pre-existing admin
+routes plus all 4 new MS-05 routes return 200 with **zero console errors and zero page errors** —
+and each of those 200s is itself the meaningful check, since every one of them queries a table this
+migration created. All 8 new tables confirmed present by direct `psql`. ADR-006's self-rescheduling
+chain survived the restart unbroken: the worker correctly did not re-seed (one was already pending)
+and the 5-minute cadence runs straight through 16:08 → 16:13 → 16:18 → 16:23. `unstable restarts: 0`
+on both processes, dashboard error log empty.
+
+**One real gap found by the deploy, not yet closed — S3 uploads cannot work on stage.** The box has
+no `AWS_REGION`/`AWS_S3_BUCKET`/`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` at all, in either `.env`
+or `.env.local`; the archived checkout still sitting alongside it (`firsthing-dashboard-newui-
+archived-20260814`) doesn't have them either, so the archived app's S3 work was only ever configured
+on the local dev machine and this is a pre-existing hole MS-05 is simply the first thing to actually
+depend on. Consequence is bounded and not a crash: every page renders and every non-upload action
+works, but `getUploadUrl` will throw when it tries to presign with an undefined region, so the two
+upload surfaces (a KYC document file, the executed agreement scan) fail on stage. **Deliberately not
+fixed unilaterally** — the fix is copying a live IAM credential onto a server, which is the user's
+call to make, not a mechanical deploy step. Everything else in MS-05 is exercisable on stage today,
+including the out-of-band KYC entry path that exists precisely so a document can be recorded without
+a file.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.
@@ -1407,6 +1435,7 @@ In parallel, the design-system rollout (5-theme tokens + new app shell, previous
 - Resolved (2026-08-05): S3 is fully live — bucket `firsthing` (`ap-south-1`, `Documents/` root prefix), public-read policy + CORS + scoped IAM user all provisioned by the user and confirmed working via a real upload+public-fetch test.
 - Leftover test objects in the live bucket need manual cleanup (the app's own IAM credentials can't delete them, by design — `PutObject`-only): `Documents/ASF_Insignia_Gurugram/2026-08/Invoices/ASF_Insignia_Gurugram_Invoice_2026-08_TEST-001.pdf` (2026-08-05), plus two from MS-05's verification (2026-08-14): `Documents/Palmwood_Enclave/2026-08/KYC/Palmwood_Enclave_GSTCertificate_2026-08.pdf` and `Documents/Palmwood_Enclave/2026-08/Agreements/Palmwood_Enclave_Agreement_2026-08.pdf`.
 - **KYC documents and executed agreements are stored in a public-read bucket** (user's explicit choice, 2026-08-14, made with the alternative and the reasoning in front of them — see the MS-05 section). Anyone with or guessing a URL can fetch a society's GST certificate or signed agreement without a session. Worth revisiting alongside **SPIKE-02** (India DPDP Act review), which is still unresolved. The switch is cheap by construction: the DB stores S3 keys, not URLs, so it is a change to `publicS3Url()` plus a read path, not a data migration.
+- **`stage.firsthing.earth` has no AWS credentials, so uploads fail there** (found by the MS-05 deploy, 2026-08-14). Neither `.env` nor `.env.local` on the box carries `AWS_REGION`/`AWS_S3_BUCKET`/`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, and neither does the archived checkout beside it — S3 was only ever configured on the local dev machine. Everything else on stage works; the two upload surfaces (KYC document file, executed agreement scan) throw on presign. Not fixed unilaterally because it means copying a live IAM credential onto a server — the user's call. The KYC out-of-band entry path still works on stage without a file, by design.
 - 5 of the 8 planned document types (meter readings, pre/post-demo reports, legal agreements, gate passes) have a naming convention defined but **no upload UI or schema yet** — only invoices, savings reports, and inspection reports are actually wired up.
 - The CSV meter-reading upload/validation pipeline the user described (period selection, ±5% benchmark variance flagging, review/ignore workflow, auto-generating the monthly savings report image) is **fully unbuilt** — explicitly deferred as a separate, substantial feature, not attempted alongside the naming-convention work.
 - Resolved (2026-08-05): the Postgres container naming/recreation blocker is done — `firsthing-postgres` is up under the correct name, migrated, and seeded.

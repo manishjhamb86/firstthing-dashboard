@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { recordCommissioningReading, fixCommissioningAnomaly } from "./monitoring-actions";
+import { CsvUploadForm } from "./csv-upload-form";
 
 type Reading = {
   id: string;
@@ -157,6 +158,7 @@ export function MonitoringWindowPanel({
           >
             {pending ? "Recording…" : "Record day"}
           </button>
+          <CsvUploadForm circuitId={circuitId} windowType={windowType} />
         </div>
       )}
     </section>

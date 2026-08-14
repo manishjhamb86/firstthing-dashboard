@@ -808,6 +808,74 @@ meter-installed → gate pass → pre-install window → light replacement → c
 post-install window → benchmark) has not been driven end to end yet and is the natural starting
 point for that follow-up pass.
 
+## Commissioning monitoring: sheet upload, a status dashboard, and the deferred E2E pass finally run (2026-08-14)
+
+**The user asked directly for three things, all scoped to the commissioning flow just built**: finish
+the demo-installation monitoring flow, a daily status view of each meter's variation against its
+benchmark, and a sheet upload for manual readings. Asked one clarifying question before building —
+whether "sheet upload" meant extending the commissioning-scoped mechanism just built or pulling
+FEAT-043/MS-07's full CSV+Gemini production ingest pipeline forward out of milestone order (it
+depends on MS-05/MS-06, neither built) — user confirmed **commissioning-scoped**, so this stayed
+additive to FEAT-012/014 rather than a new milestone jump.
+
+**Sheet upload**: `src/lib/monitoring-window.ts`'s `parseCommissioningCsv()` — a deliberately simple
+comma-separated parser (no quoted-field support; the only content is a date and a number), sorted
+chronologically regardless of file order since the row-level rules below are order-sensitive.
+`uploadCommissioningReadingsCsv()` (`monitoring-actions.ts`) applies each row through the exact same
+per-day rules a manual entry uses — refactored into a shared `applyCommissioningReading()` helper so
+the two entry points (one form field vs. a whole sheet) can't drift apart. **Stops at the first
+failing row rather than skipping past it** (an open anomaly gate, a window already complete, a bad
+value) and reports how many rows actually landed — a partial, honestly-reported result beats
+silently reordering or dropping rows PER-04 would then have to reconcile by hand. Explicitly **not**
+FEAT-043's CON-30 pipeline: no raw-file retention, no Gemini normalization — a plain client-side
+`file.text()` read, sent straight to the server action, since there's no file-storage
+infrastructure in this `src/` at all yet (see MS-04's own gate-pass-photo gap above, same class of
+honestly-scoped-down decision).
+
+**Daily status dashboard** (`/admin/monitoring`, nav-gated to `manage_survey`): every circuit
+currently mid-window, across every society, in one place — the bird's-eye view drilling into one
+circuit at a time never gave. Two new pure helpers in `monitoring-window.ts` compute a live,
+dashboard-only signal that's never written to the DB: `latestVarianceFromAveragePct()` (pre-install
+— how far today's reading sits from the running average, a stability check before there's a
+benchmark to compare against) and, combined with `averageOfValid()`, a **projected savings
+percentage** for post-install windows (today's average vs. the stored `preInstallBaseline`) — so ops
+can watch the number trend toward or away from CON-20's 60-80% band before the 5th day actually
+lands, not just find out on completion day. A third "Recently resolved" section lists
+`benchmark_confirmed`/`benchmark_review` circuits with their final percentage, for a complete
+picture in one screen.
+
+**The deferred end-to-end pass finally ran, and found one real bug** (Playwright/system Chrome, the
+established pattern this repo has used since the archived app): the long-running local dev server
+process had a **stale generated Prisma Client** — it predated the last few schema migrations in this
+session's own MS-04 batch, so every `db.circuit.findMany`/`findUnique` call including relations added
+this session (`gatePasses`, `commissioningReadings`) threw `PrismaClientValidationError: Unknown
+field`. `pnpm prisma generate` alone doesn't help a process that's already loaded the old client into
+memory — the dev server itself has to restart. **Worth remembering**: after any `prisma migrate dev`
+that changes the schema mid-session, restart whatever `next dev` process is actually serving
+requests, don't just re-run `generate` and assume a long-lived process picks it up. Once restarted,
+the full flow was walked for real, not assumed: a lead's site survey → lighting inventory → circuit
+candidate (eligible, 60 lights) → load validation (1100W meter reading against a 1080W theoretical
+load, 1.85% — within CON-17's ±10%) → install gate pass submitted → pre-install window backdated via
+`psql` to simulate elapsed days (Playwright can't fast-forward real calendar time) → **2 valid days,
+1 anomaly flagged, the fix-and-restart action correctly zeroed the count and excluded the pre-anomaly
+readings** → the remaining 5 valid days supplied via a real CSV upload through the browser's file
+input → window completed with `preInstallBaseline = 1078` (exact average, confirmed via direct
+`psql` query, not just UI text) → completion gate pass → light replacement recorded (the departure
+gate genuinely blocks this step without a submitted completion gate pass — confirmed by the section
+only appearing once the gate pass existed) → post-install window (5 valid days via the manual
+single-day form, exercising the other entry path) → **`benchmarkSavingsPct = 70.32%` computed and
+confirmed inside CON-20's band**, matching the hand-calculated value exactly. A second circuit was
+walked partway (2 pre-install days, one deliberately left mid-window) specifically to verify the
+dashboard's **active-window** rows, not just its empty and resolved states — confirmed showing "Day 2
+of 5" and the correct `+3.1%` live variance figure. Zero console errors, zero page errors, across
+every step. All Playwright-created circuits/readings/gate passes and the one lighting-inventory-area
+were deleted via `psql` afterward — the pipeline/society/survey they were built against pre-existed
+this session's testing and was left alone, same "don't touch what you didn't create" discipline as
+every prior verification pass in this file.
+
+**`docs/backlog.yaml` unchanged this round** — this was additive UI/UX on top of already-built
+FEAT-012/014, not a new tracked feature or milestone shift.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

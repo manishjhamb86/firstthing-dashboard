@@ -84,3 +84,67 @@ export function averageOfFirstValid(readings: { status: string; consumptionKwh: 
   const sum = valid.reduce((acc, r) => acc + (r.consumptionKwh ?? 0), 0);
   return sum / valid.length;
 }
+
+// Dashboard-only signal, not written anywhere — "how is this window
+// trending today," distinct from the fixed value the completed window
+// writes. Pre-install: how far the latest reading sits from the running
+// average so far (a stability check before there's a benchmark to compare
+// against). Post-install: the projected CON-10 savings % if the window
+// completed with today's average, so ops can see the number moving toward
+// (or away from) CON-20's 60-80% band before the 5th day lands.
+export function averageOfValid(readings: { status: string; consumptionKwh: number | null }[]) {
+  const valid = readings.filter((r) => r.status === "valid" && r.consumptionKwh != null);
+  if (valid.length === 0) return null;
+  const sum = valid.reduce((acc, r) => acc + (r.consumptionKwh ?? 0), 0);
+  return sum / valid.length;
+}
+
+export function latestVarianceFromAveragePct(readings: { status: string; consumptionKwh: number | null; date: Date }[]) {
+  const valid = readings.filter((r) => r.status === "valid" && r.consumptionKwh != null);
+  if (valid.length === 0) return null;
+  const latest = valid[valid.length - 1];
+  const avg = averageOfValid(valid);
+  if (avg == null || avg === 0 || latest.consumptionKwh == null) return null;
+  return ((latest.consumptionKwh - avg) / avg) * 100;
+}
+
+// "Sheet upload" — a lightweight CSV parser for the commissioning-scoped
+// manual readings upload, not FEAT-043's full CON-30 ingest pipeline (no
+// raw-file retention, no AI normalization — deliberately out of scope,
+// see PROJECT_CONTEXT.md). Deliberately simple: comma-separated, no
+// quoted-field support, since the only content is a date and a number.
+export type CsvReadingRow = { date: string; consumptionKwh?: number; anomalyNote?: string };
+
+export function parseCommissioningCsv(text: string): CsvReadingRow[] {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return [];
+
+  const header = lines[0].toLowerCase().split(",").map((h) => h.trim());
+  const dateIdx = header.indexOf("date");
+  const kwhIdx = header.indexOf("consumption_kwh");
+  const noteIdx = header.indexOf("anomaly_note");
+  if (dateIdx === -1 || kwhIdx === -1) return [];
+
+  const rows = lines
+    .slice(1)
+    .map((line) => {
+      const cells = line.split(",").map((c) => c.trim());
+      const date = cells[dateIdx];
+      const kwhRaw = cells[kwhIdx];
+      const note = noteIdx >= 0 ? cells[noteIdx] : undefined;
+      return {
+        date,
+        consumptionKwh: kwhRaw ? Number(kwhRaw) : undefined,
+        anomalyNote: note?.trim() || undefined,
+      };
+    })
+    .filter((r) => r.date);
+
+  // Chronological order matters downstream — anomaly-gating and window
+  // completion are both evaluated row by row, so an out-of-order sheet
+  // would silently misapply both.
+  return rows.sort((a, b) => a.date.localeCompare(b.date));
+}

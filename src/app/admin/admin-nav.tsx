@@ -12,5 +12,6 @@ import { AdminNavClient } from "./admin-nav-client";
 export async function AdminNav() {
   const [theme, session] = await Promise.all([resolveTheme(), auth()]);
   const showPipeline = session?.user.adminPermissions?.includes("manage_pipeline") ?? false;
-  return <AdminNavClient theme={theme} showPipeline={showPipeline} />;
+  const showMonitoring = session?.user.adminPermissions?.includes("manage_survey") ?? false;
+  return <AdminNavClient theme={theme} showPipeline={showPipeline} showMonitoring={showMonitoring} />;
 }

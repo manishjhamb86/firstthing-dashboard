@@ -13,6 +13,7 @@ const BASE_LINKS = [
   { href: "/admin/users", label: "Users" },
 ];
 const PIPELINE_LINK = { href: "/admin/pipeline", label: "Leads" };
+const MONITORING_LINK = { href: "/admin/monitoring", label: "Monitoring" };
 
 // Mobile gets a collapsed toggle rather than a wrapped multi-row bar — an
 // earlier flex-wrap fix technically stopped content clipping, but on a
@@ -22,9 +23,21 @@ const PIPELINE_LINK = { href: "/admin/pipeline", label: "Leads" };
 // header stays one compact row by default, matching the archived shell's
 // proven mobile pattern (archive/src/components/shell/Sidebar.tsx) even
 // though this is a top bar, not that component's off-canvas sidebar.
-export function AdminNavClient({ theme, showPipeline }: { theme: ThemeId; showPipeline: boolean }) {
+export function AdminNavClient({
+  theme,
+  showPipeline,
+  showMonitoring,
+}: {
+  theme: ThemeId;
+  showPipeline: boolean;
+  showMonitoring: boolean;
+}) {
   const [open, setOpen] = useState(false);
-  const links = showPipeline ? [...BASE_LINKS, PIPELINE_LINK] : BASE_LINKS;
+  const links = [
+    ...BASE_LINKS,
+    ...(showPipeline ? [PIPELINE_LINK] : []),
+    ...(showMonitoring ? [MONITORING_LINK] : []),
+  ];
 
   return (
     <div className="mb-8 rounded-[var(--r-lg)]" style={{ background: "var(--chrome)", color: "var(--chrome-text)" }}>

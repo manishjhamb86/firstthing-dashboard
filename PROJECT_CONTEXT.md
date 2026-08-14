@@ -651,6 +651,30 @@ app (`societies/new`'s standalone form, and the society-detail page's list+form 
 container) were checked and don't have the same double-constraint. Verified both locally and on
 stage: both cards measure identically (310px at 390px viewport, 576px at 1280px).
 
+## Missing sign-out control (2026-08-14) — user-caught, a real rebuild gap
+
+**There was no way to sign out anywhere in the product.** `src/lib/auth.ts` has exported NextAuth's
+`signOut` since MS-01, but nothing ever called it — no button, no menu item, on either `AdminNav` or
+the portal header. The design docs do specify sign-out behavior (`05-field.md`'s "Sign out" row:
+refused while unsynced work exists, purges cached data), and the archived pre-blueprint app had a
+working "Sign out" button (`archive/src/components/shell/Sidebar.tsx`) — this was a real gap
+introduced by the greenfield rebuild never carrying that control forward into the new chrome, not a
+missing design decision or an intentional scope cut.
+
+Fixed with `src/app/logout-actions.ts` (`logoutAction`, a Server Action calling `signOut({
+redirectTo: "/login" })`, mirroring `login/actions.ts`'s own Server-Action pattern) and a shared
+`src/components/sign-out-button.tsx` (a plain `<form action={logoutAction}>`), wired into both
+`admin-nav-client.tsx` (desktop inline row and the mobile collapsed-menu panel) and `portal/page.tsx`'s
+header. **Field-specific sign-out rules from `05-field.md`** (refuse while unsynced work exists,
+purge local cache) are SUR-02's own concern, not SUR-01/portal's — out of scope here since the field
+surface itself isn't built yet.
+
+**Verified end to end via Playwright** (6/6 checks): admin desktop and mobile (behind the "Menu"
+toggle), and portal, all correctly end the session — confirmed not just by landing on `/login`, but
+by re-requesting the now-signed-out route (`/admin`, `/portal`) and getting redirected back to
+`/login`, proving the session was actually destroyed server-side, not just the tab navigated away.
+`tsc`/`lint`/`build`/`vitest` all clean, route table unchanged.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

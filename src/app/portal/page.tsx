@@ -5,6 +5,7 @@ import { isPortalRole } from "@/lib/roles";
 import { TransferButton } from "./transfer-button";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { SignOutButton } from "@/components/sign-out-button";
 import { resolveTheme } from "@/lib/resolve-theme";
 
 const AUTHORITY_LABEL: Record<string, string> = {
@@ -46,7 +47,10 @@ export default async function PortalHomePage() {
         style={{ background: "var(--chrome)", color: "var(--chrome-text)" }}
       >
         <BrandMark variant={theme === "light" ? "light" : "dark"} className="h-7" />
-        <ThemeSwitcher current={theme} />
+        <div className="flex items-center gap-4">
+          <ThemeSwitcher current={theme} />
+          <SignOutButton className="text-sm font-medium hover:opacity-80" style={{ color: "var(--chrome-muted)" }} />
+        </div>
       </div>
       <h1 className="text-2xl font-bold mb-1">{society.name}</h1>
       <p className="mb-8 text-[var(--text-muted)]">

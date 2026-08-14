@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { SignOutButton } from "@/components/sign-out-button";
 import type { ThemeId } from "@/lib/theme";
 
 const LINKS = [
@@ -37,6 +38,7 @@ export function AdminNavClient({ theme }: { theme: ThemeId }) {
             ))}
           </nav>
           <ThemeSwitcher current={theme} />
+          <SignOutButton className="text-sm font-medium hover:opacity-80" style={{ color: "var(--chrome-muted)" }} />
         </div>
 
         <button
@@ -70,6 +72,10 @@ export function AdminNavClient({ theme }: { theme: ThemeId }) {
             ))}
           </nav>
           <ThemeSwitcher current={theme} />
+          <SignOutButton
+            className="text-sm font-medium text-left hover:opacity-80"
+            style={{ color: "var(--chrome-muted)" }}
+          />
         </div>
       )}
     </div>

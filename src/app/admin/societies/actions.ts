@@ -74,3 +74,26 @@ export async function updateSocietyStatus(id: string, status: SocietyStatus) {
   revalidatePath("/admin/societies");
   return {};
 }
+
+// FEAT-039: enroll a society in a service line. This is the entity
+// FEAT-085-AC-5's gap comment above was waiting on — each engagement now
+// carries its own independent status, separate from any other service
+// line's. Gated the same way society status changes already are
+// (requireAdmin, not a named permission) — PER-01's own tooling access is
+// already the broadest in this app, matching the existing convention rather
+// than fragmenting the permission model further for one more admin action.
+export async function enrollServiceLine(societyId: string, serviceLine: string) {
+  const session = await requireAdmin();
+
+  // FEAT-039-AC-3 — one engagement per (society, serviceLine), enforced at
+  // the DB too (@@unique), but checked here first for a clean error message.
+  const existing = await db.engagement.findUnique({
+    where: { societyId_serviceLine: { societyId, serviceLine: serviceLine as never } },
+  });
+  if (existing) return { error: "This society is already enrolled in that service line." };
+
+  await db.engagement.create({ data: { societyId, serviceLine: serviceLine as never } });
+  logger.info("society.service_line_enrolled", { actorId: session.user.id, societyId, serviceLine });
+  revalidatePath(`/admin/societies/${societyId}`);
+  return {};
+}

@@ -77,13 +77,150 @@ enum CircuitState {
   surveyed
   eligible
   ineligible // CON-16 hard-criterion failure (FEAT-007-AC-5) — no exception path
-  benchmarking
-  benchmark_confirmed
-  awaiting_installation
+  meter_installed // FEAT-011 — load validated within CON-17's ±10% band (or PER-01-overridden)
+  pre_install_monitoring // FEAT-012 — 5-consecutive-valid-day window running
+  awaiting_installation // FEAT-012 complete, baseline computed — ready for FEAT-013's light replacement
+  post_install_pending // FEAT-013 — replacement + gate-pass done, FEAT-014's window not yet started
+  post_install_monitoring // FEAT-014 — 5-consecutive-valid-day window running
+  benchmark_confirmed // FEAT-014 — result fell in CON-20's 60-80% band, benchmarkSavingsPct written
+  benchmark_review // FEAT-014-AC-5 — result outside 60-80%, routed to FEAT-015 (not yet built)
   active_billing
   retired
 
   @@map("circuit_state")
+}
+
+// FEAT-012/014 — the commissioning-scoped daily monitoring mechanism.
+// Deliberately smaller than MS-07's full CSV/vendor-API reading ingest
+// (not built until that milestone): PER-04 records one reading per
+// calendar day directly against the circuit being commissioned. A missing
+// day is simply the absence of a row here — distinguished from an
+// actively-flagged anomaly (FEAT-012-AC-5) by presence/status rather than
+// a third enum value.
+enum CommissioningWindowType {
+  pre_install
+  post_install
+
+  @@map("commissioning_window_type")
+}
+
+enum CommissioningReadingStatus {
+  valid
+  anomaly
+
+  @@map("commissioning_reading_status")
+}
+
+model CommissioningReading {
+  id             String                      @id @default(cuid())
+  circuitId      String                      @map("circuit_id")
+  windowType     CommissioningWindowType     @map("window_type")
+  date           DateTime                    @map("date") // calendar day, stored at midnight UTC
+  consumptionKwh Float?                      @map("consumption_kwh")
+  status         CommissioningReadingStatus
+  anomalyNote    String?                     @map("anomaly_note")
+  recordedById   String                      @map("recorded_by_id")
+  createdAt      DateTime                    @default(now()) @map("created_at")
+
+  circuit     Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  recordedBy  AdminUser @relation(fields: [recordedById], references: [id])
+
+  @@unique([circuitId, windowType, date])
+  @@index([circuitId, windowType])
+  @@map("commissioning_readings")
+}
+
+// FEAT-011/CON-18 — one instance of the cross-cutting gate-pass component
+// (09-architecture.md §5, ADR-006): an itemized equipment list signed,
+// photographed, and backend-approved before PER-04 leaves site. `kind` is
+// deliberately a real enum, not a free string, even with one value today —
+// FEAT-013's installation gate-pass is a second instance of the same
+// component, added when that feature needs it, not guessed at here.
+enum GatePassKind {
+  demo_install
+  demo_install_completion // FEAT-013 — light-replacement sign-off, CON-18
+
+  @@map("gate_pass_kind")
+}
+
+// ADR-006 — `submitted` is provisional-release eligible: a `submitted` pass
+// older than 30 minutes is flipped to `provisional` by the gatepass-sweep
+// job (never by a client-side timer, per ADR-006's own reasoning), letting
+// PER-04 proceed without an indefinite wait on backend approval.
+enum GatePassStatus {
+  submitted
+  provisional
+  approved
+  rejected
+
+  @@map("gate_pass_status")
+}
+
+// ADR-003 — the one piece of new infrastructure this schema introduces: a
+// Postgres-backed job queue, polled by a dedicated worker process
+// (scripts/job-worker.ts), carrying every time-driven guarantee in the
+// product. MS-04 is the first point it's load-bearing (the gate-pass
+// timeout); later milestones reuse the same table for SLA escalation, the
+// CON-13 suspension countdown, and notification retries — not rebuilt per
+// feature.
+enum JobType {
+  gatepass_sweep
+
+  @@map("job_type")
+}
+
+enum JobStatus {
+  pending
+  running
+  done
+  failed
+
+  @@map("job_status")
+}
+
+model Job {
+  id        String    @id @default(cuid())
+  type      JobType
+  runAt     DateTime  @map("run_at")
+  status    JobStatus @default(pending)
+  attempts  Int       @default(0)
+  payload   Json?
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, runAt])
+  @@map("jobs")
+}
+
+model GatePass {
+  id             String         @id @default(cuid())
+  circuitId      String         @map("circuit_id")
+  kind           GatePassKind
+  status         GatePassStatus @default(submitted)
+  itemsJson      Json           @map("items_json") // itemized equipment list, CON-18
+  photoUrl       String?        @map("photo_url")
+  submittedById  String         @map("submitted_by_id")
+  submittedAt    DateTime       @default(now()) @map("submitted_at")
+  approvedById   String?        @map("approved_by_id")
+  approvedAt     DateTime?      @map("approved_at")
+  rejectedReason String?        @map("rejected_reason")
+
+  circuit     Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  submittedBy AdminUser @relation("GatePassSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy  AdminUser? @relation("GatePassApprovedBy", fields: [approvedById], references: [id])
+
+  @@index([circuitId])
+  @@index([status])
+  @@map("gate_passes")
+}
+
+// FEAT-039 — an engagement's own independent status, separate from the
+// pipeline/contract state that sits on top of it.
+enum EngagementStatus {
+  active
+  inactive
+
+  @@map("engagement_status")
 }
 
 // CAP-15 — CON-24's earliest pipeline stages. MS-03's own scope is lead
@@ -122,12 +259,33 @@ model Society {
   nextElectionDate DateTime? @map("next_election_date") // CON-28a — a prompt, never enforced
   createdAt        DateTime  @default(now()) @map("created_at")
 
-  contacts  SocietyContact[]
-  profiles  Profile[]
-  circuits  Circuit[]
-  pipelines Pipeline[]
+  contacts    SocietyContact[]
+  profiles    Profile[]
+  circuits    Circuit[]
+  pipelines   Pipeline[]
+  engagements Engagement[]
 
   @@map("societies")
+}
+
+// FEAT-039 — the abstraction every pipeline/contract/billing record keys
+// against; a society is never "a lighting customer," it's a society with
+// one or more independent service-line engagements. Closes a gap
+// societies/actions.ts already flagged (FEAT-085-AC-5 needed exactly this
+// entity and didn't have it yet). SVC-03/04 (solar/wastewater) can be
+// enrolled here but are deliberately inert — FEAT-039-AC-5 — nothing else
+// in the product builds operational screens against them yet.
+model Engagement {
+  id          String           @id @default(cuid())
+  societyId   String           @map("society_id")
+  serviceLine ServiceLine      @map("service_line")
+  status      EngagementStatus @default(active)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@unique([societyId, serviceLine])
+  @@map("engagements")
 }
 
 model SocietyContact {
@@ -185,6 +343,11 @@ model AdminUser {
 
   pipelinesOwned Pipeline[] @relation("PipelineSalesOwner")
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
+
+  circuitLoadOverrides Circuit[] @relation("CircuitLoadOverrideBy")
+  gatePassSubmissions  GatePass[] @relation("GatePassSubmittedBy")
+  gatePassApprovals    GatePass[] @relation("GatePassApprovedBy")
+  commissioningReadingsRecorded CommissioningReading[]
 
   @@map("admin_users")
 }
@@ -289,21 +452,54 @@ model Circuit {
   societyId             String       @map("society_id")
   siteSurveyId          String?      @map("site_survey_id") // FEAT-007 — which survey this candidate was selected during
   serviceLine           ServiceLine  @map("service_line")
+  location              String?      // FEAT-040 — physical area/location, set during registry configuration
   lightType             String       @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
   meteredLightCount     Int          @map("metered_light_count")
   representedLightCount Int          @map("represented_light_count") // scoped to this lightType only — CON-11
   wattage               Float
   workingHours          Float?       @map("working_hours") // metadata only, never triggers a rescale — CON-10
+  // FEAT-040-AC-5 — when workingHours last changed; recorded so a later
+  // off-band month can be traced to a metadata change vs. a real anomaly,
+  // without that change itself ever triggering a benchmark rescale (CON-10).
+  workingHoursEffectiveAt DateTime? @map("working_hours_effective_at")
   eligibilityChecklist  Json?        @map("eligibility_checklist") // CON-16 — per-criterion pass/fail, FEAT-007
   // FEAT-007-AC-3 — the one exception-able criterion (light count < 50);
   // every other hard criterion (fixtures >15ft, driveway) has no override.
   lightCountExceptionApprovedBy String? @map("light_count_exception_approved_by")
   lightCountExceptionReason     String? @map("light_count_exception_reason")
+  // FEAT-011 — CON-17 load validation: the meter's displayed load vs.
+  // (light count × wattage), and the resulting delta. A persistently
+  // failed validation can only be overridden by PER-01 (FEAT-011-AC-5),
+  // recorded here rather than silently accepted as a normal pass.
+  meterDisplayedLoad            Float?    @map("meter_displayed_load")
+  meterInstalledAt              DateTime? @map("meter_installed_at")
+  loadDiscrepancyPct            Float?    @map("load_discrepancy_pct")
+  loadValidationOverrideById    String?   @map("load_validation_override_by_id")
+  loadValidationOverrideReason  String?   @map("load_validation_override_reason")
+  // FEAT-012/014 — pre/post monitoring windows. windowStartAt is the
+  // calendar day valid-day counting begins from; an anomaly fix (AC-3)
+  // bumps it forward to the midnight after the fix rather than mutating
+  // past readings, so evaluation is always just "valid readings on/after
+  // windowStartAt". Baselines are the resulting averages once each window
+  // completes (FEAT-012-AC-1/FEAT-014-AC-1).
+  preInstallWindowStartAt  DateTime? @map("pre_install_window_start_at")
+  preInstallBaseline       Float?    @map("pre_install_baseline")
+  lightReplacementDate     DateTime? @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
+  postInstallWindowStartAt DateTime? @map("post_install_window_start_at")
+  postInstallBaseline      Float?    @map("post_install_baseline")
+  // FEAT-014 — the number the contract prices against (CON-20's 60-80%
+  // band). System-computed only; FEAT-014-AC-4 requires no manual entry
+  // path exists for it, so there is deliberately no action in this
+  // codebase that sets this field directly from user input.
+  benchmarkSavingsPct       Float?    @map("benchmark_savings_pct")
   state                 CircuitState @default(surveyed)
   createdAt             DateTime     @default(now()) @map("created_at")
 
   society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
   siteSurvey SiteSurvey? @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
+  loadValidationOverrideBy AdminUser? @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
+  gatePasses GatePass[]
+  commissioningReadings CommissioningReading[]
 
   @@index([societyId])
   @@index([siteSurveyId])

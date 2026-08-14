@@ -675,6 +675,139 @@ by re-requesting the now-signed-out route (`/admin`, `/portal`) and getting redi
 `/login`, proving the session was actually destroyed server-side, not just the tab navigated away.
 `tsc`/`lint`/`build`/`vitest` all clean, route table unchanged.
 
+## MS-03 done (2026-08-14) — lead to confirmed survey, the deal's first real vertical slice
+
+**All 4 features built** (`docs/backlog.yaml` MS-03 status flipped to `done`): FEAT-001 (log a new
+lead), FEAT-002 (demo proposal, 3-outcome decision), FEAT-006 (whole-society lighting inventory by
+area), FEAT-007 (demo-circuit selection & CON-16 eligibility checklist). New `AdminPermission`
+values `manage_pipeline` (CAP-15, PER-07 sales) and `manage_survey` (CAP-16, PER-04 field survey)
+gate this area, kept as two separate permissions rather than one broader flag — a real deployment
+has different staff for sales vs. field work, and PER-01 (ops) is expected to hold both, which
+becomes the technical proxy for "PER-01 specifically" wherever an AC calls for it (see below).
+
+**New schema, MS-03 scope only** (`09-architecture.md` §5.2's "representative, not exhaustive"
+convention, same as MS-01's Circuit/CircuitState): `Pipeline` (one per `(societyId, serviceLine)` —
+CON-24's `@@unique` is the structural guarantee, not just an app check), `SiteSurvey` (one per
+Pipeline, the umbrella FEAT-006/007 data attaches to — CAP-16's full scope, governance profile,
+pump-room audit, logbook, is explicitly not built here), `LightingInventoryArea`. `Circuit` gained
+`siteSurveyId` and the light-count-exception fields.
+
+**The "PER-01 specifically" technical-proxy decision** (Research Gate item — several ACs,
+FEAT-007-AC-4 among them, require an actor distinct from both PER-04 and PER-07, and the permission
+model has no third marker for it): resolved by requiring the actor to hold **both** `manage_survey`
+and `manage_pipeline`, on the reasoning that a real PER-01 account holds every back-office
+permission. Applied consistently at every point this gap recurs across this batch (FEAT-007's
+light-count exception approval, FEAT-011's load-validation override, every gate-pass approval) —
+recorded here once rather than re-derived at each site.
+
+**FEAT-039/040 followed in dependency order, closing a gap FEAT-085's own comment had flagged**:
+`Engagement` (one row per `(societyId, serviceLine)`, `EngagementStatus active | inactive`) is the
+entity the MS-02 session's `societies/actions.ts` comment was explicitly waiting on
+(FEAT-085-AC-5's per-service-line independent state) — `enrollServiceLine()` and a "Service lines"
+panel on the society detail page are the first things to use it. FEAT-040 added `Circuit.location`
+and `workingHoursEffectiveAt` (a working-hours edit is metadata only, per CON-10 — recorded with an
+effective date, never triggers a rescale on its own) plus a dedicated
+`/admin/societies/[id]/circuits` registry screen, editing gated to the PER-01 proxy above
+(FEAT-040-AC-4: PER-04 reads, doesn't edit).
+
+## MS-04 (partial, 2026-08-14) — circuit commissioning: meter install through benchmark, FEAT-041 still open
+
+**6 of MS-04's 7 features built; `docs/backlog.yaml` MS-04 status deliberately left `proposed`, not
+flipped to `done`** — same "don't overstate an incomplete milestone" discipline as MS-02's own
+partial entry above. FEAT-041 (light-count-triggered baseline rescale, INV-07) depends on FEAT-014
+and wasn't attempted this batch; all three of MS-04's own exit criteria (circuit registry with a
+load-validated meter; a gate pass resolving via explicit approval or the 30-minute provisional
+timeout with the job runner live; baseline/post-install windows completing to a benchmark inside
+CON-20's 60-80% band) are met by the 6 built features, but the milestone's `features:` list isn't
+fully done, so the status field says so honestly.
+
+**New infrastructure: ADR-003's Postgres-backed job queue, the first piece of infrastructure this
+build has needed with no precedent** (per `09-architecture.md`'s own risk register, RISK-04). A
+`Job` table (`type`, `runAt`, `status`, `attempts`, `payload`) plus `scripts/job-worker.ts`, a
+standalone long-polling process (`pnpm worker`, 15s poll interval) — not a request-handler-driven
+mechanism, since these jobs are time-driven. The one job type implemented, `gatepass_sweep`
+(ADR-006), flips any `submitted` `GatePass` older than 30 minutes to `provisional` and
+**self-reschedules** on every run (a recurring job re-inserting its own next `Job` row, since this
+queue has no separate cron primitive) — chosen over a fixed interval loop inside the worker itself
+so the schedule stays inspectable/adjustable via the same `Job` table every other job type will use.
+**Genuinely runtime-verified, not just code-reviewed**: ran `pnpm worker` against the real local
+Postgres, confirmed via direct `psql` query that it seeded its first sweep job, processed it
+(`status: done`), and re-queued the next one — the exact self-perpetuating behavior the design
+depends on, not assumed from reading the code.
+
+**`GatePass` (CON-18)**: `kind` is a real enum (`demo_install`, `demo_install_completion`) rather
+than a free string even with two values today — FEAT-011's install pass and FEAT-013's completion
+pass are two instances of the same cross-cutting component (`09-architecture.md` §5), sharing one
+`submitGatePass`/`approveGatePass`/`rejectGatePass` action set parameterized by `kind`, each gated
+to the circuit state it belongs after. Approval is gated to the PER-01 proxy (both permissions);
+submission (PER-04, `manage_survey` alone) is what actually unblocks the next step per ADR-006 —
+**backend approval is never the blocking event**, matching the architecture doc's own reasoning for
+why the provisional-release sweep exists at all. **Deliberate, documented gap**: gate-pass photo
+capture is a plain URL field, not a wired upload widget — this greenfield `src/` has no
+file-storage infrastructure at all yet (the archived app's S3 presigned-PUT pipeline, see
+Architecture Decisions below, was never ported), so there was nothing to reuse. Same class of
+honestly-left-open gap as the 5 still-unbuilt document upload types noted further down this file;
+a real upload widget is follow-up work, not silently stubbed as done.
+
+**FEAT-011 load validation (CON-17)**: `submitLoadValidation` computes the discrepancy between the
+meter's displayed load and (light count × wattage) and only writes `state: meter_installed` inside
+±10% — outside it, the delta and inputs are still persisted (so a subsequent override has something
+real to record against) but the state doesn't advance, and the exact percentage is returned to the
+UI (FEAT-011-AC-3's "exact delta shown," not a generic failure). `overrideLoadValidation` is the
+PER-01-proxy path (FEAT-011-AC-5): it writes `loadValidationOverrideById`/`Reason` alongside the
+state transition, so an overridden circuit is visibly distinguishable from one that passed normally
+going forward, not silently indistinguishable.
+
+**FEAT-012/014's monitoring windows are one shared mechanism** (`src/lib/monitoring-window.ts` +
+`monitoring-actions.ts`), not two parallel implementations — FEAT-014's own spec says it "mirrors
+FEAT-012's mechanism" exactly, so duplicating it would have been the wrong call. **Deliberately
+smaller than MS-07's future full CSV/vendor-API reading ingest**: PER-04 records one reading per
+calendar day directly against the circuit being commissioned (`CommissioningReading`, distinct from
+whatever `MeterReading` MS-07 eventually builds for production billing ingest) — a real, separate,
+intentionally minimal mechanism scoped to commissioning, not a stand-in for the eventual pipeline.
+**A missing day is deliberately not a third status value** — it's the absence of a row for that
+date, distinguished from an actively-flagged `anomaly` row by presence rather than an enum value
+(FEAT-012-AC-5), and naturally doesn't force a window restart on its own (only an anomaly does, and
+only once PER-04 explicitly records a fix — FEAT-012-AC-3's "resets... starting the next midnight"
+is implemented literally: the fix action computes tomorrow's midnight and moves
+`Circuit.pre/postInstallWindowStartAt` forward to it, so evaluation is always just "valid readings
+on/after `windowStartAt`," with no separate counter to keep in sync). The window-start dates
+themselves are set at the moments CON-19/CON-10 say the pivot day should be excluded: pre-install
+starts the day after `meterInstalledAt` (set inside FEAT-011's own actions, not a separate step);
+post-install starts the day after `lightReplacementDate` (FEAT-013-AC-5 — only the *last* light's
+replacement day is the excluded pivot, satisfied for free since only one date is ever recorded).
+Completion computes the average of the chronologically first 5 valid readings and, for the
+post-install window, the CON-10 savings percentage against the stored `preInstallBaseline` — inside
+CON-20's 60-80% band, `benchmarkSavingsPct` is written and the circuit reaches `benchmark_confirmed`
+(FEAT-014-AC-1); outside it, the circuit moves to `benchmark_review` and no benchmark is written,
+routing to FEAT-015 (not built) rather than being silently accepted (FEAT-014-AC-5). **FEAT-014-AC-4's
+"benchmark-writing is a system computation, not a manual entry"** is satisfied structurally, not by
+a runtime check — there is deliberately no action anywhere in this codebase that accepts
+`benchmarkSavingsPct` as user input.
+
+**FEAT-013** ties the two windows together: `recordLightReplacement` refuses to run
+(FEAT-013-AC-3's departure-gating rule) unless a `demo_install_completion` gate pass has already
+been *submitted* for the circuit — submission, not approval, is the gate, consistent with
+ADR-006's reasoning throughout this milestone.
+
+**Six new `CircuitState` values added** to the MS-01-era provisional enum (`meter_installed`,
+`pre_install_monitoring`, `post_install_pending`, `post_install_monitoring`, `benchmark_review`,
+plus renaming the placeholder `benchmarking` out entirely in favor of the two `*_monitoring` states
+that actually distinguish pre- from post-install) — safe as a destructive enum migration only
+because zero `Circuit` rows existed yet in any environment this touches; would need a real data
+migration path if attempted after commissioning data exists.
+
+**Validated this batch**: `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm build`, and `pnpm test`
+(existing 8 Vitest cases, unaffected) all clean after every migration in this batch. **Not yet
+browser-verified** — this batch was built back-to-back per the user's explicit instruction ("complete
+next 10 in a row, after that we will test everything thoroughly"), deferring the interactive
+end-to-end pass (the pattern every prior milestone in this file used) to a dedicated follow-up
+session rather than interleaving it here. The job-worker's self-scheduling behavior is the one piece
+independently confirmed live against Postgres (see above); the full commissioning flow (eligible →
+meter-installed → gate pass → pre-install window → light replacement → completion gate pass →
+post-install window → benchmark) has not been driven end to end yet and is the natural starting
+point for that follow-up pass.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

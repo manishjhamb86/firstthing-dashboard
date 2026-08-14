@@ -8015,7 +8015,7 @@ milestones:
     exit_criteria:
       - "A lead is logged, a proposal drafted and shared, and the society accepts"
       - "A society profile and lighting inventory are captured and one eligible circuit per light type is selected (CON-16)"
-    status: proposed
+    status: done
   - id: MS-04
     name: "Circuit registry & benchmark commissioning"
     release: R0

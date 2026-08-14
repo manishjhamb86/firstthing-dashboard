@@ -1471,6 +1471,19 @@ remain.
 `20260814163021_add_ms06_installation_execution` is additive apart from two new `PipelineStage`
 values (`installation`, `active_billing`).
 
+**Deployed to `stage.firsthing.earth` (2026-08-14, commit `67dd14d`)** — backup taken first to
+`/tmp/firsthing_blueprint_pre_ms06_20260814_173218.sql` (65,210 bytes, size checked not just the
+exit code), migration applied via `prisma migrate deploy`, both pm2 processes restarted with
+`--update-env`. Verified over the public HTTPS path logged in as a real account: all 5 pre-existing
+admin routes plus all 6 pipeline sub-routes return 200 — including `/installation`, whose 200 is
+the meaningful check since it queries nine tables this migration created — with zero console errors
+and zero page errors. All 9 tables confirmed present by direct `psql`. ADR-006's self-rescheduling
+job chain ran straight through the restart at its usual 5-minute cadence (17:29 → 17:34 → 17:39),
+`unstable restarts: 0` on both processes, pm2 error log clean. **Uploads still cannot work on
+stage** — the AWS credential gap recorded in Current Blockers now covers batch photos and dispute
+evidence too, which is the more visible half of it: an onlooker on stage can approve a day but not
+dispute one, since a dispute requires a photo by design.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -1804,6 +1804,75 @@ Migration `20260815021500_add_rescale_void_and_payment_confirmation` is purely a
 1 index, 3 FKs; it also carries MS-08's `BillingInvoice.paymentStatusConfirmedAt` — see below).
 `tsc`/`lint`/`build` clean; suite at **215 across 12 files**.
 
+## Circuits can be soft-deleted, with authority rising through the lifecycle (2026-08-15) — user-asked
+
+**The ask, verbatim**: "if i have accidently added duplicate or incorrect or unwanted Demo-circuit
+candidates. i should be able to soft delete it. if a progress is not done yet. if there is progress
+on it. then only admin should be able to soft delete it. otherwise who created it can also delete
+it." Built as specified, plus one tier the request didn't name (below).
+
+**Never a hard delete.** A circuit is CON-11's billing grain, so the row always survives —
+`voidedAt`/`voidedById`/`voidReason`, and the whole decision in `src/lib/circuit-void.ts` as a pure
+function with the action as a thin shell, the same split as `portal-authority.ts` and
+`benchmark-rescale.ts`.
+
+**Three tiers, ordered by the cost of being wrong:**
+- **Nothing recorded yet** → the creator, or ops. A candidate added twice during a survey is the
+  field team's own housekeeping; making them wait on the ops lead to fix a typo is friction with no
+  safety value. `Circuit.createdById` is new — null on every pre-existing row, which
+  `decideVoidCircuit` reads as "creator unknown" and falls through to ops-only, the safe direction.
+- **Any progress** (meter installed, baseline, benchmark, gate pass, commissioning or meter
+  readings, rescale event, fee line) → ops only. `hasProgress` is deliberately generous: being
+  wrong this way costs a request to the ops lead, being wrong the other way discards someone else's
+  evidence.
+- **Billed on a RELEASED calculation** → **nobody, ops included**. This tier was added rather than
+  asked for: GATE-02 makes released billing documents append-only, so voiding such a circuit would
+  silently unmake a line on an invoice a society already holds. The refusal names the paths that do
+  leave a record (contract amendment, or a deviation review). It is checked *before* the
+  reason-required check, so the UI never implies that better wording would get it through.
+  Deliberately keyed on `releasedAt`, not on the mere existence of a fee line — a line on a draft
+  month is work in progress, and blocking on it would strand every circuit the moment ops ran a
+  trial calculation.
+
+**Restore is stricter than removal — ops only, whoever did the removing.** The asymmetry is the
+point: removing an untouched candidate is housekeeping, but restoring one puts it back in front of
+the billing query.
+
+**The part that actually carried the risk was the read side, not the write.** A soft delete is only
+as good as the queries that honour it, so `voidedAt: null` was added to all ten circuit reads —
+the registry, the survey candidate list, the monitoring board's three windows, the readings page,
+two portfolio KPIs, the demo report's CON-11 extrapolation, and above all `runCalculation`'s circuit
+query, which is the one that turns circuits into money. A removed circuit that still billed would
+have been a far worse bug than no delete button at all.
+
+**Verified in a browser across three scripts — 16/16, zero console errors, zero page errors** — and
+**both hard gates were driven through paths the client genuinely cannot pre-block**, per this repo's
+standing rule that a missing button proves nothing about the server. Each used the same technique:
+let the control render legitimately, then change the underlying row *behind the open form*, so the
+click reaches an action that must now refuse.
+- A PER-04 account opened Remove on a circuit it had created; a meter was installed behind the
+  form; the click was refused with the operations-lead message, wrote nothing (`voidedAt` still
+  null), and logged `circuit.void_refused` with `isCreator: true, hasProgress: true`.
+- Ops opened Remove on an unbilled circuit; a released fee line landed behind the form; refused,
+  nothing written, logged with `isOps: true, releasedFeeLineCount: 1` — GATE-02 binding the
+  strongest actor in the system.
+Also verified: a blank reason is refused; a removed circuit disappears from the registry and
+appears in a collapsed "removed" disclosure naming who removed it and why; ops can remove a
+circuit with commissioning work; restore returns it. 15 new unit cases (`tests/circuit-void.test.ts`).
+
+**A soft delete that hides the row completely is indistinguishable from a hard one**, so removed
+circuits stay visible in a disclosure on the registry, and a removed circuit reached by direct link
+renders a banner rather than silently looking like a live circuit missing from every list.
+
+**One process note worth keeping** (it cost time again): the registry page 500'd on first run with
+`PrismaClientValidationError: Unknown argument voidedAt`. The migration and `prisma generate` had
+both run — but the long-lived `next dev` process still held the old client in memory. This is
+already recorded in this file from MS-04's monitoring work and caught me a second time: **after any
+migration, restart the dev server; regenerating is not enough.**
+
+Migration `20260815024500_add_circuit_soft_delete` is purely additive (4 columns, 2 FKs).
+`tsc`/`lint`/`build` clean; suite at **232 across 13 files**.
+
 ## MS-08 in progress (2026-08-15) — the calculation engine, the arrears clock, and their schema
 
 Not complete and not claimed as such: `docs/backlog.yaml` MS-08 stays `proposed`. What exists is the

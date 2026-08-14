@@ -91,7 +91,14 @@ export async function runCalculation(input: {
     certificate.billingStartDate >= from && certificate.billingStartDate < to;
 
   const circuits = await db.circuit.findMany({
-    where: { societyId: input.societyId, serviceLine: input.serviceLine, state: "benchmark_confirmed" },
+    // A voided circuit must never reach a fee line — this is the query that
+    // turns circuits into money, so the exclusion matters most here.
+    where: {
+      societyId: input.societyId,
+      serviceLine: input.serviceLine,
+      state: "benchmark_confirmed",
+      voidedAt: null,
+    },
     include: { rescaleEvents: { orderBy: { effectiveDate: "asc" } } },
   });
   if (circuits.length === 0) {

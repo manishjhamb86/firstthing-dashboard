@@ -68,7 +68,7 @@ export async function submitCircuitCandidate(input: {
   fixturesUnder15ft: boolean;
   notOnDrivewayOrRamp: boolean;
 }) {
-  await requireAdminPermission("manage_survey");
+  const session = await requireAdminPermission("manage_survey");
 
   if (!Number.isFinite(input.meteredLightCount) || input.meteredLightCount <= 0) {
     return { error: "Light count must be a positive number." };
@@ -107,6 +107,9 @@ export async function submitCircuitCandidate(input: {
       workingHours: input.workingHours ?? null,
       eligibilityChecklist,
       state,
+      // Recorded so the person who added a candidate can tidy their own
+      // mistake without waiting on the ops lead (src/lib/circuit-void.ts).
+      createdById: session.user.id,
     },
   });
 

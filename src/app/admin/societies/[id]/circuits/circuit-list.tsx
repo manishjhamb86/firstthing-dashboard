@@ -6,6 +6,7 @@ import Link from "next/link";
 import { CircuitEditForm } from "./circuit-edit-form";
 import { Card, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 
 type Circuit = {
   id: string;
@@ -18,6 +19,8 @@ type Circuit = {
   workingHours: number | null;
   workingHoursEffectiveAt: Date | null;
   state: string;
+  canRemove: boolean;
+  blockLabel: string | null;
 };
 
 export function CircuitList({
@@ -61,9 +64,9 @@ export function CircuitList({
               </div>
               <StatusChip tone={state.tone}>{state.label}</StatusChip>
             </div>
-            {canEdit && (
-              <div className="mt-2">
-                {editingId === c.id ? (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              {canEdit &&
+                (editingId === c.id ? (
                   <CircuitEditForm
                     circuit={c}
                     onDone={() => {
@@ -75,9 +78,16 @@ export function CircuitList({
                   <button type="button" onClick={() => setEditingId(c.id)} className="btn-ghost btn-sm">
                     Edit configuration
                   </button>
-                )}
-              </div>
-            )}
+                ))}
+              {editingId !== c.id && (
+                <RemoveCircuitButton
+                  circuitId={c.id}
+                  label={c.location || c.lightType}
+                  canRemove={c.canRemove}
+                  blockLabel={c.blockLabel}
+                />
+              )}
+            </div>
           </div>
         );
       })}

@@ -24,7 +24,10 @@ export async function collectDemoReportInput(pipelineId: string) {
           areas: true,
           // The demo's circuits are the ones selected during this survey
           // (FEAT-007) — not every circuit the society has.
-          circuits: { include: { commissioningReadings: { orderBy: { date: "asc" } } } },
+          circuits: {
+            where: { voidedAt: null },
+            include: { commissioningReadings: { orderBy: { date: "asc" } } },
+          },
         },
       },
     },

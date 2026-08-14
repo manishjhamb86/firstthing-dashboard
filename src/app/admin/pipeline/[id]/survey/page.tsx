@@ -8,6 +8,8 @@ import { CircuitEligibilityForm } from "./circuit-eligibility-form";
 import { ExceptionApprovalButton } from "./exception-approval-button";
 import { DeleteAreaButton } from "./delete-area-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { resolveCircuitRemoval } from "@/lib/circuit-removal";
+import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 
 export default async function SiteSurveyPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminPage();
@@ -31,9 +33,16 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
   const siteSurvey = pipeline.siteSurvey;
 
   const circuits = await db.circuit.findMany({
-    where: { siteSurveyId: siteSurvey.id },
+    where: { siteSurveyId: siteSurvey.id, voidedAt: null },
     orderBy: { createdAt: "asc" },
   });
+
+  // A candidate added twice on site is the field team's own housekeeping —
+  // resolveCircuitRemoval decides per circuit whether this viewer may tidy it.
+  const removal = await resolveCircuitRemoval(
+    circuits.map((c) => c.id),
+    { id: session.user.id, isOps: canApproveException },
+  );
 
   const totalLights = siteSurvey.areas.reduce((sum, a) => sum + a.count, 0);
 
@@ -132,7 +141,15 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
                         <span className="num">{c.wattage}</span>W
                       </span>
                     </span>
-                    <StatusChip tone={state.tone}>{state.label}</StatusChip>
+                    <span className="flex items-center gap-3">
+                      <StatusChip tone={state.tone}>{state.label}</StatusChip>
+                      <RemoveCircuitButton
+                        circuitId={c.id}
+                        label={c.location || c.lightType}
+                        canRemove={removal.get(c.id)?.canRemove ?? false}
+                        blockLabel={removal.get(c.id)?.blockLabel ?? null}
+                      />
+                    </span>
                   </div>
                   {c.state === "surveyed" && c.meteredLightCount < 50 && (
                     <div className="mt-2">

@@ -33,16 +33,19 @@ export default async function AdminHomePage() {
     db.pipeline.count({ where: { stage: { in: ["lead", "survey_pending"] } } }),
     db.pipeline.count({ where: { authoritative: false } }),
     db.circuit.count({
-      where: { state: { in: ["meter_installed", "pre_install_monitoring", "awaiting_installation", "post_install_pending", "post_install_monitoring"] } },
+      where: {
+        voidedAt: null,
+        state: { in: ["meter_installed", "pre_install_monitoring", "awaiting_installation", "post_install_pending", "post_install_monitoring"] },
+      },
     }),
-    db.circuit.count({ where: { state: "benchmark_confirmed" } }),
+    db.circuit.count({ where: { voidedAt: null, state: "benchmark_confirmed" } }),
     db.pipeline.findMany({
       orderBy: { createdAt: "desc" },
       take: 5,
       include: { society: true, salesOwner: true },
     }),
     db.circuit.findMany({
-      where: { state: { in: ["benchmark_review", "surveyed"] } },
+      where: { voidedAt: null, state: { in: ["benchmark_review", "surveyed"] } },
       orderBy: { createdAt: "desc" },
       take: 5,
       include: { society: true },

@@ -1,9 +1,11 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { EmptyState, PageHeader } from "@/components/ui";
+import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { CircuitList } from "./circuit-list";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { resolveCircuitRemoval } from "@/lib/circuit-removal";
+import { RestoreCircuitButton } from "./restore-circuit-button";
 
 export default async function CircuitRegistryPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminPage();
@@ -23,8 +25,24 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
   if (!society) notFound();
 
   const circuits = await db.circuit.findMany({
-    where: { societyId: id },
+    where: { societyId: id, voidedAt: null },
     orderBy: { createdAt: "asc" },
+  });
+
+  // Removal authority is per circuit, not per screen: an untouched candidate
+  // can be removed by whoever added it, while one with commissioning work
+  // needs the ops lead. Resolved server-side — the button is not the gate.
+  const removal = await resolveCircuitRemoval(
+    circuits.map((c) => c.id),
+    { id: session.user.id, isOps: canEdit },
+  );
+
+  // Removed circuits are kept and stay visible, collapsed — a soft delete
+  // that hides the row completely is indistinguishable from a hard one.
+  const removedCircuits = await db.circuit.findMany({
+    where: { societyId: id, voidedAt: { not: null } },
+    orderBy: { voidedAt: "desc" },
+    include: { voidedBy: { select: { name: true, email: true } } },
   });
 
   return (
@@ -48,8 +66,40 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
         </EmptyState>
       ) : (
         <div className="max-w-3xl">
-          <CircuitList circuits={circuits} canEdit={canEdit} societyId={society.id} />
+          <CircuitList
+            circuits={circuits.map((c) => ({
+              ...c,
+              canRemove: removal.get(c.id)?.canRemove ?? false,
+              blockLabel: removal.get(c.id)?.blockLabel ?? null,
+            }))}
+            canEdit={canEdit}
+            societyId={society.id}
+          />
         </div>
+      )}
+
+      {removedCircuits.length > 0 && (
+        <details className="max-w-3xl mt-6">
+          <summary className="text-sm text-[var(--text-muted)] cursor-pointer select-none">
+            {removedCircuits.length} removed {removedCircuits.length === 1 ? "circuit" : "circuits"} — kept
+            for audit, excluded from monitoring and billing
+          </summary>
+          <Card className="mt-3 divide-y divide-[var(--border-subtle)]">
+            {removedCircuits.map((c) => (
+              <div key={c.id} className="p-4 text-sm flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <div style={{ opacity: 0.7 }}>
+                  <span className="font-medium" style={{ textDecoration: "line-through" }}>
+                    {c.location || c.lightType}
+                  </span>
+                  <p className="text-[var(--text-muted)] text-xs mt-1">
+                    Removed by {c.voidedBy?.name ?? c.voidedBy?.email ?? "—"} — {c.voidReason}
+                  </p>
+                </div>
+                {canEdit && <RestoreCircuitButton circuitId={c.id} />}
+              </div>
+            ))}
+          </Card>
+        </details>
       )}
     </>
   );

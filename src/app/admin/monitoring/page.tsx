@@ -38,7 +38,7 @@ export default async function MonitoringDashboardPage() {
   // view that drilling into one circuit at a time doesn't give.
   const [preInstallActive, postInstallActive, recentlyResolved] = await Promise.all([
     db.circuit.findMany({
-      where: { preInstallWindowStartAt: { not: null }, preInstallBaseline: null },
+      where: { voidedAt: null, preInstallWindowStartAt: { not: null }, preInstallBaseline: null },
       include: {
         society: true,
         commissioningReadings: { where: { windowType: "pre_install" }, orderBy: { date: "asc" } },
@@ -46,7 +46,7 @@ export default async function MonitoringDashboardPage() {
       orderBy: { preInstallWindowStartAt: "asc" },
     }),
     db.circuit.findMany({
-      where: { postInstallWindowStartAt: { not: null }, postInstallBaseline: null },
+      where: { voidedAt: null, postInstallWindowStartAt: { not: null }, postInstallBaseline: null },
       include: {
         society: true,
         commissioningReadings: { where: { windowType: "post_install" }, orderBy: { date: "asc" } },
@@ -54,7 +54,7 @@ export default async function MonitoringDashboardPage() {
       orderBy: { postInstallWindowStartAt: "asc" },
     }),
     db.circuit.findMany({
-      where: { state: { in: ["benchmark_confirmed", "benchmark_review"] } },
+      where: { voidedAt: null, state: { in: ["benchmark_confirmed", "benchmark_review"] } },
       include: { society: true },
       orderBy: { createdAt: "desc" },
       take: 20,

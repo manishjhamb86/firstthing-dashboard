@@ -75,6 +75,7 @@ export default async function CircuitDetailPage({
       gatePasses: { orderBy: { submittedAt: "desc" } },
       commissioningReadings: { orderBy: { date: "asc" } },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
+      voidedBy: { select: { name: true, email: true } },
     },
   });
   if (!circuit || circuit.societyId !== id) notFound();
@@ -120,6 +121,21 @@ export default async function CircuitDetailPage({
         title={circuit.location || circuit.lightType}
         chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
       />
+
+      {/* A removed circuit stays reachable by link — saying nothing would
+          make the page read as a live circuit that has simply gone missing
+          from every list. */}
+      {circuit.voidedAt && (
+        <div
+          className="max-w-2xl rounded-[var(--r-md)] border p-4 text-sm mb-8"
+          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+        >
+          This circuit was removed by {circuit.voidedBy?.name ?? circuit.voidedBy?.email ?? "—"} on{" "}
+          <span className="num">{circuit.voidedAt.toISOString().slice(0, 10)}</span> — {circuit.voidReason}.
+          It is excluded from the registry, the monitoring board and every billing run. The record is kept,
+          and the operations lead can restore it from the registry.
+        </div>
+      )}
 
       {circuit.state === "eligible" && canEdit && (
         <section className="max-w-md mb-10">

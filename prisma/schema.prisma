@@ -378,6 +378,8 @@ model AdminUser {
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
 
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
+  circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
+  circuitsVoided                Circuit[]               @relation("CircuitVoidedBy")
   gatePassSubmissions           GatePass[]              @relation("GatePassSubmittedBy")
   gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
   commissioningReadingsRecorded CommissioningReading[]
@@ -579,10 +581,26 @@ model Circuit {
   benchmarkSavingsPct           Float?       @map("benchmark_savings_pct")
   state                         CircuitState @default(surveyed)
   createdAt                     DateTime     @default(now()) @map("created_at")
+  // Who selected this candidate. Null for every circuit predating the column,
+  // which `decideVoidCircuit` reads as "creator unknown" and falls through to
+  // ops-only — the safe direction.
+  createdById                   String?      @map("created_by_id")
+
+  // Soft delete. A circuit is the grain CON-11 bills on, so it is never hard
+  // deleted: the row survives, struck out, and stops being counted anywhere.
+  // Authority rises with the lifecycle (see src/lib/circuit-void.ts) — the
+  // creator may remove an untouched candidate, ops may remove one with
+  // commissioning work, and nobody may remove one already billed on a
+  // released invoice (GATE-02).
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
 
   society                  Society                 @relation(fields: [societyId], references: [id], onDelete: Cascade)
   siteSurvey               SiteSurvey?             @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
   loadValidationOverrideBy AdminUser?              @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
+  createdBy                AdminUser?              @relation("CircuitCreatedBy", fields: [createdById], references: [id])
+  voidedBy                 AdminUser?              @relation("CircuitVoidedBy", fields: [voidedById], references: [id])
   gatePasses               GatePass[]
   commissioningReadings    CommissioningReading[]
   rescaleEvents            BenchmarkRescaleEvent[]

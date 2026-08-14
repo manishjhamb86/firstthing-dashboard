@@ -32,7 +32,7 @@ export default async function ReadingsPage({
 
   const [circuits, uploads, openAnomalies] = await Promise.all([
     db.circuit.findMany({
-      where: { state: { in: ["benchmark_confirmed", "active_billing"] } },
+      where: { voidedAt: null, state: { in: ["benchmark_confirmed", "active_billing"] } },
       select: {
         id: true,
         lightType: true,

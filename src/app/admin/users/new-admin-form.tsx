@@ -28,7 +28,7 @@ export function NewAdminForm() {
   return (
     <form
       action={formAction}
-      className="space-y-3 max-w-md bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6"
+      className="space-y-3 bg-[var(--surface)] border border-[var(--border-subtle)] rounded-[var(--r-lg)] p-6"
     >
       <p className="text-sm font-semibold mb-1">New admin</p>
       <input

@@ -23,6 +23,14 @@ export const KYC_TYPE_LABEL: Record<KycDocumentType, string> = {
   electricity_bill: "Recent electricity bill",
 };
 
+// The "not applicable" field's example text — kept type-specific (a user
+// reported the GST example rendering under the Electricity Bill card, which
+// turned out to be this same hardcoded string on every card, not a data bug).
+export const KYC_NA_EXAMPLE: Record<KycDocumentType, string> = {
+  gst_certificate: "Society is not GST-registered.",
+  electricity_bill: "Common-area electricity is billed to the builder, not the society.",
+};
+
 export const KYC_STATUS_LABEL: Record<KycRequirementStatus, string> = {
   outstanding: "Outstanding",
   received: "Received",

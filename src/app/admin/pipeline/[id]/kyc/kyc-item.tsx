@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import type { KycDocumentType, KycRequirementStatus, ReceiptChannel } from "@prisma/client";
 import { ErrorText, Field } from "@/components/ui";
 import { uploadFileToS3 } from "@/lib/upload-to-s3";
+import { KYC_NA_EXAMPLE, KYC_TYPE_LABEL } from "@/lib/kyc";
 import {
   markKycNotApplicable,
   recordKycDocument,
@@ -242,7 +243,7 @@ export function KycItem({
         <div className="flex flex-wrap items-end gap-2">
           <div className="grow">
             <Field
-              label="Not applicable to this society"
+              label={`Not applicable — ${KYC_TYPE_LABEL[type]}`}
               htmlFor={`kyc-na-${type}`}
               hint="Requires a reason — otherwise it just hides from the stall signal."
             >
@@ -251,7 +252,7 @@ export function KycItem({
                 value={naReason}
                 onChange={(e) => setNaReason(e.target.value)}
                 disabled={busy}
-                placeholder="Society is not GST-registered."
+                placeholder={KYC_NA_EXAMPLE[type]}
                 className="field"
               />
             </Field>
@@ -268,7 +269,7 @@ export function KycItem({
             disabled={busy || !naReason.trim()}
             className="btn-ghost btn-sm"
           >
-            Mark not applicable
+            Mark &quot;{KYC_TYPE_LABEL[type]}&quot; not applicable
           </button>
         </div>
       )}

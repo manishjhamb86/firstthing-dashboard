@@ -2166,6 +2166,50 @@ start too; a reading dated exactly at the window start is accepted, written, and
 day earlier is still refused. Fixture removed afterward, confirmed by count query — 4 societies,
 unchanged. `tsc`/`lint`/`vitest` (287 cases, unaffected)/`build` all clean; no schema change.
 
+## A KYC "not applicable" reason looked like it landed under the wrong card (2026-08-15) — user-caught
+
+**Reported**: a screenshot of the not-applicable field showing "Society is not GST-registered." —
+"this should be part of GST CERTIFICATE card. instead its showing up in RECENT ELECTRICITY BILL
+card."
+
+**Not a data or state bug — confirmed by reading the whole chain, not assumed.** `page.tsx`'s
+`items.map()` gives each `<Card key={item.type}>` its own `KycItem` instance with `type` correctly
+bound (`type={item.type}`), and `markKycNotApplicable` persists via
+`db.kycRequirement.upsert({ where: { pipelineId_type: { pipelineId, type } } })` — the `type` passed
+in is the one closed over by the specific card's own component instance. There is no shared state,
+no index-based key, no reordering between renders (the checklist order comes from the static
+`KYC_REQUIREMENTS` array in `src/lib/kyc.ts`, not DB row order). A reason typed into one card's field
+and submitted from that card's own button was always going to persist against that card's own type.
+
+**The actual defect: the copy, not the wiring.** `kyc-item.tsx`'s not-applicable field had a
+hardcoded label ("Not applicable to this society"), hint, and — critically — a hardcoded GST-flavored
+placeholder ("Society is not GST-registered.") on **every** card regardless of document type, since
+neither field's copy was parameterized by `type`. On a fresh pipeline both requirements are
+"outstanding," so both cards' identical-looking forms are visible on the page at once, and nothing in
+either one names which document it belongs to beyond the card's own title, scrolled above a fairly
+tall stack (upload grid, follow-up field) by the time a user reaches this control. The user's own
+report is exactly what that produces: filling in and submitting the Electricity Bill card's own
+(correctly-scoped, correctly-persisted) field while believing it was still the GST card's.
+
+**Fixed by parameterizing the copy, not the data model** — `KYC_TYPE_LABEL` (already existed in
+`src/lib/kyc.ts` for status displays) is now also used to build the field's label
+(`"Not applicable — GST certificate"` / `"Not applicable — Recent electricity bill"`) and the
+button's own text (`Mark "GST certificate" not applicable`), so the control names its own document
+even out of context of the card's title. A new `KYC_NA_EXAMPLE` map gives each type its own
+plausible placeholder (the electricity card's is "Common-area electricity is billed to the builder,
+not the society." rather than a GST-flavored example that made no sense there) — extends the same
+way `KYC_REQUIREMENTS` already does for any future document type, rather than a special case for
+just these two.
+
+**Verified in a browser (6/6, zero console/page errors)**: both cards render distinct, self-naming
+labels and buttons; the GST-flavored placeholder now appears on exactly one input, not both; the
+electricity card gets its own example text. Screenshotted for the record. **One process note**: an
+earlier regression re-run of `flow-sequencing.mjs` (from the prior session's fix) had its own
+end-of-script cleanup skipped when I re-ran it a second time — a stray "Flow Sequencing Test" society
+was found still sitting in the local dev database while confirming this fix's own fixture was
+removed, caught by listing every society rather than trusting a bare count. Removed. `tsc`/`lint`/
+`vitest` (287 cases, unaffected)/`build` all clean; no schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

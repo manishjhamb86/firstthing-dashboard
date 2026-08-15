@@ -1986,6 +1986,41 @@ still `open`). 30 new Vitest cases across `commissioning-anomaly` and `demo-resu
 `20260815031500_add_demo_result_review` is purely additive. Backlog validator: **16 errors / 263
 warnings**, the same documented baseline, AC count 555 → 557.
 
+## An empty state that named a step the user had no route to (2026-08-15) — user-caught on stage
+
+**Reported**: created a society, enrolled it in lighting, saw "Active" — then the circuit registry was
+blank, telling them to "select a demo-circuit candidate on a pipeline's site survey."
+
+**The blank registry is correct and stays correct.** Circuits come from FEAT-007's survey-time
+selection with CON-16's eligibility checklist attached; FEAT-040-AC-2 is explicit that they are never
+created ad hoc from the registry, and Phase 6's own dependency finding (FEAT-040 structurally
+depends on FEAT-007 — "there is no backend-only shortcut to create a billable circuit") is exactly
+this. Nothing about that was changed.
+
+**What was actually broken is that the instruction pointed at something the society did not have.**
+Confirmed against the row rather than inferred: `LandCraft` had an active `lighting` **Engagement**
+and **zero Pipelines**. An engagement records that a society is engaged on a service line
+(FEAT-039); the deal that produces a survey — and therefore circuits — is the Pipeline, one per
+`(society, serviceLine)` under CON-24. A society created through `/admin/societies/new` and enrolled
+manually gets the first and not the second, so the screen was naming a survey that could not exist
+and offering no way to start one. **Same defect class as the FEAT-015 dead-end banner fixed earlier
+the same day**: a screen that states a next step the reader cannot reach from where they are.
+
+**Fixed as guidance, not by changing the data model** — making "Enroll service line" also mint a
+Pipeline would be wrong: a pipeline needs a sales owner, a contact and a meeting date, and CON-24
+makes it the deal record, not a flag. The registry's empty state now resolves which link of the
+chain is missing *for that society* and links to it: no pipeline → "Log a lead" (verified the lead
+form does list existing societies, so the link is a real route, not a suggestion); pipeline but no
+survey → open the pipeline, with the note that a survey opens once the demo proposal is accepted;
+survey ready → straight to it. The society-detail service-lines panel got the same treatment — an
+enrolled line now either links to its deal or says plainly that there isn't one, since "Active" with
+no route onward is what made enrolling look like the whole step.
+
+**Verified in a browser across all three states (14/14, zero console errors, zero page errors)**,
+reproducing the reported case locally first (society + engagement, no pipeline), then creating a
+pipeline and then a survey behind it and re-checking the screen each time. The survey deep link was
+followed to a real 200 rather than merely asserted to be present.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -26,10 +26,17 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   const society = await db.society.findUnique({ where: { id } });
   if (!society) notFound();
 
-  const [accounts, engagements] = await Promise.all([
+  const [accounts, engagements, pipelines] = await Promise.all([
     db.profile.findMany({ where: { societyId: id, isActive: true }, orderBy: { name: "asc" } }),
     db.engagement.findMany({ where: { societyId: id }, orderBy: { createdAt: "asc" } }),
+    // An engagement records that the society is engaged on a service line;
+    // the deal that actually moves it (survey → circuits → contract) is the
+    // Pipeline, one per (society, serviceLine) under CON-24. Without this
+    // the panel showed "Active" with no route onward, which reads as though
+    // enrolling were the whole step.
+    db.pipeline.findMany({ where: { societyId: id }, select: { id: true, serviceLine: true, stage: true } }),
   ]);
+  const pipelineFor = new Map(pipelines.map((p) => [p.serviceLine as string, p]));
   const availableServiceLines = ALL_SERVICE_LINES.filter(
     (sl) => !engagements.some((e) => e.serviceLine === sl)
   );
@@ -98,13 +105,32 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             <ul className="space-y-3">
               {engagements.map((e) => {
                 const status = statusMeta(ENGAGEMENT_STATUS, e.status);
+                const pipeline = pipelineFor.get(e.serviceLine);
                 return (
                   <li
                     key={e.id}
-                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                    className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
                   >
-                    <span className="font-medium">{SERVICE_LINE_LABEL[e.serviceLine] ?? e.serviceLine}</span>
-                    <StatusChip tone={status.tone}>{status.label}</StatusChip>
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                      <span className="font-medium">{SERVICE_LINE_LABEL[e.serviceLine] ?? e.serviceLine}</span>
+                      <StatusChip tone={status.tone}>{status.label}</StatusChip>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      {pipeline ? (
+                        <Link href={`/admin/pipeline/${pipeline.id}`} className="underline">
+                          Open the deal →
+                        </Link>
+                      ) : (
+                        <>
+                          Enrolled, but no deal running — the survey that produces circuits belongs to a
+                          pipeline.{" "}
+                          <Link href="/admin/pipeline/new" className="underline">
+                            Log a lead
+                          </Link>
+                          .
+                        </>
+                      )}
+                    </p>
                   </li>
                 );
               })}

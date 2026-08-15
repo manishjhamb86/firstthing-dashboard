@@ -29,6 +29,21 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
     orderBy: { createdAt: "asc" },
   });
 
+  // FEAT-040-AC-2 is "no ad-hoc creation here", not "give no direction".
+  // Circuits come from FEAT-007's survey-time selection, and a society
+  // enrolled in a service line without a pipeline has no survey to select
+  // on — so the empty state has to name which link of that chain is
+  // actually missing for THIS society, and link to it.
+  const pipelines =
+    circuits.length === 0
+      ? await db.pipeline.findMany({
+          where: { societyId: id },
+          include: { siteSurvey: { select: { id: true } } },
+          orderBy: { createdAt: "asc" },
+        })
+      : [];
+  const withSurvey = pipelines.find((p) => p.siteSurvey);
+
   // Removal authority is per circuit, not per screen: an untouched candidate
   // can be removed by whoever added it, while one with commissioning work
   // needs the ops lead. Resolved server-side — the button is not the gate.
@@ -58,11 +73,36 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
       />
 
       {circuits.length === 0 ? (
-        // FEAT-040-AC-2 — circuits are created through the survey flow
-        // (FEAT-007), never ad hoc from this screen.
         <EmptyState title="No circuits yet">
-          Circuits are created through the survey flow, not ad hoc — select a demo-circuit candidate on a
-          pipeline&apos;s site survey to register one here.
+          Circuits are registered by selecting a demo-circuit candidate on a site survey (CON-16&apos;s
+          eligibility checklist runs there), never created directly here.{" "}
+          {withSurvey ? (
+            <>
+              This society&apos;s survey is ready —{" "}
+              <Link href={`/admin/pipeline/${withSurvey.id}/survey`} className="underline">
+                open the site survey
+              </Link>{" "}
+              and select a candidate.
+            </>
+          ) : pipelines.length > 0 ? (
+            <>
+              This society has a pipeline, but no site survey yet — a survey opens once the demo proposal
+              is accepted.{" "}
+              <Link href={`/admin/pipeline/${pipelines[0].id}`} className="underline">
+                Open the pipeline
+              </Link>{" "}
+              to record that decision.
+            </>
+          ) : (
+            <>
+              <strong>This society has no pipeline yet.</strong> Enrolling a service line records that the
+              society is engaged on it; the survey that produces circuits belongs to a deal.{" "}
+              <Link href="/admin/pipeline/new" className="underline">
+                Log a lead
+              </Link>{" "}
+              for this society to start one.
+            </>
+          )}
         </EmptyState>
       ) : (
         <div className="max-w-3xl">

@@ -21,6 +21,7 @@ export function DemoReviewPanel({
   urgencyLabel,
   urgencyTone,
   canResolve,
+  embedded = false,
 }: {
   reviewId: string;
   measuredSavingsPct: number;
@@ -30,6 +31,9 @@ export function DemoReviewPanel({
   urgencyLabel: string;
   urgencyTone: "warn" | "bad";
   canResolve: boolean;
+  /** Inside a StepSection the step header already carries the title and
+   *  urgency chip, so the panel drops its own. */
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -39,11 +43,13 @@ export function DemoReviewPanel({
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <section className="max-w-2xl mb-10">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
-        <h2 className="text-[15px] font-semibold">Out-of-range demo result</h2>
-        <StatusChip tone={urgencyTone}>{urgencyLabel}</StatusChip>
-      </div>
+    <section className={embedded ? "max-w-2xl" : "max-w-2xl mb-10"}>
+      {!embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
+          <h2 className="text-[15px] font-semibold">Out-of-range demo result</h2>
+          <StatusChip tone={urgencyTone}>{urgencyLabel}</StatusChip>
+        </div>
+      )}
 
       <Card className="p-5 text-sm space-y-4">
         <p className="text-[var(--text-muted)]">

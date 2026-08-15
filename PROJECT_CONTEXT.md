@@ -2030,6 +2030,83 @@ dumping the served page rather than re-guessing: the detail panel renders "Open 
 the real pipeline id, which only the new build emits. **The general shape**: when a check fails
 against live data the user is actively using, confirm the state before concluding the deploy is bad.
 
+## Deal-flow sequencing: one module decides "you are here, do this next" (2026-08-15) — user-caught
+
+**The report, verbatim in parts**: "the flow is not clear enough for anyone to understand… the
+survey page is like everything at one screen at once… it was like a lost thing i couldnt find from
+where to add the circuite or what to do next… it feels like you have just copied everything from
+the design on a single page without any logic to what belongs to what step." All correct — every
+screen since MS-03 rendered each stage's workspace conditionally by state, but nothing anywhere
+stated the *ordering*: the pipeline page offered six equal stage buttons, the survey page showed
+inventory and candidate forms side by side, and the hand-off from "candidate is eligible" to "now
+open the circuit page" existed only in the operator's head.
+
+**The fix is one pure module, not per-screen copy** — `src/lib/deal-progress.ts`, the same
+convention as `portal-authority.ts`/`benchmark-rescale.ts`. `dealProgress(facts)` returns the
+blueprint's own deal-to-bill spine (08-prioritization.md §3.1: lead → survey → commissioning →
+report → offer → agreement → installation → billing, with KYC as the one genuinely parallel track,
+CON-23/GATE-01) as ordered steps with exactly one `current` and THE one next action, carrying the
+href of the screen where that action actually lives — including the reported hole: an eligible
+candidate's next action links **to the circuit page**, by name. `circuitSteps(facts)` is the same
+idea one level down (eligibility → meter → install gate → baseline window → completion gate →
+replacement → benchmark). 25 unit cases (suite now **287 across 16 files**), including GATE-01
+routing (offer accepted + KYC incomplete → "Complete KYC first", not the agreement), closed-lost
+freezing the spine, and the demo-skip path.
+
+**Screens rebuilt on it**: the pipeline detail page replaces the six flat buttons with a
+`NextStepCallout` (the one next action, linked) plus a `DealStepper` map where **locked steps are
+not links** — they say what unlocks them instead, which is the whole sequencing signal. The survey
+page becomes Step 1 (inventory) → Step 2 (candidate, gated on an area existing) with a hand-off
+callout to the circuit once a candidate advances.
+
+**A real coherence bug surfaced by the user's screenshot of stage, fixed with the map**: "Basement
+Tower 115" (benchmark_review) showed step 3 "Install gate pass" as *current* while steps 4–6 read
+done — the done-inference was artifact-only (`hasInstallGatePass`), and that circuit's stage rows
+predate some artifacts. The rule is now **rank-OR-artifact**: a state the machine can only have
+reached *through* a step marks that step done even when its artifact row is missing, because the
+map marking an early step current while later ones read done is exactly the incoherence a map
+exists to prevent. Unit-tested against that literal shape. Where a step reads done this way with no
+artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
+this step" — rather than claiming "Submitted" about a row that does not exist.
+
+## The circuit page is an accordion: the active step is the only open form (2026-08-15) — user-specified
+
+**The user's second round on the same screens, with screenshots**: "Not happy with this ui
+arrangment. Everything is displayed one by one. instead it should be like. whichever state is
+active to be taken action on should only be the open form. rest should be closed with only
+header/title mentioning the step and either marked done and a button to edit if option available.
+or disabled with header/title section so we know we dont need to act on it its a future task."
+Implemented literally as `src/components/step-section.tsx` (hook-free, Server-Component renderable,
+native `<details>` for the toggles — same rule as `ui.tsx`): the current step renders as the one
+open, accent-bordered form; done steps are closed ✓ headers whose record sits behind a "View"
+toggle — **including still-live controls**, so a submitted gate pass's approval buttons live behind
+that toggle rather than as a permanently open card; locked steps are disabled headers stating what
+unlocks them, no link, no toggle. The circuit page maps `circuitSteps()` onto these sections and
+embeds the existing workspaces as step bodies (`MonitoringWindowPanel`/`DemoReviewPanel` gained an
+`embedded` prop that drops their own headers — the step header already names the window and carries
+the Day-X-of-5 / urgency chip). The always-open `RescaleForm` — the specific thing the user's first
+screenshot showed — is likewise behind its own "Record a verified light-count change" toggle, since
+it is occasional maintenance, not a step. The FEAT-015 review and the escalated-state notice fold
+into the benchmark step's body; the standalone benchmark-confirmed banner is gone because the
+step's own summary carries the figure.
+
+**Verified end to end in a browser (Playwright/system Chrome), 41/41, zero console errors, zero
+page errors**, walking one deal lead → survey → eligible candidate → meter_installed →
+pre-window-with-gate-pass → benchmark_confirmed → closed-lost, asserting at each stage that the
+*right single form* is the open one and the others are genuinely absent from the DOM (not hidden):
+at `eligible` the load-validation field renders and the gate-pass textarea does not exist anywhere;
+at `meter_installed` they swap; at pre-window the reading form is open, the done gate pass is
+closed with its status chip, and **the approval control is provably behind the View toggle**
+(invisible before the click, visible after); fully done, no step form exists on the page at all and
+the rescale form only appears once toggled. Plus the spine checks (locked stages carry no links,
+GATE-01 KYC routing, closed-lost freezes the map) and zero horizontal overflow at 390px on both
+pages. All fixtures ("Flow Sequencing Test" society and everything cascading) removed afterward,
+confirmed by count query. `tsc`/`lint`/`build`/`vitest` all clean; no schema change in this batch.
+
+**One harness note**: Playwright's screenshot caret-hiding injects `caret-color: transparent` as an
+inline style, which React 19 reports as a hydration mismatch — a console error that looks like an
+app bug and is not. Screenshots now pass `caret: "initial"`.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

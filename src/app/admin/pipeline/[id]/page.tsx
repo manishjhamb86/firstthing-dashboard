@@ -6,6 +6,8 @@ import { PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-map
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { dealProgress } from "@/lib/deal-progress";
+import { DealStepper, NextStepCallout } from "@/components/deal-stepper";
 
 const OUTCOME_LABEL: Record<string, string> = {
   agreed: "Agreed — advanced to survey",
@@ -20,11 +22,52 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
   const { id } = await params;
   const pipeline = await db.pipeline.findUnique({
     where: { id },
-    include: { society: true, salesOwner: true, loggedBy: true, siteSurvey: true },
+    include: {
+      society: true,
+      salesOwner: true,
+      loggedBy: true,
+      siteSurvey: { include: { areas: { select: { id: true } } } },
+      demoReports: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
+      kycRequirements: { select: { status: true } },
+      offers: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
+      contract: { select: { status: true } },
+      installationProject: { select: { state: true, certificate: { select: { id: true } } } },
+    },
   });
   if (!pipeline) notFound();
 
+  const candidates = pipeline.siteSurvey
+    ? await db.circuit.findMany({
+        where: { siteSurveyId: pipeline.siteSurvey.id, voidedAt: null },
+        select: { id: true, state: true, location: true, lightType: true },
+      })
+    : [];
+
   const stage = statusMeta(PIPELINE_STAGE, pipeline.stage);
+
+  // The sequencing decision lives in one pure module, not scattered across
+  // conditionals here — see src/lib/deal-progress.ts.
+  const progress = dealProgress({
+    pipelineId: pipeline.id,
+    societyId: pipeline.societyId,
+    stage: pipeline.stage,
+    authoritative: pipeline.authoritative,
+    demoSkipped: pipeline.demoSkipped,
+    surveyExists: !!pipeline.siteSurvey,
+    areaCount: pipeline.siteSurvey?.areas.length ?? 0,
+    candidates,
+    reportStatus: pipeline.demoReports[0]?.status ?? null,
+    kyc: {
+      total: pipeline.kycRequirements.length,
+      resolved: pipeline.kycRequirements.filter(
+        (k) => k.status === "verified" || k.status === "not_applicable",
+      ).length,
+    },
+    offerStatus: pipeline.offers[0]?.status ?? null,
+    contractStatus: pipeline.contract?.status ?? null,
+    installationState: pipeline.installationProject?.state ?? null,
+    certificateSigned: !!pipeline.installationProject?.certificate,
+  });
 
   return (
     <>
@@ -57,9 +100,30 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
         </div>
       )}
 
-      <Card className="max-w-xl p-6 mb-6">
-        <CardTitle>Lead details</CardTitle>
-        <dl className="space-y-2.5 text-sm">
+      {/* The one thing the operator came here to learn: what to do now. */}
+      {progress.next && <NextStepCallout next={progress.next} />}
+
+      {/* The lead stage's own workspace lives on this page, so it renders
+          right under the callout that points at it. */}
+      {pipeline.stage === "lead" && pipeline.authoritative && (
+        <div className="mb-8">
+          <ProposalForm pipelineId={pipeline.id} />
+        </div>
+      )}
+
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,22rem)] items-start mb-6">
+        {/* The deal's map — every stage in spine order, exactly one current,
+            locked stages unlinked and saying what unlocks them. This
+            replaces the old row of six identical buttons. */}
+        <Card className="p-6">
+          <CardTitle>Deal progress</CardTitle>
+          <DealStepper steps={progress.steps} />
+        </Card>
+
+        <div className="space-y-6">
+          <Card className="p-6">
+            <CardTitle>Lead details</CardTitle>
+            <dl className="space-y-2.5 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-[var(--text-muted)]">Contact</dt>
             <dd>
@@ -81,56 +145,33 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
               <dd>{pipeline.notes}</dd>
             </div>
           )}
-        </dl>
-      </Card>
+            </dl>
+          </Card>
 
-      {/* the recorded proposal, once one exists — previously the outcome
-          vanished from the UI the moment the stage moved on */}
-      {pipeline.proposalOutcome && (
-        <Card className="max-w-xl p-6 mb-6">
-          <CardTitle>Demo proposal</CardTitle>
-          <p className="text-sm font-medium mb-1">{OUTCOME_LABEL[pipeline.proposalOutcome] ?? pipeline.proposalOutcome}</p>
-          {pipeline.proposalDecidedAt && (
-            <p className="text-xs text-[var(--text-muted)] mb-2">
-              Decided {pipeline.proposalDecidedAt.toISOString().slice(0, 10)}
-            </p>
+          {/* the recorded proposal, once one exists — previously the outcome
+              vanished from the UI the moment the stage moved on */}
+          {pipeline.proposalOutcome && (
+            <Card className="p-6">
+              <CardTitle>Demo proposal</CardTitle>
+              <p className="text-sm font-medium mb-1">
+                {OUTCOME_LABEL[pipeline.proposalOutcome] ?? pipeline.proposalOutcome}
+              </p>
+              {pipeline.proposalDecidedAt && (
+                <p className="text-xs text-[var(--text-muted)] mb-2">
+                  Decided {pipeline.proposalDecidedAt.toISOString().slice(0, 10)}
+                </p>
+              )}
+              {pipeline.proposalSummary && (
+                <p className="text-sm text-[var(--text-muted)]">{pipeline.proposalSummary}</p>
+              )}
+              {pipeline.closedLostReason && (
+                <p className="text-sm mt-2" style={{ color: "var(--bad-fg)" }}>
+                  {pipeline.closedLostReason}
+                </p>
+              )}
+            </Card>
           )}
-          {pipeline.proposalSummary && <p className="text-sm text-[var(--text-muted)]">{pipeline.proposalSummary}</p>}
-          {pipeline.closedLostReason && (
-            <p className="text-sm mt-2" style={{ color: "var(--bad-fg)" }}>
-              {pipeline.closedLostReason}
-            </p>
-          )}
-        </Card>
-      )}
-
-      {pipeline.stage === "lead" && pipeline.authoritative && <ProposalForm pipelineId={pipeline.id} />}
-
-      {/* The deal's stages, always all visible rather than only the current
-          one: the work is not strictly sequential in practice (KYC is
-          collected alongside the demo), and hiding a stage until its
-          predecessor completes is how a chase-able task goes unnoticed. */}
-      <div className="flex flex-wrap gap-3">
-        {pipeline.siteSurvey && (
-          <Link href={`/admin/pipeline/${pipeline.id}/survey`} className="btn-primary">
-            Site survey →
-          </Link>
-        )}
-        <Link href={`/admin/pipeline/${pipeline.id}/report`} className="btn-secondary">
-          Demo report →
-        </Link>
-        <Link href={`/admin/pipeline/${pipeline.id}/kyc`} className="btn-secondary">
-          KYC documents →
-        </Link>
-        <Link href={`/admin/pipeline/${pipeline.id}/offer`} className="btn-secondary">
-          Offer →
-        </Link>
-        <Link href={`/admin/pipeline/${pipeline.id}/agreement`} className="btn-secondary">
-          Agreement &amp; contract →
-        </Link>
-        <Link href={`/admin/pipeline/${pipeline.id}/installation`} className="btn-secondary">
-          Installation →
-        </Link>
+        </div>
       </div>
     </>
   );

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -14,6 +15,8 @@ import { DemoReviewPanel } from "./demo-review-panel";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { circuitSteps } from "@/lib/deal-progress";
+import { StepSection } from "@/components/step-section";
 
 function GatePassCard({
   gatePass,
@@ -74,6 +77,7 @@ export default async function CircuitDetailPage({
     where: { id: circuitId },
     include: {
       society: true,
+      siteSurvey: { select: { pipelineId: true } },
       gatePasses: { orderBy: { submittedAt: "desc" } },
       commissioningReadings: { orderBy: { date: "asc" } },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
@@ -122,6 +126,19 @@ export default async function CircuitDetailPage({
   const postInstallValidCount = postInstallReadings.filter((r) => r.status === "valid").length;
   const postInstallPendingAnomaly = postInstallReadings.some((r) => r.status === "anomaly");
 
+  const steps = circuitSteps({
+    state: circuit.state,
+    hasInstallGatePass: !!installGatePass,
+    hasCompletionGatePass: !!completionGatePass,
+    preInstallBaseline: circuit.preInstallBaseline,
+    lightReplacementDate: circuit.lightReplacementDate,
+    benchmarkSavingsPct: circuit.benchmarkSavingsPct,
+  });
+  const surveyHref = circuit.siteSurvey ? `/admin/pipeline/${circuit.siteSurvey.pipelineId}/survey` : null;
+  const urgency = openReview
+    ? reviewUrgency({ raisedAt: openReview.raisedAt, occurrence: openReview.occurrence, now: new Date() })
+    : null;
+
   return (
     <>
       <PageHeader
@@ -149,158 +166,293 @@ export default async function CircuitDetailPage({
         </div>
       )}
 
-      {circuit.state === "eligible" && canEdit && (
-        <section className="max-w-md mb-10">
-          <h2 className="text-[15px] font-semibold mb-3">Meter installation &amp; load validation</h2>
-          <LoadValidationForm
-            circuitId={circuit.id}
-            meteredLightCount={circuit.meteredLightCount}
-            wattage={circuit.wattage}
-            canOverride={canOverride}
-            lastDiscrepancyPct={circuit.loadDiscrepancyPct}
-          />
-        </section>
-      )}
-      {circuit.state === "eligible" && !canEdit && (
-        <p className="text-sm text-[var(--text-muted)] max-w-md mb-10">
-          Meter installation and load validation is PER-04&apos;s action — you can read this circuit&apos;s
-          record but not edit it.
-        </p>
-      )}
-      {circuit.loadValidationOverrideById && (
-        <p className="text-xs text-[var(--text-muted)] max-w-md mb-6">
-          Load validation was overridden by ops — {circuit.loadValidationOverrideReason}
-          {circuit.loadDiscrepancyPct != null && ` (discrepancy was ${circuit.loadDiscrepancyPct.toFixed(1)}%)`}
-        </p>
-      )}
+      {/* The commissioning sequence as an accordion — the user-specified
+          arrangement (2026-08-15): only the step that needs action right now
+          is an open form; done steps are closed headers with their record one
+          "View" toggle away (still-live controls, like a gate-pass approval,
+          sit behind that same toggle); future steps are disabled headers that
+          say what unlocks them. circuitSteps() is the single source of the
+          ordering and statuses — this page only supplies each step's body. */}
+      <div className="max-w-2xl space-y-3 mb-10">
+        {steps.map((step, i) => {
+          let summary: string = step.summary;
+          let chip: ReactNode = null;
+          let body: ReactNode = null;
 
-      {/* FEAT-011/CON-18 — the demo-installation gate pass. */}
-      {circuit.state === "meter_installed" && !installGatePass && (
-        <section className="max-w-md mb-10">
-          <h2 className="text-[15px] font-semibold mb-3">Install gate pass</h2>
-          {canEdit ? (
-            <GatePassForm circuitId={circuit.id} />
-          ) : (
-            <p className="text-sm text-[var(--text-muted)]">Awaiting PER-04 to submit the gate pass on site.</p>
-          )}
-        </section>
-      )}
-      {installGatePass && (
-        <section className="max-w-md mb-10">
-          <h2 className="text-[15px] font-semibold mb-3">Install gate pass</h2>
-          <GatePassCard gatePass={installGatePass} canOverride={canOverride} />
-        </section>
-      )}
+          switch (step.key) {
+            case "eligibility": {
+              if (step.status === "current") {
+                body = (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    The eligibility decision happens on the{" "}
+                    {surveyHref ? (
+                      <Link href={surveyHref} className="underline">
+                        survey page
+                      </Link>
+                    ) : (
+                      "survey page"
+                    )}
+                    , not here.
+                  </p>
+                );
+              }
+              break;
+            }
 
-      {/* FEAT-012 — pre-install baseline monitoring window. */}
-      {circuit.preInstallWindowStartAt && (
-        <MonitoringWindowPanel
-          circuitId={circuit.id}
-          windowType="pre_install"
-          title="Pre-install monitoring window"
-          readings={preInstallReadings}
-          validCount={preInstallValidCount}
-          pendingAnomaly={preInstallPendingAnomaly}
-          canEdit={canEdit && circuit.preInstallBaseline == null}
-        />
-      )}
-      {circuit.preInstallBaseline != null && (
-        <p className="text-sm text-[var(--text-muted)] max-w-md -mt-6 mb-10">
-          Commissioned baseline: <span className="num">{circuit.preInstallBaseline.toFixed(2)}</span> kWh/day at{" "}
-          <span className="num">
-            {circuit.rescaleEvents[0]?.previousLightCount ?? circuit.meteredLightCount}
-          </span>{" "}
-          lights
-          {/* Only a LIVE entry moves the baseline — a circuit whose entries
-              were all voided is back on its commissioned figure, and saying
-              "in force now" there would contradict the replay. */}
-          {liveRescaleEvents.length > 0 && effectiveBaseline != null && (
-            <>
-              {" · in force now: "}
-              <span className="num font-semibold" style={{ color: "var(--text)" }}>
-                {effectiveBaseline.toFixed(2)}
-              </span>{" "}
-              kWh/day at <span className="num">{circuit.meteredLightCount}</span> lights
-            </>
-          )}
-        </p>
-      )}
+            case "meter": {
+              if (step.status === "current") {
+                body = canEdit ? (
+                  <LoadValidationForm
+                    circuitId={circuit.id}
+                    meteredLightCount={circuit.meteredLightCount}
+                    wattage={circuit.wattage}
+                    canOverride={canOverride}
+                    lastDiscrepancyPct={circuit.loadDiscrepancyPct}
+                  />
+                ) : (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Meter installation and load validation is PER-04&apos;s action — you can read this
+                    circuit&apos;s record but not edit it.
+                  </p>
+                );
+              } else if (step.status === "done" && circuit.loadValidationOverrideById) {
+                // An overridden circuit stays visibly distinguishable from
+                // one that passed normally (FEAT-011-AC-5).
+                summary = "Validation overridden by ops";
+                body = (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Load validation was overridden by ops — {circuit.loadValidationOverrideReason}
+                    {circuit.loadDiscrepancyPct != null &&
+                      ` (discrepancy was ${circuit.loadDiscrepancyPct.toFixed(1)}%)`}
+                  </p>
+                );
+              }
+              break;
+            }
 
-      {/* FEAT-013 — light replacement / demo installation. */}
-      {circuit.state === "awaiting_installation" && !completionGatePass && (
-        <section className="max-w-md mb-10">
-          <h2 className="text-[15px] font-semibold mb-3">Completion gate pass</h2>
-          {canEdit ? (
-            <GatePassForm circuitId={circuit.id} kind="demo_install_completion" />
-          ) : (
-            <p className="text-sm text-[var(--text-muted)]">Awaiting PER-04 to submit the completion gate pass.</p>
-          )}
-        </section>
-      )}
-      {completionGatePass && (
-        <section className="max-w-md mb-10">
-          <h2 className="text-[15px] font-semibold mb-3">Completion gate pass</h2>
-          <GatePassCard gatePass={completionGatePass} canOverride={canOverride} />
-        </section>
-      )}
-      {circuit.state === "awaiting_installation" && completionGatePass && (
-        <section className="max-w-md mb-10">
-          <h2 className="text-[15px] font-semibold mb-3">Light replacement</h2>
-          {canEdit ? (
-            <LightReplacementForm circuitId={circuit.id} />
-          ) : (
-            <p className="text-sm text-[var(--text-muted)]">Awaiting PER-04 to record the replacement date.</p>
-          )}
-        </section>
-      )}
-      {circuit.lightReplacementDate && (
-        <p className="text-sm text-[var(--text-muted)] max-w-md -mt-6 mb-10">
-          Lights replaced: <span className="num">{circuit.lightReplacementDate.toISOString().slice(0, 10)}</span>
-        </p>
-      )}
+            // FEAT-011/013/CON-18 — the two gate passes are the same
+            // component parameterized by kind, here too.
+            case "install-gate":
+            case "completion-gate": {
+              const pass = step.key === "install-gate" ? installGatePass : completionGatePass;
+              if (pass) {
+                const meta = statusMeta(GATE_PASS_STATUS, pass.status);
+                chip = <StatusChip tone={meta.tone}>{meta.label}</StatusChip>;
+                summary = ""; // the chip already states it
+                body = <GatePassCard gatePass={pass} canOverride={canOverride} />;
+              } else if (step.status === "done") {
+                // Rank-inferred done: the lifecycle is past this step but no
+                // pass row exists (data predating the feature, an override).
+                // Claiming "Submitted" would assert an artifact that isn't there.
+                summary = "No stored record — the lifecycle advanced past this step";
+              } else if (step.status === "current") {
+                body = canEdit ? (
+                  <GatePassForm
+                    circuitId={circuit.id}
+                    kind={step.key === "completion-gate" ? "demo_install_completion" : undefined}
+                  />
+                ) : (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Awaiting PER-04 to submit the gate pass on site.
+                  </p>
+                );
+              }
+              break;
+            }
 
-      {/* FEAT-014 — post-install monitoring window & benchmark computation. */}
-      {circuit.postInstallWindowStartAt && (
-        <MonitoringWindowPanel
-          circuitId={circuit.id}
-          windowType="post_install"
-          title="Post-install monitoring window"
-          readings={postInstallReadings}
-          validCount={postInstallValidCount}
-          pendingAnomaly={postInstallPendingAnomaly}
-          canEdit={canEdit && circuit.state !== "benchmark_confirmed" && circuit.state !== "benchmark_review"}
-        />
-      )}
-      {circuit.state === "benchmark_confirmed" && circuit.benchmarkSavingsPct != null && (
-        <div
-          className="max-w-md rounded-[var(--r-md)] border p-4 text-sm"
-          style={{ borderColor: "var(--ok-line)", background: "var(--ok-bg)", color: "var(--ok-fg)" }}
-        >
-          Benchmark confirmed — <span className="num font-semibold">{circuit.benchmarkSavingsPct.toFixed(1)}%</span>{" "}
-          savings, fixed for the contract term.
-        </div>
-      )}
-      {/* FEAT-015 — the out-of-range result is reviewed here rather than
-          parking the circuit forever. */}
-      {openReview && (
-        <DemoReviewPanel
-          reviewId={openReview.id}
-          measuredSavingsPct={openReview.measuredSavingsPct}
-          preInstallBaseline={openReview.preInstallBaseline}
-          postInstallAverage={openReview.postInstallAverage}
-          occurrence={openReview.occurrence}
-          urgencyLabel={reviewUrgency({
-            raisedAt: openReview.raisedAt,
-            occurrence: openReview.occurrence,
-            now: new Date(),
-          }).label}
-          urgencyTone={
-            reviewUrgency({ raisedAt: openReview.raisedAt, occurrence: openReview.occurrence, now: new Date() })
-              .tone
+            // FEAT-012 — pre-install baseline monitoring window.
+            case "pre-window": {
+              if (step.status === "current") {
+                chip = (
+                  <StatusChip tone={preInstallPendingAnomaly ? "warn" : "info"}>
+                    {preInstallPendingAnomaly ? "Anomaly open" : `Day ${preInstallValidCount} of 5`}
+                  </StatusChip>
+                );
+                body = circuit.preInstallWindowStartAt ? (
+                  <MonitoringWindowPanel
+                    circuitId={circuit.id}
+                    windowType="pre_install"
+                    title="Pre-install monitoring window"
+                    readings={preInstallReadings}
+                    validCount={preInstallValidCount}
+                    pendingAnomaly={preInstallPendingAnomaly}
+                    canEdit={canEdit && circuit.preInstallBaseline == null}
+                    embedded
+                  />
+                ) : (
+                  <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
+                );
+              } else if (step.status === "done" && circuit.preInstallBaseline == null) {
+                summary = "No stored baseline — the lifecycle advanced past this step";
+              } else if (step.status === "done" && circuit.preInstallBaseline != null) {
+                summary = `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day from 5 valid days`;
+                body = (
+                  <div className="space-y-4">
+                    <p className="text-sm text-[var(--text-muted)]">
+                      Commissioned baseline:{" "}
+                      <span className="num">{circuit.preInstallBaseline.toFixed(2)}</span> kWh/day at{" "}
+                      <span className="num">
+                        {circuit.rescaleEvents[0]?.previousLightCount ?? circuit.meteredLightCount}
+                      </span>{" "}
+                      lights
+                      {/* Only a LIVE entry moves the baseline — a circuit whose
+                          entries were all voided is back on its commissioned
+                          figure, and saying "in force now" there would
+                          contradict the replay. */}
+                      {liveRescaleEvents.length > 0 && effectiveBaseline != null && (
+                        <>
+                          {" · in force now: "}
+                          <span className="num font-semibold" style={{ color: "var(--text)" }}>
+                            {effectiveBaseline.toFixed(2)}
+                          </span>{" "}
+                          kWh/day at <span className="num">{circuit.meteredLightCount}</span> lights
+                        </>
+                      )}
+                    </p>
+                    {circuit.preInstallWindowStartAt && preInstallReadings.length > 0 && (
+                      <MonitoringWindowPanel
+                        circuitId={circuit.id}
+                        windowType="pre_install"
+                        title="Pre-install monitoring window"
+                        readings={preInstallReadings}
+                        validCount={preInstallValidCount}
+                        pendingAnomaly={preInstallPendingAnomaly}
+                        canEdit={false}
+                        embedded
+                      />
+                    )}
+                  </div>
+                );
+              }
+              break;
+            }
+
+            // FEAT-013 — light replacement / demo installation.
+            case "replacement": {
+              if (step.status === "current") {
+                body = canEdit ? (
+                  <LightReplacementForm circuitId={circuit.id} />
+                ) : (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Awaiting PER-04 to record the replacement date.
+                  </p>
+                );
+              } else if (step.status === "done") {
+                summary = circuit.lightReplacementDate
+                  ? `Replaced ${circuit.lightReplacementDate
+                      .toISOString()
+                      .slice(0, 10)} — that day is excluded; the post window starts the day after`
+                  : "No stored date — the lifecycle advanced past this step";
+              }
+              break;
+            }
+
+            // FEAT-014/015 — post-install window, benchmark, and the
+            // out-of-range review when the result lands outside CON-20.
+            case "benchmark": {
+              if (step.status === "current") {
+                if (openReview && urgency) {
+                  chip = <StatusChip tone={urgency.tone}>{urgency.label}</StatusChip>;
+                  body = (
+                    <div className="space-y-4">
+                      <DemoReviewPanel
+                        reviewId={openReview.id}
+                        measuredSavingsPct={openReview.measuredSavingsPct}
+                        preInstallBaseline={openReview.preInstallBaseline}
+                        postInstallAverage={openReview.postInstallAverage}
+                        occurrence={openReview.occurrence}
+                        urgencyLabel={urgency.label}
+                        urgencyTone={urgency.tone}
+                        canResolve={canOverride}
+                        embedded
+                      />
+                      {circuit.postInstallWindowStartAt && (
+                        <MonitoringWindowPanel
+                          circuitId={circuit.id}
+                          windowType="post_install"
+                          title="Post-install monitoring window"
+                          readings={postInstallReadings}
+                          validCount={postInstallValidCount}
+                          pendingAnomaly={postInstallPendingAnomaly}
+                          canEdit={false}
+                          embedded
+                        />
+                      )}
+                    </div>
+                  );
+                } else if (circuit.state === "benchmark_review") {
+                  body = (
+                    <div className="space-y-4">
+                      <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
+                        The measured result fell outside CON-20&apos;s 60-80% band, and the review was
+                        escalated for a manual benchmark decision — so it is not written by this screen.
+                      </p>
+                      {circuit.postInstallWindowStartAt && (
+                        <MonitoringWindowPanel
+                          circuitId={circuit.id}
+                          windowType="post_install"
+                          title="Post-install monitoring window"
+                          readings={postInstallReadings}
+                          validCount={postInstallValidCount}
+                          pendingAnomaly={postInstallPendingAnomaly}
+                          canEdit={false}
+                          embedded
+                        />
+                      )}
+                    </div>
+                  );
+                } else {
+                  chip = circuit.postInstallWindowStartAt ? (
+                    <StatusChip tone={postInstallPendingAnomaly ? "warn" : "info"}>
+                      {postInstallPendingAnomaly ? "Anomaly open" : `Day ${postInstallValidCount} of 5`}
+                    </StatusChip>
+                  ) : null;
+                  body = circuit.postInstallWindowStartAt ? (
+                    <MonitoringWindowPanel
+                      circuitId={circuit.id}
+                      windowType="post_install"
+                      title="Post-install monitoring window"
+                      readings={postInstallReadings}
+                      validCount={postInstallValidCount}
+                      pendingAnomaly={postInstallPendingAnomaly}
+                      canEdit={canEdit}
+                      embedded
+                    />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
+                  );
+                }
+              } else if (step.status === "done" && circuit.benchmarkSavingsPct != null) {
+                summary = `Benchmark confirmed — ${circuit.benchmarkSavingsPct.toFixed(
+                  1,
+                )}% savings, fixed for the contract term`;
+                if (circuit.postInstallWindowStartAt && postInstallReadings.length > 0) {
+                  body = (
+                    <MonitoringWindowPanel
+                      circuitId={circuit.id}
+                      windowType="post_install"
+                      title="Post-install monitoring window"
+                      readings={postInstallReadings}
+                      validCount={postInstallValidCount}
+                      pendingAnomaly={postInstallPendingAnomaly}
+                      canEdit={false}
+                      embedded
+                    />
+                  );
+                }
+              }
+              break;
+            }
           }
-          canResolve={canOverride}
-        />
-      )}
+
+          return (
+            <StepSection key={step.key} index={i + 1} title={step.title} status={step.status} summary={summary} chip={chip}>
+              {body}
+            </StepSection>
+          );
+        })}
+      </div>
+
       {resolvedReviews.length > 0 && (
         <section className="max-w-2xl mb-10">
           <h2 className="text-[15px] font-semibold mb-3">Out-of-range result history</h2>
@@ -332,16 +484,6 @@ export default async function CircuitDetailPage({
           </Card>
         </section>
       )}
-      {circuit.state === "benchmark_review" && !openReview && (
-        <div
-          className="max-w-md rounded-[var(--r-md)] border p-4 text-sm"
-          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
-        >
-          The measured result fell outside CON-20&apos;s 60-80% band, and the review was escalated for a manual
-          benchmark decision — so it is not written by this screen.
-        </div>
-      )}
-
       {/* FEAT-041 / INV-07 — light-count change & baseline rescale. Only
           meaningful once a baseline exists to rescale, which is also
           exactly when the count stops being free-form config. */}
@@ -466,11 +608,22 @@ export default async function CircuitDetailPage({
           )}
 
           {canOverride ? (
-            <RescaleForm
-              circuitId={circuit.id}
-              currentLightCount={circuit.meteredLightCount}
-              effectiveBaseline={effectiveBaseline}
-            />
+            // The form is an occasional maintenance act, not the circuit's
+            // current step — closed until someone actually needs it, same
+            // arrangement as the step accordion above.
+            <details className="group">
+              <summary className="text-sm underline cursor-pointer select-none text-[var(--text-muted)] list-none [&::-webkit-details-marker]:hidden">
+                <span className="group-open:hidden">Record a verified light-count change</span>
+                <span className="hidden group-open:inline">Close</span>
+              </summary>
+              <div className="mt-3">
+                <RescaleForm
+                  circuitId={circuit.id}
+                  currentLightCount={circuit.meteredLightCount}
+                  effectiveBaseline={effectiveBaseline}
+                />
+              </div>
+            </details>
           ) : (
             // FEAT-041-AC-4 — PER-04 reads this history but cannot record one.
             <p className="text-sm text-[var(--text-muted)]">

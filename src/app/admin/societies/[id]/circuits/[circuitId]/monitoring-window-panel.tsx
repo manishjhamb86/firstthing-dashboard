@@ -31,6 +31,7 @@ export function MonitoringWindowPanel({
   validCount,
   pendingAnomaly,
   canEdit,
+  embedded = false,
 }: {
   circuitId: string;
   windowType: "pre_install" | "post_install";
@@ -39,6 +40,9 @@ export function MonitoringWindowPanel({
   validCount: number;
   pendingAnomaly: boolean;
   canEdit: boolean;
+  /** Inside a StepSection the step header already names the window, so the
+   *  panel drops its own heading and section wrapper. */
+  embedded?: boolean;
 }) {
   const [date, setDate] = useState(todayISO());
   const [consumptionKwh, setConsumptionKwh] = useState("");
@@ -81,13 +85,15 @@ export function MonitoringWindowPanel({
   const complete = validCount >= REQUIRED_VALID_DAYS;
 
   return (
-    <section className="max-w-md mb-10">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
-        <h2 className="text-[15px] font-semibold">{title}</h2>
-        <StatusChip tone={complete ? "ok" : pendingAnomaly ? "warn" : "info"}>
-          {complete ? "Complete" : `Day ${validCount} of ${REQUIRED_VALID_DAYS}`}
-        </StatusChip>
-      </div>
+    <section className={embedded ? "max-w-md" : "max-w-md mb-10"}>
+      {!embedded && (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
+          <h2 className="text-[15px] font-semibold">{title}</h2>
+          <StatusChip tone={complete ? "ok" : pendingAnomaly ? "warn" : "info"}>
+            {complete ? "Complete" : `Day ${validCount} of ${REQUIRED_VALID_DAYS}`}
+          </StatusChip>
+        </div>
+      )}
 
       {/* 5-slot progress strip — CON-19's rule is "5 consecutive valid
           days", so showing the count as five discrete slots states the

@@ -10,6 +10,8 @@ import { DeleteAreaButton } from "./delete-area-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { resolveCircuitRemoval } from "@/lib/circuit-removal";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
+import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
+import { NextStepCallout } from "@/components/deal-stepper";
 
 export default async function SiteSurveyPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminPage();
@@ -46,6 +48,22 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
 
   const totalLights = siteSurvey.areas.reduce((sum, a) => sum + a.count, 0);
 
+  // Where does this survey hand off? Once a candidate clears eligibility,
+  // everything that comes next (meter, windows, benchmark) happens on the
+  // CIRCUIT page — the hand-off this screen previously never stated, which
+  // is exactly where the flow got lost.
+  const top = mostAdvancedCandidate(
+    circuits.map((c) => ({ id: c.id, state: c.state, location: c.location, lightType: c.lightType })),
+  );
+  const handoff =
+    top && top.state !== "surveyed" && top.state !== "ineligible"
+      ? {
+          label: circuitNextLabel(top.state),
+          detail: `Commissioning continues on the circuit page for ${candidateLabel(top)} — not here.`,
+          href: `/admin/societies/${pipeline.society.id}/circuits/${top.id}`,
+        }
+      : null;
+
   return (
     <>
       <PageHeader
@@ -58,9 +76,16 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
         subtitle={pipeline.society.location}
       />
 
+      {handoff && <NextStepCallout next={handoff} />}
+
       <section className="max-w-2xl mb-10">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-3">
-          <h2 className="text-[15px] font-semibold">Lighting inventory by area</h2>
+          <h2 className="text-[15px] font-semibold">
+            <span className="lbl mr-2" style={{ color: "var(--accent)" }}>
+              Step 1
+            </span>
+            Lighting inventory by area
+          </h2>
           {siteSurvey.areas.length > 0 && (
             <p className="text-xs text-[var(--text-muted)]">
               <span className="num">{totalLights}</span> lights across{" "}
@@ -117,7 +142,23 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
       </section>
 
       <section className="max-w-2xl">
-        <h2 className="text-[15px] font-semibold mb-3">Demo-circuit candidates</h2>
+        <h2 className="text-[15px] font-semibold mb-3">
+          <span className="lbl mr-2" style={{ color: "var(--accent)" }}>
+            Step 2
+          </span>
+          Pick the demo circuit
+        </h2>
+        {/* Step 2 waits on step 1 — a candidate is judged against CON-16
+            with the society-wide inventory as its context (the demo circuit
+            REPRESENTS that inventory), so offering the form before any area
+            exists invites recording a candidate against nothing. */}
+        {siteSurvey.areas.length === 0 ? (
+          <EmptyState title="Record the inventory first">
+            The demo circuit represents the whole society&apos;s lighting, so the area-by-area inventory
+            above comes first. This step opens once at least one area is recorded.
+          </EmptyState>
+        ) : (
+          <>
         {circuits.length === 0 ? (
           <div className="mb-4">
             <EmptyState title="No candidate circuits yet">
@@ -177,6 +218,8 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
             societyId={pipeline.society.id}
             serviceLine={pipeline.serviceLine}
           />
+        )}
+          </>
         )}
       </section>
     </>

@@ -1,0 +1,301 @@
+import { describe, expect, it } from "vitest";
+import {
+  circuitNextLabel,
+  circuitSteps,
+  dealProgress,
+  mostAdvancedCandidate,
+  type DealFacts,
+} from "@/lib/deal-progress";
+
+// A fresh lead: nothing beyond the pipeline row exists yet.
+const freshLead: DealFacts = {
+  pipelineId: "p1",
+  societyId: "s1",
+  stage: "lead",
+  authoritative: true,
+  demoSkipped: false,
+  surveyExists: false,
+  areaCount: 0,
+  candidates: [],
+  reportStatus: null,
+  kyc: { total: 0, resolved: 0 },
+  offerStatus: null,
+  contractStatus: null,
+  installationState: null,
+  certificateSigned: false,
+};
+
+const byKey = (f: DealFacts) =>
+  Object.fromEntries(dealProgress(f).steps.map((s) => [s.key, s]));
+
+describe("the spine has exactly one current step", () => {
+  it("a fresh lead is current at the lead step, everything else locked (bar nothing)", () => {
+    const { steps, next } = dealProgress(freshLead);
+    expect(steps.filter((s) => s.status === "current").map((s) => s.key)).toEqual(["lead"]);
+    expect(steps.filter((s) => s.status === "done")).toHaveLength(0);
+    expect(next?.label).toBe("Record the demo proposal decision");
+  });
+
+  it("a non-authoritative lead's next action is the approval, not the proposal", () => {
+    const { next } = dealProgress({ ...freshLead, authoritative: false });
+    expect(next?.label).toBe("Get the lead approved");
+  });
+
+  it("locked steps carry no link — that IS the sequencing signal", () => {
+    const steps = byKey(freshLead);
+    expect(steps.offer.status).toBe("locked");
+    expect(steps.offer.href).toBeDefined(); // href computed…
+    const { steps: list } = dealProgress(freshLead);
+    // …but the component only links reachable steps; the module must still
+    // mark them locked so it can refuse.
+    expect(list.find((s) => s.key === "agreement")?.status).toBe("locked");
+  });
+});
+
+describe("survey and commissioning", () => {
+  const surveyed: DealFacts = {
+    ...freshLead,
+    stage: "survey_pending",
+    surveyExists: true,
+  };
+
+  it("after the proposal, the survey is current and names both halves of its work", () => {
+    const { steps, next } = dealProgress(surveyed);
+    expect(steps.find((s) => s.key === "survey")?.status).toBe("current");
+    expect(next?.label).toBe("Run the site survey");
+  });
+
+  it("a candidate awaiting its exception keeps the survey current, not commissioning", () => {
+    const { steps, next } = dealProgress({
+      ...surveyed,
+      areaCount: 3,
+      candidates: [{ id: "c1", state: "surveyed", location: null, lightType: "basement" }],
+    });
+    expect(steps.find((s) => s.key === "survey")?.status).toBe("current");
+    expect(next?.label).toBe("Resolve the candidate's eligibility");
+  });
+
+  it("an eligible candidate moves the deal to commissioning, and next points AT THE CIRCUIT", () => {
+    // This is the reported hole: "i couldnt find from where to add the
+    // circuit or what to do next" — the next action must carry the circuit
+    // page's own href, not the survey's.
+    const { steps, next } = dealProgress({
+      ...surveyed,
+      areaCount: 3,
+      candidates: [{ id: "c1", state: "eligible", location: "Basement B1", lightType: "basement" }],
+    });
+    expect(steps.find((s) => s.key === "commissioning")?.status).toBe("current");
+    expect(next?.href).toBe("/admin/societies/s1/circuits/c1");
+    expect(next?.label).toBe("Install the meter and validate the load");
+  });
+
+  it("commissioning progress is judged by the MOST advanced candidate", () => {
+    const top = mostAdvancedCandidate([
+      { id: "a", state: "surveyed", location: null, lightType: "basement" },
+      { id: "b", state: "pre_install_monitoring", location: null, lightType: "stilt" },
+      { id: "c", state: "eligible", location: null, lightType: "external" },
+    ]);
+    expect(top?.id).toBe("b");
+  });
+
+  it("benchmark_review does not read as a confirmed benchmark", () => {
+    const { steps } = dealProgress({
+      ...surveyed,
+      candidates: [{ id: "c1", state: "benchmark_review", location: null, lightType: "basement" }],
+    });
+    expect(steps.find((s) => s.key === "commissioning")?.status).toBe("current");
+    expect(steps.find((s) => s.key === "commissioning")?.summary).toMatch(/out-of-range/i);
+  });
+});
+
+describe("report → offer → agreement → installation → billing", () => {
+  const benchmarked: DealFacts = {
+    ...freshLead,
+    stage: "survey_pending",
+    surveyExists: true,
+    areaCount: 3,
+    candidates: [{ id: "c1", state: "benchmark_confirmed", location: null, lightType: "basement" }],
+  };
+
+  it("a confirmed benchmark makes the report current", () => {
+    const { next } = dealProgress(benchmarked);
+    expect(next?.label).toBe("Generate the demo report");
+  });
+
+  it("a drafted-but-unshared report is still the current step", () => {
+    const { next } = dealProgress({ ...benchmarked, reportStatus: "draft" });
+    expect(next?.label).toBe("Share the demo report");
+  });
+
+  it("an issued offer waits on the society, and says so", () => {
+    const { next } = dealProgress({ ...benchmarked, reportStatus: "shared", offerStatus: "issued" });
+    expect(next?.label).toBe("Awaiting the society's offer decision");
+  });
+
+  it("an accepted offer with incomplete KYC routes next to KYC (GATE-01), not the agreement", () => {
+    const { next, steps } = dealProgress({
+      ...benchmarked,
+      reportStatus: "shared",
+      offerStatus: "accepted",
+      kyc: { total: 3, resolved: 1 },
+    });
+    expect(steps.find((s) => s.key === "agreement")?.status).toBe("current");
+    expect(next?.label).toBe("Complete KYC first");
+    expect(next?.href).toBe("/admin/pipeline/p1/kyc");
+  });
+
+  it("with KYC done the agreement is the next action", () => {
+    const { next } = dealProgress({
+      ...benchmarked,
+      reportStatus: "shared",
+      offerStatus: "accepted",
+      kyc: { total: 3, resolved: 3 },
+    });
+    expect(next?.label).toBe("Execute the agreement");
+  });
+
+  it("an active contract makes installation current", () => {
+    const { next } = dealProgress({
+      ...benchmarked,
+      reportStatus: "shared",
+      offerStatus: "accepted",
+      kyc: { total: 3, resolved: 3 },
+      contractStatus: "active",
+    });
+    expect(next?.label).toBe("Set up the installation project");
+  });
+
+  it("active billing ends the spine — no next action, billing marked done", () => {
+    const { next, steps } = dealProgress({
+      ...benchmarked,
+      stage: "active_billing",
+      reportStatus: "shared",
+      offerStatus: "accepted",
+      kyc: { total: 3, resolved: 3 },
+      contractStatus: "active",
+      installationState: "complete",
+      certificateSigned: true,
+    });
+    expect(next).toBeNull();
+    expect(steps.find((s) => s.key === "billing")?.status).toBe("done");
+  });
+});
+
+describe("the KYC parallel track", () => {
+  it("is locked on a fresh lead, parallel once the deal is moving, done when resolved", () => {
+    expect(byKey(freshLead).kyc.status).toBe("locked");
+    const moving = { ...freshLead, stage: "survey_pending", surveyExists: true };
+    expect(byKey(moving).kyc.status).toBe("parallel");
+    expect(byKey({ ...moving, kyc: { total: 3, resolved: 3 } }).kyc.status).toBe("done");
+  });
+
+  it("zero requirements is 'not started', never 'done'", () => {
+    const moving = { ...freshLead, stage: "survey_pending", surveyExists: true };
+    expect(byKey(moving).kyc.status).toBe("parallel");
+    expect(byKey(moving).kyc.summary).toMatch(/start collecting early/i);
+  });
+});
+
+describe("closed-lost and demo-skip", () => {
+  it("closed-lost freezes the spine: no current step, no next action", () => {
+    const { steps, next } = dealProgress({ ...freshLead, stage: "closed_lost" });
+    expect(next).toBeNull();
+    expect(steps.filter((s) => s.status === "current")).toHaveLength(0);
+  });
+
+  it("an ops-approved demo skip marks commissioning and report done without a benchmark", () => {
+    const { steps, next } = dealProgress({
+      ...freshLead,
+      stage: "survey_pending",
+      surveyExists: true,
+      demoSkipped: true,
+      candidates: [{ id: "c1", state: "eligible", location: null, lightType: "basement" }],
+    });
+    expect(steps.find((s) => s.key === "commissioning")?.status).toBe("done");
+    expect(steps.find((s) => s.key === "commissioning")?.summary).toMatch(/skip/i);
+    expect(steps.find((s) => s.key === "report")?.status).toBe("done");
+    expect(next?.label).toBe("Generate and issue the offer");
+  });
+});
+
+describe("circuitSteps — the map one level down", () => {
+  it("an eligible circuit is current at meter install", () => {
+    const steps = circuitSteps({
+      state: "eligible",
+      hasInstallGatePass: false,
+      hasCompletionGatePass: false,
+      preInstallBaseline: null,
+      lightReplacementDate: null,
+      benchmarkSavingsPct: null,
+    });
+    expect(steps.find((s) => s.status === "current")?.key).toBe("meter");
+    expect(steps.filter((s) => s.status === "current")).toHaveLength(1);
+  });
+
+  it("completion gate pass comes BEFORE light replacement — CON-18's departure gate", () => {
+    const steps = circuitSteps({
+      state: "awaiting_installation",
+      hasInstallGatePass: true,
+      hasCompletionGatePass: false,
+      preInstallBaseline: 30,
+      lightReplacementDate: null,
+      benchmarkSavingsPct: null,
+    });
+    const keys = steps.map((s) => s.key);
+    expect(keys.indexOf("completion-gate")).toBeLessThan(keys.indexOf("replacement"));
+    expect(steps.find((s) => s.status === "current")?.key).toBe("completion-gate");
+  });
+
+  it("benchmark_review is current at the benchmark step and says why", () => {
+    const steps = circuitSteps({
+      state: "benchmark_review",
+      hasInstallGatePass: true,
+      hasCompletionGatePass: true,
+      preInstallBaseline: 30,
+      lightReplacementDate: new Date("2026-08-01"),
+      benchmarkSavingsPct: null,
+    });
+    const cur = steps.find((s) => s.status === "current");
+    expect(cur?.key).toBe("benchmark");
+    expect(cur?.summary).toMatch(/outside CON-20/i);
+  });
+
+  it("ineligible collapses to the one step that matters", () => {
+    const steps = circuitSteps({
+      state: "ineligible",
+      hasInstallGatePass: false,
+      hasCompletionGatePass: false,
+      preInstallBaseline: null,
+      lightReplacementDate: null,
+      benchmarkSavingsPct: null,
+    });
+    expect(steps).toHaveLength(1);
+    expect(steps[0].summary).toMatch(/no exception path/i);
+  });
+
+  it("a state past a step outranks a missing artifact — the map must stay coherent", () => {
+    // The reported screenshot: a benchmark_review circuit with no stored
+    // install gate pass showed step 3 as current while steps 4-6 read done.
+    // The state machine can only reach benchmark_review THROUGH those steps,
+    // so the missing artifact is a historical gap, not pending work.
+    const steps = circuitSteps({
+      state: "benchmark_review",
+      hasInstallGatePass: false, // artifact missing…
+      hasCompletionGatePass: false, // …both of them
+      preInstallBaseline: 30,
+      lightReplacementDate: null, // and this one too
+      benchmarkSavingsPct: null,
+    });
+    expect(steps.find((s) => s.key === "install-gate")?.status).toBe("done");
+    expect(steps.find((s) => s.key === "completion-gate")?.status).toBe("done");
+    expect(steps.find((s) => s.key === "replacement")?.status).toBe("done");
+    expect(steps.find((s) => s.status === "current")?.key).toBe("benchmark");
+    expect(steps.filter((s) => s.status === "current")).toHaveLength(1);
+  });
+
+  it("every mid-lifecycle state has a next label in the operator's words", () => {
+    for (const s of ["surveyed", "eligible", "meter_installed", "pre_install_monitoring", "awaiting_installation", "post_install_pending", "post_install_monitoring", "benchmark_review"]) {
+      expect(circuitNextLabel(s)).not.toBe("Open the circuit");
+    }
+  });
+});

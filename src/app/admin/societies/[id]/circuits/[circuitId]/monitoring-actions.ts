@@ -12,6 +12,7 @@ import {
   restartWindow,
   averageOfFirstValid,
   parseCommissioningCsv,
+  startOfDayUTC,
   REQUIRED_VALID_DAYS,
 } from "@/lib/monitoring-window";
 import { detectAnomalies } from "@/lib/reading-anomaly";
@@ -41,6 +42,29 @@ async function applyCommissioningReading(
 
   const windowStartAt = windowType === "pre_install" ? circuit.preInstallWindowStartAt : circuit.postInstallWindowStartAt;
   if (!windowStartAt) return { error: `${date}: this monitoring window hasn't started yet.` };
+
+  // A restart (FEAT-012-AC-3) moves windowStartAt forward, past whatever was
+  // recorded before the anomaly — sometimes past dates that already have a
+  // reading row. Writing one there anyway used to succeed silently: the
+  // upsert has no date filter, so the row landed in the database but every
+  // read (getWindowProgress, the readings table, the monitoring board) only
+  // ever looks at date >= windowStartAt — the reading existed and was
+  // permanently invisible everywhere. Refusing here, by name, is what MS-04's
+  // "check for the action's own log line" rule and MS-08's "a refusal with
+  // no log line is a refusal you cannot verify" both point at: silent success
+  // is worse than a clear refusal.
+  const requestedDate = startOfDayUTC(new Date(date));
+  if (requestedDate.getTime() < windowStartAt.getTime()) {
+    logger.warn("commissioning.reading_before_window_start", {
+      circuitId,
+      windowType,
+      date,
+      windowStartAt,
+    });
+    return {
+      error: `${date}: the window restarted on ${windowStartAt.toISOString().slice(0, 10)} — record a reading on or after that date instead.`,
+    };
+  }
 
   const baselineAlready = windowType === "pre_install" ? circuit.preInstallBaseline != null : circuit.postInstallBaseline != null;
   if (baselineAlready) return { error: `${date}: this window has already completed.` };

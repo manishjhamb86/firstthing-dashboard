@@ -272,6 +272,7 @@ export default async function CircuitDetailPage({
                   <MonitoringWindowPanel
                     circuitId={circuit.id}
                     windowType="pre_install"
+                    windowStartAt={circuit.preInstallWindowStartAt?.toISOString() ?? null}
                     title="Pre-install monitoring window"
                     readings={preInstallReadings}
                     validCount={preInstallValidCount}
@@ -313,6 +314,7 @@ export default async function CircuitDetailPage({
                       <MonitoringWindowPanel
                         circuitId={circuit.id}
                         windowType="pre_install"
+                        windowStartAt={circuit.preInstallWindowStartAt?.toISOString() ?? null}
                         title="Pre-install monitoring window"
                         readings={preInstallReadings}
                         validCount={preInstallValidCount}
@@ -370,6 +372,7 @@ export default async function CircuitDetailPage({
                         <MonitoringWindowPanel
                           circuitId={circuit.id}
                           windowType="post_install"
+                          windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
                           title="Post-install monitoring window"
                           readings={postInstallReadings}
                           validCount={postInstallValidCount}
@@ -391,6 +394,7 @@ export default async function CircuitDetailPage({
                         <MonitoringWindowPanel
                           circuitId={circuit.id}
                           windowType="post_install"
+                          windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
                           title="Post-install monitoring window"
                           readings={postInstallReadings}
                           validCount={postInstallValidCount}
@@ -411,6 +415,7 @@ export default async function CircuitDetailPage({
                     <MonitoringWindowPanel
                       circuitId={circuit.id}
                       windowType="post_install"
+                      windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
                       title="Post-install monitoring window"
                       readings={postInstallReadings}
                       validCount={postInstallValidCount}
@@ -431,6 +436,7 @@ export default async function CircuitDetailPage({
                     <MonitoringWindowPanel
                       circuitId={circuit.id}
                       windowType="post_install"
+                      windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
                       title="Post-install monitoring window"
                       readings={postInstallReadings}
                       validCount={postInstallValidCount}

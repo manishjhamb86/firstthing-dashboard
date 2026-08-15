@@ -31,6 +31,7 @@ export function MonitoringWindowPanel({
   validCount,
   pendingAnomaly,
   canEdit,
+  windowStartAt,
   embedded = false,
 }: {
   circuitId: string;
@@ -40,16 +41,39 @@ export function MonitoringWindowPanel({
   validCount: number;
   pendingAnomaly: boolean;
   canEdit: boolean;
+  /** ISO date. A restart moves this forward — defaulting the date field to
+   *  today alone would hand out a default the server has to refuse whenever
+   *  the recorded days run ahead of the real calendar (a common shape here:
+   *  commissioning is walked with catch-up dates). */
+  windowStartAt: string | null;
   /** Inside a StepSection the step header already names the window, so the
    *  panel drops its own heading and section wrapper. */
   embedded?: boolean;
 }) {
-  const [date, setDate] = useState(todayISO());
+  const defaultDate = () => {
+    const today = todayISO();
+    const start = windowStartAt?.slice(0, 10);
+    return start && start > today ? start : today;
+  };
+  const [date, setDate] = useState(defaultDate);
   const [consumptionKwh, setConsumptionKwh] = useState("");
   const [isAnomaly, setIsAnomaly] = useState(false);
   const [anomalyNote, setAnomalyNote] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
+
+  // A "Record fix & restart" moves windowStartAt forward without remounting
+  // this component — bump the field along with it, or the very next save
+  // would hit the same restarted-past-this-date refusal by surprise. Adjusted
+  // during render (React's own pattern for "state derived from a changed
+  // prop"), not an effect — an effect here would setState synchronously on
+  // every render where it's out of sync.
+  const [trackedWindowStartAt, setTrackedWindowStartAt] = useState(windowStartAt);
+  if (windowStartAt !== trackedWindowStartAt) {
+    setTrackedWindowStartAt(windowStartAt);
+    const start = windowStartAt?.slice(0, 10);
+    if (start && date < start) setDate(start);
+  }
 
   function submit() {
     startTransition(async () => {

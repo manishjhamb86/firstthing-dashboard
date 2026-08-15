@@ -2107,6 +2107,65 @@ confirmed by count query. `tsc`/`lint`/`build`/`vitest` all clean; no schema cha
 inline style, which React 19 reports as a hydration mismatch — a console error that looks like an
 app bug and is not. Screenshots now pass `caret: "initial"`.
 
+## A reading window restart left a silent black hole for writes (2026-08-15) — user-caught
+
+**Reported**: "Saved a reading using the form. got 200 response. but the readings not appearing
+anywhere," with a network capture (200 OK, `x-action-revalidated: 1`) and two screenshots — the
+post-install step at "Day 0 of 5" with the date field showing `08/21/2026`, and the monitoring
+dashboard's row for the same circuit reading "0/5 — Awaiting first reading."
+
+**Confirmed against the row, not guessed**: the circuit's `postInstallWindowStartAt` was
+`2026-08-25` — correctly moved there by the already-shipped restart logic (`restartFromDate`,
+"the later of tomorrow and the midnight after the last recorded day") after an automatic ±5%
+anomaly on a reading dated `2026-08-24`, itself part of a catch-up batch of dates run ahead of the
+real calendar. The five readings the user had already recorded (`08-20` through `08-24`) were all
+now *before* the restarted window start, so `getWindowProgress`'s `date: { gte: windowStartAt }`
+filter — used everywhere a window is read: the readings table, the day count, the monitoring
+board — correctly excludes every one of them. That part is working as designed.
+
+**The actual defect: the write side had no matching check.** `recordDailyReading` upserts on
+`(circuitId, windowType, date)` unconditionally — nothing compared the submitted date against the
+circuit's own `windowStartAt` before writing. So a reading dated `2026-08-21` (what the form's date
+field still held, since `date` isn't reset after a submit — only `consumptionKwh`/`anomalyNote`
+are) landed a real, silent 200: the upsert succeeded, `x-action-revalidated: 1` fired, and the row
+either updated in place or was created — and then was permanently invisible everywhere, forever,
+since every read filters on the same `>= windowStartAt` clause the write never checked. Same shape
+as this session's own standing rule ("the guard belongs on the write path nobody is looking at
+while building the new one," first named at MS-04's FEAT-040 hole) — the restart logic was built
+and tested from the read side; nobody asked what happens to a write that lands behind it.
+
+**Fixed in `applyCommissioningReading`** (`monitoring-actions.ts`, the shared row-level function
+both the single-day form and the CSV upload go through, so both entry points are covered by one
+change): a submitted date earlier than the circuit's current `windowStartAt` is now refused outright
+— `"{date}: the window restarted on {windowStartAt} — record a reading on or after that date
+instead,"` logged as `commissioning.reading_before_window_start` — rather than silently upserted.
+Per this repo's own rule ("a refusal with no log line is a refusal you cannot verify," MS-08), the
+log line was written first specifically so the fix's own verification could tell a real refusal
+apart from a client that never submitted.
+
+**A second, related gap closed in the same pass, since it's what set the trap**: `MonitoringWindowPanel`'s
+date field defaulted to `todayISO()` unconditionally — which, on this catch-up-dated demo data, is
+*also* before the restarted window start, so even a fresh attempt with the field untouched would hit
+the same refusal by surprise. The panel now takes `windowStartAt` as a prop and defaults to
+`max(today, windowStartAt)`; a restart that happens while the panel is already mounted (revalidation
+updates the prop without remounting the component) is picked up the same way, adjusted **during
+render** rather than in a `useEffect` — the project's `react-hooks/set-state-in-effect` lint rule
+correctly flagged the effect-based first draft, and React's own documented "adjusting state when a
+prop changes" pattern (comparing against a tracked-previous-value state, no effect) is what's used.
+
+**Verified against the real circuit itself, carefully** — a refusal is a no-op by construction, so
+it's safe to reproduce the exact reported request (same stale date, same circuit) against live data
+without touching it, but a *successful* write is real data and was verified against a disposable
+fixture instead, never the user's own: 7/7 checks, zero console/page errors. Against Mahagun
+Puram's real circuit — the date field now defaults to `2026-08-25` (the live window start) instead
+of today; resubmitting the exact stale date from the report's network capture is refused by name,
+naming the actual restart date; the pre-existing `08-21` row is confirmed untouched by direct query
+(still `7.92`, not the deliberately-wrong `999` the refused submission carried). Against a disposable
+fixture built to the same restarted-window shape: the date field default tracks a *future* window
+start too; a reading dated exactly at the window start is accepted, written, and rendered; a date one
+day earlier is still refused. Fixture removed afterward, confirmed by count query — 4 societies,
+unchanged. `tsc`/`lint`/`vitest` (287 cases, unaffected)/`build` all clean; no schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

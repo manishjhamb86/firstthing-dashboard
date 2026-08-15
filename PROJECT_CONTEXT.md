@@ -2021,6 +2021,15 @@ reproducing the reported case locally first (society + engagement, no pipeline),
 pipeline and then a survey behind it and re-checking the screen each time. The survey deep link was
 followed to a real 200 rather than merely asserted to be present.
 
+**On stage, verified against the reported society itself (8/8)** — with one thing worth recording
+about the verification rather than the fix: `LandCraft` had moved on between the report and the
+deploy. It now has a lighting pipeline at `survey_pending` and a registered circuit, so the empty
+state correctly does not render there at all, and the first run's failures were assertions checking
+a branch the society had left — not a stale deploy, which is what they looked like. Confirmed by
+dumping the served page rather than re-guessing: the detail panel renders "Open the deal →" against
+the real pipeline id, which only the new build emits. **The general shape**: when a check fails
+against live data the user is actively using, confirm the state before concluding the deploy is bad.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

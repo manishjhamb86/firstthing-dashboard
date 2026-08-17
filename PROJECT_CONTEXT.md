@@ -2292,6 +2292,25 @@ time: `||` concatenation casts to `'false'`, while bare `-tA` prints `f`.
 uploads under `Ingest/Sonoff_Verification_Colony/` — added to Current Blockers in spirit; the DB
 rows behind them are gone.
 
+**Deployed to `stage.firsthing.earth` (2026-08-17).** Backup first (184 KB with a real dump
+header — size checked, per the standing 0-byte lesson), then rsync + `pnpm install` (no new deps) +
+`prisma migrate deploy` + build + both pm2 processes restarted. **The two CON-45 migrations were
+already applied on stage** — the user had attempted a deploy themselves earlier which failed
+partway; verified correct by querying the migration history and the three new tables directly
+rather than trusting "no pending migrations". Device catalog seeded via targeted psql upserts (not
+the full seed, which carries password-bearing test profiles). **Found and fixed in passing:
+`firsthing-job-worker` had been stopped since ~2026-08-15 05:00** (12 restarts, ELIFECYCLE
+failures) — restarted, stable after 44s, and ADR-006's chain verified intact: exactly 1 pending
+`gatepass_sweep`, 327 done, no fork. Verified over the public HTTPS path (Playwright headless
+Chromium): login, `/admin/device-catalog` rendering the seeded types and mapping,
+`/admin`, `/admin/readings`, `/admin/monitoring` all 200, and a real circuit page rendering the
+new Load inventory section with zero console/page errors — that 200 is the meaningful check, since
+the page's query now includes `devices` and `meterReadings` unconditionally. The one dashboard
+error-log line post-restart is the long-documented Server-Reference restart artifact;
+`unstable restarts: 0`. **The user also said mid-deploy that git push/pull on the server is now
+allowed** — this deploy was already mid-flight on rsync; switching the deploy flow to git is open
+for next time, pending which remote (origin is still the public third-party repo).
+
 **Deliberately not done**: manufacturers 2 and 3 (one signature-table entry each when their sample
 files exist); wiring MS-08's billing UI to consume this store (MS-08 remains the one `proposed`
 milestone); migrating legacy `CommissioningReading` circuits onto the unified store.

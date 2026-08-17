@@ -34,6 +34,13 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
   if (!pipeline || !pipeline.siteSurvey) notFound();
   const siteSurvey = pipeline.siteSurvey;
 
+  // CON-45 — the candidate form's device dropdowns read the catalog.
+  const catalogOriginals = await db.deviceType.findMany({
+    where: { role: "original", active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, defaultWattage: true },
+  });
+
   const circuits = await db.circuit.findMany({
     where: { siteSurveyId: siteSurvey.id, voidedAt: null },
     orderBy: { createdAt: "asc" },
@@ -217,6 +224,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
             siteSurveyId={siteSurvey.id}
             societyId={pipeline.society.id}
             serviceLine={pipeline.serviceLine}
+            catalog={catalogOriginals}
           />
         )}
           </>

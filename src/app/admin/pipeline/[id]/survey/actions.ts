@@ -54,14 +54,27 @@ export async function deleteLightingInventoryArea(id: string, siteSurveyId: stri
 // FEAT-007: demo-circuit selection & CON-16 eligibility checklist. Four
 // hard criteria (no exception path, FEAT-007-AC-5) plus the one
 // exception-able minimum (light count >= 50, FEAT-007-AC-3).
+// CON-45 (2026-08-17, user's call): a candidate circuit is captured as an
+// INVENTORY — line items from the device catalog, count × wattage × hours —
+// not a single type/wattage pair. The inspector records what actually hangs
+// off the circuit; the metered light count and connected load are derived
+// from those lines, so the CON-16 ≥50 check and CON-17's load validation
+// read the same record the inspector made, not a separately-typed number
+// that can disagree with it.
+export type CandidateLine = {
+  deviceTypeId: string;
+  count: number;
+  wattage: number;
+  hoursPerDay: number;
+};
+
 export async function submitCircuitCandidate(input: {
   siteSurveyId: string;
   societyId: string;
   serviceLine: string;
   lightType: string;
-  meteredLightCount: number;
   representedLightCount: number;
-  wattage: number;
+  lines: CandidateLine[];
   workingHours?: number;
   noSharedAppliances: boolean;
   wifiReachable: boolean;
@@ -70,13 +83,36 @@ export async function submitCircuitCandidate(input: {
 }) {
   const session = await requireAdminPermission("manage_survey");
 
-  if (!Number.isFinite(input.meteredLightCount) || input.meteredLightCount <= 0) {
-    return { error: "Light count must be a positive number." };
+  if (!input.lines || input.lines.length === 0) {
+    return { error: "Record at least one device line — the circuit's inventory is what everything downstream compares against." };
   }
-  if (!Number.isFinite(input.wattage) || input.wattage <= 0) {
-    return { error: "Wattage must be a positive number." };
+  const types = await db.deviceType.findMany({
+    where: { id: { in: input.lines.map((l) => l.deviceTypeId) }, role: "original", active: true },
+  });
+  const typeById = new Map(types.map((t) => [t.id, t]));
+  for (const line of input.lines) {
+    if (!typeById.has(line.deviceTypeId)) {
+      return { error: "Pick every device from the catalog — if one is missing, ops can add it under Device catalog." };
+    }
+    if (!Number.isInteger(line.count) || line.count < 1 || line.count > 5000) {
+      return { error: "Each line's count must be a whole number between 1 and 5000." };
+    }
+    if (!Number.isFinite(line.wattage) || line.wattage <= 0 || line.wattage > 2000) {
+      return { error: "Each line's wattage must be between 1 and 2000 W." };
+    }
+    if (!Number.isFinite(line.hoursPerDay) || line.hoursPerDay <= 0 || line.hoursPerDay > 24) {
+      return { error: "Each line's hours per day must be between 1 and 24." };
+    }
   }
-  if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < input.meteredLightCount) {
+
+  // Derived, never typed separately: the count the ≥50 rule reads and the
+  // wattage CON-17's count × wattage arithmetic uses. The weighted average
+  // keeps count × wattage exactly equal to Σ(count × wattage).
+  const meteredLightCount = input.lines.reduce((s, l) => s + l.count, 0);
+  const connectedLoadW = input.lines.reduce((s, l) => s + l.count * l.wattage, 0);
+  const wattage = connectedLoadW / meteredLightCount;
+
+  if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < meteredLightCount) {
     return { error: "Represented light count must be at least the metered light count." };
   }
 
@@ -88,29 +124,41 @@ export async function submitCircuitCandidate(input: {
     wifiReachable: input.wifiReachable,
     fixturesUnder15ft: input.fixturesUnder15ft,
     notOnDrivewayOrRamp: input.notOnDrivewayOrRamp,
-    lightCountMinMet: input.meteredLightCount >= 50,
+    lightCountMinMet: meteredLightCount >= 50,
   };
 
   // FEAT-007-AC-5 — a hard-criterion failure is ineligible outright, no
   // exception path exists for these (only the light-count minimum is).
-  const state = !hardCriteriaPass ? "ineligible" : input.meteredLightCount >= 50 ? "eligible" : "surveyed";
+  const state = !hardCriteriaPass ? "ineligible" : meteredLightCount >= 50 ? "eligible" : "surveyed";
 
-  const circuit = await db.circuit.create({
-    data: {
-      societyId: input.societyId,
-      siteSurveyId: input.siteSurveyId,
-      serviceLine: input.serviceLine as never,
-      lightType: input.lightType.trim(),
-      meteredLightCount: input.meteredLightCount,
-      representedLightCount: input.representedLightCount,
-      wattage: input.wattage,
-      workingHours: input.workingHours ?? null,
-      eligibilityChecklist,
-      state,
-      // Recorded so the person who added a candidate can tidy their own
-      // mistake without waiting on the ops lead (src/lib/circuit-void.ts).
-      createdById: session.user.id,
-    },
+  const circuit = await db.$transaction(async (tx) => {
+    const created = await tx.circuit.create({
+      data: {
+        societyId: input.societyId,
+        siteSurveyId: input.siteSurveyId,
+        serviceLine: input.serviceLine as never,
+        lightType: input.lightType.trim(),
+        meteredLightCount,
+        representedLightCount: input.representedLightCount,
+        wattage,
+        workingHours: input.workingHours ?? null,
+        eligibilityChecklist,
+        state,
+        // Recorded so the person who added a candidate can tidy their own
+        // mistake without waiting on the ops lead (src/lib/circuit-void.ts).
+        createdById: session.user.id,
+      },
+    });
+    await tx.circuitDevice.createMany({
+      data: input.lines.map((l) => ({
+        circuitId: created.id,
+        deviceTypeId: l.deviceTypeId,
+        count: l.count,
+        wattage: l.wattage,
+        hoursPerDay: l.hoursPerDay,
+      })),
+    });
+    return created;
   });
 
   logger.info("survey.circuit_candidate_submitted", {
@@ -118,7 +166,9 @@ export async function submitCircuitCandidate(input: {
     siteSurveyId: input.siteSurveyId,
     state,
     hardCriteriaPass,
-    meteredLightCount: input.meteredLightCount,
+    meteredLightCount,
+    lines: input.lines.length,
+    connectedLoadW,
   });
 
   revalidatePath("/admin/pipeline");

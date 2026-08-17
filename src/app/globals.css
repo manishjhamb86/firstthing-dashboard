@@ -66,6 +66,16 @@
   --chrome-accent: #849DFF;
   --chrome-accent-ink: #10162A;
 
+  /* auth surfaces — the login split panel. Deliberately deep in Light and
+     Slate alike: a brand panel is the brand, not a theme variable. Dark
+     remaps it to zinc so it doesn't sit navy against a black page. */
+  --auth-panel: #141C2B;
+  --auth-panel-lift: #1E2A3F;
+  --auth-panel-text: #F2F6FC;
+  --auth-panel-muted: #9DB0CC;
+  --auth-panel-line: rgba(255, 255, 255, 0.12);
+  --auth-glow: rgba(93, 135, 255, 0.32);
+
   /* radius — Modernize/HeroUI roundness */
   --r-sm: 8px;
   --r-md: 12px;
@@ -141,6 +151,13 @@
   --chrome-subtle: #8E8E96;
   --chrome-accent: #7E9BFF;
   --chrome-accent-ink: #0F1222;
+
+  --auth-panel: #0C0C0E;
+  --auth-panel-lift: #17171B;
+  --auth-panel-text: #ECEDEE;
+  --auth-panel-muted: #A1A1AA;
+  --auth-panel-line: rgba(255, 255, 255, 0.08);
+  --auth-glow: rgba(126, 155, 255, 0.2);
 
   --e1: 0 0 0 1px rgba(255, 255, 255, 0.02);
   --e2: 0 8px 24px rgba(0, 0, 0, 0.6);

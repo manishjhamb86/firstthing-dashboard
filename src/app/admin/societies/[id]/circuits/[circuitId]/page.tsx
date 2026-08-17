@@ -632,6 +632,25 @@ export default async function CircuitDetailPage({
               Every day the meter has reported, as reviewed and saved. Excluded days stay listed with
               their reason and never count toward an average or a report.
             </p>
+            {/* CON-45 — the three reports, each appearing once its phase has
+                data. Print-styled routes rendering straight from the store. */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
+              {storedReadings.some((r) => r.phase === "pre_install") && (
+                <Link href={`/admin/societies/${id}/circuits/${circuit.id}/reports/pre-install`} className="underline">
+                  Pre-installation report
+                </Link>
+              )}
+              {circuit.lightReplacementDate && storedReadings.some((r) => r.phase !== "pre_install") && (
+                <Link href={`/admin/societies/${id}/circuits/${circuit.id}/reports/post-install`} className="underline">
+                  Post-installation savings report
+                </Link>
+              )}
+              {storedReadings.some((r) => r.phase === "monitoring") && (
+                <Link href={`/admin/societies/${id}/circuits/${circuit.id}/reports/monthly`} className="underline">
+                  Monthly savings report
+                </Link>
+              )}
+            </div>
           </div>
           {circuit.benchmarkSavingsPct !== null && (
             <div>

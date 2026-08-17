@@ -769,3 +769,46 @@ async function recomputeCircuitFigures(
   }
   return { baseline, benchmark };
 }
+
+// ── The pre-install report's investigate hook ────────────────────────────
+// Beyond ±10% average variance the report offers "investigate" alongside
+// "proceed". Raising it files a ReadingAnomaly into the existing queue —
+// non-blocking (nothing in this flow stops anyone), but on record with an
+// owner the moment someone picks it up there.
+
+export async function raisePreInstallInvestigation(
+  circuitId: string,
+  note: string,
+  variancePct: number,
+): Promise<Outcome> {
+  const admin = await resolveAdmin();
+  if (!admin || !(admin.permissions as string[]).includes("manage_survey")) {
+    return { error: "Raising an investigation is a field-survey action." };
+  }
+  if (!note.trim()) return { error: "Say what the inspector should look for." };
+
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    select: { id: true, societyId: true, voidedAt: true },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+
+  const period = new Date().toISOString().slice(0, 7);
+  await db.readingAnomaly.create({
+    data: {
+      circuitId: circuit.id,
+      period,
+      kind: "out_of_range",
+      detail: `Pre-installation average varies ${variancePct > 0 ? "+" : ""}${variancePct.toFixed(1)}% from the circuit's theoretical load — assigned for on-site investigation: ${note.trim()}`,
+      deviationPct: variancePct,
+      blocksBilling: false,
+    },
+  });
+  logger.info("circuit_ingest.investigation_raised", {
+    actorId: admin.id,
+    circuitId: circuit.id,
+    variancePct,
+  });
+  revalidatePath(circuitPath(circuit.societyId, circuit.id));
+  return { ok: true };
+}

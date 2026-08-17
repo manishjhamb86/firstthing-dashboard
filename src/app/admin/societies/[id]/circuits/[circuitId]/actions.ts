@@ -198,10 +198,32 @@ export async function rejectGatePass(gatePassId: string, reason: string) {
 // rule: the completion gate pass must already be *submitted* (not
 // necessarily approved — ADR-006's provisional release covers the wait)
 // before this can proceed.
-export async function recordLightReplacement(circuitId: string, replacementDate: string) {
+/**
+ * FEAT-013 + CON-45 — the installation record. When the circuit carries a
+ * load inventory, each line item states what was installed against it,
+ * chosen from that device's own compatibility mapping; the date stamp then
+ * freezes the inventory and the pre-install baseline together.
+ */
+export type ReplacementLine = {
+  lineId: string;
+  replacementTypeId: string;
+  count: number;
+  wattage: number;
+};
+
+export async function recordLightReplacement(
+  circuitId: string,
+  replacementDate: string,
+  replacements: ReplacementLine[] = [],
+) {
   const session = await requireAdminPermission("manage_survey");
 
-  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    include: {
+      devices: { include: { deviceType: { include: { replacementOptions: true } } } },
+    },
+  });
   if (!circuit) return { error: "Circuit not found." };
   if (circuit.state !== "awaiting_installation") {
     return { error: "This circuit isn't ready for light replacement yet — the pre-install window must finish first." };
@@ -214,21 +236,77 @@ export async function recordLightReplacement(circuitId: string, replacementDate:
     return { error: "Submit the completion gate pass (itemized list + photo) before marking this circuit installed." };
   }
 
+  // CON-45 — an inventory-carrying circuit records what was installed
+  // against every line, from that device's own mapped compatibility list.
+  // A circuit with no inventory (legacy flow) keeps the date-only path.
+  const byLine = new Map(replacements.map((r) => [r.lineId, r]));
+  if (circuit.devices.length > 0) {
+    for (const line of circuit.devices) {
+      const r = byLine.get(line.id);
+      if (!r) {
+        return {
+          error: `Record what replaced the ${line.count} × ${line.deviceType.name} — every line needs its installed device.`,
+        };
+      }
+      const compatible = line.deviceType.replacementOptions.some(
+        (o) => o.replacementTypeId === r.replacementTypeId,
+      );
+      if (!compatible) {
+        return {
+          error: `That device isn't in the compatibility list for ${line.deviceType.name} — pick from its mapped replacements, or have ops extend the mapping in the catalog.`,
+        };
+      }
+      if (!Number.isInteger(r.count) || r.count < 1 || r.count > 5000) {
+        return { error: `Installed count for ${line.deviceType.name} must be a whole number.` };
+      }
+      if (!Number.isFinite(r.wattage) || r.wattage <= 0 || r.wattage > 2000) {
+        return { error: `Installed wattage for ${line.deviceType.name} must be between 1 and 2000 W.` };
+      }
+      if (r.count !== line.count) {
+        // Not a block — a count difference is real (a broken fitting left
+        // unreplaced) — but it must be deliberate, so the client confirms it
+        // and the log records it.
+        logger.warn("circuit.replacement_count_differs", {
+          circuitId,
+          lineId: line.id,
+          original: line.count,
+          installed: r.count,
+        });
+      }
+    }
+  }
+
   const date = new Date(replacementDate);
   const windowStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
 
-  await db.circuit.update({
-    where: { id: circuitId },
-    data: {
-      state: "post_install_pending",
-      lightReplacementDate: date,
-      postInstallWindowStartAt: windowStart,
-    },
+  await db.$transaction(async (tx) => {
+    for (const line of circuit.devices) {
+      const r = byLine.get(line.id)!;
+      await tx.circuitDevice.update({
+        where: { id: line.id },
+        data: {
+          replacementTypeId: r.replacementTypeId,
+          replacementCount: r.count,
+          replacementWattage: r.wattage,
+          replacedAt: date,
+          replacedById: session.user.id,
+        },
+      });
+    }
+    await tx.circuit.update({
+      where: { id: circuitId },
+      data: {
+        state: "post_install_pending",
+        lightReplacementDate: date,
+        postInstallWindowStartAt: windowStart,
+      },
+    });
   });
 
   logger.info("circuit.light_replacement_recorded", {
     circuitId,
     replacementDate: date,
+    linesRecorded: circuit.devices.length,
     recordedBy: session.user.id,
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);

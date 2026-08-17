@@ -18,6 +18,17 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
 import { StepSection } from "@/components/step-section";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
+import { CircuitReadingPanel } from "./circuit-reading-panel";
+import { StoredReadingsPanel, type StoredReadingDTO } from "./stored-readings-panel";
+import {
+  classifyDay,
+  periodSavingsSummary,
+  savingsBand,
+  savingsPct,
+  theoreticalDailyKwh,
+  varianceAgainstTheoretical,
+  type SavingsBand,
+} from "@/lib/circuit-load";
 
 function GatePassCard({
   gatePass,
@@ -94,6 +105,7 @@ export default async function CircuitDetailPage({
           replacementType: { select: { name: true } },
         },
       },
+      meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
     },
   });
   if (!circuit || circuit.societyId !== id) notFound();
@@ -104,6 +116,26 @@ export default async function CircuitDetailPage({
     orderBy: { name: "asc" },
     select: { id: true, name: true, defaultWattage: true },
   });
+  // CON-45 — each inventory line's compatible replacements, for the
+  // installation step's dropdowns.
+  const replacementOptionRows = await db.deviceReplacementOption.findMany({
+    where: { originalTypeId: { in: circuit.devices.map((d) => d.deviceTypeId) } },
+    include: { replacement: { select: { id: true, name: true, defaultWattage: true, active: true } } },
+  });
+  const replacementFormLines = circuit.devices.map((l) => ({
+    lineId: l.id,
+    deviceName: l.deviceType.name,
+    count: l.count,
+    wattage: l.wattage,
+    options: replacementOptionRows
+      .filter((o) => o.originalTypeId === l.deviceTypeId && o.replacement.active)
+      .map((o) => ({
+        id: o.replacement.id,
+        name: o.replacement.name,
+        defaultWattage: o.replacement.defaultWattage,
+      })),
+  }));
+
   const inventoryLines: InventoryLine[] = circuit.devices.map((l) => ({
     id: l.id,
     deviceTypeId: l.deviceTypeId,
@@ -116,6 +148,63 @@ export default async function CircuitDetailPage({
     replacementCount: l.replacementCount,
     replacementWattage: l.replacementWattage,
   }));
+
+  // CON-45 — the stored daily readings, phase-classified against the
+  // circuit's own dates, with the same bands every review surface uses.
+  const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
+  const storedReadings: StoredReadingDTO[] = circuit.meterInstalledAt
+    ? circuit.meterReadings
+        .map((r) => {
+          const phase = classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate);
+          if (phase === "before_meter" || phase === "replacement_day") return null;
+          const isPre = phase === "pre_install";
+          const effB = isPre
+            ? null
+            : effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, r.date);
+          const sPct = isPre || effB === null ? null : savingsPct(effB, r.kWh);
+          const v = isPre && theoretical !== null ? varianceAgainstTheoretical(r.kWh, theoretical) : null;
+          return {
+            id: r.id,
+            date: r.date.toISOString().slice(0, 10),
+            kWh: r.kWh,
+            intervalCount: r.intervalCount,
+            expectedIntervals: r.expectedIntervals,
+            phase: isPre ? ("pre_install" as const) : circuit.benchmarkSavingsPct !== null || circuit.state === "active_billing"
+              ? ("monitoring" as const)
+              : ("post_install" as const),
+            excluded: r.excludedAt !== null,
+            excludedReason: r.excludedReason,
+            released: r.usedInCalculationId !== null,
+            superseded: r.supersededAt !== null,
+            variancePct: v?.pct ?? null,
+            varianceBand: v?.band ?? null,
+            savingsPct: sPct,
+            savingsBand: sPct === null ? null : savingsBand(sPct),
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null)
+    : [];
+  const effBaselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
+  const phaseSummaries = (["pre_install", "post_install", "monitoring"] as const).flatMap((phase) => {
+    const rows = storedReadings.filter((r) => r.phase === phase);
+    if (rows.length === 0) return [];
+    const days = rows.map((r) => ({ kWh: r.kWh, excluded: r.excluded }));
+    const summary = periodSavingsSummary(phase === "pre_install" ? null : effBaselineNow, days);
+    return [
+      {
+        phase,
+        label: phase,
+        averageKwh: summary.averageKwh,
+        savingsPct: summary.savingsPct,
+        savingsBand: summary.band as SavingsBand | null,
+        warn: summary.warn,
+      },
+    ];
+  });
+  // A circuit that already ran the manual/commissioning-window flow keeps it;
+  // a fresh circuit gets the CSV review flow. One circuit, one flow — mixing
+  // the two stores under one baseline is how figures stop agreeing.
+  const usesLegacyFlow = circuit.commissioningReadings.length > 0 && storedReadings.length === 0;
 
   // FEAT-015 — at most one review is open at a time: a review is only raised
   // when a window completes, and a completed window can't complete again
@@ -321,25 +410,37 @@ export default async function CircuitDetailPage({
                     {preInstallPendingAnomaly ? "Anomaly open" : `Day ${preInstallValidCount} of 5`}
                   </StatusChip>
                 );
-                body = circuit.preInstallWindowStartAt ? (
-                  <MonitoringWindowPanel
-                    circuitId={circuit.id}
-                    windowType="pre_install"
-                    windowStartAt={circuit.preInstallWindowStartAt?.toISOString() ?? null}
-                    title="Pre-install monitoring window"
-                    readings={preInstallReadings}
-                    validCount={preInstallValidCount}
-                    pendingAnomaly={preInstallPendingAnomaly}
-                    canEdit={canEdit && circuit.preInstallBaseline == null}
-                    embedded
-                  />
+                body = usesLegacyFlow ? (
+                  circuit.preInstallWindowStartAt ? (
+                    <MonitoringWindowPanel
+                      circuitId={circuit.id}
+                      windowType="pre_install"
+                      windowStartAt={circuit.preInstallWindowStartAt?.toISOString() ?? null}
+                      title="Pre-install monitoring window"
+                      readings={preInstallReadings}
+                      validCount={preInstallValidCount}
+                      pendingAnomaly={preInstallPendingAnomaly}
+                      canEdit={canEdit && circuit.preInstallBaseline == null}
+                      embedded
+                    />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
+                  )
+                ) : canEdit ? (
+                  // CON-45 — the CSV review flow. The system extracts from the
+                  // day after meter install; every day is reviewed before save.
+                  <CircuitReadingPanel circuitId={circuit.id} />
                 ) : (
-                  <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
+                  <p className="text-sm text-[var(--text-muted)]">
+                    Awaiting PER-04 to upload the meter&apos;s readings.
+                  </p>
                 );
               } else if (step.status === "done" && circuit.preInstallBaseline == null) {
                 summary = "No stored baseline — the lifecycle advanced past this step";
               } else if (step.status === "done" && circuit.preInstallBaseline != null) {
-                summary = `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day from 5 valid days`;
+                summary = usesLegacyFlow
+                  ? `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day from 5 valid days`
+                  : `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day — the average of the accepted pre-install days`;
                 body = (
                   <div className="space-y-4">
                     <p className="text-sm text-[var(--text-muted)]">
@@ -386,7 +487,7 @@ export default async function CircuitDetailPage({
             case "replacement": {
               if (step.status === "current") {
                 body = canEdit ? (
-                  <LightReplacementForm circuitId={circuit.id} />
+                  <LightReplacementForm circuitId={circuit.id} lines={replacementFormLines} />
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">
                     Awaiting PER-04 to record the replacement date.
@@ -458,7 +559,7 @@ export default async function CircuitDetailPage({
                       )}
                     </div>
                   );
-                } else {
+                } else if (usesLegacyFlow) {
                   chip = circuit.postInstallWindowStartAt ? (
                     <StatusChip tone={postInstallPendingAnomaly ? "warn" : "info"}>
                       {postInstallPendingAnomaly ? "Anomaly open" : `Day ${postInstallValidCount} of 5`}
@@ -478,6 +579,14 @@ export default async function CircuitDetailPage({
                     />
                   ) : (
                     <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
+                  );
+                } else {
+                  body = canEdit ? (
+                    <CircuitReadingPanel circuitId={circuit.id} />
+                  ) : (
+                    <p className="text-sm text-[var(--text-muted)]">
+                      Awaiting PER-04 to upload the post-installation readings.
+                    </p>
                   );
                 }
               } else if (step.status === "done" && circuit.benchmarkSavingsPct != null) {
@@ -511,6 +620,39 @@ export default async function CircuitDetailPage({
           );
         })}
       </div>
+
+      {/* CON-45 — every stored daily reading, phase-grouped, with the
+          persistent exclusion control and (once the benchmark is confirmed)
+          the monthly monitoring upload. */}
+      {circuit.meterInstalledAt && !usesLegacyFlow && (
+        <section className="max-w-2xl mb-10 space-y-4">
+          <div>
+            <h2 className="text-[15px] font-semibold mb-1">Meter readings</h2>
+            <p className="text-sm text-[var(--text-muted)]">
+              Every day the meter has reported, as reviewed and saved. Excluded days stay listed with
+              their reason and never count toward an average or a report.
+            </p>
+          </div>
+          {circuit.benchmarkSavingsPct !== null && (
+            <div>
+              <h3 className="text-sm font-medium mb-2">Upload this month&apos;s readings</h3>
+              {canOverride ? (
+                <CircuitReadingPanel circuitId={circuit.id} />
+              ) : (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Monthly monitoring readings feed billing — uploading them is an operations-lead
+                  action.
+                </p>
+              )}
+            </div>
+          )}
+          <StoredReadingsPanel
+            readings={storedReadings}
+            canEdit={canEdit}
+            summaries={phaseSummaries}
+          />
+        </section>
+      )}
 
       {resolvedReviews.length > 0 && (
         <section className="max-w-2xl mb-10">

@@ -30,3 +30,22 @@ export function buildRawReadingKey(params: {
   const ext = (params.fileName.split(".").pop() ?? "csv").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   return `Ingest/${slug(params.society)}/${params.period}/${params.circuitId}/${stamp}_${name}.${ext}`;
 }
+
+/**
+ * CON-45 — the circuit-page flow's raw files. Same private `Ingest/` prefix
+ * and same no-collision rule; the path names the phase the system derived
+ * (pre_install / post_install / monitoring) instead of an operator-chosen
+ * month, because that is what this flow anchors on.
+ */
+export function buildCircuitFlowReadingKey(params: {
+  society: string;
+  phase: "pre_install" | "post_install" | "monitoring";
+  circuitId: string;
+  fileName: string;
+  uploadedAt: Date;
+}): string {
+  const stamp = params.uploadedAt.toISOString().replace(/[:.]/g, "-");
+  const name = slug(params.fileName.replace(/\.[^.]+$/, ""));
+  const ext = (params.fileName.split(".").pop() ?? "csv").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return `Ingest/${slug(params.society)}/${params.phase}/${params.circuitId}/${stamp}_${name}.${ext}`;
+}

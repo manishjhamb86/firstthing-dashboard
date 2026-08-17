@@ -264,8 +264,49 @@ export default async function CircuitDetailPage({
           </Link>
         }
         title={circuit.location || circuit.lightType}
+        subtitle={`${circuit.lightType} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`}
         chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
       />
+
+      {/* The four figures someone opens a circuit to check, before the
+          step-by-step detail. Each is absent-not-invented: a circuit with no
+          baseline yet says so rather than showing a zero. */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-8 max-w-2xl">
+        {[
+          {
+            label: "Theoretical",
+            value: theoretical === null ? "—" : theoretical.toFixed(2),
+            unit: theoretical === null ? "no inventory" : "kWh/day",
+          },
+          {
+            label: "Pre-install baseline",
+            value: circuit.preInstallBaseline === null ? "—" : circuit.preInstallBaseline.toFixed(2),
+            unit: circuit.preInstallBaseline === null ? "not commissioned" : "kWh/day",
+          },
+          {
+            label: "In force now",
+            value: effBaselineNow === null ? "—" : effBaselineNow.toFixed(2),
+            unit:
+              effBaselineNow === null
+                ? "no baseline"
+                : liveRescaleEvents.length > 0
+                  ? `after ${liveRescaleEvents.length} rescale${liveRescaleEvents.length === 1 ? "" : "s"}`
+                  : "unchanged",
+          },
+          {
+            label: "Benchmark",
+            value:
+              circuit.benchmarkSavingsPct === null ? "—" : `${circuit.benchmarkSavingsPct.toFixed(1)}%`,
+            unit: circuit.benchmarkSavingsPct === null ? "not confirmed" : "fixed for the term",
+          },
+        ].map((f) => (
+          <div key={f.label} className="card p-4">
+            <p className="lbl mb-1.5">{f.label}</p>
+            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
+            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.unit}</p>
+          </div>
+        ))}
+      </div>
 
       {/* A removed circuit stays reachable by link — saying nothing would
           make the page read as a live circuit that has simply gone missing

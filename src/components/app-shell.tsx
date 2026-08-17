@@ -16,10 +16,12 @@ type NavItem = {
   exact?: boolean;
 };
 
-// The sidebar nav is 05a-theme-system.md §3.7's own component ("sidebar nav
-// with counts"), replacing the top bar the previous shell shipped as an
-// explicit placeholder. Chrome tokens throughout — in Slate/Dark the shell
-// is dark, in Light it's white; content-side tokens never appear here.
+// Theme-experiment shell (2026-08-17): the NextAdmin/Modernize anatomy, not
+// just their palette — a content-surface top header carrying the theme
+// switcher and the signed-in identity, and a sectioned sidebar whose active
+// item is a full pill. The sidebar speaks chrome tokens (navy in Slate,
+// white in Light, black in Dark); the header speaks content tokens, which
+// is exactly how NextAdmin pairs a white header with a navy sidebar.
 export function AppShell({
   theme,
   email,
@@ -52,7 +54,10 @@ export function AppShell({
     ...(showUsers ? [{ href: "/admin/users", label: "Admin users", icon: Users }] : []),
   ];
 
-  const brandVariant = theme === "light" ? "light" : "dark";
+  // Sidebar/menu panel sit on chrome; the header sits on content surface.
+  const sidebarBrandVariant = theme === "light" ? "light" : "dark";
+  const headerBrandVariant = theme === "dark" ? "dark" : "light";
+  const initial = (email[0] ?? "?").toUpperCase();
 
   function isActive(item: NavItem) {
     return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
@@ -68,81 +73,115 @@ export function AppShell({
           href={item.href}
           onClick={onNavigate}
           aria-current={active ? "page" : undefined}
-          className="flex items-center gap-2.5 rounded-[var(--r-md)] px-3 py-2 text-[13px] font-medium transition-colors"
+          className="flex items-center gap-3 rounded-[var(--r-md)] px-3.5 py-2.5 text-sm font-medium transition-colors"
           style={{
             background: active ? "var(--chrome-active)" : "transparent",
             color: active ? "var(--chrome-accent)" : "var(--chrome-muted)",
           }}
         >
-          <Icon size={16} strokeWidth={1.75} aria-hidden />
+          <Icon size={18} strokeWidth={1.75} aria-hidden />
           {item.label}
         </Link>
       );
     });
 
+  const identity = (
+    <div className="flex items-center gap-3">
+      <ThemeSwitcher current={theme} surface="content" />
+      <div
+        aria-hidden
+        className="h-6 w-px hidden sm:block"
+        style={{ background: "var(--border)" }}
+      />
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden
+          className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+          style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
+        >
+          {initial}
+        </span>
+        <div className="hidden sm:block leading-tight">
+          <p className="text-[13px] font-semibold truncate max-w-[180px]" title={email}>
+            {email}
+          </p>
+          <SignOutButton
+            className="text-xs font-medium hover:opacity-80"
+            style={{ color: "var(--text-muted)" }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen">
-      {/* desktop sidebar */}
+      {/* sidebar — chrome surface, NextAdmin anatomy */}
       <aside
-        className="hidden lg:flex fixed inset-y-0 left-0 w-60 flex-col"
+        className="hidden lg:flex fixed inset-y-0 left-0 w-[264px] flex-col"
         style={{ background: "var(--chrome)", borderRight: "1px solid var(--chrome-border)" }}
       >
-        <div className="px-5 pt-6 pb-5">
-          <BrandMark variant={brandVariant} className="h-7" />
+        <div className="px-6 pt-7 pb-6">
+          <BrandMark variant={sidebarBrandVariant} className="h-7" />
         </div>
-        <nav className="flex-1 px-3 space-y-0.5" aria-label="Main">
-          {navLinks()}
+        <nav className="flex-1 px-4" aria-label="Main">
+          <p
+            className="px-3.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em]"
+            style={{ color: "var(--chrome-subtle)" }}
+          >
+            Menu
+          </p>
+          <div className="space-y-1">{navLinks()}</div>
         </nav>
-        <div className="px-5 py-5 space-y-4" style={{ borderTop: "1px solid var(--chrome-border)" }}>
-          <ThemeSwitcher current={theme} />
-          <div className="flex items-center justify-between gap-2">
-            <p className="truncate text-xs" style={{ color: "var(--chrome-subtle)" }} title={email}>
-              {email}
-            </p>
-            <SignOutButton
-              className="text-xs font-semibold hover:opacity-80 shrink-0"
-              style={{ color: "var(--chrome-muted)" }}
-            />
-          </div>
-        </div>
+        <p className="px-6 py-5 text-[11px]" style={{ color: "var(--chrome-subtle)" }}>
+          FirsThing · verified savings
+        </p>
       </aside>
 
-      {/* mobile top bar */}
-      <div
-        className="lg:hidden sticky top-0 z-20"
-        style={{ background: "var(--chrome)", borderBottom: "1px solid var(--chrome-border)" }}
-      >
-        <div className="flex items-center justify-between px-4 py-3">
-          <BrandMark variant={brandVariant} className="h-6" />
-          <button
-            type="button"
-            onClick={() => setOpen((v) => !v)}
-            aria-expanded={open}
-            aria-label="Toggle navigation menu"
-            className="flex items-center gap-1.5 text-sm font-semibold"
-            style={{ color: "var(--chrome-muted)" }}
-          >
-            {open ? <X size={18} strokeWidth={1.75} /> : <Menu size={18} strokeWidth={1.75} />}
-            {open ? "Close" : "Menu"}
-          </button>
-        </div>
-        {open && (
-          <div className="px-3 pb-4 pt-1 space-y-0.5" style={{ borderTop: "1px solid var(--chrome-border)" }}>
-            {navLinks(() => setOpen(false))}
-            <div className="flex items-center justify-between gap-3 px-3 pt-4">
-              <ThemeSwitcher current={theme} />
-              <SignOutButton
-                className="text-sm font-medium hover:opacity-80"
-                style={{ color: "var(--chrome-muted)" }}
-              />
+      <div className="lg:pl-[264px]">
+        {/* header — content surface, like NextAdmin's white bar over a navy rail */}
+        <header
+          className="app-header sticky top-0 z-20"
+          style={{
+            background: "var(--surface)",
+            borderBottom: "1px solid var(--border)",
+            boxShadow: "0 1px 3px rgba(42, 53, 71, 0.04)",
+          }}
+        >
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setOpen((v) => !v)}
+                aria-expanded={open}
+                aria-label="Toggle navigation menu"
+                className="lg:hidden flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] border"
+                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+              >
+                {open ? <X size={18} strokeWidth={1.75} /> : <Menu size={18} strokeWidth={1.75} />}
+              </button>
+              <span className="lg:hidden">
+                <BrandMark variant={headerBrandVariant} className="h-6" />
+              </span>
             </div>
+            {identity}
           </div>
-        )}
-      </div>
 
-      <main className="lg:pl-60">
-        <div className="mx-auto max-w-5xl p-5 sm:p-8">{children}</div>
-      </main>
+          {/* mobile nav panel — chrome, matching the sidebar it stands in for */}
+          {open && (
+            <div
+              className="lg:hidden px-4 pb-4 pt-2 space-y-1"
+              style={{ background: "var(--chrome)", borderTop: "1px solid var(--chrome-border)" }}
+            >
+              {navLinks(() => setOpen(false))}
+            </div>
+          )}
+        </header>
+
+        <main>
+          <div className="mx-auto max-w-6xl p-5 sm:p-8">{children}</div>
+        </main>
+      </div>
     </div>
   );
 }

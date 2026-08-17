@@ -17,7 +17,14 @@ const OPTIONS: { id: ThemeId; icon: typeof Sun }[] = [
 // Applied to <html> immediately (no flash while the Server Action round-
 // trips), then router.refresh() re-syncs the SSR-resolved value from the DB,
 // the same source layout.tsx's own resolveTheme() reads.
-export function ThemeSwitcher({ current }: { current: ThemeId }) {
+export function ThemeSwitcher({
+  current,
+  surface = "chrome",
+}: {
+  current: ThemeId;
+  /** Which token family to speak — "chrome" in the sidebar, "content" in the header. */
+  surface?: "chrome" | "content";
+}) {
   const [active, setActive] = useState(current);
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -40,7 +47,11 @@ export function ThemeSwitcher({ current }: { current: ThemeId }) {
       role="radiogroup"
       aria-label="Theme"
       className="flex gap-0.5 rounded-[var(--r-md)] border p-0.5"
-      style={{ borderColor: "var(--chrome-border)", background: "var(--chrome-hover)" }}
+      style={
+        surface === "chrome"
+          ? { borderColor: "var(--chrome-border)", background: "var(--chrome-hover)" }
+          : { borderColor: "var(--border)", background: "var(--surface-sunken)" }
+      }
     >
       {OPTIONS.map(({ id, icon: Icon }) => {
         const isActive = active === id;
@@ -55,10 +66,17 @@ export function ThemeSwitcher({ current }: { current: ThemeId }) {
             disabled={pending}
             onClick={() => choose(id)}
             className="flex h-7 w-7 items-center justify-center rounded-[calc(var(--r-md)-2px)] transition-colors disabled:opacity-60"
-            style={{
-              background: isActive ? "var(--chrome-active)" : "transparent",
-              color: isActive ? "var(--chrome-accent)" : "var(--chrome-muted)",
-            }}
+            style={
+              surface === "chrome"
+                ? {
+                    background: isActive ? "var(--chrome-active)" : "transparent",
+                    color: isActive ? "var(--chrome-accent)" : "var(--chrome-muted)",
+                  }
+                : {
+                    background: isActive ? "var(--accent-subtle)" : "transparent",
+                    color: isActive ? "var(--accent)" : "var(--text-muted)",
+                  }
+            }
           >
             <Icon size={15} strokeWidth={1.75} />
           </button>

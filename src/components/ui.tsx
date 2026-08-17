@@ -19,10 +19,10 @@ export function Card({ className, children }: { className?: string; children: Re
   return <div className={`card ${className ?? ""}`}>{children}</div>;
 }
 
-// Section heading inside a card — the muted small-caps card title the
-// design uses instead of a bold h-tag per panel.
+// Section heading inside a card — Modernize-style sentence-case semibold,
+// replacing the Console small-caps treatment.
 export function CardTitle({ children }: { children: ReactNode }) {
-  return <p className="lbl mb-4">{children}</p>;
+  return <p className="text-[15px] font-semibold mb-4">{children}</p>;
 }
 
 export function PageHeader({
@@ -107,14 +107,49 @@ export function ErrorText({ children }: { children: ReactNode }) {
   );
 }
 
-// KPI tile for the Portfolio dashboard — figure in the data face (§3.3),
-// label in the label style.
-export function KpiTile({ label, value, detail }: { label: string; value: ReactNode; detail?: ReactNode }) {
+// KPI tile — the admin-template signature: a tinted icon bubble beside the
+// figure. Icon optional so existing call sites keep working; the figure
+// stays in the data face (tabular, comparable down a column).
+const KPI_TONE: Record<string, { bg: string; fg: string }> = {
+  accent: { bg: "var(--accent-subtle)", fg: "var(--accent)" },
+  ok: { bg: "var(--ok-bg)", fg: "var(--ok-fg)" },
+  warn: { bg: "var(--warn-bg)", fg: "var(--warn-fg)" },
+  bad: { bg: "var(--bad-bg)", fg: "var(--bad-fg)" },
+  info: { bg: "var(--info-bg)", fg: "var(--info-fg)" },
+};
+
+export function KpiTile({
+  label,
+  value,
+  detail,
+  icon,
+  tone = "accent",
+}: {
+  label: string;
+  value: ReactNode;
+  detail?: ReactNode;
+  icon?: ReactNode;
+  tone?: keyof typeof KPI_TONE;
+}) {
+  const t = KPI_TONE[tone] ?? KPI_TONE.accent;
   return (
     <div className="card p-5">
-      <p className="lbl mb-2">{label}</p>
-      <p className="num text-[26px] font-semibold leading-none">{value}</p>
-      {detail && <p className="mt-2 text-xs text-[var(--text-muted)]">{detail}</p>}
+      <div className="flex items-start gap-4">
+        {icon && (
+          <span
+            aria-hidden
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+            style={{ background: t.bg, color: t.fg }}
+          >
+            {icon}
+          </span>
+        )}
+        <div className="min-w-0">
+          <p className="num text-[24px] font-semibold leading-tight">{value}</p>
+          <p className="text-[13px] font-medium text-[var(--text-muted)]">{label}</p>
+          {detail && <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{detail}</p>}
+        </div>
+      </div>
     </div>
   );
 }

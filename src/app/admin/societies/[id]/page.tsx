@@ -1,7 +1,8 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Building2, Users, Gauge, Layers } from "lucide-react";
+import { Card, CardTitle, EmptyState, KpiTile, PageHeader, StatusChip } from "@/components/ui";
 import {
   ENGAGEMENT_STATUS,
   PORTAL_AUTHORITY_LABEL,
@@ -26,7 +27,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   const society = await db.society.findUnique({ where: { id } });
   if (!society) notFound();
 
-  const [accounts, engagements, pipelines] = await Promise.all([
+  const [accounts, engagements, pipelines, circuitCount] = await Promise.all([
     db.profile.findMany({ where: { societyId: id, isActive: true }, orderBy: { name: "asc" } }),
     db.engagement.findMany({ where: { societyId: id }, orderBy: { createdAt: "asc" } }),
     // An engagement records that the society is engaged on a service line;
@@ -35,6 +36,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     // the panel showed "Active" with no route onward, which reads as though
     // enrolling were the whole step.
     db.pipeline.findMany({ where: { societyId: id }, select: { id: true, serviceLine: true, stage: true } }),
+    db.circuit.count({ where: { societyId: id, voidedAt: null } }),
   ]);
   const pipelineFor = new Map(pipelines.map((p) => [p.serviceLine as string, p]));
   const availableServiceLines = ALL_SERVICE_LINES.filter(
@@ -54,8 +56,38 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         action={<StatusControl societyId={society.id} status={society.status} />}
       />
 
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <KpiTile
+          label="Flats"
+          value={society.flatCount.toLocaleString("en-IN")}
+          icon={<Building2 size={20} strokeWidth={1.75} />}
+          tone="accent"
+        />
+        <KpiTile
+          label="Service lines"
+          value={engagements.filter((e) => e.status === "active").length}
+          detail={engagements.length > 0 ? `${engagements.length} enrolled` : "None enrolled"}
+          icon={<Layers size={20} strokeWidth={1.75} />}
+          tone="info"
+        />
+        <KpiTile
+          label="Circuits"
+          value={circuitCount}
+          detail={circuitCount === 0 ? "None registered" : "Registered, not removed"}
+          icon={<Gauge size={20} strokeWidth={1.75} />}
+          tone="warn"
+        />
+        <KpiTile
+          label="Portal accounts"
+          value={accounts.length}
+          detail={accounts.length === 0 ? "Nobody can sign in" : "Active"}
+          icon={<Users size={20} strokeWidth={1.75} />}
+          tone={accounts.length === 0 ? "bad" : "ok"}
+        />
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2 items-start">
-        <Card className="p-6">
+        <Card className="p-6 min-w-0">
           <CardTitle>Portal accounts</CardTitle>
 
           {accounts.length === 0 ? (
@@ -89,7 +121,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           <PortalAccountForm societyId={society.id} />
         </Card>
 
-        <Card className="p-6">
+        <Card className="p-6 min-w-0">
           <CardTitle>Service lines</CardTitle>
 
           {engagements.length === 0 ? (

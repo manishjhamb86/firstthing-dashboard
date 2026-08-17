@@ -1,146 +1,149 @@
 @import "tailwindcss";
 
 /*
- * The approved theme system (docs/product/05a-theme-system.md, DIR-02
- * "Console") — palette, chrome split, radius, elevation, type, chips,
- * fields, buttons. Three themes — Light, Dark, Slate (default) — never
- * `prefers-color-scheme`; the doc is explicit that the theme never changes
- * itself. Slate is a chrome-only delta from Light (nav shell darkens,
- * content stays light), so a card is byte-identical in Light and Slate.
+ * Theme experiment branch (user's instruction, 2026-08-17): replace DIR-02
+ * "Console" with a NextAdmin × Modernize skin, HeroUI v3 as the dark
+ * reference — https://demo.nextadmin.co, modernize-nextjs.adminmart.com,
+ * heroui.com v3.
  *
- * Adopted here beyond the palette: elevation (e1 on cards — Console is
- * elevation-led, §3.4), the label style (§3.3), status chips (§3.7),
- * field/button primitives with real padding and focus states, tabular
- * figures (.num), a global :focus-visible ring, and accent-color so native
- * checkboxes/radios stop rendering browser-default blue. Still not
- * adopted: the full component library (§3.7's tables-with-sticky-heads,
- * bulk bars, toasts, skeletons) — built as screens need them.
+ * Mapping keeps the three-theme model and every token NAME, so no component
+ * changes: Slate (un-stamped default) = NextAdmin — navy chrome, light
+ * content; Light = Modernize — all-light, white chrome; Dark = HeroUI —
+ * zinc-on-black, layered by borders rather than shadows.
+ *
+ * Two deliberate departures from the references, both this repo's own
+ * standing rules: --field-border keeps the ≥3:1 control-boundary contrast
+ * (both refs ship sub-3:1 inputs), and --accent is #4560E6 rather than
+ * Modernize's #5D87FF because white button text on #5D87FF is 3.5:1 —
+ * #5D87FF lives on as the tint/line family instead.
  */
 
 :root {
   /* content — light (also the base for Slate, which reuses these) */
-  --ground: #ECEFEC;
+  --ground: #F0F5F9;
   --surface: #FFFFFF;
-  --surface-sunken: #F5F7F4;
+  --surface-sunken: #F6F9FC;
   --surface-raised: #FFFFFF;
-  --surface-hover: #F3F5F2;
-  --surface-active: #EAEEE9;
-  --border: #DDE2DC;
-  --border-subtle: #E9EDE8;
-  --field-border: #828B82;
-  --text: #151A17;
-  --text-muted: #586058;
-  --text-subtle: #636C63;
+  --surface-hover: #F2F6FA;
+  --surface-active: #E8EFF6;
+  --border: #E5EAEF;
+  --border-subtle: #EBF1F7;
+  --field-border: #8093AF;
+  --text: #2A3547;
+  --text-muted: #5A6A85;
+  --text-subtle: #6C7A93;
   --text-on-accent: #FFFFFF;
-  --accent: #16624A;
-  --accent-hover: #0F4E3A;
-  --accent-subtle: #E3F0E9;
-  --accent-line: #BFDCCE;
+  --accent: #4560E6;
+  --accent-hover: #3C50E0;
+  --accent-subtle: #ECF2FF;
+  --accent-line: #C9D7FA;
   --signal: #B8E23F;
-  --signal-ink: #151A17;
-  --ok-bg: #DFF0E4;
-  --ok-fg: #12583E;
-  --ok-line: #BEDFC9;
-  --warn-bg: #FBEED4;
-  --warn-fg: #7E5A08;
-  --warn-line: #F0DCA9;
-  --bad-bg: #FBE4DE;
-  --bad-fg: #9E3F2C;
-  --bad-line: #F2C9BF;
-  --info-bg: #DEEAF4;
-  --info-fg: #1F5477;
-  --info-line: #BED6E8;
-  --neu-bg: #E8EBE7;
-  --neu-fg: #4C544C;
-  --neu-line: #D6DBD4;
+  --signal-ink: #1C2434;
+  --ok-bg: #E4FBF6;
+  --ok-fg: #0B7A6C;
+  --ok-line: #BEEFE4;
+  --warn-bg: #FEF5E5;
+  --warn-fg: #8A6410;
+  --warn-line: #F6E3B8;
+  --bad-bg: #FDEDE8;
+  --bad-fg: #BA4A32;
+  --bad-line: #F6D2C7;
+  --info-bg: #EBF3FE;
+  --info-fg: #1A63B8;
+  --info-line: #C8DDF8;
+  --neu-bg: #EDF2F6;
+  --neu-fg: #52657A;
+  --neu-line: #DCE4EC;
 
-  /* chrome — Slate is the un-stamped default: dark slate shell, light content */
-  --chrome: #26322D;
-  --chrome-hover: #2F3C36;
-  --chrome-active: #38473F;
-  --chrome-border: #38473F;
-  --chrome-text: #ECF1EB;
-  --chrome-muted: #AEBAB1;
-  --chrome-subtle: #9DAAA0;
-  --chrome-accent: #C6E85E;
-  --chrome-accent-ink: #151A17;
+  /* chrome — Slate default: NextAdmin's navy shell, light content */
+  --chrome: #1C2434;
+  --chrome-hover: #263043;
+  --chrome-active: #313D54;
+  --chrome-border: #313D54;
+  --chrome-text: #DEE4EE;
+  --chrome-muted: #8A99AF;
+  --chrome-subtle: #71809B;
+  --chrome-accent: #849DFF;
+  --chrome-accent-ink: #10162A;
 
-  /* radius (§3.4) — r-md 9px is the Console signature for cards + buttons */
-  --r-sm: 5px;
-  --r-md: 9px;
-  --r-lg: 12px;
+  /* radius — Modernize/HeroUI roundness */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 16px;
   --r-pill: 999px;
 
-  /* elevation (§3.4) — e1 cards, e2 popovers. Spent on layers, not decoration. */
-  --e1: 0 1px 2px rgba(21, 26, 23, 0.05), 0 2px 6px rgba(21, 26, 23, 0.06);
-  --e2: 0 4px 12px rgba(21, 26, 23, 0.1), 0 2px 4px rgba(21, 26, 23, 0.08);
+  /* elevation — Modernize's soft ambient card shadow; e2 for popovers */
+  --e1: 0 7px 30px 0 rgba(90, 114, 123, 0.11);
+  --e2: 0 12px 36px 0 rgba(90, 114, 123, 0.2), 0 2px 6px rgba(42, 53, 71, 0.08);
 
   /* native form controls (checkbox/radio/progress) pick up the accent
      instead of browser-default blue */
   accent-color: var(--accent);
 }
 
-/* Light — a chrome-only delta from Slate. Nothing content-side is
-   redefined, so a card/table/chip render byte-identical to Slate. */
+/* Light — Modernize all-light: chrome goes white, content unchanged. */
 :root[data-theme="light"] {
   --chrome: #FFFFFF;
-  --chrome-hover: #F3F5F2;
-  --chrome-active: #E3F0E9;
-  --chrome-border: #DDE2DC;
-  --chrome-text: #151A17;
-  --chrome-muted: #586058;
-  --chrome-subtle: #636C63;
-  --chrome-accent: #16624A;
+  --chrome-hover: #F2F6FA;
+  --chrome-active: #ECF2FF;
+  --chrome-border: #E5EAEF;
+  --chrome-text: #2A3547;
+  --chrome-muted: #5A6A85;
+  --chrome-subtle: #6C7A93;
+  --chrome-accent: #4560E6;
   --chrome-accent-ink: #FFFFFF;
 }
 
-/* Dark — the full palette remap, content and chrome alike. */
+/* Dark — HeroUI v3: zinc layers on near-black, borders carry the layering,
+   shadows nearly disappear, accent lifts to stay legible. */
 :root[data-theme="dark"] {
-  --ground: #0F1311;
-  --surface: #171C19;
-  --surface-sunken: #131816;
-  --surface-raised: #1E2420;
-  --surface-hover: #1C221E;
-  --surface-active: #222925;
-  --border: #242B26;
-  --border-subtle: #1D231F;
-  --field-border: #68756D;
-  --text: #E8ECE7;
-  --text-muted: #96A096;
-  --text-subtle: #8A938A;
-  --text-on-accent: #0B0F0C;
-  --accent: #45D18E;
-  --accent-hover: #5EDDA0;
-  --accent-subtle: #16281F;
-  --accent-line: #20402F;
-  --ok-bg: #132A1F;
-  --ok-fg: #68DCA4;
-  --ok-line: #1E4030;
-  --warn-bg: #2B2214;
-  --warn-fg: #DDB25C;
-  --warn-line: #45351C;
-  --bad-bg: #2E1B16;
-  --bad-fg: #E59683;
-  --bad-line: #482A22;
-  --info-bg: #16232E;
-  --info-fg: #7FB6DC;
-  --info-line: #24384A;
-  --neu-bg: #1C221E;
-  --neu-fg: #9AA39A;
-  --neu-line: #2A312C;
+  --ground: #09090B;
+  --surface: #18181B;
+  --surface-sunken: #101013;
+  --surface-raised: #1F1F23;
+  --surface-hover: #1E1E22;
+  --surface-active: #26262B;
+  --border: #27272A;
+  --border-subtle: #1F1F23;
+  --field-border: #71717A;
+  --text: #ECEDEE;
+  --text-muted: #A1A1AA;
+  --text-subtle: #8E8E96;
+  --text-on-accent: #0F1222;
+  --accent: #7E9BFF;
+  --accent-hover: #93ACFF;
+  --accent-subtle: #182035;
+  --accent-line: #2A3A5F;
+  --signal: #B8E23F;
+  --signal-ink: #09090B;
+  --ok-bg: #0E2A25;
+  --ok-fg: #34D3AE;
+  --ok-line: #17453C;
+  --warn-bg: #2A2110;
+  --warn-fg: #E4B34A;
+  --warn-line: #453718;
+  --bad-bg: #2E1712;
+  --bad-fg: #F09071;
+  --bad-line: #4A2419;
+  --info-bg: #122137;
+  --info-fg: #6BAAF2;
+  --info-line: #1F3A5C;
+  --neu-bg: #1E1E22;
+  --neu-fg: #A6A6AF;
+  --neu-line: #2C2C31;
 
-  --chrome: #171C19;
-  --chrome-hover: #1C221E;
-  --chrome-active: #16281F;
-  --chrome-border: #242B26;
-  --chrome-text: #E8ECE7;
-  --chrome-muted: #96A096;
-  --chrome-subtle: #8A938A;
-  --chrome-accent: #45D18E;
-  --chrome-accent-ink: #0B0F0C;
+  --chrome: #09090B;
+  --chrome-hover: #18181B;
+  --chrome-active: #1F1F23;
+  --chrome-border: #27272A;
+  --chrome-text: #ECEDEE;
+  --chrome-muted: #A1A1AA;
+  --chrome-subtle: #8E8E96;
+  --chrome-accent: #7E9BFF;
+  --chrome-accent-ink: #0F1222;
 
-  --e1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.3);
-  --e2: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.35);
+  --e1: 0 0 0 1px rgba(255, 255, 255, 0.02);
+  --e2: 0 8px 24px rgba(0, 0, 0, 0.6);
 }
 
 /* Slate repeats :root verbatim — stamping it is idempotent, same as never
@@ -149,9 +152,9 @@
 body {
   background: var(--ground);
   color: var(--text);
-  font-family: ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
-  font-size: 13.5px;
-  line-height: 1.5;
+  font-family: var(--font-sans, "Plus Jakarta Sans"), ui-sans-serif, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
 /* one global focus treatment — every interactive element, §3.9 */
@@ -162,8 +165,8 @@ body {
 
 /* ---- primitives ------------------------------------------------------- */
 
-/* card — surface + subtle border + e1. Console is elevation-led; a card
-   with no shadow reads as Ledger, not Console. r-md per §3.4. */
+/* card — Modernize's soft-shadow surface; in dark the shadow token is a
+   1px light ring, so layering reads HeroUI-style through borders. */
 .card {
   background: var(--surface);
   border: 1px solid var(--border-subtle);
@@ -171,15 +174,16 @@ body {
   box-shadow: var(--e1);
 }
 
-/* label — §3.3's label style: 11/1.35 uppercase .07em 650 */
+/* label — softened from the Console treatment: still uppercase for form
+   labels, but lighter tracking and weight to sit with Jakarta */
 .lbl {
   display: block;
   font-size: 11px;
-  line-height: 1.35;
-  font-weight: 650;
+  line-height: 1.4;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.07em;
-  color: var(--text-subtle);
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
 }
 
 /* figures a person compares down a column — §3.3's data role */
@@ -197,8 +201,8 @@ body {
   background: var(--surface);
   color: var(--text);
   border-radius: var(--r-sm);
-  padding: 8px 10px;
-  font-size: 13.5px;
+  padding: 9px 12px;
+  font-size: 14px;
   line-height: 1.4;
   transition: border-color 120ms cubic-bezier(0.2, 0, 0, 1), box-shadow 120ms cubic-bezier(0.2, 0, 0, 1);
 }
@@ -234,11 +238,11 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
-  padding: 9px 14px;
-  border-radius: var(--r-md);
+  padding: 9px 16px;
+  border-radius: var(--r-sm);
   white-space: nowrap;
   transition: background-color 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1),
     border-color 120ms cubic-bezier(0.2, 0, 0, 1);
@@ -340,16 +344,15 @@ body {
 .tbl {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13.5px;
+  font-size: 14px;
 }
 .tbl th {
   text-align: left;
-  font-size: 10.5px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-subtle);
-  padding: 9px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-muted);
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
 }
 .tbl td {

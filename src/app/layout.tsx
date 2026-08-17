@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import { resolveTheme } from "@/lib/resolve-theme";
 import "./globals.css";
+
+// Modernize's face — self-hosted by next/font at build time, exposed as the
+// --font-sans variable globals.css's body rule reads.
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "FirsThing",
@@ -15,7 +24,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const dataTheme = theme === "slate" ? undefined : theme;
 
   return (
-    <html lang="en" data-theme={dataTheme} suppressHydrationWarning>
+    <html lang="en" data-theme={dataTheme} className={jakarta.variable} suppressHydrationWarning>
       <body>{children}</body>
     </html>
   );

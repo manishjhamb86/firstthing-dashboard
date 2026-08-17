@@ -38,7 +38,12 @@ export default async function CircuitReadingHistory({
     orderBy: { uploadedAt: "desc" },
   });
 
-  const periods = [...new Set(files.map((f) => f.period))].sort().reverse();
+  // Circuit-flow uploads (CON-45) carry a derived date range instead of a
+  // chosen month; this month-scoped billing view lists only the month-scoped
+  // uploads.
+  const periods = [...new Set(files.map((f) => f.period).filter((p): p is string => p !== null))]
+    .sort()
+    .reverse();
   const period = periodParam && periods.includes(periodParam) ? periodParam : periods[0];
 
   const [readings, anomalies, acceptance] = period

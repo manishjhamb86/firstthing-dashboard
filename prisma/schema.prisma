@@ -384,6 +384,7 @@ model AdminUser {
   gatePassSubmissions           GatePass[]              @relation("GatePassSubmittedBy")
   gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
   commissioningReadingsRecorded CommissioningReading[]
+  circuitDevicesReplaced        CircuitDevice[]         @relation("CircuitDeviceReplacedBy")
   benchmarkRescalesRecorded     BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
   benchmarkRescalesVoided       BenchmarkRescaleEvent[] @relation("BenchmarkRescaleVoidedBy")
 
@@ -613,6 +614,7 @@ model Circuit {
   readingAnomalies    ReadingAnomaly[]
   coverageAcceptances CoverageAcceptance[]
   feeLines            CircuitFeeLine[]
+  devices             CircuitDevice[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -1518,7 +1520,19 @@ model RawReadingFile {
   // INV-04 / CON-25 — always an explicit operator selection at upload time,
   // never inferred from the file's own contents. The parser in fact refuses
   // rows outside this period rather than trusting them.
-  period String
+  //
+  // Nullable since the circuit-page commissioning flow (CON-45, 2026-08-17):
+  // there the anchor is not a chosen month but the circuit's own recorded
+  // dates (meterInstalledAt / lightReplacementDate / last stored reading),
+  // and the derived range is stored below and shown to the operator before
+  // anything commits. The global monthly-billing path still always sets it.
+  period String?
+
+  // CON-45 — the circuit-page flow's derived extraction window, recorded so
+  // the provenance chain states exactly which slice of the file was used.
+  rangeStart  DateTime?    @map("range_start")
+  rangeEnd    DateTime?    @map("range_end")
+  ingestPhase IngestPhase? @map("ingest_phase")
 
   s3Key       String  @map("s3_key")
   fileName    String  @map("file_name")
@@ -1591,6 +1605,11 @@ model MeterReading {
   // Set once a released MonthlyCalculation has consumed it (MS-08). Blocks
   // any further overwrite outright — INV-03.
   usedInCalculationId String? @map("used_in_calculation_id")
+
+  // What a complete day holds under the file's granularity (24 for hourly).
+  // intervalCount below it is a partial day — shown as one, not as a low
+  // reading.
+  expectedIntervals Int? @map("expected_intervals")
 
   rawFileId String @map("raw_file_id")
 
@@ -2027,4 +2046,97 @@ model InvoiceExtension {
 
   @@index([invoiceId])
   @@map("invoice_extensions")
+}
+
+// ─── CON-45 — circuit load inventory & the SONOFF reading-review flow ──────
+// (user-specified 2026-08-17: the circuit knows what hangs off it, the
+// theoretical daily figure is computed from that, and every uploaded reading
+// is reviewed row by row against it before anything is saved)
+
+// Which phase of a circuit's life a raw file was ingested for. Derived from
+// the circuit's own recorded dates at upload time, never asked of the
+// operator — but stored, because provenance should say what the system
+// decided, not make a later reader re-derive it.
+enum IngestPhase {
+  pre_install
+  post_install
+  monitoring
+
+  @@map("ingest_phase")
+}
+
+enum DeviceRole {
+  // What a survey finds on a circuit — tube light, fan, TV.
+  original
+  // What FirsThing installs — motion-enabled batten, dimmable surface light.
+  replacement
+
+  @@map("device_role")
+}
+
+// The predefined catalog the dropdowns read from. Ops-maintained; adding a
+// manufacturer's new fixture is a row here, not a code change.
+model DeviceType {
+  id             String     @id @default(cuid())
+  name           String     @unique
+  role           DeviceRole
+  defaultWattage Float?     @map("default_wattage")
+  active         Boolean    @default(true)
+  createdAt      DateTime   @default(now()) @map("created_at")
+
+  // 1-5 compatible replacements per original type — the installer picking a
+  // replacement only ever sees this mapped list, never the whole catalog.
+  replacementOptions DeviceReplacementOption[] @relation("OriginalType")
+  replacementFor     DeviceReplacementOption[] @relation("ReplacementType")
+
+  circuitDevices      CircuitDevice[] @relation("CircuitDeviceType")
+  circuitReplacements CircuitDevice[] @relation("CircuitReplacementType")
+
+  @@map("device_types")
+}
+
+model DeviceReplacementOption {
+  id                String @id @default(cuid())
+  originalTypeId    String @map("original_type_id")
+  replacementTypeId String @map("replacement_type_id")
+
+  original    DeviceType @relation("OriginalType", fields: [originalTypeId], references: [id], onDelete: Cascade)
+  replacement DeviceType @relation("ReplacementType", fields: [replacementTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([originalTypeId, replacementTypeId])
+  @@map("device_replacement_options")
+}
+
+// One line item of the circuit's load inventory: "20 × 20W tube light, 24h".
+// Σ(count × wattage × hoursPerDay) ÷ 1000 is the theoretical daily kWh every
+// pre-install reading is compared against — the check that nothing unknown
+// is silently consuming on a circuit surveyed as lighting-only.
+model CircuitDevice {
+  id           String @id @default(cuid())
+  circuitId    String @map("circuit_id")
+  deviceTypeId String @map("device_type_id")
+
+  count       Int
+  wattage     Float // per-unit watts — editable per line; the catalog only supplies a default
+  hoursPerDay Float  @map("hours_per_day") // 24 or 12 normally; custom allowed (user's call 2026-08-17)
+  note        String?
+
+  // Stage-3 installation recording — what was actually installed against this
+  // line, chosen from the compatibility mapping. Null until the engineer
+  // records it; replacedAt on every line is what completes the installation.
+  replacementTypeId  String?   @map("replacement_type_id")
+  replacementCount   Int?      @map("replacement_count")
+  replacementWattage Float?    @map("replacement_wattage")
+  replacedAt         DateTime? @map("replaced_at")
+  replacedById       String?   @map("replaced_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  circuit         Circuit     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  deviceType      DeviceType  @relation("CircuitDeviceType", fields: [deviceTypeId], references: [id])
+  replacementType DeviceType? @relation("CircuitReplacementType", fields: [replacementTypeId], references: [id])
+  replacedBy      AdminUser?  @relation("CircuitDeviceReplacedBy", fields: [replacedById], references: [id])
+
+  @@index([circuitId])
+  @@map("circuit_devices")
 }

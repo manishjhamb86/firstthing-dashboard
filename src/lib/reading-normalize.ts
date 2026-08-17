@@ -100,7 +100,11 @@ export function splitDelimitedLine(line: string, delimiter: Delimiter): string[]
 }
 
 export function nonEmptyLines(text: string): string[] {
-  return text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  // SONOFF exports open with a UTF-8 BOM; left in place it corrupts the
+  // first cell of whichever line it lands on (the header today, a date cell
+  // in a headerless file tomorrow).
+  const clean = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
+  return clean.split(/\r?\n/).filter((l) => l.trim() !== "");
 }
 
 /**
@@ -195,15 +199,28 @@ export function daysInPeriod(period: string): number {
  * month boundary is normal, and silently importing the overhang would put
  * readings into a month the operator never chose — possibly a closed one.
  */
-export function applyMapping(text: string, mapping: ReadingMapping, period: string): ParseResult {
+type Point = { at: Date; value: number };
+
+type PointsResult = {
+  intervals: Point[];
+  rowsAttempted: number;
+  rowsUnparseable: number;
+  rowsNegative: number;
+  problems: string[];
+};
+
+/**
+ * The shared front half of both parse paths: rows → timestamped points →
+ * consumption intervals. Cumulative registers are differenced here, so no
+ * caller can ever mistake a register for consumption.
+ */
+function parseIntervals(text: string, mapping: ReadingMapping): PointsResult {
   const problems: string[] = [];
   const lines = nonEmptyLines(text);
   const start = mapping.headerRowIndex >= 0 ? mapping.headerRowIndex + 1 : 0;
   const end = Math.max(start, lines.length - Math.max(0, mapping.footerRowsToIgnore));
   const dataLines = lines.slice(start, end);
 
-  const scale = UNIT_TO_KWH[mapping.valueUnit];
-  type Point = { at: Date; value: number };
   const points: Point[] = [];
   let rowsUnparseable = 0;
 
@@ -252,6 +269,16 @@ export function applyMapping(text: string, mapping: ReadingMapping, period: stri
   } else {
     intervals = points;
   }
+
+  return { intervals, rowsAttempted: dataLines.length, rowsUnparseable, rowsNegative, problems };
+}
+
+export function applyMapping(text: string, mapping: ReadingMapping, period: string): ParseResult {
+  const parsed = parseIntervals(text, mapping);
+  const { intervals, rowsAttempted, rowsUnparseable, rowsNegative } = parsed;
+  const problems = [...parsed.problems];
+  const dataLines = { length: rowsAttempted };
+  const scale = UNIT_TO_KWH[mapping.valueUnit];
 
   const byDay = new Map<number, { kWh: number; intervalCount: number }>();
   let rowsOutOfPeriod = 0;
@@ -311,4 +338,50 @@ export function refuseMapping(r: ParseResult, period: string): string | null {
     return `No rows in this file fall inside ${period}. Check you picked the right month, or the right export.`;
   }
   return null;
+}
+
+// ── CON-45 — range-scoped parsing for the circuit-page flow ──────────────
+
+export type RangeParseResult = {
+  /** Every day the file yields, in range or not — the review table shows the
+   * out-of-window ones greyed rather than making them vanish. */
+  days: DailyReading[];
+  rowsParsed: number;
+  rowsAttempted: number;
+  rowsUnparseable: number;
+  rowsNegative: number;
+  problems: string[];
+};
+
+/**
+ * The circuit-page flow's parse: no operator-chosen month. The whole file is
+ * aggregated to days; windowing against the circuit's own recorded dates is
+ * the caller's job (`circuit-load.ts` buildReviewRows), because which days
+ * matter depends on the circuit, not on the file.
+ */
+export function applyMappingAllDays(text: string, mapping: ReadingMapping): RangeParseResult {
+  const parsed = parseIntervals(text, mapping);
+  const scale = UNIT_TO_KWH[mapping.valueUnit];
+
+  const byDay = new Map<number, { kWh: number; intervalCount: number }>();
+  for (const p of parsed.intervals) {
+    const key = utcDayOf(p.at).getTime();
+    const acc = byDay.get(key) ?? { kWh: 0, intervalCount: 0 };
+    acc.kWh += p.value * scale;
+    acc.intervalCount += 1;
+    byDay.set(key, acc);
+  }
+
+  const days = [...byDay.entries()]
+    .map(([ts, v]) => ({ date: new Date(ts), kWh: v.kWh, intervalCount: v.intervalCount }))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  return {
+    days,
+    rowsParsed: parsed.intervals.length,
+    rowsAttempted: parsed.rowsAttempted,
+    rowsUnparseable: parsed.rowsUnparseable,
+    rowsNegative: parsed.rowsNegative,
+    problems: parsed.problems,
+  };
 }

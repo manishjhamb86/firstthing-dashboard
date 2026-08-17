@@ -185,9 +185,13 @@ export async function confirmMapping(
   const file = await db.rawReadingFile.findUnique({ where: { id: rawFileId } });
   if (!file) return { error: "That upload is no longer in the queue." };
   if (file.status === "committed") return { error: "This file has already been committed." };
+  const period = file.period;
+  if (!period) {
+    return { error: "This upload belongs to a circuit's commissioning flow — review and commit it on the circuit page instead." };
+  }
 
-  const parsed = applyMapping(fileText, mapping, file.period);
-  const refusal = refuseMapping(parsed, file.period);
+  const parsed = applyMapping(fileText, mapping, period);
+  const refusal = refuseMapping(parsed, period);
   if (refusal) {
     logger.warn("ingest.mapping_refused", { actorId: ops.session.user.id, rawFileId, reason: refusal });
     return { error: refusal };
@@ -204,7 +208,7 @@ export async function confirmMapping(
     },
   });
 
-  const coverage = coverageOf(parsed.days, file.period);
+  const coverage = coverageOf(parsed.days, period);
   const result: PreviewResult = {
     preview: parsed.days.slice(0, 10).map((d) => ({
       date: d.date.toISOString().slice(0, 10),
@@ -305,16 +309,20 @@ export async function commitUpload(
   if (!file) return { error: "That upload is no longer in the queue." };
   if (file.status === "committed") return { error: "This file has already been committed." };
   if (!file.confirmedMapping) return { error: "Confirm the column mapping before committing." };
+  const period = file.period;
+  if (!period) {
+    return { error: "This upload belongs to a circuit's commissioning flow — review and commit it on the circuit page instead." };
+  }
 
   const mapping = file.confirmedMapping as unknown as ReadingMapping;
-  const parsed = applyMapping(fileText, mapping, file.period);
-  const refusal = refuseMapping(parsed, file.period);
+  const parsed = applyMapping(fileText, mapping, period);
+  const refusal = refuseMapping(parsed, period);
   if (refusal) return { error: refusal };
 
   const existingFiles = await db.rawReadingFile.findMany({
     where: {
       circuitId: file.circuitId,
-      period: file.period,
+      period,
       status: "committed",
       id: { not: file.id },
     },
@@ -332,7 +340,7 @@ export async function commitUpload(
       rawFileId,
       priorFileId: prior.id,
       circuitId: file.circuitId,
-      period: file.period,
+      period,
     });
     return {
       duplicate: {
@@ -370,7 +378,7 @@ export async function commitUpload(
   const now = new Date();
   const anomalyRows = detectAnomalies(
     parsed.days.map((d) => ({ date: d.date, kWh: d.kWh })),
-    file.period,
+    period,
   );
 
   await db.$transaction(async (tx) => {
@@ -444,7 +452,7 @@ export async function commitUpload(
       await tx.readingAnomaly.create({
         data: {
           circuitId: file.circuitId,
-          period: file.period,
+          period,
           date: f.date,
           kind: f.kind,
           detail: f.detail,
@@ -476,13 +484,13 @@ export async function commitUpload(
     });
   });
 
-  const coverage = coverageOf(parsed.days, file.period);
+  const coverage = coverageOf(parsed.days, period);
   const blocking = anomalyRows.filter((f) => f.blocksBilling).length;
   logger.info("ingest.committed", {
     actorId: ops.session.user.id,
     rawFileId,
     circuitId: file.circuitId,
-    period: file.period,
+    period,
     days: parsed.days.length,
     anomalies: anomalyRows.length,
     blocking,

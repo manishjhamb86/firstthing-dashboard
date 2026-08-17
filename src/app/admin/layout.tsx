@@ -21,6 +21,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       // ingesting into it needs both permissions (the PER-01 proxy), which
       // each action checks for itself.
       showReadings={perms.includes("manage_pipeline")}
+      showCatalog={perms.includes("manage_survey") || perms.includes("manage_pipeline")}
       showUsers={perms.includes("manage_admins")}
     >
       {children}

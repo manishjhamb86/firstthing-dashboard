@@ -79,6 +79,51 @@ async function main() {
       societyId: "seed-society-2",
     },
   });
+
+  // CON-45 — a starter device catalog, so the inventory and replacement
+  // dropdowns are usable out of the box. Upserted by name; ops grows the
+  // rest from /admin/device-catalog.
+  const catalogSeed: {
+    name: string;
+    role: "original" | "replacement";
+    defaultWattage: number | null;
+  }[] = [
+    { name: "Tube light 20W", role: "original", defaultWattage: 20 },
+    { name: "Tube light 18W", role: "original", defaultWattage: 18 },
+    { name: "Surface light 12W", role: "original", defaultWattage: 12 },
+    { name: "Bulb 9W", role: "original", defaultWattage: 9 },
+    { name: "Ceiling fan", role: "original", defaultWattage: 60 },
+    { name: "Motion-enabled batten 20W", role: "replacement", defaultWattage: 20 },
+    { name: "Motion-enabled batten 18W", role: "replacement", defaultWattage: 18 },
+    { name: "Motion-enabled dimmable surface 12W", role: "replacement", defaultWattage: 12 },
+    { name: "Motion-enabled bulb 9W", role: "replacement", defaultWattage: 9 },
+  ];
+  const byName = new Map<string, string>();
+  for (const t of catalogSeed) {
+    const row = await db.deviceType.upsert({
+      where: { name: t.name },
+      update: {},
+      create: { name: t.name, role: t.role, defaultWattage: t.defaultWattage },
+    });
+    byName.set(t.name, row.id);
+  }
+  const mappings: [string, string[]][] = [
+    ["Tube light 20W", ["Motion-enabled batten 20W", "Motion-enabled batten 18W"]],
+    ["Tube light 18W", ["Motion-enabled batten 18W", "Motion-enabled batten 20W"]],
+    ["Surface light 12W", ["Motion-enabled dimmable surface 12W"]],
+    ["Bulb 9W", ["Motion-enabled bulb 9W"]],
+  ];
+  for (const [orig, reps] of mappings) {
+    for (const rep of reps) {
+      const originalTypeId = byName.get(orig)!;
+      const replacementTypeId = byName.get(rep)!;
+      await db.deviceReplacementOption.upsert({
+        where: { originalTypeId_replacementTypeId: { originalTypeId, replacementTypeId } },
+        update: {},
+        create: { originalTypeId, replacementTypeId },
+      });
+    }
+  }
 }
 
 main()

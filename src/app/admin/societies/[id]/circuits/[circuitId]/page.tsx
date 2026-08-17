@@ -17,6 +17,7 @@ import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
 import { StepSection } from "@/components/step-section";
+import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
 
 function GatePassCard({
   gatePass,
@@ -86,9 +87,35 @@ export default async function CircuitDetailPage({
         orderBy: { raisedAt: "desc" },
         include: { resolvedBy: { select: { name: true, email: true } } },
       },
+      devices: {
+        orderBy: { createdAt: "asc" },
+        include: {
+          deviceType: { select: { name: true } },
+          replacementType: { select: { name: true } },
+        },
+      },
     },
   });
   if (!circuit || circuit.societyId !== id) notFound();
+
+  // CON-45 — the inventory dropdown reads the catalog's active originals.
+  const catalogOriginals = await db.deviceType.findMany({
+    where: { role: "original", active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, defaultWattage: true },
+  });
+  const inventoryLines: InventoryLine[] = circuit.devices.map((l) => ({
+    id: l.id,
+    deviceTypeId: l.deviceTypeId,
+    deviceTypeName: l.deviceType.name,
+    count: l.count,
+    wattage: l.wattage,
+    hoursPerDay: l.hoursPerDay,
+    note: l.note,
+    replacementName: l.replacementType?.name ?? null,
+    replacementCount: l.replacementCount,
+    replacementWattage: l.replacementWattage,
+  }));
 
   // FEAT-015 — at most one review is open at a time: a review is only raised
   // when a window completes, and a completed window can't complete again
@@ -165,6 +192,32 @@ export default async function CircuitDetailPage({
           and the operations lead can restore it from the registry.
         </div>
       )}
+
+      {/* CON-45 — what hangs off this circuit, and the theoretical daily
+          figure every pre-installation reading is judged against. Editable
+          until the lights are replaced, frozen after — the inventory is what
+          the replacement was recorded against. */}
+      <section className="max-w-2xl mb-8">
+        <h2 className="text-[15px] font-semibold mb-1">Load inventory</h2>
+        <p className="text-sm text-[var(--text-muted)] mb-3">
+          Σ count × wattage × hours ÷ 1000 is the theoretical kWh/day. A pre-install reading outside
+          ±5% of it is flagged; outside ±10% is a warning — the check that nothing unknown is
+          consuming on this circuit.
+        </p>
+        <LoadInventoryPanel
+          circuitId={circuit.id}
+          lines={inventoryLines}
+          catalog={catalogOriginals}
+          editable={canEdit && circuit.lightReplacementDate === null && !circuit.voidedAt}
+          frozenReason={
+            circuit.lightReplacementDate
+              ? "The lights have been replaced — the inventory is frozen as the record the replacement was made against."
+              : canEdit
+                ? null
+                : "Recording the load inventory is PER-04\u2019s action."
+          }
+        />
+      </section>
 
       {/* The commissioning sequence as an accordion — the user-specified
           arrangement (2026-08-15): only the step that needs action right now

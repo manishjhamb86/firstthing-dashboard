@@ -1,0 +1,158 @@
+"use server";
+
+// CON-45 — the circuit's load inventory: what physically hangs off this
+// circuit, line by line. Σ(count × wattage × hours) ÷ 1000 is the
+// theoretical daily kWh every pre-install reading is judged against, so
+// these rows are billing-relevant data, not free-form notes.
+
+import { revalidatePath } from "next/cache";
+import { db } from "@/lib/db";
+import { logger } from "@/lib/logger";
+import { resolveAdmin } from "@/lib/admin-permissions";
+
+type Outcome = { error: string } | { ok: true };
+
+function circuitPath(societyId: string, circuitId: string) {
+  return `/admin/societies/${societyId}/circuits/${circuitId}`;
+}
+
+// Inventory capture is PER-04's field data — manage_survey, same gate as
+// load validation and the commissioning readings.
+async function requireSurveyor() {
+  const admin = await resolveAdmin();
+  if (!admin) return null;
+  if (!(admin.permissions as string[]).includes("manage_survey")) return null;
+  return admin;
+}
+
+/**
+ * A line item is editable until the lights are replaced. After that the
+ * inventory is what the replacement was recorded against — editing it would
+ * silently detach the recorded replacements and the theoretical figure from
+ * what was actually on the wall. Same shape as the FEAT-040 guard on
+ * meteredLightCount once a baseline exists.
+ */
+type EditableGate =
+  | { error: string; circuit?: never }
+  | { error?: never; circuit: { id: string; societyId: string } };
+
+async function editableCircuit(circuitId: string): Promise<EditableGate> {
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    select: { id: true, societyId: true, lightReplacementDate: true, voidedAt: true },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  if (circuit.lightReplacementDate) {
+    return {
+      error:
+        "The lights on this circuit have been replaced — the inventory is frozen as the record the replacement was made against.",
+    };
+  }
+  return { circuit: { id: circuit.id, societyId: circuit.societyId } };
+}
+
+function validateLine(input: { count: number; wattage: number; hoursPerDay: number }) {
+  if (!Number.isInteger(input.count) || input.count < 1 || input.count > 5000) {
+    return "Count must be a whole number between 1 and 5000.";
+  }
+  if (!Number.isFinite(input.wattage) || input.wattage <= 0 || input.wattage > 2000) {
+    return "Per-unit wattage must be between 1 and 2000 W.";
+  }
+  if (!Number.isFinite(input.hoursPerDay) || input.hoursPerDay <= 0 || input.hoursPerDay > 24) {
+    return "Hours per day must be between 1 and 24.";
+  }
+  return null;
+}
+
+export async function addCircuitDevice(input: {
+  circuitId: string;
+  deviceTypeId: string;
+  count: number;
+  wattage: number;
+  hoursPerDay: number;
+  note?: string;
+}): Promise<Outcome> {
+  const admin = await requireSurveyor();
+  if (!admin) {
+    logger.warn("inventory.add_refused", { circuitId: input.circuitId });
+    return { error: "Recording the load inventory is a field-survey action." };
+  }
+
+  const gate = await editableCircuit(input.circuitId);
+  if (gate.error !== undefined) return { error: gate.error };
+
+  const type = await db.deviceType.findUnique({ where: { id: input.deviceTypeId } });
+  if (!type || !type.active || type.role !== "original") {
+    return { error: "Pick a device from the catalog — if it's missing, ops can add it there." };
+  }
+  const invalid = validateLine(input);
+  if (invalid) return { error: invalid };
+
+  await db.circuitDevice.create({
+    data: {
+      circuitId: gate.circuit.id,
+      deviceTypeId: type.id,
+      count: input.count,
+      wattage: input.wattage,
+      hoursPerDay: input.hoursPerDay,
+      note: input.note?.trim() || null,
+    },
+  });
+  logger.info("inventory.line_added", {
+    actorId: admin.id,
+    circuitId: gate.circuit.id,
+    deviceTypeId: type.id,
+    count: input.count,
+    wattage: input.wattage,
+    hoursPerDay: input.hoursPerDay,
+  });
+  revalidatePath(circuitPath(gate.circuit.societyId, gate.circuit.id));
+  return { ok: true };
+}
+
+export async function updateCircuitDevice(input: {
+  lineId: string;
+  count: number;
+  wattage: number;
+  hoursPerDay: number;
+  note?: string;
+}): Promise<Outcome> {
+  const admin = await requireSurveyor();
+  if (!admin) return { error: "Recording the load inventory is a field-survey action." };
+
+  const line = await db.circuitDevice.findUnique({ where: { id: input.lineId } });
+  if (!line) return { error: "That line item no longer exists." };
+  const gate = await editableCircuit(line.circuitId);
+  if (gate.error !== undefined) return { error: gate.error };
+
+  const invalid = validateLine(input);
+  if (invalid) return { error: invalid };
+
+  await db.circuitDevice.update({
+    where: { id: line.id },
+    data: {
+      count: input.count,
+      wattage: input.wattage,
+      hoursPerDay: input.hoursPerDay,
+      note: input.note?.trim() || null,
+    },
+  });
+  logger.info("inventory.line_updated", { actorId: admin.id, lineId: line.id, circuitId: line.circuitId });
+  revalidatePath(circuitPath(gate.circuit.societyId, gate.circuit.id));
+  return { ok: true };
+}
+
+export async function removeCircuitDevice(lineId: string): Promise<Outcome> {
+  const admin = await requireSurveyor();
+  if (!admin) return { error: "Recording the load inventory is a field-survey action." };
+
+  const line = await db.circuitDevice.findUnique({ where: { id: lineId } });
+  if (!line) return { error: "That line item no longer exists." };
+  const gate = await editableCircuit(line.circuitId);
+  if (gate.error !== undefined) return { error: gate.error };
+
+  await db.circuitDevice.delete({ where: { id: line.id } });
+  logger.info("inventory.line_removed", { actorId: admin.id, lineId, circuitId: line.circuitId });
+  revalidatePath(circuitPath(gate.circuit.societyId, gate.circuit.id));
+  return { ok: true };
+}

@@ -145,7 +145,20 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
             </table>
           </Card>
         )}
-        {canEdit && <LightingInventoryForm siteSurveyId={siteSurvey.id} />}
+        {canEdit &&
+          (siteSurvey.areas.length === 0 ? (
+            <LightingInventoryForm siteSurveyId={siteSurvey.id} />
+          ) : (
+            <details className="group">
+              <summary className="text-sm underline cursor-pointer select-none text-[var(--text-muted)] list-none [&::-webkit-details-marker]:hidden">
+                <span className="group-open:hidden">Add another area</span>
+                <span className="hidden group-open:inline">Close</span>
+              </summary>
+              <div className="mt-3">
+                <LightingInventoryForm siteSurveyId={siteSurvey.id} />
+              </div>
+            </details>
+          ))}
       </section>
 
       <section className="max-w-2xl">
@@ -219,14 +232,30 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
             })}
           </Card>
         )}
-        {canEdit && (
-          <CircuitEligibilityForm
-            siteSurveyId={siteSurvey.id}
-            societyId={pipeline.society.id}
-            serviceLine={pipeline.serviceLine}
-            catalog={catalogOriginals}
-          />
-        )}
+        {canEdit &&
+          (circuits.length === 0 ? (
+            <CircuitEligibilityForm
+              siteSurveyId={siteSurvey.id}
+              societyId={pipeline.society.id}
+              serviceLine={pipeline.serviceLine}
+              catalog={catalogOriginals}
+            />
+          ) : (
+            <details className="group">
+              <summary className="text-sm underline cursor-pointer select-none text-[var(--text-muted)] list-none [&::-webkit-details-marker]:hidden">
+                <span className="group-open:hidden">Add another candidate circuit</span>
+                <span className="hidden group-open:inline">Close</span>
+              </summary>
+              <div className="mt-3">
+                <CircuitEligibilityForm
+                  siteSurveyId={siteSurvey.id}
+                  societyId={pipeline.society.id}
+                  serviceLine={pipeline.serviceLine}
+                  catalog={catalogOriginals}
+                />
+              </div>
+            </details>
+          ))}
           </>
         )}
       </section>

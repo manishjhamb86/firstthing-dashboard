@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { submitCircuitCandidate, type CandidateLine } from "./actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 
@@ -21,9 +21,8 @@ type LineDraft = {
   hours: string; // "24" | "12" | custom value
 };
 
-let nextKey = 1;
-function emptyLine(): LineDraft {
-  return { key: nextKey++, deviceTypeId: "", count: "", wattage: "", hours: "24" };
+function lineWith(key: number): LineDraft {
+  return { key, deviceTypeId: "", count: "", wattage: "", hours: "24" };
 }
 
 // FEAT-007 + CON-45 (user's call, 2026-08-17): a candidate circuit is
@@ -44,7 +43,11 @@ export function CircuitEligibilityForm({
   catalog: CatalogOption[];
 }) {
   const [lightType, setLightType] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
+  // Key allocation lives in a ref, NOT at module level: a module counter
+  // increments across the dev server's renders while the client bundle
+  // starts at 1, which is a guaranteed hydration-id mismatch.
+  const nextKey = useRef(1);
+  const [lines, setLines] = useState<LineDraft[]>([lineWith(0)]);
   const [representedLightCount, setRepresentedLightCount] = useState("");
   const [workingHours, setWorkingHours] = useState("");
   const [checks, setChecks] = useState<Record<string, boolean>>({});
@@ -101,7 +104,7 @@ export function CircuitEligibilityForm({
       } else {
         setError(undefined);
         setLightType("");
-        setLines([emptyLine()]);
+        setLines([lineWith(nextKey.current++)]);
         setRepresentedLightCount("");
         setWorkingHours("");
         setChecks({});
@@ -148,134 +151,119 @@ export function CircuitEligibilityForm({
             pre-installation reading will be judged against the theoretical figure these lines add
             up to.
           </p>
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Device</th>
-                  <th>Count</th>
-                  <th>W each</th>
-                  <th>Runs (h/day)</th>
-                  <th>kWh/day</th>
-                  <th>{""}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((l) => {
-                  const preset = l.hours === "24" || l.hours === "12" ? l.hours : "custom";
-                  const kwh =
-                    l.count && l.wattage && l.hours
-                      ? ((Number(l.count) || 0) * (Number(l.wattage) || 0) * (Number(l.hours) || 0)) / 1000
-                      : null;
-                  return (
-                    <tr key={l.key}>
-                      <td>
-                        <select
-                          value={l.deviceTypeId}
-                          onChange={(e) => pickDevice(l, e.target.value)}
-                          disabled={pending}
-                          aria-label="Device"
-                          className="field field-auto"
-                        >
-                          <option value="">Pick from the catalog…</option>
-                          {catalog.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td>
+          <div className="space-y-3">
+            {lines.map((l, idx) => {
+              const preset = l.hours === "24" || l.hours === "12" ? l.hours : "custom";
+              const kwh =
+                l.count && l.wattage && l.hours
+                  ? ((Number(l.count) || 0) * (Number(l.wattage) || 0) * (Number(l.hours) || 0)) / 1000
+                  : null;
+              return (
+                <div
+                  key={l.key}
+                  className="rounded-[var(--r-sm)] border border-[var(--border-subtle)] p-3 flex flex-wrap items-end gap-x-3 gap-y-2"
+                >
+                  <Field label="Device" htmlFor={`cand-dev-${l.key}`}>
+                    <select
+                      id={`cand-dev-${l.key}`}
+                      value={l.deviceTypeId}
+                      onChange={(e) => pickDevice(l, e.target.value)}
+                      disabled={pending}
+                      className="field field-auto max-w-full"
+                    >
+                      <option value="">Pick from the catalog…</option>
+                      {catalog.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Count" htmlFor={`cand-count-${l.key}`}>
+                    <input
+                      id={`cand-count-${l.key}`}
+                      type="number"
+                      min={1}
+                      value={l.count}
+                      onChange={(e) => patchLine(l.key, { count: e.target.value })}
+                      disabled={pending}
+                      className="field field-auto w-20"
+                    />
+                  </Field>
+                  <Field label="W each" htmlFor={`cand-w-${l.key}`}>
+                    <input
+                      id={`cand-w-${l.key}`}
+                      type="number"
+                      min={1}
+                      step="0.5"
+                      value={l.wattage}
+                      onChange={(e) => patchLine(l.key, { wattage: e.target.value })}
+                      disabled={pending}
+                      className="field field-auto w-24"
+                    />
+                  </Field>
+                  <Field label="Runs" htmlFor={`cand-h-${l.key}`}>
+                    <span className="inline-flex items-center gap-2">
+                      <select
+                        id={`cand-h-${l.key}`}
+                        value={preset}
+                        onChange={(e) =>
+                          patchLine(l.key, { hours: e.target.value === "custom" ? "" : e.target.value })
+                        }
+                        disabled={pending}
+                        className="field field-auto"
+                      >
+                        <option value="24">24 h</option>
+                        <option value="12">12 h</option>
+                        <option value="custom">Custom…</option>
+                      </select>
+                      {preset === "custom" && (
                         <input
                           type="number"
                           min={1}
-                          value={l.count}
-                          onChange={(e) => patchLine(l.key, { count: e.target.value })}
+                          max={24}
+                          step="0.5"
+                          value={l.hours}
+                          onChange={(e) => patchLine(l.key, { hours: e.target.value })}
                           disabled={pending}
-                          aria-label="Count"
+                          aria-label="Custom hours per day"
                           className="field field-auto w-20"
                         />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          min={1}
-                          step="0.5"
-                          value={l.wattage}
-                          onChange={(e) => patchLine(l.key, { wattage: e.target.value })}
-                          disabled={pending}
-                          aria-label="Wattage"
-                          className="field field-auto w-24"
-                        />
-                      </td>
-                      <td>
-                        <span className="inline-flex items-center gap-2">
-                          <select
-                            value={preset}
-                            onChange={(e) =>
-                              patchLine(l.key, { hours: e.target.value === "custom" ? "" : e.target.value })
-                            }
-                            disabled={pending}
-                            aria-label="Hours preset"
-                            className="field field-auto"
-                          >
-                            <option value="24">24 h</option>
-                            <option value="12">12 h</option>
-                            <option value="custom">Custom…</option>
-                          </select>
-                          {preset === "custom" && (
-                            <input
-                              type="number"
-                              min={1}
-                              max={24}
-                              step="0.5"
-                              value={l.hours}
-                              onChange={(e) => patchLine(l.key, { hours: e.target.value })}
-                              disabled={pending}
-                              aria-label="Custom hours per day"
-                              className="field field-auto w-20"
-                            />
-                          )}
-                        </span>
-                      </td>
-                      <td className="num">{kwh === null ? "—" : kwh.toFixed(2)}</td>
-                      <td>
-                        {lines.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
-                            disabled={pending}
-                            className="btn-ghost text-xs"
-                            style={{ color: "var(--bad-fg)" }}
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              {complete.length > 0 && (
-                <tfoot>
-                  <tr>
-                    <td className="font-medium">Derived</td>
-                    <td className="num font-semibold">{meteredCount}</td>
-                    <td className="num" colSpan={2}>
-                      {connectedLoadW.toFixed(0)} W connected load
-                    </td>
-                    <td className="num font-semibold">{theoreticalKwh.toFixed(2)}</td>
-                    <td className="text-xs text-[var(--text-muted)]">
-                      {meteredCount < 50 ? "Below the 50-light minimum (CON-16)" : ""}
-                    </td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
+                      )}
+                    </span>
+                  </Field>
+                  <span className="text-sm text-[var(--text-muted)] pb-2">
+                    {kwh === null ? "— kWh/day" : <span className="num">{kwh.toFixed(2)} kWh/day</span>}
+                  </span>
+                  {lines.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => setLines((prev) => prev.filter((x) => x.key !== l.key))}
+                      disabled={pending}
+                      aria-label={`Remove line ${idx + 1}`}
+                      className="btn-ghost text-xs ml-auto"
+                      style={{ color: "var(--bad-fg)" }}
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
+          {complete.length > 0 && (
+            <p className="text-sm">
+              Derived: <span className="num font-semibold">{meteredCount}</span> lights ·{" "}
+              <span className="num">{connectedLoadW.toFixed(0)}</span> W connected load ·{" "}
+              <span className="num font-semibold">{theoreticalKwh.toFixed(2)}</span> kWh/day theoretical
+              {meteredCount > 0 && meteredCount < 50 && (
+                <span style={{ color: "var(--warn-fg)" }}> — below the 50-light minimum (CON-16)</span>
+              )}
+            </p>
+          )}
           <button
             type="button"
-            onClick={() => setLines((prev) => [...prev, emptyLine()])}
+            onClick={() => setLines((prev) => [...prev, lineWith(nextKey.current++)])}
             disabled={pending}
             className="btn-secondary"
           >

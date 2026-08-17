@@ -1,15 +1,33 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { Card, CardTitle, EmptyState, KpiTile, PageHeader, StatusChip } from "@/components/ui";
-import { Building2, Target, Gauge, BadgeCheck } from "lucide-react";
+import { Card, CardTitle, EmptyState, KpiTile, StatusChip } from "@/components/ui";
+import { Building2, Target, Gauge, BadgeCheck, ArrowRight } from "lucide-react";
 import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
-// The Portfolio overview. Replaces MS-01's walking-skeleton stub ("Societies
-// in Postgres: 1"), which was a proof that a Server Component could read a
-// row, never a screen. Every figure here is a real query — nothing is
+// The Portfolio overview. Every figure here is a real query — nothing is
 // fabricated, and anything the schema can't yet answer is simply absent
 // rather than shown as a placeholder number.
+//
+// Page-by-page design pass (2026-08-17): a dashboard is scanned, not read,
+// so the order is summary → what needs a decision → where the work sits.
+// The two visuals are CSS bars over real counts, not a charting library:
+// the deal funnel (where every open deal is) and the benchmark spread
+// (whether commissioned circuits land in CON-20's band).
+
+// The deal spine in order (08-prioritization.md §3.1). closed_lost is
+// deliberately outside the funnel — it is an exit, not a stage of progress.
+const FUNNEL_STAGES = [
+  "lead",
+  "survey_pending",
+  "demo_reported",
+  "offered",
+  "agreed",
+  "installation",
+  "active_billing",
+] as const;
+
 export default async function AdminHomePage() {
   const session = await requireAdminPage();
 
@@ -27,6 +45,8 @@ export default async function AdminHomePage() {
     benchmarkConfirmedCount,
     recentPipelines,
     circuitsNeedingAttention,
+    stageGroups,
+    benchmarkedCircuits,
   ] = await Promise.all([
     db.society.count(),
     db.society.count({ where: { status: "active" } }),
@@ -36,7 +56,15 @@ export default async function AdminHomePage() {
     db.circuit.count({
       where: {
         voidedAt: null,
-        state: { in: ["meter_installed", "pre_install_monitoring", "awaiting_installation", "post_install_pending", "post_install_monitoring"] },
+        state: {
+          in: [
+            "meter_installed",
+            "pre_install_monitoring",
+            "awaiting_installation",
+            "post_install_pending",
+            "post_install_monitoring",
+          ],
+        },
       },
     }),
     db.circuit.count({ where: { voidedAt: null, state: "benchmark_confirmed" } }),
@@ -51,13 +79,50 @@ export default async function AdminHomePage() {
       take: 5,
       include: { society: true },
     }),
+    db.pipeline.groupBy({ by: ["stage"], _count: { _all: true } }),
+    db.circuit.findMany({
+      where: { voidedAt: null, benchmarkSavingsPct: { not: null } },
+      orderBy: { benchmarkSavingsPct: "desc" },
+      take: 6,
+      include: { society: { select: { name: true } } },
+    }),
   ]);
+
+  const stageCount = new Map(stageGroups.map((g) => [g.stage as string, g._count._all]));
+  const funnel = FUNNEL_STAGES.map((s) => ({ stage: s, count: stageCount.get(s) ?? 0 }));
+  const funnelPeak = Math.max(1, ...funnel.map((f) => f.count));
+  const closedLost = stageCount.get("closed_lost") ?? 0;
+  const today = new Date().toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  });
+
+  const decisionCount = circuitsNeedingAttention.length;
 
   return (
     <>
-      <PageHeader title="Portfolio" subtitle={`Signed in as ${session.user.email}`} />
+      {/* A dashboard's header should say what today is and whether anything
+          is waiting — not repeat the sidebar's own identity block. */}
+      <header className="mb-7 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div>
+          <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em]">Portfolio</h1>
+          <p className="mt-1 text-[var(--text-muted)]">{today}</p>
+        </div>
+        {canSeeMonitoring && decisionCount > 0 && (
+          <a
+            href="#needs-decision"
+            className="inline-flex items-center gap-2 rounded-[var(--r-md)] border px-3.5 py-2 text-sm font-medium"
+            style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}
+          >
+            {decisionCount} {decisionCount === 1 ? "circuit needs" : "circuits need"} a decision
+            <ArrowRight size={15} strokeWidth={2} aria-hidden />
+          </a>
+        )}
+      </header>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
         <KpiTile
           label="Societies"
           value={societyCount}
@@ -94,83 +159,200 @@ export default async function AdminHomePage() {
         )}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2 items-start">
-        {canSeePipeline && (
-          <Card className="p-6">
-            <CardTitle>Recent leads</CardTitle>
-            {recentPipelines.length === 0 ? (
-              <EmptyState
-                title="No leads yet"
-                action={
-                  <Link href="/admin/pipeline/new" className="btn-ghost btn-sm">
-                    Log a lead →
-                  </Link>
-                }
-              >
-                The deal spine starts here — log a lead after a first meeting.
-              </EmptyState>
-            ) : (
-              <ul className="space-y-3">
-                {recentPipelines.map((p) => {
-                  const stage = statusMeta(PIPELINE_STAGE, p.stage);
-                  return (
-                    <li
-                      key={p.id}
-                      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
-                    >
-                      <div>
-                        <Link href={`/admin/pipeline/${p.id}`} className="font-medium hover:underline">
-                          {p.society.name}
-                        </Link>
-                        <p className="text-sm text-[var(--text-muted)]">
-                          {SERVICE_LINE_LABEL[p.serviceLine]} · {p.salesOwner.name ?? p.salesOwner.email}
-                        </p>
-                      </div>
-                      <StatusChip tone={stage.tone}>{stage.label}</StatusChip>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
-        )}
+      <div className="grid gap-6 lg:grid-cols-12 items-start">
+        {/* ── Left column: where the work is ─────────────────────────── */}
+        <div className="lg:col-span-7 min-w-0 space-y-6">
+          {canSeePipeline && (
+            <Card className="p-6">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
+                <CardTitle>Deal pipeline</CardTitle>
+                <Link href="/admin/pipeline" className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+                  Open the board →
+                </Link>
+              </div>
+              {funnel.every((f) => f.count === 0) ? (
+                <EmptyState
+                  title="No deals in flight"
+                  action={
+                    <Link href="/admin/pipeline/new" className="btn-ghost btn-sm">
+                      Log a lead →
+                    </Link>
+                  }
+                >
+                  The deal spine starts here — log a lead after a first meeting.
+                </EmptyState>
+              ) : (
+                <>
+                  <ul className="space-y-2.5">
+                    {funnel.map(({ stage, count }) => {
+                      const meta = statusMeta(PIPELINE_STAGE, stage);
+                      return (
+                        <li key={stage} className="flex items-center gap-3">
+                          <span className="w-32 shrink-0 text-[13px] text-[var(--text-muted)]">{meta.label}</span>
+                          {/* the bar is a second encoding of the number beside
+                              it, never the only one */}
+                          <span
+                            className="h-2 flex-1 overflow-hidden rounded-[var(--r-pill)]"
+                            style={{ background: "var(--surface-active)" }}
+                          >
+                            <span
+                              className="block h-full rounded-[var(--r-pill)]"
+                              style={{
+                                width: `${Math.max(count === 0 ? 0 : 4, (count / funnelPeak) * 100)}%`,
+                                background: count === 0 ? "transparent" : "var(--accent)",
+                              }}
+                            />
+                          </span>
+                          <span className="num w-8 shrink-0 text-right text-sm font-semibold">{count}</span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {closedLost > 0 && (
+                    <p className="mt-4 border-t pt-3 text-xs text-[var(--text-subtle)]" style={{ borderColor: "var(--border-subtle)" }}>
+                      <span className="num">{closedLost}</span> closed / lost — an exit, not a stage, so it sits
+                      outside the funnel.
+                    </p>
+                  )}
+                </>
+              )}
+            </Card>
+          )}
 
-        {canSeeMonitoring && (
-          <Card className="p-6">
-            <CardTitle>Needs a decision</CardTitle>
-            {circuitsNeedingAttention.length === 0 ? (
-              <EmptyState title="Nothing waiting">
-                No circuit is sitting on a light-count exception or a benchmark outside CON-20&apos;s band.
-              </EmptyState>
-            ) : (
-              <ul className="space-y-3">
-                {circuitsNeedingAttention.map((c) => {
-                  const state =
-                    c.state === "surveyed"
-                      ? { label: "Awaiting light-count exception", tone: "warn" as const }
-                      : statusMeta(CIRCUIT_STATE, c.state);
-                  return (
-                    <li
-                      key={c.id}
-                      className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
-                    >
-                      <div>
-                        <Link
-                          href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
-                          className="font-medium hover:underline"
+          {canSeePipeline && (
+            <Card className="p-6">
+              <CardTitle>Recent leads</CardTitle>
+              {recentPipelines.length === 0 ? (
+                <EmptyState title="No leads yet">
+                  Nothing logged so far — the newest five will appear here.
+                </EmptyState>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="tbl">
+                    <thead>
+                      <tr>
+                        <th>Society</th>
+                        <th>Service line</th>
+                        <th>Owner</th>
+                        <th>Stage</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentPipelines.map((p) => {
+                        const stage = statusMeta(PIPELINE_STAGE, p.stage);
+                        return (
+                          <tr key={p.id}>
+                            <td>
+                              <Link href={`/admin/pipeline/${p.id}`} className="font-medium hover:underline">
+                                {p.society.name}
+                              </Link>
+                            </td>
+                            <td className="text-[var(--text-muted)]">{SERVICE_LINE_LABEL[p.serviceLine]}</td>
+                            <td className="text-[var(--text-muted)]">
+                              {p.salesOwner.name ?? p.salesOwner.email}
+                            </td>
+                            <td>
+                              <StatusChip tone={stage.tone}>{stage.label}</StatusChip>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+        </div>
+
+        {/* ── Right column: what needs a person ──────────────────────── */}
+        <div className="lg:col-span-5 min-w-0 space-y-6">
+          {canSeeMonitoring && (
+            <Card className="p-6" >
+              <div id="needs-decision" className="scroll-mt-24">
+                <CardTitle>Needs a decision</CardTitle>
+              </div>
+              {circuitsNeedingAttention.length === 0 ? (
+                <EmptyState title="Nothing waiting">
+                  No circuit is sitting on a light-count exception or a benchmark outside CON-20&apos;s band.
+                </EmptyState>
+              ) : (
+                <ul className="space-y-3">
+                  {circuitsNeedingAttention.map((c) => {
+                    const state =
+                      c.state === "surveyed"
+                        ? { label: "Awaiting light-count exception", tone: "warn" as const }
+                        : statusMeta(CIRCUIT_STATE, c.state);
+                    return (
+                      <li
+                        key={c.id}
+                        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                      >
+                        <div className="min-w-0">
+                          <Link
+                            href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
+                            className="font-medium hover:underline"
+                          >
+                            {c.location || c.lightType}
+                          </Link>
+                          <p className="text-sm text-[var(--text-muted)] truncate">{c.society.name}</p>
+                        </div>
+                        <StatusChip tone={state.tone}>{state.label}</StatusChip>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          )}
+
+          {/* Confirmed benchmarks against CON-20's band — the number the whole
+              commercial model rests on, so it belongs on the home screen. */}
+          {canSeeMonitoring && (
+            <Card className="p-6">
+              <CardTitle>Commissioned savings</CardTitle>
+              {benchmarkedCircuits.length === 0 ? (
+                <EmptyState title="No benchmarks yet">
+                  A circuit lands here once its post-installation window produces a measured savings
+                  figure.
+                </EmptyState>
+              ) : (
+                <ul className="space-y-3.5">
+                  {benchmarkedCircuits.map((c) => {
+                    const pct = c.benchmarkSavingsPct ?? 0;
+                    const band = savingsBand(pct);
+                    const meta = SAVINGS_BAND_META[band];
+                    return (
+                      <li key={c.id}>
+                        <div className="flex items-baseline justify-between gap-3">
+                          <Link
+                            href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
+                            className="truncate text-[13px] font-medium hover:underline"
+                          >
+                            {c.society.name} · {c.location || c.lightType}
+                          </Link>
+                          <span className="num shrink-0 text-sm font-semibold" style={{ color: meta.accent }}>
+                            {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div
+                          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-[var(--r-pill)]"
+                          style={{ background: "var(--surface-active)" }}
                         >
-                          {c.location || c.lightType}
-                        </Link>
-                        <p className="text-sm text-[var(--text-muted)]">{c.society.name}</p>
-                      </div>
-                      <StatusChip tone={state.tone}>{state.label}</StatusChip>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Card>
-        )}
+                          <div
+                            className="h-full rounded-[var(--r-pill)]"
+                            style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: meta.accent }}
+                          />
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--text-subtle)]">{meta.label}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          )}
+        </div>
       </div>
     </>
   );

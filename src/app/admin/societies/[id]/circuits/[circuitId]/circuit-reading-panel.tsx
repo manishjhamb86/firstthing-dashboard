@@ -5,6 +5,7 @@
 // phase and the window; every judgment stays with the operator.
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip } from "@/components/ui";
 import {
   SAVINGS_BAND_META,
@@ -74,6 +75,7 @@ function comparisonCell(row: PreviewRowDTO): { text: string; label: string } {
 }
 
 export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
+  const router = useRouter();
   const [stage, setStage] = useState<"idle" | "working" | "review" | "done">("idle");
   const [error, setError] = useState<string | undefined>();
   const [preview, setPreview] = useState<CircuitPreviewDTO | undefined>();
@@ -250,8 +252,15 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
             </li>
           )}
         </ul>
-        <button type="button" onClick={reset} className="btn-secondary">
-          Upload another file
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            router.refresh();
+          }}
+          className="btn-primary"
+        >
+          Done
         </button>
       </Card>
     );

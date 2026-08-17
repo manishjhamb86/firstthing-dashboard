@@ -451,6 +451,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Risks:** see failure modes.
 
 ### FEAT-012 — Pre-install baseline monitoring window
+- **Scope note (2026-08-17, CON-45):** For circuits commissioned through the CSV reading flow, the 5-consecutive-valid-day window is superseded — the baseline is the average of the accepted, non-excluded pre-install days (any count, 1–10 or more), each day compared against the circuit's theoretical load (±5/±10 non-blocking bands), and the baseline freezes when the lights are replaced. This feature's window mechanism remains for legacy circuits already mid-window.
 - **Capability:** CAP-02 · **Persona:** PER-04, PER-01 · **Serves:** JTBD-05
 - **Surface(s):** SUR-02 (PER-04 monitors/investigates), SUR-01 (PER-01 sees status)
 - **Problem:** The benchmark's accuracy depends entirely on a clean, uncontaminated baseline reading window — without a structured 5-valid-day tracker with anomaly handling, one bad baseline day could silently corrupt the whole contract-term benchmark.
@@ -1335,6 +1336,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Risks:** none significant.
 
 ### FEAT-045 — Upload-time anomaly detection
+- **Scope note (2026-08-17, CON-45):** On the circuit-page flow the ±5% band is not a day-level blocking gate — replayed against a real SONOFF export, 86% of genuinely healthy days violate it (daily range 4.17–38.87 kWh around a 13.6 median), so it was detecting Tuesday, not faults. There, pre-install days are judged against the theoretical load and post-install days as savings bands, all non-blocking; only a zero day still files a blocking anomaly (INV-09). This feature's detectors are unchanged on the monthly billing path.
 - **Capability:** CAP-03 · **Persona:** PER-01 · **Serves:** GOAL-01, INV-09
 - **Surface(s):** SUR-01
 - **Problem:** INV-09 states it plainly: catching a bad reading before the bill goes out is cheaper than disputing it afterward. Without detection at ingest, the first person to notice a bad reading is the customer.

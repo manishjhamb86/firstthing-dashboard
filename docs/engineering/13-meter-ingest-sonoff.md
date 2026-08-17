@@ -1,6 +1,18 @@
 # SONOFF meter ingest → pre-install baseline → post-install savings → daily monitoring
-**Product:** FirsThing Platform · **Status:** Plan — awaiting decisions D1–D6
+**Product:** FirsThing Platform · **Status:** Built & verified 2026-08-17 — see CON-45 in `../product/00-intake.md` for the decision record
 **Last updated:** 2026-08-17 · **Owner:** this branch
+
+> **Outcome.** All six decisions resolved by the user the same day (D1 range-not-month — implemented
+> as the system-derived window off the circuit's own dates; D2 replace day-level ±5% — implemented
+> as the user's refined spec: theoretical-load bands pre-install, savings bands after, nothing
+> blocking; D3 partial days kept-shown-excluded; D4 one store — `MeterReading`, with legacy
+> window-flow circuits keeping their `CommissioningReading` path untouched; D5 signature-before-AI;
+> D6 zero-run collapse — subsumed by the out-of-window fold and the theoretical comparison, with
+> zero days still filing blocking anomalies on monitoring commits per INV-09). Plus three
+> refinements from mid-build messages: one shared colour system everywhere a reading shows, a
+> "suspect" band above CON-20's 80%, and exclusion as one persistent `excludedAt` mechanism usable
+> any time before a report. Verified end to end against the real 4,536-row export: 25 + 29 browser
+> checks, every figure asserted against the database.
 
 The feature, as specified by the user 2026-08-17: upload a smart-meter CSV **under a specific
 society's specific circuit**, have AI read its shape, convert it to our canonical daily readings,

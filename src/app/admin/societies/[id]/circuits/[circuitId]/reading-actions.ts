@@ -545,7 +545,11 @@ export async function commitCircuitReadings(
     baseline: summaryAfter.baseline,
     benchmark: summaryAfter.benchmark,
   });
-  revalidatePath(circuitPath(circuit.society.id, circuit.id));
+  // Deliberately no revalidatePath here: refreshing the tree immediately can
+  // advance the step accordion and unmount the panel before its "saved"
+  // summary ever renders — the operator sees their form vanish instead of the
+  // outcome. The panel shows the summary and refreshes the page when the
+  // operator dismisses it.
 
   return {
     summary: {

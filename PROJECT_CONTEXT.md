@@ -2210,6 +2210,92 @@ was found still sitting in the local dev database while confirming this fix's ow
 removed, caught by listing every society rather than trusting a bare count. Removed. `tsc`/`lint`/
 `vitest` (287 cases, unaffected)/`build` all clean; no schema change.
 
+## CON-45 built: SONOFF ingest → review → baseline → savings → monitoring (2026-08-17) — user-specified, end to end
+
+**The user's spec, built in full and verified against their real meter export**: upload the SONOFF
+CSV on a specific circuit's own page (their stated preference — no global picker to upload the
+wrong society's sheet into), the system derives everything from the circuit's record, every
+produced day is reviewed **row by row** before anything saves, and one reading store feeds the
+pre-install report, the post-install savings report, and monthly monitoring. Plan first
+(`docs/engineering/13-meter-ingest-sonoff.md`), then four decisions put to the user (range-not-
+month, replace the day-level ±5%, partial-day handling, one store), plus three mid-build
+refinements from them (colour bands everywhere a variance shows; exclusion as a persistent
+mechanism usable any time before a report; hours 24/12+custom). Recorded as **CON-45** in
+`00-intake.md`, with scope notes on FEAT-012/FEAT-045 in `03-features.md` and `backlog.yaml`
+(validator: 15 errors/263 warnings, the documented baseline).
+
+**The finding that shaped the design**: replaying MS-07's own ±5% blocking day-band against the
+real 4,536-row export produced **32 blocking findings for a month of perfectly healthy readings**
+(86% of genuine days violate it — real daily range 4.17–38.87 kWh around a 13.6 median). The band
+was detecting Tuesday, not faults — the same "asking the wrong question" class the commissioning
+side had already been through on 2026-08-15. The replacement: pre-install days are judged against
+the **load inventory's theoretical figure** (Σ count × wattage × hours ÷ 1000; ±5% flag, ±10% red,
+never blocking), post-install and monitoring days as **savings bands against the baseline**
+(≥65 green · 60–65 cyan · 58–60 yellow · 55–58 orange · <55 red — the user's exact numbers — plus
+a violet "check the meter" band above CON-20's 80%, since a dead meter reads as 100% savings).
+One colour system, defined once in `src/lib/circuit-load.ts`, used by the review table, the stored-
+readings view and all three reports; a band is never the only signal (the % and a label always
+accompany it, per the blueprint's own colourblind/greyscale rule).
+
+**What was built** (5 commits, `eafbf1f`..`2897605`): DeviceType/DeviceReplacementOption catalog
+(`/admin/device-catalog`, 1–5 compatible replacements per original — the installer's dropdown reads
+the mapping, never the whole catalog) · CircuitDevice load inventory on the circuit page (frozen at
+light replacement, same guard shape as FEAT-040's) · SONOFF matched by exact header signature
+(BOM-stripped) with no AI call, unknown formats still falling back to the AI path ·
+`applyMappingAllDays` (range parsing) by refactoring the shared interval pipeline out of
+`applyMapping` · the review flow (`reading-actions.ts` + `circuit-reading-panel.tsx`): phase derived
+from the circuit's own dates (pre = day after `meterInstalledAt`; the install day, the replacement
+day and today always excluded; monitoring = one day **before** the last stored reading, per the
+user's 13-Nov→12-Nov overlap rule, that day alone superseded by the fuller value), dispositions
+new/stored_match/stored_changed(warn-keep-stored)/supersede/released(INV-03)/out_of_window,
+accept/reject per row, include-in-average toggles on pre days, partial days stored-but-excluded
+with the interval count in the reason · per-line replacement recording on the installation step ·
+three print-styled reports (excluded days struck through with reasons, never hidden; monthly is
+kWh-only deliberately — the ₹ figures stay with MS-08's released calculation so two sources can
+never disagree) · post-hoc exclusion via the one `excludedAt` mechanism, frozen with the figure it
+feeds (baseline at replacement, benchmark at confirmation, billing at release).
+
+**Commit is server-authoritative**: everything re-derives from the raw file plus the circuit's
+record inside the transaction; the client's rows are never trusted. One recompute function owns
+`preInstallBaseline` (average of non-excluded pre days) and the benchmark decision (CON-20 in-band
+→ `benchmark_confirmed`; out-of-band → **no benchmark written**, FEAT-015 review raised — FEAT-014's
+semantics kept). Monitoring commits still file zero days as blocking anomalies (INV-09). Legacy
+window-flow circuits (Mahagun) keep their manual panels untouched — a circuit uses one flow, never
+both stores under one baseline.
+
+**Verified end to end with the real file** (Playwright + its own headless Chromium — **system
+Chrome is no longer installed on this machine**, worth knowing for the next session): 25 + 29
+browser checks across two scripts, zero console/page errors, every figure asserted against the
+database rather than the screen. Highlights: 4,536 rows → 190 days, 0 unparseable; 158 dead-meter
+days folded behind the out-of-window toggle; all three variance bands landing on the file's own
+numbers (38.87 → +12.5% warn, 31.79 → −8.0% flag, 33.61 → −2.7% ok against a 34.56 theoretical);
+14 rejected days genuinely absent from the store; baseline exact to 1e-6 at every reshape
+(19.7400 → 34.7567 after exclusions); the pre-report's warn/investigate path filing a non-blocking
+anomaly into the existing queue; 18 stored pre days verified unchanged on re-upload; the partial
+day (13 of 24 intervals) auto-excluded with the reason stored; **benchmark confirmed at 64.1747%**
+(computed independently in the test from the CSV, matched to 4dp); the monitoring overlap day
+superseded 6.13 → 11.08 kWh with the old value retained; and **the ops gate driven through a path
+the client cannot pre-block** (permission revoked behind the open review; the commit refused by
+name and wrote nothing; restored, it succeeded). Fixture removed by cascade and confirmed by
+ownership query, not just count — every remaining reading row belongs to Mahagun Puram's
+pre-existing circuit.
+
+**Two UX defects found by the E2E itself, both fixed**: `revalidatePath` inside the commit action
+re-rendered the accordion, advanced the step, and **unmounted the review panel before its "saved"
+summary could render** — the operator would see their form vanish (the exact "saved but nothing
+happened" class the 2026-08-15 black-hole fix dealt with); the commit no longer revalidates, the
+summary stays up, and a Done button refreshes deterministically. And the seeded local password is
+`password123` (not the stage one) — plus the psql boolean trap struck in its **inverse** form this
+time: `||` concatenation casts to `'false'`, while bare `-tA` prints `f`.
+
+**Leftover S3 objects, same cause as every prior pass** (PutObject-only credentials): a handful of
+uploads under `Ingest/Sonoff_Verification_Colony/` — added to Current Blockers in spirit; the DB
+rows behind them are gone.
+
+**Deliberately not done**: manufacturers 2 and 3 (one signature-table entry each when their sample
+files exist); wiring MS-08's billing UI to consume this store (MS-08 remains the one `proposed`
+milestone); migrating legacy `CommissioningReading` circuits onto the unified store.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

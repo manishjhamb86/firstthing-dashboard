@@ -2065,6 +2065,13 @@ features:
     depends_on: [FEAT-011]
     status: ready
     milestone: MS-04
+    scope_note: >-
+      CON-45 (2026-08-17): for circuits commissioned through the circuit-page CSV
+      flow, the 5-valid-day window is superseded — the baseline is the average of
+      the accepted, non-excluded pre-install days, judged day-by-day against the
+      circuit load inventory's theoretical figure (±5/±10 non-blocking bands),
+      frozen at light replacement. The window mechanism remains for legacy
+      circuits already mid-window.
     acceptance_criteria:
       - id: FEAT-012-AC-1
         type: happy

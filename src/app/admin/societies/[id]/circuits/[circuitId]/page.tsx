@@ -301,7 +301,7 @@ export default async function CircuitDetailPage({
           },
         ].map((f) => (
           <div key={f.label} className="card p-4">
-            <p className="lbl mb-1.5">{f.label}</p>
+            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
             <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
             <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.unit}</p>
           </div>

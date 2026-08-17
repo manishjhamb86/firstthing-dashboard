@@ -75,7 +75,14 @@ function HoursInput({
   );
 }
 
+// The add-line form is folded by default (user's call, 2026-08-17): an
+// always-open form on a panel that already lists its lines reads as clutter,
+// and this one is only used when something is genuinely being added. Opening
+// it reveals a proper grid — the previous flex-wrap could not align, because
+// each field carries a label above and one carries a hint below, so
+// items-end had nothing consistent to align to.
 function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: CatalogOption[] }) {
+  const [open, setOpen] = useState(false);
   const [typeId, setTypeId] = useState("");
   const [count, setCount] = useState("");
   const [wattage, setWattage] = useState("");
@@ -92,6 +99,15 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
     if (t?.defaultWattage && wattage.trim() === "") setWattage(String(t.defaultWattage));
   }
 
+  function reset() {
+    setTypeId("");
+    setCount("");
+    setWattage("");
+    setHours("24");
+    setNote("");
+    setError(undefined);
+  }
+
   function submit() {
     startTransition(async () => {
       const result = await addCircuitDevice({
@@ -105,49 +121,120 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
       if ("error" in result) {
         setError(result.error);
       } else {
-        setError(undefined);
-        setTypeId("");
-        setCount("");
-        setWattage("");
-        setHours("24");
-        setNote("");
+        reset();
+        setOpen(false);
       }
     });
   }
 
-  return (
-    <div className="flex flex-wrap items-end gap-3">
-      <Field label="Device" htmlFor="inv-type">
-        <select id="inv-type" value={typeId} onChange={(e) => pickType(e.target.value)} disabled={pending} className="field field-auto">
-          <option value="">Pick from the catalog…</option>
-          {catalog.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Count" htmlFor="inv-count">
-        <input id="inv-count" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} disabled={pending} className="field field-auto w-20" />
-      </Field>
-      <Field label="W each" htmlFor="inv-w">
-        <input id="inv-w" type="number" min={1} step="0.5" value={wattage} onChange={(e) => setWattage(e.target.value)} disabled={pending} className="field field-auto w-24" />
-      </Field>
-      <Field label="Runs" htmlFor="inv-h">
-        <HoursInput id="inv-h" hours={hours} setHours={setHours} disabled={pending} />
-      </Field>
-      <Field label="Note" htmlFor="inv-note" hint="Optional — e.g. 'shared with lift fan'">
-        <input id="inv-note" value={note} onChange={(e) => setNote(e.target.value)} disabled={pending} className="field field-auto w-48" />
-      </Field>
-      <button
-        type="button"
-        onClick={submit}
-        disabled={pending || !typeId || count.trim() === "" || wattage.trim() === "" || hours.trim() === ""}
-        className="btn-secondary"
-      >
-        Add line
+  const incomplete = !typeId || count.trim() === "" || wattage.trim() === "" || hours.trim() === "";
+  const preview =
+    !incomplete
+      ? ((Number(count) || 0) * (Number(wattage) || 0) * (Number(hours) || 0)) / 1000
+      : null;
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="btn-secondary">
+        Add a device line
       </button>
-      {error && <ErrorText>{error}</ErrorText>}
+    );
+  }
+
+  return (
+    <div
+      className="rounded-[var(--r-md)] border p-4"
+      style={{ borderColor: "var(--border)", background: "var(--surface-sunken)" }}
+    >
+      <p className="text-sm font-semibold mb-3">New device line</p>
+
+      {/* A grid, so every label sits on one line and every control on the
+          next — regardless of which field carries a hint. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Field label="Device" htmlFor="inv-type">
+          <select
+            id="inv-type"
+            value={typeId}
+            onChange={(e) => pickType(e.target.value)}
+            disabled={pending}
+            className="field"
+          >
+            <option value="">Pick from the catalog…</option>
+            {catalog.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Count" htmlFor="inv-count">
+          <input
+            id="inv-count"
+            type="number"
+            min={1}
+            value={count}
+            onChange={(e) => setCount(e.target.value)}
+            disabled={pending}
+            className="field"
+          />
+        </Field>
+        <Field label="Watts each" htmlFor="inv-w">
+          <input
+            id="inv-w"
+            type="number"
+            min={1}
+            step="0.5"
+            value={wattage}
+            onChange={(e) => setWattage(e.target.value)}
+            disabled={pending}
+            className="field"
+          />
+        </Field>
+        <Field label="Runs per day" htmlFor="inv-h">
+          <HoursInput id="inv-h" hours={hours} setHours={setHours} disabled={pending} />
+        </Field>
+      </div>
+
+      <div className="mt-3">
+        <Field label="Note" htmlFor="inv-note" hint="Optional — e.g. “shared with lift fan”">
+          <input
+            id="inv-note"
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            disabled={pending}
+            className="field"
+          />
+        </Field>
+      </div>
+
+      {error && (
+        <div className="mt-3">
+          <ErrorText>{error}</ErrorText>
+        </div>
+      )}
+
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" onClick={submit} disabled={pending || incomplete} className="btn-primary">
+          {pending ? "Adding…" : "Add line"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            reset();
+            setOpen(false);
+          }}
+          disabled={pending}
+          className="btn-ghost"
+        >
+          Cancel
+        </button>
+        {/* What this line will contribute, before it is saved. */}
+        {preview !== null && (
+          <span className="text-sm text-[var(--text-muted)]">
+            Adds <span className="num font-semibold">{preview.toFixed(2)}</span> kWh/day
+          </span>
+        )}
+      </div>
     </div>
   );
 }

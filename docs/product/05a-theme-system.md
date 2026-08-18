@@ -302,8 +302,11 @@ body 13.5/1.5 · small 12.5/1.45 · label 11/1.35 uppercase .07em 650 · data mo
 ### 3.4 Space, shape, elevation, motion
 
 - **Space** — 4px base, steps 4/8/12/16/24/32/48 only.
-- **Radius** — `--r-sm` 5 (fields, small controls) · `--r-md` 9 (cards, buttons — the direction's
-  signature) · `--r-lg` 12 (modals, app frame) · `--r-pill`.
+- **Radius** — `--r-sm` 10 (fields, small controls) · `--r-md` 18 (cards, buttons — the direction's
+  signature) · `--r-lg` 24 (modals, app frame) · `--r-pill`. Revised 2026-08-18 from the original
+  5/9/12 spec: implementation had already drifted to 8/12/16 with no doc update recorded, and the
+  user then asked directly for less-boxy corners ("i dont like perfect squared boxes") — actioned
+  as a real design decision and reconciled here rather than left to drift a second time.
 - **Elevation** — `e1` cards · `e2` popovers and toasts · `e3` modals. Elevation is what makes this
   Console rather than Ledger, so it is spent on layers and never on decoration.
 - **Motion** — one easing, `cubic-bezier(.2,0,0,1)`; 120ms hover, 180ms tab/toggle/dropdown, 260ms

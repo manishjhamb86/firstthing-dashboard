@@ -76,12 +76,20 @@
   --auth-panel-line: rgba(255, 255, 255, 0.12);
   --auth-glow: rgba(93, 135, 255, 0.32);
 
-  /* radius — Modernize/HeroUI roundness */
-  --r-sm: 8px;
+  /* radius — user-reported 2026-08-18: "i dont like perfect squared boxes",
+     narrowed on follow-up to specifically the buttons whose styling changed
+     this session. 05a-theme-system.md originally specced 5/9/12 (its own
+     "signature"); shipped code had already drifted to 8/12/16 with no doc
+     update recorded. --r-sm (buttons + fields, since they share a row and
+     must share a radius the same way they share --control-h) gets the
+     larger push since that is what was actually being pointed at; --r-md/
+     --r-lg (cards, dialogs) move too so nothing looks mismatched against
+     the rounder buttons sitting inside them. See 05a-theme-system.md §3.4. */
+  --r-sm: 12px;
   /* One height for inputs, selects and buttons that share a row. */
   --control-h: 40px;
-  --r-md: 12px;
-  --r-lg: 16px;
+  --r-md: 18px;
+  --r-lg: 24px;
   --r-pill: 999px;
 
   /* elevation — Modernize's soft ambient card shadow; e2 for popovers */

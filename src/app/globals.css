@@ -37,11 +37,14 @@
   --accent-hover: #3C50E0;
   --accent-subtle: #ECF2FF;
   --accent-line: #C9D7FA;
-  /* A second, deeper step of the SAME hue — .btn-secondary's fill. Not a
-     new color family, just more of this one, the way "SENDEN" row 1's blue
-     and a richer navy read as one brand rather than two competing hues. */
-  --accent-deep: #2E3F99;
-  --accent-deep-hover: #26327D;
+  /* .btn-secondary's fill: a deeper step of the SAME blue, reached by
+     lowering lightness ONLY (HSL 230/76%/59% -> 230/76%/53%). The previous
+     value also cut saturation (76% -> 54%), and that desaturation is what
+     made it read as a different, muddier color family — "doesn't match the
+     theme" (user, 2026-08-19). Hue and saturation now match --accent
+     exactly, so it is unmistakably the same blue, just weightier. */
+  --accent-deep: #2C4AE2;
+  --accent-deep-hover: #1F3FE0;
   /* .btn-secondary's own ink — white in both themes, not --text-on-accent
      (which is tuned per-theme for the lighter, theme-native primary accent
      and fails contrast against this deeper surface in dark mode). */
@@ -151,8 +154,8 @@
   --accent-hover: #93ACFF;
   --accent-subtle: #182035;
   --accent-line: #2A3A5F;
-  --accent-deep: #3850B5;
-  --accent-deep-hover: #4560E6;
+  --accent-deep: #3D67FF;
+  --accent-deep-hover: #5277FF;
   --accent-deep-ink: #FFFFFF;
   --e-btn: 0 0 0 1px rgba(255, 255, 255, 0.03);
   --e-btn-hover: 0 0 0 1px rgba(255, 255, 255, 0.05);

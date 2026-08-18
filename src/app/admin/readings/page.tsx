@@ -123,7 +123,7 @@ export default async function ReadingsPage({
         <button type="submit" className="btn-secondary">
           Show
         </button>
-        <p className="text-xs text-[var(--text-muted)] pb-2">
+        <p className="text-xs text-[var(--text-muted)] pb-[calc((var(--control-h)-1rem)/2)]">
           An explicit choice, never read from the file&apos;s own dates (INV-04).
         </p>
       </form>

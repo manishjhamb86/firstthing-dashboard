@@ -78,6 +78,8 @@
 
   /* radius — Modernize/HeroUI roundness */
   --r-sm: 8px;
+  /* One height for inputs, selects and buttons that share a row. */
+  --control-h: 40px;
   --r-md: 12px;
   --r-lg: 16px;
   --r-pill: 999px;
@@ -221,7 +223,15 @@ body {
  * call sites were sizing controls that way and getting the default instead;
  * one layer declaration fixes all of them. */
 @layer components {
+/* Every control that can sit next to another control shares one height.
+   Without this they each computed their own: .field at line-height 1.4 came
+   out ~39.6px, .btn-* at 1.2 came out ~36.8px, and a native <select> ignores
+   line-height altogether and landed shorter again — so an input, a select
+   and a button on one row were three different heights (user-reported,
+   2026-08-17). Height is a property of the control row, not of each
+   control's text. */
 .field {
+  min-height: var(--control-h);
   width: 100%;
   border: 1px solid var(--field-border);
   background: var(--surface);
@@ -249,6 +259,19 @@ body {
 .field-auto {
   width: auto;
 }
+
+/* A select's inner box is UA-drawn, so its text sits by its own rules —
+   flexing it centres the label in the shared height rather than letting it
+   ride high. */
+select.field {
+  line-height: normal;
+}
+
+textarea.field {
+  /* A textarea is sized by rows; the shared minimum would otherwise crop it
+     to one line's worth. */
+  min-height: calc(var(--control-h) * 2);
+}
 }
 
 /* buttons — all variants share real padding, radius, and motion. The old
@@ -264,6 +287,7 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  min-height: var(--control-h);
   font-size: 14px;
   font-weight: 600;
   line-height: 1.2;
@@ -281,6 +305,7 @@ body {
   cursor: not-allowed;
 }
 .btn-sm {
+  min-height: 32px;
   padding: 6px 10px;
   font-size: 12.5px;
 }

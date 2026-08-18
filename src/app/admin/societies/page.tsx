@@ -149,10 +149,11 @@ export default async function SocietiesPage({
             <thead>
               <tr>
                 <th>Society</th>
-                <th>Flats</th>
-                <th>Service lines</th>
-                <th>Circuits</th>
+                <th className="hidden md:table-cell">Flats</th>
+                <th className="hidden lg:table-cell">Service lines</th>
+                <th className="hidden md:table-cell">Circuits</th>
                 <th>Status</th>
+                <th className="hidden sm:table-cell" />
               </tr>
             </thead>
             <tbody>
@@ -172,7 +173,7 @@ export default async function SocietiesPage({
                         <div className="min-w-0">
                           <Link
                             href={`/admin/societies/${s.id}`}
-                            className="font-medium hover:underline"
+                            className="row-link font-medium hover:underline"
                           >
                             {s.name}
                           </Link>
@@ -180,8 +181,8 @@ export default async function SocietiesPage({
                         </div>
                       </div>
                     </td>
-                    <td className="num">{s.flatCount.toLocaleString("en-IN")}</td>
-                    <td>
+                    <td className="num hidden md:table-cell">{s.flatCount.toLocaleString("en-IN")}</td>
+                    <td className="hidden lg:table-cell">
                       {s.engagements.length === 0 ? (
                         <span className="text-[13px] text-[var(--text-subtle)]">None enrolled</span>
                       ) : (
@@ -201,7 +202,7 @@ export default async function SocietiesPage({
                         </span>
                       )}
                     </td>
-                    <td className="num">
+                    <td className="num hidden md:table-cell">
                       {s._count.circuits === 0 ? (
                         <span className="text-[var(--text-subtle)]">—</span>
                       ) : (
@@ -210,6 +211,10 @@ export default async function SocietiesPage({
                     </td>
                     <td>
                       <StatusChip tone={st.tone}>{st.label}</StatusChip>
+                    </td>
+                    {/* Decoration only — the whole row is the link. */}
+                    <td className="hidden sm:table-cell text-right whitespace-nowrap" aria-hidden>
+                      <span className="row-link-cue text-sm font-semibold">Open →</span>
                     </td>
                   </tr>
                 );

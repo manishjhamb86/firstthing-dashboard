@@ -454,6 +454,35 @@ textarea.field {
 .tbl tbody tr:hover {
   background: var(--surface-hover);
 }
+
+/* A listing row that navigates. The anchor stays a real anchor — keyboard
+   focus, middle-click, open-in-new-tab, screen readers all keep working —
+   and its ::after covers the row, so the whole row is the hit target without
+   wrapping a <tr> in an <a>, which is not valid HTML. Only safe on rows with
+   no other interactive element, since the overlay would sit on top of it. */
+.tbl tbody tr:has(.row-link) {
+  position: relative;
+  cursor: pointer;
+}
+
+.row-link::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+/* The affordance: a chevron that leans in on hover, so the row reads as
+   something you can open rather than just a record. */
+.row-link-cue {
+  color: var(--text-subtle);
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1), color 120ms cubic-bezier(0.2, 0, 0, 1);
+  display: inline-block;
+}
+
+.tbl tbody tr:hover .row-link-cue {
+  color: var(--accent);
+  transform: translateX(3px);
+}
 }
 
 

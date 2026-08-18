@@ -260,10 +260,28 @@ body {
   width: auto;
 }
 
-/* A select's inner box is UA-drawn, so its text sits by its own rules —
-   flexing it centres the label in the shared height rather than letting it
-   ride high. */
+/* A select keeps the platform's own menulist control unless appearance is
+   reset, and that control sizes itself: Safari/WebKit ignores min-height and
+   padding on it outright, so the shared control height silently did nothing
+   there while Chromium honoured it (user-reported, 2026-08-17 — the same row
+   measured 40px in Chromium and rendered short in Safari).
+   Resetting appearance makes it an ordinary box that obeys the height, and
+   the chevron is drawn here instead of by the OS so every browser agrees.
+   The arrow is an inline data: URI — no network request, and it inherits the
+   token colour via `stroke` in the SVG source. */
 select.field {
+  appearance: none;
+  -webkit-appearance: none;
+  line-height: normal;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8' fill='none'%3E%3Cpath d='M1 1.5 6 6.5l5-5' stroke='%236B7A90' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+/* Safari also draws the file control's button to its own rules; without this
+   the row's height comes from that button rather than from the field. */
+input[type="file"].field {
   line-height: normal;
 }
 

@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { db } from "@/lib/db";
-import { EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { CardTabs } from "@/components/tabs";
+import { PageHeader, StatusChip } from "@/components/ui";
+import { MonitoringBoard, type BoardRow } from "./board";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
 import { reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -21,20 +20,6 @@ function loggedToday(readings: { date: Date }[], now: Date) {
 
 function dayCount(readings: { status: string }[]) {
   return readings.filter((r) => r.status === "valid").length;
-}
-
-function DayStrip({ validCount }: { validCount: number }) {
-  return (
-    <span className="inline-flex gap-1 align-middle" aria-hidden>
-      {Array.from({ length: REQUIRED_VALID_DAYS }, (_, i) => (
-        <span
-          key={i}
-          className="h-1.5 w-4 rounded-full"
-          style={{ background: i < validCount ? "var(--accent)" : "var(--surface-active)" }}
-        />
-      ))}
-    </span>
-  );
 }
 
 export default async function MonitoringDashboardPage() {
@@ -125,29 +110,114 @@ export default async function MonitoringDashboardPage() {
   ).length;
   const anomaliesOpen = [...preRows, ...postRows].filter((r) => r.pendingAnomaly).length;
 
-  const tabs = [
-    { id: "review", label: "Needs review", count: openReviews.length, urgent: openReviews.length > 0 },
-    { id: "pre", label: "Pre-install", count: preRows.length },
-    { id: "post", label: "Post-install", count: postRows.length },
-    { id: "resolved", label: "Resolved", count: recentlyResolved.length },
+  // One row set, ranked by how much it needs a person. Rank decides the whole
+  // board's order, so the top of the list is always the work to do — that is
+  // what makes it safe to show everything at once instead of hiding three
+  // quarters of it behind a tab or below the fold.
+  //   0 stuck out-of-band review · 1 open anomaly holding a window
+  //   2 window with today's reading still missing · 3 window up to date
+  //   4 resolved
+  const rows: BoardRow[] = [
+    ...openReviews.map((r) => {
+      // FEAT-015-AC-3/AC-5 — the SLA wording and the repeat-outranks-overdue
+      // rule both live in reviewUrgency; the board must not restate them.
+      const u = reviewUrgency({ raisedAt: r.raisedAt, occurrence: r.occurrence, now });
+      return {
+      id: `rev-${r.id}`,
+      href: `/admin/societies/${r.circuit.societyId}/circuits/${r.circuit.id}`,
+      society: r.circuit.society.name,
+      circuit: r.circuit.location || r.circuit.lightType,
+      group: "review" as const,
+      stageLabel: u.label,
+      // A repeat failure sorts above an overdue first attempt, which sorts
+      // above one still inside its SLA — AC-5, expressed as order.
+      rank: u.repeat ? 0 : u.overdue ? 0.1 : 0.2,
+      urgent: true,
+      validCount: null,
+      requiredDays: REQUIRED_VALID_DAYS,
+      today: null,
+      signal: `${r.measuredSavingsPct.toFixed(1)}% measured`,
+      signalTone: "bad" as const,
+      };
+    }),
+    ...preRows.map((r) => ({
+      id: `pre-${r.circuit.id}`,
+      href: `/admin/societies/${r.circuit.societyId}/circuits/${r.circuit.id}`,
+      society: r.circuit.society.name,
+      circuit: r.circuit.location || r.circuit.lightType,
+      group: "pre" as const,
+      stageLabel: "Pre-install window",
+      rank: r.pendingAnomaly ? 1 : r.loggedToday ? 3 : 2,
+      urgent: r.pendingAnomaly,
+      validCount: r.validCount,
+      requiredDays: REQUIRED_VALID_DAYS,
+      today: r.pendingAnomaly ? null : ((r.loggedToday ? "logged" : "not_yet") as "logged" | "not_yet"),
+      signal: r.pendingAnomaly
+        ? "Anomaly open"
+        : r.variancePct != null
+          ? `${r.variancePct >= 0 ? "+" : ""}${r.variancePct.toFixed(1)}% vs average`
+          : "Awaiting first reading",
+      signalTone: r.pendingAnomaly ? ("warn" as const) : null,
+    })),
+    ...postRows.map((r) => {
+      const inBand =
+        r.projectedSavingsPct != null && r.projectedSavingsPct >= 60 && r.projectedSavingsPct <= 80;
+      return {
+        id: `post-${r.circuit.id}`,
+        href: `/admin/societies/${r.circuit.societyId}/circuits/${r.circuit.id}`,
+        society: r.circuit.society.name,
+        circuit: r.circuit.location || r.circuit.lightType,
+        group: "post" as const,
+        stageLabel: "Post-install window",
+        rank: r.pendingAnomaly ? 1 : r.loggedToday ? 3 : 2,
+        urgent: r.pendingAnomaly,
+        validCount: r.validCount,
+        requiredDays: REQUIRED_VALID_DAYS,
+        today: r.pendingAnomaly ? null : ((r.loggedToday ? "logged" : "not_yet") as "logged" | "not_yet"),
+        signal: r.pendingAnomaly
+          ? "Anomaly open"
+          : r.projectedSavingsPct != null
+            ? `${r.projectedSavingsPct.toFixed(1)}% so far`
+            : "Awaiting first reading",
+        signalTone: r.pendingAnomaly ? ("warn" as const) : r.projectedSavingsPct != null ? (inBand ? ("ok" as const) : ("warn" as const)) : null,
+      };
+    }),
+    ...recentlyResolved.map((c) => ({
+      id: `res-${c.id}`,
+      href: `/admin/societies/${c.societyId}/circuits/${c.id}`,
+      society: c.society.name,
+      circuit: c.location || c.lightType,
+      group: "resolved" as const,
+      stageLabel: c.state === "benchmark_confirmed" ? "Benchmark confirmed" : "Sent to review",
+      rank: 4,
+      urgent: false,
+      validCount: null,
+      requiredDays: REQUIRED_VALID_DAYS,
+      today: null,
+      signal:
+        c.benchmarkSavingsPct != null ? `${c.benchmarkSavingsPct.toFixed(1)}% confirmed` : "Out of band",
+      signalTone: c.benchmarkSavingsPct != null ? ("ok" as const) : ("warn" as const),
+    })),
   ];
 
-  // Open on the work that is stuck, not on the first tab. A tab hides its
-  // content, and the one section here that holds blocked work must not be a
-  // click away from being missed entirely.
-  const initialTab =
-    openReviews.length > 0 ? "review" : preRows.length > 0 ? "pre" : postRows.length > 0 ? "post" : "resolved";
+  const needsAttention = rows.filter((r) => r.rank <= 2).length;
 
   return (
     <>
       <PageHeader
         title="Metering monitoring"
-        subtitle="Daily status of every circuit currently in a commissioning window."
+        subtitle="Every circuit in commissioning, most urgent first."
+        chip={
+          needsAttention > 0 ? (
+            <StatusChip tone="warn">
+              {needsAttention} {needsAttention === 1 ? "needs" : "need"} attention
+            </StatusChip>
+          ) : (
+            <StatusChip tone="ok">Nothing outstanding</StatusChip>
+          )
+        }
       />
 
-      {/* Only the two facts that cut ACROSS the tabs live here — the
-          per-section counts are on the tabs themselves, so repeating them
-          would be two sources for one number. */}
       <div className="grid grid-cols-2 gap-3 mb-6 max-w-xl">
         {[
           {
@@ -169,245 +239,7 @@ export default async function MonitoringDashboardPage() {
         ))}
       </div>
 
-      <CardTabs
-        tabs={tabs}
-        initial={initialTab}
-        panels={{
-          review: (
-            <>
-              {openReviews.length === 0 ? (
-          // FEAT-015-AC-2 — an empty queue states it plainly.
-          <EmptyState title="No demo results awaiting review">
-            Every completed post-install window has landed inside CON-20&apos;s 60-80% band.
-          </EmptyState>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Society</th>
-                  <th>Circuit</th>
-                  <th>Measured</th>
-                  <th>Baseline</th>
-                  <th>Raised</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openReviews.map((r) => {
-                  const u = reviewUrgency({ raisedAt: r.raisedAt, occurrence: r.occurrence, now });
-                  return (
-                    <tr key={r.id}>
-                      <td>{r.circuit.society.name}</td>
-                      <td>
-                        <Link
-                          href={`/admin/societies/${r.circuit.societyId}/circuits/${r.circuitId}`}
-                          className="underline"
-                        >
-                          {r.circuit.location || r.circuit.lightType}
-                        </Link>
-                      </td>
-                      <td className="num">{r.measuredSavingsPct.toFixed(1)}%</td>
-                      <td className="num">{r.preInstallBaseline.toFixed(2)} kWh/day</td>
-                      <td className="num text-[var(--text-muted)]">
-                        {r.raisedAt.toISOString().slice(0, 10)}
-                      </td>
-                      <td>
-                        <StatusChip tone={u.tone}>{u.label}</StatusChip>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-            </>
-          ),
-          pre: (
-            <>
-              {preRows.length === 0 ? (
-          <EmptyState title="No active pre-install windows">
-            A circuit appears here once its meter is installed and load-validated.
-          </EmptyState>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Society</th>
-                  <th>Circuit</th>
-                  <th>Progress</th>
-                  <th>Today</th>
-                  <th>Latest vs. average</th>
-                </tr>
-              </thead>
-              <tbody>
-                {preRows.map((row) => (
-                  <tr key={row.circuit.id}>
-                    <td>
-                      <Link
-                        href={`/admin/societies/${row.circuit.societyId}/circuits/${row.circuit.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {row.circuit.society.name}
-                      </Link>
-                    </td>
-                    <td className="text-[var(--text-muted)]">{row.circuit.location || row.circuit.lightType}</td>
-                    <td>
-                      <span className="flex items-center gap-2">
-                        <DayStrip validCount={row.validCount} />
-                        <span className="num text-xs text-[var(--text-muted)]">
-                          {row.validCount}/{REQUIRED_VALID_DAYS}
-                        </span>
-                      </span>
-                    </td>
-                    <td>
-                      {row.pendingAnomaly ? (
-                        <span className="text-[var(--text-muted)]">—</span>
-                      ) : row.loggedToday ? (
-                        <StatusChip tone="ok">Logged</StatusChip>
-                      ) : (
-                        <StatusChip tone="warn">Not yet</StatusChip>
-                      )}
-                    </td>
-                    <td>
-                      {row.pendingAnomaly ? (
-                        <StatusChip tone="warn">Anomaly open</StatusChip>
-                      ) : row.variancePct != null ? (
-                        <span className="num">
-                          {row.variancePct >= 0 ? "+" : ""}
-                          {row.variancePct.toFixed(1)}%
-                        </span>
-                      ) : (
-                        <span className="text-[var(--text-muted)]">Awaiting first reading</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-            </>
-          ),
-          post: (
-            <>
-              {postRows.length === 0 ? (
-          <EmptyState title="No active post-install windows">
-            A circuit appears here once its lights are replaced and the completion gate pass is submitted.
-          </EmptyState>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Society</th>
-                  <th>Circuit</th>
-                  <th>Progress</th>
-                  <th>Today</th>
-                  <th>Projected savings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {postRows.map((row) => {
-                  const inBand =
-                    row.projectedSavingsPct != null &&
-                    row.projectedSavingsPct >= 60 &&
-                    row.projectedSavingsPct <= 80;
-                  return (
-                    <tr key={row.circuit.id}>
-                      <td>
-                        <Link
-                          href={`/admin/societies/${row.circuit.societyId}/circuits/${row.circuit.id}`}
-                          className="font-medium hover:underline"
-                        >
-                          {row.circuit.society.name}
-                        </Link>
-                      </td>
-                      <td className="text-[var(--text-muted)]">{row.circuit.location || row.circuit.lightType}</td>
-                      <td>
-                        <span className="flex items-center gap-2">
-                          <DayStrip validCount={row.validCount} />
-                          <span className="num text-xs text-[var(--text-muted)]">
-                            {row.validCount}/{REQUIRED_VALID_DAYS}
-                          </span>
-                        </span>
-                      </td>
-                      <td>
-                        {row.pendingAnomaly ? (
-                          <span className="text-[var(--text-muted)]">—</span>
-                        ) : row.loggedToday ? (
-                          <StatusChip tone="ok">Logged</StatusChip>
-                        ) : (
-                          <StatusChip tone="warn">Not yet</StatusChip>
-                        )}
-                      </td>
-                      <td>
-                        {row.pendingAnomaly ? (
-                          <StatusChip tone="warn">Anomaly open</StatusChip>
-                        ) : row.projectedSavingsPct != null ? (
-                          <StatusChip tone={inBand ? "ok" : "warn"}>
-                            {row.projectedSavingsPct.toFixed(1)}% so far
-                          </StatusChip>
-                        ) : (
-                          <span className="text-[var(--text-muted)]">Awaiting first reading</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-            </>
-          ),
-          resolved: (
-            <>
-              {recentlyResolved.length === 0 ? (
-          <EmptyState title="Nothing commissioned yet">
-            No circuit has completed benchmark commissioning yet.
-          </EmptyState>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Society</th>
-                  <th>Circuit</th>
-                  <th>Outcome</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentlyResolved.map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <Link
-                        href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
-                        className="font-medium hover:underline"
-                      >
-                        {c.society.name}
-                      </Link>
-                    </td>
-                    <td className="text-[var(--text-muted)]">{c.location || c.lightType}</td>
-                    <td>
-                      {c.state === "benchmark_confirmed" && c.benchmarkSavingsPct != null ? (
-                        <StatusChip tone="ok">{c.benchmarkSavingsPct.toFixed(1)}% confirmed</StatusChip>
-                      ) : (
-                        <StatusChip tone="warn">Outside CON-20 band — under review</StatusChip>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-            </>
-          ),
-        }}
-      />
+      <MonitoringBoard rows={rows} />
     </>
   );
 }

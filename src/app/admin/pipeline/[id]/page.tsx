@@ -111,16 +111,18 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,26rem)_minmax(0,22rem)] items-start mb-6">
+      <div className="grid gap-6 lg:grid-cols-12 items-start mb-6">
         {/* The deal's map — every stage in spine order, exactly one current,
             locked stages unlinked and saying what unlocks them. This
             replaces the old row of six identical buttons. */}
-        <Card className="p-6">
-          <CardTitle>Deal progress</CardTitle>
-          <DealStepper steps={progress.steps} />
-        </Card>
+        <div className="lg:col-span-7 min-w-0">
+          <Card className="p-6">
+            <CardTitle>Deal progress</CardTitle>
+            <DealStepper steps={progress.steps} />
+          </Card>
+        </div>
 
-        <div className="space-y-6">
+        <div className="lg:col-span-5 min-w-0 space-y-6">
           <Card className="p-6">
             <CardTitle>Lead details</CardTitle>
             <dl className="space-y-2.5 text-sm">

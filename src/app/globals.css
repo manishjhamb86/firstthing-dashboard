@@ -37,6 +37,23 @@
   --accent-hover: #3C50E0;
   --accent-subtle: #ECF2FF;
   --accent-line: #C9D7FA;
+  /* A second, deeper step of the SAME hue — .btn-secondary's fill. Not a
+     new color family, just more of this one, the way "SENDEN" row 1's blue
+     and a richer navy read as one brand rather than two competing hues. */
+  --accent-deep: #2E3F99;
+  --accent-deep-hover: #26327D;
+  /* .btn-secondary's own ink — white in both themes, not --text-on-accent
+     (which is tuned per-theme for the lighter, theme-native primary accent
+     and fails contrast against this deeper surface in dark mode). */
+  --accent-deep-ink: #FFFFFF;
+  /* Button shadows carry the accent's own hue (a colored lift, not a plain
+     grey drop shadow) — matching DIR-02's elevation-led read, extended to a
+     component that had none. */
+  --e-btn: 0 1px 2px rgba(20, 30, 70, 0.06), 0 4px 10px rgba(69, 96, 230, 0.22);
+  --e-btn-hover: 0 2px 4px rgba(20, 30, 70, 0.08), 0 8px 18px rgba(69, 96, 230, 0.28);
+  /* Same lift, neutral rather than accent-tinted — for solid buttons whose
+     own hue is not the accent (tone-ok green, tone-warn amber). */
+  --e-btn-neutral: 0 1px 2px rgba(20, 30, 70, 0.06), 0 4px 10px rgba(20, 30, 70, 0.14);
   --signal: #B8E23F;
   --signal-ink: #1C2434;
   --ok-bg: #E4FBF6;
@@ -134,6 +151,12 @@
   --accent-hover: #93ACFF;
   --accent-subtle: #182035;
   --accent-line: #2A3A5F;
+  --accent-deep: #3850B5;
+  --accent-deep-hover: #4560E6;
+  --accent-deep-ink: #FFFFFF;
+  --e-btn: 0 0 0 1px rgba(255, 255, 255, 0.03);
+  --e-btn-hover: 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --e-btn-neutral: 0 0 0 1px rgba(255, 255, 255, 0.03);
   --signal: #B8E23F;
   --signal-ink: #09090B;
   --ok-bg: #0E2A25;
@@ -336,30 +359,36 @@ textarea.field {
   font-size: 12.5px;
 }
 
+/* Solid + a hue-tinted shadow, not a flat fill — round two of the same
+   complaint (2026-08-18): a pale tint read as "neglected" too. The shadow
+   is what a flat fill can't give on its own: the reference buttons the user
+   pointed at all have real lift under them. Radius is DELIBERATELY untouched
+   here — a separate, earlier ask, and the user was explicit today it stays
+   exactly where it is regardless of what else changes in this pass. */
 .btn-primary {
   background: var(--accent);
   color: var(--text-on-accent);
+  box-shadow: var(--e-btn);
 }
 .btn-primary:hover:not(:disabled) {
   background: var(--accent-hover);
+  box-shadow: var(--e-btn-hover);
 }
 
-/* .btn-secondary was the one variant with no color identity — .btn-primary
-   is accent-filled, .btn-ghost is accent text, .btn-danger is already
-   red-tinted — so every "Add", "Enroll", "Log a lead" style action across
-   the app rendered as plain grey-on-white (user-reported, 2026-08-18: "the
-   buttons... rightnow it feels like neglected... same pattern should follow
-   everywhere"). Tinted the same way .btn-danger already tints red, reusing
-   the accent tokens the KPI tiles and .btn-ghost already use, so it reads as
-   this product's existing color language rather than a new one. One change
-   here reaches all ~24 call sites at once — that IS "everywhere". */
+/* .btn-secondary — a second, deeper step of the SAME accent hue, not a
+   different color. Two solid blues of different depth is one brand line
+   with two weights (primary = the one action on the view; secondary = a
+   real but lesser action) — closer to what "SENDEN" row 1 actually does
+   than a rainbow of unrelated hues would be, and it stays inside tokens
+   this theme already owns rather than importing a new one. */
 .btn-secondary {
-  background: var(--accent-subtle);
-  color: var(--accent);
-  border: 1px solid var(--accent-line);
+  background: var(--accent-deep);
+  color: var(--accent-deep-ink);
+  box-shadow: var(--e-btn);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: var(--accent-line);
+  background: var(--accent-deep-hover);
+  box-shadow: var(--e-btn-hover);
 }
 
 .btn-ghost {
@@ -412,6 +441,7 @@ textarea.field {
   background: var(--ok-fg);
   color: var(--text-on-accent);
   border: 1px solid var(--ok-fg);
+  box-shadow: var(--e-btn-neutral);
 }
 .btn-tone-ok:hover:not(:disabled) {
   filter: brightness(0.92);
@@ -425,6 +455,7 @@ textarea.field {
   background: var(--warn-fg);
   color: var(--text-on-accent);
   border: 1px solid var(--warn-fg);
+  box-shadow: var(--e-btn-neutral);
 }
 .btn-tone-warn:hover:not(:disabled) {
   filter: brightness(0.92);

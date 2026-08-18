@@ -67,12 +67,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         subtitle={`${society.location} · ${society.flatCount} flats`}
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/admin/societies/${society.id}/circuits`} className="btn-secondary btn-sm">
+            <Link href={`/admin/societies/${society.id}/circuits`} className="btn-outline btn-sm">
               Circuit registry
             </Link>
             {/* Arriving from this society, the form should not ask again which
                 society it is — the id rides along and is preselected. */}
-            <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="btn-secondary btn-sm">
+            <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="btn-outline btn-sm">
               Log a lead
             </Link>
             <AddPortalAccountButton societyId={society.id} variant="secondary" />

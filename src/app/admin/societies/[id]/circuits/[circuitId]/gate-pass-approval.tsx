@@ -25,7 +25,7 @@ export function GatePassApproval({ gatePassId }: { gatePassId: string }) {
 
   return (
     <div className="flex flex-wrap items-center gap-2 pt-1">
-      <button type="button" onClick={approve} disabled={pending} className="btn-primary btn-sm">
+      <button type="button" onClick={approve} disabled={pending} className="btn-tone-ok btn-sm">
         Approve
       </button>
       <input

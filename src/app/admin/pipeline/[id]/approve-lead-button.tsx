@@ -16,7 +16,7 @@ export function ApproveLeadButton({ pipelineId }: { pipelineId: string }) {
   }
 
   return (
-    <button type="button" onClick={approve} disabled={pending} className="btn-primary btn-sm">
+    <button type="button" onClick={approve} disabled={pending} className="btn-tone-ok btn-sm">
       {pending ? "Approving…" : "Approve — this lead is mine"}
     </button>
   );

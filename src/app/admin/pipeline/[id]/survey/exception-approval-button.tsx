@@ -31,7 +31,7 @@ export function ExceptionApprovalButton({ circuitId }: { circuitId: string }) {
         type="button"
         onClick={approve}
         disabled={pending || !reason.trim()}
-        className="btn-ghost btn-sm"
+        className="btn-tone-ok btn-sm"
       >
         {pending ? "Approving…" : "Approve exception"}
       </button>

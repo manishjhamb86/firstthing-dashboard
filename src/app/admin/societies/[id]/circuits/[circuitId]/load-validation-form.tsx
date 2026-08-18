@@ -93,7 +93,7 @@ export function LoadValidationForm({
             type="button"
             onClick={submitOverride}
             disabled={pending || !overrideReason.trim()}
-            className="btn-secondary"
+            className="btn-tone-warn"
           >
             Override & proceed
           </button>

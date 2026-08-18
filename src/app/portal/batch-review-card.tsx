@@ -198,7 +198,7 @@ export function BatchReviewCard({
                 costs a crew a day. Disputing is deliberately harder. */}
             <button
               type="button"
-              className="btn-primary"
+              className="btn-tone-ok"
               disabled={busy}
               onClick={() =>
                 startTransition(async () => {

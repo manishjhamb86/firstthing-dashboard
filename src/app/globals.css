@@ -336,13 +336,22 @@ textarea.field {
   background: var(--accent-hover);
 }
 
+/* .btn-secondary was the one variant with no color identity — .btn-primary
+   is accent-filled, .btn-ghost is accent text, .btn-danger is already
+   red-tinted — so every "Add", "Enroll", "Log a lead" style action across
+   the app rendered as plain grey-on-white (user-reported, 2026-08-18: "the
+   buttons... rightnow it feels like neglected... same pattern should follow
+   everywhere"). Tinted the same way .btn-danger already tints red, reusing
+   the accent tokens the KPI tiles and .btn-ghost already use, so it reads as
+   this product's existing color language rather than a new one. One change
+   here reaches all ~24 call sites at once — that IS "everywhere". */
 .btn-secondary {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--field-border);
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
 }
 .btn-secondary:hover:not(:disabled) {
-  background: var(--surface-hover);
+  background: var(--accent-line);
 }
 
 .btn-ghost {
@@ -360,6 +369,57 @@ textarea.field {
 }
 .btn-danger:hover:not(:disabled) {
   background: var(--bad-bg);
+}
+
+/* Three more variants, added deliberately rather than decoratively — each
+   closes a real gap found by auditing what this app's buttons actually do,
+   not picked from a swatch. All three stay inside the palette this product
+   already uses everywhere else (the accent, and the same five chip tones
+   status pills already carry) rather than adopting a new hue or a gradient,
+   which would read as a different product's design system dropped into
+   this one (user asked which of three reference sheets "fit our theme" —
+   answer: none of them as-is; their PRINCIPLE — solid vs. tinted vs.
+   outlined, one hue per meaning — is what's borrowed here).
+
+   .btn-outline — a real secondary action that must not compete with a
+   .btn-primary or .btn-secondary already on the same view. Border carries
+   the color, fill stays empty. */
+.btn-outline {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+}
+.btn-outline:hover:not(:disabled) {
+  background: var(--accent-subtle);
+}
+
+/* .btn-tone-ok — every real "Approve" action in this app (a batch review
+   against CON-21's 3-hour deadline, a gate pass, a pending-approval lead, a
+   CON-16 exception) was rendered .btn-primary or, worse, .btn-ghost — the
+   same blue as "Create", or nearly invisible, for the single most
+   consequential click on several of these screens. Solid fill using the
+   already-established --ok-fg token (the same green "Active"/"Confirmed"
+   chips use) makes approval read as approval. */
+.btn-tone-ok {
+  background: var(--ok-fg);
+  color: var(--text-on-accent);
+  border: 1px solid var(--ok-fg);
+}
+.btn-tone-ok:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+/* .btn-tone-warn — "Override & proceed" (a deliberate override of a failed
+   CON-17 load-validation check) was plain .btn-secondary, indistinguishable
+   from an ordinary save. This is not that; amber says so before the label
+   does. */
+.btn-tone-warn {
+  background: var(--warn-fg);
+  color: var(--text-on-accent);
+  border: 1px solid var(--warn-fg);
+}
+.btn-tone-warn:hover:not(:disabled) {
+  filter: brightness(0.92);
 }
 
 /* status chip — tinted pill + dot, §3.7. Colour is never the only carrier:

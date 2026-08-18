@@ -507,7 +507,11 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
           type="button"
           onClick={save}
           disabled={pending || (liveSummary?.kept ?? 0) === 0}
-          className="btn-primary"
+          // The brand's lime, used here and effectively nowhere else:
+          // docs/product/brand/ gives it one meaning, "lime marks a verified
+          // value", and this is the click that turns reviewed rows into
+          // stored readings a baseline and a bill will rest on.
+          className="btn-signal"
         >
           Save {liveSummary?.kept ?? 0} reading{(liveSummary?.kept ?? 0) === 1 ? "" : "s"}
         </button>

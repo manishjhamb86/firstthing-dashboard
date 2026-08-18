@@ -334,7 +334,13 @@ textarea.field {
 .btn-primary,
 .btn-secondary,
 .btn-ghost,
-.btn-danger {
+.btn-danger,
+.btn-tone-ok,
+.btn-tone-warn,
+.btn-tone-bad,
+.btn-tone-info,
+.btn-signal,
+.btn-outline {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -352,7 +358,13 @@ textarea.field {
 .btn-primary:disabled,
 .btn-secondary:disabled,
 .btn-ghost:disabled,
-.btn-danger:disabled {
+.btn-danger:disabled,
+.btn-tone-ok:disabled,
+.btn-tone-warn:disabled,
+.btn-tone-bad:disabled,
+.btn-tone-info:disabled,
+.btn-signal:disabled,
+.btn-outline:disabled {
   opacity: 0.55;
   cursor: not-allowed;
 }
@@ -462,6 +474,50 @@ textarea.field {
 }
 .btn-tone-warn:hover:not(:disabled) {
   filter: brightness(0.92);
+}
+
+/* .btn-tone-bad — the CONFIRMING half of a destructive act (the submit
+   inside a dispute or skip-gate form), where .btn-danger's quiet outline is
+   the right weight for the row-level trigger that merely opens it. Two
+   weights of the same red: one to start, one to mean it. */
+.btn-tone-bad {
+  background: var(--bad-fg);
+  color: var(--text-on-accent);
+  border: 1px solid var(--bad-fg);
+  box-shadow: var(--e-btn-neutral);
+}
+.btn-tone-bad:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+/* .btn-tone-info — informational output: print, export, open a report. A
+   deeper, greener blue than --accent, so it reads as a different KIND of
+   action rather than a second primary competing for the same attention. */
+.btn-tone-info {
+  background: var(--info-fg);
+  color: var(--text-on-accent);
+  border: 1px solid var(--info-fg);
+  box-shadow: var(--e-btn-neutral);
+}
+.btn-tone-info:hover:not(:disabled) {
+  filter: brightness(0.92);
+}
+
+/* .btn-signal — the brand's own lime, the one colour in this system that is
+   neither accent nor status. docs/product/brand/ gives it exactly one
+   meaning ("lime marks a verified value"), so it gets exactly one job here:
+   the act that turns reviewed readings into a stored, verified figure.
+   Reserved deliberately — the moment it decorates an ordinary button it
+   stops meaning anything. Ink is --signal-ink in both themes, since lime
+   stays light on either ground (white on it measures 1.50:1). */
+.btn-signal {
+  background: var(--signal);
+  color: var(--signal-ink);
+  border: 1px solid var(--signal);
+  box-shadow: var(--e-btn-neutral);
+}
+.btn-signal:hover:not(:disabled) {
+  filter: brightness(0.95);
 }
 
 /* status chip — tinted pill + dot, §3.7. Colour is never the only carrier:

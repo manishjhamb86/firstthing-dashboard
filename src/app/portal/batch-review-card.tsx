@@ -181,7 +181,7 @@ export function BatchReviewCard({
             />
           </Field>
           <div className="flex flex-wrap gap-2">
-            <button type="submit" className="btn-danger" disabled={busy}>
+            <button type="submit" className="btn-tone-bad" disabled={busy}>
               {uploading ? "Uploading…" : pending ? "Sending…" : "Send the dispute"}
             </button>
             <button type="button" className="btn-ghost" onClick={() => setDisputing(false)}>

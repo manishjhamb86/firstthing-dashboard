@@ -419,7 +419,7 @@ export function SkipGateForm({ pipelineId, plannedDayId }: { pipelineId: string;
         <textarea id="skip-reason" className="field" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} required />
       </Field>
       <div className="flex gap-2">
-        <button type="submit" className="btn-danger btn-sm" disabled={pending}>
+        <button type="submit" className="btn-tone-bad btn-sm" disabled={pending}>
           {pending ? "Recording…" : "Use the skip"}
         </button>
         <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>

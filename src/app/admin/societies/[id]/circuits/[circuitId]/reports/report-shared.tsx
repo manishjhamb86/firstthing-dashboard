@@ -6,7 +6,7 @@ import { raisePreInstallInvestigation } from "../reading-actions";
 
 export function PrintButton() {
   return (
-    <button type="button" onClick={() => window.print()} className="btn-secondary no-print">
+    <button type="button" onClick={() => window.print()} className="btn-tone-info no-print">
       Print / save as PDF
     </button>
   );

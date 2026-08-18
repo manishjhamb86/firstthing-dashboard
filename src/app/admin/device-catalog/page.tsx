@@ -21,6 +21,7 @@ export default async function DeviceCatalogPage() {
   const originals = types.filter((t) => t.role === "original");
   const replacements = types.filter((t) => t.role === "replacement");
   const activeReplacements = replacements.filter((t) => t.active).map((t) => ({ id: t.id, name: t.name }));
+  const unmapped = originals.filter((t) => t.active && t.replacementOptions.length === 0);
 
   return (
     <>
@@ -29,8 +30,54 @@ export default async function DeviceCatalogPage() {
         subtitle="What the inventory and replacement dropdowns offer. Each original device maps to the 1-5 replacements compatible with it."
       />
 
+      {/* An original with no compatible replacement is a dead end for the
+          installer: the replacement dropdown reads this mapping, so that
+          device can be surveyed onto a circuit and then never recorded as
+          replaced. The catalog knew this and never said it. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 max-w-5xl">
+        {[
+          {
+            label: "Devices found on site",
+            value: originals.filter((t) => t.active).length,
+            detail: `${originals.length} in the catalog`,
+          },
+          {
+            label: "Replacements offered",
+            value: replacements.filter((t) => t.active).length,
+            detail: `${replacements.length} in the catalog`,
+          },
+          {
+            label: "Without a replacement",
+            value: unmapped.length,
+            detail: unmapped.length === 0 ? "every device is covered" : "installer has nothing to pick",
+          },
+          {
+            label: "Retired",
+            value: types.filter((t) => !t.active).length,
+            detail: "hidden from dropdowns",
+          },
+        ].map((f) => (
+          <div key={f.label} className="card p-4">
+            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
+            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
+            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      {unmapped.length > 0 && (
+        <p
+          className="max-w-5xl mb-6 rounded-[var(--r-sm)] border p-3 text-sm"
+          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+        >
+          {unmapped.length === 1 ? "One active device has" : `${unmapped.length} active devices have`} no
+          compatible replacement mapped: {unmapped.map((t) => t.name).join(", ")}. A circuit carrying{" "}
+          {unmapped.length === 1 ? "it" : "them"} cannot have its replacement recorded at installation.
+        </p>
+      )}
+
       <div className="grid gap-8 lg:grid-cols-2 max-w-5xl">
-        <section className="space-y-4">
+        <section className="space-y-4 min-w-0">
           <CardTitle>Devices found on circuits</CardTitle>
           {originals.length === 0 ? (
             <EmptyState title="No original devices yet">
@@ -71,7 +118,7 @@ export default async function DeviceCatalogPage() {
           {canEdit && <NewDeviceTypeForm role="original" />}
         </section>
 
-        <section className="space-y-4">
+        <section className="space-y-4 min-w-0">
           <CardTitle>FirsThing replacement devices</CardTitle>
           {replacements.length === 0 ? (
             <EmptyState title="No replacement devices yet">

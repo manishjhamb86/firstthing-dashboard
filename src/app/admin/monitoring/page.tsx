@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { CardTabs } from "@/components/tabs";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
 import { reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -115,14 +116,27 @@ export default async function MonitoringDashboardPage() {
     };
   });
 
+  // Four stacked empty states is not a dashboard; when there is genuinely
+  // nothing in flight, say that once.
+
   const activeWindows = preRows.length + postRows.length;
   const awaitingToday = [...preRows, ...postRows].filter(
     (r) => !r.loggedToday && !r.pendingAnomaly,
   ).length;
   const anomaliesOpen = [...preRows, ...postRows].filter((r) => r.pendingAnomaly).length;
-  // Four stacked empty states is not a dashboard; when there is genuinely
-  // nothing in flight, say that once.
-  const nothingInFlight = openReviews.length === 0 && activeWindows === 0;
+
+  const tabs = [
+    { id: "review", label: "Needs review", count: openReviews.length, urgent: openReviews.length > 0 },
+    { id: "pre", label: "Pre-install", count: preRows.length },
+    { id: "post", label: "Post-install", count: postRows.length },
+    { id: "resolved", label: "Resolved", count: recentlyResolved.length },
+  ];
+
+  // Open on the work that is stuck, not on the first tab. A tab hides its
+  // content, and the one section here that holds blocked work must not be a
+  // click away from being missed entirely.
+  const initialTab =
+    openReviews.length > 0 ? "review" : preRows.length > 0 ? "pre" : postRows.length > 0 ? "post" : "resolved";
 
   return (
     <>
@@ -131,26 +145,15 @@ export default async function MonitoringDashboardPage() {
         subtitle="Daily status of every circuit currently in a commissioning window."
       />
 
-      {/* The board's own facts. "Awaiting today's reading" is the question
-          this screen exists to answer and the one it never actually stated —
-          a window needs one reading per day, and a day missed is a day the
-          window does not advance. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+      {/* Only the two facts that cut ACROSS the tabs live here — the
+          per-section counts are on the tabs themselves, so repeating them
+          would be two sources for one number. */}
+      <div className="grid grid-cols-2 gap-3 mb-6 max-w-xl">
         {[
           {
             label: "Awaiting today's reading",
             value: awaitingToday,
             detail: activeWindows === 0 ? "no active windows" : `of ${activeWindows} active window${activeWindows === 1 ? "" : "s"}`,
-          },
-          {
-            label: "Stuck on review",
-            value: openReviews.length,
-            detail: openReviews.length === 0 ? "nothing out of band" : "out of CON-20's band",
-          },
-          {
-            label: "Windows in progress",
-            value: activeWindows,
-            detail: `${preRows.length} pre · ${postRows.length} post`,
           },
           {
             label: "Anomalies open",
@@ -159,33 +162,26 @@ export default async function MonitoringDashboardPage() {
           },
         ].map((f) => (
           <div key={f.label} className="card p-4">
-            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
+            <p className="lbl mb-1.5">{f.label}</p>
             <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
             <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
           </div>
         ))}
       </div>
 
-      {nothingInFlight ? (
-        <Card className="p-6">
-          <EmptyState title="Nothing in a commissioning window">
-            No circuit is currently mid-window and nothing is awaiting review. A circuit appears
-            here the day after its meter is installed, and stays until its benchmark is confirmed.
-          </EmptyState>
-        </Card>
-      ) : (
-        <>
-      {/* FEAT-015 — sits first because it is the only section here holding
-          work that is stuck rather than merely in progress. */}
-      <section className="mb-8">
-        <h2 className="text-[15px] font-semibold mb-3">Out-of-range demo results</h2>
-        {openReviews.length === 0 ? (
+      <CardTabs
+        tabs={tabs}
+        initial={initialTab}
+        panels={{
+          review: (
+            <>
+              {openReviews.length === 0 ? (
           // FEAT-015-AC-2 — an empty queue states it plainly.
           <EmptyState title="No demo results awaiting review">
             Every completed post-install window has landed inside CON-20&apos;s 60-80% band.
           </EmptyState>
         ) : (
-          <Card className="overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -224,18 +220,18 @@ export default async function MonitoringDashboardPage() {
                 })}
               </tbody>
             </table>
-          </Card>
+          </div>
         )}
-      </section>
-
-      <section className="mb-8">
-        <h2 className="text-[15px] font-semibold mb-3">Pre-install baseline windows</h2>
-        {preRows.length === 0 ? (
+            </>
+          ),
+          pre: (
+            <>
+              {preRows.length === 0 ? (
           <EmptyState title="No active pre-install windows">
             A circuit appears here once its meter is installed and load-validated.
           </EmptyState>
         ) : (
-          <Card className="overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -291,18 +287,18 @@ export default async function MonitoringDashboardPage() {
                 ))}
               </tbody>
             </table>
-          </Card>
+          </div>
         )}
-      </section>
-
-      <section className="mb-8">
-        <h2 className="text-[15px] font-semibold mb-3">Post-install windows — live benchmark trend</h2>
-        {postRows.length === 0 ? (
+            </>
+          ),
+          post: (
+            <>
+              {postRows.length === 0 ? (
           <EmptyState title="No active post-install windows">
             A circuit appears here once its lights are replaced and the completion gate pass is submitted.
           </EmptyState>
         ) : (
-          <Card className="overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -363,21 +359,18 @@ export default async function MonitoringDashboardPage() {
                 })}
               </tbody>
             </table>
-          </Card>
+          </div>
         )}
-      </section>
-
-        </>
-      )}
-
-      <section>
-        <h2 className="text-[15px] font-semibold mb-3">Recently resolved</h2>
-        {recentlyResolved.length === 0 ? (
+            </>
+          ),
+          resolved: (
+            <>
+              {recentlyResolved.length === 0 ? (
           <EmptyState title="Nothing commissioned yet">
             No circuit has completed benchmark commissioning yet.
           </EmptyState>
         ) : (
-          <Card className="overflow-x-auto">
+          <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -409,9 +402,12 @@ export default async function MonitoringDashboardPage() {
                 ))}
               </tbody>
             </table>
-          </Card>
+          </div>
         )}
-      </section>
+            </>
+          ),
+        }}
+      />
     </>
   );
 }

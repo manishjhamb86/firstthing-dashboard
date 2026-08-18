@@ -87,7 +87,7 @@ export async function submitCircuitCandidate(input: {
     return { error: "Record at least one device line — the circuit's inventory is what everything downstream compares against." };
   }
   const types = await db.deviceType.findMany({
-    where: { id: { in: input.lines.map((l) => l.deviceTypeId) }, role: "original", active: true },
+    where: { id: { in: input.lines.map((l) => l.deviceTypeId) }, role: "original", active: true, deletedAt: null },
   });
   const typeById = new Map(types.map((t) => [t.id, t]));
   for (const line of input.lines) {

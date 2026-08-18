@@ -36,7 +36,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
 
   // CON-45 — the candidate form's device dropdowns read the catalog.
   const catalogOriginals = await db.deviceType.findMany({
-    where: { role: "original", active: true },
+    where: { role: "original", active: true, deletedAt: null },
     orderBy: { name: "asc" },
     select: { id: true, name: true, defaultWattage: true },
   });

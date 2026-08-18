@@ -112,7 +112,7 @@ export default async function CircuitDetailPage({
 
   // CON-45 — the inventory dropdown reads the catalog's active originals.
   const catalogOriginals = await db.deviceType.findMany({
-    where: { role: "original", active: true },
+    where: { role: "original", active: true, deletedAt: null },
     orderBy: { name: "asc" },
     select: { id: true, name: true, defaultWattage: true },
   });

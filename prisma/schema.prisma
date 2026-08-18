@@ -437,6 +437,7 @@ model AdminUser {
   rawReadingsUploaded RawReadingFile[]     @relation("RawReadingUploadedBy")
   anomaliesResolved   ReadingAnomaly[]     @relation("ReadingAnomalyResolvedBy")
   coverageAccepted    CoverageAcceptance[] @relation("CoverageAcceptedBy")
+  deviceTypesDeleted  DeviceType[]         @relation("DeviceTypeDeletedBy")
 
   @@map("admin_users")
 }
@@ -2094,10 +2095,20 @@ model DeviceType {
   active         Boolean    @default(true)
   createdAt      DateTime   @default(now()) @map("created_at")
 
+  // Soft delete. A device type is referenced by every CircuitDevice line
+  // recorded against it — a load inventory that produced a theoretical
+  // figure a baseline was judged against. Removing the row would either fail
+  // on those references or leave inventory lines pointing at nothing, so
+  // removal only hides it from the pickers.
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+
   // 1-5 compatible replacements per original type — the installer picking a
   // replacement only ever sees this mapped list, never the whole catalog.
   replacementOptions DeviceReplacementOption[] @relation("OriginalType")
   replacementFor     DeviceReplacementOption[] @relation("ReplacementType")
+
+  deletedBy AdminUser? @relation("DeviceTypeDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
 
   circuitDevices      CircuitDevice[] @relation("CircuitDeviceType")
   circuitReplacements CircuitDevice[] @relation("CircuitReplacementType")

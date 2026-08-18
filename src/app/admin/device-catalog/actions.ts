@@ -94,7 +94,7 @@ export async function setReplacementOptions(
   }
 
   const replacements = await db.deviceType.findMany({
-    where: { id: { in: unique }, role: "replacement" },
+    where: { id: { in: unique }, role: "replacement", deletedAt: null },
   });
   if (replacements.length !== unique.length) {
     return { error: "Every mapped entry must be an existing replacement-role device." };
@@ -111,6 +111,94 @@ export async function setReplacementOptions(
     originalTypeId,
     count: unique.length,
   });
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+export async function updateDeviceType(input: {
+  id: string;
+  name: string;
+  defaultWattage: number | null;
+  active: boolean;
+}): Promise<Outcome> {
+  const admin = await requireCatalogEditor();
+  if (!admin) {
+    logger.warn("catalog.update_refused", { id: input.id });
+    return { error: "Maintaining the device catalog is an operations-lead action." };
+  }
+
+  const name = input.name.trim();
+  if (name.length < 2) return { error: "Name the device — that's what every dropdown shows." };
+  if (
+    input.defaultWattage !== null &&
+    (!Number.isFinite(input.defaultWattage) || input.defaultWattage <= 0 || input.defaultWattage > 2000)
+  ) {
+    return { error: "Default wattage must be between 1 and 2000 W, or left blank." };
+  }
+
+  // The name is the unique key and every dropdown's label, so a rename must
+  // not silently collide with another row.
+  const clash = await db.deviceType.findFirst({ where: { name, id: { not: input.id } } });
+  if (clash) return { error: `"${name}" is already in the catalog.` };
+
+  // The ROLE is deliberately not editable. Flipping an original to a
+  // replacement (or back) would strand every mapping and every recorded
+  // inventory line that was made under the old meaning — remove it and add
+  // the right one instead, which leaves both facts on the record.
+  await db.deviceType.update({
+    where: { id: input.id },
+    data: { name, defaultWattage: input.defaultWattage, active: input.active },
+  });
+  logger.info("catalog.device_type_updated", { actorId: admin.id, id: input.id, name });
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+export async function deleteDeviceType(id: string): Promise<Outcome> {
+  const admin = await requireCatalogEditor();
+  if (!admin) {
+    logger.warn("catalog.delete_refused", { id });
+    return { error: "Maintaining the device catalog is an operations-lead action." };
+  }
+
+  const target = await db.deviceType.findUnique({
+    where: { id },
+    include: { _count: { select: { circuitDevices: true, circuitReplacements: true } } },
+  });
+  if (!target) return { error: "That device is no longer in the catalog." };
+  if (target.deletedAt) return { error: "That device has already been removed." };
+
+  // Soft delete only. Every CircuitDevice line recorded against this type
+  // helped produce a theoretical figure that a baseline was judged against;
+  // the row has to stay for those to keep meaning anything. Removal takes it
+  // out of the pickers, which is the whole point of removing it.
+  await db.deviceType.update({
+    where: { id },
+    data: { deletedAt: new Date(), deletedById: admin.id, active: false },
+  });
+  logger.info("catalog.device_type_removed", {
+    actorId: admin.id,
+    id,
+    inventoryLines: target._count.circuitDevices,
+    replacementLines: target._count.circuitReplacements,
+  });
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
+export async function restoreDeviceType(id: string): Promise<Outcome> {
+  const admin = await requireCatalogEditor();
+  if (!admin) return { error: "Maintaining the device catalog is an operations-lead action." };
+  const target = await db.deviceType.findUnique({ where: { id } });
+  if (!target?.deletedAt) return { error: "That device has not been removed." };
+
+  // Comes back inactive, so putting it in front of a surveyor again is a
+  // separate, deliberate act.
+  await db.deviceType.update({
+    where: { id },
+    data: { deletedAt: null, deletedById: null, active: false },
+  });
+  logger.info("catalog.device_type_restored", { actorId: admin.id, id });
   revalidatePath(PATH);
   return { ok: true };
 }

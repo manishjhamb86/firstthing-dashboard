@@ -150,14 +150,23 @@ function AdminForm({
   );
 }
 
+function matchesQuery(row: AdminListRow, q: string, labels: Map<string, string>) {
+  if (!q) return true;
+  // Searching a permission by its label is the useful case: "who can release
+  // billing" is a question this list should be able to answer.
+  const perms = row.permissions.map((p) => labels.get(p) ?? p).join(" ");
+  return `${row.name ?? ""} ${row.email} ${perms}`.toLowerCase().includes(q.toLowerCase());
+}
+
 export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfId: string }) {
+  const [q, setQ] = useState("");
   const [editing, setEditing] = useState<AdminListRow | null>(null);
   const [creating, setCreating] = useState(false);
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const live = rows.filter((r) => !r.removed);
-  const removed = rows.filter((r) => r.removed);
+  const live = rows.filter((r) => !r.removed && matchesQuery(r, q, LABEL));
+  const removed = rows.filter((r) => r.removed && matchesQuery(r, q, LABEL));
 
   function act(id: string, fn: () => Promise<{ error?: string } | void>) {
     setRowError(null);
@@ -174,7 +183,14 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
 
   return (
     <>
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <input
+          className="field field-auto w-full sm:w-80"
+          placeholder="Search name, email or permission…"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          aria-label="Search admin accounts"
+        />
         <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
           Add admin
         </button>
@@ -191,6 +207,13 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
             </tr>
           </thead>
           <tbody>
+            {live.length === 0 && (
+              <tr>
+                <td colSpan={4} className="text-[var(--text-muted)]">
+                  Nothing matches &ldquo;{q}&rdquo;.
+                </td>
+              </tr>
+            )}
             {live.map((r) => (
               <tr key={r.id}>
                 <td>

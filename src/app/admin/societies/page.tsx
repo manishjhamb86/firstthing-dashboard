@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { ClickableRow } from "@/components/clickable-row";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { SOCIETY_STATUS, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -160,7 +161,7 @@ export default async function SocietiesPage({
               {societies.map((s) => {
                 const st = statusMeta(SOCIETY_STATUS, s.status);
                 return (
-                  <tr key={s.id}>
+                  <ClickableRow key={s.id} href={`/admin/societies/${s.id}`}>
                     <td>
                       <div className="flex items-center gap-3">
                         <span
@@ -173,7 +174,7 @@ export default async function SocietiesPage({
                         <div className="min-w-0">
                           <Link
                             href={`/admin/societies/${s.id}`}
-                            className="row-link font-medium hover:underline"
+                            className="font-medium hover:underline"
                           >
                             {s.name}
                           </Link>
@@ -216,7 +217,7 @@ export default async function SocietiesPage({
                     <td className="hidden sm:table-cell text-right whitespace-nowrap" aria-hidden>
                       <span className="row-link-cue text-sm font-semibold">Open →</span>
                     </td>
-                  </tr>
+                  </ClickableRow>
                 );
               })}
             </tbody>

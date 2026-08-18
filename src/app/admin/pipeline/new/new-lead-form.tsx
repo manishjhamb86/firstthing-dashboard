@@ -38,14 +38,16 @@ export function NewLeadForm({
   societies,
   salesOwners,
   currentUserId,
+  initialSocietyId,
 }: {
   societies: Society[];
   salesOwners: SalesOwner[];
   currentUserId: string;
+  initialSocietyId?: string;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
 
-  const [societyId, setSocietyId] = useState("");
+  const [societyId, setSocietyId] = useState(initialSocietyId ?? "");
   const [newSocietyName, setNewSocietyName] = useState("");
   const [newSocietyLocation, setNewSocietyLocation] = useState("");
   const [newSocietyFlatCount, setNewSocietyFlatCount] = useState("");

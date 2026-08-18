@@ -21,8 +21,10 @@ export function Card({ className, children }: { className?: string; children: Re
 
 // Section heading inside a card — Modernize-style sentence-case semibold,
 // replacing the Console small-caps treatment.
-export function CardTitle({ children }: { children: ReactNode }) {
-  return <p className="text-[15px] font-semibold mb-4">{children}</p>;
+export function CardTitle({ children, className = "" }: { children: ReactNode; className?: string }) {
+  // className exists so a title can sit in a header row beside an action
+  // button, where the default bottom margin would misalign the pair.
+  return <p className={`text-[15px] font-semibold mb-4 ${className}`}>{children}</p>;
 }
 
 export function PageHeader({
@@ -49,7 +51,7 @@ export function PageHeader({
           </div>
           {subtitle && <p className="mt-1 text-[var(--text-muted)]">{subtitle}</p>}
         </div>
-        {action && <div className="shrink-0">{action}</div>}
+        {action && <div className="shrink-0 max-w-full">{action}</div>}
       </div>
     </header>
   );

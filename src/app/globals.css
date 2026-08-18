@@ -455,20 +455,22 @@ textarea.field {
   background: var(--surface-hover);
 }
 
-/* A listing row that navigates. The anchor stays a real anchor — keyboard
-   focus, middle-click, open-in-new-tab, screen readers all keep working —
-   and its ::after covers the row, so the whole row is the hit target without
-   wrapping a <tr> in an <a>, which is not valid HTML. Only safe on rows with
-   no other interactive element, since the overlay would sit on top of it. */
-.tbl tbody tr:has(.row-link) {
-  position: relative;
+/* A listing row that navigates.
+ *
+ * The first version used an absolutely-positioned ::after on the anchor,
+ * stretched over a `position: relative` <tr>. That is a common pattern and it
+ * is WRONG here: WebKit does not reliably make a table row a containing
+ * block, so the overlay resolved against a far larger ancestor and made the
+ * WHOLE PAGE navigate to the last row's society (user-reported, 2026-08-18 —
+ * "click anywhere outside list and it opens a society").
+ *
+ * The row now carries a real click handler instead (see clickable-row.tsx),
+ * so nothing is absolutely positioned and nothing can escape its row. The
+ * anchor inside stays a real anchor for keyboard, middle-click and screen
+ * readers.
+ */
+.tbl tbody tr.row-clickable {
   cursor: pointer;
-}
-
-.row-link::after {
-  content: "";
-  position: absolute;
-  inset: 0;
 }
 
 /* The affordance: a chevron that leans in on hover, so the row reads as

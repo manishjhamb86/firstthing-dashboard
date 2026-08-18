@@ -18,8 +18,27 @@ async function action(_prev: string | undefined, formData: FormData) {
 
 // Controlled inputs — see login-form.tsx for the full React 19
 // form-reset-on-submit finding this works around.
-export function PortalAccountForm({ societyId }: { societyId: string }) {
+export function PortalAccountForm({
+  societyId,
+  onSaved,
+}: {
+  societyId: string;
+  onSaved?: () => void;
+}) {
   const [error, formAction, pending] = useActionState(action, undefined);
+  const [submitted, setSubmitted] = useState(false);
+
+  // useActionState gives no success signal, so "was pending, is no longer,
+  // and returned no error" is the completion — checked during render rather
+  // than in an effect, per this project's set-state-in-effect rule.
+  const [wasPending, setWasPending] = useState(false);
+  if (pending !== wasPending) {
+    setWasPending(pending);
+    if (!pending && submitted && !error) {
+      setSubmitted(false);
+      onSaved?.();
+    }
+  }
   const [name, setName] = useState("");
   const [portalAuthority, setPortalAuthority] = useState<"office_bearer" | "committee" | "manager">(
     "office_bearer",
@@ -28,9 +47,8 @@ export function PortalAccountForm({ societyId }: { societyId: string }) {
   const [password, setPassword] = useState("");
 
   return (
-    <form action={formAction} className="space-y-4 border-t border-[var(--border-subtle)] pt-4 mt-4">
+    <form action={formAction} onSubmit={() => setSubmitted(true)} className="space-y-4">
       <input type="hidden" name="societyId" value={societyId} />
-      <p className="lbl">New portal account</p>
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Name" htmlFor={`pa-name-${societyId}`}>
           <input

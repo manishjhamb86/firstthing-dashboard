@@ -5,12 +5,13 @@ import { Building2, Users, Gauge, Layers } from "lucide-react";
 import { Card, CardTitle, EmptyState, KpiTile, PageHeader, StatusChip } from "@/components/ui";
 import {
   ENGAGEMENT_STATUS,
+  PIPELINE_STAGE,
   PORTAL_AUTHORITY_LABEL,
   SERVICE_LINE_LABEL,
   statusMeta,
 } from "@/lib/status-maps";
 import { StatusControl } from "./status-control";
-import { PortalAccountForm } from "./portal-account-form";
+import { AddPortalAccountButton } from "./add-portal-account-button";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
 import { EnrollServiceLineForm } from "./enroll-service-line-form";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -35,7 +36,18 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     // Pipeline, one per (society, serviceLine) under CON-24. Without this
     // the panel showed "Active" with no route onward, which reads as though
     // enrolling were the whole step.
-    db.pipeline.findMany({ where: { societyId: id }, select: { id: true, serviceLine: true, stage: true } }),
+    db.pipeline.findMany({
+      where: { societyId: id },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        serviceLine: true,
+        stage: true,
+        contactName: true,
+        createdAt: true,
+        authoritative: true,
+      },
+    }),
     db.circuit.count({ where: { societyId: id, voidedAt: null } }),
   ]);
   const pipelineFor = new Map(pipelines.map((p) => [p.serviceLine as string, p]));
@@ -53,7 +65,20 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         }
         title={society.name}
         subtitle={`${society.location} · ${society.flatCount} flats`}
-        action={<StatusControl societyId={society.id} status={society.status} />}
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            <Link href={`/admin/societies/${society.id}/circuits`} className="btn-secondary btn-sm">
+              Circuit registry
+            </Link>
+            {/* Arriving from this society, the form should not ask again which
+                society it is — the id rides along and is preselected. */}
+            <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="btn-secondary btn-sm">
+              Log a lead
+            </Link>
+            <AddPortalAccountButton societyId={society.id} variant="secondary" />
+            <StatusControl societyId={society.id} status={society.status} />
+          </div>
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
@@ -87,24 +112,124 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2 items-start">
+        {/* Everything about the ENGAGEMENT: what the society is signed up
+            for, and every deal that has run on it. */}
+        <div className="space-y-6 min-w-0">
+          <Card className="p-6 min-w-0">
+            <CardTitle>Service lines</CardTitle>
+
+            {engagements.length === 0 ? (
+              // FEAT-039-AC-2: the record shows available service lines to
+              // enroll rather than assuming lighting.
+              <div className="mb-4">
+                <EmptyState title="Not enrolled in any service line yet">
+                  Logging a lead enrolls the society in that service line automatically; other lines —
+                  lighting, pumps, solar, or wastewater — can be enrolled below.
+                </EmptyState>
+              </div>
+            ) : (
+              <ul className="space-y-3">
+                {engagements.map((e) => {
+                  const status = statusMeta(ENGAGEMENT_STATUS, e.status);
+                  const pipeline = pipelineFor.get(e.serviceLine);
+                  return (
+                    <li
+                      key={e.id}
+                      className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <span className="font-medium">
+                          {SERVICE_LINE_LABEL[e.serviceLine] ?? e.serviceLine}
+                        </span>
+                        <StatusChip tone={status.tone}>{status.label}</StatusChip>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        {pipeline ? (
+                          <Link href={`/admin/pipeline/${pipeline.id}`} className="underline">
+                            Open the deal →
+                          </Link>
+                        ) : (
+                          <>
+                            Enrolled, but no deal running — the survey that produces circuits belongs to a
+                            pipeline.{" "}
+                            <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="underline">
+                              Log a lead
+                            </Link>
+                            .
+                          </>
+                        )}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <EnrollServiceLineForm societyId={society.id} available={availableServiceLines} />
+          </Card>
+
+          <Card className="p-6 min-w-0">
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+              <CardTitle className="mb-0">Leads</CardTitle>
+              <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="btn-ghost btn-sm">
+                Log a lead
+              </Link>
+            </div>
+
+            {pipelines.length === 0 ? (
+              <EmptyState title="No leads logged">
+                A lead is the deal record — it is what produces the survey, and the survey is what
+                produces circuits.
+              </EmptyState>
+            ) : (
+              <ul className="space-y-3">
+                {pipelines.map((p) => {
+                  const st = statusMeta(PIPELINE_STAGE, p.stage);
+                  return (
+                    <li
+                      key={p.id}
+                      className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <Link href={`/admin/pipeline/${p.id}`} className="font-medium hover:underline">
+                          {SERVICE_LINE_LABEL[p.serviceLine] ?? p.serviceLine}
+                        </Link>
+                        <span className="flex items-center gap-2">
+                          {!p.authoritative && <StatusChip tone="warn">Pending approval</StatusChip>}
+                          <StatusChip tone={st.tone}>{st.label}</StatusChip>
+                        </span>
+                      </div>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        {p.contactName} · logged {p.createdAt.toISOString().slice(0, 10)}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Card>
+        </div>
+
+        {/* Everything about WHO at the society can sign in. */}
         <Card className="p-6 min-w-0">
-          <CardTitle>Portal accounts</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <CardTitle className="mb-0">Portal accounts</CardTitle>
+            <AddPortalAccountButton societyId={society.id} variant="secondary" />
+          </div>
 
           {accounts.length === 0 ? (
             // FEAT-108-AC-8: empty state explains the consequence and offers
             // to create the first one.
-            <div className="mb-4">
-              <EmptyState title="No portal accounts yet">
-                This society has no one who can sign in, view its data, or accept binding acts (GATE-04).
-                Create the first account — usually the office-bearer — below.
-              </EmptyState>
-            </div>
+            <EmptyState title="No portal accounts yet">
+              This society has no one who can sign in, view its data, or accept binding acts (GATE-04).
+              Add the first account — usually the office-bearer.
+            </EmptyState>
           ) : (
             <ul className="space-y-3">
               {accounts.map((a) => (
                 <li
                   key={a.id}
-                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:ptate-0"
                 >
                   <div>
                     <p className="font-medium">{a.name ?? a.email}</p>
@@ -117,67 +242,9 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
               ))}
             </ul>
           )}
-
-          <PortalAccountForm societyId={society.id} />
-        </Card>
-
-        <Card className="p-6 min-w-0">
-          <CardTitle>Service lines</CardTitle>
-
-          {engagements.length === 0 ? (
-            // FEAT-039-AC-2: the record shows available service lines to
-            // enroll rather than assuming lighting.
-            <div className="mb-4">
-              <EmptyState title="Not enrolled in any service line yet">
-                Logging a lead enrolls the society in that service line automatically; other lines — lighting,
-                pumps, solar, or wastewater — can be enrolled manually below.
-              </EmptyState>
-            </div>
-          ) : (
-            <ul className="space-y-3">
-              {engagements.map((e) => {
-                const status = statusMeta(ENGAGEMENT_STATUS, e.status);
-                const pipeline = pipelineFor.get(e.serviceLine);
-                return (
-                  <li
-                    key={e.id}
-                    className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                      <span className="font-medium">{SERVICE_LINE_LABEL[e.serviceLine] ?? e.serviceLine}</span>
-                      <StatusChip tone={status.tone}>{status.label}</StatusChip>
-                    </div>
-                    <p className="text-xs text-[var(--text-muted)] mt-1">
-                      {pipeline ? (
-                        <Link href={`/admin/pipeline/${pipeline.id}`} className="underline">
-                          Open the deal →
-                        </Link>
-                      ) : (
-                        <>
-                          Enrolled, but no deal running — the survey that produces circuits belongs to a
-                          pipeline.{" "}
-                          <Link href="/admin/pipeline/new" className="underline">
-                            Log a lead
-                          </Link>
-                          .
-                        </>
-                      )}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <EnrollServiceLineForm societyId={society.id} available={availableServiceLines} />
-
-          <div className="mt-6 pt-4 border-t border-[var(--border-subtle)]">
-            <Link href={`/admin/societies/${society.id}/circuits`} className="btn-ghost btn-sm">
-              View circuit registry →
-            </Link>
-          </div>
         </Card>
       </div>
+
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Card, EmptyState, ErrorText, Field } from "@/components/ui";
+import { Modal } from "@/components/modal";
 import { addCircuitDevice, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
 
 export type InventoryLine = {
@@ -133,116 +134,102 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
       ? ((Number(count) || 0) * (Number(wattage) || 0) * (Number(hours) || 0)) / 1000
       : null;
 
-  if (!open) {
-    return (
+  return (
+    <>
       <button type="button" onClick={() => setOpen(true)} className="btn-secondary">
         Add a device line
       </button>
-    );
-  }
 
-  return (
-    <div
-      className="rounded-[var(--r-md)] border p-4"
-      style={{ borderColor: "var(--border)", background: "var(--surface-sunken)" }}
-    >
-      <p className="text-sm font-semibold mb-3">New device line</p>
+      <Modal
+        open={open}
+        onClose={() => {
+          reset();
+          setOpen(false);
+        }}
+        title="New device line"
+        description="Count × watts × hours is what the pre-installation readings get checked against."
+        footer={
+          <>
+            <button type="button" onClick={submit} disabled={pending || incomplete} className="btn-primary">
+              {pending ? "Adding…" : "Add line"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setOpen(false);
+              }}
+              disabled={pending}
+              className="btn-ghost"
+            >
+              Cancel
+            </button>
+            <span className="num ml-auto text-sm text-[var(--text-muted)]">
+              {preview === null ? "—" : `${preview.toFixed(2)} kWh/day`}
+            </span>
+          </>
+        }
+      >
+        <Field label="Device" htmlFor="add-type" hint="From the catalog — its wattage fills in and stays editable.">
+          <select
+            id="add-type"
+            value={typeId}
+            onChange={(e) => pickType(e.target.value)}
+            disabled={pending}
+            className="field"
+          >
+            <option value="">Pick from the catalog…</option>
+            {catalog.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
 
-      {/* A grid, so every label sits on one line and every control on the
-          next — regardless of which field carries a hint.
-          The numeric columns are content-sized (auto) and their labels are
-          nowrap, so each is only as wide as its own title; Device takes
-          minmax(0,1fr) and gets everything left over, because a device name
-          like "Motion-enabled dimmable surface 12W" is the one value here
-          that actually needs the room (user's call, 2026-08-17). */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-[minmax(0,1fr)_5rem_6rem_auto]">
-        <div className="col-span-2 lg:col-span-1 min-w-0">
-          <Field label="Device" htmlFor="inv-type">
-            <select
-              id="inv-type"
-              value={typeId}
-              onChange={(e) => pickType(e.target.value)}
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Count" htmlFor="add-count">
+            <input
+              id="add-count"
+              type="number"
+              min={1}
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
               disabled={pending}
               className="field"
-            >
-              <option value="">Pick from the catalog…</option>
-              {catalog.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            />
+          </Field>
+          <Field label="Watts each" htmlFor="add-watt">
+            <input
+              id="add-watt"
+              type="number"
+              min={1}
+              step="0.5"
+              value={wattage}
+              onChange={(e) => setWattage(e.target.value)}
+              disabled={pending}
+              className="field"
+            />
           </Field>
         </div>
-        <Field label={<span className="whitespace-nowrap">Count</span>} htmlFor="inv-count">
-          <input
-            id="inv-count"
-            type="number"
-            min={1}
-            value={count}
-            onChange={(e) => setCount(e.target.value)}
-            disabled={pending}
-            className="field"
-          />
-        </Field>
-        <Field label={<span className="whitespace-nowrap">Watts each</span>} htmlFor="inv-w">
-          <input
-            id="inv-w"
-            type="number"
-            min={1}
-            step="0.5"
-            value={wattage}
-            onChange={(e) => setWattage(e.target.value)}
-            disabled={pending}
-            className="field"
-          />
-        </Field>
-        <Field label={<span className="whitespace-nowrap">Runs per day</span>} htmlFor="inv-h">
-          <HoursInput id="inv-h" hours={hours} setHours={setHours} disabled={pending} />
-        </Field>
-      </div>
 
-      <div className="mt-3">
-        <Field label="Note" htmlFor="inv-note" hint="Optional — e.g. “shared with lift fan”">
+        <Field label="Runs for" htmlFor="add-hours">
+          <HoursInput id="add-hours" hours={hours} setHours={setHours} disabled={pending} />
+        </Field>
+
+        <Field label="Note" htmlFor="add-note" hint="Optional.">
           <input
-            id="inv-note"
+            id="add-note"
             value={note}
             onChange={(e) => setNote(e.target.value)}
             disabled={pending}
             className="field"
           />
         </Field>
-      </div>
 
-      {error && (
-        <div className="mt-3">
-          <ErrorText>{error}</ErrorText>
-        </div>
-      )}
-
-      <div className="mt-4 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={submit} disabled={pending || incomplete} className="btn-primary">
-          {pending ? "Adding…" : "Add line"}
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            reset();
-            setOpen(false);
-          }}
-          disabled={pending}
-          className="btn-ghost"
-        >
-          Cancel
-        </button>
-        {/* What this line will contribute, before it is saved. */}
-        {preview !== null && (
-          <span className="text-sm text-[var(--text-muted)]">
-            Adds <span className="num font-semibold">{preview.toFixed(2)}</span> kWh/day
-          </span>
-        )}
-      </div>
-    </div>
+        {error && <ErrorText>{error}</ErrorText>}
+      </Modal>
+    </>
   );
 }
 
@@ -254,6 +241,16 @@ function LineRow({ line, editable }: { line: InventoryLine; editable: boolean })
   const [note, setNote] = useState(line.note ?? "");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
+
+  // Reopening after a cancel must not show the abandoned edit.
+  function open() {
+    setCount(String(line.count));
+    setWattage(String(line.wattage));
+    setHours(String(line.hoursPerDay));
+    setNote(line.note ?? "");
+    setError(undefined);
+    setEditing(true);
+  }
 
   function save() {
     startTransition(async () => {
@@ -280,65 +277,97 @@ function LineRow({ line, editable }: { line: InventoryLine; editable: boolean })
     });
   }
 
-  if (!editing) {
-    return (
-      <tr>
-        <td>{line.deviceTypeName}</td>
-        <td className="num">{line.count}</td>
-        <td className="num">{line.wattage}</td>
-        <td className="num">{line.hoursPerDay} h</td>
-        <td className="num">{lineKwh(line).toFixed(2)}</td>
-        <td className="text-[var(--text-muted)]">
-          {line.replacementName
-            ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}`
-            : line.note ?? "—"}
-        </td>
-        {editable && (
-          <td>
-            <span className="inline-flex gap-1">
-              <button type="button" onClick={() => setEditing(true)} disabled={pending} className="btn-ghost text-xs">
-                Edit
-              </button>
-              <button type="button" onClick={remove} disabled={pending} className="btn-ghost text-xs" style={{ color: "var(--bad-fg)" }}>
-                Remove
-              </button>
-            </span>
-            {error && <ErrorText>{error}</ErrorText>}
-          </td>
-        )}
-      </tr>
-    );
-  }
+  const previewKwh =
+    count && wattage && hours
+      ? lineKwh({ count: Number(count), wattage: Number(wattage), hoursPerDay: Number(hours) })
+      : null;
 
   return (
     <tr>
       <td>{line.deviceTypeName}</td>
-      <td>
-        <input type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} disabled={pending} aria-label="Count" className="field field-auto w-20" />
+      <td className="num">{line.count}</td>
+      <td className="num">{line.wattage}</td>
+      <td className="num">{line.hoursPerDay} h</td>
+      <td className="num">{lineKwh(line).toFixed(2)}</td>
+      <td className="text-[var(--text-muted)]">
+        {line.replacementName
+          ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}`
+          : line.note ?? "—"}
       </td>
-      <td>
-        <input type="number" min={1} step="0.5" value={wattage} onChange={(e) => setWattage(e.target.value)} disabled={pending} aria-label="Wattage" className="field field-auto w-24" />
-      </td>
-      <td>
-        <HoursInput id={`h-${line.id}`} hours={hours} setHours={setHours} disabled={pending} />
-      </td>
-      <td className="num">
-        {count && wattage && hours ? lineKwh({ count: Number(count), wattage: Number(wattage), hoursPerDay: Number(hours) }).toFixed(2) : "—"}
-      </td>
-      <td>
-        <input value={note} onChange={(e) => setNote(e.target.value)} disabled={pending} aria-label="Note" className="field field-auto w-40" />
-      </td>
-      <td>
-        <span className="inline-flex gap-1">
-          <button type="button" onClick={save} disabled={pending} className="btn-secondary text-xs">
-            Save
-          </button>
-          <button type="button" onClick={() => setEditing(false)} disabled={pending} className="btn-ghost text-xs">
-            Cancel
-          </button>
-        </span>
-        {error && <ErrorText>{error}</ErrorText>}
-      </td>
+      {editable && (
+        <td>
+          <span className="inline-flex gap-1">
+            <button type="button" onClick={open} disabled={pending} className="btn-ghost text-xs">
+              Edit
+            </button>
+            <button type="button" onClick={remove} disabled={pending} className="btn-ghost text-xs" style={{ color: "var(--bad-fg)" }}>
+              Remove
+            </button>
+          </span>
+          {error && !editing && <ErrorText>{error}</ErrorText>}
+
+          {/* The edit form used to render as inputs inside these cells, which
+              the column widths clipped. It gets its own dialog now. */}
+          <Modal
+            open={editing}
+            onClose={() => setEditing(false)}
+            title={`Edit ${line.deviceTypeName}`}
+            description="The theoretical daily figure recomputes from these three numbers."
+            footer={
+              <>
+                <button type="button" onClick={save} disabled={pending} className="btn-primary">
+                  {pending ? "Saving…" : "Save changes"}
+                </button>
+                <button type="button" onClick={() => setEditing(false)} disabled={pending} className="btn-ghost">
+                  Cancel
+                </button>
+                <span className="num ml-auto text-sm text-[var(--text-muted)]">
+                  {previewKwh === null ? "—" : `${previewKwh.toFixed(2)} kWh/day`}
+                </span>
+              </>
+            }
+          >
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Count" htmlFor={`ec-${line.id}`}>
+                <input
+                  id={`ec-${line.id}`}
+                  type="number"
+                  min={1}
+                  value={count}
+                  onChange={(e) => setCount(e.target.value)}
+                  disabled={pending}
+                  className="field"
+                />
+              </Field>
+              <Field label="Watts each" htmlFor={`ew-${line.id}`}>
+                <input
+                  id={`ew-${line.id}`}
+                  type="number"
+                  min={1}
+                  step="0.5"
+                  value={wattage}
+                  onChange={(e) => setWattage(e.target.value)}
+                  disabled={pending}
+                  className="field"
+                />
+              </Field>
+            </div>
+            <Field label="Runs for" htmlFor={`eh-${line.id}`}>
+              <HoursInput id={`eh-${line.id}`} hours={hours} setHours={setHours} disabled={pending} />
+            </Field>
+            <Field label="Note" htmlFor={`en-${line.id}`} hint="Optional — anything that explains this line.">
+              <input
+                id={`en-${line.id}`}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                disabled={pending}
+                className="field"
+              />
+            </Field>
+            {error && <ErrorText>{error}</ErrorText>}
+          </Modal>
+        </td>
+      )}
     </tr>
   );
 }

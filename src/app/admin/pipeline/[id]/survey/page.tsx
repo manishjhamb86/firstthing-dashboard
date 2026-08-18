@@ -117,11 +117,15 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
         subtitle={pipeline.society.location}
       />
 
-      {handoff && <NextStepCallout next={handoff} />}
+      {handoff && (
+        <div className="max-w-4xl">
+          <NextStepCallout next={handoff} />
+        </div>
+      )}
 
       {/* What the survey has established so far. Every figure is counted
           from the rows below it, never stored separately. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8 max-w-2xl">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8 max-w-4xl">
         {[
           { label: "Areas counted", value: siteSurvey.areas.length, detail: siteSurvey.areas.length === 0 ? "none yet" : "recorded" },
           { label: "Lights", value: totalLights.toLocaleString("en-IN"), detail: "whole society" },
@@ -145,7 +149,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
         ))}
       </div>
 
-      <section className="max-w-2xl mb-10">
+      <section className="max-w-4xl mb-10">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-3">
           <h2 className="text-[15px] font-semibold">
             <span className="lbl mr-2" style={{ color: "var(--accent)" }}>
@@ -226,7 +230,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
           it is: one circuit is metered per type and represents this many
           lights (CON-11). */}
       {byLightType.length > 0 && (
-        <section className="max-w-2xl mb-10">
+        <section className="max-w-4xl mb-10">
           <h2 className="text-[15px] font-semibold mb-1">Extrapolation base</h2>
           <p className="text-sm text-[var(--text-muted)] mb-3">
             One circuit is metered per light type, and represents every light of that type. These
@@ -280,7 +284,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
         </section>
       )}
 
-      <section className="max-w-2xl">
+      <section className="max-w-4xl">
         <h2 className="text-[15px] font-semibold mb-3">
           <span className="lbl mr-2" style={{ color: "var(--accent)" }}>
             Step 2

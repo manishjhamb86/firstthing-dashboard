@@ -187,6 +187,21 @@ export function deriveUploadKind(c: {
  * End: yesterday relative to `today` — today's rows are incomplete by
  * construction and never imported.
  */
+/**
+ * True when no day can possibly qualify yet — the meter went in today or
+ * yesterday, so "the day after installation" has not finished. The window
+ * then computes from > to, which is correct arithmetic and nonsense to show
+ * as a date range ("2026-08-18 -> 2026-08-17").
+ */
+export function windowIsEmpty(w: { from: Date; to: Date }): boolean {
+  return w.from.getTime() > w.to.getTime();
+}
+
+/** The first day that will ever qualify — what to tell the operator to wait for. */
+export function firstQualifyingDay(w: { from: Date; to: Date }): Date {
+  return w.from;
+}
+
 export function extractionWindow(args: {
   kind: UploadKind;
   meterInstalledAt: Date;
@@ -283,7 +298,14 @@ export function buildReviewRows(args: {
     let vBand: VarianceBand | null = null;
     let sPct: number | null = null;
     let sBand: SavingsBand | null = null;
-    if (phase === "pre_install" && args.theoretical !== null) {
+    if (partial) {
+      // A part-day total cannot be judged against a whole-day figure. 13 of
+      // 24 hours against a 24-hour theoretical reads as roughly -50% no
+      // matter how healthy the circuit is — the day simply isn't over. The
+      // day is already excluded from every average; giving it a red band as
+      // well reports a fault that the data does not show. Left null, and the
+      // UI says "partial day" in place of a verdict.
+    } else if (phase === "pre_install" && args.theoretical !== null) {
       const v = varianceAgainstTheoretical(day.kWh, args.theoretical);
       variancePct = v.pct;
       vBand = v.band;

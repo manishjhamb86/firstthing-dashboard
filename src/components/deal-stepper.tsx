@@ -91,7 +91,7 @@ export function NextStepCallout({ next }: { next: NextAction }) {
   return (
     <Link
       href={next.href}
-      className="block max-w-xl mb-8 rounded-[var(--r-md)] border p-4 no-underline transition-shadow hover:shadow-[var(--e1)]"
+      className="block w-full mb-8 rounded-[var(--r-md)] border p-4 no-underline transition-shadow hover:shadow-[var(--e1)]"
       style={{ borderColor: "var(--accent)", background: "var(--surface)" }}
     >
       <p className="lbl mb-1" style={{ color: "var(--accent)" }}>

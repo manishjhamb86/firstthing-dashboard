@@ -13,11 +13,15 @@ import {
   changedStoredRows,
   periodSavingsSummary,
   addDays,
+  windowIsEmpty,
+  firstQualifyingDay,
 } from "@/lib/circuit-load";
 import { matchKnownFormat, stripBom } from "@/lib/reading-formats";
 import { applyMappingAllDays, parseTimestamp } from "@/lib/reading-normalize";
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+const iso = (x: Date) => x.toISOString().slice(0, 10);
 
 describe("theoreticalDailyKwh", () => {
   it("computes the user's own worked example: 20 × 20W × 24h = 9.6 kWh/day", () => {
@@ -231,7 +235,12 @@ describe("buildReviewRows — dispositions", () => {
     expect(actionableRows(rows)).toHaveLength(0);
   });
 
-  it("a partial day is marked partial, not shown as a low reading", () => {
+  // This test previously asserted that a partial day STILL got a variance
+  // band ("the % is still shown"), which is what put a red "-72.2% outside
+  // +/-10%" against a real 13-of-24-hour upload. A part-day total judged
+  // against a whole-day theoretical is guaranteed to look catastrophic —
+  // the day simply is not over. It gets no verdict now.
+  it("a partial day gets no verdict — a part day cannot be judged against a whole-day figure", () => {
     const rows = buildReviewRows({
       ...base,
       kind: "pre_install",
@@ -243,7 +252,41 @@ describe("buildReviewRows — dispositions", () => {
     });
     expect(rows[0].partial).toBe(true);
     expect(rows[0].phase).toBe("pre_install");
-    expect(rows[0].varianceBand).toBe("warn"); // 3.1 vs 10 — and the % is still shown
+    expect(rows[0].varianceBand).toBeNull();
+    expect(rows[0].variancePct).toBeNull();
+    // A complete day of the same shape is still judged normally.
+    const full = buildReviewRows({
+      ...base,
+      kind: "pre_install",
+      lightReplacementDate: null,
+      window: { from: d("2026-11-02"), to: d("2026-11-08") },
+      lastStoredDate: null,
+      stored: [],
+      parsedDays: [{ date: d("2026-11-04"), kWh: 3.1, intervalCount: 24 }],
+    });
+    expect(full[0].partial).toBe(false);
+    expect(full[0].varianceBand).toBe("warn");
+  });
+
+  it("an empty window is reported as empty, not as a backwards date range", () => {
+    // The reported case: meter installed yesterday, so "the day after
+    // installation" is today and today never counts — from > to.
+    const w = extractionWindow({
+      kind: "pre_install",
+      meterInstalledAt: d("2026-08-17"),
+      lastStoredDate: null,
+      today: d("2026-08-18"),
+    });
+    expect(windowIsEmpty(w)).toBe(true);
+    expect(iso(firstQualifyingDay(w))).toBe("2026-08-18");
+
+    const open = extractionWindow({
+      kind: "pre_install",
+      meterInstalledAt: d("2026-08-10"),
+      lastStoredDate: null,
+      today: d("2026-08-18"),
+    });
+    expect(windowIsEmpty(open)).toBe(false);
   });
 
   it("pre-install rows carry variance, post rows carry savings — never both", () => {

@@ -60,14 +60,38 @@ function rowStyle(row: PreviewRowDTO): React.CSSProperties {
 }
 
 function comparisonCell(row: PreviewRowDTO): { text: string; label: string } {
+  // An incomplete day gets no verdict — see circuit-load.ts. Saying so beats
+  // a dash, because the operator can see the kWh is low and deserves the
+  // reason.
+  if (row.partial) {
+    return {
+      text: "—",
+      label:
+        row.expectedIntervals === null
+          ? "Partial day — not comparable"
+          : `Partial day (${row.intervalCount} of ${row.expectedIntervals}h) — not comparable`,
+    };
+  }
+  // Before the meter, or on the replacement day, nothing is being measured
+  // that could be compared to anything.
+  if (row.phase === "before_meter" || row.phase === "replacement_day") {
+    return {
+      text: "—",
+      label: row.phase === "before_meter" ? "Before the meter went in" : "Replacement day",
+    };
+  }
   if (row.phase === "pre_install") {
-    if (row.varianceBand === null) return { text: "—", label: "No inventory to compare against" };
+    if (row.varianceBand === null) return { text: "—", label: "No load inventory to compare against" };
     return {
       text: fmtPct(row.variancePct),
       label: VARIANCE_BAND_META[row.varianceBand as VarianceBand].label,
     };
   }
-  if (row.savingsBand === null) return { text: "—", label: "No baseline yet" };
+  // Only a post-install day is ever judged against a baseline, so this is the
+  // only place that may mention one. It used to be the catch-all fallback,
+  // which is how a pre-install row ended up reporting "No baseline yet" —
+  // demanding something of the upload that this phase never involves.
+  if (row.savingsBand === null) return { text: "—", label: "No baseline recorded yet" };
   return {
     text: row.savingsPct === null ? "—" : `${row.savingsPct.toFixed(1)}%`,
     label: SAVINGS_BAND_META[row.savingsBand as SavingsBand].label,
@@ -297,7 +321,7 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-medium text-sm">{KIND_LABEL[preview.kind]}</span>
         <StatusChip tone="info">
-          {preview.windowFrom} → {preview.windowTo}
+          {preview.windowEmpty ? "Window not open yet" : `${preview.windowFrom} → ${preview.windowTo}`}
         </StatusChip>
         <span className="text-xs text-[var(--text-muted)]">
           {preview.vendor.toUpperCase()} format · {preview.parse.daysInFile} days in file ·{" "}
@@ -306,6 +330,19 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
       </div>
       <p className="text-xs text-[var(--text-muted)]">{KIND_HINT[preview.kind]}</p>
 
+      {/* The meter went in today or yesterday, so "the day after
+          installation" has not finished yet and no day in any file can
+          qualify. Previously this rendered as a backwards date range with a
+          table of red rows, which reads as a data fault rather than as
+          "you are simply early". */}
+      {preview.windowEmpty && (
+        <p className="text-sm rounded-[var(--r-sm)] border p-3" style={{ borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" }}>
+          The baseline window has not opened yet. Counting starts the day after the meter was
+          installed, and a day only counts once it is complete — so the first day that can qualify
+          is <strong>{preview.windowFrom}</strong>. Nothing in this file can be used yet; upload it
+          again once that day has passed. Nothing has been saved.
+        </p>
+      )}
       {preview.noInventoryWarning && (
         <p className="text-sm rounded-[var(--r-sm)] border p-3" style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}>
           No load inventory is recorded for this circuit, so there is no theoretical figure to

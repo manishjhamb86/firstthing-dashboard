@@ -35,6 +35,7 @@ import {
   type UploadKind,
   type SavingsBand,
   type VarianceBand,
+  windowIsEmpty,
 } from "@/lib/circuit-load";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { BENCHMARK_MIN_PCT, BENCHMARK_MAX_PCT } from "@/lib/commissioning-anomaly";
@@ -271,6 +272,7 @@ export type PreviewRowDTO = {
   date: string;
   kWh: number;
   intervalCount: number;
+  expectedIntervals: number | null;
   partial: boolean;
   phase: string;
   disposition: string;
@@ -287,6 +289,7 @@ export type CircuitPreviewDTO = {
   expectedIntervals: number;
   windowFrom: string;
   windowTo: string;
+  windowEmpty: boolean;
   theoretical: number | null;
   baseline: number | null;
   rows: PreviewRowDTO[];
@@ -343,6 +346,7 @@ export async function previewCircuitReadings(
     date: iso(r.date),
     kWh: r.kWh,
     intervalCount: r.intervalCount,
+    expectedIntervals: r.expectedIntervals,
     partial: r.partial,
     phase: r.phase,
     disposition: r.disposition,
@@ -368,6 +372,7 @@ export async function previewCircuitReadings(
       expectedIntervals: derived.expectedIntervals,
       windowFrom: iso(derived.window.from),
       windowTo: iso(derived.window.to),
+      windowEmpty: windowIsEmpty(derived.window),
       theoretical: derived.theoretical,
       baseline: derived.baselineNow,
       rows,

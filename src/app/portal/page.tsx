@@ -75,6 +75,18 @@ export default async function PortalHomePage() {
   const isOfficeBearer = viewer.role === "office_bearer";
   const theme = await resolveTheme();
 
+  // Only acts this viewer can actually perform count as needing them — the
+  // committee member who cannot accept an offer is not being told to.
+  const pendingActions: string[] = [];
+  if (installation && dayBatches.length > 0 && viewer.id === installation.onlookerId) {
+    pendingActions.push(
+      `Confirm day ${awaitingDay ?? 1} of the installation${
+        nextPlannedDay ? ` — before ${reviewDeadlineFor(nextPlannedDay.startAt).toISOString().slice(11, 16)} UTC tomorrow` : ""
+      }`,
+    );
+  }
+  if (openOffer && isOfficeBearer) pendingActions.push("Respond to the offer FirsThing has issued");
+
   return (
     <div className="min-h-screen">
       <div
@@ -94,18 +106,36 @@ export default async function PortalHomePage() {
         <PageHeader
           title={society.name}
           subtitle={`Signed in as ${viewer.email} · ${PORTAL_AUTHORITY_LABEL[viewer.role]}`}
+          chip={
+            pendingActions.length > 0 ? (
+              <StatusChip tone="warn">
+                {pendingActions.length} awaiting you
+              </StatusChip>
+            ) : (
+              <StatusChip tone="ok">Nothing needs you</StatusChip>
+            )
+          }
         />
 
-        {/* MS-05's first exit criterion: the society sees its demo report in
-            its own portal. Only shared versions ever reach here. */}
-        {sharedReports.length > 0 && (
-          <section className="mb-8">
-            <h2 className="text-[15px] font-semibold mb-1">Your demo savings report</h2>
-            <p className="text-sm text-[var(--text-muted)] mb-4">
-              Measured on the metered demo circuits, with the daily readings behind every figure.
+        {/* What the society actually has to DO, before anything it merely
+            needs to know. The batch review carries a three-hour deadline —
+            miss it and a crew cannot start tomorrow — and it used to sit
+            below a full savings report. Ordering by urgency is the whole
+            point; the callout just says out loud what the order implies. */}
+        {pendingActions.length > 0 && (
+          <div
+            className="mb-8 rounded-[var(--r-md)] border p-4"
+            style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+          >
+            <p className="text-sm font-semibold mb-1">
+              {pendingActions.length === 1 ? "One thing needs you" : `${pendingActions.length} things need you`}
             </p>
-            <DemoReportView report={sharedReports[0]} />
-          </section>
+            <ul className="text-sm list-disc pl-5 space-y-0.5">
+              {pendingActions.map((a) => (
+                <li key={a}>{a}</li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {/* CON-21's gate, from the society's side. Highest-stakes routine
@@ -136,22 +166,6 @@ export default async function PortalHomePage() {
           </div>
         )}
 
-        {/* FEAT-035-AC-2 — a caught-up state, not a blank space. */}
-        {installation && dayBatches.length === 0 && (
-          <div className="mb-8">
-            <Card className="p-6">
-              <CardTitle>Installation</CardTitle>
-              <p className="text-sm">
-                Nothing to review right now — {installation.batches.filter((b) => b.state === "approved").length} of{" "}
-                {new Set(installation.plannedDays.map((d) => d.day)).size} days approved,{" "}
-                <span className="num">{installation.batches.reduce((n, b) => n + b.installedCount, 0)}</span> of{" "}
-                <span className="num">{installation.contractedLightCount}</span> fittings installed. We&apos;ll email
-                you each evening when there is a day to confirm.
-              </p>
-            </Card>
-          </div>
-        )}
-
         {openOffer && (
           <div className="mb-8">
             <OfferCard
@@ -167,6 +181,34 @@ export default async function PortalHomePage() {
               }}
               canRespond={isOfficeBearer}
             />
+          </div>
+        )}
+
+        {/* MS-05's first exit criterion: the society sees its demo report in
+            its own portal. Only shared versions ever reach here. */}
+        {sharedReports.length > 0 && (
+          <section className="mb-8">
+            <h2 className="text-[15px] font-semibold mb-1">Your demo savings report</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-4">
+              Measured on the metered demo circuits, with the daily readings behind every figure.
+            </p>
+            <DemoReportView report={sharedReports[0]} />
+          </section>
+        )}
+
+        {/* FEAT-035-AC-2 — a caught-up state, not a blank space. */}
+        {installation && dayBatches.length === 0 && (
+          <div className="mb-8">
+            <Card className="p-6">
+              <CardTitle>Installation</CardTitle>
+              <p className="text-sm">
+                Nothing to review right now — {installation.batches.filter((b) => b.state === "approved").length} of{" "}
+                {new Set(installation.plannedDays.map((d) => d.day)).size} days approved,{" "}
+                <span className="num">{installation.batches.reduce((n, b) => n + b.installedCount, 0)}</span> of{" "}
+                <span className="num">{installation.contractedLightCount}</span> fittings installed. We&apos;ll email
+                you each evening when there is a day to confirm.
+              </p>
+            </Card>
           </div>
         )}
 

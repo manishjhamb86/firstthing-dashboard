@@ -155,7 +155,7 @@ function DeviceForm({
       <Field
         label="Kind"
         htmlFor="dt-role"
-        hint={isEdit ? "Fixed once created — remove and re-add to change it." : "Found on site, or installed by FirsThing."}
+        hint={isEdit ? "Fixed once created — remove and re-add to change it." : "A device found on site that FirsThing will replace, or the replacement itself."}
       >
         <select
           id="dt-role"
@@ -164,7 +164,7 @@ function DeviceForm({
           onChange={(e) => setRole(e.target.value as "original" | "replacement")}
           disabled={pending || isEdit}
         >
-          <option value="original">Found on site</option>
+          <option value="original">To be replaced</option>
           <option value="replacement">Replacement</option>
         </select>
       </Field>
@@ -217,7 +217,6 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
     () => rows.filter((r) => r.role === "replacement" && !r.removed).map((r) => ({ id: r.id, name: r.name })),
     [rows],
   );
-  const nameById = useMemo(() => new Map(rows.map((r) => [r.id, r.name])), [rows]);
 
   const live = rows.filter((r) => !r.removed && matches(r, q));
   const removed = rows.filter((r) => r.removed && matches(r, q));
@@ -263,7 +262,6 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
               <th>Device</th>
               <th>Kind</th>
               <th className="text-right">Default W</th>
-              <th>Replacements</th>
               <th>Status</th>
               {canEdit && <th />}
             </tr>
@@ -271,7 +269,7 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
           <tbody>
             {live.length === 0 ? (
               <tr>
-                <td colSpan={canEdit ? 6 : 5} className="text-[var(--text-muted)]">
+                <td colSpan={canEdit ? 5 : 4} className="text-[var(--text-muted)]">
                   {q ? `Nothing matches "${q}".` : "The catalog is empty."}
                 </td>
               </tr>
@@ -283,22 +281,12 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
                     {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
                   </td>
                   <td>
-                    {/* The distinction the whole catalog turns on: what a
-                        survey finds, versus what FirsThing installs. */}
+                    {/* The one distinction the catalog turns on. */}
                     <StatusChip tone={r.role === "replacement" ? "ok" : "neu"}>
-                      {r.role === "replacement" ? "Replacement" : "Found on site"}
+                      {r.role === "replacement" ? "Replacement" : "To be replaced"}
                     </StatusChip>
                   </td>
                   <td className="num text-right">{r.defaultWattage ?? "—"}</td>
-                  <td className="text-[var(--text-muted)]">
-                    {r.role === "replacement" ? (
-                      "—"
-                    ) : r.replacementIds.length === 0 ? (
-                      <StatusChip tone="warn">None mapped</StatusChip>
-                    ) : (
-                      r.replacementIds.map((id) => nameById.get(id) ?? id).join(", ")
-                    )}
-                  </td>
                   <td>
                     {r.active ? (
                       <StatusChip tone="ok">Active</StatusChip>
@@ -342,7 +330,7 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
                     <td>
                       <span className="font-medium line-through">{r.name}</span>
                       <p className="text-[13px] text-[var(--text-muted)]">
-                        {r.role === "replacement" ? "Replacement" : "Found on site"}
+                        {r.role === "replacement" ? "Replacement" : "To be replaced"}
                         {r.usageCount > 0 ? ` · still on ${r.usageCount} recorded line${r.usageCount === 1 ? "" : "s"}` : ""}
                       </p>
                       {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}

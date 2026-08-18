@@ -37,7 +37,7 @@ export default async function DeviceCatalogPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
         {[
           {
-            label: "Found on site",
+            label: "To be replaced",
             value: originals.filter((t) => t.active).length,
             detail: `${originals.length} in the catalog`,
           },

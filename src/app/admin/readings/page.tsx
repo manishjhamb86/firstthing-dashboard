@@ -54,9 +54,14 @@ export default async function ReadingsPage({
     db.readingAnomaly.count({ where: { period, status: { in: ["open", "sent_back"] }, blocksBilling: true } }),
   ]);
 
+  const daysIngested = uploads
+    .filter((u) => u.status === "committed")
+    .reduce((sum, u) => sum + u._count.readings, 0);
+
   const committedCircuitIds = new Set(
     uploads.filter((u) => u.status === "committed").map((u) => u.circuitId),
   );
+  const awaiting = circuits.filter((c) => !committedCircuitIds.has(c.id));
 
   return (
     <>
@@ -74,6 +79,33 @@ export default async function ReadingsPage({
           </Link>
         }
       />
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        {[
+          {
+            label: "Circuits covered",
+            value: `${committedCircuitIds.size}/${circuits.length}`,
+            detail: circuits.length === 0 ? "none billable yet" : `for ${period}`,
+          },
+          { label: "Days ingested", value: daysIngested.toLocaleString("en-IN"), detail: "committed readings" },
+          {
+            label: "Awaiting readings",
+            value: awaiting.length,
+            detail: awaiting.length === 0 ? "every circuit in" : "no file yet",
+          },
+          {
+            label: "Blocking flags",
+            value: openAnomalies,
+            detail: openAnomalies === 0 ? "nothing held up" : "bills held until resolved",
+          },
+        ].map((f) => (
+          <div key={f.label} className="card p-4">
+            <p className="lbl mb-1.5">{f.label}</p>
+            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
+            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
+          </div>
+        ))}
+      </div>
 
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
@@ -112,6 +144,46 @@ export default async function ReadingsPage({
             Reading ingest is an operations lead action — it needs both pipeline and field-survey
             authority. You can see every upload and its readings here.
           </p>
+        </Card>
+      )}
+
+      {circuits.length > 0 && awaiting.length > 0 && (
+        <Card className="p-6 mb-6">
+          <CardTitle>Awaiting readings</CardTitle>
+          <p className="text-sm text-[var(--text-muted)] mb-4">
+            These circuits are billable for {period} and have no committed file yet. A month cannot
+            be calculated for a circuit with no readings.
+          </p>
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Circuit</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {awaiting.map((c) => (
+                  <tr key={c.id}>
+                    <td className="font-medium">{c.society.name}</td>
+                    <td className="text-[var(--text-muted)]">
+                      {c.lightType}
+                      {c.location ? ` · ${c.location}` : ""}
+                    </td>
+                    <td className="text-right">
+                      <Link
+                        href={`/admin/societies/${c.society.id}/circuits/${c.id}`}
+                        className="text-sm underline"
+                      >
+                        Open circuit
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 

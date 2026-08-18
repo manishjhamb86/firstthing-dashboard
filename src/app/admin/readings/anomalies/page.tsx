@@ -80,6 +80,35 @@ export default async function AnomalyReviewPage({
         }
       />
 
+      {anomalies.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          {[
+            {
+              label: "Unresolved",
+              value: unresolved,
+              detail: unresolved === 0 ? "nothing held" : "holding the month",
+            },
+            {
+              label: "Informational",
+              value: anomalies.filter((a) => !a.blocksBilling && a.status === "open").length,
+              detail: "worth a look, not blocking",
+            },
+            { label: "Circuits affected", value: byCircuit.size, detail: `flagged in ${period}` },
+            {
+              label: "Coverage accepted",
+              value: acceptedCircuits.size,
+              detail: acceptedCircuits.size === 0 ? "none needed" : `below ${COVERAGE_FLOOR_DAYS} days, signed off`,
+            },
+          ].map((f) => (
+            <div key={f.label} className="card p-4">
+              <p className="lbl mb-1.5">{f.label}</p>
+              <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
+              <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
           <label htmlFor="period" className="lbl">

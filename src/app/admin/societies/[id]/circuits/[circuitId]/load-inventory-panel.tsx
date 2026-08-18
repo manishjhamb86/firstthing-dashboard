@@ -149,25 +149,32 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
       <p className="text-sm font-semibold mb-3">New device line</p>
 
       {/* A grid, so every label sits on one line and every control on the
-          next — regardless of which field carries a hint. */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Field label="Device" htmlFor="inv-type">
-          <select
-            id="inv-type"
-            value={typeId}
-            onChange={(e) => pickType(e.target.value)}
-            disabled={pending}
-            className="field"
-          >
-            <option value="">Pick from the catalog…</option>
-            {catalog.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Count" htmlFor="inv-count">
+          next — regardless of which field carries a hint.
+          The numeric columns are content-sized (auto) and their labels are
+          nowrap, so each is only as wide as its own title; Device takes
+          minmax(0,1fr) and gets everything left over, because a device name
+          like "Motion-enabled dimmable surface 12W" is the one value here
+          that actually needs the room (user's call, 2026-08-17). */}
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-[minmax(0,1fr)_5rem_6rem_auto]">
+        <div className="col-span-2 lg:col-span-1 min-w-0">
+          <Field label="Device" htmlFor="inv-type">
+            <select
+              id="inv-type"
+              value={typeId}
+              onChange={(e) => pickType(e.target.value)}
+              disabled={pending}
+              className="field"
+            >
+              <option value="">Pick from the catalog…</option>
+              {catalog.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        <Field label={<span className="whitespace-nowrap">Count</span>} htmlFor="inv-count">
           <input
             id="inv-count"
             type="number"
@@ -178,7 +185,7 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
             className="field"
           />
         </Field>
-        <Field label="Watts each" htmlFor="inv-w">
+        <Field label={<span className="whitespace-nowrap">Watts each</span>} htmlFor="inv-w">
           <input
             id="inv-w"
             type="number"
@@ -190,7 +197,7 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
             className="field"
           />
         </Field>
-        <Field label="Runs per day" htmlFor="inv-h">
+        <Field label={<span className="whitespace-nowrap">Runs per day</span>} htmlFor="inv-h">
           <HoursInput id="inv-h" hours={hours} setHours={setHours} disabled={pending} />
         </Field>
       </div>

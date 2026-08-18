@@ -211,7 +211,16 @@ body {
 
 /* field — real padding, --field-border (the control-boundary token that
    exists precisely so inputs don't inherit the decorative border), visible
-   focus state */
+   focus state.
+ *
+ * Declared inside @layer components so Tailwind's utilities layer, which
+ * comes after it, can override individual properties. Unlayered these rules
+ * beat every utility regardless of class order — which is why `.field-auto`
+ * had to exist at all, and why `field field-auto w-20` silently resolved to
+ * width:auto (a number input at auto is ~174px of browser default). Eleven
+ * call sites were sizing controls that way and getting the default instead;
+ * one layer declaration fixes all of them. */
+@layer components {
 .field {
   width: 100%;
   border: 1px solid var(--field-border);
@@ -234,12 +243,12 @@ body {
 .field:disabled {
   opacity: 0.6;
 }
-/* Tailwind's utilities live in a cascade layer, so an unlayered `.field`
-   rule beats `w-auto` no matter the class order in the markup — the header
-   status select rendered full-bleed because of exactly this. An explicit
-   opt-out class, declared after `.field`, is the reliable override. */
+/* Kept for the many call sites that use it to mean "size to content" (a
+   select showing "Custom…", for instance). Now that `.field` is layered, an
+   explicit Tailwind width also works and wins over both. */
 .field-auto {
   width: auto;
+}
 }
 
 /* buttons — all variants share real padding, radius, and motion. The old

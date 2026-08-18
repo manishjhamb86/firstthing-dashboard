@@ -23,7 +23,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         // "role" column — see PROJECT_CONTEXT.md and 00-intake.md INV-01.
         // This makes an admin session structurally impossible to obtain any
         // other way, not just role-gated.
-        const admin = await db.adminUser.findUnique({ where: { email } });
+        // A removed account must not be able to sign in. Filtering here rather
+        // than after the password check means a deleted admin is indistinguishable
+        // from a nonexistent one, which is also the right answer to give.
+        const admin = await db.adminUser.findFirst({ where: { email, deletedAt: null } });
         if (admin) {
           if (!admin.isActive) {
             logger.warn("auth.login_failed", { email, reason: "admin_inactive" });

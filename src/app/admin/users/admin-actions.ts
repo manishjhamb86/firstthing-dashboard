@@ -84,7 +84,7 @@ export async function deleteAdminUser(id: string) {
   const target = await db.adminUser.findUnique({ where: { id } });
   if (target?.permissions.includes("manage_admins")) {
     const otherActiveManagers = await db.adminUser.count({
-      where: { id: { not: id }, isActive: true, permissions: { has: "manage_admins" } },
+      where: { id: { not: id }, isActive: true, deletedAt: null, permissions: { has: "manage_admins" } },
     });
     if (otherActiveManagers === 0) {
       logger.warn("admin_user.lockout_refused", { actorId: session.user.id, targetId: id, act: "delete" });
@@ -92,8 +92,33 @@ export async function deleteAdminUser(id: string) {
     }
   }
 
-  await db.adminUser.delete({ where: { id } });
-  logger.info("admin_user.deleted", { actorId: session.user.id, targetId: id });
+  // Soft delete, never a row removal: this account is the recorded actor on
+  // gate passes, releases, rescales and more, and deleting it would either
+  // fail on those references or quietly detach them from a name. Removal
+  // hides the account and stops it signing in (auth.ts filters deletedAt,
+  // and resolveAdmin ends any live session on the next request).
+  await db.adminUser.update({
+    where: { id },
+    data: { deletedAt: new Date(), deletedById: session.user.id, isActive: false },
+  });
+  logger.info("admin_user.removed", { actorId: session.user.id, targetId: id });
+  revalidatePath("/admin/users");
+  return {};
+}
+
+export async function restoreAdminUser(id: string) {
+  const session = await requireAdminPermission("manage_admins");
+  const target = await db.adminUser.findUnique({ where: { id } });
+  if (!target) return { error: "That account no longer exists." };
+  if (!target.deletedAt) return { error: "That account has not been removed." };
+
+  // Restored deactivated, not straight back into service: whoever restores it
+  // should have to decide, as a separate act, that it may sign in again.
+  await db.adminUser.update({
+    where: { id },
+    data: { deletedAt: null, deletedById: null, isActive: false },
+  });
+  logger.info("admin_user.restored", { actorId: session.user.id, targetId: id });
   revalidatePath("/admin/users");
   return {};
 }

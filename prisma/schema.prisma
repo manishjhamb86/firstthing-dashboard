@@ -371,8 +371,18 @@ model AdminUser {
   createdById     String?           @map("created_by_id")
   createdAt       DateTime          @default(now()) @map("created_at")
 
+  // Soft delete. An AdminUser is the recorded actor on dozens of tables
+  // below — who approved a gate pass, who released a month, who voided a
+  // baseline — so the row can never actually go away without taking that
+  // provenance with it. Removal hides the account and stops it signing in;
+  // the history keeps pointing at a real name.
+  deletedAt   DateTime? @map("deleted_at")
+  deletedById String?   @map("deleted_by_id")
+
   createdBy AdminUser?  @relation("AdminCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   created   AdminUser[] @relation("AdminCreatedBy")
+  deletedBy AdminUser?  @relation("AdminDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deleted   AdminUser[] @relation("AdminDeletedBy")
 
   pipelinesOwned  Pipeline[] @relation("PipelineSalesOwner")
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")

@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { AdminRow } from "./admin-row";
-import { NewAdminForm } from "./new-admin-form";
+import { EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { AdminUsersClient } from "./admin-users-client";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
 // FEAT-086: internal (AdminUser) account management. Gated to admins who
@@ -12,9 +11,12 @@ export default async function UsersPage() {
   const session = await requireAdminPage();
 
   const canManageAdmins = session.user.adminPermissions?.includes("manage_admins") ?? false;
-  const admins = await db.adminUser.findMany({ orderBy: { createdAt: "asc" } });
+  const admins = await db.adminUser.findMany({ orderBy: [{ deletedAt: "asc" }, { createdAt: "asc" }] });
 
-  const active = admins.filter((a) => a.isActive);
+  // Removed accounts are excluded from every count — they cannot sign in and
+  // cannot hold an authority.
+  const liveAdmins = admins.filter((a) => !a.deletedAt);
+  const active = liveAdmins.filter((a) => a.isActive);
   // createAdmin/updateAdmin/deleteAdmin already refuse to remove the last
   // active manage_admins holder — a self-lockout nobody can undo from inside
   // the product. The screen never said how close to that edge it was, so the
@@ -37,7 +39,7 @@ export default async function UsersPage() {
       {canManageAdmins && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 max-w-4xl">
           {[
-            { label: "Admin accounts", value: admins.length, detail: `${active.length} active` },
+            { label: "Admin accounts", value: liveAdmins.length, detail: `${active.length} active` },
             {
               label: "Can manage admins",
               value: adminManagers,
@@ -50,8 +52,8 @@ export default async function UsersPage() {
             },
             {
               label: "Deactivated",
-              value: admins.length - active.length,
-              detail: admins.length === active.length ? "none" : "cannot sign in",
+              value: liveAdmins.length - active.length,
+              detail: liveAdmins.length === active.length ? "none" : "cannot sign in",
             },
           ].map((f) => (
             <div key={f.label} className="card p-4">
@@ -69,20 +71,22 @@ export default async function UsersPage() {
           available to you.
         </p>
       ) : (
-        <div className="space-y-6 max-w-4xl">
+        <div className="space-y-6">
           {admins.length === 0 ? (
-            <EmptyState title="No admin accounts">Create the first internal account below.</EmptyState>
+            <EmptyState title="No admin accounts">Create the first internal account.</EmptyState>
           ) : (
-            <Card className="p-6">
-              <ul className="space-y-4">
-                {admins.map((a) => (
-                  <AdminRow key={a.id} admin={a} isSelf={a.id === session.user.id} />
-                ))}
-              </ul>
-            </Card>
+            <AdminUsersClient
+              selfId={session.user.id}
+              rows={admins.map((a) => ({
+                id: a.id,
+                email: a.email,
+                name: a.name,
+                isActive: a.isActive,
+                removed: a.deletedAt !== null,
+                permissions: a.permissions,
+              }))}
+            />
           )}
-
-          <NewAdminForm />
         </div>
       )}
     </>

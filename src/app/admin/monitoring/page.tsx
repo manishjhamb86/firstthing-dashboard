@@ -8,6 +8,16 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 
 const REQUIRED_VALID_DAYS = 5;
 
+/** Days here are stored at UTC midnight; compare on the same footing. */
+function utcDay(d: Date) {
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+function loggedToday(readings: { date: Date }[], now: Date) {
+  const today = utcDay(now);
+  return readings.some((r) => utcDay(r.date) === today);
+}
+
 function dayCount(readings: { status: string }[]) {
   return readings.filter((r) => r.status === "valid").length;
 }
@@ -82,6 +92,7 @@ export default async function MonitoringDashboardPage() {
       circuit: c,
       validCount: dayCount(readings),
       pendingAnomaly: readings.some((r) => r.status === "anomaly"),
+      loggedToday: loggedToday(readings, now),
       variancePct: latestVarianceFromAveragePct(readings),
     };
   });
@@ -99,9 +110,19 @@ export default async function MonitoringDashboardPage() {
       circuit: c,
       validCount: dayCount(readings),
       pendingAnomaly: readings.some((r) => r.status === "anomaly"),
+      loggedToday: loggedToday(readings, now),
       projectedSavingsPct,
     };
   });
+
+  const activeWindows = preRows.length + postRows.length;
+  const awaitingToday = [...preRows, ...postRows].filter(
+    (r) => !r.loggedToday && !r.pendingAnomaly,
+  ).length;
+  const anomaliesOpen = [...preRows, ...postRows].filter((r) => r.pendingAnomaly).length;
+  // Four stacked empty states is not a dashboard; when there is genuinely
+  // nothing in flight, say that once.
+  const nothingInFlight = openReviews.length === 0 && activeWindows === 0;
 
   return (
     <>
@@ -110,6 +131,50 @@ export default async function MonitoringDashboardPage() {
         subtitle="Daily status of every circuit currently in a commissioning window."
       />
 
+      {/* The board's own facts. "Awaiting today's reading" is the question
+          this screen exists to answer and the one it never actually stated —
+          a window needs one reading per day, and a day missed is a day the
+          window does not advance. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8">
+        {[
+          {
+            label: "Awaiting today's reading",
+            value: awaitingToday,
+            detail: activeWindows === 0 ? "no active windows" : `of ${activeWindows} active window${activeWindows === 1 ? "" : "s"}`,
+          },
+          {
+            label: "Stuck on review",
+            value: openReviews.length,
+            detail: openReviews.length === 0 ? "nothing out of band" : "out of CON-20's band",
+          },
+          {
+            label: "Windows in progress",
+            value: activeWindows,
+            detail: `${preRows.length} pre · ${postRows.length} post`,
+          },
+          {
+            label: "Anomalies open",
+            value: anomaliesOpen,
+            detail: anomaliesOpen === 0 ? "no window held" : "window held until fixed",
+          },
+        ].map((f) => (
+          <div key={f.label} className="card p-4">
+            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
+            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
+            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
+          </div>
+        ))}
+      </div>
+
+      {nothingInFlight ? (
+        <Card className="p-6">
+          <EmptyState title="Nothing in a commissioning window">
+            No circuit is currently mid-window and nothing is awaiting review. A circuit appears
+            here the day after its meter is installed, and stays until its benchmark is confirmed.
+          </EmptyState>
+        </Card>
+      ) : (
+        <>
       {/* FEAT-015 — sits first because it is the only section here holding
           work that is stuck rather than merely in progress. */}
       <section className="mb-8">
@@ -177,6 +242,7 @@ export default async function MonitoringDashboardPage() {
                   <th>Society</th>
                   <th>Circuit</th>
                   <th>Progress</th>
+                  <th>Today</th>
                   <th>Latest vs. average</th>
                 </tr>
               </thead>
@@ -199,6 +265,15 @@ export default async function MonitoringDashboardPage() {
                           {row.validCount}/{REQUIRED_VALID_DAYS}
                         </span>
                       </span>
+                    </td>
+                    <td>
+                      {row.pendingAnomaly ? (
+                        <span className="text-[var(--text-muted)]">—</span>
+                      ) : row.loggedToday ? (
+                        <StatusChip tone="ok">Logged</StatusChip>
+                      ) : (
+                        <StatusChip tone="warn">Not yet</StatusChip>
+                      )}
                     </td>
                     <td>
                       {row.pendingAnomaly ? (
@@ -234,6 +309,7 @@ export default async function MonitoringDashboardPage() {
                   <th>Society</th>
                   <th>Circuit</th>
                   <th>Progress</th>
+                  <th>Today</th>
                   <th>Projected savings</th>
                 </tr>
               </thead>
@@ -264,6 +340,15 @@ export default async function MonitoringDashboardPage() {
                       </td>
                       <td>
                         {row.pendingAnomaly ? (
+                          <span className="text-[var(--text-muted)]">—</span>
+                        ) : row.loggedToday ? (
+                          <StatusChip tone="ok">Logged</StatusChip>
+                        ) : (
+                          <StatusChip tone="warn">Not yet</StatusChip>
+                        )}
+                      </td>
+                      <td>
+                        {row.pendingAnomaly ? (
                           <StatusChip tone="warn">Anomaly open</StatusChip>
                         ) : row.projectedSavingsPct != null ? (
                           <StatusChip tone={inBand ? "ok" : "warn"}>
@@ -281,6 +366,9 @@ export default async function MonitoringDashboardPage() {
           </Card>
         )}
       </section>
+
+        </>
+      )}
 
       <section>
         <h2 className="text-[15px] font-semibold mb-3">Recently resolved</h2>

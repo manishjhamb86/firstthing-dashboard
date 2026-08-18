@@ -55,6 +55,40 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
 
   const totalLights = siteSurvey.areas.reduce((sum, a) => sum + a.count, 0);
 
+  // CON-11's extrapolation base. Areas are how lights get COUNTED ("Tower B
+  // staircase"); light types are how they get BILLED — four towers are four
+  // area rows and one type, and the per-type sum is what a metered circuit
+  // will represent. The page collected both axes and showed only one, which
+  // left the number that decides billing un-shown on the screen that
+  // produces it (05-screens SCR-011).
+  const byLightType = [...
+    siteSurvey.areas
+      .reduce((m, a) => {
+        const e = m.get(a.lightType) ?? { lights: 0, areas: 0, estimated: 0 };
+        e.lights += a.count;
+        e.areas += 1;
+        if (a.method === "estimated") e.estimated += 1;
+        m.set(a.lightType, e);
+        return m;
+      }, new Map<string, { lights: number; areas: number; estimated: number }>())
+      .entries(),
+  ].sort((x, y) => y[1].lights - x[1].lights);
+
+  const estimatedAreas = siteSurvey.areas.filter((a) => a.method === "estimated").length;
+
+  // An area's light type and a candidate circuit's light type are two
+  // INDEPENDENT free-text fields — real data already holds "Tube Light" on
+  // one and "Tubelight" on the other, which an exact match reports as an
+  // uncovered type while a candidate plainly exists. Comparing on a
+  // normalised key makes the coverage column right in practice; the real
+  // fix is one controlled vocabulary across both (CON-11 names five
+  // profiles), which is a schema change and belongs in the blueprint, not
+  // in a design pass. Flagged rather than silently normalised away.
+  const typeKey = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const candidateTypeKeys = new Set(circuits.map((c) => typeKey(c.lightType)));
+  const hasCandidateFor = (t: string) => candidateTypeKeys.has(typeKey(t));
+  const typesWithoutCandidate = byLightType.filter(([t]) => !hasCandidateFor(t)).length;
+
   // Where does this survey hand off? Once a candidate clears eligibility,
   // everything that comes next (meter, windows, benchmark) happens on the
   // CIRCUIT page — the hand-off this screen previously never stated, which
@@ -84,6 +118,32 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
       />
 
       {handoff && <NextStepCallout next={handoff} />}
+
+      {/* What the survey has established so far. Every figure is counted
+          from the rows below it, never stored separately. */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8 max-w-2xl">
+        {[
+          { label: "Areas counted", value: siteSurvey.areas.length, detail: siteSurvey.areas.length === 0 ? "none yet" : "recorded" },
+          { label: "Lights", value: totalLights.toLocaleString("en-IN"), detail: "whole society" },
+          { label: "Light types", value: byLightType.length, detail: "each needs a circuit" },
+          {
+            label: "Candidates",
+            value: circuits.length,
+            detail:
+              byLightType.length === 0
+                ? "count the lighting first"
+                : typesWithoutCandidate > 0
+                  ? `${typesWithoutCandidate} type${typesWithoutCandidate === 1 ? "" : "s"} unresolved`
+                  : "every type covered",
+          },
+        ].map((f) => (
+          <div key={f.label} className="card p-4">
+            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
+            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
+            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
+          </div>
+        ))}
+      </div>
 
       <section className="max-w-2xl mb-10">
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-3">
@@ -160,6 +220,65 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
             </details>
           ))}
       </section>
+
+      {/* The billing axis, derived from the area rows above. Named as the
+          extrapolation base rather than as a subtotal, because that is what
+          it is: one circuit is metered per type and represents this many
+          lights (CON-11). */}
+      {byLightType.length > 0 && (
+        <section className="max-w-2xl mb-10">
+          <h2 className="text-[15px] font-semibold mb-1">Extrapolation base</h2>
+          <p className="text-sm text-[var(--text-muted)] mb-3">
+            One circuit is metered per light type, and represents every light of that type. These
+            totals are what a bill is extrapolated across — they are not revisited later.
+          </p>
+          <Card className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Light type</th>
+                  <th>Areas</th>
+                  <th>Lights represented</th>
+                  <th>Candidate circuit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byLightType.map(([type, agg]) => {
+                  const covered = hasCandidateFor(type);
+                  return (
+                    <tr key={type}>
+                      <td className="font-medium">{type}</td>
+                      <td className="num">{agg.areas}</td>
+                      <td className="num">
+                        {agg.lights.toLocaleString("en-IN")}
+                        {agg.estimated > 0 && (
+                          <span className="ml-2 text-xs" style={{ color: "var(--warn-fg)" }}>
+                            {agg.estimated} estimated
+                          </span>
+                        )}
+                      </td>
+                      <td>
+                        {covered ? (
+                          <StatusChip tone="ok">Selected</StatusChip>
+                        ) : (
+                          <StatusChip tone="warn">Not yet</StatusChip>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+          {estimatedAreas > 0 && (
+            <p className="mt-3 text-xs" style={{ color: "var(--warn-fg)" }}>
+              {estimatedAreas} area{estimatedAreas === 1 ? " was" : "s were"} estimated rather than
+              walked and counted. Nothing downstream re-counts these — a miscount here biases the
+              bill for the whole term.
+            </p>
+          )}
+        </section>
+      )}
 
       <section className="max-w-2xl">
         <h2 className="text-[15px] font-semibold mb-3">

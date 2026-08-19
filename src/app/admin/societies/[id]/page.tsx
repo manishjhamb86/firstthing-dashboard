@@ -165,7 +165,19 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
               </ul>
             )}
 
-            <EnrollServiceLineForm societyId={society.id} available={availableServiceLines} />
+            {/* Enrolment comes AFTER a lead, not before it: a society is
+                engaged on a service line because a deal was opened and a
+                meeting happened, so offering the control first invites
+                recording an engagement that nothing backs. With no lead on
+                record the card says what has to happen first instead. */}
+            {pipelines.length > 0 ? (
+              <EnrollServiceLineForm societyId={society.id} available={availableServiceLines} />
+            ) : (
+              <p className="mt-4 pt-4 border-t border-[var(--border-subtle)] text-sm text-[var(--text-muted)]">
+                Enrolling a service line comes after a lead — log one and hold the meeting first, and
+                logging it enrols the society on that line automatically.
+              </p>
+            )}
           </Card>
 
           <Card className="p-6 min-w-0">

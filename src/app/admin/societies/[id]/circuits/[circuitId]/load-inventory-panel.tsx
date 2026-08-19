@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Card, EmptyState, ErrorText, Field } from "@/components/ui";
+import { Card, EmptyState, ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { addCircuitDevice, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
 
@@ -16,6 +16,7 @@ export type InventoryLine = {
   replacementName: string | null;
   replacementCount: number | null;
   replacementWattage: number | null;
+  historical: boolean;
 };
 
 export type CatalogOption = { id: string; name: string; defaultWattage: number | null };
@@ -89,6 +90,8 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
   const [wattage, setWattage] = useState("");
   const [hours, setHours] = useState("24");
   const [note, setNote] = useState("");
+  const [historical, setHistorical] = useState(false);
+  const [historicalNote, setHistoricalNote] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
 
@@ -106,6 +109,8 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
     setWattage("");
     setHours("24");
     setNote("");
+    setHistorical(false);
+    setHistoricalNote("");
     setError(undefined);
   }
 
@@ -118,6 +123,8 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
         wattage: Number(wattage),
         hoursPerDay: Number(hours),
         note,
+        historical,
+        historicalNote,
       });
       if ("error" in result) {
         setError(result.error);
@@ -227,6 +234,37 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
           />
         </Field>
 
+        {/* The one way past the post-replacement freeze: say plainly that
+            this line is a reconstruction, not something captured on site. */}
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={historical}
+            onChange={(e) => setHistorical(e.target.checked)}
+            disabled={pending}
+            className="mt-1"
+          />
+          <span>
+            Past record — this circuit was commissioned before the system
+            <span className="block text-xs text-[var(--text-subtle)]">
+              Lets the line be entered after the lights were replaced. It stays marked as
+              reconstructed, so a reading judged against it can be read for what it is.
+            </span>
+          </span>
+        </label>
+
+        {historical && (
+          <Field label="Where this came from" htmlFor="add-hist-note" hint="Optional — the survey sheet, invoice or photo it was reconstructed from.">
+            <input
+              id="add-hist-note"
+              value={historicalNote}
+              onChange={(e) => setHistoricalNote(e.target.value)}
+              disabled={pending}
+              className="field"
+            />
+          </Field>
+        )}
+
         {error && <ErrorText>{error}</ErrorText>}
       </Modal>
     </>
@@ -284,7 +322,17 @@ function LineRow({ line, editable }: { line: InventoryLine; editable: boolean })
 
   return (
     <tr>
-      <td>{line.deviceTypeName}</td>
+      <td>
+        {line.deviceTypeName}
+        {/* A reconstructed line must be readable as one — a reading judged
+            against it is evidence of a different quality than one captured
+            on site, and INV-02 means that has to be visible. */}
+        {line.historical && (
+          <span className="ml-2 align-middle">
+            <StatusChip tone="neu">Past record</StatusChip>
+          </span>
+        )}
+      </td>
       <td className="num">{line.count}</td>
       <td className="num">{line.wattage}</td>
       <td className="num">{line.hoursPerDay} h</td>
@@ -378,12 +426,14 @@ export function LoadInventoryPanel({
   catalog,
   editable,
   frozenReason,
+  canRecordHistorical,
 }: {
   circuitId: string;
   lines: InventoryLine[];
   catalog: CatalogOption[];
   editable: boolean;
   frozenReason: string | null;
+  canRecordHistorical: boolean;
 }) {
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
   const anyReplacement = lines.some((l) => l.replacementName);
@@ -432,7 +482,12 @@ export function LoadInventoryPanel({
       {editable ? (
         <AddLineForm circuitId={circuitId} catalog={catalog} />
       ) : frozenReason ? (
-        <p className="text-sm text-[var(--text-muted)]">{frozenReason}</p>
+        // Frozen is not a dead end: the reason is stated, and a past record
+        // can still be entered for a circuit commissioned before this system.
+        <div className="space-y-3">
+          <p className="text-sm text-[var(--text-muted)]">{frozenReason}</p>
+          {canRecordHistorical && <AddLineForm circuitId={circuitId} catalog={catalog} />}
+        </div>
       ) : null}
     </Card>
   );

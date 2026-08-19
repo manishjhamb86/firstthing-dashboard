@@ -395,6 +395,7 @@ model AdminUser {
   gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
   commissioningReadingsRecorded CommissioningReading[]
   circuitDevicesReplaced        CircuitDevice[]         @relation("CircuitDeviceReplacedBy")
+  circuitDevicesRecorded        CircuitDevice[]         @relation("CircuitDeviceRecordedBy")
   benchmarkRescalesRecorded     BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
   benchmarkRescalesVoided       BenchmarkRescaleEvent[] @relation("BenchmarkRescaleVoidedBy")
 
@@ -2151,12 +2152,24 @@ model CircuitDevice {
   replacedAt         DateTime? @map("replaced_at")
   replacedById       String?   @map("replaced_by_id")
 
+  // Backfill provenance. The inventory normally freezes at light replacement,
+  // because it is the record the replacement was judged against. A circuit
+  // that was commissioned BEFORE this system existed has no such record to
+  // protect — it has to be entered after the fact — so those lines are
+  // allowed through the freeze and carry this flag saying so. A figure
+  // reconstructed from paper is not the same evidence as one captured on
+  // site, and INV-02 means the difference has to be visible, not assumed.
+  historical      Boolean   @default(false)
+  historicalNote  String?   @map("historical_note")
+  recordedById    String?   @map("recorded_by_id")
+
   createdAt DateTime @default(now()) @map("created_at")
 
   circuit         Circuit     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
   deviceType      DeviceType  @relation("CircuitDeviceType", fields: [deviceTypeId], references: [id])
   replacementType DeviceType? @relation("CircuitReplacementType", fields: [replacementTypeId], references: [id])
   replacedBy      AdminUser?  @relation("CircuitDeviceReplacedBy", fields: [replacedById], references: [id])
+  recordedBy      AdminUser?  @relation("CircuitDeviceRecordedBy", fields: [recordedById], references: [id])
 
   @@index([circuitId])
   @@map("circuit_devices")

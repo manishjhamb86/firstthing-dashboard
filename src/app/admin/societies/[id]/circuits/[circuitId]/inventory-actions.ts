@@ -36,16 +36,23 @@ type EditableGate =
   | { error: string; circuit?: never }
   | { error?: never; circuit: { id: string; societyId: string } };
 
-async function editableCircuit(circuitId: string): Promise<EditableGate> {
+async function editableCircuit(circuitId: string, historical = false): Promise<EditableGate> {
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
     select: { id: true, societyId: true, lightReplacementDate: true, voidedAt: true },
   });
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
-  if (circuit.lightReplacementDate) {
+  // The freeze still holds for ordinary edits — after replacement the
+  // inventory IS the record the replacement was judged against. What it must
+  // not do is block backfilling a circuit that was commissioned before this
+  // system existed: there, the record does not exist yet and the freeze is
+  // protecting nothing. Such a line comes through explicitly marked
+  // historical, so the reconstruction is visible in the data rather than
+  // indistinguishable from a line captured on site.
+  if (circuit.lightReplacementDate && !historical) {
     return {
       error:
-        "The lights on this circuit have been replaced — the inventory is frozen as the record the replacement was made against.",
+        "The lights on this circuit have been replaced — the inventory is frozen. Tick \u201cpast record\u201d to enter it as a historical line.",
     };
   }
   return { circuit: { id: circuit.id, societyId: circuit.societyId } };
@@ -71,6 +78,9 @@ export async function addCircuitDevice(input: {
   wattage: number;
   hoursPerDay: number;
   note?: string;
+  /** entered after the fact for a circuit commissioned before this system */
+  historical?: boolean;
+  historicalNote?: string;
 }): Promise<Outcome> {
   const admin = await requireSurveyor();
   if (!admin) {
@@ -78,7 +88,7 @@ export async function addCircuitDevice(input: {
     return { error: "Recording the load inventory is a field-survey action." };
   }
 
-  const gate = await editableCircuit(input.circuitId);
+  const gate = await editableCircuit(input.circuitId, input.historical === true);
   if (gate.error !== undefined) return { error: gate.error };
 
   const type = await db.deviceType.findUnique({ where: { id: input.deviceTypeId } });
@@ -96,6 +106,9 @@ export async function addCircuitDevice(input: {
       wattage: input.wattage,
       hoursPerDay: input.hoursPerDay,
       note: input.note?.trim() || null,
+      historical: input.historical === true,
+      historicalNote: input.historical === true ? input.historicalNote?.trim() || null : null,
+      recordedById: admin.id,
     },
   });
   logger.info("inventory.line_added", {
@@ -105,6 +118,7 @@ export async function addCircuitDevice(input: {
     count: input.count,
     wattage: input.wattage,
     hoursPerDay: input.hoursPerDay,
+    historical: input.historical === true,
   });
   revalidatePath(circuitPath(gate.circuit.societyId, gate.circuit.id));
   return { ok: true };
@@ -122,7 +136,10 @@ export async function updateCircuitDevice(input: {
 
   const line = await db.circuitDevice.findUnique({ where: { id: input.lineId } });
   if (!line) return { error: "That line item no longer exists." };
-  const gate = await editableCircuit(line.circuitId);
+  // A line already marked historical stays editable after the freeze — a
+  // reconstruction gets corrected as the paper record is checked, which is
+  // exactly the workflow the flag exists to support.
+  const gate = await editableCircuit(line.circuitId, line.historical);
   if (gate.error !== undefined) return { error: gate.error };
 
   const invalid = validateLine(input);
@@ -148,7 +165,7 @@ export async function removeCircuitDevice(lineId: string): Promise<Outcome> {
 
   const line = await db.circuitDevice.findUnique({ where: { id: lineId } });
   if (!line) return { error: "That line item no longer exists." };
-  const gate = await editableCircuit(line.circuitId);
+  const gate = await editableCircuit(line.circuitId, line.historical);
   if (gate.error !== undefined) return { error: gate.error };
 
   await db.circuitDevice.delete({ where: { id: line.id } });

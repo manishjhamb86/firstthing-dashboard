@@ -143,6 +143,7 @@ export default async function CircuitDetailPage({
     count: l.count,
     wattage: l.wattage,
     hoursPerDay: l.hoursPerDay,
+    historical: l.historical,
     note: l.note,
     replacementName: l.replacementType?.name ?? null,
     replacementCount: l.replacementCount,
@@ -346,6 +347,11 @@ export default async function CircuitDetailPage({
                 ? null
                 : "Recording the load inventory is PER-04\u2019s action."
           }
+          // A circuit commissioned before this system still has to have its
+          // inventory entered. Anyone who could have recorded it normally can
+          // record it as a past record — the flag, not a second permission,
+          // is what keeps the reconstruction visible.
+          canRecordHistorical={canEdit && !circuit.voidedAt}
         />
       </section>
 

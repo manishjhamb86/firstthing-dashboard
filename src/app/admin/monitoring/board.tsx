@@ -119,7 +119,67 @@ export function MonitoringBoard({ rows }: { rows: BoardRow[] }) {
           </EmptyState>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Mobile: one card per circuit, not a table squeezed sideways. The
+            shape follows the reference the user approved — identity + status
+            pill on top, the number and its bar as the middle line, the meta
+            line beneath, chevron to open. It carries exactly the same fields
+            as the desktop table, so nothing is hidden, only re-laid-out. */}
+        <ul className="md:hidden flex flex-col gap-3 p-3">
+          {shown.map((r) => (
+            <li key={r.id}>
+              <Link
+                href={r.href}
+                className="block card p-4 no-underline"
+                style={
+                  r.urgent
+                    ? { borderColor: "var(--bad-line)", background: "var(--bad-bg)" }
+                    : undefined
+                }
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold truncate">{r.society}</p>
+                    <p className="text-[13px] text-[var(--text-muted)] truncate">{r.circuit}</p>
+                  </div>
+                  <StatusChip tone={r.urgent ? "bad" : r.group === "resolved" ? "ok" : "neu"}>
+                    {r.stageLabel}
+                  </StatusChip>
+                </div>
+
+                {r.validCount !== null && (
+                  <div className="mt-3 flex items-center gap-3">
+                    <span className="num text-[22px] font-semibold leading-none">
+                      {r.validCount}/{r.requiredDays}
+                    </span>
+                    <span className="flex-1">
+                      <DayStrip validCount={r.validCount} required={r.requiredDays} />
+                    </span>
+                  </div>
+                )}
+
+                <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  {r.today !== null &&
+                    (r.today === "logged" ? (
+                      <StatusChip tone="ok">Logged today</StatusChip>
+                    ) : (
+                      <StatusChip tone="warn">Not logged today</StatusChip>
+                    ))}
+                  {r.signalTone ? (
+                    <StatusChip tone={r.signalTone}>{r.signal}</StatusChip>
+                  ) : (
+                    <span className="num text-sm text-[var(--text-muted)]">{r.signal}</span>
+                  )}
+                  <span className="row-link-cue ml-auto text-sm font-semibold" aria-hidden>
+                    Open →
+                  </span>
+                </div>
+              </Link>
+            </li>
+          ))}
+        </ul>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="tbl">
             <thead>
               <tr>
@@ -183,6 +243,7 @@ export function MonitoringBoard({ rows }: { rows: BoardRow[] }) {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

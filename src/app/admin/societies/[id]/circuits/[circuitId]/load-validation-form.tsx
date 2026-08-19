@@ -21,6 +21,11 @@ export function LoadValidationForm({
   // theoretical inputs are shown as reference (already recorded via
   // FEAT-007/FEAT-040), not retyped blind.
   const [meterDisplayedLoad, setMeterDisplayedLoad] = useState("");
+  // Defaults to today, because that is the normal case — the meter is being
+  // validated as it goes in. Editable because a circuit commissioned before
+  // this system has a real install date in the past, and that date sets the
+  // pre-install window start.
+  const [installedOn, setInstalledOn] = useState(() => new Date().toISOString().slice(0, 10));
   const [error, setError] = useState<string | undefined>();
   const [failed, setFailed] = useState(lastDiscrepancyPct != null && lastDiscrepancyPct > 10);
   const [overrideReason, setOverrideReason] = useState("");
@@ -30,7 +35,7 @@ export function LoadValidationForm({
 
   function submit() {
     startTransition(async () => {
-      const result = await submitLoadValidation(circuitId, Number(meterDisplayedLoad));
+      const result = await submitLoadValidation(circuitId, Number(meterDisplayedLoad), installedOn);
       if (result?.error) {
         setError(result.error);
         setFailed(true);
@@ -43,7 +48,7 @@ export function LoadValidationForm({
 
   function submitOverride() {
     startTransition(async () => {
-      const result = await overrideLoadValidation(circuitId, overrideReason);
+      const result = await overrideLoadValidation(circuitId, overrideReason, installedOn);
       setError(result?.error);
     });
   }
@@ -54,16 +59,33 @@ export function LoadValidationForm({
         Theoretical load (recorded): <span className="num">{meteredLightCount}</span> lights ×{" "}
         <span className="num">{wattage}</span>W = <span className="num">{theoreticalLoad}</span>W
       </p>
-      <Field label="Meter's displayed load (W)" htmlFor="lv-load">
-        <input
-          id="lv-load"
-          type="number"
-          value={meterDisplayedLoad}
-          onChange={(e) => setMeterDisplayedLoad(e.target.value)}
-          disabled={pending}
-          className="field"
-        />
-      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Meter's displayed load (W)" htmlFor="lv-load">
+          <input
+            id="lv-load"
+            type="number"
+            value={meterDisplayedLoad}
+            onChange={(e) => setMeterDisplayedLoad(e.target.value)}
+            disabled={pending}
+            className="field"
+          />
+        </Field>
+        <Field
+          label="Install date"
+          htmlFor="lv-installed"
+          hint="Today unless this is an older circuit — the baseline window starts the day after."
+        >
+          <input
+            id="lv-installed"
+            type="date"
+            value={installedOn}
+            max={new Date().toISOString().slice(0, 10)}
+            onChange={(e) => setInstalledOn(e.target.value)}
+            disabled={pending}
+            className="field"
+          />
+        </Field>
+      </div>
       {error && <ErrorText>{error}</ErrorText>}
       <button
         type="button"

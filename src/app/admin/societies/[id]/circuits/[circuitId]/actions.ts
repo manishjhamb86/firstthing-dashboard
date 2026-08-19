@@ -16,7 +16,40 @@ const LOAD_TOLERANCE_PCT = 10; // CON-17
 // failing. The delta is persisted either way so a subsequent PER-01
 // override (below) has the failed reading to record against, not just a
 // pass/fail flag.
-export async function submitLoadValidation(circuitId: string, meterDisplayedLoad: number) {
+/**
+ * The install date is normally "now" — the meter is being validated as it goes
+ * in. A circuit commissioned before this system existed has a real install
+ * date in the past, and it cannot be left as today: meterInstalledAt fixes the
+ * pre-install window start (the day after), so a wrong date silently puts
+ * every backfilled reading outside its own window. Hence an explicit date,
+ * defaulting to today.
+ *
+ * The only rule is "not in the future". A "not before the circuit was
+ * created" rule was drafted and dropped: a backfilled circuit's ROW is
+ * created today while its real install was months ago, so that guard would
+ * reject precisely the case this exists for.
+ */
+type InstallDate = { at: Date; error?: never } | { at?: never; error: string };
+
+function resolveInstallDate(installedOn: string | undefined): InstallDate {
+  if (!installedOn) return { at: new Date() };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(installedOn)) return { error: "Pick a valid install date." };
+  const at = new Date(`${installedOn}T00:00:00.000Z`);
+  if (Number.isNaN(at.getTime())) return { error: "Pick a valid install date." };
+
+  const todayEnd = new Date();
+  todayEnd.setUTCHours(23, 59, 59, 999);
+  if (at.getTime() > todayEnd.getTime()) {
+    return { error: "The meter cannot have been installed in the future." };
+  }
+  return { at };
+}
+
+export async function submitLoadValidation(
+  circuitId: string,
+  meterDisplayedLoad: number,
+  installedOn?: string,
+) {
   await requireAdminPermission("manage_survey");
 
   if (!Number.isFinite(meterDisplayedLoad) || meterDisplayedLoad <= 0) {
@@ -25,6 +58,10 @@ export async function submitLoadValidation(circuitId: string, meterDisplayedLoad
 
   const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
   if (!circuit) return { error: "Circuit not found." };
+
+  const installed = resolveInstallDate(installedOn);
+  if (installed.at === undefined) return { error: installed.error };
+  const installedAt: Date = installed.at;
 
   const theoreticalLoad = circuit.meteredLightCount * circuit.wattage;
   const discrepancyPct = (Math.abs(meterDisplayedLoad - theoreticalLoad) / theoreticalLoad) * 100;
@@ -39,7 +76,11 @@ export async function submitLoadValidation(circuitId: string, meterDisplayedLoad
       // moment the meter passes validation; the install day itself is
       // excluded (window starts the following calendar day).
       ...(withinTolerance
-        ? { state: "meter_installed", meterInstalledAt: new Date(), preInstallWindowStartAt: nextDayUTC(new Date()) }
+        ? {
+            state: "meter_installed",
+            meterInstalledAt: installedAt,
+            preInstallWindowStartAt: nextDayUTC(installedAt),
+          }
         : {}),
     },
   });
@@ -50,6 +91,8 @@ export async function submitLoadValidation(circuitId: string, meterDisplayedLoad
     meterDisplayedLoad,
     discrepancyPct,
     withinTolerance,
+    installedOn: installedAt.toISOString().slice(0, 10),
+    backdated: installedAt.toISOString().slice(0, 10) !== new Date().toISOString().slice(0, 10),
   });
 
   if (!withinTolerance) {
@@ -67,7 +110,7 @@ export async function submitLoadValidation(circuitId: string, meterDisplayedLoad
 // silently accepted as if it had passed normally. Same "hold both
 // permissions" PER-01 proxy already established for the light-count
 // exception (survey/actions.ts).
-export async function overrideLoadValidation(circuitId: string, reason: string) {
+export async function overrideLoadValidation(circuitId: string, reason: string, installedOn?: string) {
   await requireAdminPermission("manage_survey");
   const session = await requireAdminPermission("manage_pipeline");
 
@@ -77,12 +120,15 @@ export async function overrideLoadValidation(circuitId: string, reason: string) 
   if (!circuit) return { error: "Circuit not found." };
   if (circuit.meterDisplayedLoad == null) return { error: "No load reading has been submitted yet." };
 
+  const installed = resolveInstallDate(installedOn);
+  if (installed.at === undefined) return { error: installed.error };
+
   await db.circuit.update({
     where: { id: circuitId },
     data: {
       state: "meter_installed",
-      meterInstalledAt: new Date(),
-      preInstallWindowStartAt: nextDayUTC(new Date()),
+      meterInstalledAt: installed.at,
+      preInstallWindowStartAt: nextDayUTC(installed.at),
       loadValidationOverrideById: session.user.id,
       loadValidationOverrideReason: reason.trim(),
     },

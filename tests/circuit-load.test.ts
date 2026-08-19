@@ -147,10 +147,53 @@ describe("extractionWindow", () => {
   const meter = d("2026-05-21");
   const today = d("2026-08-17");
 
-  it("pre/post uploads re-read from the day after meter install through yesterday", () => {
-    const w = extractionWindow({ kind: "post_install", meterInstalledAt: meter, lastStoredDate: d("2026-06-20"), today });
+  it("a PRE-install upload re-reads from the day after meter install through yesterday", () => {
+    const w = extractionWindow({ kind: "pre_install", meterInstalledAt: meter, lastStoredDate: d("2026-06-20"), today });
     expect(w.from).toEqual(d("2026-05-22"));
     expect(w.to).toEqual(d("2026-08-16"));
+  });
+
+  // This previously asserted the post window ALSO started from meter install,
+  // which is the bug it was meant to guard: days from before the replacement
+  // fell inside the post window and would have been committed as post-install
+  // readings, dragging the savings benchmark toward the old fittings.
+  it("a POST-install upload starts the day after the LIGHTS were replaced", () => {
+    const w = extractionWindow({
+      kind: "post_install",
+      meterInstalledAt: meter,
+      lightReplacementDate: d("2026-08-10"),
+      lastStoredDate: d("2026-06-20"),
+      today,
+    });
+    expect(w.from).toEqual(d("2026-08-11"));
+    expect(w.to).toEqual(d("2026-08-16"));
+  });
+
+  it("the reported case: replaced today, so the post window has not opened", () => {
+    // Meter in on the 12th, lights replaced on the 19th, today the 19th.
+    // Anchored to the meter this offered 2026-08-13 -> 2026-08-18, six days
+    // that all predate the replacement.
+    const w = extractionWindow({
+      kind: "post_install",
+      meterInstalledAt: d("2026-08-12"),
+      lightReplacementDate: d("2026-08-19"),
+      lastStoredDate: null,
+      today: d("2026-08-19"),
+    });
+    expect(w.from).toEqual(d("2026-08-20"));
+    expect(windowIsEmpty(w)).toBe(true);
+  });
+
+  it("no day before the replacement can fall inside a post-install window", () => {
+    const replacement = d("2026-08-10");
+    const w = extractionWindow({
+      kind: "post_install",
+      meterInstalledAt: meter,
+      lightReplacementDate: replacement,
+      lastStoredDate: null,
+      today,
+    });
+    expect(w.from.getTime()).toBeGreaterThan(replacement.getTime());
   });
 
   it("monitoring starts one day BEFORE the last stored reading — the user's 13 Nov → 12 Nov rule", () => {

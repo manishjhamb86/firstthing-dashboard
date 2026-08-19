@@ -138,6 +138,7 @@ function deriveReview(circuit: Circuit, fileText: string): Derived | { error: st
   const window = extractionWindow({
     kind,
     meterInstalledAt: circuit.meterInstalledAt,
+    lightReplacementDate: circuit.lightReplacementDate,
     lastStoredDate,
     today: new Date(),
   });

@@ -205,12 +205,24 @@ export function firstQualifyingDay(w: { from: Date; to: Date }): Date {
 export function extractionWindow(args: {
   kind: UploadKind;
   meterInstalledAt: Date;
+  /** required for a post-install window — the day the lights actually changed */
+  lightReplacementDate?: Date | null;
   lastStoredDate: Date | null;
   today: Date;
 }): { from: Date; to: Date } {
   const yesterday = addDays(args.today, -1);
   if (args.kind === "monitoring" && args.lastStoredDate !== null) {
     return { from: addDays(args.lastStoredDate, -1), to: yesterday };
+  }
+  // A POST-install window starts the day after the LIGHTS were replaced, not
+  // the day after the meter went in (user-reported 2026-08-19: replacement on
+  // the 19th was offering 08-13 → 08-18). Anchoring it to meterInstalledAt
+  // put days from BEFORE the replacement inside the post window, where they
+  // would be committed as post-install readings and drag the savings
+  // benchmark toward the old fittings' consumption. CON-19 excludes the
+  // replacement day itself, exactly as the pre window excludes install day.
+  if (args.kind === "post_install" && args.lightReplacementDate) {
+    return { from: addDays(args.lightReplacementDate, 1), to: yesterday };
   }
   return { from: addDays(args.meterInstalledAt, 1), to: yesterday };
 }

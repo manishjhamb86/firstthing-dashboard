@@ -136,17 +136,24 @@ function deriveReview(circuit: Circuit, fileText: string): Derived | { error: st
     released: r.usedInCalculationId !== null,
   }));
   const lastStoredDate = stored.length > 0 ? stored[stored.length - 1].date : null;
-  // DEMO_MODE widens the window to include today, so a circuit whose meter or
-  // lights went in today can still be walked through its readings. It moves
-  // the END of the window only — the START still excludes the pivot day, so a
-  // pre-replacement day never becomes a post-install reading even in a demo.
+  // DEMO_MODE lifts the window's END far past today. A demo sheet carries
+  // simulated days that have not happened yet — replace the lights today and
+  // the post-install readings are necessarily future-dated — and "to =
+  // yesterday" excluded every one of them, so the step could never be walked
+  // in one sitting. +1 day was not enough (user-reported 2026-08-19: a file
+  // of 08-20..08-25 landed entirely outside the window).
+  //
+  // It moves the END only. The START still comes from the pivot date, so a
+  // day on or before the replacement is STILL out of the post window even in
+  // demo — sequence is never what demo mode relaxes.
   const demoWindow = demoBypass("reading_window_end", { circuitId: circuit.id, kind });
+  const DEMO_HORIZON_DAYS = 366;
   const window = extractionWindow({
     kind,
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
     lastStoredDate,
-    today: demoWindow ? addDays(new Date(), 1) : new Date(),
+    today: demoWindow ? addDays(new Date(), DEMO_HORIZON_DAYS) : new Date(),
   });
 
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;

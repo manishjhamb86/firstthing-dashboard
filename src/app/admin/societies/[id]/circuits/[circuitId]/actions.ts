@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { refuseReplacementDate } from "@/lib/step-dates";
 import { scheduleJob } from "@/lib/jobs";
 import { nextDayUTC } from "@/lib/monitoring-window";
 
@@ -323,6 +324,34 @@ export async function recordLightReplacement(
   }
 
   const date = new Date(replacementDate);
+
+  // Relative ordering, enforced in BOTH modes: a whole historical
+  // commissioning can be entered with real past dates, but the sequence
+  // between them still has to hold. Backdating is not a licence to record a
+  // replacement before its own meter install.
+  const lastPre = await db.commissioningReading.findFirst({
+    where: { circuitId, windowType: "pre_install" },
+    orderBy: { date: "desc" },
+    select: { date: true },
+  });
+  const lastPreCsv = await db.meterReading.findFirst({
+    where: { circuitId, date: { lte: date } },
+    orderBy: { date: "desc" },
+    select: { date: true },
+  });
+  const lastReading =
+    [lastPre?.date, lastPreCsv?.date].filter(Boolean).sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null;
+
+  const dateRefusal = refuseReplacementDate({
+    replacementDate: date,
+    meterInstalledAt: circuit.meterInstalledAt,
+    lastPreInstallReading: lastReading,
+    now: new Date(),
+  });
+  if (dateRefusal) {
+    logger.warn("circuit.replacement_date_refused", { circuitId, replacementDate, reason: dateRefusal });
+    return { error: dateRefusal };
+  }
   const windowStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
 
   await db.$transaction(async (tx) => {

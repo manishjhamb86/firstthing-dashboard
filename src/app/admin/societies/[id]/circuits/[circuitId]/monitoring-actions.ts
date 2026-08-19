@@ -5,7 +5,6 @@ import type { CommissioningWindowType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { demoBypass } from "@/lib/demo-mode";
 import { generateDemoReportInternal } from "@/app/admin/pipeline/[id]/report/actions";
 import {
   getWindowProgress,
@@ -55,15 +54,13 @@ async function applyCommissioningReading(
   // no log line is a refusal you cannot verify" both point at: silent success
   // is worse than a clear refusal.
   const requestedDate = startOfDayUTC(new Date(date));
-  // DEMO_MODE: a demo has to record several "days" in one sitting, which
-  // means dates that predate the current window start. The refusal exists
-  // because such a row is invisible to every read — in demo that is an
-  // accepted trade, and the bypass is logged so the resulting figures can be
-  // identified later as demo-produced.
-  if (
-    requestedDate.getTime() < windowStartAt.getTime() &&
-    !demoBypass("reading_before_window_start", { circuitId, windowType, date })
-  ) {
+  // This is RELATIVE ordering — a reading cannot predate the window its own
+  // circuit opened — and it holds in demo mode too. Backdating is achieved by
+  // giving the earlier STEPS their real historical dates (meter installed
+  // 23 March => the window opens 24 March => March readings are in range),
+  // not by disabling the check. A DEMO_MODE bypass was added here and removed
+  // the same day: it broke the very validation the backfill depends on.
+  if (requestedDate.getTime() < windowStartAt.getTime()) {
     logger.warn("commissioning.reading_before_window_start", {
       circuitId,
       windowType,

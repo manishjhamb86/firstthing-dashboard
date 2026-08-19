@@ -105,7 +105,7 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
           )}
         </EmptyState>
       ) : (
-        <div className="max-w-3xl">
+        <div className="max-w-none">
           <CircuitList
             circuits={circuits.map((c) => ({
               ...c,
@@ -119,7 +119,7 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
       )}
 
       {removedCircuits.length > 0 && (
-        <details className="max-w-3xl mt-6">
+        <details className="max-w-none mt-6">
           <summary className="text-sm text-[var(--text-muted)] cursor-pointer select-none">
             {removedCircuits.length} removed {removedCircuits.length === 1 ? "circuit" : "circuits"} — kept
             for audit, excluded from monitoring and billing

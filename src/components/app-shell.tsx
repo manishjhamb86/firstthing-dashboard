@@ -179,7 +179,7 @@ export function AppShell({
         </header>
 
         <main>
-          <div className="mx-auto max-w-6xl p-5 sm:p-8">{children}</div>
+          <div className="mx-auto max-w-[1600px] p-5 sm:p-8">{children}</div>
         </main>
       </div>
     </div>

@@ -37,7 +37,7 @@ export default async function UsersPage() {
       />
 
       {canManageAdmins && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 max-w-4xl">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 max-w-none">
           {[
             { label: "Admin accounts", value: liveAdmins.length, detail: `${active.length} active` },
             {

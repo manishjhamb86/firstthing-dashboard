@@ -51,7 +51,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
 
       {!current ? (
         // FEAT-027-AC-2 — a clear "no offer yet" state with a generate action.
-        <div className="max-w-2xl space-y-6">
+        <div className="max-w-none space-y-6">
           <EmptyState title="No offer yet">
             {demoReport
               ? "Generate one from the confirmed demo numbers — the commercial terms stay editable."
@@ -65,7 +65,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           </Card>
         </div>
       ) : (
-        <div className="max-w-3xl space-y-6">
+        <div className="max-w-none space-y-6">
           <Card className="p-5">
             <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
               <CardTitle>Version {current.version}</CardTitle>

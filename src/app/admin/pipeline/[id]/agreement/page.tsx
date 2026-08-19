@@ -57,7 +57,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
       />
 
       {!agreement ? (
-        <div className="max-w-2xl space-y-4">
+        <div className="max-w-none space-y-4">
           {/* FEAT-029-AC-2 — what's outstanding, as discrete steps. */}
           <EmptyState title="No agreement prepared yet">
             Once the society accepts an offer and KYC is settled, the agreement is prepared from exactly the
@@ -66,7 +66,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
           {canEdit && <PrepareAgreementButton pipelineId={pipeline.id} />}
         </div>
       ) : (
-        <div className="max-w-3xl space-y-6">
+        <div className="max-w-none space-y-6">
           <Card className="p-5">
             <CardTitle>Execution steps</CardTitle>
             <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">

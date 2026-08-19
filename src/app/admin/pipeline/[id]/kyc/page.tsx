@@ -73,7 +73,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
         </p>
       )}
 
-      <div className="max-w-3xl space-y-6">
+      <div className="max-w-none space-y-6">
         {items.map((item) => {
           const record = item.record;
           const status = statusMeta(KYC_REQUIREMENT_STATUS, record?.status ?? "outstanding");

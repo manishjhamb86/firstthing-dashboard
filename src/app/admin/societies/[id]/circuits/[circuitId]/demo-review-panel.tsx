@@ -43,7 +43,7 @@ export function DemoReviewPanel({
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <section className={embedded ? "max-w-2xl" : "max-w-2xl mb-10"}>
+    <section className={embedded ? "max-w-none" : "max-w-none mb-10"}>
       {!embedded && (
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
           <h2 className="text-[15px] font-semibold">Out-of-range demo result</h2>

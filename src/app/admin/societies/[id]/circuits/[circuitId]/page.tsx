@@ -271,7 +271,7 @@ export default async function CircuitDetailPage({
       {/* The four figures someone opens a circuit to check, before the
           step-by-step detail. Each is absent-not-invented: a circuit with no
           baseline yet says so rather than showing a zero. */}
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-8 max-w-2xl">
+      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-8 max-w-none">
         {[
           {
             label: "Theoretical",
@@ -313,7 +313,7 @@ export default async function CircuitDetailPage({
           from every list. */}
       {circuit.voidedAt && (
         <div
-          className="max-w-2xl rounded-[var(--r-md)] border p-4 text-sm mb-8"
+          className="max-w-none rounded-[var(--r-md)] border p-4 text-sm mb-8"
           style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
         >
           This circuit was removed by {circuit.voidedBy?.name ?? circuit.voidedBy?.email ?? "—"} on{" "}
@@ -327,7 +327,7 @@ export default async function CircuitDetailPage({
           figure every pre-installation reading is judged against. Editable
           until the lights are replaced, frozen after — the inventory is what
           the replacement was recorded against. */}
-      <section className="max-w-2xl mb-8">
+      <section className="max-w-none mb-8">
         <h2 className="text-[15px] font-semibold mb-1">Load inventory</h2>
         <p className="text-sm text-[var(--text-muted)] mb-3">
           Σ count × wattage × hours ÷ 1000 is the theoretical kWh/day. A pre-install reading outside
@@ -356,7 +356,7 @@ export default async function CircuitDetailPage({
           sit behind that same toggle); future steps are disabled headers that
           say what unlocks them. circuitSteps() is the single source of the
           ordering and statuses — this page only supplies each step's body. */}
-      <div className="max-w-2xl space-y-3 mb-10">
+      <div className="max-w-none space-y-3 mb-10">
         {steps.map((step, i) => {
           let summary: string = step.summary;
           let chip: ReactNode = null;
@@ -666,7 +666,7 @@ export default async function CircuitDetailPage({
           persistent exclusion control and (once the benchmark is confirmed)
           the monthly monitoring upload. */}
       {circuit.meterInstalledAt && !usesLegacyFlow && (
-        <section className="max-w-2xl mb-10 space-y-4">
+        <section className="max-w-none mb-10 space-y-4">
           <div>
             <h2 className="text-[15px] font-semibold mb-1">Meter readings</h2>
             <p className="text-sm text-[var(--text-muted)]">
@@ -715,7 +715,7 @@ export default async function CircuitDetailPage({
       )}
 
       {resolvedReviews.length > 0 && (
-        <section className="max-w-2xl mb-10">
+        <section className="max-w-none mb-10">
           <h2 className="text-[15px] font-semibold mb-3">Out-of-range result history</h2>
           <Card className="overflow-x-auto">
             <table className="tbl">
@@ -749,7 +749,7 @@ export default async function CircuitDetailPage({
           meaningful once a baseline exists to rescale, which is also
           exactly when the count stops being free-form config. */}
       {circuit.preInstallBaseline != null && effectiveBaseline != null && (
-        <section className="max-w-2xl mt-10">
+        <section className="max-w-none mt-10">
           <h2 className="text-[15px] font-semibold mb-1">Light-count changes &amp; baseline rescales</h2>
           <p className="text-sm text-[var(--text-muted)] mb-4">
             Recorded as dated events, separate from any billing decision — so a dispute can tell a reapplied

@@ -103,7 +103,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     return (
       <>
         {header}
-        <div className="max-w-3xl space-y-5">
+        <div className="max-w-none space-y-5">
           <EmptyState title="No installation plan yet">
             <p>Setting up the project needs four things, and the plan cannot publish without any of them:</p>
             <ul className="mt-3 text-left inline-block space-y-1">
@@ -166,7 +166,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     <>
       {header}
 
-      <div className="max-w-4xl space-y-6">
+      <div className="max-w-none space-y-6">
         <Card className="p-5">
           <CardTitle>Scope</CardTitle>
           <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4 text-sm">

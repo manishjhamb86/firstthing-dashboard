@@ -55,7 +55,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
 
       {!latest ? (
         // FEAT-020-AC-2 — "no demo report", not an empty document shell.
-        <div className="max-w-2xl space-y-4">
+        <div className="max-w-none space-y-4">
           <EmptyState title="No demo report yet">
             {blockerMessage ??
               "The report generates itself once every demo circuit reaches a confirmed benchmark."}

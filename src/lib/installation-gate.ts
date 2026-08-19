@@ -83,6 +83,14 @@ export function evaluateDayGate(input: {
   startAt: Date;
   now: Date;
   skipUsedForDay?: boolean;
+  /**
+   * DEMO_MODE only: treat CON-21's 3-hour deadline as not yet passed, so a
+   * whole installation can be walked in one sitting. Passed IN rather than
+   * read from env here, so this stays a pure function its tests can drive
+   * both ways. A DISPUTE still blocks — that is not a clock, it is the
+   * society saying the work is wrong.
+   */
+  ignoreDeadline?: boolean;
 }): DayGate {
   const { previousBatches, startAt, now } = input;
   const deadline = reviewDeadlineFor(startAt);
@@ -117,7 +125,7 @@ export function evaluateDayGate(input: {
   }
 
   if (outstanding.length > 0) {
-    if (now >= deadline) {
+    if (now >= deadline && !input.ignoreDeadline) {
       return {
         status: "blocked",
         canStart: false,

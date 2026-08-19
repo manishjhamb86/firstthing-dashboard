@@ -15,6 +15,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { demoBypass } from "@/lib/demo-mode";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { buildCircuitFlowReadingKey } from "@/lib/ingest-keys";
@@ -135,12 +136,17 @@ function deriveReview(circuit: Circuit, fileText: string): Derived | { error: st
     released: r.usedInCalculationId !== null,
   }));
   const lastStoredDate = stored.length > 0 ? stored[stored.length - 1].date : null;
+  // DEMO_MODE widens the window to include today, so a circuit whose meter or
+  // lights went in today can still be walked through its readings. It moves
+  // the END of the window only — the START still excludes the pivot day, so a
+  // pre-replacement day never becomes a post-install reading even in a demo.
+  const demoWindow = demoBypass("reading_window_end", { circuitId: circuit.id, kind });
   const window = extractionWindow({
     kind,
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
     lastStoredDate,
-    today: new Date(),
+    today: demoWindow ? addDays(new Date(), 1) : new Date(),
   });
 
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { demoBypass } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import {
@@ -151,6 +152,8 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     }));
 
   const now = new Date();
+  // One evaluation of the flag per render, shared by every day's gate.
+  const demoDeadline = demoBypass("installation_review_deadline", { pipelineId: id });
   const totalInstalled = project.batches.reduce((n, b) => n + b.installedCount, 0);
   const totalSkipped = project.batches.reduce((n, b) => n + b.skippedCount, 0);
   const openBlockers = project.blockers.filter((b) => b.status === "open");
@@ -230,6 +233,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   const skipApplies =
                     !!project.gateSkipBatchId && previous.some((b) => b.id === project.gateSkipBatchId);
                   const gate = evaluateDayGate({
+                    ignoreDeadline: demoDeadline,
                     previousBatches: gateInputs(previous),
                     startAt: d.startAt,
                     now,
@@ -267,7 +271,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
           </div>
           {project.plannedDays.some((d) => {
             const previous = project.batches.filter((b) => b.day === d.day - 1);
-            return !evaluateDayGate({ previousBatches: gateInputs(previous), startAt: d.startAt, now }).canStart;
+            return !evaluateDayGate({ previousBatches: gateInputs(previous), startAt: d.startAt, now, ignoreDeadline: demoDeadline }).canStart;
           }) && (
             <div
               className="mt-4 rounded-[var(--r-md)] border p-4 text-sm"

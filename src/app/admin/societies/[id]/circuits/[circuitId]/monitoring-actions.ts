@@ -5,6 +5,7 @@ import type { CommissioningWindowType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { demoBypass } from "@/lib/demo-mode";
 import { generateDemoReportInternal } from "@/app/admin/pipeline/[id]/report/actions";
 import {
   getWindowProgress,
@@ -13,7 +14,7 @@ import {
   averageOfFirstValid,
   parseCommissioningCsv,
   startOfDayUTC,
-  REQUIRED_VALID_DAYS,
+  requiredValidDays,
 } from "@/lib/monitoring-window";
 import { detectAnomalies } from "@/lib/reading-anomaly";
 import {
@@ -54,7 +55,15 @@ async function applyCommissioningReading(
   // no log line is a refusal you cannot verify" both point at: silent success
   // is worse than a clear refusal.
   const requestedDate = startOfDayUTC(new Date(date));
-  if (requestedDate.getTime() < windowStartAt.getTime()) {
+  // DEMO_MODE: a demo has to record several "days" in one sitting, which
+  // means dates that predate the current window start. The refusal exists
+  // because such a row is invisible to every read — in demo that is an
+  // accepted trade, and the bypass is logged so the resulting figures can be
+  // identified later as demo-produced.
+  if (
+    requestedDate.getTime() < windowStartAt.getTime() &&
+    !demoBypass("reading_before_window_start", { circuitId, windowType, date })
+  ) {
     logger.warn("commissioning.reading_before_window_start", {
       circuitId,
       windowType,
@@ -163,8 +172,12 @@ async function applyCommissioningReading(
 
   const progress = await getWindowProgress(circuitId, windowType, windowStartAt);
 
-  if (progress.validCount >= REQUIRED_VALID_DAYS) {
-    const average = averageOfFirstValid(progress.readings, REQUIRED_VALID_DAYS);
+  // The window completes at the required day count, which DEMO_MODE lowers
+  // to 1 — the average is taken over however many that is, so the figure
+  // still comes from real recorded days, just fewer of them.
+  const needed = requiredValidDays();
+  if (progress.validCount >= needed) {
+    const average = averageOfFirstValid(progress.readings, needed);
 
     if (windowType === "pre_install") {
       await db.circuit.update({

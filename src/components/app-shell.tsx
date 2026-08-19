@@ -30,10 +30,12 @@ export function AppShell({
   showReadings,
   showCatalog,
   showUsers,
+  demoMode = false,
   children,
 }: {
   theme: ThemeId;
   email: string;
+  demoMode?: boolean;
   showPipeline: boolean;
   showMonitoring: boolean;
   showReadings: boolean;
@@ -179,6 +181,21 @@ export function AppShell({
         </header>
 
         <main>
+          {/* DEMO_MODE is a server env var with no UI toggle, so this banner
+              is the only thing on screen distinguishing a passing check from
+              a skipped one. It sits inside <main> rather than the header so
+              it survives scrolling to the top of any page and appears in
+              every screenshot taken of one. */}
+          {demoMode && (
+            <div
+              className="border-b px-5 sm:px-8 py-2.5 text-sm font-semibold"
+              style={{ background: "var(--warn-bg)", color: "var(--warn-fg)", borderColor: "var(--warn-line)" }}
+              role="status"
+            >
+              Demo mode — date and window checks are bypassed. Figures produced here are not
+              evidence of a real commissioning.
+            </div>
+          )}
           <div className="mx-auto max-w-[1600px] p-5 sm:p-8">{children}</div>
         </main>
       </div>

@@ -1,6 +1,7 @@
 import { resolveTheme } from "@/lib/resolve-theme";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { AppShell } from "@/components/app-shell";
+import { isDemoMode } from "@/lib/demo-mode";
 
 // One shell for every /admin route — the sidebar nav from 05a-theme-system
 // §3.7. This layout only decides what the nav shows; every page below it
@@ -24,6 +25,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <AppShell
       theme={theme}
       email={admin?.email ?? ""}
+      demoMode={isDemoMode()}
       showPipeline={perms.includes("manage_pipeline")}
       showMonitoring={perms.includes("manage_survey")}
       // The readings area is readable by anyone who can see a pipeline;

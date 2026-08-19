@@ -2,12 +2,24 @@ import type { CommissioningReadingStatus, CommissioningWindowType } from "@prism
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { restartFromDate } from "@/lib/commissioning-anomaly";
+import { demoBypass } from "@/lib/demo-mode";
 
 // FEAT-012/FEAT-014 — the two windows mirror each other exactly (per
 // FEAT-014's own description), so the mechanism lives here once rather
 // than being duplicated per window type. CON-19-style rule: 5 consecutive
 // valid calendar days, the pivot day excluded, anomaly-triggered restart.
 export const REQUIRED_VALID_DAYS = 5;
+
+/**
+ * How many valid days a window actually needs right now. DEMO_MODE drops it
+ * to 1 so a window can complete in one sitting — the single calendar rule
+ * that otherwise makes a full demo take a real week. The band CON-20 judges
+ * the result against is untouched: a demo benchmark still has to land in
+ * 60-80% to confirm, it just needs fewer days to get there.
+ */
+export function requiredValidDays(): number {
+  return demoBypass("required_valid_days", { normally: REQUIRED_VALID_DAYS }) ? 1 : REQUIRED_VALID_DAYS;
+}
 
 export function startOfDayUTC(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));

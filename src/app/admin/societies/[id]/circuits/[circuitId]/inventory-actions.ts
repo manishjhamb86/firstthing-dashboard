@@ -8,6 +8,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { isDemoMode } from "@/lib/demo-mode";
 import { resolveAdmin } from "@/lib/admin-permissions";
 
 type Outcome = { error: string } | { ok: true };
@@ -39,9 +40,25 @@ type EditableGate =
 async function editableCircuit(circuitId: string, historical = false): Promise<EditableGate> {
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
-    select: { id: true, societyId: true, lightReplacementDate: true, voidedAt: true },
+    select: {
+      id: true,
+      societyId: true,
+      meterInstalledAt: true,
+      lightReplacementDate: true,
+      voidedAt: true,
+    },
   });
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+
+  // The lock moved earlier, to meter install: from that point the theoretical
+  // figure is what every pre-install reading is judged against. The UI hides
+  // the controls, but this is the enforcement — a hidden button is not a gate.
+  if (circuit.meterInstalledAt && !historical) {
+    return {
+      error:
+        "The meter is installed — the load inventory is locked, because the pre-install readings are judged against it. Contact an administrator if it has to change.",
+    };
+  }
   // The freeze still holds for ordinary edits — after replacement the
   // inventory IS the record the replacement was judged against. What it must
   // not do is block backfilling a circuit that was commissioned before this
@@ -49,10 +66,10 @@ async function editableCircuit(circuitId: string, historical = false): Promise<E
   // protecting nothing. Such a line comes through explicitly marked
   // historical, so the reconstruction is visible in the data rather than
   // indistinguishable from a line captured on site.
-  if (circuit.lightReplacementDate && !historical) {
+  if (historical && !isDemoMode()) {
     return {
       error:
-        "The lights on this circuit have been replaced — the inventory is frozen. Tick \u201cpast record\u201d to enter it as a historical line.",
+        "Backfilling a past record is only available in demo mode. Contact an administrator to change a locked inventory.",
     };
   }
   return { circuit: { id: circuit.id, societyId: circuit.societyId } };

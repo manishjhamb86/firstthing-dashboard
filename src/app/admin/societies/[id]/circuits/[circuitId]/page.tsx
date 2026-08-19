@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { isDemoMode } from "@/lib/demo-mode";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { LoadValidationForm } from "./load-validation-form";
@@ -80,6 +81,7 @@ export default async function CircuitDetailPage({
     session.user.adminPermissions?.includes("manage_pipeline");
   if (!canView) redirect("/admin/societies");
   const canEdit = session.user.adminPermissions?.includes("manage_survey") ?? false;
+  const demoMode = isDemoMode();
   const canOverride =
     (session.user.adminPermissions?.includes("manage_survey") ?? false) &&
     (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
@@ -339,19 +341,25 @@ export default async function CircuitDetailPage({
           circuitId={circuit.id}
           lines={inventoryLines}
           catalog={catalogOriginals}
-          editable={canEdit && circuit.lightReplacementDate === null && !circuit.voidedAt}
+          // The inventory now locks at METER INSTALL, not at light
+          // replacement (user's rule, 2026-08-19). From the moment the meter
+          // is in, every pre-install reading is judged against the
+          // theoretical figure these lines produce — so changing them after
+          // that silently moves the basis those readings were compared to.
+          editable={canEdit && circuit.meterInstalledAt === null && !circuit.voidedAt}
           frozenReason={
-            circuit.lightReplacementDate
-              ? "The lights have been replaced — the inventory is frozen as the record the replacement was made against."
+            circuit.meterInstalledAt
+              ? circuit.lightReplacementDate
+                ? "The meter is installed and the lights have been replaced — the inventory is locked as the record both were measured against. Contact an administrator if it has to change."
+                : "The meter is installed — the inventory is locked, because every pre-install reading is judged against the theoretical figure it produces. Contact an administrator if it has to change."
               : canEdit
                 ? null
                 : "Recording the load inventory is PER-04\u2019s action."
           }
-          // A circuit commissioned before this system still has to have its
-          // inventory entered. Anyone who could have recorded it normally can
-          // record it as a past record — the flag, not a second permission,
-          // is what keeps the reconstruction visible.
-          canRecordHistorical={canEdit && !circuit.voidedAt}
+          // Backfilling a past record is a DEMO-mode affordance now. In normal
+          // operation a locked inventory stays locked and the change goes
+          // through an administrator, which is what the frozen message says.
+          canRecordHistorical={canEdit && !circuit.voidedAt && demoMode}
         />
       </section>
 

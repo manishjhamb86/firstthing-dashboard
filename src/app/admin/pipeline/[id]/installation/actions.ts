@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { BlockerType } from "@prisma/client";
 import { db } from "@/lib/db";
+import { demoBypass } from "@/lib/demo-mode";
 import { requireAdmin, requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import {
@@ -214,6 +215,7 @@ export async function startBatch(pipelineId: string, plannedDayId: string) {
   // which is precisely what FEAT-035-AC-3 exists to prevent.
   const previous = day.project.batches.filter((b) => b.day === day.day - 1).map(toGateInput);
   const gate = evaluateDayGate({
+    ignoreDeadline: demoBypass("installation_review_deadline", { plannedDayId: day?.id }),
     previousBatches: previous,
     startAt: day.startAt,
     now: new Date(),
@@ -409,7 +411,12 @@ export async function skipReviewGate(pipelineId: string, blockedDayId: string, r
   if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is not part of this project." };
 
   const previous = day.project.batches.filter((b) => b.day === day.day - 1).map(toGateInput);
-  const gate = evaluateDayGate({ previousBatches: previous, startAt: day.startAt, now: new Date() });
+  const gate = evaluateDayGate({
+    previousBatches: previous,
+    startAt: day.startAt,
+    now: new Date(),
+    ignoreDeadline: demoBypass("installation_review_deadline", { plannedDayId: day.id }),
+  });
 
   const refusal = refuseGateSkip({
     gateSkipUsedAt: day.project.gateSkipUsedAt,

@@ -19,6 +19,14 @@
  */
 
 :root {
+  /* Tells the browser which palette to paint its OWN widget internals with:
+     the file input's button, number spinners, date fields, select popups,
+     scrollbars and focus rings. Without it Chrome uses light-mode defaults
+     regardless of our tokens, so on a dark surface those pieces come out
+     invisible — user-reported 2026-08-20 ("some of the things inside text
+     are not visible"). The default root is Slate's light content palette. */
+  color-scheme: light;
+
   /* content — light (also the base for Slate, which reuses these) */
   --ground: #F0F5F9;
   --surface: #FFFFFF;
@@ -123,6 +131,7 @@
 
 /* Light — Modernize all-light: chrome goes white, content unchanged. */
 :root[data-theme="light"] {
+  color-scheme: light;
   --chrome: #FFFFFF;
   --chrome-hover: #F2F6FA;
   --chrome-active: #ECF2FF;
@@ -137,6 +146,7 @@
 /* Dark — HeroUI v3: zinc layers on near-black, borders carry the layering,
    shadows nearly disappear, accent lifts to stay legible. */
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --ground: #09090B;
   --surface: #18181B;
   --surface-sunken: #101013;

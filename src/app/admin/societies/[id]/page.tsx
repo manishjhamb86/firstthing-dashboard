@@ -13,7 +13,7 @@ import {
 import { StatusControl } from "./status-control";
 import { AddPortalAccountButton } from "./add-portal-account-button";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
-import { EnrollServiceLineForm } from "./enroll-service-line-form";
+import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { NextStepCallout } from "@/components/deal-stepper";
@@ -92,9 +92,6 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             href: `/admin/pipeline/new?societyId=${society.id}`,
           }
       : null;
-  const availableServiceLines = ALL_SERVICE_LINES.filter(
-    (sl) => !engagements.some((e) => e.serviceLine === sl)
-  );
 
   return (
     <>
@@ -168,61 +165,71 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           <Card className="p-6 min-w-0">
             <CardTitle>Service lines</CardTitle>
 
-            {engagements.length === 0 ? (
-              // FEAT-039-AC-2: the record shows available service lines to
-              // enroll rather than assuming lighting.
-              <div className="mb-4">
-                <EmptyState title="Not enrolled in any service line yet">
-                  Logging a lead enrolls the society in that service line automatically; other lines —
-                  lighting, pumps, solar, or wastewater — can be enrolled below.
-                </EmptyState>
-              </div>
-            ) : (
-              <ul className="space-y-3">
-                {engagements.map((e) => {
-                  const status = statusMeta(ENGAGEMENT_STATUS, e.status);
-                  const pipeline = pipelineFor.get(e.serviceLine);
-                  return (
-                    <li
-                      key={e.id}
-                      className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                        <span className="font-medium">
-                          {SERVICE_LINE_LABEL[e.serviceLine] ?? e.serviceLine}
-                        </span>
-                        <StatusChip tone={status.tone}>{status.label}</StatusChip>
-                      </div>
-                      <p className="text-xs text-[var(--text-muted)] mt-1">
-                        {pipeline ? (
+            {/* Every line, always — enrolled or not. The dropdown showed
+                only what was already there and hid the rest. */}
+            <ul className="space-y-0">
+              {ALL_SERVICE_LINES.map((line) => {
+                const engagement = engagements.find((e) => e.serviceLine === line);
+                const pipeline = pipelineFor.get(line);
+                const status = engagement ? statusMeta(ENGAGEMENT_STATUS, engagement.status) : null;
+                const canEnrol = pipelines.length > 0;
+                return (
+                  <li
+                    key={line}
+                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] py-3 first:border-t-0 first:pt-0"
+                  >
+                    <span className="min-w-0">
+                      <span
+                        className={engagement ? "font-medium" : "font-medium text-[var(--text-muted)]"}
+                      >
+                        {SERVICE_LINE_LABEL[line] ?? line}
+                      </span>
+                      <span className="block text-xs text-[var(--text-muted)] mt-0.5">
+                        {!engagement ? (
+                          canEnrol ? (
+                            "Not enrolled"
+                          ) : (
+                            "Not enrolled — enrolment follows a lead"
+                          )
+                        ) : pipeline ? (
                           <Link href={`/admin/pipeline/${pipeline.id}`} className="underline">
                             Open the deal →
                           </Link>
                         ) : (
                           <>
-                            Enrolled, but no deal running — the survey that produces circuits belongs to a
-                            pipeline.{" "}
-                            <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="underline">
+                            Enrolled, but no deal running.{" "}
+                            <Link
+                              href={`/admin/pipeline/new?societyId=${society.id}`}
+                              className="underline"
+                            >
                               Log a lead
                             </Link>
                             .
                           </>
                         )}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+                      </span>
+                    </span>
+                    <span className="flex flex-wrap items-center gap-2 shrink-0">
+                      {status && <StatusChip tone={status.tone}>{status.label}</StatusChip>}
+                      {/* Enrolment comes AFTER a lead, not before it: a
+                          society is engaged on a line because a deal was
+                          opened and a meeting happened. Without one on
+                          record the row says so instead of offering the
+                          control. */}
+                      {canEnrol && (!engagement || engagement.status !== "active") && (
+                        <EnrollServiceLineButton
+                          societyId={society.id}
+                          serviceLine={line}
+                          label={engagement ? "Enroll again" : "Enroll"}
+                        />
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
 
-            {/* Enrolment comes AFTER a lead, not before it: a society is
-                engaged on a service line because a deal was opened and a
-                meeting happened, so offering the control first invites
-                recording an engagement that nothing backs. With no lead on
-                record the card says what has to happen first instead. */}
-            {pipelines.length > 0 ? (
-              <EnrollServiceLineForm societyId={society.id} available={availableServiceLines} />
-            ) : (
+            {pipelines.length === 0 && (
               <p className="mt-4 pt-4 border-t border-[var(--border-subtle)] text-sm text-[var(--text-muted)]">
                 Enrolling a service line comes after a lead — log one and hold the meeting first, and
                 logging it enrols the society on that line automatically.

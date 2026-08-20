@@ -3,53 +3,44 @@
 import { useState, useTransition } from "react";
 import { enrollServiceLine } from "../actions";
 import { ErrorText } from "@/components/ui";
-import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 
-export function EnrollServiceLineForm({
+/**
+ * One button per service line, on that line's own row.
+ *
+ * It used to be a dropdown plus a single Enroll button, which meant the card
+ * showed only what the society already had and hid the rest behind a select
+ * (user-asked 2026-08-20: "show separate rows for each service and highlight
+ * which are already enrolled"). A row per line says what is and is not
+ * covered without opening anything.
+ */
+export function EnrollServiceLineButton({
   societyId,
-  available,
+  serviceLine,
+  label,
 }: {
   societyId: string;
-  available: string[];
+  serviceLine: string;
+  label: string;
 }) {
-  const [serviceLine, setServiceLine] = useState(available[0] ?? "");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
 
-  if (available.length === 0) return null;
-
-  function submit() {
-    startTransition(async () => {
-      const result = await enrollServiceLine(societyId, serviceLine);
-      setError(result?.error);
-    });
-  }
-
   return (
-    <div className="mt-4 pt-4 border-t border-[var(--border-subtle)]">
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={serviceLine}
-          onChange={(e) => setServiceLine(e.target.value)}
-          disabled={pending}
-          aria-label="Service line to enroll"
-          className="field max-w-48"
-        >
-          {available.map((value) => (
-            <option key={value} value={value}>
-              {SERVICE_LINE_LABEL[value] ?? value}
-            </option>
-          ))}
-        </select>
-        <button type="button" onClick={submit} disabled={pending} className="btn-secondary">
-          {pending ? "Enrolling…" : "Enroll service line"}
-        </button>
-      </div>
-      {error && (
-        <div className="mt-2">
-          <ErrorText>{error}</ErrorText>
-        </div>
-      )}
-    </div>
+    <span className="shrink-0">
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            const result = await enrollServiceLine(societyId, serviceLine);
+            setError(result?.error);
+          })
+        }
+      >
+        {pending ? "Enrolling…" : label}
+      </button>
+      {error && <ErrorText>{error}</ErrorText>}
+    </span>
   );
 }

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { demoBypass } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { loadDealProgress } from "@/lib/pipeline-facts";
+import { AddPortalAccountButton } from "@/components/add-portal-account-button";
 import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import {
@@ -117,6 +118,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 detail: "Installation commits FirsThing's own capital, so this is a hard gate.",
                 href: `/admin/pipeline/${pipeline.id}/agreement`,
                 cta: "Execute the agreement",
+                inline: false,
               },
               {
                 label: "A named society onlooker",
@@ -124,6 +126,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 detail: "This society has no active portal account, so nobody can approve a day's work (CON-21).",
                 href: `/admin/societies/${pipeline.societyId}`,
                 cta: "Add a portal account",
+                inline: true,
               },
             ];
             const blocked = items.filter((i) => !i.done);
@@ -151,9 +154,23 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                             <span className="block font-semibold text-sm">{i.label}</span>
                             <span className="block text-xs text-[var(--text-muted)]">{i.detail}</span>
                           </span>
-                          <Link href={i.href} className="btn-primary btn-sm shrink-0">
-                            {i.cta} →
-                          </Link>
+                          {/* The portal account can be created from here —
+                              the same dialog the society page uses. Sending
+                              the operator to another screen to come back was
+                              a detour, not a route (user-asked 2026-08-20). */}
+                          {i.inline ? (
+                            <span className="shrink-0">
+                              <AddPortalAccountButton
+                                societyId={pipeline.societyId}
+                                variant="secondary"
+                                label={i.cta}
+                              />
+                            </span>
+                          ) : (
+                            <Link href={i.href} className="btn-primary btn-sm shrink-0">
+                              {i.cta} →
+                            </Link>
+                          )}
                         </li>
                       ))}
                     </ul>

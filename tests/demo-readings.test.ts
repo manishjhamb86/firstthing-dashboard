@@ -221,3 +221,51 @@ describe("snapToHourly", () => {
     expect((snapped / HOURS_PER_DAY).toFixed(4)).toBe(String(snapped / HOURS_PER_DAY));
   });
 });
+
+describe("a monitoring window never opens before the lights changed", () => {
+  const now = d("2026-08-20");
+
+  it("floors at the day after the replacement when nothing is stored yet", () => {
+    // A live circuit commissioned through the legacy window flow has no
+    // MeterReading rows at all. Falling back to "day after meter install"
+    // opened a window across the whole pre-install history, and days from
+    // before the lights changed were accepted into a month billed against
+    // the post-replacement baseline.
+    const w = circuitReadingWindow({
+      meterInstalledAt: d("2026-06-01"),
+      lightReplacementDate: d("2026-07-10"),
+      benchmarkSavingsPct: 68,
+      lastStoredDate: null,
+      demo: false,
+      now,
+    })!;
+    expect(w.kind).toBe("monitoring");
+    expect(iso(w.from)).toBe("2026-07-11");
+  });
+
+  it("still takes the one-day overlap when the last stored day is later", () => {
+    const w = circuitReadingWindow({
+      meterInstalledAt: d("2026-06-01"),
+      lightReplacementDate: d("2026-07-10"),
+      benchmarkSavingsPct: 68,
+      lastStoredDate: d("2026-08-13"),
+      demo: false,
+      now,
+    })!;
+    expect(iso(w.from)).toBe("2026-08-12");
+  });
+
+  it("does not let the overlap reach back past the replacement", () => {
+    // Last stored day IS the first post-install day: overlapping one day
+    // earlier would land on the replacement day itself.
+    const w = circuitReadingWindow({
+      meterInstalledAt: d("2026-06-01"),
+      lightReplacementDate: d("2026-07-10"),
+      benchmarkSavingsPct: 68,
+      lastStoredDate: d("2026-07-11"),
+      demo: false,
+      now,
+    })!;
+    expect(iso(w.from)).toBe("2026-07-11");
+  });
+});

@@ -16,6 +16,7 @@ import {
   windowIsEmpty,
   firstQualifyingDay,
 } from "@/lib/circuit-load";
+import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { matchKnownFormat, stripBom } from "@/lib/reading-formats";
 import { applyMappingAllDays, parseTimestamp } from "@/lib/reading-normalize";
 
@@ -420,3 +421,31 @@ describe("addDays is UTC-safe", () => {
     expect(addDays(d("2028-02-28"), 1)).toEqual(d("2028-02-29")); // 2028 is
   });
 });
+
+describe("live monitoring is gated on the installation, not the benchmark", () => {
+  // The circuit page offered "Upload this month's readings" the moment a
+  // demo benchmark confirmed — before the offer, agreement and installation
+  // existed. A monthly figure is what a society is billed on, and billing
+  // starts the day after the completion certificate (CON-22).
+
+  it("says what is missing while the benchmark is not confirmed", () => {
+    expect(
+      liveMonitoringBlocker({ benchmarkSavingsPct: null, installationCertificateSigned: true }),
+    ).toContain("demo benchmark is confirmed");
+  });
+
+  it("still refuses on a confirmed benchmark with no signed-off installation", () => {
+    const why = liveMonitoringBlocker({
+      benchmarkSavingsPct: 68,
+      installationCertificateSigned: false,
+    });
+    expect(why).toContain("full installation");
+    expect(why).toContain("CON-22");
+  });
+
+  it("is live only when both hold", () => {
+    expect(
+      liveMonitoringBlocker({ benchmarkSavingsPct: 68, installationCertificateSigned: true }),
+    ).toBeNull();
+  });
+})

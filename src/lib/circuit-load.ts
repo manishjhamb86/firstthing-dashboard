@@ -211,8 +211,24 @@ export function extractionWindow(args: {
   today: Date;
 }): { from: Date; to: Date } {
   const yesterday = addDays(args.today, -1);
-  if (args.kind === "monitoring" && args.lastStoredDate !== null) {
-    return { from: addDays(args.lastStoredDate, -1), to: yesterday };
+  if (args.kind === "monitoring") {
+    // A monitoring day can never precede the post-install window's own
+    // start, whatever the last stored reading is — so the overlap rule is
+    // floored at the day after the replacement.
+    //
+    // Without the floor, a live circuit with NO stored MeterReading rows
+    // (its commissioning ran through the legacy window flow, which writes
+    // CommissioningReading instead) fell through to "day after meter
+    // install" and opened a window covering the entire pre-install history.
+    // Days from before the lights changed would then be accepted into a
+    // month that bills against the post-replacement baseline. Found by
+    // moving the monthly upload to its own screen (2026-08-20) and watching
+    // three saved days land outside the monitoring phase entirely.
+    const floor = args.lightReplacementDate
+      ? addDays(args.lightReplacementDate, 1)
+      : addDays(args.meterInstalledAt, 1);
+    const overlap = args.lastStoredDate !== null ? addDays(args.lastStoredDate, -1) : floor;
+    return { from: overlap.getTime() < floor.getTime() ? floor : overlap, to: yesterday };
   }
   // A POST-install window starts the day after the LIGHTS were replaced, not
   // the day after the meter went in (user-reported 2026-08-19: replacement on

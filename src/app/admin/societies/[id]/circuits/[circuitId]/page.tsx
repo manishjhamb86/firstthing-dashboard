@@ -20,6 +20,7 @@ import { circuitSteps } from "@/lib/deal-progress";
 import { StepSection } from "@/components/step-section";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
 import { CircuitReadingPanel, type ReadingWindowDTO } from "./circuit-reading-panel";
+import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { StoredReadingsPanel, type StoredReadingDTO } from "./stored-readings-panel";
 import {
   circuitReadingWindow,
@@ -209,6 +210,15 @@ export default async function CircuitDetailPage({
   // a fresh circuit gets the CSV review flow. One circuit, one flow — mixing
   // the two stores under one baseline is how figures stop agreeing.
   const usesLegacyFlow = circuit.commissioningReadings.length > 0 && storedReadings.length === 0;
+
+  // Has this circuit's deal actually finished installing? That, not the demo
+  // benchmark, is what makes a month billable (CON-22).
+  const installationSignedOff = circuit.siteSurvey
+    ? (await db.pipeline.findUnique({
+        where: { id: circuit.siteSurvey.pipelineId },
+        select: { stage: true, installationProject: { select: { certificate: { select: { id: true } } } } },
+      }).then((pl) => pl?.stage === "active_billing" || !!pl?.installationProject?.certificate)) ?? false
+    : false;
 
   // The valid period for THIS step's readings, resolved from the circuit's
   // own dates by the same composition the ingest action uses to enforce it
@@ -782,23 +792,35 @@ export default async function CircuitDetailPage({
               )}
             </div>
           </div>
-          {circuit.benchmarkSavingsPct !== null && (
-            <div>
-              <h3 className="text-sm font-medium mb-2">Upload this month&apos;s readings</h3>
-              {canOverride ? (
-                <CircuitReadingPanel
-                  circuitId={circuit.id}
-                  window={readingWindowDTO}
-                  demoMode={demoMode}
-                />
-              ) : (
-                <p className="text-sm text-[var(--text-muted)]">
-                  Monthly monitoring readings feed billing — uploading them is an operations-lead
-                  action.
-                </p>
-              )}
-            </div>
-          )}
+          {/* Monthly readings are NOT uploaded here. This page is the
+              commissioning sequence; a monthly figure is what a society is
+              billed on, and billing does not begin until the day after the
+              completion certificate (CON-22). Offering the upload the moment
+              a demo benchmark was confirmed put it before the offer, the
+              agreement and the installation — user-reported 2026-08-20. It
+              lives in Live monitoring, and this says where it went rather
+              than leaving a hole. */}
+          {circuit.benchmarkSavingsPct !== null &&
+            (liveMonitoringBlocker({
+              benchmarkSavingsPct: circuit.benchmarkSavingsPct,
+              installationCertificateSigned: installationSignedOff,
+            }) === null ? (
+              <p className="text-sm">
+                <Link href={`/admin/monitoring/${circuit.id}`} className="underline font-medium">
+                  Live monitoring →
+                </Link>{" "}
+                <span className="text-[var(--text-muted)]">
+                  — this circuit is live; each month&apos;s readings are recorded there.
+                </span>
+              </p>
+            ) : (
+              <p className="text-sm text-[var(--text-muted)]">
+                {liveMonitoringBlocker({
+                  benchmarkSavingsPct: circuit.benchmarkSavingsPct,
+                  installationCertificateSigned: installationSignedOff,
+                })}
+              </p>
+            ))}
           <StoredReadingsPanel
             readings={storedReadings}
             canEdit={canEdit}

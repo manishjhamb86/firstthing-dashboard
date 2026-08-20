@@ -5,6 +5,11 @@ import { MonitoringBoard, type BoardRow } from "./board";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
 import { reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
+import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { classifyDay, periodSavingsSummary } from "@/lib/circuit-load";
+import Link from "next/link";
+import { Card, CardTitle, EmptyState } from "@/components/ui";
 
 const REQUIRED_VALID_DAYS = 5;
 
@@ -69,6 +74,48 @@ export default async function MonitoringDashboardPage() {
       take: 20,
     }),
   ]);
+
+  // Live monitoring — the circuits past commissioning AND past installation,
+  // whose monthly readings feed billing. This is where the circuit page's
+  // "Upload this month's readings" moved to (user-reported 2026-08-20): the
+  // commissioning page offered it the moment a demo benchmark confirmed,
+  // which is before the offer, the agreement and the installation exist.
+  const liveCircuits = await db.circuit.findMany({
+    where: LIVE_MONITORING_WHERE,
+    include: {
+      society: { select: { name: true } },
+      rescaleEvents: true,
+      meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  const liveIds = new Set(liveCircuits.map((c) => c.id));
+
+  const liveRows = liveCircuits.map((c) => {
+    const days =
+      c.meterInstalledAt && c.lightReplacementDate
+        ? c.meterReadings.filter(
+            (r) => classifyDay(r.date, c.meterInstalledAt!, c.lightReplacementDate) === "post_install",
+          )
+        : [];
+    const baseline = effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, now);
+    const summary = periodSavingsSummary(
+      baseline,
+      days.map((d) => ({ kWh: d.kWh, excluded: d.excludedAt !== null })),
+    );
+    const last = days.length > 0 ? days[days.length - 1].date : null;
+    return {
+      id: c.id,
+      society: c.society.name,
+      circuit: c.location || c.lightType,
+      benchmarkPct: c.benchmarkSavingsPct,
+      days: days.length,
+      savingsPct: summary.savingsPct,
+      warn: summary.warn,
+      lastReading: last ? last.toISOString().slice(0, 10) : null,
+    };
+  });
 
   const preRows = preInstallActive.map((c) => {
     const readings = c.commissioningReadings.filter(
@@ -182,7 +229,12 @@ export default async function MonitoringDashboardPage() {
         signalTone: r.pendingAnomaly ? ("warn" as const) : r.projectedSavingsPct != null ? (inBand ? ("ok" as const) : ("warn" as const)) : null,
       };
     }),
-    ...recentlyResolved.map((c) => ({
+    // A circuit that has gone live has moved past "recently resolved" — it
+    // has its own row below. Listing it in both puts the same circuit on the
+    // screen twice with two different meanings.
+    ...recentlyResolved
+      .filter((c) => !liveIds.has(c.id))
+      .map((c) => ({
       id: `res-${c.id}`,
       href: `/admin/societies/${c.societyId}/circuits/${c.id}`,
       society: c.society.name,
@@ -197,7 +249,7 @@ export default async function MonitoringDashboardPage() {
       signal:
         c.benchmarkSavingsPct != null ? `${c.benchmarkSavingsPct.toFixed(1)}% confirmed` : "Out of band",
       signalTone: c.benchmarkSavingsPct != null ? ("ok" as const) : ("warn" as const),
-    })),
+      })),
   ];
 
   const needsAttention = rows.filter((r) => r.rank <= 2).length;
@@ -206,7 +258,7 @@ export default async function MonitoringDashboardPage() {
     <>
       <PageHeader
         title="Metering monitoring"
-        subtitle="Every circuit in commissioning, most urgent first."
+        subtitle="Every circuit in commissioning, most urgent first — then the ones already live."
         chip={
           needsAttention > 0 ? (
             <StatusChip tone="warn">
@@ -240,6 +292,71 @@ export default async function MonitoringDashboardPage() {
       </div>
 
       <MonitoringBoard rows={rows} />
+
+      {/* Live monitoring sits below commissioning deliberately: a circuit
+          reaches it only by finishing everything above, so the order on this
+          page is the order of the work. */}
+      <section className="max-w-none mt-10">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 mb-1">
+          <CardTitle className="mb-0">Live monitoring</CardTitle>
+          {liveRows.length > 0 && (
+            <StatusChip tone="ok">
+              {liveRows.length} live circuit{liveRows.length === 1 ? "" : "s"}
+            </StatusChip>
+          )}
+        </div>
+        <p className="text-sm text-[var(--text-muted)] mb-3">
+          Installed, signed off and billing. Each month&apos;s readings are recorded here — savings
+          are measured against the baseline in force (INV-07).
+        </p>
+        {liveRows.length === 0 ? (
+          <EmptyState title="No circuits are live yet">
+            A circuit arrives here once its benchmark is confirmed and its installation is signed
+            off — billing starts the day after the completion certificate (CON-22).
+          </EmptyState>
+        ) : (
+          <Card className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Circuit</th>
+                  <th>Benchmark</th>
+                  <th>Days recorded</th>
+                  <th>Last reading</th>
+                  <th>Measured savings</th>
+                </tr>
+              </thead>
+              <tbody>
+                {liveRows.map((r) => (
+                  <tr key={r.id}>
+                    <td>{r.society}</td>
+                    <td>
+                      <Link href={`/admin/monitoring/${r.id}`} className="font-medium hover:underline">
+                        {r.circuit} →
+                      </Link>
+                    </td>
+                    <td className="num">
+                      {r.benchmarkPct != null ? `${r.benchmarkPct.toFixed(1)}%` : "—"}
+                    </td>
+                    <td className="num">{r.days}</td>
+                    <td className="num text-[var(--text-muted)]">{r.lastReading ?? "none yet"}</td>
+                    <td>
+                      {r.savingsPct == null ? (
+                        <span className="text-[var(--text-muted)]">awaiting readings</span>
+                      ) : (
+                        <StatusChip tone={r.warn ? "warn" : "ok"}>
+                          {r.savingsPct.toFixed(1)}%
+                        </StatusChip>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </section>
     </>
   );
 }

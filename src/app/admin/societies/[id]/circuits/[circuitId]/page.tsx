@@ -23,6 +23,7 @@ import { loadDealProgress } from "@/lib/pipeline-facts";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
 import { CircuitReadingPanel, type ReadingWindowDTO } from "./circuit-reading-panel";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
+import { exclusionRefusal } from "@/lib/reading-exclusion";
 import { StoredReadingsPanel, type StoredReadingDTO } from "./stored-readings-panel";
 import {
   circuitReadingWindow,
@@ -190,6 +191,13 @@ export default async function CircuitDetailPage({
             varianceBand: v?.band ?? null,
             savingsPct: sPct,
             savingsBand: sPct === null ? null : savingsBand(sPct),
+            frozenReason: exclusionRefusal({
+              phase: isPre ? "pre_install" : "post_install",
+              replacementRecorded: circuit.lightReplacementDate !== null,
+              benchmarkConfirmed: circuit.benchmarkSavingsPct !== null,
+              billed: r.usedInCalculationId !== null,
+              isOps: canOverride,
+            }),
           };
         })
         .filter((r): r is NonNullable<typeof r> => r !== null)

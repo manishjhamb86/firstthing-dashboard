@@ -31,6 +31,8 @@ export type StoredReadingDTO = {
   varianceBand: VarianceBand | null;
   savingsPct: number | null;
   savingsBand: SavingsBand | null;
+  /** Non-null when this day can no longer be excluded or re-included. */
+  frozenReason?: string | null;
 };
 
 const PHASE_LABEL: Record<StoredReadingDTO["phase"], string> = {
@@ -63,6 +65,13 @@ function ExclusionControl({ reading, editable }: { reading: StoredReadingDTO; ed
   }
 
   if (!editable) return null;
+  // Don't offer what can only refuse. This control used to render on every
+  // row; on a circuit past its benchmark the action refused every time and
+  // the refusal was a line of small text in the last column, so the rows
+  // simply "came back on refresh".
+  if (reading.frozenReason) {
+    return <span className="text-xs text-[var(--text-subtle)]">{reading.frozenReason}</span>;
+  }
   return (
     <span>
       <button type="button" onClick={toggle} disabled={pending} className="btn-ghost text-xs">

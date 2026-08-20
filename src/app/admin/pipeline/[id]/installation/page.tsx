@@ -101,45 +101,88 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
       <>
         {header}
         <div className="max-w-none space-y-5">
-          {/* A checklist that states four requirements and offers a route to
-              none of them is a dead end — "no buttons, no actionables, and
-              now we are stuck" (user-reported 2026-08-20). Two of these are
-              filled in by the form below; the other two are things that
-              happen on other screens, so those link there. */}
-          <EmptyState title="No installation plan yet">
-            <p>Setting up the project needs four things, and the plan cannot publish without any of them:</p>
-            <ul className="mt-3 text-left inline-block space-y-1.5">
-              <li>
-                {contractReady ? "✓" : "•"} An executed, active contract
-                {!contractReady && (
-                  <>
-                    {" — installation commits FirsThing's own capital, so this is a hard gate. "}
-                    <Link href={`/admin/pipeline/${pipeline.id}/agreement`} className="underline font-medium">
-                      Execute the agreement →
-                    </Link>
-                  </>
+          {/* Two of the four happen elsewhere; the other two are the form
+              below. Rendered as a bulleted paragraph the outstanding ones
+              got lost in the prose — "it is not visualised properly so the
+              information gets lost" (user-reported 2026-08-20). Blocked
+              items are now the loud part of the page and carry their route;
+              satisfied ones recede. */}
+          {(() => {
+            const items = [
+              {
+                label: "An executed, active contract",
+                done: contractReady,
+                detail: "Installation commits FirsThing's own capital, so this is a hard gate.",
+                href: `/admin/pipeline/${pipeline.id}/agreement`,
+                cta: "Execute the agreement",
+              },
+              {
+                label: "A named society onlooker",
+                done: accounts.length > 0,
+                detail: "This society has no active portal account, so nobody can approve a day's work (CON-21).",
+                href: `/admin/societies/${pipeline.societyId}`,
+                cta: "Add a portal account",
+              },
+            ];
+            const blocked = items.filter((i) => !i.done);
+            return (
+              <>
+                {blocked.length > 0 && (
+                  <div
+                    className="rounded-[var(--r-md)] border p-5"
+                    style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
+                  >
+                    <p className="lbl mb-1" style={{ color: "var(--warn-fg)" }}>
+                      {blocked.length} thing{blocked.length === 1 ? "" : "s"} blocking the installation
+                    </p>
+                    <p className="text-sm mb-4" style={{ color: "var(--warn-fg)" }}>
+                      The project can&apos;t be set up until {blocked.length === 1 ? "it is" : "both are"} done.
+                    </p>
+                    <ul className="space-y-3">
+                      {blocked.map((i) => (
+                        <li
+                          key={i.label}
+                          className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[var(--r-sm)] p-3"
+                          style={{ background: "var(--surface)" }}
+                        >
+                          <span className="min-w-0">
+                            <span className="block font-semibold text-sm">{i.label}</span>
+                            <span className="block text-xs text-[var(--text-muted)]">{i.detail}</span>
+                          </span>
+                          <Link href={i.href} className="btn-primary btn-sm shrink-0">
+                            {i.cta} →
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 )}
-              </li>
-              <li>
-                {accounts.length > 0 ? "✓" : "•"} A named society onlooker
-                {accounts.length === 0 && (
-                  <>
-                    {" — this society has no active portal account yet. "}
-                    <Link href={`/admin/societies/${pipeline.societyId}`} className="underline font-medium">
-                      Add a portal account →
-                    </Link>
-                  </>
-                )}
-              </li>
-              <li>• The contracted scope, and a note if it differs from the {surveyed} lights the survey found</li>
-              <li>• A day-by-day batch plan whose counts reconcile to that scope</li>
-            </ul>
-            <p className="mt-3">
-              {contractReady && accounts.length > 0
-                ? "The last two are filled in below."
-                : "The last two are filled in here once the items above are in place."}
-            </p>
-          </EmptyState>
+
+                <Card className="p-5">
+                  <CardTitle>What setup needs</CardTitle>
+                  <ul className="space-y-1.5 text-sm">
+                    {items.map((i) => (
+                      <li key={i.label} style={{ color: i.done ? "var(--ok-fg)" : "var(--text-muted)" }}>
+                        {i.done ? "✓" : "•"} {i.label}
+                      </li>
+                    ))}
+                    <li className="text-[var(--text-muted)]">
+                      • The contracted scope, and a note if it differs from the {surveyed} lights the
+                      survey found
+                    </li>
+                    <li className="text-[var(--text-muted)]">
+                      • A day-by-day batch plan whose counts reconcile to that scope
+                    </li>
+                  </ul>
+                  <p className="mt-3 text-sm text-[var(--text-muted)]">
+                    {blocked.length === 0
+                      ? "The last two are filled in below."
+                      : "The last two are filled in here once the items above are in place."}
+                  </p>
+                </Card>
+              </>
+            );
+          })()}
 
           {isOps && contractReady && accounts.length > 0 && (
             <Card className="p-5">

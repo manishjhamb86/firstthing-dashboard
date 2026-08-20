@@ -47,6 +47,7 @@ import {
   windowIsEmpty,
 } from "@/lib/circuit-load";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { exclusionRefusal } from "@/lib/reading-exclusion";
 import { BENCHMARK_MIN_PCT, BENCHMARK_MAX_PCT } from "@/lib/commissioning-anomaly";
 import { generateDemoReportInternal } from "@/app/admin/pipeline/[id]/report/actions";
 
@@ -662,32 +663,27 @@ export async function setReadingExclusion(
     },
   });
   if (!reading || reading.circuit.voidedAt) return { error: "That reading no longer exists." };
-  if (reading.usedInCalculationId !== null) {
-    return { error: "This day has already been billed on a released calculation — it can't be changed (INV-03)." };
-  }
   if (exclude && !reason.trim()) return { error: "Say why this day is being excluded — the report will show it." };
 
   const phase = reading.circuit.meterInstalledAt
     ? classifyDay(reading.date, reading.circuit.meterInstalledAt, reading.circuit.lightReplacementDate)
     : null;
+  if (phase === null || phase === "before_meter" || phase === "replacement_day") {
+    return { error: "That day does not belong to any of this circuit's phases." };
+  }
 
-  // The baseline freezes when the lights are replaced; the benchmark freezes
-  // when it is confirmed. Changing an input after its output is in force
-  // would silently restate a figure someone was already shown.
-  if (phase === "pre_install" && reading.circuit.lightReplacementDate !== null) {
-    return {
-      error:
-        "The lights have been replaced — the pre-install set and its average are frozen as the baseline the savings are measured against.",
-    };
-  }
-  if (phase === "post_install" && reading.circuit.benchmarkSavingsPct !== null) {
-    return {
-      error: "The benchmark is confirmed — post-install days behind it are frozen. A billing-month day can still be excluded until it is billed.",
-    };
-  }
-  if (phase === "post_install" && reading.circuit.benchmarkSavingsPct === null && !perms.includes("manage_pipeline")) {
-    // Post rows drive the benchmark decision — ops-lead once it's about money.
-    return { error: "Excluding a post-install day changes the benchmark computation — that's an operations-lead action." };
+  // One rule, shared with the row that decides whether to offer the control
+  // at all — see src/lib/reading-exclusion.ts.
+  const refusal = exclusionRefusal({
+    phase,
+    replacementRecorded: reading.circuit.lightReplacementDate !== null,
+    benchmarkConfirmed: reading.circuit.benchmarkSavingsPct !== null,
+    billed: reading.usedInCalculationId !== null,
+    isOps: perms.includes("manage_pipeline"),
+  });
+  if (refusal) {
+    logger.warn("circuit_ingest.exclusion_refused", { readingId, circuitId: reading.circuit.id, refusal });
+    return { error: refusal };
   }
 
   await db.$transaction(async (tx) => {

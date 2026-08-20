@@ -96,9 +96,34 @@ export function KycItem({
 
   const pendingFiles = files.filter((f) => f.state === "pending");
 
+  // A recorded document closes the asking. The upload form, the follow-up
+  // note and the not-applicable field all exist to chase a document that has
+  // not arrived — leaving them open under a verified one is asking for
+  // something already in hand (user-reported 2026-08-20). A REJECTED file
+  // does not count: the requirement is genuinely open again, and the forms
+  // come back on their own.
+  const liveFile = files.some((f) => f.state === "pending" || f.state === "verified");
+  const chasing = status !== "not_applicable" && !liveFile;
+  // Not removed, only folded away: FEAT-026-AC-5 is the same document
+  // arriving twice by different routes, one verified and the other retained,
+  // and that has to stay possible.
+  const [showAnyway, setShowAnyway] = useState(false);
+  const formsOpen = chasing || showAnyway;
+
   return (
     <div className="space-y-4 border-t pt-4" style={{ borderColor: "var(--line)" }}>
-      {status !== "not_applicable" && (
+      {!chasing && status !== "not_applicable" && (
+        <button
+          type="button"
+          onClick={() => setShowAnyway((v) => !v)}
+          className="btn-ghost btn-sm"
+          aria-expanded={showAnyway}
+        >
+          {showAnyway ? "Hide" : "Record another document or follow-up"}
+        </button>
+      )}
+
+      {formsOpen && status !== "not_applicable" && (
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Document file" htmlFor={`kyc-file-${type}`}>
             <input
@@ -139,7 +164,7 @@ export function KycItem({
       )}
 
       <div className="flex flex-wrap gap-2">
-        {status !== "not_applicable" && (
+        {formsOpen && status !== "not_applicable" && (
           <button type="button" onClick={submitDocument} disabled={busy || !file} className="btn-primary btn-sm">
             {uploading ? "Uploading…" : "Record document"}
           </button>
@@ -210,6 +235,7 @@ export function KycItem({
         </div>
       )}
 
+      {formsOpen && (
       <div className="flex flex-wrap items-end gap-2">
         <div className="grow">
           <Field label="Record a follow-up" htmlFor={`kyc-fu-${type}`} hint="Counts toward this step's stall signal (CON-23).">
@@ -238,8 +264,9 @@ export function KycItem({
           Log follow-up
         </button>
       </div>
+      )}
 
-      {status !== "not_applicable" && status !== "verified" && (
+      {formsOpen && status !== "not_applicable" && status !== "verified" && (
         <div className="flex flex-wrap items-end gap-2">
           <div className="grow">
             <Field

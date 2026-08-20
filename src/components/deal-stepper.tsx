@@ -13,6 +13,15 @@ import type { DealStep, NextAction } from "@/lib/deal-progress";
 // - locked    → muted, NO link — a locked step that links anyway is exactly
 //               the "six equal buttons" problem this replaces
 
+function LockGlyph() {
+  return (
+    <svg width="9" height="10" viewBox="0 0 10 11" fill="none" aria-hidden>
+      <rect x="1" y="4.5" width="8" height="6" rx="1.5" fill="currentColor" />
+      <path d="M3 4.5V3a2 2 0 1 1 4 0v1.5" stroke="currentColor" strokeWidth="1.4" fill="none" />
+    </svg>
+  );
+}
+
 function Marker({ status, index }: { status: DealStep["status"]; index: number }) {
   const base =
     "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold";
@@ -71,13 +80,41 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
             )}
             <Marker status={s.status} index={i + 1} />
             <div className="min-w-0 flex-1 pb-5 text-sm">
-              <div className="flex flex-wrap items-baseline gap-x-2">{title}</div>
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                {title}
+                {/* A locked step used to be told apart from a done one only
+                    by the colour of its marker — both summaries rendered as
+                    the same muted line, so "Unlocks when …" read like a
+                    record of something that had happened. */}
+                {s.status === "locked" && (
+                  <span className="chip chip-neu">
+                    <LockGlyph />
+                    Locked
+                  </span>
+                )}
+              </div>
               <p
                 className="text-xs mt-0.5"
                 style={{ color: s.status === "current" ? "var(--text)" : "var(--text-muted)" }}
               >
                 {s.summary}
               </p>
+              {/* Where the work actually is. The condition alone ("when the
+                  demo report is shared") does not say which step owns it. */}
+              {s.blockedBy && (
+                <p className="text-xs mt-1 flex flex-wrap items-center gap-1">
+                  <span style={{ color: "var(--warn-fg)" }}>Waiting on</span>
+                  {s.blockedBy.href ? (
+                    <Link href={s.blockedBy.href} className="font-medium hover:underline">
+                      step {s.blockedBy.index} · {s.blockedBy.title} →
+                    </Link>
+                  ) : (
+                    <span className="font-medium">
+                      step {s.blockedBy.index} · {s.blockedBy.title}
+                    </span>
+                  )}
+                </p>
+              )}
             </div>
           </li>
         );

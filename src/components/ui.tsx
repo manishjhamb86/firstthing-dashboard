@@ -42,7 +42,20 @@ export function PageHeader({
 }) {
   return (
     <header className="mb-8">
-      {breadcrumb && <div className="mb-1 text-sm text-[var(--text-subtle)]">{breadcrumb}</div>}
+      {/* The way back. It used to render as a line of muted text that read as
+          a label rather than a control, so a user deep in a deal had no
+          visible way out and went back to the society list to start again
+          (user-reported 2026-08-20: "there is no go back button anywhere ...
+          it makes the user feel stuck"). Same node, given the affordances of
+          a control: an arrow, a hit area, and a hover state. */}
+      {breadcrumb && (
+        <div className="mb-2">
+          <span className="crumb-back inline-flex items-center gap-1.5 text-sm">
+            <span aria-hidden>←</span>
+            {breadcrumb}
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div>
           <div className="flex flex-wrap items-center gap-3">

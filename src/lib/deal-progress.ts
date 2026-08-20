@@ -29,6 +29,23 @@ export type DealStep = {
   /** Only reachable steps get a link — a locked step linking anyway is how
    *  the "everything at once" feel happens. */
   href?: string;
+  /**
+   * For a locked step: the earlier sequential step that has to finish first,
+   * by its position in this list. "Unlocks when the demo report is shared"
+   * says what the condition is but not where the work lives, and rendered as
+   * plain muted text it looked identical to a completed step's summary —
+   * user-reported 2026-08-20 ("its not attracting users attention and gets
+   * hidden"). Naming the blocking step turns the map into a pointer.
+   */
+  blockedBy?: { index: number; title: string; href?: string };
+  /**
+   * Marks a step that runs alongside the spine rather than in it (KYC —
+   * CON-23). It is never the reason a later step is locked, whatever its own
+   * status happens to be: before the lead is approved KYC reads "locked"
+   * too, and without this flag the offer would have reported itself blocked
+   * by a document collection it does not depend on.
+   */
+  parallelTrack?: true;
 };
 
 export type NextAction = { label: string; detail: string; href: string };
@@ -115,6 +132,27 @@ export function circuitNextLabel(state: string): string {
     default:
       return "Open the circuit";
   }
+}
+
+/**
+ * Fills in `blockedBy` for every locked step: the first EARLIER step that is
+ * not done. Parallel steps are skipped deliberately — KYC runs alongside the
+ * spine, so it is never the reason a later spine step is locked (GATE-01's
+ * genuine KYC dependency is stated by the agreement step's own summary and
+ * by the next action, not invented here).
+ */
+function annotateBlockers(steps: DealStep[]): DealStep[] {
+  return steps.map((step, i) => {
+    if (step.status !== "locked") return step;
+    for (let j = i - 1; j >= 0; j--) {
+      const earlier = steps[j];
+      if (earlier.parallelTrack || earlier.status === "done" || earlier.status === "parallel") {
+        continue;
+      }
+      return { ...step, blockedBy: { index: j + 1, title: earlier.title, href: earlier.href } };
+    }
+    return step;
+  });
 }
 
 export function dealProgress(f: DealFacts): DealProgress {
@@ -204,6 +242,7 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "kyc",
       title: "KYC documents",
+      parallelTrack: true,
       // The one genuinely parallel track — chased alongside the demo
       // (CON-23), but the agreement is gated on it (GATE-01).
       status: kycDone ? "done" : closed ? "locked" : leadDone ? "parallel" : "locked",
@@ -307,7 +346,7 @@ export function dealProgress(f: DealFacts): DealProgress {
     }
   }
 
-  return { steps, next };
+  return { steps: annotateBlockers(steps), next };
 }
 
 // ---------------------------------------------------------------------------
@@ -362,7 +401,7 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
   const flags = [eligibilityDone, meterDone, installGateDone, baselineDone, completionGateDone, replacementDone, benchmarkDone];
   const cur = flags.findIndex((d) => !d);
 
-  return [
+  return annotateBlockers([
     mk("eligibility", "Eligibility (CON-16)", eligibilityDone, cur === 0,
       "Passed the eligibility checklist",
       "Awaiting the light-count exception decision on the survey page",
@@ -393,5 +432,5 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
         ? "The measured result fell outside CON-20's band — resolve the review below"
         : "Record one reading per day below — 5 valid days compute the savings benchmark",
       "Unlocks once the replacement is recorded"),
-  ];
+  ]);
 }

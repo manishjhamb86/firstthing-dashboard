@@ -299,3 +299,93 @@ describe("circuitSteps — the map one level down", () => {
     }
   });
 });
+
+describe("a locked step names what it is waiting on", () => {
+  // "Unlocks when the demo report is shared" says the condition but not
+  // where the work lives, and rendered as muted text it looked identical to
+  // a completed step's summary (user-reported 2026-08-20).
+
+  it("points at the first earlier step that is not done", () => {
+    const steps = byKey(freshLead);
+    // Everything is locked behind step 1, the lead itself.
+    expect(steps.survey.blockedBy).toEqual({
+      index: 1,
+      title: "Lead & demo proposal",
+      href: "/admin/pipeline/p1",
+    });
+  });
+
+  it("names the nearest blocker, not the first thing in the list", () => {
+    // Lead and survey done; the deal sits at demo commissioning.
+    const mid: DealFacts = {
+      ...freshLead,
+      stage: "survey_pending",
+      surveyExists: true,
+      areaCount: 1,
+      candidates: [{ id: "c1", state: "meter_installed", location: "Basement", lightType: "Tube" }],
+    };
+    const steps = byKey(mid);
+    expect(steps.commissioning.status).toBe("current");
+    // The offer is not waiting on the lead — it is waiting on the report,
+    // which is waiting on commissioning.
+    expect(steps.offer.blockedBy?.title).toBe("Demo savings report");
+    expect(steps.report.blockedBy?.title).toBe("Demo commissioning");
+  });
+
+  it("skips the parallel KYC track — it never blocks a spine step", () => {
+    // KYC runs alongside; treating it as a sequential blocker would tell the
+    // operator the offer is held up by a document, which is not the rule.
+    const withKyc: DealFacts = { ...freshLead, kyc: { total: 2, resolved: 0 } };
+    const steps = byKey(withKyc);
+    // Before the lead is approved KYC reads "locked" like anything else —
+    // which is exactly why the skip is keyed on the track, not the status.
+    expect(steps.kyc.status).toBe("locked");
+    expect(steps.kyc.parallelTrack).toBe(true);
+    for (const step of dealProgress(withKyc).steps) {
+      expect(step.blockedBy?.title).not.toBe("KYC documents");
+    }
+    // …and once it is genuinely parallel, still never a blocker.
+    const started = dealProgress({
+      ...withKyc,
+      stage: "survey_pending",
+      surveyExists: true,
+      areaCount: 1,
+      candidates: [{ id: "c1", state: "meter_installed", location: null, lightType: "Tube" }],
+    });
+    expect(started.steps.find((x) => x.key === "kyc")?.status).toBe("parallel");
+    for (const step of started.steps) {
+      expect(step.blockedBy?.title).not.toBe("KYC documents");
+    }
+  });
+
+  it("a done step and a current step never carry a blocker", () => {
+    const done: DealFacts = {
+      ...freshLead,
+      stage: "active_billing",
+      surveyExists: true,
+      areaCount: 1,
+      candidates: [{ id: "c1", state: "benchmark_confirmed", location: null, lightType: "Tube" }],
+      reportStatus: "shared",
+      offerStatus: "accepted",
+      contractStatus: "active",
+      certificateSigned: true,
+    };
+    for (const step of dealProgress(done).steps) {
+      if (step.status !== "locked") expect(step.blockedBy).toBeUndefined();
+    }
+  });
+
+  it("works one level down too — a circuit step names its own blocker", () => {
+    const steps = circuitSteps({
+      state: "eligible",
+      hasInstallGatePass: false,
+      hasCompletionGatePass: false,
+      preInstallBaseline: null,
+      lightReplacementDate: null,
+      benchmarkSavingsPct: null,
+    });
+    const preWindow = steps.find((s) => s.key === "pre-window")!;
+    expect(preWindow.status).toBe("locked");
+    expect(preWindow.blockedBy?.title).toBe("Install gate pass");
+  });
+});

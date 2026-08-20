@@ -6,7 +6,7 @@ import { PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-map
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { dealProgress } from "@/lib/deal-progress";
+import { DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
 import { DealStepper, NextStepCallout } from "@/components/deal-stepper";
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -26,12 +26,7 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
       society: true,
       salesOwner: true,
       loggedBy: true,
-      siteSurvey: { include: { areas: { select: { id: true } } } },
-      demoReports: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
-      kycRequirements: { select: { status: true } },
-      offers: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
-      contract: { select: { status: true } },
-      installationProject: { select: { state: true, certificate: { select: { id: true } } } },
+      ...DEAL_PROGRESS_INCLUDE,
     },
   });
   if (!pipeline) notFound();
@@ -46,28 +41,9 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
   const stage = statusMeta(PIPELINE_STAGE, pipeline.stage);
 
   // The sequencing decision lives in one pure module, not scattered across
-  // conditionals here — see src/lib/deal-progress.ts.
-  const progress = dealProgress({
-    pipelineId: pipeline.id,
-    societyId: pipeline.societyId,
-    stage: pipeline.stage,
-    authoritative: pipeline.authoritative,
-    demoSkipped: pipeline.demoSkipped,
-    surveyExists: !!pipeline.siteSurvey,
-    areaCount: pipeline.siteSurvey?.areas.length ?? 0,
-    candidates,
-    reportStatus: pipeline.demoReports[0]?.status ?? null,
-    kyc: {
-      total: pipeline.kycRequirements.length,
-      resolved: pipeline.kycRequirements.filter(
-        (k) => k.status === "verified" || k.status === "not_applicable",
-      ).length,
-    },
-    offerStatus: pipeline.offers[0]?.status ?? null,
-    contractStatus: pipeline.contract?.status ?? null,
-    installationState: pipeline.installationProject?.state ?? null,
-    certificateSigned: !!pipeline.installationProject?.certificate,
-  });
+  // conditionals here — see src/lib/deal-progress.ts. The facts mapping is
+  // shared with the KYC screen (src/lib/pipeline-facts.ts).
+  const progress = toDealProgress(pipeline, candidates);
 
   return (
     <>

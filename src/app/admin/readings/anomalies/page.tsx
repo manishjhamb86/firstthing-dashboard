@@ -64,6 +64,11 @@ export default async function AnomalyReviewPage({
   return (
     <>
       <PageHeader
+        breadcrumb={
+          <Link href="/admin/readings" className="hover:underline">
+            Readings
+          </Link>
+        }
         title="Anomaly &amp; coverage review"
         subtitle={`${period} — every flag has to be resolved or explicitly accepted before this month can be billed (INV-09).`}
         chip={

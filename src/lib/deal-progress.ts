@@ -54,6 +54,15 @@ export type DealProgress = {
   steps: DealStep[];
   /** Null when the deal is closed-lost or fully through to billing. */
   next: NextAction | null;
+  /**
+   * Where the deal is, for a header chip. Deliberately NOT Pipeline.stage:
+   * that column only moves at commercial milestones (it sits at
+   * `survey_pending` from the moment the proposal is agreed right through
+   * the survey, commissioning and the benchmark), so a header reading
+   * "Survey pending" sat directly above a map showing Site survey ✓ —
+   * user-reported 2026-08-20. One source of truth or the two disagree.
+   */
+  phase: { label: string; tone: "ok" | "info" | "warn" | "bad" | "neu" };
 };
 
 export type CandidateFacts = {
@@ -346,7 +355,17 @@ export function dealProgress(f: DealFacts): DealProgress {
     }
   }
 
-  return { steps: annotateBlockers(steps), next };
+  const annotated = annotateBlockers(steps);
+  const current = annotated.find((x) => x.status === "current");
+  const phase: DealProgress["phase"] = closed
+    ? { label: "Closed / lost", tone: "bad" }
+    : billingLive
+      ? { label: "Active billing", tone: "ok" }
+      : current
+        ? { label: current.title, tone: "info" }
+        : { label: "In progress", tone: "info" };
+
+  return { steps: annotated, next, phase };
 }
 
 // ---------------------------------------------------------------------------

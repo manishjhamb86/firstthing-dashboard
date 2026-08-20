@@ -6,12 +6,30 @@ import type { DealStep, NextAction } from "@/lib/deal-progress";
 // Components render it directly.
 //
 // The rules it encodes visually:
-// - done      → check, muted, one-line summary of what happened
-// - current   → accent ring + accent left border; the summary is the
-//               instruction
-// - parallel  → hollow marker; runs alongside, link stays live
-// - locked    → muted, NO link — a locked step that links anyway is exactly
-//               the "six equal buttons" problem this replaces
+// - done      → solid green marker with a check, "Completed"
+// - current   → solid accent marker with a halo, "In progress"
+// - parallel  → dashed marker; runs alongside, link stays live
+// - locked    → hollow marker, NO link, "Locked" + the step it waits on
+//
+// The heavier treatment (2026-08-20) follows reference designs the user
+// picked: a STEP N eyebrow above each title, a right-aligned status chip per
+// row, larger markers, and a connector that is GREEN behind completed steps
+// and grey ahead of them — so the line itself carries how far the deal has
+// got, which is the thing you read a stepper for.
+
+function CheckGlyph() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M2.5 7.2 5.6 10.3 11.5 4.4"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function LockGlyph() {
   return (
@@ -22,36 +40,87 @@ function LockGlyph() {
   );
 }
 
-function Marker({ status, index }: { status: DealStep["status"]; index: number }) {
-  const base =
-    "flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold";
+export const STEP_MARKER_PX = 28;
+
+/**
+ * The one marker used by every step-shaped surface in the product, so the
+ * deal spine, the circuit sequence and the survey's own two steps read as
+ * the same language rather than three near-misses.
+ */
+export function StepMarker({
+  status,
+  index,
+  size = STEP_MARKER_PX,
+}: {
+  status: DealStep["status"];
+  index: number;
+  size?: number;
+}) {
+  const base = "flex shrink-0 items-center justify-center rounded-full font-semibold";
+  const dims = { width: size, height: size, fontSize: size <= 24 ? 11 : 12 };
+
   if (status === "done") {
     return (
-      <span className={base} style={{ background: "var(--ok-bg)", color: "var(--ok-fg)", border: "1px solid var(--ok-line)" }} aria-hidden>
-        ✓
+      <span
+        className={base}
+        style={{ ...dims, background: "var(--ok-fg)", color: "#fff" }}
+        aria-hidden
+      >
+        <CheckGlyph />
       </span>
     );
   }
   if (status === "current") {
     return (
-      <span className={base} style={{ background: "var(--accent)", color: "var(--accent-contrast, #fff)" }} aria-hidden>
+      <span
+        className={base}
+        style={{
+          ...dims,
+          background: "var(--accent)",
+          color: "var(--accent-contrast, #fff)",
+          // The halo is what makes "you are here" findable at a glance in a
+          // column of nine rows.
+          boxShadow: "0 0 0 4px var(--accent-subtle)",
+        }}
+        aria-hidden
+      >
         {index}
       </span>
     );
   }
   if (status === "parallel") {
     return (
-      <span className={base} style={{ border: "1.5px dashed var(--text-muted)", color: "var(--text-muted)" }} aria-hidden>
+      <span
+        className={base}
+        style={{ ...dims, border: "1.5px dashed var(--text-muted)", color: "var(--text-muted)" }}
+        aria-hidden
+      >
         {index}
       </span>
     );
   }
   return (
-    <span className={base} style={{ border: "1px solid var(--border-subtle)", color: "var(--text-muted)" }} aria-hidden>
+    <span
+      className={base}
+      style={{
+        ...dims,
+        border: "1.5px solid var(--border)",
+        background: "var(--surface)",
+        color: "var(--text-subtle)",
+      }}
+      aria-hidden
+    >
       {index}
     </span>
   );
 }
+
+const STATUS_CHIP: Record<DealStep["status"], { label: string; cls: string } | null> = {
+  done: { label: "Completed", cls: "chip-ok" },
+  current: { label: "In progress", cls: "chip-info" },
+  parallel: { label: "Alongside", cls: "chip-neu" },
+  locked: { label: "Locked", cls: "chip-neu" },
+};
 
 export function DealStepper({ steps }: { steps: DealStep[] }) {
   return (
@@ -59,42 +128,48 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
       {steps.map((s, i) => {
         const isLast = i === steps.length - 1;
         const reachable = s.href && s.status !== "locked";
+        const chip = STATUS_CHIP[s.status];
         const title = reachable ? (
-          <Link href={s.href as string} className="font-medium hover:underline">
+          <Link href={s.href as string} className="font-semibold hover:underline">
             {s.title} →
           </Link>
         ) : (
-          <span className={s.status === "current" ? "font-medium" : "font-medium text-[var(--text-muted)]"}>
+          <span className={s.status === "locked" ? "font-semibold text-[var(--text-muted)]" : "font-semibold"}>
             {s.title}
           </span>
         );
         return (
-          <li key={s.key} className="relative flex gap-3">
-            {/* connector */}
+          <li key={s.key} className="relative flex gap-3.5">
+            {/* The connector carries progress: green behind a completed
+                step, grey from the current one onward. */}
             {!isLast && (
               <span
                 aria-hidden
-                className="absolute left-3 top-6 bottom-0 w-px -translate-x-1/2"
-                style={{ background: "var(--border-subtle)" }}
+                className="absolute top-7 bottom-0 w-0.5 -translate-x-1/2 rounded-full"
+                style={{
+                  left: STEP_MARKER_PX / 2,
+                  background: s.status === "done" ? "var(--ok-line)" : "var(--border-subtle)",
+                }}
               />
             )}
-            <Marker status={s.status} index={i + 1} />
-            <div className="min-w-0 flex-1 pb-5 text-sm">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                {title}
-                {/* A locked step used to be told apart from a done one only
-                    by the colour of its marker — both summaries rendered as
-                    the same muted line, so "Unlocks when …" read like a
-                    record of something that had happened. */}
-                {s.status === "locked" && (
-                  <span className="chip chip-neu">
-                    <LockGlyph />
-                    Locked
+            <StepMarker status={s.status} index={i + 1} />
+            <div className="min-w-0 flex-1 pb-6 text-sm">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="min-w-0">
+                  <p className="lbl" style={{ color: "var(--text-subtle)" }}>
+                    Step {i + 1}
+                  </p>
+                  <div className="mt-0.5">{title}</div>
+                </div>
+                {chip && (
+                  <span className={`chip ${chip.cls} shrink-0`}>
+                    {s.status === "locked" ? <LockGlyph /> : <span className="chip-dot" aria-hidden />}
+                    {chip.label}
                   </span>
                 )}
               </div>
               <p
-                className="text-xs mt-0.5"
+                className="text-xs mt-1"
                 style={{ color: s.status === "current" ? "var(--text)" : "var(--text-muted)" }}
               >
                 {s.summary}
@@ -102,7 +177,7 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
               {/* Where the work actually is. The condition alone ("when the
                   demo report is shared") does not say which step owns it. */}
               {s.blockedBy && (
-                <p className="text-xs mt-1 flex flex-wrap items-center gap-1">
+                <p className="text-xs mt-1.5 flex flex-wrap items-center gap-1">
                   <span style={{ color: "var(--warn-fg)" }}>Waiting on</span>
                   {s.blockedBy.href ? (
                     <Link href={s.blockedBy.href} className="font-medium hover:underline">
@@ -137,5 +212,50 @@ export function NextStepCallout({ next }: { next: NextAction }) {
       <p className="text-sm font-semibold">{next.label} →</p>
       <p className="text-xs text-[var(--text-muted)] mt-0.5">{next.detail}</p>
     </Link>
+  );
+}
+
+/**
+ * A section heading that reads as a step. Used where a screen is itself one
+ * stage of the deal broken into ordered parts (the survey's inventory →
+ * candidate), so those parts use the same marker and chip language as the
+ * spine instead of a bare "Step 1" label.
+ */
+export function StepHeading({
+  index,
+  title,
+  status,
+  hint,
+  aside,
+}: {
+  index: number;
+  title: string;
+  status: DealStep["status"];
+  hint?: string;
+  aside?: React.ReactNode;
+}) {
+  const chip = STATUS_CHIP[status];
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-3">
+      <div className="flex items-start gap-3 min-w-0">
+        <StepMarker status={status} index={index} size={24} />
+        <div className="min-w-0">
+          <p className="lbl" style={{ color: "var(--text-subtle)" }}>
+            Step {index}
+          </p>
+          <h2 className="text-[15px] font-semibold mt-0.5">{title}</h2>
+          {hint && <p className="text-xs text-[var(--text-muted)] mt-0.5">{hint}</p>}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 shrink-0">
+        {aside}
+        {chip && (
+          <span className={`chip ${chip.cls}`}>
+            {status === "locked" ? <LockGlyph /> : <span className="chip-dot" aria-hidden />}
+            {chip.label}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }

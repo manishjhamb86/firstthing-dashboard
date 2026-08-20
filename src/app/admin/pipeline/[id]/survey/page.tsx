@@ -11,7 +11,7 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { resolveCircuitRemoval } from "@/lib/circuit-removal";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
-import { NextStepCallout } from "@/components/deal-stepper";
+import { NextStepCallout, StepHeading } from "@/components/deal-stepper";
 
 export default async function SiteSurveyPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminPage();
@@ -54,6 +54,13 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
   );
 
   const totalLights = siteSurvey.areas.reduce((sum, a) => sum + a.count, 0);
+
+  // The survey's two steps, so their headings can say where the work is
+  // rather than sitting at "Step 1"/"Step 2" whatever has happened. Step 2
+  // is genuinely gated on step 1 — a candidate is judged against the
+  // society-wide inventory, so there is nothing to judge it against yet.
+  const inventoryDone = siteSurvey.areas.length > 0;
+  const candidateDone = circuits.length > 0;
 
   // CON-11's extrapolation base. Areas are how lights get COUNTED ("Tower B
   // staircase"); light types are how they get BILLED — four towers are four
@@ -150,20 +157,22 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
       </div>
 
       <section className="max-w-none mb-10">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-3">
-          <h2 className="text-[15px] font-semibold">
-            <span className="lbl mr-2" style={{ color: "var(--accent)" }}>
-              Step 1
-            </span>
-            Lighting inventory by area
-          </h2>
-          {siteSurvey.areas.length > 0 && (
-            <p className="text-xs text-[var(--text-muted)]">
-              <span className="num">{totalLights}</span> lights across{" "}
-              <span className="num">{siteSurvey.areas.length}</span> areas
-            </p>
-          )}
-        </div>
+        {/* The survey's own two steps are a sequence like any other, so they
+            use the spine's marker and chip language rather than a bare
+            "Step 1" label that looked the same whether it was done or not. */}
+        <StepHeading
+          index={1}
+          title="Lighting inventory by area"
+          status={inventoryDone ? "done" : "current"}
+          aside={
+            siteSurvey.areas.length > 0 ? (
+              <p className="text-xs text-[var(--text-muted)]">
+                <span className="num">{totalLights}</span> lights across{" "}
+                <span className="num">{siteSurvey.areas.length}</span> areas
+              </p>
+            ) : undefined
+          }
+        />
         {siteSurvey.areas.length === 0 ? (
           <div className="mb-4">
             <EmptyState title="No areas recorded yet">
@@ -285,12 +294,16 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
       )}
 
       <section className="max-w-none">
-        <h2 className="text-[15px] font-semibold mb-3">
-          <span className="lbl mr-2" style={{ color: "var(--accent)" }}>
-            Step 2
-          </span>
-          Pick the demo circuit
-        </h2>
+        <StepHeading
+          index={2}
+          title="Pick the demo circuit"
+          status={candidateDone ? "done" : inventoryDone ? "current" : "locked"}
+          hint={
+            inventoryDone
+              ? undefined
+              : "Unlocks once at least one area is recorded — a candidate is judged against the society-wide inventory"
+          }
+        />
         {/* Step 2 waits on step 1 — a candidate is judged against CON-16
             with the society-wide inventory as its context (the demo circuit
             REPRESENTS that inventory), so offering the form before any area

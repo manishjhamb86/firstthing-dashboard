@@ -389,3 +389,49 @@ describe("a locked step names what it is waiting on", () => {
     expect(preWindow.blockedBy?.title).toBe("Install gate pass");
   });
 });
+
+describe("the header phase agrees with the map", () => {
+  // Pipeline.stage only moves at commercial milestones — it sits at
+  // survey_pending from the agreed proposal right through the survey,
+  // commissioning and the benchmark. A header reading it directly said
+  // "Survey pending" above a map showing Site survey ✓ (user-reported
+  // 2026-08-20).
+
+  it("names the current step, not the stored stage", () => {
+    const mid = dealProgress({
+      ...freshLead,
+      stage: "survey_pending", // unchanged in the database…
+      surveyExists: true,
+      areaCount: 1,
+      candidates: [{ id: "c1", state: "meter_installed", location: "Basement", lightType: "Tube" }],
+    });
+    expect(mid.steps.find((s) => s.key === "survey")?.status).toBe("done");
+    // …so the phase must come from the map, or the two contradict.
+    expect(mid.phase.label).toBe("Demo commissioning");
+    expect(mid.phase.tone).toBe("info");
+  });
+
+  it("a fresh lead reads as the lead step", () => {
+    expect(dealProgress(freshLead).phase.label).toBe("Lead & demo proposal");
+  });
+
+  it("closed-lost and live billing are their own phases, not a step", () => {
+    expect(dealProgress({ ...freshLead, stage: "closed_lost" }).phase).toEqual({
+      label: "Closed / lost",
+      tone: "bad",
+    });
+    expect(
+      dealProgress({
+        ...freshLead,
+        stage: "active_billing",
+        surveyExists: true,
+        areaCount: 1,
+        candidates: [{ id: "c1", state: "benchmark_confirmed", location: null, lightType: "Tube" }],
+        reportStatus: "shared",
+        offerStatus: "accepted",
+        contractStatus: "active",
+        certificateSigned: true,
+      }).phase,
+    ).toEqual({ label: "Active billing", tone: "ok" });
+  });
+});

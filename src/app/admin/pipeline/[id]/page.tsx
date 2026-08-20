@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
-import { PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -38,7 +38,6 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
       })
     : [];
 
-  const stage = statusMeta(PIPELINE_STAGE, pipeline.stage);
 
   // The sequencing decision lives in one pure module, not scattered across
   // conditionals here — see src/lib/deal-progress.ts. The facts mapping is
@@ -54,7 +53,9 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
           </Link>
         }
         title={pipeline.society.name}
-        chip={<StatusChip tone={stage.tone}>{stage.label}</StatusChip>}
+        // The map's own current step, not Pipeline.stage — see the phase
+        // field in deal-progress.ts for why the two used to disagree.
+        chip={<StatusChip tone={progress.phase.tone}>{progress.phase.label}</StatusChip>}
         subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${pipeline.society.location}`}
       />
 

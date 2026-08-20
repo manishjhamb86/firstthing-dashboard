@@ -6,7 +6,7 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { AddPortalAccountButton } from "@/components/add-portal-account-button";
 import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
-import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import {
   BATCH_STATE,
   BLOCKER_STATUS,
@@ -93,6 +93,18 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
         ) : undefined
       }
       subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${surveyed} lights surveyed`}
+      // Top right, in line with the title — raising a blocker is a thing you
+      // do from anywhere on this screen, not a control belonging to the
+      // section that lists them (user-asked 2026-08-20).
+      action={
+        project && isField ? (
+          <RaiseBlockerForm
+            pipelineId={pipeline.id}
+            areas={[...new Set(project.plannedDays.map((d) => d.areaKey))]}
+            batches={project.batches.map((b) => ({ id: b.id, label: `Day ${b.day} · ${b.areaKey}` }))}
+          />
+        ) : undefined
+      }
     />
   );
 
@@ -464,24 +476,31 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
           </Card>
         )}
 
-        {/* ── FEAT-036 blockers ── */}
-        <Card className="p-5">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4">
-            <CardTitle className="mb-0">Blockers &amp; requirement changes</CardTitle>
-            {isField && (
-              <RaiseBlockerForm
-                pipelineId={pipeline.id}
-                areas={[...new Set(project.plannedDays.map((d) => d.areaKey))]}
-                batches={project.batches.map((b) => ({ id: b.id, label: `Day ${b.day} · ${b.areaKey}` }))}
-              />
-            )}
-          </div>
-          {project.blockers.length === 0 ? (
-            <EmptyState title="No blockers">
-              Installation is running to plan — day {new Set(project.batches.map((b) => b.day)).size} of{" "}
-              {new Set(project.plannedDays.map((d) => d.day)).size}.
-            </EmptyState>
-          ) : (
+        {/* ── FEAT-036 blockers ──
+            Folded to a single line when there is nothing to list: a card
+            wrapping a dashed "No blockers" box took a screenful to say
+            nothing was wrong. It opens out only when there is a line item. */}
+        {project.blockers.length === 0 ? (
+          <Card className="p-4">
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+              <span className="font-medium">Blockers &amp; requirement changes</span>
+              <StatusChip tone="ok">None</StatusChip>
+              <span className="text-[var(--text-muted)]">
+                Running to plan — day {new Set(project.batches.map((b) => b.day)).size} of{" "}
+                {new Set(project.plannedDays.map((d) => d.day)).size}.
+              </span>
+            </p>
+          </Card>
+        ) : (
+          <Card className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4">
+              <CardTitle className="mb-0">Blockers &amp; requirement changes</CardTitle>
+              <StatusChip tone={openBlockers.length > 0 ? "warn" : "neu"}>
+                {openBlockers.length > 0
+                  ? `${openBlockers.length} open`
+                  : `${project.blockers.length} resolved`}
+              </StatusChip>
+            </div>
             <div className="space-y-4">
               {project.blockers.map((b) => {
                 const meta = statusMeta(BLOCKER_STATUS, b.status);
@@ -534,9 +553,8 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 );
               })}
             </div>
-          )}
-
-        </Card>
+          </Card>
+        )}
 
         {/* ── FEAT-037 completion ── */}
         <Card className="p-5">

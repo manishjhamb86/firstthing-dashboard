@@ -89,9 +89,12 @@ export function StoredReadingsPanel({
   readings,
   canEdit,
   summaries,
+  allComplete = false,
 }: {
   readings: StoredReadingDTO[];
   canEdit: boolean;
+  /** Every step on this circuit is done — nothing here needs looking at. */
+  allComplete?: boolean;
   summaries: {
     phase: StoredReadingDTO["phase"];
     label: string;
@@ -102,8 +105,11 @@ export function StoredReadingsPanel({
   }[];
 }) {
   const [openPhases, setOpenPhases] = useState<Set<string>>(
-    // The newest phase present starts open; history starts folded.
+    // The newest phase present starts open, because it is the one still
+    // being worked on — unless nothing is: once every step is complete the
+    // whole page folds to headers and figures (user-reported 2026-08-20).
     () => {
+      if (allComplete) return new Set<string>();
       const phases = [...new Set(readings.map((r) => r.phase))];
       return new Set(phases.length > 0 ? [phases[phases.length - 1]] : []);
     },

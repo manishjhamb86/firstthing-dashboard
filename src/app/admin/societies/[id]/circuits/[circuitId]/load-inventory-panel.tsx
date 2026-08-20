@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Card, EmptyState, ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
+import { StepMarker } from "@/components/deal-stepper";
 import { addCircuitDevice, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
 
 export type InventoryLine = {
@@ -455,8 +456,51 @@ export function LoadInventoryPanel({
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
   const anyReplacement = lines.some((l) => l.replacementName);
 
+  // A locked inventory is a finished record, so it folds like every other
+  // finished thing on this page — header, figure, done (user-reported
+  // 2026-08-20: "all the completed steps should be folded and only the
+  // status and summary shown in the header"). It stays one click away,
+  // because it is the figure every pre-install reading was judged against.
+  const [open, setOpen] = useState(editable || lines.length === 0);
+
+  if (!open) {
+    return (
+      <Card className="p-4">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 text-left"
+        >
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <StepMarker status="done" index={0} size={22} />
+            <span className="font-medium text-sm">Load inventory</span>
+            <span className="text-xs text-[var(--text-muted)]">
+              {lines.length} line{lines.length === 1 ? "" : "s"} · locked
+            </span>
+            <span className="chip chip-info">
+              <span className="chip-dot" aria-hidden />
+              {theoretical.toFixed(2)} kWh/day theoretical
+            </span>
+          </span>
+          <span className="text-sm text-[var(--text-muted)]">Show</span>
+        </button>
+      </Card>
+    );
+  }
+
   return (
     <Card className="p-5 space-y-4">
+      {!editable && (
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <span className="flex items-center gap-2">
+            <StepMarker status="done" index={0} size={22} />
+            <span className="font-medium text-sm">Load inventory</span>
+          </span>
+          <button type="button" onClick={() => setOpen(false)} className="text-sm text-[var(--text-muted)] hover:underline">
+            Hide
+          </button>
+        </div>
+      )}
       {lines.length === 0 ? (
         <EmptyState title="No load inventory recorded">
           Record what hangs off this circuit — every pre-installation reading is judged against the
@@ -503,9 +547,24 @@ export function LoadInventoryPanel({
         // can still be entered for a circuit commissioned before this system.
         <div className="space-y-3">
           <p className="text-sm text-[var(--text-muted)]">{frozenReason}</p>
-          {canRecordHistorical && (
-            <AddLineForm circuitId={circuitId} catalog={catalog} demoBackfill />
-          )}
+          {/* The backfill exists for a locked circuit whose inventory was
+              never recorded. Once lines are there it is an occasional extra,
+              not a standing action — "if a record is already there then why
+              show this?" (user-reported 2026-08-20). Same disclosure
+              treatment as the KYC chase forms. */}
+          {canRecordHistorical &&
+            (lines.length === 0 ? (
+              <AddLineForm circuitId={circuitId} catalog={catalog} demoBackfill />
+            ) : (
+              <details>
+                <summary className="cursor-pointer text-sm text-[var(--text-muted)] hover:underline">
+                  Add another past record (demo mode)
+                </summary>
+                <div className="mt-3">
+                  <AddLineForm circuitId={circuitId} catalog={catalog} demoBackfill />
+                </div>
+              </details>
+            ))}
         </div>
       ) : null}
     </Card>

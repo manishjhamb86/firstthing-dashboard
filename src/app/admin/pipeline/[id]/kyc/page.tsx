@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -60,11 +59,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/pipeline/${pipeline.id}`} className="hover:underline">
-            {pipeline.society.name}
-          </Link>
-        }
+        backHref={`/admin/pipeline/${pipeline.id}`}
         title="KYC documents"
         chip={
           <StatusChip tone={settled === items.length ? "ok" : "warn"}>

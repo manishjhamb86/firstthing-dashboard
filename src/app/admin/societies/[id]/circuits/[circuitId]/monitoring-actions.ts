@@ -217,6 +217,24 @@ async function applyCommissioningReading(
       });
       logger.info("commissioning.post_install_window_complete", { circuitId, savingsPct, withinBand });
 
+      // Same rule as the CSV path: a confirmed benchmark answers whatever an
+      // earlier out-of-band review was asking, so that review closes rather
+      // than sitting at the top of the monitoring queue contradicting the
+      // circuit's own page. Resolved, never deleted.
+      if (withinBand) {
+        await db.demoResultReview.updateMany({
+          where: { circuitId, state: "open" },
+          data: {
+            state: "resolved",
+            resolution: "rerun_window",
+            resolutionNote: `Superseded by a re-measured result of ${savingsPct.toFixed(
+              2,
+            )}%, inside CON-20's ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band. Closed by the system when the benchmark confirmed.`,
+            resolvedAt: new Date(),
+          },
+        });
+      }
+
       // FEAT-015 — an out-of-range result opens a real review item rather
       // than parking the circuit in a state with nothing to act on. AC-5's
       // "repeat failure" is the count of prior reviews on this circuit, so a

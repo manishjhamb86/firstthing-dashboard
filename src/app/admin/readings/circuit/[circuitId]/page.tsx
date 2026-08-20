@@ -68,11 +68,7 @@ export default async function CircuitReadingHistory({
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/societies/${circuit.society.id}/circuits`} className="underline">
-            {circuit.society.name} circuits
-          </Link>
-        }
+        backHref={`/admin/societies/${circuit.society.id}/circuits/${circuit.id}`}
         title={`${circuit.lightType} readings`}
         subtitle={
           circuit.location

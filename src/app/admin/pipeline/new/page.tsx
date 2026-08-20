@@ -1,5 +1,4 @@
 import { isDemoMode } from "@/lib/demo-mode";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
@@ -27,11 +26,7 @@ export default async function NewLeadPage({
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href="/admin/pipeline" className="hover:underline">
-            Leads &amp; pipeline
-          </Link>
-        }
+        backHref="/admin/pipeline"
         title="Log a lead"
         subtitle="After a first meeting with a prospective society."
       />

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -39,11 +38,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/pipeline/${pipeline.id}`} className="hover:underline">
-            {pipeline.society.name}
-          </Link>
-        }
+        backHref={`/admin/pipeline/${pipeline.id}`}
         title="Offer"
         chip={status ? <StatusChip tone={status.tone}>{status.label}</StatusChip> : undefined}
         subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · priced from the demo numbers (CON-11)`}

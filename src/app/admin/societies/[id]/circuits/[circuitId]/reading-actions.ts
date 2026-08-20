@@ -779,6 +779,24 @@ async function recomputeCircuitFigures(
           // FEAT-014's semantics kept: the benchmark is a system computation.
           updates.benchmarkSavingsPct = pct;
           updates.state = "benchmark_confirmed";
+          // An out-of-band review raised earlier has had its question
+          // answered: the measurement came back inside CON-20's band. Left
+          // open it kept the circuit at the top of the monitoring queue
+          // reading "Awaiting review · 43.3% measured" while its own page
+          // said "Benchmark confirmed 68.0%" (user-reported 2026-08-20).
+          // Resolved, not deleted — the review and its original figure stay
+          // on record, which is the whole point of raising one.
+          await tx.demoResultReview.updateMany({
+            where: { circuitId: circuit.id, state: "open" },
+            data: {
+              state: "resolved",
+              resolution: "rerun_window",
+              resolutionNote: `Superseded by a re-measured result of ${pct.toFixed(
+                2,
+              )}%, inside CON-20's ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band. Closed by the system when the benchmark confirmed.`,
+              resolvedAt: new Date(),
+            },
+          });
         } else {
           // Outside CON-20's band no benchmark is written; the existing
           // FEAT-015 review queue takes over — same escalation the window

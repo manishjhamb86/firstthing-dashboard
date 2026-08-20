@@ -696,23 +696,26 @@ textarea.field {
   }
 }
 
-/* The back control in PageHeader. The breadcrumb node itself is a <Link>
-   supplied by the page, so the styling reaches it through the wrapper rather
-   than by every page remembering to pass classes. */
-.crumb-back {
+/* The back control in PageHeader. A real button: bordered, with the arrow
+   inside the hit area, because the previous version was muted text whose
+   arrow was not clickable at all. */
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px 0 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-pill);
+  background: var(--surface);
   color: var(--text-muted);
-  border: 1px solid transparent;
-  border-radius: var(--r-sm);
-  padding: 3px 8px 3px 6px;
-  margin-left: -6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
   transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
 }
-.crumb-back:hover {
+.btn-back:hover {
   color: var(--text);
-  background: var(--surface-sunken);
-  border-color: var(--border);
-}
-.crumb-back a {
-  color: inherit;
-  text-decoration: none;
+  background: var(--surface-hover);
+  border-color: var(--text-subtle);
 }

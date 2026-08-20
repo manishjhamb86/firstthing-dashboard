@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { BackButton } from "./back-button";
 
 // Shared presentational primitives for the DIR-02 Console system
 // (docs/product/05a-theme-system.md). No hooks — usable from Server and
@@ -30,30 +31,24 @@ export function CardTitle({ children, className = "" }: { children: ReactNode; c
 export function PageHeader({
   title,
   subtitle,
-  breadcrumb,
+  backHref,
   chip,
   action,
 }: {
   title: ReactNode;
   subtitle?: ReactNode;
-  breadcrumb?: ReactNode;
+  /** Where to land when there is no history to walk — a deep link or a new tab. */
+  backHref?: string;
   chip?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <header className="mb-8">
-      {/* The way back. It used to render as a line of muted text that read as
-          a label rather than a control, so a user deep in a deal had no
-          visible way out and went back to the society list to start again
-          (user-reported 2026-08-20: "there is no go back button anywhere ...
-          it makes the user feel stuck"). Same node, given the affordances of
-          a control: an arrow, a hit area, and a hover state. */}
-      {breadcrumb && (
-        <div className="mb-2">
-          <span className="crumb-back inline-flex items-center gap-1.5 text-sm">
-            <span aria-hidden>←</span>
-            {breadcrumb}
-          </span>
+      {/* One control, and it goes BACK — not to a fixed parent. See
+          BackButton for why the breadcrumb version was wrong three ways. */}
+      {backHref && (
+        <div className="mb-3">
+          <BackButton fallbackHref={backHref} />
         </div>
       )}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">

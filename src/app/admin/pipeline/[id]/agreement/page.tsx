@@ -34,6 +34,10 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
       society: true,
       agreement: { include: { offer: true, preparedBy: true, uploadedBy: true } },
       contract: { include: { versions: { orderBy: { version: "desc" } }, activatedBy: true } },
+      // GATE-01's two preconditions, so the empty state can say which one is
+      // missing instead of describing both as prose.
+      offers: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
+      kycRequirements: { select: { status: true } },
     },
   });
   if (!pipeline) notFound();
@@ -42,15 +46,18 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
   const contract = pipeline.contract;
   const contractStatus = contract ? statusMeta(CONTRACT_STATUS, contract.status) : null;
   const currentTerms = contract?.versions[0] ?? null;
+  const offerAccepted = pipeline.offers[0]?.status === "accepted";
+  const kycTotal = pipeline.kycRequirements.length;
+  const kycSettled = pipeline.kycRequirements.filter(
+    (k) => k.status === "verified" || k.status === "not_applicable",
+  ).length;
+  const kycDone = kycTotal > 0 && kycSettled >= kycTotal;
+  const canPrepare = offerAccepted && kycDone;
 
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/pipeline/${pipeline.id}`} className="hover:underline">
-            {pipeline.society.name}
-          </Link>
-        }
+        backHref={`/admin/pipeline/${pipeline.id}`}
         title="Agreement & contract"
         chip={contractStatus ? <StatusChip tone={contractStatus.tone}>{contractStatus.label}</StatusChip> : undefined}
         subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · prepared from the accepted offer`}
@@ -59,11 +66,45 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
       {!agreement ? (
         <div className="max-w-none space-y-4">
           {/* FEAT-029-AC-2 — what's outstanding, as discrete steps. */}
+          {/* Which precondition is missing, and where it is met — the prose
+              version named both and pointed at neither, so the only way to
+              find out was to press the button and read a refusal. */}
           <EmptyState title="No agreement prepared yet">
-            Once the society accepts an offer and KYC is settled, the agreement is prepared from exactly the
-            terms they accepted — then printed, notarized, signed and scanned back in.
+            <p>
+              It is prepared from exactly the terms the society accepted, then printed, notarized,
+              signed and scanned back in. Two things have to be true first:
+            </p>
+            <ul className="mt-3 text-left inline-block space-y-1.5">
+              <li>
+                {offerAccepted ? "✓" : "•"} The society has accepted an offer
+                {!offerAccepted && (
+                  <>
+                    {" — "}
+                    <Link href={`/admin/pipeline/${pipeline.id}/offer`} className="underline font-medium">
+                      Open the offer →
+                    </Link>
+                  </>
+                )}
+              </li>
+              <li>
+                {kycDone ? "✓" : "•"} KYC is settled (GATE-01)
+                {!kycDone && (
+                  <>
+                    {kycTotal > 0 ? ` — ${kycSettled} of ${kycTotal} settled. ` : " — nothing collected yet. "}
+                    <Link href={`/admin/pipeline/${pipeline.id}/kyc`} className="underline font-medium">
+                      Open KYC →
+                    </Link>
+                  </>
+                )}
+              </li>
+            </ul>
           </EmptyState>
-          {canEdit && <PrepareAgreementButton pipelineId={pipeline.id} />}
+          {canEdit && canPrepare && <PrepareAgreementButton pipelineId={pipeline.id} />}
+          {canEdit && !canPrepare && (
+            <p className="text-sm text-[var(--text-muted)]">
+              Preparing the agreement unlocks once both are done.
+            </p>
+          )}
         </div>
       ) : (
         <div className="max-w-none space-y-6">

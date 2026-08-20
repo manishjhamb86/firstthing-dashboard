@@ -142,11 +142,7 @@ export default async function LiveMonitoringCircuitPage({
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href="/admin/monitoring" className="hover:underline">
-            Monitoring
-          </Link>
-        }
+        backHref="/admin/monitoring"
         title={circuit.location || circuit.lightType}
         chip={
           blocker ? (

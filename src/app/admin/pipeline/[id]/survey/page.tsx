@@ -1,5 +1,4 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
@@ -115,11 +114,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/pipeline/${pipeline.id}`} className="hover:underline">
-            {pipeline.society.name}
-          </Link>
-        }
+        backHref={`/admin/pipeline/${pipeline.id}`}
         title="Site survey"
         subtitle={pipeline.society.location}
       />

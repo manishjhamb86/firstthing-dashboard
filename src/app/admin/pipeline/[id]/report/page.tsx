@@ -66,11 +66,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/pipeline/${pipeline.id}`} className="hover:underline">
-            {pipeline.society.name}
-          </Link>
-        }
+        backHref={`/admin/pipeline/${pipeline.id}`}
         title="Demo savings report"
         chip={status ? <StatusChip tone={status.tone}>{status.label}</StatusChip> : undefined}
         subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · measured on the demo circuits, extrapolated society-wide (CON-11)`}

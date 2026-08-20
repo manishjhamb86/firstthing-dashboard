@@ -99,11 +99,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href="/admin/societies" className="hover:underline">
-            Societies
-          </Link>
-        }
+        backHref="/admin/societies"
         title={society.name}
         subtitle={`${society.location} · ${society.flatCount} flats`}
         action={

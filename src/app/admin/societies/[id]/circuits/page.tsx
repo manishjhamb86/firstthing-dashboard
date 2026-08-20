@@ -63,11 +63,7 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/societies/${society.id}`} className="hover:underline">
-            {society.name}
-          </Link>
-        }
+        backHref={`/admin/societies/${society.id}`}
         title="Circuit registry"
         subtitle="Every metered circuit this society has, through its full commissioning lifecycle."
       />

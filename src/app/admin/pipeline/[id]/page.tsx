@@ -1,6 +1,5 @@
 import { isDemoMode } from "@/lib/demo-mode";
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
@@ -48,11 +47,7 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href="/admin/pipeline" className="hover:underline">
-            Leads &amp; pipeline
-          </Link>
-        }
+        backHref="/admin/pipeline"
         title={pipeline.society.name}
         // The map's own current step, not Pipeline.stage — see the phase
         // field in deal-progress.ts for why the two used to disagree.

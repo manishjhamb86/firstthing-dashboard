@@ -18,6 +18,8 @@ import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
 import { StepSection } from "@/components/step-section";
+import { NextStepCallout } from "@/components/deal-stepper";
+import { loadDealProgress } from "@/lib/pipeline-facts";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
 import { CircuitReadingPanel, type ReadingWindowDTO } from "./circuit-reading-panel";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
@@ -314,6 +316,15 @@ export default async function CircuitDetailPage({
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
   });
   const surveyHref = circuit.siteSurvey ? `/admin/pipeline/${circuit.siteSurvey.pipelineId}/survey` : null;
+
+  // Nothing on this page needs a person any more. Say so at the top and
+  // point off the page, rather than leaving an operator to scan seven ticked
+  // rows to work that out (user-reported 2026-08-20).
+  const allStepsComplete = steps.every((st) => st.status === "done");
+  const dealNext =
+    allStepsComplete && circuit.siteSurvey
+      ? (await loadDealProgress(circuit.siteSurvey.pipelineId))?.next ?? null
+      : null;
   const urgency = openReview
     ? reviewUrgency({ raisedAt: openReview.raisedAt, occurrence: openReview.occurrence, now: new Date() })
     : null;
@@ -321,11 +332,7 @@ export default async function CircuitDetailPage({
   return (
     <>
       <PageHeader
-        breadcrumb={
-          <Link href={`/admin/societies/${id}/circuits`} className="hover:underline">
-            {circuit.society.name} · Circuit registry
-          </Link>
-        }
+        backHref={`/admin/societies/${id}/circuits`}
         title={circuit.location || circuit.lightType}
         subtitle={`${circuit.lightType} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`}
         chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
@@ -334,6 +341,33 @@ export default async function CircuitDetailPage({
       {/* The four figures someone opens a circuit to check, before the
           step-by-step detail. Each is absent-not-invented: a circuit with no
           baseline yet says so rather than showing a zero. */}
+      {/* Either the deal has somewhere else to be, or this circuit is
+          genuinely finished. Both beat silence under a page of ticks. */}
+      {allStepsComplete &&
+        (dealNext ? (
+          <NextStepCallout next={dealNext} />
+        ) : (
+          <div
+            className="mb-8 flex flex-wrap items-center gap-3 rounded-[var(--r-md)] border p-4"
+            style={{ borderColor: "var(--ok-line)", background: "var(--ok-bg)", color: "var(--ok-fg)" }}
+          >
+            <span
+              aria-hidden
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold"
+              style={{ background: "var(--ok-fg)", color: "var(--ok-bg)" }}
+            >
+              ✓
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold">Commissioning complete — nothing left to do here.</p>
+              <p className="text-sm">
+                Every step on this circuit is done. The records below are folded; open any of them
+                to check a figure.
+              </p>
+            </div>
+          </div>
+        ))}
+
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-8 max-w-none">
         {[
           {
@@ -391,12 +425,20 @@ export default async function CircuitDetailPage({
           until the lights are replaced, frozen after — the inventory is what
           the replacement was recorded against. */}
       <section className="max-w-none mb-8">
-        <h2 className="text-[15px] font-semibold mb-1">Load inventory</h2>
-        <p className="text-sm text-[var(--text-muted)] mb-3">
-          Σ count × wattage × hours ÷ 1000 is the theoretical kWh/day. A pre-install reading outside
-          ±5% of it is flagged; outside ±10% is a warning — the check that nothing unknown is
-          consuming on this circuit.
-        </p>
+        {/* Only while the inventory is still being built. Once it is locked
+            the panel folds to a header carrying its own figure, and this
+            explanation of a rule nobody can act on any more is just noise
+            above it. */}
+        {circuit.meterInstalledAt === null && (
+          <>
+            <h2 className="text-[15px] font-semibold mb-1">Load inventory</h2>
+            <p className="text-sm text-[var(--text-muted)] mb-3">
+              Σ count × wattage × hours ÷ 1000 is the theoretical kWh/day. A pre-install reading
+              outside ±5% of it is flagged; outside ±10% is a warning — the check that nothing
+              unknown is consuming on this circuit.
+            </p>
+          </>
+        )}
         <LoadInventoryPanel
           circuitId={circuit.id}
           lines={inventoryLines}
@@ -415,8 +457,12 @@ export default async function CircuitDetailPage({
                 // Say which of the two is true, rather than telling the
                 // operator to contact an administrator while a control that
                 // does the thing is rendered a line below.
-                (demoMode
-                  ? " Demo mode allows a past record to be added below; normal operation does not."
+                // Only mention the backfill when it is the thing to do: on a
+                // locked circuit that has no inventory at all. With lines
+                // already recorded it is folded away, and advertising it in
+                // the locked notice contradicts the notice.
+                (demoMode && inventoryLines.length === 0
+                  ? " Demo mode allows the past record to be added below; normal operation does not."
                   : " Contact an administrator if it has to change.")
               : canEdit
                 ? null
@@ -775,6 +821,7 @@ export default async function CircuitDetailPage({
             readings={storedReadings}
             canEdit={canEdit}
             summaries={phaseSummaries}
+            allComplete={allStepsComplete}
           />
 
           <div className="pt-2 border-t border-[var(--border-subtle)]">

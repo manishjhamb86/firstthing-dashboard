@@ -47,7 +47,14 @@ export default async function MonitoringDashboardPage() {
     // circuit that has already failed a re-run outranks one nobody has looked
     // at yet (AC-5), then oldest-first within that.
     db.demoResultReview.findMany({
-      where: { state: "open", circuit: { voidedAt: null } },
+      // A review whose circuit has since reached a confirmed benchmark has
+      // had its question answered. The write paths now close those, but rows
+      // raised before that fix exist — and a queue item that contradicts the
+      // circuit's own page is worse than no queue item.
+      where: {
+        state: "open",
+        circuit: { voidedAt: null, benchmarkSavingsPct: null },
+      },
       include: { circuit: { include: { society: true } } },
       orderBy: [{ occurrence: "desc" }, { raisedAt: "asc" }],
     }),

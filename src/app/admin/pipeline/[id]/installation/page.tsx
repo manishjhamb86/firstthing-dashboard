@@ -80,11 +80,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
 
   const header = (
     <PageHeader
-      breadcrumb={
-        <Link href={`/admin/pipeline/${pipeline.id}`} className="hover:underline">
-          {pipeline.society.name}
-        </Link>
-      }
+      backHref={`/admin/pipeline/${pipeline.id}`}
       title="Installation"
       chip={
         project ? (
@@ -105,20 +101,44 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
       <>
         {header}
         <div className="max-w-none space-y-5">
+          {/* A checklist that states four requirements and offers a route to
+              none of them is a dead end — "no buttons, no actionables, and
+              now we are stuck" (user-reported 2026-08-20). Two of these are
+              filled in by the form below; the other two are things that
+              happen on other screens, so those link there. */}
           <EmptyState title="No installation plan yet">
             <p>Setting up the project needs four things, and the plan cannot publish without any of them:</p>
-            <ul className="mt-3 text-left inline-block space-y-1">
+            <ul className="mt-3 text-left inline-block space-y-1.5">
               <li>
-                {contractReady ? "✓" : "•"} An executed, active contract{" "}
-                {contractReady ? "" : "— installation commits FirsThing's own capital, so this is a hard gate."}
+                {contractReady ? "✓" : "•"} An executed, active contract
+                {!contractReady && (
+                  <>
+                    {" — installation commits FirsThing's own capital, so this is a hard gate. "}
+                    <Link href={`/admin/pipeline/${pipeline.id}/agreement`} className="underline font-medium">
+                      Execute the agreement →
+                    </Link>
+                  </>
+                )}
+              </li>
+              <li>
+                {accounts.length > 0 ? "✓" : "•"} A named society onlooker
+                {accounts.length === 0 && (
+                  <>
+                    {" — this society has no active portal account yet. "}
+                    <Link href={`/admin/societies/${pipeline.societyId}`} className="underline font-medium">
+                      Add a portal account →
+                    </Link>
+                  </>
+                )}
               </li>
               <li>• The contracted scope, and a note if it differs from the {surveyed} lights the survey found</li>
               <li>• A day-by-day batch plan whose counts reconcile to that scope</li>
-              <li>
-                • A named society onlooker{" "}
-                {accounts.length === 0 ? "— this society has no active portal account yet." : ""}
-              </li>
             </ul>
+            <p className="mt-3">
+              {contractReady && accounts.length > 0
+                ? "The last two are filled in below."
+                : "The last two are filled in here once the items above are in place."}
+            </p>
           </EmptyState>
 
           {isOps && contractReady && accounts.length > 0 && (

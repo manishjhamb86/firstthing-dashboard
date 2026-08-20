@@ -128,3 +128,43 @@ describe("TC-020-1b — several circuits, each with its own benchmark (CON-11)",
     expect(r.figures.circuits.map((c) => c.benchmarkSavingsPct)).toEqual([70, 65]);
   });
 });
+
+describe("the report reads whichever store a circuit actually used", () => {
+  // A circuit commissioned through CON-45 has no CommissioningReading rows
+  // at all — its days are MeterReading rows. Reading only the legacy store
+  // reported "a benchmarked circuit has no post-install readings to average"
+  // for every such circuit, so the report could never generate and the deal
+  // spine stopped at step 4 (user-reported 2026-08-20).
+  //
+  // The collector is a Server Action, so what is unit-testable here is the
+  // rule it applies: a circuit with post-install days builds, one without
+  // reports exactly that blocker.
+
+  const circuit = (postInstall: { date: string; consumptionKwh: number }[]) => ({
+    id: "c1",
+    lightType: "Tube",
+    location: "Basement",
+    meteredLightCount: 50,
+    representedLightCount: 200,
+    wattage: 20,
+    preInstallBaseline: 70,
+    benchmarkSavingsPct: 68,
+    state: "benchmark_confirmed",
+    preInstallReadings: [{ date: "2026-07-01", consumptionKwh: 70 }],
+    postInstallReadings: postInstall,
+  });
+
+  it("builds once post-install days are present, whichever store they came from", () => {
+    const r = buildDemoReport({
+      circuits: [circuit([{ date: "2026-08-01", consumptionKwh: 22.4 }])],
+      societyLightCount: 200,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("names the missing-days blocker rather than failing silently", () => {
+    const r = buildDemoReport({ circuits: [circuit([])], societyLightCount: 200 });
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.blocker).toBe("no-post-install-readings");
+  });
+});

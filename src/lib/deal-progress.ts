@@ -244,7 +244,11 @@ export function dealProgress(f: DealFacts): DealProgress {
           : currentIdx === 3
             ? f.reportStatus === "draft"
               ? "Draft generated — review it and share it with the society"
-              : "Generate the report from the confirmed benchmark"
+              // Generation is automatic on BenchmarkConfirmed (FEAT-020-AC-1),
+              // so "generate it" is only ever true when the automatic run was
+              // blocked. Saying "open it" and letting the screen state the
+              // blocker beats a step that reads like a chore nobody assigned.
+              : "Generated automatically from the confirmed benchmark — open it to review and share"
             : "Unlocks when the benchmark is confirmed",
       href: `${base}/report`,
     },
@@ -333,7 +337,7 @@ export function dealProgress(f: DealFacts): DealProgress {
       };
     } else if (!reportDone) {
       next = {
-        label: f.reportStatus === "draft" ? "Share the demo report" : "Generate the demo report",
+        label: f.reportStatus === "draft" ? "Share the demo report" : "Open the demo report",
         detail: "The society sees it in their portal once shared.",
         href: `${base}/report`,
       };

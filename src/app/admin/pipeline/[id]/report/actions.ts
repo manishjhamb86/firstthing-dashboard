@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import { BLOCKER_MESSAGE, buildDemoReport, type DemoReportCircuitInput } from "@/lib/demo-report";
+import { classifyDay } from "@/lib/circuit-load";
 
 async function requirePer01() {
   await requireAdminPermission("manage_survey");
@@ -26,7 +27,16 @@ export async function collectDemoReportInput(pipelineId: string) {
           // (FEAT-007) — not every circuit the society has.
           circuits: {
             where: { voidedAt: null },
-            include: { commissioningReadings: { orderBy: { date: "asc" } } },
+            include: {
+              commissioningReadings: { orderBy: { date: "asc" } },
+              // CON-45's store. A circuit commissioned through the current
+              // flow has NO CommissioningReading rows at all — reading only
+              // that store reported "a benchmarked circuit has no
+              // post-install readings to average" for every such circuit, so
+              // the report could never generate and the whole deal spine
+              // stopped at step 4 (user-reported 2026-08-20).
+              meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
+            },
           },
         },
       },
@@ -34,7 +44,40 @@ export async function collectDemoReportInput(pipelineId: string) {
   });
   if (!pipeline) return null;
 
-  const circuits: DemoReportCircuitInput[] = (pipeline.siteSurvey?.circuits ?? []).map((c) => ({
+  const circuits: DemoReportCircuitInput[] = (pipeline.siteSurvey?.circuits ?? []).map((c) => {
+    // One circuit uses one store, never both — mixing them under one
+    // baseline is how figures stop agreeing (the rule the circuit page
+    // already applies with `usesLegacyFlow`). Prefer the CON-45 store when
+    // it holds anything, since that is the flow a new circuit walks.
+    const csv = c.meterReadings;
+    const useCsv = csv.length > 0 && c.meterInstalledAt !== null;
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+
+    const preInstallReadings = useCsv
+      ? csv
+          .filter(
+            (r) =>
+              r.excludedAt === null &&
+              classifyDay(r.date, c.meterInstalledAt!, c.lightReplacementDate) === "pre_install",
+          )
+          .map((r) => ({ date: day(r.date), consumptionKwh: r.kWh }))
+      : c.commissioningReadings
+          .filter((r) => r.windowType === "pre_install" && r.status === "valid" && r.consumptionKwh != null)
+          .map((r) => ({ date: day(r.date), consumptionKwh: r.consumptionKwh! }));
+
+    const postInstallReadings = useCsv
+      ? csv
+          .filter(
+            (r) =>
+              r.excludedAt === null &&
+              classifyDay(r.date, c.meterInstalledAt!, c.lightReplacementDate) === "post_install",
+          )
+          .map((r) => ({ date: day(r.date), consumptionKwh: r.kWh }))
+      : c.commissioningReadings
+          .filter((r) => r.windowType === "post_install" && r.status === "valid" && r.consumptionKwh != null)
+          .map((r) => ({ date: day(r.date), consumptionKwh: r.consumptionKwh! }));
+
+    return {
       id: c.id,
       lightType: c.lightType,
       location: c.location,
@@ -44,13 +87,10 @@ export async function collectDemoReportInput(pipelineId: string) {
       preInstallBaseline: c.preInstallBaseline,
       benchmarkSavingsPct: c.benchmarkSavingsPct,
       state: c.state,
-      preInstallReadings: c.commissioningReadings
-        .filter((r) => r.windowType === "pre_install" && r.status === "valid" && r.consumptionKwh != null)
-        .map((r) => ({ date: r.date.toISOString().slice(0, 10), consumptionKwh: r.consumptionKwh! })),
-      postInstallReadings: c.commissioningReadings
-        .filter((r) => r.windowType === "post_install" && r.status === "valid" && r.consumptionKwh != null)
-        .map((r) => ({ date: r.date.toISOString().slice(0, 10), consumptionKwh: r.consumptionKwh! })),
-  }));
+      preInstallReadings,
+      postInstallReadings,
+    };
+  });
 
   const societyLightCount = (pipeline.siteSurvey?.areas ?? []).reduce((s, a) => s + a.count, 0);
   return { pipeline, circuits, societyLightCount };

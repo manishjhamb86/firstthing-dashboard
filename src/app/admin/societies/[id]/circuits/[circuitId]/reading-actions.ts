@@ -48,6 +48,7 @@ import {
 } from "@/lib/circuit-load";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { BENCHMARK_MIN_PCT, BENCHMARK_MAX_PCT } from "@/lib/commissioning-anomaly";
+import { generateDemoReportInternal } from "@/app/admin/pipeline/[id]/report/actions";
 
 type Outcome = { error: string } | { ok: true };
 
@@ -553,6 +554,22 @@ export async function commitCircuitReadings(
 
     return recomputeCircuitFigures(tx, circuit.id);
   });
+
+  // FEAT-020-AC-1 — generation is automatic on BenchmarkConfirmed. The
+  // legacy window flow has always done this; the CON-45 commit path never
+  // did, so a circuit commissioned here confirmed its benchmark and the
+  // report simply never appeared (user-reported 2026-08-20). It self-refuses
+  // while a sibling circuit is still commissioning, so calling it on every
+  // confirmation is correct rather than premature, and it runs OUTSIDE the
+  // transaction above so a report failure can never roll back stored
+  // readings.
+  if (summaryAfter.benchmark?.inBand && circuit.siteSurveyId) {
+    const survey = await db.siteSurvey.findUnique({
+      where: { id: circuit.siteSurveyId },
+      select: { pipelineId: true },
+    });
+    if (survey) await generateDemoReportInternal(survey.pipelineId, null);
+  }
 
   logger.info("circuit_ingest.committed", {
     actorId: admin.id,

@@ -119,7 +119,11 @@ describe("report → offer → agreement → installation → billing", () => {
 
   it("a confirmed benchmark makes the report current", () => {
     const { next } = dealProgress(benchmarked);
-    expect(next?.label).toBe("Generate the demo report");
+    // Not "generate": FEAT-020-AC-1 makes generation automatic on
+    // BenchmarkConfirmed, so the action a person takes is to open it and
+    // share it. Telling them to generate it reads like a chore nobody
+    // assigned, and hid that the automatic run had failed.
+    expect(next?.label).toBe("Open the demo report");
   });
 
   it("a drafted-but-unshared report is still the current step", () => {

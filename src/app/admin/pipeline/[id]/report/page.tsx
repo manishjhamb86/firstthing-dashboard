@@ -38,6 +38,29 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
     if (!attempt.ok) blockerMessage = BLOCKER_MESSAGE[attempt.blocker];
   }
 
+  // Which circuit is holding it up, and what that circuit still needs — so
+  // the blocker comes with a route rather than just a sentence.
+  const blockingCircuits =
+    blockerMessage && collected
+      ? collected.circuits
+          .filter(
+            (c) =>
+              c.benchmarkSavingsPct === null ||
+              c.postInstallReadings.length === 0 ||
+              c.preInstallReadings.length === 0,
+          )
+          .map((c) => ({
+            id: c.id,
+            label: c.location ? `${c.lightType}, ${c.location}` : c.lightType,
+            why:
+              c.benchmarkSavingsPct === null
+                ? "still commissioning — it needs a confirmed benchmark"
+                : c.postInstallReadings.length === 0
+                  ? "benchmarked, but no post-installation readings are stored to average"
+                  : "no pre-installation readings are stored to average",
+          }))
+      : [];
+
   const status = latest ? statusMeta(DEMO_REPORT_STATUS, latest.status) : null;
 
   return (
@@ -55,13 +78,49 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
 
       {!latest ? (
         // FEAT-020-AC-2 — "no demo report", not an empty document shell.
+        //
+        // But not a dead end either (user-reported 2026-08-20: "it should
+        // take me to the screen where i can generate the demo report and say
+        // so"). Either it can be generated here and now — in which case the
+        // control is right here — or something is missing, in which case say
+        // what AND link to the screen that fixes it. Naming a blocker with
+        // no route to it is the same defect this project has already fixed
+        // on the FEAT-015 banner and the circuit registry's empty state.
         <div className="max-w-none space-y-4">
           <EmptyState title="No demo report yet">
             {blockerMessage ??
-              "The report generates itself once every demo circuit reaches a confirmed benchmark."}
+              "Everything it needs is in place — generate it below. It is a draft until you share it; the society sees nothing before that."}
           </EmptyState>
           {canEdit && !blockerMessage && (
             <GenerateReportButton pipelineId={pipeline.id} label="Generate the demo report" />
+          )}
+          {blockerMessage && (
+            <Card className="p-5 max-w-2xl">
+              <CardTitle>Where to resolve it</CardTitle>
+              {blockingCircuits.length === 0 ? (
+                <p className="text-sm text-[var(--text-muted)]">
+                  The demo starts on the site survey — record the lighting inventory and pick the
+                  circuit to meter.{" "}
+                  <Link href={`/admin/pipeline/${pipeline.id}/survey`} className="underline">
+                    Open the site survey →
+                  </Link>
+                </p>
+              ) : (
+                <ul className="text-sm space-y-2">
+                  {blockingCircuits.map((c) => (
+                    <li key={c.id}>
+                      <Link
+                        href={`/admin/societies/${pipeline.societyId}/circuits/${c.id}`}
+                        className="font-medium underline"
+                      >
+                        {c.label} →
+                      </Link>{" "}
+                      <span className="text-[var(--text-muted)]">— {c.why}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
           )}
         </div>
       ) : (

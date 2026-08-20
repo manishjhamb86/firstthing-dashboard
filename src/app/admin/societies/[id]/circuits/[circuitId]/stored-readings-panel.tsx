@@ -34,9 +34,13 @@ export type StoredReadingDTO = {
 };
 
 const PHASE_LABEL: Record<StoredReadingDTO["phase"], string> = {
-  pre_install: "Pre-installation",
-  post_install: "Post-installation",
-  monitoring: "Monthly monitoring",
+  pre_install: "Pre-installation readings",
+  post_install: "Post-installation readings",
+  // Only ever rendered on the Live monitoring screen. The circuit page used
+  // to label its post-replacement days "Monthly monitoring" as soon as a
+  // benchmark existed, which named the very days that PRODUCED the benchmark
+  // after something else entirely (user-reported 2026-08-20).
+  monitoring: "Monthly readings",
 };
 
 function ExclusionControl({ reading, editable }: { reading: StoredReadingDTO; editable: boolean }) {

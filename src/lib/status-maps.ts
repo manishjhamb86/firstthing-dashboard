@@ -16,7 +16,13 @@ export const SOCIETY_STATUS: Record<string, StatusMeta> = {
 
 export const PIPELINE_STAGE: Record<string, StatusMeta> = {
   lead: { label: "Lead", tone: "info" },
-  survey_pending: { label: "Survey pending", tone: "warn" },
+  // NOT "Survey pending": this stage spans the agreed proposal right through
+  // the survey, the commissioning and the benchmark — it only moves when the
+  // demo report is shared. Labelled as the survey, it contradicted every
+  // surface showing Site survey ✓ (user-reported 2026-08-20). The detail
+  // header resolves the live step from dealProgress(); list surfaces show
+  // this coarser stage, so it has to be true for the whole span.
+  survey_pending: { label: "Demo in progress", tone: "info" },
   demo_reported: { label: "Demo reported", tone: "info" },
   offered: { label: "Offer issued", tone: "warn" },
   agreed: { label: "Agreed", tone: "ok" },

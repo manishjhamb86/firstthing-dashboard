@@ -15,6 +15,9 @@ import { AddPortalAccountButton } from "./add-portal-account-button";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
 import { EnrollServiceLineForm } from "./enroll-service-line-form";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { loadDealProgress } from "@/lib/pipeline-facts";
+import { NextStepCallout } from "@/components/deal-stepper";
+import type { NextAction } from "@/lib/deal-progress";
 
 const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 
@@ -51,6 +54,44 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     db.circuit.count({ where: { societyId: id, voidedAt: null } }),
   ]);
   const pipelineFor = new Map(pipelines.map((p) => [p.serviceLine as string, p]));
+
+  // What to actually do next, per open deal — resolved from the same
+  // sequencing module every other screen uses.
+  //
+  // This page showed four counts, three cards and no instruction at all
+  // ("I genuinely can't figure out what's the next step ... every state
+  // should be clear enough to point the user in the right direction" —
+  // user-reported 2026-08-20). A society is where someone lands from the
+  // list, so it has to say where the work is, not just what exists.
+  const openDeals = pipelines.filter((p) => p.stage !== "closed_lost" && p.stage !== "active_billing");
+  const nextSteps = (
+    await Promise.all(
+      openDeals.map(async (p) => {
+        const progress = await loadDealProgress(p.id);
+        return progress?.next
+          ? { serviceLine: p.serviceLine as string, next: progress.next }
+          : null;
+      }),
+    )
+  ).filter((x): x is { serviceLine: string; next: NextAction } => x !== null);
+
+  // Nothing is running yet — the first move depends on which piece is
+  // missing, and saying which beats a page of empty cards.
+  const coldStart =
+    pipelines.length === 0
+      ? accounts.length === 0
+        ? {
+            label: "Log the first lead",
+            detail:
+              "A deal is what produces a survey, circuits and a contract. Enrolling a service line on its own does not start one.",
+            href: `/admin/pipeline/new?societyId=${society.id}`,
+          }
+        : {
+            label: "Log the first lead",
+            detail: "Portal access exists, but no deal has been logged for this society yet.",
+            href: `/admin/pipeline/new?societyId=${society.id}`,
+          }
+      : null;
   const availableServiceLines = ALL_SERVICE_LINES.filter(
     (sl) => !engagements.some((e) => e.serviceLine === sl)
   );
@@ -80,6 +121,19 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           </div>
         }
       />
+
+      {/* The one thing this page was missing: where the work is. One
+          callout per open deal, so a society running two service lines does
+          not have to guess which is being described. */}
+      {coldStart && <NextStepCallout next={coldStart} />}
+      {nextSteps.map((s) => (
+        <div key={s.serviceLine}>
+          <p className="lbl mb-1" style={{ color: "var(--text-subtle)" }}>
+            {SERVICE_LINE_LABEL[s.serviceLine] ?? s.serviceLine}
+          </p>
+          <NextStepCallout next={s.next} />
+        </div>
+      ))}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
         <KpiTile

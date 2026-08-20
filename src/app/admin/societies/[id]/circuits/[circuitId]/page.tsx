@@ -174,9 +174,12 @@ export default async function CircuitDetailPage({
             kWh: r.kWh,
             intervalCount: r.intervalCount,
             expectedIntervals: r.expectedIntervals,
-            phase: isPre ? ("pre_install" as const) : circuit.benchmarkSavingsPct !== null || circuit.state === "active_billing"
-              ? ("monitoring" as const)
-              : ("post_install" as const),
+            // On THIS page every post-replacement day is a post-installation
+            // reading: these are the days the benchmark was computed from.
+            // Labelling them "Monthly monitoring" the moment a benchmark
+            // existed named the evidence after the thing it produced. The
+            // monthly record lives on the Live monitoring screen.
+            phase: isPre ? ("pre_install" as const) : ("post_install" as const),
             excluded: r.excludedAt !== null,
             excludedReason: r.excludedReason,
             released: r.usedInCalculationId !== null,
@@ -761,19 +764,27 @@ export default async function CircuitDetailPage({
         })}
       </div>
 
-      {/* CON-45 — every stored daily reading, phase-grouped, with the
-          persistent exclusion control and (once the benchmark is confirmed)
-          the monthly monitoring upload. */}
+      {/* CON-45 — every stored daily reading, phase-grouped. The readings
+          come FIRST and the reports/links block after them: the block was
+          sitting above the data as a heading, so the screen opened on
+          footnotes and a CON-22 caveat rather than on the numbers
+          (user-reported 2026-08-20). */}
       {circuit.meterInstalledAt && !usesLegacyFlow && (
         <section className="max-w-none mb-10 space-y-4">
-          <div>
+          <StoredReadingsPanel
+            readings={storedReadings}
+            canEdit={canEdit}
+            summaries={phaseSummaries}
+          />
+
+          <div className="pt-2 border-t border-[var(--border-subtle)]">
             <h2 className="text-[15px] font-semibold mb-1">Meter readings</h2>
             <p className="text-sm text-[var(--text-muted)]">
               Every day the meter has reported, as reviewed and saved. Excluded days stay listed with
               their reason and never count toward an average or a report.
             </p>
-            {/* CON-45 — the three reports, each appearing once its phase has
-                data. Print-styled routes rendering straight from the store. */}
+            {/* CON-45 — the reports, each appearing once its phase has data.
+                Print-styled routes rendering straight from the store. */}
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
               {storedReadings.some((r) => r.phase === "pre_install") && (
                 <Link href={`/admin/societies/${id}/circuits/${circuit.id}/reports/pre-install`} className="underline">
@@ -785,47 +796,37 @@ export default async function CircuitDetailPage({
                   Post-installation savings report
                 </Link>
               )}
-              {storedReadings.some((r) => r.phase === "monitoring") && (
-                <Link href={`/admin/societies/${id}/circuits/${circuit.id}/reports/monthly`} className="underline">
-                  Monthly savings report
-                </Link>
-              )}
             </div>
-          </div>
-          {/* Monthly readings are NOT uploaded here. This page is the
-              commissioning sequence; a monthly figure is what a society is
-              billed on, and billing does not begin until the day after the
-              completion certificate (CON-22). Offering the upload the moment
-              a demo benchmark was confirmed put it before the offer, the
-              agreement and the installation — user-reported 2026-08-20. It
-              lives in Live monitoring, and this says where it went rather
-              than leaving a hole. */}
-          {circuit.benchmarkSavingsPct !== null &&
-            (liveMonitoringBlocker({
-              benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-              installationCertificateSigned: installationSignedOff,
-            }) === null ? (
-              <p className="text-sm">
-                <Link href={`/admin/monitoring/${circuit.id}`} className="underline font-medium">
-                  Live monitoring →
-                </Link>{" "}
-                <span className="text-[var(--text-muted)]">
-                  — this circuit is live; each month&apos;s readings are recorded there.
-                </span>
-              </p>
-            ) : (
-              <p className="text-sm text-[var(--text-muted)]">
+
+            {/* Monthly readings are NOT uploaded here. This page is the
+                commissioning sequence; a monthly figure is what a society is
+                billed on, and billing does not begin until the day after the
+                completion certificate (CON-22). */}
+            {circuit.benchmarkSavingsPct !== null && (
+              <p className="text-sm mt-3">
                 {liveMonitoringBlocker({
                   benchmarkSavingsPct: circuit.benchmarkSavingsPct,
                   installationCertificateSigned: installationSignedOff,
-                })}
+                }) === null ? (
+                  <>
+                    <Link href={`/admin/monitoring/${circuit.id}`} className="underline font-medium">
+                      Live monitoring →
+                    </Link>{" "}
+                    <span className="text-[var(--text-muted)]">
+                      — this circuit is live; each month&apos;s readings are recorded there.
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[var(--text-muted)]">
+                    {liveMonitoringBlocker({
+                      benchmarkSavingsPct: circuit.benchmarkSavingsPct,
+                      installationCertificateSigned: installationSignedOff,
+                    })}
+                  </span>
+                )}
               </p>
-            ))}
-          <StoredReadingsPanel
-            readings={storedReadings}
-            canEdit={canEdit}
-            summaries={phaseSummaries}
-          />
+            )}
+          </div>
         </section>
       )}
 

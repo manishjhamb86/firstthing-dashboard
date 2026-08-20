@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import type { OfferCircuitTerm } from "@/lib/offer";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
+import { BackButton } from "@/components/back-button";
 
 // FEAT-029-AC-1 — "a document carrying exactly the accepted terms is produced
 // for printing" (user's call, 2026-08-14: a print-styled route rather than a
@@ -27,6 +28,10 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
 
   return (
     <main className="print-doc mx-auto max-w-[820px] p-10">
+      {/* A printed page never carries it — .no-print. */}
+      <div className="no-print mb-6">
+        <BackButton fallbackHref={`/admin/pipeline/${pipeline.id}/agreement`} />
+      </div>
       <header className="mb-8">
         <h1 className="text-2xl font-semibold">Energy savings agreement</h1>
         <p className="text-sm mt-1">

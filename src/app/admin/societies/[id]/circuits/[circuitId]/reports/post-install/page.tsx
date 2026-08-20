@@ -5,6 +5,7 @@ import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
 import { BENCHMARK_MIN_PCT, BENCHMARK_MAX_PCT } from "@/lib/commissioning-anomaly";
 import { loadCircuitReport, summarize } from "../report-data";
 import { PrintButton } from "../report-shared";
+import { BackButton } from "@/components/back-button";
 
 // CON-45 — the post-installation consumption + savings report: the baseline
 // recap, what was installed against each inventory line, every post-install
@@ -30,6 +31,10 @@ export default async function PostInstallReportPage({
 
   return (
     <main className="print-doc mx-auto max-w-[820px] p-10 space-y-8">
+      {/* A printed page never carries it — .no-print. */}
+      <div className="no-print mb-6">
+        <BackButton fallbackHref={`/admin/societies/${circuit.societyId}/circuits/${circuit.id}`} />
+      </div>
       <div className="no-print flex flex-wrap items-center gap-3">
         <Link href={`/admin/societies/${id}/circuits/${circuitId}`} className="underline text-sm">
           ← Back to the circuit

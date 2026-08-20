@@ -4,6 +4,7 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { VARIANCE_BAND_META, PRE_WARN_PCT } from "@/lib/circuit-load";
 import { loadCircuitReport } from "../report-data";
 import { InvestigateButton, PrintButton } from "../report-shared";
+import { BackButton } from "@/components/back-button";
 
 // CON-45 — the pre-installation consumption report: the devices on the
 // circuit, the theoretical figure they add to, every recorded day against
@@ -28,6 +29,10 @@ export default async function PreInstallReportPage({
 
   return (
     <main className="print-doc mx-auto max-w-[820px] p-10 space-y-8">
+      {/* A printed page never carries it — .no-print. */}
+      <div className="no-print mb-6">
+        <BackButton fallbackHref={`/admin/societies/${circuit.societyId}/circuits/${circuit.id}`} />
+      </div>
       <div className="no-print flex flex-wrap items-center gap-3">
         <Link href={`/admin/societies/${id}/circuits/${circuitId}`} className="underline text-sm">
           ← Back to the circuit

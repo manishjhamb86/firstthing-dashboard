@@ -4,6 +4,7 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
 import { loadCircuitReport, monthDays, monthsWithData, summarize } from "../report-data";
 import { PrintButton } from "../report-shared";
+import { BackButton } from "@/components/back-button";
 
 // CON-45 — the monthly savings report for one explicitly-selected month
 // (INV-04: the month is a selection, never inferred). Circuit-scoped and
@@ -45,6 +46,10 @@ export default async function MonthlyReportPage({
 
   return (
     <main className="print-doc mx-auto max-w-[820px] p-10 space-y-8">
+      {/* A printed page never carries it — .no-print. */}
+      <div className="no-print mb-6">
+        <BackButton fallbackHref={`/admin/societies/${circuit.societyId}/circuits/${circuit.id}`} />
+      </div>
       <div className="no-print flex flex-wrap items-center gap-3">
         <Link href={`/admin/societies/${id}/circuits/${circuitId}`} className="underline text-sm">
           ← Back to the circuit

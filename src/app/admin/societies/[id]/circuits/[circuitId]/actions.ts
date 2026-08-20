@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { refuseReplacementDate } from "@/lib/step-dates";
+import { refuseOrderedDate, refuseReplacementDate } from "@/lib/step-dates";
 import { scheduleJob } from "@/lib/jobs";
 import { nextDayUTC } from "@/lib/monitoring-window";
 
@@ -32,17 +32,24 @@ const LOAD_TOLERANCE_PCT = 10; // CON-17
  */
 type InstallDate = { at: Date; error?: never } | { at?: never; error: string };
 
-function resolveInstallDate(installedOn: string | undefined): InstallDate {
+function resolveInstallDate(
+  installedOn: string | undefined,
+  /** The survey that selected this circuit — the meter cannot predate it. */
+  surveyedAt: Date | null = null,
+): InstallDate {
   if (!installedOn) return { at: new Date() };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(installedOn)) return { error: "Pick a valid install date." };
   const at = new Date(`${installedOn}T00:00:00.000Z`);
-  if (Number.isNaN(at.getTime())) return { error: "Pick a valid install date." };
 
-  const todayEnd = new Date();
-  todayEnd.setUTCHours(23, 59, 59, 999);
-  if (at.getTime() > todayEnd.getTime()) {
-    return { error: "The meter cannot have been installed in the future." };
-  }
+  // Same relative rule as every other step: a backdated install is fine, an
+  // install before the survey that chose the circuit is not, in any mode.
+  const refusal = refuseOrderedDate({
+    subject: "The meter install",
+    date: at,
+    now: new Date(),
+    mustNotPrecede: [{ label: "the site survey", date: surveyedAt }],
+  });
+  if (refusal) return { error: refusal };
   return { at };
 }
 
@@ -57,10 +64,13 @@ export async function submitLoadValidation(
     return { error: "Meter displayed load must be a positive number." };
   }
 
-  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    include: { siteSurvey: { select: { createdAt: true } } },
+  });
   if (!circuit) return { error: "Circuit not found." };
 
-  const installed = resolveInstallDate(installedOn);
+  const installed = resolveInstallDate(installedOn, circuit.siteSurvey?.createdAt ?? null);
   if (installed.at === undefined) return { error: installed.error };
   const installedAt: Date = installed.at;
 
@@ -117,11 +127,14 @@ export async function overrideLoadValidation(circuitId: string, reason: string, 
 
   if (!reason.trim()) return { error: "A reason is required to override a failed load validation." };
 
-  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    include: { siteSurvey: { select: { createdAt: true } } },
+  });
   if (!circuit) return { error: "Circuit not found." };
   if (circuit.meterDisplayedLoad == null) return { error: "No load reading has been submitted yet." };
 
-  const installed = resolveInstallDate(installedOn);
+  const installed = resolveInstallDate(installedOn, circuit.siteSurvey?.createdAt ?? null);
   if (installed.at === undefined) return { error: installed.error };
 
   await db.circuit.update({

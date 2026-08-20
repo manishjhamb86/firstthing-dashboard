@@ -174,7 +174,15 @@ export function dealProgress(f: DealFacts): DealProgress {
   const surveyDone = top != null && top.state !== "surveyed" && top.state !== "ineligible";
   const benchmarkDone =
     f.demoSkipped || (top != null && (CIRCUIT_RANK[top.state] ?? 0) >= 7);
-  const reportDone = f.demoSkipped || f.reportStatus === "shared";
+  // Generating and sharing are two different acts by two different rules —
+  // the system generates automatically on BenchmarkConfirmed (FEAT-020-AC-1),
+  // a person decides when the society sees it. They were one step whose
+  // SUMMARY changed from "generate it" to "share it" while the title and the
+  // styling stayed identical, so nothing signalled that the work had moved
+  // on (user-reported 2026-08-20: "after generating, the system doesn't
+  // point the user to the share step and the customer again gets confused").
+  const reportGenerated = f.demoSkipped || f.reportStatus !== null;
+  const reportShared = f.demoSkipped || f.reportStatus === "shared";
   const kycStarted = f.kyc.total > 0;
   const kycDone = kycStarted && f.kyc.resolved >= f.kyc.total;
   const offerDone = f.offerStatus === "accepted";
@@ -182,7 +190,7 @@ export function dealProgress(f: DealFacts): DealProgress {
   const installDone = f.certificateSigned || f.stage === "active_billing";
   const billingLive = f.stage === "active_billing";
 
-  const doneFlags = [leadDone, surveyDone, benchmarkDone, reportDone, offerDone, contractDone, installDone, billingLive];
+  const doneFlags = [leadDone, surveyDone, benchmarkDone, reportGenerated, reportShared, offerDone, contractDone, installDone, billingLive];
   // The current step is the first not-done one along the spine (KYC is
   // handled separately as the parallel track).
   const currentIdx = closed ? -1 : doneFlags.findIndex((d) => !d);
@@ -236,20 +244,30 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "report",
       title: "Demo savings report",
-      status: status(3, reportDone),
+      status: status(3, reportGenerated),
       summary: f.demoSkipped
         ? "Skipped with the demo"
-        : reportDone
-          ? "Shared with the society"
+        : reportGenerated
+          ? "Generated from the confirmed benchmark"
           : currentIdx === 3
-            ? f.reportStatus === "draft"
-              ? "Draft generated — review it and share it with the society"
-              // Generation is automatic on BenchmarkConfirmed (FEAT-020-AC-1),
-              // so "generate it" is only ever true when the automatic run was
-              // blocked. Saying "open it" and letting the screen state the
-              // blocker beats a step that reads like a chore nobody assigned.
-              : "Generated automatically from the confirmed benchmark — open it to review and share"
+            // Generation is automatic on BenchmarkConfirmed (FEAT-020-AC-1),
+            // so this state is only reached when the automatic run was
+            // blocked — the screen names which circuit is holding it up.
+            ? "Generates itself from the confirmed benchmark — open it if it hasn't"
             : "Unlocks when the benchmark is confirmed",
+      href: `${base}/report`,
+    },
+    {
+      key: "share-report",
+      title: "Share the report with the society",
+      status: status(4, reportShared),
+      summary: f.demoSkipped
+        ? "Skipped with the demo"
+        : reportShared
+          ? "Shared — visible in the society's portal"
+          : currentIdx === 4
+            ? "The draft is internal until you share it. Sharing is what puts it in the society's portal."
+            : "Unlocks once the report exists",
       href: `${base}/report`,
     },
     {
@@ -269,7 +287,7 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "offer",
       title: "Offer",
-      status: status(4, offerDone),
+      status: status(5, offerDone),
       summary: offerDone
         ? "Accepted by the society"
         : currentIdx === 4
@@ -282,7 +300,7 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "agreement",
       title: "Agreement & contract",
-      status: status(5, contractDone),
+      status: status(6, contractDone),
       summary: contractDone
         ? "Contract active"
         : currentIdx === 5
@@ -295,7 +313,7 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "installation",
       title: "Full installation",
-      status: status(6, installDone),
+      status: status(7, installDone),
       summary: installDone
         ? "Completion certificate signed"
         : currentIdx === 6
@@ -335,10 +353,17 @@ export function dealProgress(f: DealFacts): DealProgress {
         detail: `Commissioning continues on the circuit page for ${candidateLabel(top)}.`,
         href: circuitHref as string,
       };
-    } else if (!reportDone) {
+    } else if (!reportGenerated) {
       next = {
-        label: f.reportStatus === "draft" ? "Share the demo report" : "Open the demo report",
-        detail: "The society sees it in their portal once shared.",
+        label: "Open the demo report",
+        detail:
+          "It generates itself once the benchmark confirms — if it hasn't, the screen names the circuit holding it up.",
+        href: `${base}/report`,
+      };
+    } else if (!reportShared) {
+      next = {
+        label: "Share the report with the society",
+        detail: "The draft is internal. Sharing is what puts it in the society's portal.",
         href: `${base}/report`,
       };
     } else if (!offerDone) {

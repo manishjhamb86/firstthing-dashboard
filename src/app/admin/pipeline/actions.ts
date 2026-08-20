@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { refuseOrderedDate, resolveBackdate } from "@/lib/step-dates";
 
 const SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"] as const;
 
@@ -27,6 +28,8 @@ export async function createLead(input: {
   notes?: string;
   salesOwnerId: string;
   confirmDuplicate?: boolean;
+  /** DEMO_MODE only — the day this lead was actually logged. */
+  loggedOn?: string;
 }): Promise<{ error?: string; duplicateOf?: string } | undefined> {
   const session = await requireAdminPermission("manage_pipeline");
 
@@ -67,8 +70,19 @@ export async function createLead(input: {
       }
     }
 
+    // A society created BY this lead cannot postdate it: backdate the
+    // society to the same day rather than stamping now() and then refusing
+    // the lead for preceding its own society.
+    const quickCreatedAt = resolveBackdate(input.loggedOn, "The society record");
+    if (typeof quickCreatedAt === "string") return { error: quickCreatedAt };
     const society = await db.society.create({
-      data: { name, location, flatCount: ns.flatCount, status: "prospect" },
+      data: {
+        name,
+        location,
+        flatCount: ns.flatCount,
+        status: "prospect",
+        ...(quickCreatedAt ? { createdAt: quickCreatedAt } : {}),
+      },
     });
     societyId = society.id;
     logger.info("society.quick_created", { societyId, name, location, via: "lead" });
@@ -101,6 +115,27 @@ export async function createLead(input: {
 
   const authoritative = input.salesOwnerId === session.user.id;
 
+  // A backdated lead is ordered against the society it belongs to; the
+  // meeting is ordered the same way. Both rules hold in normal operation
+  // too — they are simply satisfied for free when everything is now().
+  const society = await db.society.findUnique({
+    where: { id: societyId },
+    select: { createdAt: true },
+  });
+  const loggedAt = resolveBackdate(input.loggedOn, "The lead", [
+    { label: "the society record", date: society?.createdAt ?? null },
+  ]);
+  if (typeof loggedAt === "string") return { error: loggedAt };
+
+  const meetingDate = new Date(input.meetingDate);
+  const meetingRefusal = refuseOrderedDate({
+    subject: "The meeting",
+    date: meetingDate,
+    now: new Date(),
+    mustNotPrecede: [{ label: "the society record", date: society?.createdAt ?? null }],
+  });
+  if (meetingRefusal) return { error: meetingRefusal };
+
   const pipeline = await db.pipeline.create({
     data: {
       societyId,
@@ -108,11 +143,12 @@ export async function createLead(input: {
       stage: "lead",
       contactName,
       contactPhone: input.contactPhone?.trim() || null,
-      meetingDate: new Date(input.meetingDate),
+      meetingDate,
       notes: input.notes?.trim() || null,
       salesOwnerId: input.salesOwnerId,
       loggedById: session.user.id,
       authoritative,
+      ...(loggedAt ? { createdAt: loggedAt } : {}),
     },
   });
 
@@ -174,7 +210,13 @@ export async function approveLead(pipelineId: string) {
 // against it (FEAT-002-AC-3) short of logging a brand-new lead.
 export async function submitProposal(
   pipelineId: string,
-  input: { summary?: string; outcome: "agreed" | "declined" | "undecided"; closedLostReason?: string },
+  input: {
+    summary?: string;
+    outcome: "agreed" | "declined" | "undecided";
+    closedLostReason?: string;
+    /** DEMO_MODE only — the day the demo meeting was actually decided. */
+    decidedOn?: string;
+  },
 ) {
   const session = await requireAdminPermission("manage_pipeline");
 
@@ -198,6 +240,15 @@ export async function submitProposal(
 
   const summary = input.summary?.trim() || null;
 
+  // The decision follows the meeting, and the survey opens on the same day
+  // it is agreed — so one date orders both.
+  const decidedAt = resolveBackdate(input.decidedOn, "The proposal decision", [
+    { label: "the first meeting", date: pipeline.meetingDate },
+    { label: "the lead", date: pipeline.createdAt },
+  ]);
+  if (typeof decidedAt === "string") return { error: decidedAt };
+  const decided = decidedAt ?? new Date();
+
   if (input.outcome === "declined") {
     const reason = input.closedLostReason?.trim();
     if (!reason) return { error: "A reason is required when the demo is declined." };
@@ -206,7 +257,7 @@ export async function submitProposal(
       data: {
         proposalSummary: summary,
         proposalOutcome: "declined",
-        proposalDecidedAt: new Date(),
+        proposalDecidedAt: decided,
         stage: "closed_lost",
         closedLostReason: reason,
       },
@@ -219,11 +270,11 @@ export async function submitProposal(
         data: {
           proposalSummary: summary,
           proposalOutcome: "agreed",
-          proposalDecidedAt: new Date(),
+          proposalDecidedAt: decided,
           stage: "survey_pending",
         },
       }),
-      db.siteSurvey.create({ data: { pipelineId } }),
+      db.siteSurvey.create({ data: { pipelineId, createdAt: decided } }),
     ]);
     logger.info("pipeline.advanced_to_survey_pending", { pipelineId, actorId: session.user.id });
   } else {

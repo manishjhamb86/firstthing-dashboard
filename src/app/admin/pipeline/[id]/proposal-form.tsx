@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { submitProposal } from "../actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
+import { BackdateField } from "@/components/backdate-field";
 
 type Outcome = "agreed" | "declined" | "undecided";
 
@@ -13,6 +14,7 @@ async function action(_prev: string | undefined, formData: FormData) {
     summary: formData.get("summary") as string,
     outcome,
     closedLostReason: formData.get("closedLostReason") as string,
+    decidedOn: (formData.get("decidedOn") as string) || undefined,
   });
   return result?.error;
 }
@@ -20,11 +22,18 @@ async function action(_prev: string | undefined, formData: FormData) {
 // FEAT-002-AC-2: empty until an outcome is chosen — the form itself is the
 // prompt, not a silently-optional field. Controlled inputs (React 19
 // form-reset finding, see login-form.tsx).
-export function ProposalForm({ pipelineId }: { pipelineId: string }) {
+export function ProposalForm({
+  pipelineId,
+  demoMode = false,
+}: {
+  pipelineId: string;
+  demoMode?: boolean;
+}) {
   const [error, formAction, pending] = useActionState(action, undefined);
   const [summary, setSummary] = useState("");
   const [outcome, setOutcome] = useState<Outcome | "">("");
   const [closedLostReason, setClosedLostReason] = useState("");
+  const [decidedOn, setDecidedOn] = useState("");
 
   return (
     <Card className="max-w-xl p-6">
@@ -75,6 +84,18 @@ export function ProposalForm({ pipelineId }: { pipelineId: string }) {
         )}
 
         {error && <ErrorText>{error}</ErrorText>}
+
+        {demoMode && (
+          <BackdateField
+            id="decidedOn"
+            name="decidedOn"
+            label="Decision made on"
+            hint="Leave blank for today. The survey opens on this date, so it cannot precede the meeting or the lead."
+            value={decidedOn}
+            onChange={setDecidedOn}
+            disabled={pending}
+          />
+        )}
 
         <button type="submit" disabled={pending} className="btn-primary">
           {pending ? "Saving…" : "Save proposal"}

@@ -83,7 +83,15 @@ function HoursInput({
 // it reveals a proper grid — the previous flex-wrap could not align, because
 // each field carries a label above and one carries a hint below, so
 // items-end had nothing consistent to align to.
-function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: CatalogOption[] }) {
+function AddLineForm({
+  circuitId,
+  catalog,
+  demoBackfill = false,
+}: {
+  circuitId: string;
+  catalog: CatalogOption[];
+  demoBackfill?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [typeId, setTypeId] = useState("");
   const [count, setCount] = useState("");
@@ -143,8 +151,17 @@ function AddLineForm({ circuitId, catalog }: { circuitId: string; catalog: Catal
 
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="btn-secondary">
-        Add a device line
+      {/* Under a "locked" notice this used to render as the page's primary
+          action, which reads as the normal way to change the inventory —
+          "if inventory is locked then why is this button appearing?"
+          (user-reported 2026-08-20). It is a demo-only backfill, so it now
+          looks like one and says so. */}
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className={demoBackfill ? "btn-ghost btn-sm" : "btn-secondary"}
+      >
+        {demoBackfill ? "Add a past record (demo mode)" : "Add a device line"}
       </button>
 
       <Modal
@@ -486,7 +503,9 @@ export function LoadInventoryPanel({
         // can still be entered for a circuit commissioned before this system.
         <div className="space-y-3">
           <p className="text-sm text-[var(--text-muted)]">{frozenReason}</p>
-          {canRecordHistorical && <AddLineForm circuitId={circuitId} catalog={catalog} />}
+          {canRecordHistorical && (
+            <AddLineForm circuitId={circuitId} catalog={catalog} demoBackfill />
+          )}
         </div>
       ) : null}
     </Card>

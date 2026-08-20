@@ -198,19 +198,42 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
   );
 }
 
-/** The single most important thing on the page: what to do now. */
+/**
+ * The single most important thing on the page: what to do now.
+ *
+ * Filled, not outlined (user-reported 2026-08-20: "this gets merged in the
+ * page and users don't pay attention to it"). A white card with a thin
+ * accent border sits at the same visual weight as every other card on a page
+ * made of cards, so the one instruction read as another panel. Solid accent,
+ * white type, its own shadow and an explicit affordance on the right — it
+ * should be the first thing the eye lands on, because it is the only thing
+ * on the page that says what to do.
+ */
 export function NextStepCallout({ next }: { next: NextAction }) {
   return (
     <Link
       href={next.href}
-      className="block w-full mb-8 rounded-[var(--r-md)] border p-4 no-underline transition-shadow hover:shadow-[var(--e1)]"
-      style={{ borderColor: "var(--accent)", background: "var(--surface)" }}
+      className="group mb-8 flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-[var(--r-md)] p-5 no-underline transition-shadow hover:shadow-[var(--e2)]"
+      style={{ background: "var(--accent)", color: "#fff", boxShadow: "var(--e1)" }}
     >
-      <p className="lbl mb-1" style={{ color: "var(--accent)" }}>
-        Next step
-      </p>
-      <p className="text-sm font-semibold">{next.label} →</p>
-      <p className="text-xs text-[var(--text-muted)] mt-0.5">{next.detail}</p>
+      <div className="min-w-0">
+        <p className="lbl mb-1" style={{ color: "rgba(255,255,255,0.75)" }}>
+          Next step
+        </p>
+        <p className="text-[17px] font-semibold leading-snug">{next.label}</p>
+        <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.85)" }}>
+          {next.detail}
+        </p>
+      </div>
+      {/* An explicit target, so the card reads as something to click rather
+          than as a notice that happens to be coloured. */}
+      <span
+        className="shrink-0 inline-flex items-center gap-2 rounded-[var(--r-pill)] px-4 py-2 text-sm font-semibold transition-transform group-hover:translate-x-0.5"
+        style={{ background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.30)" }}
+        aria-hidden
+      >
+        Continue →
+      </span>
     </Link>
   );
 }

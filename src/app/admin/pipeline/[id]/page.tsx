@@ -1,3 +1,4 @@
+import { isDemoMode } from "@/lib/demo-mode";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -84,7 +85,7 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
           right under the callout that points at it. */}
       {pipeline.stage === "lead" && pipeline.authoritative && (
         <div className="mb-8">
-          <ProposalForm pipelineId={pipeline.id} />
+          <ProposalForm pipelineId={pipeline.id} demoMode={isDemoMode()} />
         </div>
       )}
 

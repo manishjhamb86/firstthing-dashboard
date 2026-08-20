@@ -6,6 +6,7 @@ import type { SocietyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { resolveBackdate } from "@/lib/step-dates";
 
 // FEAT-085: society record & lifecycle. A society starts as a `prospect`
 // (FEAT-085-AC-1: "created from a lead, minimal data") and moves through
@@ -28,6 +29,8 @@ export async function createSociety(input: {
   location: string;
   flatCount: number;
   confirmDuplicate?: boolean;
+  /** DEMO_MODE only — backdate the record so a past deal can start here. */
+  createdOn?: string;
 }) {
   await requireAdmin();
 
@@ -57,11 +60,22 @@ export async function createSociety(input: {
     }
   }
 
+  // The first date in a backdated deal. Everything after it is ordered
+  // against this one, so it only has to not be in the future.
+  const createdAt = resolveBackdate(input.createdOn, "The society record");
+  if (typeof createdAt === "string") return { error: createdAt };
+
   const society = await db.society.create({
-    data: { name, location, flatCount: input.flatCount, status: "prospect" },
+    data: {
+      name,
+      location,
+      flatCount: input.flatCount,
+      status: "prospect",
+      ...(createdAt ? { createdAt } : {}),
+    },
   });
 
-  logger.info("society.created", { societyId: society.id, name, location });
+  logger.info("society.created", { societyId: society.id, name, location, backdatedTo: createdAt ?? null });
   revalidatePath("/admin/societies");
   redirect(`/admin/societies/${society.id}`);
 }

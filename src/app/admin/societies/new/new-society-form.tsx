@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { createSociety } from "../actions";
 import { Card, Field } from "@/components/ui";
+import { BackdateField } from "@/components/backdate-field";
 
 type FormState = { error?: string; duplicateOf?: string } | undefined;
 
@@ -12,6 +13,7 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     location: formData.get("location") as string,
     flatCount: Number(formData.get("flatCount")),
     confirmDuplicate: formData.get("confirmDuplicate") === "true",
+    createdOn: (formData.get("createdOn") as string) || undefined,
   });
   // createSociety redirects on success, so reaching here means an error.
   return result;
@@ -21,12 +23,13 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
 // submission including a failed one, which would otherwise wipe everything
 // the operator typed right as the duplicate-review prompt appears (see
 // login-form.tsx's comment for the full finding).
-export function NewSocietyForm() {
+export function NewSocietyForm({ demoMode = false }: { demoMode?: boolean }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [flatCount, setFlatCount] = useState("");
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+  const [createdOn, setCreatedOn] = useState("");
 
   return (
     <Card className="max-w-md p-6">
@@ -63,6 +66,18 @@ export function NewSocietyForm() {
             className="field"
           />
         </Field>
+
+        {demoMode && (
+          <BackdateField
+            id="createdOn"
+            name="createdOn"
+            label="Society record dated"
+            hint="Leave blank for today. Everything after it — the lead, the survey, the meter — is ordered against this date."
+            value={createdOn}
+            onChange={setCreatedOn}
+            disabled={pending}
+          />
+        )}
 
         {state?.error && (
           <div

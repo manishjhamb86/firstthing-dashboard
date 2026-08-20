@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useState } from "react";
+import { BackdateField } from "@/components/backdate-field";
 import { createLead } from "../actions";
 import { Card, ErrorText, Field } from "@/components/ui";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
@@ -28,6 +29,7 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     notes: formData.get("notes") as string,
     salesOwnerId: formData.get("salesOwnerId") as string,
     confirmDuplicate: formData.get("confirmDuplicate") === "true",
+    loggedOn: (formData.get("loggedOn") as string) || undefined,
   });
   return result;
 }
@@ -35,6 +37,7 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
 // Controlled inputs throughout — see login-form.tsx for the React 19
 // form-reset-on-submit finding this works around.
 export function NewLeadForm({
+  demoMode = false,
   societies,
   salesOwners,
   currentUserId,
@@ -44,6 +47,7 @@ export function NewLeadForm({
   salesOwners: SalesOwner[];
   currentUserId: string;
   initialSocietyId?: string;
+  demoMode?: boolean;
 }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
 
@@ -57,6 +61,7 @@ export function NewLeadForm({
   const [meetingDate, setMeetingDate] = useState("");
   const [notes, setNotes] = useState("");
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
+  const [loggedOn, setLoggedOn] = useState("");
   const [salesOwnerId, setSalesOwnerId] = useState(
     salesOwners.some((o) => o.id === currentUserId) ? currentUserId : (salesOwners[0]?.id ?? ""),
   );
@@ -209,6 +214,18 @@ export function NewLeadForm({
             ))}
           </select>
         </Field>
+
+        {demoMode && (
+          <BackdateField
+            id="loggedOn"
+            name="loggedOn"
+            label="Lead logged on"
+            hint="Leave blank for today. It cannot precede the society's own record, and the meeting date is checked the same way."
+            value={loggedOn}
+            onChange={setLoggedOn}
+            disabled={pending}
+          />
+        )}
 
         {state?.error && state.duplicateOf ? (
           <div

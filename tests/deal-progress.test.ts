@@ -128,7 +128,7 @@ describe("report → offer → agreement → installation → billing", () => {
 
   it("a drafted-but-unshared report is still the current step", () => {
     const { next } = dealProgress({ ...benchmarked, reportStatus: "draft" });
-    expect(next?.label).toBe("Share the demo report");
+    expect(next?.label).toBe("Share the report with the society");
   });
 
   it("an issued offer waits on the society, and says so", () => {
@@ -332,7 +332,8 @@ describe("a locked step names what it is waiting on", () => {
     expect(steps.commissioning.status).toBe("current");
     // The offer is not waiting on the lead — it is waiting on the report,
     // which is waiting on commissioning.
-    expect(steps.offer.blockedBy?.title).toBe("Demo savings report");
+    // The share step now sits between them, so it is the nearest blocker.
+    expect(steps.offer.blockedBy?.title).toBe("Share the report with the society");
     expect(steps.report.blockedBy?.title).toBe("Demo commissioning");
   });
 
@@ -437,5 +438,57 @@ describe("the header phase agrees with the map", () => {
         certificateSigned: true,
       }).phase,
     ).toEqual({ label: "Active billing", tone: "ok" });
+  });
+});
+
+describe("generating the report and sharing it are separate steps", () => {
+  // They were one step whose summary changed from "generate it" to "share
+  // it" while the title and styling stayed identical — so nothing signalled
+  // that the work had moved on, and the reader could not tell the new
+  // sentence from the old one (user-reported 2026-08-20).
+
+  const benchmarked: DealFacts = {
+    ...freshLead,
+    stage: "survey_pending",
+    surveyExists: true,
+    areaCount: 1,
+    candidates: [{ id: "c1", state: "benchmark_confirmed", location: null, lightType: "Tube" }],
+  };
+
+  it("with no report, the report step is current and sharing is locked behind it", () => {
+    const steps = byKey(benchmarked);
+    expect(steps.report.status).toBe("current");
+    expect(steps["share-report"].status).toBe("locked");
+    expect(steps["share-report"].blockedBy?.title).toBe("Demo savings report");
+  });
+
+  it("a generated draft completes the report step and moves the current one to sharing", () => {
+    const steps = byKey({ ...benchmarked, reportStatus: "draft" });
+    expect(steps.report.status).toBe("done");
+    expect(steps.report.summary).toBe("Generated from the confirmed benchmark");
+    expect(steps["share-report"].status).toBe("current");
+    // The instruction is on its own row now, not a changed sentence.
+    expect(steps["share-report"].summary).toContain("internal until you share it");
+  });
+
+  it("sharing completes both, and the offer opens", () => {
+    const steps = byKey({ ...benchmarked, reportStatus: "shared" });
+    expect(steps.report.status).toBe("done");
+    expect(steps["share-report"].status).toBe("done");
+    expect(steps["share-report"].summary).toContain("visible in the society's portal");
+    expect(steps.offer.status).toBe("current");
+  });
+
+  it("a skipped demo skips both rather than stranding the share step", () => {
+    const steps = byKey({ ...benchmarked, demoSkipped: true, candidates: [] });
+    expect(steps.report.status).toBe("done");
+    expect(steps["share-report"].status).toBe("done");
+  });
+
+  it("the phase chip names whichever of the two is current", () => {
+    expect(dealProgress(benchmarked).phase.label).toBe("Demo savings report");
+    expect(dealProgress({ ...benchmarked, reportStatus: "draft" }).phase.label).toBe(
+      "Share the report with the society",
+    );
   });
 });

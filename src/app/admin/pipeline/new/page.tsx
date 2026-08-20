@@ -1,3 +1,4 @@
+import { isDemoMode } from "@/lib/demo-mode";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -35,6 +36,7 @@ export default async function NewLeadPage({
         subtitle="After a first meeting with a prospective society."
       />
       <NewLeadForm
+        demoMode={isDemoMode()}
         societies={societies}
         salesOwners={salesOwners}
         currentUserId={session.user.id}

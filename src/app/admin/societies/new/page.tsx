@@ -1,3 +1,4 @@
+import { isDemoMode } from "@/lib/demo-mode";
 import Link from "next/link";
 import { PageHeader } from "@/components/ui";
 import { NewSocietyForm } from "./new-society-form";
@@ -17,7 +18,7 @@ export default async function NewSocietyPage() {
         title="New society"
         subtitle="Created as a prospect — minimal data, from a lead."
       />
-      <NewSocietyForm />
+      <NewSocietyForm demoMode={isDemoMode()} />
     </>
   );
 }

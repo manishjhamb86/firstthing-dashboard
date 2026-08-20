@@ -15,16 +15,24 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { demoBypass } from "@/lib/demo-mode";
+import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { buildCircuitFlowReadingKey } from "@/lib/ingest-keys";
 import { matchKnownFormat } from "@/lib/reading-formats";
+import {
+  buildSonoffCsv,
+  demoAnchorKwh,
+  draftDemoDays,
+  DEMO_DEFAULT_DAYS,
+  DEMO_DEFAULT_SAVINGS_PCT,
+} from "@/lib/demo-readings";
+import { DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
 import { applyMappingAllDays, MIN_PARSE_RATE, type ReadingMapping } from "@/lib/reading-normalize";
 import {
   buildReviewRows,
   deriveUploadKind,
-  extractionWindow,
+  circuitReadingWindow,
   theoreticalDailyKwh,
   savingsPct,
   savingsBand,
@@ -136,25 +144,19 @@ function deriveReview(circuit: Circuit, fileText: string): Derived | { error: st
     released: r.usedInCalculationId !== null,
   }));
   const lastStoredDate = stored.length > 0 ? stored[stored.length - 1].date : null;
-  // DEMO_MODE lifts the window's END far past today. A demo sheet carries
-  // simulated days that have not happened yet — replace the lights today and
-  // the post-install readings are necessarily future-dated — and "to =
-  // yesterday" excluded every one of them, so the step could never be walked
-  // in one sitting. +1 day was not enough (user-reported 2026-08-19: a file
-  // of 08-20..08-25 landed entirely outside the window).
-  //
-  // It moves the END only. The START still comes from the pivot date, so a
-  // day on or before the replacement is STILL out of the post window even in
-  // demo — sequence is never what demo mode relaxes.
+  // The window is resolved by one shared composition (circuitReadingWindow),
+  // the same call the circuit page makes to SHOW the valid period before a
+  // file is chosen — so the period on the step and the period this commit
+  // enforces cannot drift apart. DEMO_MODE's horizon lives in there too.
   const demoWindow = demoBypass("reading_window_end", { circuitId: circuit.id, kind });
-  const DEMO_HORIZON_DAYS = 366;
-  const window = extractionWindow({
-    kind,
+  const resolved = circuitReadingWindow({
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
+    benchmarkSavingsPct: circuit.benchmarkSavingsPct,
     lastStoredDate,
-    today: demoWindow ? addDays(new Date(), DEMO_HORIZON_DAYS) : new Date(),
-  });
+    demo: demoWindow,
+  })!;
+  const window = { from: resolved.from, to: resolved.to };
 
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
   const baselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
@@ -315,6 +317,40 @@ export type CircuitPreviewDTO = {
   noInventoryWarning: boolean;
 };
 
+/** One shape for the review table, whichever path produced the rows. */
+function toPreviewDTO(derived: Derived): CircuitPreviewDTO {
+  return {
+    kind: derived.kind,
+    vendor: derived.vendor,
+    expectedIntervals: derived.expectedIntervals,
+    windowFrom: iso(derived.window.from),
+    windowTo: iso(derived.window.to),
+    windowEmpty: windowIsEmpty(derived.window),
+    theoretical: derived.theoretical,
+    baseline: derived.baselineNow,
+    rows: derived.rows.map<PreviewRowDTO>((r) => ({
+      date: iso(r.date),
+      kWh: r.kWh,
+      intervalCount: r.intervalCount,
+      expectedIntervals: r.expectedIntervals,
+      partial: r.partial,
+      phase: r.phase,
+      disposition: r.disposition,
+      storedKwh: r.storedKwh,
+      variancePct: r.variancePct,
+      varianceBand: r.varianceBand,
+      savingsPct: r.savingsPct,
+      savingsBand: r.savingsBand,
+    })),
+    actionable: derived.rows.filter((r) => r.disposition === "new" || r.disposition === "supersede").length,
+    changedStored: derived.rows.filter((r) => r.disposition === "stored_changed").length,
+    outOfWindow: derived.rows.filter((r) => r.disposition === "out_of_window").length,
+    released: derived.rows.filter((r) => r.disposition === "released").length,
+    parse: derived.parse,
+    noInventoryWarning: derived.kind === "pre_install" && derived.theoretical === null,
+  };
+}
+
 export async function previewCircuitReadings(
   rawFileId: string,
   fileText: string,
@@ -356,48 +392,15 @@ export async function previewCircuitReadings(
     },
   });
 
-  const rows = derived.rows.map<PreviewRowDTO>((r) => ({
-    date: iso(r.date),
-    kWh: r.kWh,
-    intervalCount: r.intervalCount,
-    expectedIntervals: r.expectedIntervals,
-    partial: r.partial,
-    phase: r.phase,
-    disposition: r.disposition,
-    storedKwh: r.storedKwh,
-    variancePct: r.variancePct,
-    varianceBand: r.varianceBand,
-    savingsPct: r.savingsPct,
-    savingsBand: r.savingsBand,
-  }));
-
   logger.info("circuit_ingest.previewed", {
     actorId: admin.id,
     rawFileId,
     circuitId: circuit.id,
     kind: derived.kind,
-    days: rows.length,
+    days: derived.rows.length,
   });
 
-  return {
-    preview: {
-      kind: derived.kind,
-      vendor: derived.vendor,
-      expectedIntervals: derived.expectedIntervals,
-      windowFrom: iso(derived.window.from),
-      windowTo: iso(derived.window.to),
-      windowEmpty: windowIsEmpty(derived.window),
-      theoretical: derived.theoretical,
-      baseline: derived.baselineNow,
-      rows,
-      actionable: derived.rows.filter((r) => r.disposition === "new" || r.disposition === "supersede").length,
-      changedStored: derived.rows.filter((r) => r.disposition === "stored_changed").length,
-      outOfWindow: derived.rows.filter((r) => r.disposition === "out_of_window").length,
-      released: derived.rows.filter((r) => r.disposition === "released").length,
-      parse: derived.parse,
-      noInventoryWarning: derived.kind === "pre_install" && derived.theoretical === null,
-    },
-  };
+  return { preview: toPreviewDTO(derived) };
 }
 
 // ── Commit ───────────────────────────────────────────────────────────────
@@ -834,4 +837,197 @@ export async function raisePreInstallInvestigation(
   });
   revalidatePath(circuitPath(circuit.societyId, circuit.id));
   return { ok: true };
+}
+
+// ── DEMO_MODE: a pre-filled manual entry, one click ──────────────────────
+// "for demo mode allow manual readings addition using a pre filled form by
+// just one click. upload feature can be tested later. once the full flow is
+// validated and finalized" — the user, 2026-08-20.
+//
+// The shortcut is the FILE, not the flow. These actions synthesise a real
+// SONOFF export and hand it to the same derivation, the same review table
+// and the same commit as an uploaded one. Writing readings straight to the
+// table would have been fewer lines and would have validated a path that
+// never ships.
+//
+// Both are refused outright unless DEMO_MODE is on, so no amount of admin
+// permission puts a production instance into generated-data territory.
+
+export type DemoDraft = {
+  kind: UploadKind;
+  windowFrom: string;
+  windowTo: string;
+  /** the figure the days vary around, and where it came from */
+  anchorKwh: number;
+  anchorBasis: string;
+  days: { date: string; kWh: number }[];
+};
+
+export async function draftDemoReadings(input: {
+  circuitId: string;
+  days?: number;
+  savingsPct?: number;
+}): Promise<{ draft: DemoDraft } | { error: string }> {
+  if (!isDemoMode()) return { error: "Demo readings are only available while DEMO_MODE is on." };
+
+  const circuit = await loadCircuitForReadings(input.circuitId);
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  if (!circuit.meterInstalledAt) {
+    return { error: "Install and validate the meter first — a reading window starts from that date." };
+  }
+
+  const kind = deriveUploadKind(circuit);
+  const gate = await requireForKind(kind);
+  if (gate.error !== undefined) return { error: gate.error };
+
+  const lastStoredDate =
+    circuit.meterReadings.length > 0
+      ? circuit.meterReadings[circuit.meterReadings.length - 1].date
+      : null;
+  const window = circuitReadingWindow({
+    meterInstalledAt: circuit.meterInstalledAt,
+    lightReplacementDate: circuit.lightReplacementDate,
+    benchmarkSavingsPct: circuit.benchmarkSavingsPct,
+    lastStoredDate,
+    demo: true,
+  })!;
+  if (window.empty) {
+    return {
+      error: `The window has not opened yet — the first day that can qualify is ${iso(window.from)}.`,
+    };
+  }
+
+  const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
+  const baseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
+  const savings = input.savingsPct ?? DEMO_DEFAULT_SAVINGS_PCT;
+  const anchor = demoAnchorKwh({ kind, theoretical, baseline, savingsPct: savings });
+  if ("error" in anchor) return { error: anchor.error };
+
+  // Start after the last day already stored INSIDE the window, so a second
+  // click extends the series rather than re-offering days the review would
+  // only show as already-in-system.
+  const inWindow = circuit.meterReadings.filter(
+    (r) => r.date >= window.from && r.date <= window.to,
+  );
+  const lastStoredInWindow = inWindow.length > 0 ? inWindow[inWindow.length - 1].date : null;
+
+  const days = draftDemoDays({
+    window,
+    lastStoredInWindow,
+    days: input.days ?? DEMO_DEFAULT_DAYS,
+    anchorKwh: anchor.kWh,
+  });
+  if (days.length === 0) {
+    return { error: "Every day in this step's window already has a reading." };
+  }
+
+  logger.warn("demo.readings_drafted", {
+    actorId: gate.admin.id,
+    circuitId: circuit.id,
+    kind,
+    days: days.length,
+    anchorKwh: anchor.kWh,
+  });
+
+  return {
+    draft: {
+      kind,
+      windowFrom: iso(window.from),
+      windowTo: iso(window.to),
+      anchorKwh: anchor.kWh,
+      anchorBasis:
+        kind === "pre_install"
+          ? "the load inventory's theoretical daily figure"
+          : `${savings}% savings against the ${baseline?.toFixed(2)} kWh/day baseline`,
+      days: days.map((d) => ({ date: iso(d.date), kWh: d.kWh })),
+    },
+  };
+}
+
+/**
+ * Turns the reviewed-and-possibly-edited day values into a real SONOFF file
+ * and previews it exactly as an upload. The operator supplies the numbers —
+ * that is what manual entry means — but every classification (which phase,
+ * in or out of the window, which band, savable or locked) is still derived
+ * here from the circuit's own record, never accepted from the client.
+ */
+export async function previewDemoReadings(input: {
+  circuitId: string;
+  days: { date: string; kWh: number }[];
+}): Promise<{ rawFileId: string; csv: string; preview: CircuitPreviewDTO } | { error: string }> {
+  if (!isDemoMode()) return { error: "Demo readings are only available while DEMO_MODE is on." };
+
+  const circuit = await loadCircuitForReadings(input.circuitId);
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+
+  const gate = await requireForKind(deriveUploadKind(circuit));
+  if (gate.error !== undefined) return { error: gate.error };
+
+  const parsedDays = [];
+  for (const d of input.days) {
+    const at = new Date(`${d.date}T00:00:00.000Z`);
+    if (Number.isNaN(at.getTime())) return { error: `"${d.date}" is not a date.` };
+    if (!Number.isFinite(d.kWh) || d.kWh < 0) {
+      return { error: `${d.date}: a day's consumption has to be a number, and can't be negative.` };
+    }
+    parsedDays.push({ date: at, kWh: d.kWh });
+  }
+  if (parsedDays.length === 0) return { error: "There are no days to review." };
+  parsedDays.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+  const csv = buildSonoffCsv(parsedDays);
+  const fileName = `demo-readings-${iso(parsedDays[0].date)}-to-${iso(
+    parsedDays[parsedDays.length - 1].date,
+  )}.csv`;
+
+  const file = await db.rawReadingFile.create({
+    data: {
+      circuitId: circuit.id,
+      period: null,
+      ingestPhase: deriveUploadKind(circuit),
+      // Deliberately not an S3 key: nothing was uploaded. The prefix is what
+      // the download path checks so it can say "generated in demo mode"
+      // rather than "could not be retrieved from storage".
+      s3Key: `${DEMO_RAW_KEY_PREFIX}${circuit.id}/${fileName}`,
+      fileName,
+      contentType: "text/csv",
+      byteSize: Buffer.byteLength(csv, "utf8"),
+      status: "pending_normalization",
+      uploadedById: gate.admin.id,
+    },
+  });
+
+  const derived = deriveReview(circuit, csv);
+  if ("error" in derived) {
+    await db.rawReadingFile.update({
+      where: { id: file.id },
+      data: { status: "abandoned", aiError: derived.error.slice(0, 500) },
+    });
+    return { error: derived.error };
+  }
+
+  await db.rawReadingFile.update({
+    where: { id: file.id },
+    data: {
+      status: "ready",
+      vendor: derived.vendor,
+      confirmedMapping: derived.mapping as unknown as object,
+      aiConfidence: "demo_generated",
+      ingestPhase: derived.kind,
+      rangeStart: derived.window.from,
+      rangeEnd: derived.window.to,
+      rowsParsed: derived.parse.rowsAttempted - derived.parse.rowsUnparseable,
+      daysProduced: derived.parse.daysInFile,
+    },
+  });
+
+  logger.warn("demo.readings_previewed", {
+    actorId: gate.admin.id,
+    circuitId: circuit.id,
+    rawFileId: file.id,
+    kind: derived.kind,
+    days: parsedDays.length,
+  });
+
+  return { rawFileId: file.id, csv, preview: toPreviewDTO(derived) };
 }

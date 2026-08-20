@@ -17,8 +17,10 @@ import {
 import {
   abortCircuitUpload,
   commitCircuitReadings,
+  draftDemoReadings,
   getCircuitReadingUploadUrl,
   previewCircuitReadings,
+  previewDemoReadings,
   recordCircuitRawUpload,
   type CircuitPreviewDTO,
   type CommitSummary,
@@ -98,9 +100,71 @@ function comparisonCell(row: PreviewRowDTO): { text: string; label: string } {
   };
 }
 
-export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
+/**
+ * The step's valid period, resolved server-side from the circuit's own dates
+ * and shown BEFORE a file is chosen (user-asked 2026-08-20: "Show the valid
+ * period for meter readings"). Previously the range only appeared once an
+ * upload had been parsed — so the one question you have while picking a file
+ * was answered only after picking it, and a file of out-of-range days read
+ * as a fault rather than as the wrong days.
+ */
+export type ReadingWindowDTO = {
+  kind: "pre_install" | "post_install" | "monitoring";
+  from: string;
+  to: string;
+  empty: boolean;
+  demoExtended: boolean;
+  /** what the start is anchored to, in words — the pivot and its date */
+  startBasis: string;
+};
+
+function ValidPeriod({ window: w }: { window: ReadingWindowDTO }) {
+  const endBasis = w.demoExtended
+    ? "the end is lifted past today because demo mode is on"
+    : "the last complete day — today is never imported, because the day is not over";
+
+  if (w.empty) {
+    return (
+      <div
+        className="rounded-[var(--r-sm)] border p-3 text-sm"
+        style={{ borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" }}
+      >
+        <p className="font-medium">This step&apos;s window has not opened yet.</p>
+        <p className="mt-1">
+          Counting starts {w.startBasis}, so the first day that can qualify is{" "}
+          <strong className="num">{w.from}</strong>. Nothing recorded before then belongs to this
+          step.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-[var(--r-sm)] border p-3 text-sm" style={{ borderColor: "var(--border)" }}>
+      <p>
+        <span className="lbl">Valid period for this step</span>
+      </p>
+      <p className="num text-base font-semibold mt-0.5">
+        {w.from} → {w.to}
+      </p>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">
+        Starts {w.startBasis}; {endBasis}. Days outside this period are still listed, so you can see
+        what the file held — they just cannot be saved against this step.
+      </p>
+    </div>
+  );
+}
+
+export function CircuitReadingPanel({
+  circuitId,
+  window: windowInfo,
+  demoMode = false,
+}: {
+  circuitId: string;
+  window: ReadingWindowDTO | null;
+  demoMode?: boolean;
+}) {
   const router = useRouter();
-  const [stage, setStage] = useState<"idle" | "working" | "review" | "done">("idle");
+  const [stage, setStage] = useState<"idle" | "working" | "fill" | "review" | "done">("idle");
   const [error, setError] = useState<string | undefined>();
   const [preview, setPreview] = useState<CircuitPreviewDTO | undefined>();
   const [rawFileId, setRawFileId] = useState<string | undefined>();
@@ -112,6 +176,12 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
   const [noAverage, setNoAverage] = useState<Set<string>>(new Set());
   const [summary, setSummary] = useState<CommitSummary | undefined>();
   const [showOutOfWindow, setShowOutOfWindow] = useState(false);
+  // DEMO_MODE only: the pre-filled day values, held as strings so a field can
+  // be cleared and retyped without the row jumping to 0.
+  const [draft, setDraft] = useState<{ date: string; kWh: string }[] | undefined>();
+  const [draftBasis, setDraftBasis] = useState<string | undefined>();
+  const [demoDays, setDemoDays] = useState("7");
+  const [demoSavings, setDemoSavings] = useState("68");
   const [pending, startTransition] = useTransition();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -146,7 +216,64 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
     setRejected(new Set());
     setNoAverage(new Set());
     setSummary(undefined);
+    setDraft(undefined);
+    setDraftBasis(undefined);
     if (inputRef.current) inputRef.current.value = "";
+  }
+
+  // ── DEMO_MODE: one click fills the form ────────────────────────────────
+  function fillDemo() {
+    setError(undefined);
+    startTransition(async () => {
+      const result = await draftDemoReadings({
+        circuitId,
+        days: Number(demoDays) || undefined,
+        savingsPct: windowInfo?.kind === "pre_install" ? undefined : Number(demoSavings) || undefined,
+      });
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setDraft(result.draft.days.map((d) => ({ date: d.date, kWh: d.kWh.toFixed(4) })));
+      setDraftBasis(result.draft.anchorBasis);
+      setStage("fill");
+    });
+  }
+
+  // The values are the operator's; the classification is never theirs. The
+  // server builds the file, re-derives every phase, disposition and band from
+  // the circuit's own record, and only then is there anything to review.
+  function reviewDraft() {
+    if (!draft) return;
+    setError(undefined);
+    const days: { date: string; kWh: number }[] = [];
+    for (const row of draft) {
+      const value = Number(row.kWh);
+      if (row.kWh.trim() === "" || !Number.isFinite(value) || value < 0) {
+        setError(`${row.date}: enter a consumption figure of 0 or more.`);
+        return;
+      }
+      days.push({ date: row.date, kWh: value });
+    }
+    startTransition(async () => {
+      const result = await previewDemoReadings({ circuitId, days });
+      if ("error" in result) {
+        setError(result.error);
+        return;
+      }
+      setRawFileId(result.rawFileId);
+      setFileText(result.csv);
+      setFileName("demo-generated readings");
+      setPreview(result.preview);
+      setNoAverage(
+        new Set(
+          result.preview.rows
+            .filter((r) => (r.disposition === "new" || r.disposition === "supersede") && r.partial)
+            .map((r) => r.date),
+        ),
+      );
+      setStage("review");
+    });
   }
 
   function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -290,24 +417,148 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
     );
   }
 
+  // DEMO_MODE — the pre-filled form. The days and their values are already
+  // there; the only required action is Review, then Save.
+  if (stage === "fill" && draft) {
+    return (
+      <Card className="p-5 space-y-4">
+        <div>
+          <p className="font-medium text-sm">Demo readings — {draft.length} day{draft.length === 1 ? "" : "s"}</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            Pre-filled from {draftBasis}. Adjust any value to see it land in a different band, then
+            review. Nothing is saved until you save it.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Consumption (kWh)</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {draft.map((row, i) => (
+                <tr key={row.date}>
+                  <td className="num">{row.date}</td>
+                  <td>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      min="0"
+                      className="field field-auto num w-36"
+                      value={row.kWh}
+                      aria-label={`Consumption for ${row.date}`}
+                      disabled={pending}
+                      onChange={(e) =>
+                        setDraft((prev) =>
+                          (prev ?? []).map((r, j) => (j === i ? { ...r, kWh: e.target.value } : r)),
+                        )
+                      }
+                    />
+                  </td>
+                  <td>
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      disabled={pending || draft.length === 1}
+                      onClick={() => setDraft((prev) => (prev ?? []).filter((_, j) => j !== i))}
+                    >
+                      Remove
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {error && <ErrorText>{error}</ErrorText>}
+        <div className="flex flex-wrap items-center gap-3">
+          <button type="button" onClick={reviewDraft} disabled={pending} className="btn-primary">
+            Review these {draft.length} day{draft.length === 1 ? "" : "s"}
+          </button>
+          <button type="button" onClick={reset} disabled={pending} className="btn-ghost">
+            Cancel
+          </button>
+        </div>
+      </Card>
+    );
+  }
+
   if (stage !== "review" || !preview) {
     return (
-      <Card className="p-5 space-y-3">
-        <p className="text-sm text-[var(--text-muted)]">
-          Upload the meter&apos;s exported CSV. The system reads the whole file, picks the days that
-          belong to this circuit&apos;s current step, and shows every one for review before anything
-          is saved.
-        </p>
-        <input
-          ref={inputRef}
-          type="file"
-          accept=".csv,text/csv"
-          onChange={onFileSelected}
-          disabled={pending}
-          aria-label="Meter readings CSV"
-          className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-[var(--r-sm)] file:border file:border-[var(--field-border)] file:bg-[var(--surface)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--surface-hover)]"
-        />
-        {pending && <p className="text-xs text-[var(--text-muted)]">Reading {fileName}…</p>}
+      <Card className="p-5 space-y-4">
+        {windowInfo && <ValidPeriod window={windowInfo} />}
+        <div className="space-y-2">
+          <p className="text-sm text-[var(--text-muted)]">
+            Upload the meter&apos;s exported CSV. The system reads the whole file, picks the days that
+            belong to this circuit&apos;s current step, and shows every one for review before anything
+            is saved.
+          </p>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={onFileSelected}
+            disabled={pending}
+            aria-label="Meter readings CSV"
+            className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-[var(--r-sm)] file:border file:border-[var(--field-border)] file:bg-[var(--surface)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--surface-hover)]"
+          />
+        </div>
+
+        {/* DEMO_MODE — walk the flow without hand-authoring an export. The
+            file is the shortcut, not the flow: this generates a real vendor
+            export and runs the same review and commit as an upload. */}
+        {demoMode && !windowInfo?.empty && (
+          <div className="pt-4 border-t border-[var(--border-subtle)] space-y-2">
+            <p className="lbl">Demo mode — enter readings by hand</p>
+            <p className="text-xs text-[var(--text-muted)]">
+              Fills a form with plausible days for the period above, ready to review and save. Useful
+              for walking the flow before the upload path is exercised.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--text-muted)]">
+                <span className="block mb-1">Days</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="40"
+                  className="field field-auto num w-24"
+                  value={demoDays}
+                  onChange={(e) => setDemoDays(e.target.value)}
+                  disabled={pending}
+                  aria-label="Days to generate"
+                />
+              </label>
+              {windowInfo?.kind !== "pre_install" && (
+                <label className="text-xs text-[var(--text-muted)]">
+                  <span className="block mb-1">Target savings %</span>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    className="field field-auto num w-28"
+                    value={demoSavings}
+                    onChange={(e) => setDemoSavings(e.target.value)}
+                    disabled={pending}
+                    aria-label="Target savings percent"
+                  />
+                </label>
+              )}
+              <button type="button" onClick={fillDemo} disabled={pending} className="btn-tone-info">
+                Fill readings form
+              </button>
+            </div>
+          </div>
+        )}
+
+        {pending && (
+          <p className="text-xs text-[var(--text-muted)]">
+            {fileName ? `Reading ${fileName}…` : "Working…"}
+          </p>
+        )}
         {error && <ErrorText>{error}</ErrorText>}
       </Card>
     );
@@ -337,10 +588,11 @@ export function CircuitReadingPanel({ circuitId }: { circuitId: string }) {
           "you are simply early". */}
       {preview.windowEmpty && (
         <p className="text-sm rounded-[var(--r-sm)] border p-3" style={{ borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" }}>
-          The baseline window has not opened yet. Counting starts the day after the meter was
-          installed, and a day only counts once it is complete — so the first day that can qualify
-          is <strong>{preview.windowFrom}</strong>. Nothing in this file can be used yet; upload it
-          again once that day has passed. Nothing has been saved.
+          This step&apos;s window has not opened yet. Counting starts
+          {windowInfo ? ` ${windowInfo.startBasis}` : " after this step's pivot date"}, and a day
+          only counts once it is complete — so the first day that can qualify is{" "}
+          <strong className="num">{preview.windowFrom}</strong>. Nothing in this file can be used
+          yet; upload it again once that day has passed. Nothing has been saved.
         </p>
       )}
       {preview.noInventoryWarning && (

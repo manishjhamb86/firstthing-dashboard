@@ -376,3 +376,56 @@ export function periodSavingsSummary(
   const pct = ((baseline - avg) / baseline) * 100;
   return { averageKwh: avg, savingsPct: pct, band: savingsBand(pct), warn: pct < SAVINGS_WARN_BELOW };
 }
+
+// ── The window, resolved from the circuit alone ──────────────────────────
+// Both the page (which shows the operator the valid period BEFORE they pick
+// a file) and the ingest action (which classifies the days in one) need the
+// same answer. Keeping it in one composition means the period shown on the
+// step and the period the commit enforces cannot drift apart.
+
+/**
+ * How far past today DEMO_MODE lifts the window's END. A demo sheet carries
+ * simulated days that have not happened yet — replace the lights today and
+ * the post-install readings are necessarily future-dated. It moves the END
+ * only: the START still comes from the pivot date, so a day on or before
+ * the replacement stays out of the post window even in demo. Sequence is
+ * never what demo mode relaxes.
+ */
+export const DEMO_WINDOW_HORIZON_DAYS = 366;
+
+export type ReadingWindow = {
+  kind: UploadKind;
+  from: Date;
+  to: Date;
+  /** from > to — no day can qualify yet; show the wait, not a backwards range. */
+  empty: boolean;
+  /** the end was lifted past today because demo mode is on */
+  demoExtended: boolean;
+};
+
+export function circuitReadingWindow(args: {
+  meterInstalledAt: Date | null;
+  lightReplacementDate: Date | null;
+  benchmarkSavingsPct: number | null;
+  lastStoredDate: Date | null;
+  demo: boolean;
+  now?: Date;
+}): ReadingWindow | null {
+  if (!args.meterInstalledAt) return null;
+  const now = args.now ?? new Date();
+  const kind = deriveUploadKind(args);
+  const w = extractionWindow({
+    kind,
+    meterInstalledAt: args.meterInstalledAt,
+    lightReplacementDate: args.lightReplacementDate,
+    lastStoredDate: args.lastStoredDate,
+    today: args.demo ? addDays(now, DEMO_WINDOW_HORIZON_DAYS) : now,
+  });
+  return { kind, from: w.from, to: w.to, empty: windowIsEmpty(w), demoExtended: args.demo };
+}
+
+/** Whole days the window spans, inclusive. 0 when the window is empty. */
+export function windowLengthDays(w: { from: Date; to: Date }): number {
+  if (windowIsEmpty(w)) return 0;
+  return Math.round((utcMidnight(w.to).getTime() - utcMidnight(w.from).getTime()) / 86_400_000) + 1;
+}

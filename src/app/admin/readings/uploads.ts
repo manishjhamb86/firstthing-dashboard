@@ -5,7 +5,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { requireOps } from "./ops";
 import { s3, S3_BUCKET } from "@/lib/s3";
-import { buildRawReadingKey } from "@/lib/ingest-keys";
+import { buildRawReadingKey, DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
 import { logger } from "@/lib/logger";
 
 // Raw vendor files are presigned separately from src/app/admin/uploads.ts,
@@ -83,6 +83,12 @@ export async function getRawFileDownloadUrl(
 
   const file = await db.rawReadingFile.findUnique({ where: { id: rawFileId } });
   if (!file) return { error: "That upload is no longer in the history." };
+  if (file.s3Key.startsWith(DEMO_RAW_KEY_PREFIX)) {
+    return {
+      error:
+        "This file's readings were generated in demo mode — nothing was uploaded, so there is no original to retrieve.",
+    };
+  }
 
   try {
     await s3.send(new HeadObjectCommand({ Bucket: S3_BUCKET, Key: file.s3Key }));

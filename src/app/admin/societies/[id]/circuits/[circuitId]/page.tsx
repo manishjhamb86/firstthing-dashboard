@@ -19,9 +19,10 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
 import { StepSection } from "@/components/step-section";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
-import { CircuitReadingPanel } from "./circuit-reading-panel";
+import { CircuitReadingPanel, type ReadingWindowDTO } from "./circuit-reading-panel";
 import { StoredReadingsPanel, type StoredReadingDTO } from "./stored-readings-panel";
 import {
+  circuitReadingWindow,
   classifyDay,
   periodSavingsSummary,
   savingsBand,
@@ -209,6 +210,52 @@ export default async function CircuitDetailPage({
   // the two stores under one baseline is how figures stop agreeing.
   const usesLegacyFlow = circuit.commissioningReadings.length > 0 && storedReadings.length === 0;
 
+  // The valid period for THIS step's readings, resolved from the circuit's
+  // own dates by the same composition the ingest action uses to enforce it
+  // (user-asked 2026-08-20: "Show the valid period for meter readings"). It
+  // is shown before a file is chosen, so the range is an instruction rather
+  // than a verdict delivered after the upload.
+  const lastStoredReadingDate =
+    circuit.meterReadings.length > 0
+      ? circuit.meterReadings[circuit.meterReadings.length - 1].date
+      : null;
+  const readingWindow = circuitReadingWindow({
+    meterInstalledAt: circuit.meterInstalledAt,
+    lightReplacementDate: circuit.lightReplacementDate,
+    benchmarkSavingsPct: circuit.benchmarkSavingsPct,
+    lastStoredDate: lastStoredReadingDate,
+    demo: demoMode,
+  });
+  const day = (d: Date) => d.toISOString().slice(0, 10);
+  const readingWindowDTO: ReadingWindowDTO | null = readingWindow
+    ? {
+        kind: readingWindow.kind,
+        from: day(readingWindow.from),
+        to: day(readingWindow.to),
+        empty: readingWindow.empty,
+        demoExtended: readingWindow.demoExtended,
+        startBasis:
+          readingWindow.kind === "monitoring" && lastStoredReadingDate
+            ? `one day before the last stored reading (${day(
+                lastStoredReadingDate,
+              )}), so a part-day at the end of the previous file is re-read in full`
+            : readingWindow.kind === "post_install" && circuit.lightReplacementDate
+              ? `the day after the lights were replaced (${day(circuit.lightReplacementDate)})`
+              : `the day after the meter was installed (${day(circuit.meterInstalledAt!)})`,
+      }
+    : null;
+  const periodChip = readingWindowDTO ? (
+    <StatusChip tone="info">
+      {readingWindowDTO.empty
+        ? `Opens ${readingWindowDTO.from}`
+        : // In demo the end is a year out by design; unlabelled, that date
+          // reads as a defect rather than as the horizon it is.
+          `${readingWindowDTO.from} → ${readingWindowDTO.to}${
+            readingWindowDTO.demoExtended ? " · demo" : ""
+          }`}
+    </StatusChip>
+  ) : null;
+
   // FEAT-015 — at most one review is open at a time: a review is only raised
   // when a window completes, and a completed window can't complete again
   // until this one resolves and restarts it.
@@ -349,9 +396,15 @@ export default async function CircuitDetailPage({
           editable={canEdit && circuit.meterInstalledAt === null && !circuit.voidedAt}
           frozenReason={
             circuit.meterInstalledAt
-              ? circuit.lightReplacementDate
-                ? "The meter is installed and the lights have been replaced — the inventory is locked as the record both were measured against. Contact an administrator if it has to change."
-                : "The meter is installed — the inventory is locked, because every pre-install reading is judged against the theoretical figure it produces. Contact an administrator if it has to change."
+              ? (circuit.lightReplacementDate
+                  ? "The meter is installed and the lights have been replaced — the inventory is locked as the record both were measured against."
+                  : "The meter is installed — the inventory is locked, because every pre-install reading is judged against the theoretical figure it produces.") +
+                // Say which of the two is true, rather than telling the
+                // operator to contact an administrator while a control that
+                // does the thing is rendered a line below.
+                (demoMode
+                  ? " Demo mode allows a past record to be added below; normal operation does not."
+                  : " Contact an administrator if it has to change.")
               : canEdit
                 ? null
                 : "Recording the load inventory is PER-04\u2019s action."
@@ -460,11 +513,22 @@ export default async function CircuitDetailPage({
             // FEAT-012 — pre-install baseline monitoring window.
             case "pre-window": {
               if (step.status === "current") {
-                chip = (
+                // The "Day X of 5" count belongs to the legacy commissioning
+                // window. On a CSV-flow circuit nothing ever writes those
+                // rows, so it read "Day 0 of 5" no matter how many readings
+                // were stored — a progress figure that could not move. That
+                // flow's own measure is the period it accepts.
+                chip = usesLegacyFlow ? (
                   <StatusChip tone={preInstallPendingAnomaly ? "warn" : "info"}>
                     {preInstallPendingAnomaly ? "Anomaly open" : `Day ${preInstallValidCount} of 5`}
                   </StatusChip>
+                ) : (
+                  periodChip
                 );
+                if (!usesLegacyFlow) {
+                  summary =
+                    "Record the meter's daily readings for the period below — every day is reviewed before it is saved";
+                }
                 body = usesLegacyFlow ? (
                   circuit.preInstallWindowStartAt ? (
                     <MonitoringWindowPanel
@@ -484,7 +548,11 @@ export default async function CircuitDetailPage({
                 ) : canEdit ? (
                   // CON-45 — the CSV review flow. The system extracts from the
                   // day after meter install; every day is reviewed before save.
-                  <CircuitReadingPanel circuitId={circuit.id} />
+                  <CircuitReadingPanel
+                    circuitId={circuit.id}
+                    window={readingWindowDTO}
+                    demoMode={demoMode}
+                  />
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">
                     Awaiting PER-04 to upload the meter&apos;s readings.
@@ -636,8 +704,15 @@ export default async function CircuitDetailPage({
                     <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
                   );
                 } else {
+                  chip = periodChip;
+                  summary =
+                    "Record the meter's daily readings for the period below — savings are measured against the pre-install baseline";
                   body = canEdit ? (
-                    <CircuitReadingPanel circuitId={circuit.id} />
+                    <CircuitReadingPanel
+                      circuitId={circuit.id}
+                      window={readingWindowDTO}
+                      demoMode={demoMode}
+                    />
                   ) : (
                     <p className="text-sm text-[var(--text-muted)]">
                       Awaiting PER-04 to upload the post-installation readings.
@@ -711,7 +786,11 @@ export default async function CircuitDetailPage({
             <div>
               <h3 className="text-sm font-medium mb-2">Upload this month&apos;s readings</h3>
               {canOverride ? (
-                <CircuitReadingPanel circuitId={circuit.id} />
+                <CircuitReadingPanel
+                  circuitId={circuit.id}
+                  window={readingWindowDTO}
+                  demoMode={demoMode}
+                />
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">
                   Monthly monitoring readings feed billing — uploading them is an operations-lead

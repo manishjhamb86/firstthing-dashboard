@@ -72,7 +72,8 @@ export default async function DeviceCatalogPage() {
         >
           {unmapped.length === 1 ? "One active device has" : `${unmapped.length} active devices have`} no
           compatible replacement mapped: {unmapped.map((t) => t.name).join(", ")}. A circuit carrying{" "}
-          {unmapped.length === 1 ? "it" : "them"} cannot have its replacement recorded at installation.
+          {unmapped.length === 1 ? "it" : "them"} cannot have its replacement recorded at installation.{" "}
+          {unmapped.length === 1 ? "It is" : "They are"} marked in the list below.
         </p>
       )}
 

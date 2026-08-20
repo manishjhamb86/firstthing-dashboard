@@ -274,8 +274,15 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
                 </td>
               </tr>
             ) : (
-              live.map((r) => (
-                <tr key={r.id}>
+              live.map((r) => {
+                // The banner above names the devices with nothing to replace
+                // them; without the same mark on the row there was no way to
+                // tell WHICH row it meant (user-reported 2026-08-20). Tinted
+                // as well as chipped, so it is findable by scanning.
+                const unmapped =
+                  r.role === "original" && r.active && r.replacementIds.length === 0;
+                return (
+                <tr key={r.id} style={unmapped ? { background: "var(--warn-bg)" } : undefined}>
                   <td>
                     <span className="font-medium">{r.name}</span>
                     {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
@@ -288,11 +295,14 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
                   </td>
                   <td className="num text-right">{r.defaultWattage ?? "—"}</td>
                   <td>
-                    {r.active ? (
-                      <StatusChip tone="ok">Active</StatusChip>
-                    ) : (
-                      <StatusChip tone="warn">Retired</StatusChip>
-                    )}
+                    <span className="flex flex-wrap items-center gap-2">
+                      {r.active ? (
+                        <StatusChip tone="ok">Active</StatusChip>
+                      ) : (
+                        <StatusChip tone="warn">Retired</StatusChip>
+                      )}
+                      {unmapped && <StatusChip tone="warn">No replacement mapped</StatusChip>}
+                    </span>
                   </td>
                   {canEdit && (
                     <td className="text-right whitespace-nowrap">
@@ -311,7 +321,8 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
                     </td>
                   )}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>

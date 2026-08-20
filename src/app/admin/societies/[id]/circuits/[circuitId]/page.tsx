@@ -369,9 +369,17 @@ export default async function CircuitDetailPage({
             unit: theoretical === null ? "no inventory" : "kWh/day",
           },
           {
-            label: "Pre-install baseline",
+            // "Pre-install baseline" read like "the average of the pre-install
+            // readings", which is a different number once days move. This is
+            // the figure frozen at replacement.
+            label: "Commissioned baseline",
             value: circuit.preInstallBaseline === null ? "—" : circuit.preInstallBaseline.toFixed(2),
-            unit: circuit.preInstallBaseline === null ? "not commissioned" : "kWh/day",
+            unit:
+              circuit.preInstallBaseline === null
+                ? "not commissioned"
+                : circuit.lightReplacementDate
+                  ? "kWh/day · frozen at replacement"
+                  : "kWh/day · not yet frozen",
           },
           {
             label: "In force now",
@@ -615,7 +623,9 @@ export default async function CircuitDetailPage({
               } else if (step.status === "done" && circuit.preInstallBaseline != null) {
                 summary = usesLegacyFlow
                   ? `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day from 5 valid days`
-                  : `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day — the average of the accepted pre-install days`;
+                  : `Commissioned baseline ${circuit.preInstallBaseline.toFixed(
+                      2,
+                    )} kWh/day — frozen when the lights were replaced`;
                 body = (
                   <div className="space-y-4">
                     <p className="text-sm text-[var(--text-muted)]">
@@ -815,6 +825,7 @@ export default async function CircuitDetailPage({
             canEdit={canEdit}
             summaries={phaseSummaries}
             allComplete={allStepsComplete}
+            commissionedBaseline={circuit.preInstallBaseline}
           />
 
           <div className="pt-2 border-t border-[var(--border-subtle)]">

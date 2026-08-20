@@ -99,11 +99,20 @@ export function StoredReadingsPanel({
   canEdit,
   summaries,
   allComplete = false,
+  commissionedBaseline = null,
 }: {
   readings: StoredReadingDTO[];
   canEdit: boolean;
   /** Every step on this circuit is done — nothing here needs looking at. */
   allComplete?: boolean;
+  /**
+   * Circuit.preInstallBaseline — the figure frozen at light replacement and
+   * measured against ever since. Passed in so the pre-install group can name
+   * BOTH numbers when they differ, rather than showing one average under a
+   * heading while the step above shows another (user-reported 2026-08-20:
+   * "the window states 12.47 but the readings show 12.59").
+   */
+  commissionedBaseline?: number | null;
   summaries: {
     phase: StoredReadingDTO["phase"];
     label: string;
@@ -163,7 +172,10 @@ export function StoredReadingsPanel({
               </span>
               {summary?.averageKwh != null && (
                 <StatusChip tone="info">
-                  avg {summary.averageKwh.toFixed(2)} kWh/day
+                  {/* Named, not just "avg": this is the average of the days
+                      LISTED HERE, which is not necessarily the figure in
+                      force. */}
+                  these days average {summary.averageKwh.toFixed(2)} kWh/day
                 </StatusChip>
               )}
               {summary?.savingsPct != null && summary.savingsBand && (
@@ -179,6 +191,33 @@ export function StoredReadingsPanel({
               )}
               <span className="ml-auto text-xs text-[var(--text-muted)]">{open ? "Hide" : "Show"}</span>
             </button>
+
+            {/* The two figures are both correct and they are not the same
+                thing: the commissioned baseline froze when the lights were
+                replaced, and this list has moved since. Showing one without
+                naming the other is what made them look like a contradiction.
+                Shown whether or not the table is open, because the gap is
+                visible in the header itself. */}
+            {phase === "pre_install" &&
+              commissionedBaseline != null &&
+              summary?.averageKwh != null &&
+              Math.abs(commissionedBaseline - summary.averageKwh) > 0.005 && (
+                <p className="text-xs text-[var(--text-muted)]">
+                  Commissioned baseline is{" "}
+                  <span className="num font-semibold text-[var(--text)]">
+                    {commissionedBaseline.toFixed(2)}
+                  </span>{" "}
+                  kWh/day — frozen when the lights were replaced, and what every savings figure is
+                  measured against. These{" "}
+                  <span className="num">{rows.length - excludedCount}</span> counted day
+                  {rows.length - excludedCount === 1 ? "" : "s"} average{" "}
+                  <span className="num font-semibold text-[var(--text)]">
+                    {summary.averageKwh.toFixed(2)}
+                  </span>{" "}
+                  because days were added or excluded after that. Changing the list does not move the
+                  baseline (ADR-005).
+                </p>
+              )}
 
             {open && (
               <div className="overflow-x-auto">

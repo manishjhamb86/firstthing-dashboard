@@ -121,14 +121,14 @@ export function refuseOrderedDate(input: {
  * that leaks into a production build still cannot move a date: the value is
  * ignored outright unless DEMO_MODE is on.
  */
-export function resolveBackdate(
+export async function resolveBackdate(
   input: string | undefined,
   subject: string,
   mustNotPrecede: DatePredecessor[] = [],
   now: Date = new Date(),
-): Date | string | null {
+): Promise<Date | string | null> {
   if (!input) return null;
-  if (!isDemoMode()) return null;
+  if (!(await isDemoMode())) return null;
   const date = new Date(`${input}T00:00:00.000Z`);
   const refusal = refuseOrderedDate({ subject, date, now, mustNotPrecede });
   if (refusal) return refusal;

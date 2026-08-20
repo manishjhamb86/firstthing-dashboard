@@ -80,7 +80,7 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
           right under the callout that points at it. */}
       {pipeline.stage === "lead" && pipeline.authoritative && (
         <div className="mb-8">
-          <ProposalForm pipelineId={pipeline.id} demoMode={isDemoMode()} />
+          <ProposalForm pipelineId={pipeline.id} demoMode={await isDemoMode()} />
         </div>
       )}
 

@@ -13,7 +13,7 @@ export default async function NewSocietyPage() {
         title="New society"
         subtitle="Created as a prospect — minimal data, from a lead."
       />
-      <NewSocietyForm demoMode={isDemoMode()} />
+      <NewSocietyForm demoMode={await isDemoMode()} />
     </>
   );
 }

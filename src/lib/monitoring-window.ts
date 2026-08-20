@@ -17,8 +17,9 @@ export const REQUIRED_VALID_DAYS = 5;
  * the result against is untouched: a demo benchmark still has to land in
  * 60-80% to confirm, it just needs fewer days to get there.
  */
-export function requiredValidDays(): number {
-  return demoBypass("required_valid_days", { normally: REQUIRED_VALID_DAYS }) ? 1 : REQUIRED_VALID_DAYS;
+export async function requiredValidDays(): Promise<number> {
+  const bypass = await demoBypass("required_valid_days", { normally: REQUIRED_VALID_DAYS });
+  return bypass ? 1 : REQUIRED_VALID_DAYS;
 }
 
 export function startOfDayUTC(d: Date): Date {

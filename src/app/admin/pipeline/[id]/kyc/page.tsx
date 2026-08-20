@@ -13,7 +13,7 @@ import { KYC_REQUIREMENTS, kycIsSettled } from "@/lib/kyc";
 import { publicS3Url } from "@/lib/s3";
 import { KycItem } from "./kyc-item";
 import { loadDealProgress } from "@/lib/pipeline-facts";
-import { NextStepCallout } from "@/components/deal-stepper";
+import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
 
 // FEAT-024/026 — the KYC checklist for one pipeline. Read-only for any
 // internal actor who isn't PER-01 (FEAT-024-AC-4): the item components are
@@ -79,25 +79,10 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
           — the checklist reading "2 of 2 settled" in a header chip was the
           only signal that GATE-01 was cleared (user-asked 2026-08-20). */}
       {allSettled && (
-        <div
-          className="mb-6 flex flex-wrap items-center gap-3 rounded-[var(--r-md)] border p-4"
-          style={{ borderColor: "var(--ok-line)", background: "var(--ok-bg)", color: "var(--ok-fg)" }}
-        >
-          <span
-            aria-hidden
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold"
-            style={{ background: "var(--ok-fg)", color: "var(--ok-bg)" }}
-          >
-            ✓
-          </span>
-          <div className="min-w-0">
-            <p className="font-semibold">KYC complete — this step is done.</p>
-            <p className="text-sm">
-              Every document is verified or recorded as not applicable, so GATE-01 no longer holds
-              the agreement.
-            </p>
-          </div>
-        </div>
+        <StepComplete title="KYC complete — this step is done.">
+          Every document is verified or recorded as not applicable, so GATE-01 no longer holds the
+          agreement.
+        </StepComplete>
       )}
 
       {progress?.next && <NextStepCallout next={progress.next} />}

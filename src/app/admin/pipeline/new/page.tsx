@@ -31,7 +31,7 @@ export default async function NewLeadPage({
         subtitle="After a first meeting with a prospective society."
       />
       <NewLeadForm
-        demoMode={isDemoMode()}
+        demoMode={await isDemoMode()}
         societies={societies}
         salesOwners={salesOwners}
         currentUserId={session.user.id}

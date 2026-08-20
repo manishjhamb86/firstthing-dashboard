@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import type { BlockerType } from "@prisma/client";
 import { ErrorText, Field } from "@/components/ui";
+import { Modal } from "@/components/modal";
 import { uploadFileToS3 } from "@/lib/upload-to-s3";
 import { prorateFirstMonth } from "@/lib/billing-start";
 import { BLOCKER_TYPE_LABEL } from "@/lib/status-maps";
@@ -448,9 +449,26 @@ export function RaiseBlockerForm({
   const [discovered, setDiscovered] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
+  // A form nobody is filling in most of the time does not belong open under
+  // the list it adds to (user-reported 2026-08-20). It is one button now,
+  // and the form is a dialog — the same treatment the inventory's own
+  // add-line control already uses.
+  const [open, setOpen] = useState(false);
 
   return (
+    <>
+      <button type="button" className="btn-secondary btn-sm" onClick={() => setOpen(true)}>
+        Raise a blocker
+      </button>
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title="Raise a blocker"
+        description="Anything stopping the crew, or a requirement that turned out different on site."
+      >
     <form
+      id="raise-blocker-form"
       className="space-y-4"
       onSubmit={(e) => {
         e.preventDefault();
@@ -469,6 +487,7 @@ export function RaiseBlockerForm({
           else {
             setDetail("");
             setDiscovered("");
+            setOpen(false);
           }
         });
       }}
@@ -525,11 +544,18 @@ export function RaiseBlockerForm({
         )}
       </div>
 
-      <button type="submit" className="btn-primary" disabled={pending}>
-        {pending ? "Raising…" : "Raise the blocker"}
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className="btn-primary" disabled={pending}>
+          {pending ? "Raising…" : "Raise the blocker"}
+        </button>
+        <button type="button" className="btn-ghost" onClick={() => setOpen(false)} disabled={pending}>
+          Cancel
+        </button>
+      </div>
       {error && <ErrorText>{error}</ErrorText>}
     </form>
+      </Modal>
+    </>
   );
 }
 

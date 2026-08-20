@@ -282,3 +282,33 @@ export function StepHeading({
     </div>
   );
 }
+
+/**
+ * "This step is done." One component, so every step page says it the same
+ * way — the pattern was being retyped per screen and drifting
+ * (user-asked 2026-08-20: "follow the standard on every steps page").
+ *
+ * Pair it with NextStepCallout: this says the step is finished, that says
+ * where to go. A finished page with neither leaves the reader to work it out
+ * from a wall of ticks.
+ */
+export function StepComplete({ title, children }: { title: string; children?: React.ReactNode }) {
+  return (
+    <div
+      className="mb-6 flex flex-wrap items-center gap-3 rounded-[var(--r-md)] border p-4"
+      style={{ borderColor: "var(--ok-line)", background: "var(--ok-bg)", color: "var(--ok-fg)" }}
+    >
+      <span
+        aria-hidden
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold"
+        style={{ background: "var(--ok-fg)", color: "var(--ok-bg)" }}
+      >
+        ✓
+      </span>
+      <div className="min-w-0">
+        <p className="font-semibold">{title}</p>
+        {children && <p className="text-sm">{children}</p>}
+      </div>
+    </div>
+  );
+}

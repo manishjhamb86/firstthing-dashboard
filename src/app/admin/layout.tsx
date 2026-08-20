@@ -1,7 +1,7 @@
 import { resolveTheme } from "@/lib/resolve-theme";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { AppShell } from "@/components/app-shell";
-import { isDemoMode } from "@/lib/demo-mode";
+import { demoModeAvailable } from "@/lib/demo-mode";
 
 // One shell for every /admin route — the sidebar nav from 05a-theme-system
 // §3.7. This layout only decides what the nav shows; every page below it
@@ -19,13 +19,18 @@ import { isDemoMode } from "@/lib/demo-mode";
 // nothing beyond the lookup the pages below already make.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const [theme, admin] = await Promise.all([resolveTheme(), resolveAdmin()]);
+  // The env var decides whether the toggle exists at all; the account's own
+  // column decides whether it is on.
+  const demoAvailable = demoModeAvailable();
+  const demoOn = demoAvailable && admin?.demoMode === true;
   const perms = (admin?.permissions ?? []) as string[];
 
   return (
     <AppShell
       theme={theme}
       email={admin?.email ?? ""}
-      demoMode={isDemoMode()}
+      demoAvailable={demoAvailable}
+      demoMode={demoOn}
       showPipeline={perms.includes("manage_pipeline")}
       showMonitoring={perms.includes("manage_survey")}
       // The readings area is readable by anyone who can see a pipeline;

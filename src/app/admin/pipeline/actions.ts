@@ -73,7 +73,7 @@ export async function createLead(input: {
     // A society created BY this lead cannot postdate it: backdate the
     // society to the same day rather than stamping now() and then refusing
     // the lead for preceding its own society.
-    const quickCreatedAt = resolveBackdate(input.loggedOn, "The society record");
+    const quickCreatedAt = await resolveBackdate(input.loggedOn, "The society record");
     if (typeof quickCreatedAt === "string") return { error: quickCreatedAt };
     const society = await db.society.create({
       data: {
@@ -122,7 +122,7 @@ export async function createLead(input: {
     where: { id: societyId },
     select: { createdAt: true },
   });
-  const loggedAt = resolveBackdate(input.loggedOn, "The lead", [
+  const loggedAt = await resolveBackdate(input.loggedOn, "The lead", [
     { label: "the society record", date: society?.createdAt ?? null },
   ]);
   if (typeof loggedAt === "string") return { error: loggedAt };
@@ -242,7 +242,7 @@ export async function submitProposal(
 
   // The decision follows the meeting, and the survey opens on the same day
   // it is agreed — so one date orders both.
-  const decidedAt = resolveBackdate(input.decidedOn, "The proposal decision", [
+  const decidedAt = await resolveBackdate(input.decidedOn, "The proposal decision", [
     { label: "the first meeting", date: pipeline.meetingDate },
     { label: "the lead", date: pipeline.createdAt },
   ]);

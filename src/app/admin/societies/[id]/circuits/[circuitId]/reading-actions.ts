@@ -116,7 +116,7 @@ type Derived = {
 
 type Circuit = NonNullable<Awaited<ReturnType<typeof loadCircuitForReadings>>>;
 
-function deriveReview(circuit: Circuit, fileText: string): Derived | { error: string } {
+function deriveReview(circuit: Circuit, fileText: string, demoWindow: boolean): Derived | { error: string } {
   if (!circuit.meterInstalledAt) {
     return { error: "Install and validate the meter first — readings only mean something against a recorded install date." };
   }
@@ -150,7 +150,6 @@ function deriveReview(circuit: Circuit, fileText: string): Derived | { error: st
   // the same call the circuit page makes to SHOW the valid period before a
   // file is chosen — so the period on the step and the period this commit
   // enforces cannot drift apart. DEMO_MODE's horizon lives in there too.
-  const demoWindow = demoBypass("reading_window_end", { circuitId: circuit.id, kind });
   const resolved = circuitReadingWindow({
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
@@ -370,7 +369,7 @@ export async function previewCircuitReadings(
   const circuit = await loadCircuitForReadings(file.circuitId);
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
 
-  const derived = deriveReview(circuit, fileText);
+  const derived = deriveReview(circuit, fileText, await demoBypass("reading_window_end", { circuitId: circuit.id }));
   if ("error" in derived) {
     await db.rawReadingFile.update({
       where: { id: file.id },
@@ -441,7 +440,7 @@ export async function commitCircuitReadings(
   // Everything is re-derived from the file — the client's rows were never
   // authority. A decision for a day the derivation doesn't consider
   // actionable is ignored, whatever the client claimed about it.
-  const derived = deriveReview(circuit, fileText);
+  const derived = deriveReview(circuit, fileText, await demoBypass("reading_window_end", { circuitId: circuit.id }));
   if ("error" in derived) return { error: derived.error };
 
   const gate = await requireForKind(derived.kind);
@@ -899,7 +898,7 @@ export async function draftDemoReadings(input: {
   days?: number;
   savingsPct?: number;
 }): Promise<{ draft: DemoDraft } | { error: string }> {
-  if (!isDemoMode()) return { error: "Demo readings are only available while DEMO_MODE is on." };
+  if (!(await isDemoMode())) return { error: "Demo readings are only available while demo mode is on." };
 
   const circuit = await loadCircuitForReadings(input.circuitId);
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
@@ -986,7 +985,7 @@ export async function previewDemoReadings(input: {
   circuitId: string;
   days: { date: string; kWh: number }[];
 }): Promise<{ rawFileId: string; csv: string; preview: CircuitPreviewDTO } | { error: string }> {
-  if (!isDemoMode()) return { error: "Demo readings are only available while DEMO_MODE is on." };
+  if (!(await isDemoMode())) return { error: "Demo readings are only available while demo mode is on." };
 
   const circuit = await loadCircuitForReadings(input.circuitId);
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
@@ -1028,7 +1027,7 @@ export async function previewDemoReadings(input: {
     },
   });
 
-  const derived = deriveReview(circuit, csv);
+  const derived = deriveReview(circuit, csv, await demoBypass("reading_window_end", { circuitId: circuit.id }));
   if ("error" in derived) {
     await db.rawReadingFile.update({
       where: { id: file.id },

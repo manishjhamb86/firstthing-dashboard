@@ -215,7 +215,7 @@ export async function startBatch(pipelineId: string, plannedDayId: string) {
   // which is precisely what FEAT-035-AC-3 exists to prevent.
   const previous = day.project.batches.filter((b) => b.day === day.day - 1).map(toGateInput);
   const gate = evaluateDayGate({
-    ignoreDeadline: demoBypass("installation_review_deadline", { plannedDayId: day?.id }),
+    ignoreDeadline: await demoBypass("installation_review_deadline", { plannedDayId: day?.id }),
     previousBatches: previous,
     startAt: day.startAt,
     now: new Date(),
@@ -415,7 +415,7 @@ export async function skipReviewGate(pipelineId: string, blockedDayId: string, r
     previousBatches: previous,
     startAt: day.startAt,
     now: new Date(),
-    ignoreDeadline: demoBypass("installation_review_deadline", { plannedDayId: day.id }),
+    ignoreDeadline: await demoBypass("installation_review_deadline", { plannedDayId: day.id }),
   });
 
   const refusal = refuseGateSkip({

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { LayoutDashboard, Building2, Target, Activity, Gauge, Lightbulb, Users, Menu, X } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
+import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { SignOutButton } from "@/components/sign-out-button";
 import type { ThemeId } from "@/lib/theme";
 
@@ -31,11 +32,14 @@ export function AppShell({
   showCatalog,
   showUsers,
   demoMode = false,
+  demoAvailable = false,
   children,
 }: {
   theme: ThemeId;
   email: string;
   demoMode?: boolean;
+  /** DEMO_MODE is set in the environment, so the toggle may render. */
+  demoAvailable?: boolean;
   showPipeline: boolean;
   showMonitoring: boolean;
   showReadings: boolean;
@@ -89,6 +93,7 @@ export function AppShell({
 
   const identity = (
     <div className="flex items-center gap-3">
+      {demoAvailable && <DemoModeToggle on={demoMode} surface="content" />}
       <ThemeSwitcher current={theme} surface="content" />
       <div
         aria-hidden

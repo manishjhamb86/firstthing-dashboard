@@ -62,7 +62,7 @@ export async function createSociety(input: {
 
   // The first date in a backdated deal. Everything after it is ordered
   // against this one, so it only has to not be in the future.
-  const createdAt = resolveBackdate(input.createdOn, "The society record");
+  const createdAt = await resolveBackdate(input.createdOn, "The society record");
   if (typeof createdAt === "string") return { error: createdAt };
 
   const society = await db.society.create({

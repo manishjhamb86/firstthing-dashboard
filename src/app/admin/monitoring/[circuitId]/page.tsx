@@ -42,6 +42,7 @@ export default async function LiveMonitoringCircuitPage({
     (session.user.adminPermissions?.includes("manage_survey") ?? false) &&
     (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
 
+  const demoOn = await isDemoMode();
   const { circuitId } = await params;
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
@@ -118,7 +119,7 @@ export default async function LiveMonitoringCircuitPage({
     lightReplacementDate: circuit.lightReplacementDate,
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
     lastStoredDate,
-    demo: isDemoMode(),
+    demo: demoOn,
   });
   const day = (d: Date) => d.toISOString().slice(0, 10);
   const windowDTO: ReadingWindowDTO | null = window
@@ -200,7 +201,7 @@ export default async function LiveMonitoringCircuitPage({
               <CircuitReadingPanel
                 circuitId={circuit.id}
                 window={windowDTO}
-                demoMode={isDemoMode()}
+                demoMode={demoOn}
               />
             ) : (
               <p className="text-sm text-[var(--text-muted)]">

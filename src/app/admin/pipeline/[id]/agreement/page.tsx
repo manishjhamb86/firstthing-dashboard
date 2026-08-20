@@ -61,6 +61,16 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
         title="Agreement & contract"
         chip={contractStatus ? <StatusChip tone={contractStatus.tone}>{contractStatus.label}</StatusChip> : undefined}
         subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · prepared from the accepted offer`}
+        // Top right, and only once there is an agreement to print — it was
+        // buried under the execution table, where a document you may need at
+        // any point in the flow is the hardest thing to find.
+        action={
+          agreement ? (
+            <Link href={`/admin/pipeline/${pipeline.id}/agreement/print`} className="btn-secondary btn-sm">
+              Open the printable agreement
+            </Link>
+          ) : undefined
+        }
       />
 
       {!agreement ? (
@@ -108,6 +118,11 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
         </div>
       ) : (
         <div className="max-w-none space-y-6">
+          {/* The upload IS the last execution step, so it sits beside the
+              list rather than below it — user-asked 2026-08-20. Stacks back
+              to one column under lg, where side-by-side would only squeeze
+              both. */}
+          <div className="grid gap-6 lg:grid-cols-2 items-start">
           <Card className="p-5">
             <CardTitle>Execution steps</CardTitle>
             <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
@@ -174,39 +189,35 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
               </table>
             </div>
 
-            <div className="mt-4">
-              <Link href={`/admin/pipeline/${pipeline.id}/agreement/print`} className="btn-secondary btn-sm">
-                Open the printable agreement
-              </Link>
-            </div>
           </Card>
 
-          {agreement.hasDeviation && (
-            <div
-              className="rounded-[var(--r-md)] border p-4 text-sm"
-              style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
-            >
-              <strong>The signed document differs from the accepted offer.</strong>
-              <p className="mt-1">{agreement.deviationNote}</p>
-              <p className="mt-1">
-                The executed document is authoritative; this note exists so the difference is visible rather than
-                silently reconciled.
-              </p>
-            </div>
-          )}
-
-          {canEdit && !agreement.executedS3Key && (
+          {/* One column, one act: whatever the execution steps are waiting
+              for. The upload while the scan is outstanding, then activation
+              takes its place rather than reappearing at the foot of the page
+              (user-asked 2026-08-20). */}
+          {canEdit && !agreement.executedS3Key ? (
             <Card className="p-5">
               <CardTitle>Upload the executed agreement</CardTitle>
               <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
-                A hard gate — the deal cannot advance to installation without it, because installation commits
-                FirsThing&apos;s own capital.
+                A hard gate — the deal cannot advance to installation without it, because installation
+                commits FirsThing&apos;s own capital.
               </p>
               <ExecutedUploadForm pipelineId={pipeline.id} societyName={pipeline.society.name} />
             </Card>
-          )}
+          ) : canEdit && !contract ? (
+            <Card className="p-5">
+              <CardTitle>Activate the contract</CardTitle>
+              <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
+                Carries the accepted offer&apos;s terms — tolerance, revenue share, unit rate,
+                exclusions, spare stock and the per-circuit benchmark table — as version 1.
+              </p>
+              <ActivateContractForm pipelineId={pipeline.id} />
+            </Card>
+          ) : contract ? (
+            // The column carries whatever this stage is about: the upload,
+            // then the activation, then the contract it produced. Dropping
+            // the contract below left the right-hand space empty beside it.
 
-          {contract ? (
             <Card className="p-5">
               <CardTitle>Contract</CardTitle>
               <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
@@ -247,18 +258,24 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
                 stays computed against the version in force at the time.
               </p>
             </Card>
-          ) : (
-            canEdit && (
-              <Card className="p-5">
-                <CardTitle>Activate the contract</CardTitle>
-                <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
-                  Carries the accepted offer&apos;s terms — tolerance, revenue share, unit rate, exclusions, spare
-                  stock and the per-circuit benchmark table — as version 1.
-                </p>
-                <ActivateContractForm pipelineId={pipeline.id} />
-              </Card>
-            )
+          ) : null}
+          </div>
+
+          {agreement.hasDeviation && (
+            <div
+              className="rounded-[var(--r-md)] border p-4 text-sm"
+              style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+            >
+              <strong>The signed document differs from the accepted offer.</strong>
+              <p className="mt-1">{agreement.deviationNote}</p>
+              <p className="mt-1">
+                The executed document is authoritative; this note exists so the difference is visible rather than
+                silently reconciled.
+              </p>
+            </div>
           )}
+
+
         </div>
       )}
     </>

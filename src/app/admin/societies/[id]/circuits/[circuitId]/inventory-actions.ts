@@ -66,7 +66,7 @@ async function editableCircuit(circuitId: string, historical = false): Promise<E
   // protecting nothing. Such a line comes through explicitly marked
   // historical, so the reconstruction is visible in the data rather than
   // indistinguishable from a line captured on site.
-  if (historical && !isDemoMode()) {
+  if (historical && !(await isDemoMode())) {
     return {
       error:
         "Backfilling a past record is only available in demo mode. Contact an administrator to change a locked inventory.",

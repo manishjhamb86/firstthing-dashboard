@@ -18,7 +18,7 @@ import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
 import { StepSection } from "@/components/step-section";
-import { NextStepCallout } from "@/components/deal-stepper";
+import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
 import { CircuitReadingPanel, type ReadingWindowDTO } from "./circuit-reading-panel";
@@ -86,7 +86,7 @@ export default async function CircuitDetailPage({
     session.user.adminPermissions?.includes("manage_pipeline");
   if (!canView) redirect("/admin/societies");
   const canEdit = session.user.adminPermissions?.includes("manage_survey") ?? false;
-  const demoMode = isDemoMode();
+  const demoMode = await isDemoMode();
   const canOverride =
     (session.user.adminPermissions?.includes("manage_survey") ?? false) &&
     (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
@@ -355,25 +355,10 @@ export default async function CircuitDetailPage({
         (dealNext ? (
           <NextStepCallout next={dealNext} />
         ) : (
-          <div
-            className="mb-8 flex flex-wrap items-center gap-3 rounded-[var(--r-md)] border p-4"
-            style={{ borderColor: "var(--ok-line)", background: "var(--ok-bg)", color: "var(--ok-fg)" }}
-          >
-            <span
-              aria-hidden
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-base font-bold"
-              style={{ background: "var(--ok-fg)", color: "var(--ok-bg)" }}
-            >
-              ✓
-            </span>
-            <div className="min-w-0">
-              <p className="font-semibold">Commissioning complete — nothing left to do here.</p>
-              <p className="text-sm">
-                Every step on this circuit is done. The records below are folded; open any of them
-                to check a figure.
-              </p>
-            </div>
-          </div>
+          <StepComplete title="Commissioning complete — nothing left to do here.">
+            Every step on this circuit is done. The records below are folded; open any of them to
+            check a figure.
+          </StepComplete>
         ))}
 
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-8 max-w-none">

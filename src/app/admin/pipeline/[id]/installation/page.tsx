@@ -3,6 +3,8 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { demoBypass } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { loadDealProgress } from "@/lib/pipeline-facts";
+import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import {
   BATCH_STATE,
@@ -216,10 +218,14 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
 
   const now = new Date();
   // One evaluation of the flag per render, shared by every day's gate.
-  const demoDeadline = demoBypass("installation_review_deadline", { pipelineId: id });
+  const demoDeadline = await demoBypass("installation_review_deadline", { pipelineId: id });
   const totalInstalled = project.batches.reduce((n, b) => n + b.installedCount, 0);
   const totalSkipped = project.batches.reduce((n, b) => n + b.skippedCount, 0);
   const openBlockers = project.blockers.filter((b) => b.status === "open");
+  // Same standard as every other step page: say plainly that it is finished,
+  // then point onward.
+  const installationDone = !!project.certificate;
+  const afterInstall = installationDone ? (await loadDealProgress(pipeline.id))?.next ?? null : null;
 
   const blocks = completionBlockers({
     batches: gateInputs(project.batches),
@@ -231,6 +237,18 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   return (
     <>
       {header}
+
+      {installationDone && (
+        <StepComplete title="Installation complete — this step is done.">
+          The completion certificate is signed
+          {project.certificate?.billingStartDate
+            ? `, and billing started ${project.certificate.billingStartDate
+                .toISOString()
+                .slice(0, 10)} — the day after (CON-22).`
+            : "."}
+        </StepComplete>
+      )}
+      {afterInstall && <NextStepCallout next={afterInstall} />}
 
       <div className="max-w-none space-y-6">
         <Card className="p-5">
@@ -431,7 +449,16 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
 
         {/* ── FEAT-036 blockers ── */}
         <Card className="p-5">
-          <CardTitle>Blockers & requirement changes</CardTitle>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-4">
+            <CardTitle className="mb-0">Blockers &amp; requirement changes</CardTitle>
+            {isField && (
+              <RaiseBlockerForm
+                pipelineId={pipeline.id}
+                areas={[...new Set(project.plannedDays.map((d) => d.areaKey))]}
+                batches={project.batches.map((b) => ({ id: b.id, label: `Day ${b.day} · ${b.areaKey}` }))}
+              />
+            )}
+          </div>
           {project.blockers.length === 0 ? (
             <EmptyState title="No blockers">
               Installation is running to plan — day {new Set(project.batches.map((b) => b.day)).size} of{" "}
@@ -492,16 +519,6 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
             </div>
           )}
 
-          {isField && (
-            <div className="mt-6 border-t border-[var(--border)] pt-5">
-              <CardTitle>Raise a blocker</CardTitle>
-              <RaiseBlockerForm
-                pipelineId={pipeline.id}
-                areas={[...new Set(project.plannedDays.map((d) => d.areaKey))]}
-                batches={project.batches.map((b) => ({ id: b.id, label: `Day ${b.day} · ${b.areaKey}` }))}
-              />
-            </div>
-          )}
         </Card>
 
         {/* ── FEAT-037 completion ── */}

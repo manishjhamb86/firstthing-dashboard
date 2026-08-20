@@ -32,7 +32,7 @@ export const resolveAdmin = cache(async () => {
 
   const admin = await db.adminUser.findUnique({
     where: { id: session.user.id },
-    select: { id: true, email: true, name: true, permissions: true, isActive: true, deletedAt: true },
+    select: { id: true, email: true, name: true, permissions: true, isActive: true, deletedAt: true, demoMode: true },
   });
 
   // A removed account's live session stops working on its very next request,

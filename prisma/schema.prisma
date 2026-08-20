@@ -367,6 +367,11 @@ model AdminUser {
   name            String?
   isActive        Boolean           @default(true) @map("is_active")
   permissions     AdminPermission[]
+  // DEMO_MODE's per-account switch. The env var is the master gate — with
+  // it unset this column can never turn anything on, and no toggle renders.
+  // Default false so a missing choice reads as normal mode.
+  demoMode Boolean @default(false) @map("demo_mode")
+
   themePreference Theme?            @map("theme_preference")
   createdById     String?           @map("created_by_id")
   createdAt       DateTime          @default(now()) @map("created_at")

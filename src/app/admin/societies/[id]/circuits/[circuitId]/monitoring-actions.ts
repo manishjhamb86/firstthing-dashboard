@@ -172,7 +172,7 @@ async function applyCommissioningReading(
   // The window completes at the required day count, which DEMO_MODE lowers
   // to 1 — the average is taken over however many that is, so the figure
   // still comes from real recorded days, just fewer of them.
-  const needed = requiredValidDays();
+  const needed = await requiredValidDays();
   if (progress.validCount >= needed) {
     const average = averageOfFirstValid(progress.readings, needed);
 

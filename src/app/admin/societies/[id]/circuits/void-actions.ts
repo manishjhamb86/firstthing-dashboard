@@ -109,7 +109,7 @@ export async function voidCircuit(circuitId: string, reason: string): Promise<Vo
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits`);
   revalidatePath(`/admin/societies/${circuit.societyId}`);
   if (circuit.siteSurveyId) revalidatePath("/admin/pipeline");
-  revalidatePath("/admin/monitoring");
+  revalidatePath("/admin/demo-monitoring");
   revalidatePath("/admin");
   return {};
 }
@@ -149,7 +149,7 @@ export async function restoreCircuit(circuitId: string): Promise<VoidCircuitResu
   logger.info("circuit.restored", { actorId: admin.id, circuitId, societyId: circuit.societyId });
 
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits`);
-  revalidatePath("/admin/monitoring");
+  revalidatePath("/admin/demo-monitoring");
   revalidatePath("/admin");
   return {};
 }

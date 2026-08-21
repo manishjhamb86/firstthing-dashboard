@@ -860,7 +860,7 @@ export default async function CircuitDetailPage({
                   installationCertificateSigned: installationSignedOff,
                 }) === null ? (
                   <>
-                    <Link href={`/admin/monitoring/${circuit.id}`} className="underline font-medium">
+                    <Link href={`/admin/live-monitoring/${circuit.id}`} className="underline font-medium">
                       Live monitoring →
                     </Link>{" "}
                     <span className="text-[var(--text-muted)]">

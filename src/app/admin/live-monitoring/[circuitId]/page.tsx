@@ -143,7 +143,7 @@ export default async function LiveMonitoringCircuitPage({
   return (
     <>
       <PageHeader
-        backHref="/admin/monitoring"
+        backHref="/admin/live-monitoring"
         title={circuit.location || circuit.lightType}
         chip={
           blocker ? (

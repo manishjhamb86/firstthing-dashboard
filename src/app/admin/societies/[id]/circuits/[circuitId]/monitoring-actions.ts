@@ -423,7 +423,7 @@ export async function escalateOutOfBandResult(circuitId: string) {
   });
 
   await revalidateCircuit(circuitId);
-  revalidatePath("/admin/monitoring");
+  revalidatePath("/admin/demo-monitoring");
   return {};
 }
 

@@ -104,6 +104,6 @@ export async function resolveDemoResultReview(
   });
 
   revalidatePath(`/admin/societies/${review.circuit.societyId}/circuits/${review.circuitId}`);
-  revalidatePath("/admin/monitoring");
+  revalidatePath("/admin/demo-monitoring");
   return {};
 }

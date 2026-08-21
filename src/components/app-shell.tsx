@@ -3,7 +3,18 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, Target, Activity, Gauge, Lightbulb, Users, Menu, X } from "lucide-react";
+import {
+  LayoutDashboard,
+  Building2,
+  Target,
+  Activity,
+  SignalHigh,
+  Gauge,
+  Lightbulb,
+  Users,
+  Menu,
+  X,
+} from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
@@ -54,7 +65,14 @@ export function AppShell({
     { href: "/admin", label: "Portfolio", icon: LayoutDashboard, exact: true },
     { href: "/admin/societies", label: "Societies", icon: Building2 },
     ...(showPipeline ? [{ href: "/admin/pipeline", label: "Leads & pipeline", icon: Target }] : []),
-    ...(showMonitoring ? [{ href: "/admin/monitoring", label: "Monitoring", icon: Activity }] : []),
+    // Two tabs, not one: a circuit chasing a benchmark and a society holding
+    // one are different questions with different cadences (2026-08-21).
+    ...(showMonitoring
+      ? [{ href: "/admin/demo-monitoring", label: "Demo monitoring", icon: Activity }]
+      : []),
+    ...(showMonitoring
+      ? [{ href: "/admin/live-monitoring", label: "Live monitoring", icon: SignalHigh }]
+      : []),
     ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
     ...(showCatalog ? [{ href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb }] : []),
     ...(showUsers ? [{ href: "/admin/users", label: "Admin users", icon: Users }] : []),

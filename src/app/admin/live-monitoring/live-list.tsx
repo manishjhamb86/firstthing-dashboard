@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
 import Link from "next/link";
 import { Card, EmptyState, StatusChip } from "@/components/ui";
@@ -84,7 +85,7 @@ export function LiveList({
           there was only one made the whole feature look absent on a
           deployment that happens to run one line — which is exactly what
           stage looks like (user-reported 2026-08-21). */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
+      <ListToolbar>
         <SearchInput
           value={query}
           onChange={setQuery}
@@ -127,7 +128,7 @@ export function LiveList({
             Clear
           </button>
         )}
-      </div>
+      </ListToolbar>
 
       {filtered.length === 0 ? (
         <EmptyState

@@ -52,7 +52,12 @@ export function PageHeader({
         </div>
       )}
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-        <div>
+        {/* min-w-0 flex-1: without it a long subtitle makes the title column
+            wider than the row and the action wraps beneath it — which is how
+            the device catalog's "Add device" ended up below the heading while
+            every other page's sat top-right. The subtitle wraps inside its
+            own column now. */}
+        <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-[22px] font-bold leading-tight tracking-[-0.018em]">{title}</h1>
             {chip}

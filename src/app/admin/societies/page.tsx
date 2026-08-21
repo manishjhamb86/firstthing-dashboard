@@ -74,9 +74,22 @@ export default async function SocietiesPage({
         }
       />
 
-      {/* Filter row — a GET form, so a filtered view is a shareable URL and
-          the back button behaves. */}
-      <form method="get" className="mb-5 flex flex-wrap items-center gap-x-2 gap-y-3">
+      {/* A GET form, so a filtered view is a shareable URL and the back
+          button behaves — the one justified difference from the other
+          listings, which filter a list already on the page. The ORDER and
+          the controls match them: search first, filters after. */}
+      <form method="get" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+        {activeTab !== "all" && <input type="hidden" name="status" value={activeTab} />}
+        <SearchInput
+          name="q"
+          defaultValue={query}
+          placeholder="Search name or location"
+          label="Search societies"
+          className="w-full sm:w-72"
+        />
+        <button type="submit" className="btn-secondary">
+          Search
+        </button>
         <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by status">
           {STATUS_TABS.map((tab) => {
             const isActive = tab === activeTab;
@@ -99,19 +112,6 @@ export default async function SocietiesPage({
               </Link>
             );
           })}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          {activeTab !== "all" && <input type="hidden" name="status" value={activeTab} />}
-          <SearchInput
-            name="q"
-            defaultValue={query}
-            placeholder="Search name or location"
-            label="Search societies"
-            className="w-full sm:w-64"
-          />
-          <button type="submit" className="btn-secondary">
-            Search
-          </button>
         </div>
       </form>
 

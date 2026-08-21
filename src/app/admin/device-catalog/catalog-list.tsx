@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
 import { ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
@@ -210,9 +212,16 @@ function DeviceForm({
 }
 
 export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: boolean }) {
+  // The "Add device" button lives in the page header with every other page's
+  // primary action, so it cannot hold this component's state — it sets ?new=1
+  // instead. A dialog opened by the URL also closes on Back, which is what
+  // people expect of one.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const creatingFromUrl = searchParams.get("new") === "1";
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<CatalogRow | null>(null);
-  const [creating, setCreating] = useState(false);
+
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -243,19 +252,16 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      {/* Search leads the toolbar; the primary action lives in the page
+          header with every other page's. */}
+      <ListToolbar>
         <SearchInput
           value={q}
           onChange={setQ}
           placeholder="Search the catalog…"
           label="Search the catalog"
         />
-        {canEdit && (
-          <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
-            Add device
-          </button>
-        )}
-      </div>
+      </ListToolbar>
 
       <div className="card overflow-x-auto">
         <table className="tbl">
@@ -368,7 +374,14 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
         </details>
       )}
 
-      {creating && <DeviceForm open onClose={() => setCreating(false)} editing={null} replacements={replacements} />}
+      {creatingFromUrl && canEdit && (
+        <DeviceForm
+          open
+          onClose={() => router.replace("/admin/device-catalog")}
+          editing={null}
+          replacements={replacements}
+        />
+      )}
       {editing && (
         <DeviceForm key={editing.id} open onClose={() => setEditing(null)} editing={editing} replacements={replacements} />
       )}

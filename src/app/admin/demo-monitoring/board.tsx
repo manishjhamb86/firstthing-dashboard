@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import Link from "next/link";
@@ -92,11 +93,10 @@ export function MonitoringBoard({
     .sort((a, b) => a.rank - b.rank || a.society.localeCompare(b.society));
 
   return (
-    <div className="card overflow-hidden">
-      <div
-        className="flex flex-wrap items-center gap-2 border-b p-3"
-        style={{ borderColor: "var(--border)", background: "var(--surface-sunken)" }}
-      >
+    <>
+      {/* Outside the card, like every other listing's toolbar — it was the
+          only page that buried its filters in the table's own header. */}
+      <ListToolbar>
         <SearchInput
           value={query}
           onChange={setQuery}
@@ -152,8 +152,9 @@ export function MonitoringBoard({
             </button>
           );
         })}
-      </div>
+      </ListToolbar>
 
+      <div className="card overflow-hidden">
       {shown.length === 0 ? (
         <div className="p-5">
           <EmptyState
@@ -297,6 +298,7 @@ export function MonitoringBoard({
         </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

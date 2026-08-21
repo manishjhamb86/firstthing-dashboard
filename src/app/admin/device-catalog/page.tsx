@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { Stat, StatRow } from "@/components/list-toolbar";
 import { PageHeader } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { CatalogList } from "./catalog-list";
@@ -32,9 +34,16 @@ export default async function DeviceCatalogPage() {
       <PageHeader
         title="Device catalog"
         subtitle="Every device the inventory and replacement dropdowns offer. An original maps to the replacements compatible with it — that mapping is all an installer ever sees."
+        action={
+          canEdit ? (
+            <Link href="/admin/device-catalog?new=1" className="btn-primary">
+              Add device
+            </Link>
+          ) : undefined
+        }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <StatRow>
         {[
           {
             label: "To be replaced",
@@ -57,13 +66,9 @@ export default async function DeviceCatalogPage() {
             detail: "hidden from dropdowns",
           },
         ].map((f) => (
-          <div key={f.label} className="card p-4">
-            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
-            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
-            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
-          </div>
+          <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />
         ))}
-      </div>
+      </StatRow>
 
       {unmapped.length > 0 && (
         <p

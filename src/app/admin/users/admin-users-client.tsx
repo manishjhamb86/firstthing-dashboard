@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
 import type { AdminPermission } from "@prisma/client";
 import { ErrorText, Field, StatusChip } from "@/components/ui";
@@ -162,7 +164,12 @@ function matchesQuery(row: AdminListRow, q: string, labels: Map<string, string>)
 export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfId: string }) {
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<AdminListRow | null>(null);
-  const [creating, setCreating] = useState(false);
+  // The Add button is in the page header with every other page's, so it
+  // signals through the URL rather than this component's state.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const creating = searchParams.get("new") === "1";
+  const closeCreate = () => router.replace("/admin/users");
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -184,17 +191,14 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <ListToolbar>
         <SearchInput
           value={q}
           onChange={setQ}
           placeholder="Search name, email or permission…"
           label="Search admin accounts"
         />
-        <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
-          Add admin
-        </button>
-      </div>
+      </ListToolbar>
 
       <div className="card overflow-x-auto">
         <table className="tbl">
@@ -311,7 +315,7 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
         </details>
       )}
 
-      {creating && <AdminForm open onClose={() => setCreating(false)} editing={null} />}
+      {creating && <AdminForm open onClose={() => closeCreate()} editing={null} />}
       {editing && <AdminForm key={editing.id} open onClose={() => setEditing(null)} editing={editing} />}
     </>
   );

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { Stat, StatRow } from "@/components/list-toolbar";
 import { PageHeader, StatusChip } from "@/components/ui";
 import { MonitoringBoard, type BoardRow } from "./board";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
@@ -240,7 +241,7 @@ export default async function MonitoringDashboardPage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 mb-6 max-w-xl">
+      <StatRow>
         {[
           {
             label: "Awaiting today's reading",
@@ -253,13 +254,9 @@ export default async function MonitoringDashboardPage() {
             detail: anomaliesOpen === 0 ? "no window held" : "window held until fixed",
           },
         ].map((f) => (
-          <div key={f.label} className="card p-4">
-            <p className="lbl mb-1.5">{f.label}</p>
-            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
-            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
-          </div>
+          <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />
         ))}
-      </div>
+      </StatRow>
 
       <MonitoringBoard rows={rows} serviceLines={[...new Set(rows.map((r) => r.serviceLine))].sort()} />
 

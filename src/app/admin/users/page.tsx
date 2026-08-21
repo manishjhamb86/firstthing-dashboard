@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Stat, StatRow } from "@/components/list-toolbar";
 import { AdminUsersClient } from "./admin-users-client";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
@@ -34,10 +36,17 @@ export default async function UsersPage() {
             <StatusChip tone="warn">One admin manager</StatusChip>
           ) : undefined
         }
+        action={
+          canManageAdmins ? (
+            <Link href="/admin/users?new=1" className="btn-primary">
+              Add admin
+            </Link>
+          ) : undefined
+        }
       />
 
       {canManageAdmins && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6 max-w-none">
+        <StatRow>
           {[
             { label: "Admin accounts", value: liveAdmins.length, detail: `${active.length} active` },
             {
@@ -56,13 +65,9 @@ export default async function UsersPage() {
               detail: liveAdmins.length === active.length ? "none" : "cannot sign in",
             },
           ].map((f) => (
-            <div key={f.label} className="card p-4">
-              <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
-              <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
-              <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
-            </div>
+            <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />
           ))}
-        </div>
+        </StatRow>
       )}
 
       {!canManageAdmins ? (

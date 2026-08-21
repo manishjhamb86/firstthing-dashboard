@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/demo-mode";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, EmptyState, PageHeader, PageRibbon, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { LoadValidationForm } from "./load-validation-form";
 import { GatePassForm } from "./gate-pass-form";
@@ -339,6 +339,19 @@ export default async function CircuitDetailPage({
 
   return (
     <>
+      {/* A removed circuit stays reachable by link — saying nothing would
+          make the page read as a live circuit that has simply gone missing
+          from every list. It has to lead the page: below the step map, a
+          reader has already spent the page believing the circuit is live. */}
+      {circuit.voidedAt && (
+        <PageRibbon tone="bad">
+          This circuit was removed by {circuit.voidedBy?.name ?? circuit.voidedBy?.email ?? "—"} on{" "}
+          <span className="num">{circuit.voidedAt.toISOString().slice(0, 10)}</span> — {circuit.voidReason}.
+          It is excluded from the registry, the monitoring board and every billing run. The record is kept,
+          and the operations lead can restore it from the registry.
+        </PageRibbon>
+      )}
+
       <PageHeader
         backHref={`/admin/societies/${id}/circuits`}
         title={circuit.location || circuit.lightType}
@@ -405,21 +418,6 @@ export default async function CircuitDetailPage({
           </div>
         ))}
       </div>
-
-      {/* A removed circuit stays reachable by link — saying nothing would
-          make the page read as a live circuit that has simply gone missing
-          from every list. */}
-      {circuit.voidedAt && (
-        <div
-          className="max-w-none rounded-[var(--r-md)] border p-4 text-sm mb-8"
-          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
-        >
-          This circuit was removed by {circuit.voidedBy?.name ?? circuit.voidedBy?.email ?? "—"} on{" "}
-          <span className="num">{circuit.voidedAt.toISOString().slice(0, 10)}</span> — {circuit.voidReason}.
-          It is excluded from the registry, the monitoring board and every billing run. The record is kept,
-          and the operations lead can restore it from the registry.
-        </div>
-      )}
 
       {/* CON-45 — what hangs off this circuit, and the theoretical daily
           figure every pre-installation reading is judged against. Editable

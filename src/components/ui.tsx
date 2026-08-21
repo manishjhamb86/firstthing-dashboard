@@ -122,6 +122,46 @@ export function ErrorText({ children }: { children: ReactNode }) {
   );
 }
 
+// Page ribbon — a page-level message, flush at the top of the content
+// column. This is where warnings and errors belong (the user's call,
+// 2026-08-21): one strip, at the top, in the place the eye already checks,
+// rather than a coloured paragraph wherever in the page it was authored.
+//
+// Render it as the FIRST element of the page — PageHeader carries its own
+// back control, so nothing needs to sit above it. Placed lower it still
+// renders, it just does not pull flush.
+const RIBBON_TONE: Record<string, { bg: string; fg: string; line: string }> = {
+  warn: { bg: "var(--warn-bg)", fg: "var(--warn-fg)", line: "var(--warn-line)" },
+  bad: { bg: "var(--bad-bg)", fg: "var(--bad-fg)", line: "var(--bad-line)" },
+  info: { bg: "var(--info-bg)", fg: "var(--info-fg)", line: "var(--info-line)" },
+  neutral: { bg: "var(--neu-bg)", fg: "var(--neu-fg)", line: "var(--neu-line)" },
+};
+
+export function PageRibbon({
+  tone = "warn",
+  action,
+  children,
+}: {
+  tone?: keyof typeof RIBBON_TONE;
+  /** an inline control the message itself offers — approve, restore, fix */
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  const t = RIBBON_TONE[tone] ?? RIBBON_TONE.warn;
+  return (
+    <div
+      className="page-ribbon flex flex-wrap items-center justify-between gap-x-6 gap-y-2"
+      style={{ background: t.bg, color: t.fg, borderColor: t.line }}
+      // A warning is an advisory, not an interruption — role="status" so a
+      // screen reader picks it up without stealing focus mid-task.
+      role="status"
+    >
+      <div className="min-w-0">{children}</div>
+      {action && <div className="shrink-0">{action}</div>}
+    </div>
+  );
+}
+
 // KPI tile — the admin-template signature: a tinted icon bubble beside the
 // figure. Icon optional so existing call sites keep working; the figure
 // stays in the data face (tabular, comparable down a column).

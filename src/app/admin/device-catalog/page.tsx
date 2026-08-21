@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Stat, StatRow } from "@/components/list-toolbar";
-import { PageHeader } from "@/components/ui";
+import { PageHeader, PageRibbon } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { CatalogList } from "./catalog-list";
 
@@ -31,6 +31,18 @@ export default async function DeviceCatalogPage() {
 
   return (
     <>
+      {/* Top of the page, not between the stats and the table — this is
+          about the catalog as a whole, and where it sat it read as a
+          caption for whatever followed it. */}
+      {unmapped.length > 0 && (
+        <PageRibbon>
+          {unmapped.length === 1 ? "One active device has" : `${unmapped.length} active devices have`} no
+          compatible replacement mapped: <strong>{unmapped.map((t) => t.name).join(", ")}</strong>. A circuit
+          carrying {unmapped.length === 1 ? "it" : "them"} cannot have its replacement recorded at
+          installation. {unmapped.length === 1 ? "It is" : "They are"} marked in the list below.
+        </PageRibbon>
+      )}
+
       <PageHeader
         title="Device catalog"
         subtitle="Every device the inventory and replacement dropdowns offer. An original maps to the replacements compatible with it — that mapping is all an installer ever sees."
@@ -69,18 +81,6 @@ export default async function DeviceCatalogPage() {
           <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />
         ))}
       </StatRow>
-
-      {unmapped.length > 0 && (
-        <p
-          className="mb-6 rounded-[var(--r-sm)] border p-3 text-sm"
-          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
-        >
-          {unmapped.length === 1 ? "One active device has" : `${unmapped.length} active devices have`} no
-          compatible replacement mapped: {unmapped.map((t) => t.name).join(", ")}. A circuit carrying{" "}
-          {unmapped.length === 1 ? "it" : "them"} cannot have its replacement recorded at installation.{" "}
-          {unmapped.length === 1 ? "It is" : "They are"} marked in the list below.
-        </p>
-      )}
 
       <CatalogList
         canEdit={canEdit}

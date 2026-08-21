@@ -1,7 +1,7 @@
 import { isDemoMode } from "@/lib/demo-mode";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, PageHeader, PageRibbon, StatusChip } from "@/components/ui";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
@@ -46,6 +46,22 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
 
   return (
     <>
+      {/* The whole deal is frozen behind this, so it leads the page rather
+          than sitting under the header competing with the step map. */}
+      {!pipeline.authoritative && (
+        <PageRibbon
+          action={
+            session.user.id === pipeline.salesOwnerId ? (
+              <ApproveLeadButton pipelineId={pipeline.id} />
+            ) : undefined
+          }
+        >
+          Logged by {pipeline.loggedBy.name ?? pipeline.loggedBy.email} on{" "}
+          {pipeline.salesOwner.name ?? pipeline.salesOwner.email}&apos;s behalf — pending their approval. It
+          can&apos;t advance until they approve it.
+        </PageRibbon>
+      )}
+
       <PageHeader
         backHref="/admin/pipeline"
         title={pipeline.society.name}
@@ -54,24 +70,6 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
         chip={<StatusChip tone={progress.phase.tone}>{progress.phase.label}</StatusChip>}
         subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${pipeline.society.location}`}
       />
-
-      {!pipeline.authoritative && (
-        <div
-          className="max-w-xl mb-6 rounded-[var(--r-md)] border p-4 text-sm"
-          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
-        >
-          <p>
-            Logged by {pipeline.loggedBy.name ?? pipeline.loggedBy.email} on{" "}
-            {pipeline.salesOwner.name ?? pipeline.salesOwner.email}&apos;s behalf — pending their approval. It
-            can&apos;t advance until they approve it.
-          </p>
-          {session.user.id === pipeline.salesOwnerId && (
-            <div className="mt-3">
-              <ApproveLeadButton pipelineId={pipeline.id} />
-            </div>
-          )}
-        </div>
-      )}
 
       {/* The one thing the operator came here to learn: what to do now. */}
       {progress.next && <NextStepCallout next={progress.next} />}

@@ -808,3 +808,45 @@ textarea.field {
     box-shadow: 0 0 0 2px var(--warn-line);
   }
 }
+
+/* ── Page ribbon ─────────────────────────────────────────────────────────
+   The message slot at the very top of the content column — the strip the
+   demo banner used to occupy. A warning about the WHOLE page belongs here,
+   flush under the header, rather than wherever it happened to be authored:
+   the device catalog's unmapped-device warning sat between the stat row and
+   the table and read as a caption for the table.
+
+   The negative margin cancels the content container's own padding so this
+   reads as a bar, not a card. That padding is Tailwind's p-5 sm:p-8 on the
+   container — DELIBERATELY still Tailwind's, and the values are repeated
+   here rather than shared through a custom property. A first cut did share
+   one (--page-pad, set on the container), which meant the page's padding
+   and the ribbon's breakout were two rules that had to agree: load one and
+   not the other and every page loses its padding while the ribbon keeps
+   its offset. Repeating two numbers inside a single rule is the cheaper
+   failure mode — either the whole rule applies or none of it does.
+
+   The pull-up is scoped to :first-child, so a ribbon placed further down
+   stays where it was put instead of climbing over what is above it. */
+.page-ribbon {
+  margin-left: -1.25rem;
+  margin-right: -1.25rem;
+  margin-bottom: 1.75rem;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.page-ribbon:first-child {
+  margin-top: -1.25rem;
+}
+@media (min-width: 640px) {
+  .page-ribbon {
+    margin-left: -2rem;
+    margin-right: -2rem;
+    padding: 0.85rem 2rem;
+  }
+  .page-ribbon:first-child {
+    margin-top: -2rem;
+  }
+}

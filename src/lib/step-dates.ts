@@ -1,6 +1,3 @@
-import { isDemoMode } from "./demo-mode";
-import { logger } from "./logger";
-
 /**
  * Relative ordering for a circuit's commissioning dates.
  *
@@ -111,27 +108,4 @@ export function refuseOrderedDate(input: {
     }
   }
   return null;
-}
-
-/**
- * Resolves a demo-mode backdate input into a Date, an error string, or null
- * for "use now()".
- *
- * The demo gate lives HERE rather than at each call site, so a form field
- * that leaks into a production build still cannot move a date: the value is
- * ignored outright unless DEMO_MODE is on.
- */
-export async function resolveBackdate(
-  input: string | undefined,
-  subject: string,
-  mustNotPrecede: DatePredecessor[] = [],
-  now: Date = new Date(),
-): Promise<Date | string | null> {
-  if (!input) return null;
-  if (!(await isDemoMode())) return null;
-  const date = new Date(`${input}T00:00:00.000Z`);
-  const refusal = refuseOrderedDate({ subject, date, now, mustNotPrecede });
-  if (refusal) return refusal;
-  logger.warn("demo.backdated", { subject, date: date.toISOString().slice(0, 10) });
-  return date;
 }

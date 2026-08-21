@@ -10,6 +10,13 @@ import { setDemoMode } from "@/app/demo-mode-actions";
  * Rendered only where DEMO_MODE is set in the environment — on any other
  * deployment the control does not exist, and the Server Action refuses
  * regardless. Both switches must be on for a single gate to be bypassed.
+ *
+ * While it is ON this is the ONLY thing on screen saying so: the page-wide
+ * ribbon was removed (2026-08-21) because a second amber bar above whatever
+ * the page itself was warning about is one too many. So it pulses — gently,
+ * and not at all under prefers-reduced-motion, where the amber fill and the
+ * word DEMO carry it instead. A screenshot still shows the mode it was
+ * taken in, which is the property the ribbon existed for.
  */
 export function DemoModeToggle({ on, surface }: { on: boolean; surface: "chrome" | "content" }) {
   const router = useRouter();
@@ -35,7 +42,9 @@ export function DemoModeToggle({ on, surface }: { on: boolean; surface: "chrome"
           router.refresh();
         })
       }
-      className="inline-flex items-center gap-2 rounded-[var(--r-pill)] border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors"
+      className={`demo-toggle inline-flex items-center gap-2 rounded-[var(--r-pill)] border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.04em] transition-colors${
+        on ? " demo-toggle-on" : ""
+      }`}
       style={{
         borderColor: on ? "var(--warn-line)" : "var(--border)",
         background: on ? "var(--warn-bg)" : "transparent",

@@ -9,7 +9,7 @@ import { Field } from "@/components/ui";
  * a society formed in January, a lead logged in February, a survey in March
  * — not a way to skip the ordering between them. The server refuses a date
  * that is in the future or that precedes something which must already have
- * happened, in both modes (src/lib/step-dates.ts), and ignores this field
+ * happened, in both modes (src/lib/step-dates.ts), gates it in src/lib/backdate.ts, and ignores this field
  * entirely unless DEMO_MODE is on. So this is a convenience, never the gate.
  */
 export function BackdateField({

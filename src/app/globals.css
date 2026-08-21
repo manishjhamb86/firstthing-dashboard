@@ -784,3 +784,27 @@ textarea.field {
   background: var(--surface-active);
   color: var(--text);
 }
+
+/* The demo switch is the only remaining signal that date and window checks
+   are being bypassed, so while it is on it pulses. Gently: a persistent hard
+   blink is an accessibility problem, and this sits in the header of every
+   page. Motion is dropped entirely for anyone who has asked for less of it —
+   the amber fill and the word DEMO carry the state on their own. */
+@keyframes demo-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--warn-line);
+  }
+  50% {
+    box-shadow: 0 0 0 4px transparent;
+  }
+}
+.demo-toggle-on {
+  animation: demo-pulse 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .demo-toggle-on {
+    animation: none;
+    box-shadow: 0 0 0 2px var(--warn-line);
+  }
+}

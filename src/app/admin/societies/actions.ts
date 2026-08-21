@@ -6,7 +6,7 @@ import type { SocietyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { resolveBackdate } from "@/lib/step-dates";
+import { resolveBackdate } from "@/lib/backdate";
 
 // FEAT-085: society record & lifecycle. A society starts as a `prospect`
 // (FEAT-085-AC-1: "created from a lead, minimal data") and moves through

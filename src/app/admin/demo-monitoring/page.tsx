@@ -143,6 +143,7 @@ export default async function MonitoringDashboardPage() {
       href: `/admin/societies/${r.circuit.societyId}/circuits/${r.circuit.id}`,
       society: r.circuit.society.name,
       circuit: r.circuit.location || r.circuit.lightType,
+      serviceLine: r.circuit.serviceLine,
       group: "review" as const,
       stageLabel: u.label,
       // A repeat failure sorts above an overdue first attempt, which sorts
@@ -161,6 +162,7 @@ export default async function MonitoringDashboardPage() {
       href: `/admin/societies/${r.circuit.societyId}/circuits/${r.circuit.id}`,
       society: r.circuit.society.name,
       circuit: r.circuit.location || r.circuit.lightType,
+      serviceLine: r.circuit.serviceLine,
       group: "pre" as const,
       stageLabel: "Pre-install window",
       rank: r.pendingAnomaly ? 1 : r.loggedToday ? 3 : 2,
@@ -183,6 +185,7 @@ export default async function MonitoringDashboardPage() {
         href: `/admin/societies/${r.circuit.societyId}/circuits/${r.circuit.id}`,
         society: r.circuit.society.name,
         circuit: r.circuit.location || r.circuit.lightType,
+        serviceLine: r.circuit.serviceLine,
         group: "post" as const,
         stageLabel: "Post-install window",
         rank: r.pendingAnomaly ? 1 : r.loggedToday ? 3 : 2,
@@ -205,6 +208,7 @@ export default async function MonitoringDashboardPage() {
       href: `/admin/societies/${c.societyId}/circuits/${c.id}`,
       society: c.society.name,
       circuit: c.location || c.lightType,
+      serviceLine: c.serviceLine,
       group: "resolved" as const,
       stageLabel: c.state === "benchmark_confirmed" ? "Benchmark confirmed" : "Sent to review",
       rank: 4,
@@ -257,7 +261,7 @@ export default async function MonitoringDashboardPage() {
         ))}
       </div>
 
-      <MonitoringBoard rows={rows} />
+      <MonitoringBoard rows={rows} serviceLines={[...new Set(rows.map((r) => r.serviceLine))].sort()} />
 
     </>
   );

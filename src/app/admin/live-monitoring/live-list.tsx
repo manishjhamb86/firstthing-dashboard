@@ -46,19 +46,31 @@ export function LiveList({
   serviceLines: string[];
 }) {
   const [line, setLine] = useState<string>("all");
+  const [query, setQuery] = useState("");
 
-  const filtered = useMemo(
-    () =>
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (
       societies
         .map((s) => ({
           ...s,
-          circuits: line === "all" ? s.circuits : s.circuits.filter((c) => c.serviceLine === line),
+          circuits: s.circuits.filter((c) => {
+            if (line !== "all" && c.serviceLine !== line) return false;
+            if (!q) return true;
+            // Matching the SOCIETY keeps all of its circuits — you searched
+            // for the relationship, not for one of its rows.
+            return (
+              s.name.toLowerCase().includes(q) ||
+              s.location.toLowerCase().includes(q) ||
+              c.label.toLowerCase().includes(q)
+            );
+          }),
         }))
-        // A society with nothing on the filtered line is not "a society with
-        // no circuits" — it is simply not on that line, so it drops out.
-        .filter((s) => s.circuits.length > 0),
-    [societies, line],
-  );
+        // A society with nothing left is not "a society with no circuits" —
+        // it is simply not on that line, so it drops out.
+        .filter((s) => s.circuits.length > 0)
+    );
+  }, [societies, line, query]);
 
   const countFor = (l: string) =>
     l === "all"
@@ -67,8 +79,20 @@ export function LiveList({
 
   return (
     <>
-      {serviceLines.length > 1 && (
-        <div className="flex flex-wrap gap-2 mb-4">
+      {/* Always rendered, even on a single service line. Hiding the bar when
+          there was only one made the whole feature look absent on a
+          deployment that happens to run one line — which is exactly what
+          stage looks like (user-reported 2026-08-21). */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search society or circuit…"
+          aria-label="Search society or circuit"
+          className="field field-auto w-full sm:w-72"
+        />
+        <div className="flex flex-wrap gap-2">
           {["all", ...serviceLines].map((l) => {
             const on = l === line;
             return (
@@ -91,18 +115,33 @@ export function LiveList({
             );
           })}
         </div>
-      )}
+        {(query.trim() !== "" || line !== "all") && (
+          <button
+            type="button"
+            onClick={() => {
+              setQuery("");
+              setLine("all");
+            }}
+            className="btn-ghost btn-sm"
+          >
+            Clear
+          </button>
+        )}
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState
           title={
-            line === "all"
-              ? "No circuits are live yet"
-              : `No circuits are live on ${SERVICE_LINE_LABEL[line] ?? line}`
+            query.trim() !== ""
+              ? `Nothing matches “${query.trim()}”`
+              : line === "all"
+                ? "No circuits are live yet"
+                : `No circuits are live on ${SERVICE_LINE_LABEL[line] ?? line}`
           }
         >
-          A circuit arrives here once its benchmark is confirmed and its installation is signed off —
-          billing starts the day after the completion certificate (CON-22).
+          {query.trim() !== "" || line !== "all"
+            ? "Clear the filter to see every live circuit."
+            : "A circuit arrives here once its benchmark is confirmed and its installation is signed off — billing starts the day after the completion certificate (CON-22)."}
         </EmptyState>
       ) : (
         <div className="space-y-4">

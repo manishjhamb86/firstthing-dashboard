@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import Link from "next/link";
 import { EmptyState, StatusChip } from "@/components/ui";
 
@@ -9,6 +10,7 @@ export type BoardRow = {
   href: string;
   society: string;
   circuit: string;
+  serviceLine: string;
   /** which state of commissioning this circuit is in */
   group: "review" | "pre" | "post" | "resolved";
   stageLabel: string;
@@ -54,18 +56,37 @@ function DayStrip({ validCount, required }: { validCount: number; required: numb
  * The chips filter that list rather than reveal it: the default is All, so
  * narrowing is always the user's deliberate act and never the starting state.
  */
-export function MonitoringBoard({ rows }: { rows: BoardRow[] }) {
+export function MonitoringBoard({
+  rows,
+  serviceLines,
+}: {
+  rows: BoardRow[];
+  serviceLines: string[];
+}) {
   const [filter, setFilter] = useState<string>("all");
+  const [line, setLine] = useState<string>("all");
+  const [query, setQuery] = useState("");
 
+  // Society and service line, alongside the state chips — a board ordered by
+  // urgency still needs "show me this society" once there is more than a
+  // screenful (user-reported 2026-08-21).
+  const q = query.trim().toLowerCase();
+  const matches = (r: BoardRow) =>
+    (line === "all" || r.serviceLine === line) &&
+    (q === "" || r.society.toLowerCase().includes(q) || r.circuit.toLowerCase().includes(q));
+  const scoped = rows.filter(matches);
+
+  // Counts follow the search and the line, so a chip never promises rows the
+  // other filters have already removed.
   const counts: Record<string, number> = {
-    all: rows.length,
-    review: rows.filter((r) => r.group === "review").length,
-    pre: rows.filter((r) => r.group === "pre").length,
-    post: rows.filter((r) => r.group === "post").length,
-    resolved: rows.filter((r) => r.group === "resolved").length,
+    all: scoped.length,
+    review: scoped.filter((r) => r.group === "review").length,
+    pre: scoped.filter((r) => r.group === "pre").length,
+    post: scoped.filter((r) => r.group === "post").length,
+    resolved: scoped.filter((r) => r.group === "resolved").length,
   };
 
-  const shown = (filter === "all" ? rows : rows.filter((r) => r.group === filter))
+  const shown = (filter === "all" ? scoped : scoped.filter((r) => r.group === filter))
     .slice()
     .sort((a, b) => a.rank - b.rank || a.society.localeCompare(b.society));
 
@@ -75,6 +96,29 @@ export function MonitoringBoard({ rows }: { rows: BoardRow[] }) {
         className="flex flex-wrap items-center gap-2 border-b p-3"
         style={{ borderColor: "var(--border)", background: "var(--surface-sunken)" }}
       >
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search society or circuit…"
+          aria-label="Search society or circuit"
+          className="field field-auto w-full sm:w-64"
+        />
+        {serviceLines.length > 0 && (
+          <select
+            value={line}
+            onChange={(e) => setLine(e.target.value)}
+            aria-label="Service line"
+            className="field field-auto"
+          >
+            <option value="all">All service lines</option>
+            {serviceLines.map((l) => (
+              <option key={l} value={l}>
+                {SERVICE_LINE_LABEL[l] ?? l}
+              </option>
+            ))}
+          </select>
+        )}
         {FILTERS.map((f) => {
           const on = f.id === filter;
           const n = counts[f.id];
@@ -112,10 +156,18 @@ export function MonitoringBoard({ rows }: { rows: BoardRow[] }) {
 
       {shown.length === 0 ? (
         <div className="p-5">
-          <EmptyState title={filter === "all" ? "Nothing in a commissioning window" : "Nothing in this state"}>
-            {filter === "all"
+          <EmptyState
+            title={
+              q !== ""
+                ? `Nothing matches “${query.trim()}”`
+                : filter === "all" && line === "all"
+                  ? "Nothing in a commissioning window"
+                  : "Nothing in this state"
+            }
+          >
+            {filter === "all" && line === "all" && q === ""
               ? "A circuit appears here the day after its meter is installed, and stays until its benchmark is confirmed."
-              : "Clear the filter to see every circuit in commissioning."}
+              : "Clear the filters to see every circuit in commissioning."}
           </EmptyState>
         </div>
       ) : (

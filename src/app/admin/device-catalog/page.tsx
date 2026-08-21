@@ -44,7 +44,7 @@ export default async function DeviceCatalogPage() {
     <>
       <PageHeader
         title="Device catalog"
-        subtitle="Every device the inventory and replacement dropdowns offer. An original maps to the replacements compatible with it — that mapping is all an installer ever sees."
+        subtitle="What the survey and installer dropdowns offer."
         chip={
           unmapped.length > 0 ? (
             // The chip is the way IN to the rows it counts, not just a

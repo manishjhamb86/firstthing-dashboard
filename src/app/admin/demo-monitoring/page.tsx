@@ -229,7 +229,7 @@ export default async function MonitoringDashboardPage() {
     <>
       <PageHeader
         title="Demo monitoring"
-        subtitle="Circuits still establishing a benchmark, most urgent first. Once one is installed and billing it moves to Live monitoring."
+        subtitle="Circuits still establishing a benchmark, most urgent first."
         chip={
           needsAttention > 0 ? (
             <StatusChip tone="warn">

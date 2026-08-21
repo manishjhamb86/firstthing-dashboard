@@ -78,7 +78,7 @@ export default async function LiveMonitoringPage() {
     <>
       <PageHeader
         title="Live monitoring"
-        subtitle="Installed, signed off and billing. Each month's readings are recorded per circuit; savings are measured against the baseline in force (INV-07)."
+        subtitle="Installed, signed off and billing."
         chip={
           societies.length === 0 ? undefined : belowBand > 0 ? (
             <Link href="/admin/live-monitoring?warn=1" aria-label="Show only circuits below band">

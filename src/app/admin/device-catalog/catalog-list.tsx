@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { X } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FilterChip, ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
@@ -177,7 +178,10 @@ function DeviceForm({
       </Field>
 
       {isEdit && editing.role === "original" && (
-        <Field label="Compatible replacements">
+        <Field
+          label="Compatible replacements"
+          hint="An installer replacing this device sees exactly these and nothing else — which is why an unmapped device blocks the installation step."
+        >
           <ReplacementPicker
             all={replacements}
             selected={picked}
@@ -208,9 +212,20 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
   const searchParams = useSearchParams();
   const creatingFromUrl = searchParams.get("new") === "1";
   const [q, setQ] = useState("");
-  // Opening straight into the warning is the point of the filter — the page
-  // header's chip links here with ?attention=1.
-  const [onlyAttention, setOnlyAttention] = useState(searchParams.get("attention") === "1");
+  // The URL owns this filter, not component state. The header chip links to
+  // ?attention=1, and a client-side navigation to the same route does NOT
+  // remount this component — so a useState seeded from searchParams reads it
+  // once at mount and then never again: the chip changed the URL and the list
+  // sat there unfiltered. Deriving it also makes the filtered view a real
+  // address (shareable, and Back leaves it), same as /admin/societies.
+  const onlyAttention = searchParams.get("attention") === "1";
+  const setOnlyAttention = (on: boolean) => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (on) next.set("attention", "1");
+    else next.delete("attention");
+    const qs = next.toString();
+    router.replace(qs ? `/admin/device-catalog?${qs}` : "/admin/device-catalog", { scroll: false });
+  };
   const [editing, setEditing] = useState<CatalogRow | null>(null);
 
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
@@ -221,7 +236,7 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
     [rows],
   );
 
-  const attentionCount = rows.filter(needsAttention).length;
+  // The count is stated once, in the page header — not again here.
   const live = rows
     .filter((r) => !r.removed && matches(r, q))
     .filter((r) => !onlyAttention || needsAttention(r));
@@ -255,27 +270,21 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
           placeholder="Search the catalog…"
           label="Search the catalog"
         />
-        {/* Offered even at zero, so the control does not appear and vanish
-            as the catalog changes — it just reads 0 and filters to nothing
-            worth chasing. */}
-        <FilterChip
-          on={onlyAttention}
-          count={attentionCount}
-          tone="warn"
-          onClick={() => setOnlyAttention((v) => !v)}
-        >
-          Needs attention
-        </FilterChip>
-        {(onlyAttention || q !== "") && (
-          <button
-            type="button"
-            onClick={() => {
-              setOnlyAttention(false);
-              setQ("");
-            }}
-            className="btn-ghost btn-sm"
-          >
-            Clear
+        {/* No standing "Needs attention" chip here. The page header already
+            states the count and links into this filter, and a second control
+            saying the same words with the same number two inches below it is
+            just noise ("its duplicate now showing at two places", 2026-08-21).
+            What the toolbar owes you is the ACTIVE state and a way out of it,
+            which is what this token is — it exists only while filtered. */}
+        {onlyAttention && (
+          <FilterChip on onClick={() => setOnlyAttention(false)}>
+            Needs attention
+            <X size={14} strokeWidth={2.5} aria-hidden />
+          </FilterChip>
+        )}
+        {q !== "" && (
+          <button type="button" onClick={() => setQ("")} className="btn-ghost btn-sm">
+            Clear search
           </button>
         )}
       </ListToolbar>

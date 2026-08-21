@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { SearchInput } from "@/components/search-input";
 import { ClickableRow } from "@/components/clickable-row";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { SOCIETY_STATUS, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
@@ -101,15 +102,12 @@ export default async function SocietiesPage({
         </div>
         <div className="ml-auto flex items-center gap-2">
           {activeTab !== "all" && <input type="hidden" name="status" value={activeTab} />}
-          <label htmlFor="soc-q" className="sr-only">
-            Search societies
-          </label>
-          <input
-            id="soc-q"
+          <SearchInput
             name="q"
             defaultValue={query}
             placeholder="Search name or location"
-            className="field field-auto w-56"
+            label="Search societies"
+            className="w-full sm:w-64"
           />
           <button type="submit" className="btn-secondary">
             Search

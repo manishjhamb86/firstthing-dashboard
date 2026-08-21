@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { SearchInput } from "@/components/search-input";
 import Link from "next/link";
 import { Card, EmptyState, StatusChip } from "@/components/ui";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
@@ -84,13 +85,12 @@ export function LiveList({
           deployment that happens to run one line — which is exactly what
           stage looks like (user-reported 2026-08-21). */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">
-        <input
-          type="search"
+        <SearchInput
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
           placeholder="Search society or circuit…"
-          aria-label="Search society or circuit"
-          className="field field-auto w-full sm:w-72"
+          label="Search society or circuit"
+          className="w-full sm:w-72"
         />
         <div className="flex flex-wrap gap-2">
           {["all", ...serviceLines].map((l) => {

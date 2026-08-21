@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { SearchInput } from "@/components/search-input";
 import type { AdminPermission } from "@prisma/client";
 import { ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
@@ -184,12 +185,11 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <input
-          className="field field-auto w-full sm:w-80"
-          placeholder="Search name, email or permission…"
+        <SearchInput
           value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Search admin accounts"
+          onChange={setQ}
+          placeholder="Search name, email or permission…"
+          label="Search admin accounts"
         />
         <button type="button" className="btn-primary" onClick={() => setCreating(true)}>
           Add admin

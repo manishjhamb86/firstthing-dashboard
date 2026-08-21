@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { SearchInput } from "@/components/search-input";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import Link from "next/link";
 import { EmptyState, StatusChip } from "@/components/ui";
@@ -96,13 +97,12 @@ export function MonitoringBoard({
         className="flex flex-wrap items-center gap-2 border-b p-3"
         style={{ borderColor: "var(--border)", background: "var(--surface-sunken)" }}
       >
-        <input
-          type="search"
+        <SearchInput
           value={query}
-          onChange={(e) => setQuery(e.target.value)}
+          onChange={setQuery}
           placeholder="Search society or circuit…"
-          aria-label="Search society or circuit"
-          className="field field-auto w-full sm:w-64"
+          label="Search society or circuit"
+          className="w-full sm:w-64"
         />
         {serviceLines.length > 0 && (
           <select

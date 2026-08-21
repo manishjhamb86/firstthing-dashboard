@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { SearchInput } from "@/components/search-input";
 import { ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import {
@@ -52,14 +53,16 @@ function ReplacementPicker({
 
   return (
     <div>
-      <input
-        className="field mb-2"
-        placeholder="Search replacements…"
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        disabled={disabled}
-        aria-label="Search replacements"
-      />
+      <div className="mb-2">
+        <SearchInput
+          value={q}
+          onChange={setQ}
+          placeholder="Search replacements…"
+          label="Search replacements"
+          disabled={disabled}
+          className="w-full"
+        />
+      </div>
       <div
         className="max-h-48 overflow-y-auto rounded-[var(--r-sm)] border p-2 space-y-1"
         style={{ borderColor: "var(--field-border)" }}
@@ -241,12 +244,11 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
   return (
     <>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <input
-          className="field field-auto w-full sm:w-80"
-          placeholder="Search the catalog…"
+        <SearchInput
           value={q}
-          onChange={(e) => setQ(e.target.value)}
-          aria-label="Search the catalog"
+          onChange={setQ}
+          placeholder="Search the catalog…"
+          label="Search the catalog"
         />
         {canEdit && (
           <button type="button" className="btn-primary" onClick={() => setCreating(true)}>

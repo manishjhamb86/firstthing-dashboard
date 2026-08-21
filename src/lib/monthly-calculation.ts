@@ -211,20 +211,37 @@ export function calculateFeeLine(input: {
     priorBreachAttributableAndUncorrected: input.priorBreachAttributableAndUncorrected,
   });
 
-  // The saving the society is credited with. On a `fixed` line this is
-  // evidence shown on the savings report; on an `actual_metered` line it is
-  // also what derives the amount.
-  const savedKwh = extrapolatedConsumptionKwh * (terms.benchmarkSavingsPct / 100);
+  // What this month WOULD have consumed at the pre-installation baseline,
+  // extrapolated to the represented set. Every saving is measured against
+  // this, and it is a different quantity from the extrapolated consumption
+  // above — that one is what the circuit actually drew.
+  //
+  // Getting these two confused is a money bug, and it was one: savedKwh
+  // used to be `extrapolatedConsumption × benchmark%`, which multiplies what
+  // the circuit consumed AFTER the retrofit by the fraction it was supposed
+  // to save. On a circuit performing exactly at its benchmark that reported
+  // 1,092 kWh saved where 3,120 were, and priced an actual-metered line at
+  // ₹3,669.12 against a contracted ₹10,483.20 — a 65% underbill. The
+  // identity that catches it is asserted in the tests: at measured ==
+  // benchmark, actual-metered and fixed must agree to the paisa.
+  const baselineExtrapolatedKwh = extrapolate({
+    meteredKwh: terms.baselineKwhPerDay * readings.coverageDays,
+    meteredLightCount: terms.meteredLightCount,
+    representedLightCount: terms.representedLightCount,
+  });
+
+  // The saving the society is credited with — what it MEASURABLY saved, not
+  // what it contracted to save. On a `fixed` line this is the evidence shown
+  // on the savings report while the contracted fee stands (CON-01); on an
+  // `actual_metered` line it is also what derives the amount.
+  const savedKwh = baselineExtrapolatedKwh * (measured / 100);
   const savedValue = savedKwh * contract.unitElectricityRate;
   const firsthingSharePct = 100 - contract.societyRevenueSharePct;
 
   const amount =
     pricingBasis === "fixed"
       ? terms.contractedMonthlyFee
-      : extrapolatedConsumptionKwh *
-        (measured / 100) *
-        contract.unitElectricityRate *
-        (firsthingSharePct / 100);
+      : savedValue * (firsthingSharePct / 100);
 
   return {
     circuitId: terms.circuitId,

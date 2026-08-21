@@ -11,6 +11,7 @@ import {
   SignalHigh,
   Gauge,
   Lightbulb,
+  Receipt,
   Users,
   Menu,
   X,
@@ -42,6 +43,7 @@ export function AppShell({
   showReadings,
   showCatalog,
   showUsers,
+  showBilling,
   demoMode = false,
   demoAvailable = false,
   children,
@@ -56,6 +58,7 @@ export function AppShell({
   showReadings: boolean;
   showCatalog: boolean;
   showUsers: boolean;
+  showBilling: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -75,6 +78,7 @@ export function AppShell({
       : []),
     ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
     ...(showCatalog ? [{ href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb }] : []),
+    ...(showBilling ? [{ href: "/admin/billing", label: "Billing", icon: Receipt }] : []),
     ...(showUsers ? [{ href: "/admin/users", label: "Admin users", icon: Users }] : []),
   ];
 

@@ -52,6 +52,80 @@ describe("TC-048-1 — CON-11's per-circuit extrapolation and fee", () => {
     expect(firsthingFee).toBeCloseTo(1142.4, 10); // 2,720 × 42%
   });
 
+  // ── the identity that catches a baseline/actual mix-up ──────────────────
+  it("bills the same on actual-metered as on fixed when a circuit is exactly at benchmark", () => {
+    // If a circuit saves precisely what it contracted to save, the two
+    // pricing bases MUST agree — actual-metered exists to bill what was
+    // really saved, and what was really saved is the contracted amount.
+    //
+    // This is the assertion that catches multiplying post-install
+    // consumption by the savings percentage instead of pre-install
+    // consumption: it made actual-metered come out at 35% of fixed.
+    const terms = {
+      circuitId: "c1",
+      lightType: "Tube Light",
+      meteredLightCount: 100,
+      representedLightCount: 400,
+      benchmarkSavingsPct: 65,
+      baselineKwhPerDay: 40,
+      // 400/100 × 40 × 30 × 65% × ₹8 × 42%
+      contractedMonthlyFee: 10_483.2,
+    };
+    // 14 kWh/day against a 40 kWh/day baseline is exactly 65% saved.
+    const readings = { circuitId: "c1", meteredKwh: 420, coverageDays: 30, daysInMonth: 30 };
+    const contract = { tolerancePct: 10, unitElectricityRate: 8, societyRevenueSharePct: 58 };
+
+    const inBand = calculateFeeLine({
+      terms,
+      readings,
+      contract,
+      priorConsecutiveBreaches: 0,
+      priorBreachAttributableAndUncorrected: false,
+    });
+    expect(inBand.measuredSavingsPct).toBeCloseTo(65, 10);
+    expect(inBand.pricingBasis).toBe("fixed");
+    // 4,800 kWh at baseline − 1,680 actual = 3,120 saved. NOT 1,092.
+    expect(inBand.savedKwh).toBeCloseTo(3120, 10);
+    expect(inBand.savedKwh).not.toBeCloseTo(1092, 2);
+    expect(inBand.savedValue).toBeCloseTo(24_960, 10);
+
+    // The identity itself. A circuit at its benchmark is by definition IN
+    // band, so the basis cannot actually flip here — which is why this
+    // asserts the arithmetic rather than the branch: what actual-metered
+    // pricing WOULD charge equals the contracted fee, to the paisa.
+    const whatActualMeteredWouldCharge = inBand.savedValue * 0.42;
+    expect(whatActualMeteredWouldCharge).toBeCloseTo(terms.contractedMonthlyFee, 8);
+    expect(whatActualMeteredWouldCharge).not.toBeCloseTo(3669.12, 2);
+  });
+
+  it("bills actual-metered BELOW the contracted fee when a circuit underperforms", () => {
+    // The direction matters as much as the identity: an underperforming
+    // circuit must cost the society less than its contracted fee, or
+    // actual-metered pricing would be a penalty rather than a correction.
+    const terms = {
+      circuitId: "c1",
+      lightType: "Tube Light",
+      meteredLightCount: 100,
+      representedLightCount: 400,
+      benchmarkSavingsPct: 65,
+      baselineKwhPerDay: 40,
+      contractedMonthlyFee: 10_483.2,
+    };
+    // 20 kWh/day against 40 is 50% saved — well outside a ±10% band.
+    const line = calculateFeeLine({
+      terms,
+      readings: { circuitId: "c1", meteredKwh: 600, coverageDays: 30, daysInMonth: 30 },
+      contract: { tolerancePct: 10, unitElectricityRate: 8, societyRevenueSharePct: 58 },
+      priorConsecutiveBreaches: 1,
+      priorBreachAttributableAndUncorrected: true,
+    });
+    expect(line.measuredSavingsPct).toBeCloseTo(50, 10);
+    expect(line.pricingBasis).toBe("actual_metered");
+    // 4,800 × 50% = 2,400 kWh × ₹8 × 42% = ₹8,064
+    expect(line.amount).toBeCloseTo(8064, 8);
+    expect(line.amount).toBeLessThan(terms.contractedMonthlyFee);
+  });
+
   it("credits the fee to the right party — 42% FirsThing, not 58%", () => {
     // This exact inversion has shipped twice in this project: nine places in a
     // mockup deck, and in this test case's own first draft. Asserting the
@@ -271,8 +345,18 @@ describe("calculateFeeLine", () => {
     });
     expect(line.measuredSavingsPct).toBe(40);
     expect(line.pricingBasis).toBe("actual_metered");
-    // 200÷40×180 = 900 extrapolated; × 40% = 360 saved; × ₹8 = 2,880; × 42%
-    expect(line.amount).toBeCloseTo(1209.6, 10);
+    // The saving is what the circuit did NOT consume, so it is measured from
+    // the baseline, not from the bill. Baseline 200÷40 × (10 × 30) = 1,500
+    // kWh; the circuit drew 200÷40 × 180 = 900; so it saved 600 — × ₹8 =
+    // ₹4,800, × 42% = ₹2,016.
+    //
+    // This expectation used to read 1,209.6, from `900 × 40%` — multiplying
+    // what the circuit consumed after the retrofit by the fraction it saved,
+    // which is not a quantity that means anything. Its own comment said
+    // "360 saved" about a circuit that saved 600.
+    expect(line.savedKwh).toBeCloseTo(600, 10);
+    expect(line.amount).toBeCloseTo(2016, 10);
+    expect(line.amount).not.toBeCloseTo(1209.6, 2);
     expect(line.amount).toBeLessThan(line.savedValue);
   });
 });

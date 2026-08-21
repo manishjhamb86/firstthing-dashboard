@@ -38,6 +38,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       // each action checks for itself.
       showReadings={perms.includes("manage_pipeline")}
       showCatalog={perms.includes("manage_survey") || perms.includes("manage_pipeline")}
+      // Either hat opens billing — ops runs the month, the accountant
+      // releases it — which is exactly requireBillingReader's own rule.
+      showBilling={perms.includes("manage_pipeline") || perms.includes("release_billing")}
       showUsers={perms.includes("manage_admins")}
     >
       {children}

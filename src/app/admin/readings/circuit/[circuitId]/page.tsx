@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, KpiTile, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, Stat, PageHeader, StatusChip } from "@/components/ui";
 import { READING_ANOMALY_KIND, READING_ANOMALY_STATUS, READING_UPLOAD_STATUS } from "@/lib/status-maps";
 import { coverageOf, describeCoverage, monthlyFigure } from "@/lib/reading-coverage";
 import { RawFileLink } from "./raw-file-link";
@@ -104,7 +104,7 @@ export default async function CircuitReadingHistory({
 
       {period && (
         <div className="grid gap-4 sm:grid-cols-3 mb-6">
-          <KpiTile
+          <Stat
             label={`${period} total`}
             // FEAT-046-AC-2/AC-5 — "no data" and "not billable from this" are
             // both said out loud, never rendered as a zero.
@@ -117,12 +117,12 @@ export default async function CircuitReadingHistory({
                   : "Below the 20-day floor and not explicitly accepted, so no billing-grade figure is computed."
             }
           />
-          <KpiTile
+          <Stat
             label="Coverage"
             value={coverage ? `${coverage.coverageDays}/${coverage.daysInMonth}` : "—"}
             detail={coverage ? describeCoverage(coverage) : undefined}
           />
-          <KpiTile
+          <Stat
             label="Flags"
             value={anomalies.filter((a) => a.status === "open").length}
             detail={

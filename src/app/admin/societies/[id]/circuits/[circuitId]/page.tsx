@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/demo-mode";
-import { Card, EmptyState, PageHeader, PageRibbon, StatusChip } from "@/components/ui";
+import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { LoadValidationForm } from "./load-validation-form";
 import { GatePassForm } from "./gate-pass-form";
@@ -374,7 +374,7 @@ export default async function CircuitDetailPage({
           </StepComplete>
         ))}
 
-      <div className="grid gap-3 grid-cols-2 lg:grid-cols-4 mb-8 max-w-none">
+      <StatRow>
         {[
           {
             label: "Theoretical",
@@ -411,13 +411,9 @@ export default async function CircuitDetailPage({
             unit: circuit.benchmarkSavingsPct === null ? "not confirmed" : "fixed for the term",
           },
         ].map((f) => (
-          <div key={f.label} className="card p-4">
-            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
-            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
-            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.unit}</p>
-          </div>
+          <Stat key={f.label} label={f.label} value={f.value} detail={f.unit} />
         ))}
-      </div>
+      </StatRow>
 
       {/* CON-45 — what hangs off this circuit, and the theoretical daily
           figure every pre-installation reading is judged against. Editable

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { Stat, StatRow } from "@/components/list-toolbar";
+import { EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { AdminUsersClient } from "./admin-users-client";
 import { requireAdminPage } from "@/lib/admin-permissions";
 

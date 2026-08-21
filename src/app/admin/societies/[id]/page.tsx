@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { Building2, Users, Gauge, Layers } from "lucide-react";
-import { Card, CardTitle, EmptyState, KpiTile, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import {
   ENGAGEMENT_STATUS,
   PIPELINE_STAGE,
@@ -128,35 +128,35 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         </div>
       ))}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <KpiTile
+      <StatRow>
+        <Stat
           label="Flats"
           value={society.flatCount.toLocaleString("en-IN")}
           icon={<Building2 size={20} strokeWidth={1.75} />}
           tone="accent"
         />
-        <KpiTile
+        <Stat
           label="Service lines"
           value={engagements.filter((e) => e.status === "active").length}
           detail={engagements.length > 0 ? `${engagements.length} enrolled` : "None enrolled"}
           icon={<Layers size={20} strokeWidth={1.75} />}
           tone="info"
         />
-        <KpiTile
+        <Stat
           label="Circuits"
           value={circuitCount}
           detail={circuitCount === 0 ? "None registered" : "Registered, not removed"}
           icon={<Gauge size={20} strokeWidth={1.75} />}
           tone="warn"
         />
-        <KpiTile
+        <Stat
           label="Portal accounts"
           value={accounts.length}
           detail={accounts.length === 0 ? "Nobody can sign in" : "Active"}
           icon={<Users size={20} strokeWidth={1.75} />}
           tone={accounts.length === 0 ? "bad" : "ok"}
         />
-      </div>
+      </StatRow>
 
       <div className="grid gap-6 lg:grid-cols-2 items-start">
         {/* Everything about the ENGAGEMENT: what the society is signed up

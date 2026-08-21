@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
 import { LightingInventoryForm } from "./lighting-inventory-form";
 import { CircuitEligibilityForm } from "./circuit-eligibility-form";
@@ -127,7 +127,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
 
       {/* What the survey has established so far. Every figure is counted
           from the rows below it, never stored separately. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-8 max-w-none">
+      <StatRow>
         {[
           { label: "Areas counted", value: siteSurvey.areas.length, detail: siteSurvey.areas.length === 0 ? "none yet" : "recorded" },
           { label: "Lights", value: totalLights.toLocaleString("en-IN"), detail: "whole society" },
@@ -143,13 +143,9 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
                   : "every type covered",
           },
         ].map((f) => (
-          <div key={f.label} className="card p-4">
-            <p className="lbl mb-1.5 min-h-[2.8em]">{f.label}</p>
-            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
-            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
-          </div>
+          <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />
         ))}
-      </div>
+      </StatRow>
 
       <section className="max-w-none mb-10">
         {/* The survey's own two steps are a sequence like any other, so they

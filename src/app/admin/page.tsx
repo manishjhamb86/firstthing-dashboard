@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { Card, CardTitle, EmptyState, KpiTile, StatusChip } from "@/components/ui";
-import { Building2, Target, Gauge, BadgeCheck, ArrowRight } from "lucide-react";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Building2, Target, Gauge, BadgeCheck } from "lucide-react";
 import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -103,27 +103,27 @@ export default async function AdminHomePage() {
 
   return (
     <>
-      {/* A dashboard's header should say what today is and whether anything
-          is waiting — not repeat the sidebar's own identity block. */}
-      <header className="mb-7 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-        <div>
-          <h1 className="text-[24px] font-bold leading-tight tracking-[-0.02em]">Portfolio</h1>
-          <p className="mt-1 text-[var(--text-muted)]">{today}</p>
-        </div>
-        {canSeeMonitoring && decisionCount > 0 && (
-          <a
-            href="#needs-decision"
-            className="inline-flex items-center gap-2 rounded-[var(--r-md)] border px-3.5 py-2 text-sm font-medium"
-            style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}
-          >
-            {decisionCount} {decisionCount === 1 ? "circuit needs" : "circuits need"} a decision
-            <ArrowRight size={15} strokeWidth={2} aria-hidden />
-          </a>
-        )}
-      </header>
+      {/* PageHeader like every other page — this was the one screen with a
+          hand-rolled header, which is why its title rendered at 24px against
+          everyone else's 22px and its margin was mb-7 against mb-8. The date
+          is this page's subtitle; the waiting work is its chip, and the chip
+          is a link, same as the catalog's and live monitoring's. */}
+      <PageHeader
+        title="Portfolio"
+        subtitle={today}
+        chip={
+          canSeeMonitoring && decisionCount > 0 ? (
+            <a href="#needs-decision" aria-label="Jump to the circuits needing a decision">
+              <StatusChip tone="warn">
+                {decisionCount} {decisionCount === 1 ? "circuit needs" : "circuits need"} a decision
+              </StatusChip>
+            </a>
+          ) : undefined
+        }
+      />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
-        <KpiTile
+      <StatRow>
+        <Stat
           label="Societies"
           value={societyCount}
           detail={`${activeSocietyCount} active · ${prospectCount} prospect`}
@@ -131,7 +131,7 @@ export default async function AdminHomePage() {
           tone="accent"
         />
         {canSeePipeline && (
-          <KpiTile
+          <Stat
             label="Open pipelines"
             value={openPipelineCount}
             detail={pendingApprovalCount > 0 ? `${pendingApprovalCount} pending approval` : "None pending approval"}
@@ -140,7 +140,7 @@ export default async function AdminHomePage() {
           />
         )}
         {canSeeMonitoring && (
-          <KpiTile
+          <Stat
             label="Circuits commissioning"
             value={circuitsInCommissioning}
             detail="Meter install through benchmark"
@@ -149,7 +149,7 @@ export default async function AdminHomePage() {
           />
         )}
         {canSeeMonitoring && (
-          <KpiTile
+          <Stat
             label="Benchmarks confirmed"
             value={benchmarkConfirmedCount}
             detail="Inside CON-20's 60-80% band"
@@ -157,7 +157,7 @@ export default async function AdminHomePage() {
             tone="ok"
           />
         )}
-      </div>
+      </StatRow>
 
       <div className="grid gap-6 lg:grid-cols-12 items-start">
         {/* ── Left column: where the work is ─────────────────────────── */}

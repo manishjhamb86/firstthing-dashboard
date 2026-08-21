@@ -850,3 +850,19 @@ textarea.field {
     margin-top: -2rem;
   }
 }
+
+/* ── Status tiles ────────────────────────────────────────────────────────
+   A floor height and a two-line clamp, so a row of tiles is the same
+   height on every page. Without them the row grew or shrank with whatever
+   copy each page happened to pass, and the whole page below it shifted as
+   you navigated. See Stat in ui.tsx for the other half (the label reserves
+   two lines so the value's baseline is fixed too). */
+.stat-tile {
+  min-height: 118px;
+}
+.stat-detail {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}

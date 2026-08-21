@@ -10,28 +10,17 @@ import type { ReactNode } from "react";
  * the primary action always belongs in PageHeader's own action slot, so a
  * page's structure reads the same wherever you land:
  *
- *     PageHeader (title · chip · subtitle · action)
- *     KPI tiles, where there are real figures to show
+ *     PageHeader (back · title · chip · subtitle · action)
+ *     StatRow of Stat tiles, where there are real figures to show
  *     ListToolbar (search · filters)
  *     the list
+ *
+ * Stat/StatRow live in ui.tsx with the other presentational primitives —
+ * they are not toolbar furniture, and non-page surfaces (the demo report)
+ * use them too.
  */
 export function ListToolbar({ children }: { children: ReactNode }) {
   return <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mb-4">{children}</div>;
-}
-
-/** The KPI row, so its columns and spacing cannot drift page to page. */
-export function StatRow({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">{children}</div>;
-}
-
-export function Stat({ label, value, detail }: { label: string; value: ReactNode; detail?: string }) {
-  return (
-    <div className="card p-4">
-      <p className="lbl mb-1.5 min-h-[2.8em]">{label}</p>
-      <p className="num text-[20px] font-semibold leading-none">{value}</p>
-      {detail && <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{detail}</p>}
-    </div>
-  );
 }
 
 /**

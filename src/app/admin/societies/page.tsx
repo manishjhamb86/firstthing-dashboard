@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { SearchInput } from "@/components/search-input";
 import { ClickableRow } from "@/components/clickable-row";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { SOCIETY_STATUS, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
@@ -62,6 +62,16 @@ export default async function SocietiesPage({
 
   const filtered = activeTab !== "all" || query !== "";
 
+  // Deliberately NOT the per-status counts — those are the filter tabs'
+  // own, sitting a few pixels below, and repeating them is the duplication
+  // reported on 2026-08-21. These say what the portfolio holds.
+  const totalSocieties = statusGroups.reduce((n, g) => n + g._count._all, 0);
+  const meteredCircuits = societies.reduce((n, s) => n + s._count.circuits, 0);
+  const linesLive = new Set(
+    societies.flatMap((s) => s.engagements.filter((e) => e.status === "active").map((e) => e.serviceLine)),
+  ).size;
+  const withoutCircuits = societies.filter((s) => s._count.circuits === 0).length;
+
   return (
     <>
       <PageHeader
@@ -73,6 +83,13 @@ export default async function SocietiesPage({
           </Link>
         }
       />
+
+      <StatRow>
+        <Stat label="Societies" value={totalSocieties} detail={`${countFor("active")} active · ${countFor("prospect")} prospect`} />
+        <Stat label="Circuits metered" value={meteredCircuits} detail={meteredCircuits === 0 ? "none registered yet" : "across the shown societies"} />
+        <Stat label="Service lines live" value={linesLive} detail={linesLive === 0 ? "nothing enrolled" : "at least one active engagement"} />
+        <Stat label="No circuit yet" value={withoutCircuits} detail={withoutCircuits === 0 ? "every society has one" : "nothing to bill against"} />
+      </StatRow>
 
       {/* A GET form, so a filtered view is a shareable URL and the back
           button behaves — the one justified difference from the other

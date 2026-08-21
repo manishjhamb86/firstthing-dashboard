@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
@@ -48,18 +48,14 @@ export default async function PipelinePage() {
   })).filter((g) => g.deals.length > 0);
 
   const pendingApproval = pipelines.filter((p) => !p.authoritative).length;
+  const preSurvey = pipelines.filter((p) => ["lead", "demo_proposed", "survey_pending"].includes(p.stage)).length;
+  const billing = pipelines.filter((p) => p.stage === "active_billing").length;
 
   return (
     <>
       <PageHeader
         title="Leads &amp; pipeline"
-        subtitle={
-          canManagePipeline && pipelines.length > 0
-            ? `${pipelines.length} deal${pipelines.length === 1 ? "" : "s"} on record${
-                pendingApproval > 0 ? ` · ${pendingApproval} awaiting owner approval` : ""
-              }`
-            : "Every open deal, grouped by stage."
-        }
+        subtitle="Every open deal, grouped by stage."
         action={
           canManagePipeline && (
             <Link href="/admin/pipeline/new" className="btn-primary">
@@ -68,6 +64,17 @@ export default async function PipelinePage() {
           )
         }
       />
+
+      {/* The figures used to be a run-on subtitle; they are tiles like every
+          other page's, so the row below them starts at the same y. */}
+      {canManagePipeline && (
+        <StatRow>
+          <Stat label="Deals on record" value={pipelines.length} detail={`${grouped.length} stage${grouped.length === 1 ? "" : "s"} in play`} />
+          <Stat label="Awaiting approval" value={pendingApproval} detail={pendingApproval === 0 ? "none held" : "owner has not confirmed"} />
+          <Stat label="Before survey" value={preSurvey} detail="lead through proposal" />
+          <Stat label="Billing" value={billing} detail="installed and invoicing" />
+        </StatRow>
+      )}
 
       {!canManagePipeline ? (
         <p className="max-w-xl text-[var(--text-muted)]">

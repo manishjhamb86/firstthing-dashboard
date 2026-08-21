@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Stat, StatRow } from "@/components/list-toolbar";
-import { PageHeader, StatusChip } from "@/components/ui";
+import { PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { MonitoringBoard, type BoardRow } from "./board";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
 import { reviewUrgency } from "@/lib/demo-result-review";
@@ -252,6 +251,19 @@ export default async function MonitoringDashboardPage() {
             label: "Anomalies open",
             value: anomaliesOpen,
             detail: anomaliesOpen === 0 ? "no window held" : "window held until fixed",
+          },
+          // A row of two in a four-column grid left half the row empty while
+          // every other page filled it — and these are figures the board is
+          // already sorted by, not padding.
+          {
+            label: "In commissioning",
+            value: rows.filter((r) => r.group !== "resolved").length,
+            detail: "meter install through benchmark",
+          },
+          {
+            label: "Needs a decision",
+            value: rows.filter((r) => r.group === "review").length,
+            detail: rows.some((r) => r.group === "review") ? "out of band, awaiting review" : "nothing waiting",
           },
         ].map((f) => (
           <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />

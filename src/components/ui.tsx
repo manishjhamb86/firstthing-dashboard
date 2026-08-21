@@ -162,10 +162,25 @@ export function PageRibbon({
   );
 }
 
-// KPI tile — the admin-template signature: a tinted icon bubble beside the
-// figure. Icon optional so existing call sites keep working; the figure
-// stays in the data face (tabular, comparable down a column).
-const KPI_TONE: Record<string, { bg: string; fg: string }> = {
+// Status tiles — ONE component and ONE row, used by every page that has
+// figures to show. There used to be two components (Stat and Stat) and
+// nine hand-written grids with three different gaps and two different
+// breakpoints, so the row's height and the value's baseline moved as you
+// navigated ("changing or navigating to other pages doesn't give a
+// flickering effect", 2026-08-21).
+//
+// Three things are fixed on purpose, and each one is a thing that used to
+// move:
+//   · the label reserves two lines whether or not it needs them, so the
+//     value sits at the same y on a page with "Retired" and a page with
+//     "Awaiting today's reading";
+//   · the detail is clamped to two lines, so a long one cannot grow the row;
+//   · the tile has a floor height, so a row of tiles with no detail is the
+//     same height as one with.
+// An icon is optional and sits in the CORNER rather than beside the text —
+// beside it, the text column started further right on the one page that
+// passes icons, which is exactly the drift this is meant to end.
+const STAT_TONE: Record<string, { bg: string; fg: string }> = {
   accent: { bg: "var(--accent-subtle)", fg: "var(--accent)" },
   ok: { bg: "var(--ok-bg)", fg: "var(--ok-fg)" },
   warn: { bg: "var(--warn-bg)", fg: "var(--warn-fg)" },
@@ -173,38 +188,51 @@ const KPI_TONE: Record<string, { bg: string; fg: string }> = {
   info: { bg: "var(--info-bg)", fg: "var(--info-fg)" },
 };
 
-export function KpiTile({
+export function StatRow({ children }: { children: ReactNode }) {
+  return <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">{children}</div>;
+}
+
+export function Stat({
   label,
   value,
   detail,
   icon,
   tone = "accent",
 }: {
-  label: string;
+  label: ReactNode;
   value: ReactNode;
   detail?: ReactNode;
   icon?: ReactNode;
-  tone?: keyof typeof KPI_TONE;
+  tone?: keyof typeof STAT_TONE;
 }) {
-  const t = KPI_TONE[tone] ?? KPI_TONE.accent;
+  const t = STAT_TONE[tone] ?? STAT_TONE.accent;
   return (
-    <div className="card p-5">
-      <div className="flex items-start gap-4">
+    <div className="card stat-tile p-4">
+      {/* The icon shares a flex row with the label rather than being
+          absolutely positioned over the tile. Absolute placement fails
+          DESTRUCTIVELY — if the offset utilities do not apply, the bubble
+          renders at its static position on top of the label and the value,
+          which is what a half-loaded stylesheet produced (2026-08-21). In a
+          flex row the worst case is a plainer tile, and the label still
+          starts at the same x whether or not a page passes an icon. */}
+      {/* min-h-9 on the ROW, not on the label: the icon is 36px and a
+          two-line label is ~31px, so whichever is present the row is the
+          same height and the value's baseline does not shift by a pixel
+          between a page that passes icons and one that does not. */}
+      <div className="flex items-start justify-between gap-2 mb-1.5 min-h-9">
+        <p className="lbl">{label}</p>
         {icon && (
           <span
             aria-hidden
-            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
             style={{ background: t.bg, color: t.fg }}
           >
             {icon}
           </span>
         )}
-        <div className="min-w-0">
-          <p className="num text-[24px] font-semibold leading-tight">{value}</p>
-          <p className="text-[13px] font-medium text-[var(--text-muted)]">{label}</p>
-          {detail && <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{detail}</p>}
-        </div>
       </div>
+      <p className="num text-[20px] font-semibold leading-none">{value}</p>
+      {detail && <p className="stat-detail mt-1.5 text-xs text-[var(--text-subtle)]">{detail}</p>}
     </div>
   );
 }

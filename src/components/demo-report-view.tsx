@@ -1,5 +1,5 @@
 import type { DemoReportCircuit } from "@/lib/demo-report";
-import { Card, CardTitle, KpiTile } from "@/components/ui";
+import { Card, CardTitle, Stat, StatRow } from "@/components/ui";
 
 // Shared by the back-office report screen and the society portal, so the two
 // can never drift into showing different figures for the same report — the
@@ -25,28 +25,28 @@ export function DemoReportView({
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <KpiTile
+      <StatRow>
+        <Stat
           label="Measured savings"
           value={`${report.measuredSavingsPct.toFixed(2)}%`}
           detail="Across the metered demo circuits"
         />
-        <KpiTile
+        <Stat
           label="Before (daily)"
           value={`${report.preInstallBaselineTotal.toFixed(2)} kWh`}
           detail="Pre-install baseline average"
         />
-        <KpiTile
+        <Stat
           label="After (daily)"
           value={`${report.postInstallAverageTotal.toFixed(2)} kWh`}
           detail="Post-install average"
         />
-        <KpiTile
+        <Stat
           label="Projected society-wide"
           value={`${report.projectedSavingsKwhPerDay.toFixed(2)} kWh/day`}
           detail={`${report.meteredLightCount} metered of ${report.societyLightCount} lights`}
         />
-      </div>
+      </StatRow>
 
       <Card className="p-5 overflow-x-auto">
         <CardTitle>Per circuit</CardTitle>

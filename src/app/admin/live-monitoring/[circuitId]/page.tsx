@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, KpiTile, PageHeader, StatusChip } from "@/components/ui";
+import { Card, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { isDemoMode } from "@/lib/demo-mode";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
@@ -166,30 +166,30 @@ export default async function LiveMonitoringCircuitPage({
         </Card>
       ) : (
         <>
-          <div className="grid gap-3 mb-6 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiTile
+          <StatRow>
+            <Stat
               label="Benchmark"
               value={circuit.benchmarkSavingsPct?.toFixed(1) ?? "—"}
               detail="% savings, fixed for the term"
             />
-            <KpiTile
+            <Stat
               label="Baseline in force"
               value={baselineNow?.toFixed(2) ?? "—"}
               detail="kWh/day"
             />
-            <KpiTile
+            <Stat
               label="Days recorded"
               value={monitoringDays.length}
               detail={monitoringDays.filter((d) => d.excluded).length > 0
                 ? `${monitoringDays.filter((d) => d.excluded).length} excluded`
                 : "none excluded"}
             />
-            <KpiTile
+            <Stat
               label="Measured savings"
               value={summary.savingsPct != null ? summary.savingsPct.toFixed(1) : "—"}
               detail={band ? `% · ${band.label}` : "% — no days yet"}
             />
-          </div>
+          </StatRow>
 
           <section className="max-w-none mb-8">
             <h2 className="text-[15px] font-semibold mb-1">Record this month&apos;s readings</h2>

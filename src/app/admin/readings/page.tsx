@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { ListToolbar } from "@/components/list-toolbar";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { READING_UPLOAD_STATUS } from "@/lib/status-maps";
 import { UploadPanel } from "./upload-panel";
 
@@ -80,7 +81,7 @@ export default async function ReadingsPage({
         }
       />
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <StatRow>
         {[
           {
             label: "Circuits covered",
@@ -99,33 +100,30 @@ export default async function ReadingsPage({
             detail: openAnomalies === 0 ? "nothing held up" : "bills held until resolved",
           },
         ].map((f) => (
-          <div key={f.label} className="card p-4">
-            <p className="lbl mb-1.5">{f.label}</p>
-            <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
-            <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
-          </div>
+          <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />
         ))}
-      </div>
+      </StatRow>
 
-      <form method="get" className="mb-6 flex flex-wrap items-end gap-3">
-        <div className="space-y-1.5">
-          <label htmlFor="period" className="lbl">
-            Reading period
-          </label>
+      {/* This page's toolbar. It used to stack a label above the input and
+          run a sentence beside it, which made the list start 30px lower here
+          than on every other page. The label moves to the input's own
+          aria-label and INV-04's note to its title — the rule still holds,
+          it just is not costing a row of vertical space on every visit. */}
+      <form method="get">
+        <ListToolbar>
           <input
             id="period"
             name="period"
             type="month"
             defaultValue={period}
+            aria-label="Reading period — an explicit choice, never read from the file's own dates (INV-04)"
+            title="An explicit choice, never read from the file's own dates (INV-04)."
             className="field field-auto"
           />
-        </div>
-        <button type="submit" className="btn-secondary">
-          Show
-        </button>
-        <p className="text-xs text-[var(--text-muted)] pb-[calc((var(--control-h)-1rem)/2)]">
-          An explicit choice, never read from the file&apos;s own dates (INV-04).
-        </p>
+          <button type="submit" className="btn-secondary">
+            Show
+          </button>
+        </ListToolbar>
       </form>
 
       {isOps ? (

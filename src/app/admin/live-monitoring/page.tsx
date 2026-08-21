@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { PageHeader, StatusChip } from "@/components/ui";
+import { PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
@@ -73,6 +73,8 @@ export default async function LiveMonitoringPage() {
   const societies = [...bySociety.values()].sort((a, b) => a.name.localeCompare(b.name));
   const serviceLines = [...new Set(circuits.map((c) => c.serviceLine as string))].sort();
   const belowBand = societies.filter((s) => s.circuits.some((c) => c.warn)).length;
+  const liveCircuits = societies.reduce((n, s) => n + s.circuits.length, 0);
+  const measured = societies.reduce((n, s) => n + s.circuits.filter((c) => c.measuredPct != null).length, 0);
 
   return (
     <>
@@ -91,6 +93,13 @@ export default async function LiveMonitoringPage() {
           )
         }
       />
+
+      <StatRow>
+        <Stat label="Societies billing" value={societies.length} detail={societies.length === 0 ? "none live yet" : "signed off and invoicing"} />
+        <Stat label="Circuits live" value={liveCircuits} detail={`${serviceLines.length} service line${serviceLines.length === 1 ? "" : "s"}`} />
+        <Stat label="Measured this month" value={measured} detail={measured === liveCircuits ? "every circuit reported" : `${liveCircuits - measured} awaiting readings`} />
+        <Stat label="Below band" value={belowBand} tone={belowBand > 0 ? "warn" : "ok"} detail={belowBand === 0 ? "all inside CON-20" : "societies under 60%"} />
+      </StatRow>
 
       <LiveList societies={societies} serviceLines={serviceLines} />
     </>

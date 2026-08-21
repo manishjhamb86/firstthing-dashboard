@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Stat, StatRow } from "@/components/list-toolbar";
-import { PageHeader, StatusChip } from "@/components/ui";
+import { PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { CatalogList } from "./catalog-list";
 import { needsAttention, type CatalogRow } from "@/lib/device-catalog";

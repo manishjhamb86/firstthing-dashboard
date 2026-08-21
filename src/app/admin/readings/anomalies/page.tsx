@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { READING_ANOMALY_KIND, READING_ANOMALY_STATUS } from "@/lib/status-maps";
 import { coverageOf, COVERAGE_FLOOR_DAYS, describeCoverage } from "@/lib/reading-coverage";
 import { AnomalyControls } from "./anomaly-controls";
@@ -82,7 +82,7 @@ export default async function AnomalyReviewPage({
       />
 
       {anomalies.length > 0 && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <StatRow>
           {[
             {
               label: "Unresolved",
@@ -101,13 +101,9 @@ export default async function AnomalyReviewPage({
               detail: acceptedCircuits.size === 0 ? "none needed" : `below ${COVERAGE_FLOOR_DAYS} days, signed off`,
             },
           ].map((f) => (
-            <div key={f.label} className="card p-4">
-              <p className="lbl mb-1.5">{f.label}</p>
-              <p className="num text-[20px] font-semibold leading-none">{f.value}</p>
-              <p className="mt-1.5 text-xs text-[var(--text-subtle)]">{f.detail}</p>
-            </div>
+            <Stat key={f.label} label={f.label} value={f.value} detail={f.detail} />
           ))}
-        </div>
+        </StatRow>
       )}
 
       <form method="get" className="mb-6 flex flex-wrap items-end gap-3">

@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ListToolbar } from "@/components/list-toolbar";
+import { FilterChip, ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
 import { ErrorText, Field, StatusChip } from "@/components/ui";
+import { needsAttention, type CatalogRow } from "@/lib/device-catalog";
 import { Modal } from "@/components/modal";
 import {
   createDeviceType,
@@ -13,19 +14,6 @@ import {
   setReplacementOptions,
   updateDeviceType,
 } from "./actions";
-
-export type CatalogRow = {
-  id: string;
-  name: string;
-  role: "original" | "replacement";
-  defaultWattage: number | null;
-  active: boolean;
-  removed: boolean;
-  /** originals only: the replacements an installer may pick for this device */
-  replacementIds: string[];
-  /** how many recorded lines point at this type — why removal is soft */
-  usageCount: number;
-};
 
 function matches(row: CatalogRow, q: string) {
   if (!q) return true;
@@ -220,6 +208,9 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
   const searchParams = useSearchParams();
   const creatingFromUrl = searchParams.get("new") === "1";
   const [q, setQ] = useState("");
+  // Opening straight into the warning is the point of the filter — the page
+  // header's chip links here with ?attention=1.
+  const [onlyAttention, setOnlyAttention] = useState(searchParams.get("attention") === "1");
   const [editing, setEditing] = useState<CatalogRow | null>(null);
 
   const [rowError, setRowError] = useState<{ id: string; message: string } | null>(null);
@@ -230,7 +221,10 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
     [rows],
   );
 
-  const live = rows.filter((r) => !r.removed && matches(r, q));
+  const attentionCount = rows.filter(needsAttention).length;
+  const live = rows
+    .filter((r) => !r.removed && matches(r, q))
+    .filter((r) => !onlyAttention || needsAttention(r));
   const removed = rows.filter((r) => r.removed && matches(r, q));
 
   function act(id: string, fn: () => Promise<{ error?: string } | { ok: true }>) {
@@ -261,6 +255,29 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
           placeholder="Search the catalog…"
           label="Search the catalog"
         />
+        {/* Offered even at zero, so the control does not appear and vanish
+            as the catalog changes — it just reads 0 and filters to nothing
+            worth chasing. */}
+        <FilterChip
+          on={onlyAttention}
+          count={attentionCount}
+          tone="warn"
+          onClick={() => setOnlyAttention((v) => !v)}
+        >
+          Needs attention
+        </FilterChip>
+        {(onlyAttention || q !== "") && (
+          <button
+            type="button"
+            onClick={() => {
+              setOnlyAttention(false);
+              setQ("");
+            }}
+            className="btn-ghost btn-sm"
+          >
+            Clear
+          </button>
+        )}
       </ListToolbar>
 
       <div className="card overflow-x-auto">
@@ -278,17 +295,19 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
             {live.length === 0 ? (
               <tr>
                 <td colSpan={canEdit ? 5 : 4} className="text-[var(--text-muted)]">
-                  {q ? `Nothing matches "${q}".` : "The catalog is empty."}
+                  {onlyAttention
+                    ? "Every device has a replacement mapped."
+                    : q
+                      ? `Nothing matches "${q}".`
+                      : "The catalog is empty."}
                 </td>
               </tr>
             ) : (
               live.map((r) => {
-                // The banner above names the devices with nothing to replace
-                // them; without the same mark on the row there was no way to
-                // tell WHICH row it meant (user-reported 2026-08-20). Tinted
-                // as well as chipped, so it is findable by scanning.
-                const unmapped =
-                  r.role === "original" && r.active && r.replacementIds.length === 0;
+                // The header states the count and the toolbar filters on it;
+                // the row still carries the mark so a scan finds it without
+                // filtering first (user-reported 2026-08-20).
+                const unmapped = needsAttention(r);
                 return (
                 <tr key={r.id} style={unmapped ? { background: "var(--warn-bg)" } : undefined}>
                   <td>

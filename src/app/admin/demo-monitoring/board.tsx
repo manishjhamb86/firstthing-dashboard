@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ListToolbar } from "@/components/list-toolbar";
+import { FilterChip, ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import Link from "next/link";
@@ -119,39 +119,18 @@ export function MonitoringBoard({
             ))}
           </select>
         )}
-        {FILTERS.map((f) => {
-          const on = f.id === filter;
-          const n = counts[f.id];
-          const urgent = f.id === "review" && n > 0;
-          return (
-            <button
-              key={f.id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => setFilter(f.id)}
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-[13px] font-semibold transition-colors"
-              style={{
-                background: on ? "var(--accent)" : "var(--surface)",
-                color: on ? "var(--text-on-accent)" : "var(--text-muted)",
-                border: `1px solid ${on ? "var(--accent)" : "var(--field-border)"}`,
-              }}
-            >
-              {f.label}
-              <span
-                className="num rounded-full px-1.5 text-[11px] leading-[1.6]"
-                style={
-                  on
-                    ? { background: "rgba(255,255,255,0.22)", color: "var(--text-on-accent)" }
-                    : urgent
-                      ? { background: "var(--bad-bg)", color: "var(--bad-fg)" }
-                      : { background: "var(--surface-active)", color: "var(--text-subtle)" }
-                }
-              >
-                {n}
-              </span>
-            </button>
-          );
-        })}
+        {FILTERS.map((f) => (
+          <FilterChip
+            key={f.id}
+            on={f.id === filter}
+            count={counts[f.id]}
+            // Only the review group is a warning; the others are just stages.
+            tone={f.id === "review" ? "warn" : "neutral"}
+            onClick={() => setFilter(f.id)}
+          >
+            {f.label}
+          </FilterChip>
+        ))}
       </ListToolbar>
 
       <div className="card overflow-hidden">

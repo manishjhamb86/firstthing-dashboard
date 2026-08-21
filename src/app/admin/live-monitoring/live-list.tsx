@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ListToolbar } from "@/components/list-toolbar";
+import { useSearchParams } from "next/navigation";
+import { FilterChip, ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
 import Link from "next/link";
 import { Card, EmptyState, StatusChip } from "@/components/ui";
@@ -49,6 +50,10 @@ export function LiveList({
 }) {
   const [line, setLine] = useState<string>("all");
   const [query, setQuery] = useState("");
+  // The header's "N societies below band" chip links here with ?warn=1 —
+  // a count you can act on rather than one you have to go hunting behind.
+  const searchParams = useSearchParams();
+  const [onlyWarn, setOnlyWarn] = useState(searchParams.get("warn") === "1");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -58,6 +63,7 @@ export function LiveList({
           ...s,
           circuits: s.circuits.filter((c) => {
             if (line !== "all" && c.serviceLine !== line) return false;
+            if (onlyWarn && !c.warn) return false;
             if (!q) return true;
             // Matching the SOCIETY keeps all of its circuits — you searched
             // for the relationship, not for one of its rows.
@@ -72,7 +78,9 @@ export function LiveList({
         // it is simply not on that line, so it drops out.
         .filter((s) => s.circuits.length > 0)
     );
-  }, [societies, line, query]);
+  }, [societies, line, query, onlyWarn]);
+
+  const warnCount = societies.reduce((n, s) => n + s.circuits.filter((c) => c.warn).length, 0);
 
   const countFor = (l: string) =>
     l === "all"
@@ -94,34 +102,27 @@ export function LiveList({
           className="w-full sm:w-72"
         />
         <div className="flex flex-wrap gap-2">
-          {["all", ...serviceLines].map((l) => {
-            const on = l === line;
-            return (
-              <button
-                key={l}
-                type="button"
-                onClick={() => setLine(l)}
-                className="chip"
-                style={{
-                  background: on ? "var(--accent)" : "var(--surface)",
-                  color: on ? "#fff" : "var(--text-muted)",
-                  borderColor: on ? "var(--accent)" : "var(--border)",
-                }}
-              >
-                {l === "all" ? "All service lines" : SERVICE_LINE_LABEL[l] ?? l}
-                <span className="num" style={{ opacity: 0.75 }}>
-                  {countFor(l)}
-                </span>
-              </button>
-            );
-          })}
+          {["all", ...serviceLines].map((l) => (
+            <FilterChip key={l} on={l === line} count={countFor(l)} onClick={() => setLine(l)}>
+              {l === "all" ? "All service lines" : SERVICE_LINE_LABEL[l] ?? l}
+            </FilterChip>
+          ))}
+          <FilterChip
+            on={onlyWarn}
+            count={warnCount}
+            tone="warn"
+            onClick={() => setOnlyWarn((v) => !v)}
+          >
+            Below band
+          </FilterChip>
         </div>
-        {(query.trim() !== "" || line !== "all") && (
+        {(query.trim() !== "" || line !== "all" || onlyWarn) && (
           <button
             type="button"
             onClick={() => {
               setQuery("");
               setLine("all");
+              setOnlyWarn(false);
             }}
             className="btn-ghost btn-sm"
           >
@@ -141,7 +142,9 @@ export function LiveList({
           }
         >
           {query.trim() !== "" || line !== "all"
-            ? "Clear the filter to see every live circuit."
+            ? onlyWarn
+              ? "Every live circuit is inside its band."
+              : "Clear the filter to see every live circuit."
             : "A circuit arrives here once its benchmark is confirmed and its installation is signed off — billing starts the day after the completion certificate (CON-22)."}
         </EmptyState>
       ) : (

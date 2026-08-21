@@ -2,9 +2,10 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Stat, StatRow } from "@/components/list-toolbar";
-import { PageHeader, PageRibbon } from "@/components/ui";
+import { PageHeader, StatusChip } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { CatalogList } from "./catalog-list";
+import { needsAttention, type CatalogRow } from "@/lib/device-catalog";
 
 // CON-45 — the predefined device catalog. Two halves: what a survey finds on
 // a circuit (originals), and what FirsThing installs (replacements), joined
@@ -27,25 +28,35 @@ export default async function DeviceCatalogPage() {
   const live = types.filter((t) => !t.deletedAt);
   const originals = live.filter((t) => t.role === "original");
   const replacements = live.filter((t) => t.role === "replacement");
-  const unmapped = originals.filter((t) => t.active && t.replacementOptions.length === 0);
+  const rows: CatalogRow[] = types.map((t) => ({
+    id: t.id,
+    name: t.name,
+    role: t.role as "original" | "replacement",
+    defaultWattage: t.defaultWattage,
+    active: t.active,
+    removed: t.deletedAt !== null,
+    replacementIds: t.replacementOptions.map((o) => o.replacementTypeId),
+    usageCount: t._count.circuitDevices + t._count.circuitReplacements,
+  }));
+  const unmapped = rows.filter(needsAttention);
 
   return (
     <>
-      {/* Top of the page, not between the stats and the table — this is
-          about the catalog as a whole, and where it sat it read as a
-          caption for whatever followed it. */}
-      {unmapped.length > 0 && (
-        <PageRibbon>
-          {unmapped.length === 1 ? "One active device has" : `${unmapped.length} active devices have`} no
-          compatible replacement mapped: <strong>{unmapped.map((t) => t.name).join(", ")}</strong>. A circuit
-          carrying {unmapped.length === 1 ? "it" : "them"} cannot have its replacement recorded at
-          installation. {unmapped.length === 1 ? "It is" : "They are"} marked in the list below.
-        </PageRibbon>
-      )}
-
       <PageHeader
         title="Device catalog"
         subtitle="Every device the inventory and replacement dropdowns offer. An original maps to the replacements compatible with it — that mapping is all an installer ever sees."
+        chip={
+          unmapped.length > 0 ? (
+            // The chip is the way IN to the rows it counts, not just a
+            // number — "should be able to sort or filter the list if any row
+            // with errors or warning" (2026-08-21).
+            <Link href="/admin/device-catalog?attention=1" aria-label="Show only devices that need attention">
+              <StatusChip tone="warn">
+                {unmapped.length} need{unmapped.length === 1 ? "s" : ""} attention
+              </StatusChip>
+            </Link>
+          ) : undefined
+        }
         action={
           canEdit ? (
             <Link href="/admin/device-catalog?new=1" className="btn-primary">
@@ -82,19 +93,7 @@ export default async function DeviceCatalogPage() {
         ))}
       </StatRow>
 
-      <CatalogList
-        canEdit={canEdit}
-        rows={types.map((t) => ({
-          id: t.id,
-          name: t.name,
-          role: t.role as "original" | "replacement",
-          defaultWattage: t.defaultWattage,
-          active: t.active,
-          removed: t.deletedAt !== null,
-          replacementIds: t.replacementOptions.map((o) => o.replacementTypeId),
-          usageCount: t._count.circuitDevices + t._count.circuitReplacements,
-        }))}
-      />
+      <CatalogList canEdit={canEdit} rows={rows} />
     </>
   );
 }

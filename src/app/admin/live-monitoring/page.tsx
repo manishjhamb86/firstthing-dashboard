@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { PageHeader, StatusChip } from "@/components/ui";
@@ -80,9 +81,11 @@ export default async function LiveMonitoringPage() {
         subtitle="Installed, signed off and billing. Each month's readings are recorded per circuit; savings are measured against the baseline in force (INV-07)."
         chip={
           societies.length === 0 ? undefined : belowBand > 0 ? (
-            <StatusChip tone="warn">
-              {belowBand} societ{belowBand === 1 ? "y" : "ies"} below band
-            </StatusChip>
+            <Link href="/admin/live-monitoring?warn=1" aria-label="Show only circuits below band">
+              <StatusChip tone="warn">
+                {belowBand} societ{belowBand === 1 ? "y" : "ies"} below band
+              </StatusChip>
+            </Link>
           ) : (
             <StatusChip tone="ok">All on target</StatusChip>
           )

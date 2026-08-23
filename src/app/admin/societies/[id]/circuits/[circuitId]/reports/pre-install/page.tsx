@@ -74,7 +74,7 @@ export default async function PreInstallReportPage({
 
       <section>
         <h2 className="text-base font-semibold mb-2">1. What is on this circuit</h2>
-        <table className="tbl w-full">
+        <div className="print-table-scroll"><table className="tbl w-full">
           <thead>
             <tr>
               <th>Device</th>
@@ -104,6 +104,7 @@ export default async function PreInstallReportPage({
             </tr>
           </tfoot>
         </table>
+        </div>
         {inventory.length === 0 && (
           <p className="text-sm mt-2" style={{ color: "var(--warn-fg)" }}>
             No load inventory is recorded — there is no theoretical figure to compare against, which
@@ -114,7 +115,7 @@ export default async function PreInstallReportPage({
 
       <section>
         <h2 className="text-base font-semibold mb-2">2. Recorded consumption, day by day</h2>
-        <table className="tbl w-full">
+        <div className="print-table-scroll"><table className="tbl w-full">
           <thead>
             <tr>
               <th>Date</th>
@@ -162,6 +163,7 @@ export default async function PreInstallReportPage({
             ))}
           </tbody>
         </table>
+        </div>
       </section>
 
       <section>

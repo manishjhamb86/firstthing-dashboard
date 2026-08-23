@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { ListToolbar } from "@/components/list-toolbar";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, Stat, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { READING_ANOMALY_KIND, READING_ANOMALY_STATUS, READING_UPLOAD_STATUS } from "@/lib/status-maps";
 import { coverageOf, describeCoverage, monthlyFigure } from "@/lib/reading-coverage";
 import { RawFileLink } from "./raw-file-link";
@@ -82,28 +83,8 @@ export default async function CircuitReadingHistory({
         }
       />
 
-      {periods.length > 1 && (
-        <form method="get" className="mb-6 flex flex-wrap items-end gap-3">
-          <div className="space-y-1.5">
-            <label htmlFor="period" className="lbl">
-              Period
-            </label>
-            <select id="period" name="period" defaultValue={period} className="field field-auto">
-              {periods.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </div>
-          <button type="submit" className="btn-secondary">
-            Show
-          </button>
-        </form>
-      )}
-
       {period && (
-        <div className="grid gap-4 sm:grid-cols-3 mb-6">
+        <StatRow>
           <Stat
             label={`${period} total`}
             // FEAT-046-AC-2/AC-5 — "no data" and "not billable from this" are
@@ -125,13 +106,51 @@ export default async function CircuitReadingHistory({
           <Stat
             label="Flags"
             value={anomalies.filter((a) => a.status === "open").length}
+            tone={anomalies.some((a) => a.status === "open" && a.blocksBilling) ? "warn" : "ok"}
             detail={
               acceptance
                 ? `Low coverage accepted: ${acceptance.reason}`
                 : `${anomalies.length} raised in total for this month`
             }
           />
-        </div>
+          {/* A fourth, so the row is four wide like every other page's. It is
+              a real figure the page already loads, not padding. */}
+          <Stat
+            label="Uploads"
+            value={files.length}
+            detail={
+              files.length === 0
+                ? "no file received for this circuit"
+                : `${files.filter((f) => f.status === "committed").length} committed`
+            }
+          />
+        </StatRow>
+      )}
+      {/* This page's toolbar. It used to stack a label above the control and
+          sit ABOVE the tiles, while its own parent (/admin/readings) renders
+          the same control as a toolbar BELOW them — the parent and child of
+          one feature disagreeing about their own layout. */}
+      {periods.length > 1 && (
+        <form method="get">
+          <ListToolbar>
+            <select
+              id="period"
+              name="period"
+              defaultValue={period}
+              aria-label="Reading period"
+              className="field field-auto"
+            >
+              {periods.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+            <button type="submit" className="btn-secondary">
+              Show
+            </button>
+          </ListToolbar>
+        </form>
       )}
 
       <Card className="p-6 mb-6">

@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
-import { Building2, Target, Gauge, BadgeCheck } from "lucide-react";
 import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -127,16 +126,12 @@ export default async function AdminHomePage() {
           label="Societies"
           value={societyCount}
           detail={`${activeSocietyCount} active · ${prospectCount} prospect`}
-          icon={<Building2 size={20} strokeWidth={1.75} />}
-          tone="accent"
         />
         {canSeePipeline && (
           <Stat
             label="Open pipelines"
             value={openPipelineCount}
             detail={pendingApprovalCount > 0 ? `${pendingApprovalCount} pending approval` : "None pending approval"}
-            icon={<Target size={20} strokeWidth={1.75} />}
-            tone="info"
           />
         )}
         {canSeeMonitoring && (
@@ -144,8 +139,6 @@ export default async function AdminHomePage() {
             label="Circuits commissioning"
             value={circuitsInCommissioning}
             detail="Meter install through benchmark"
-            icon={<Gauge size={20} strokeWidth={1.75} />}
-            tone="warn"
           />
         )}
         {canSeeMonitoring && (
@@ -153,8 +146,6 @@ export default async function AdminHomePage() {
             label="Benchmarks confirmed"
             value={benchmarkConfirmedCount}
             detail="Inside CON-20's 60-80% band"
-            icon={<BadgeCheck size={20} strokeWidth={1.75} />}
-            tone="ok"
           />
         )}
       </StatRow>

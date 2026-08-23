@@ -122,7 +122,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
               list rather than below it — user-asked 2026-08-20. Stacks back
               to one column under lg, where side-by-side would only squeeze
               both. */}
-          <div className="grid gap-6 lg:grid-cols-2 items-start">
+          <div className="grid gap-6 lg:grid-cols-2 items-start [&>*]:min-w-0">
           <Card className="p-5">
             <CardTitle>Execution steps</CardTitle>
             <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">

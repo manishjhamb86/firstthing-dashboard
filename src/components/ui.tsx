@@ -163,7 +163,7 @@ export function PageRibbon({
 }
 
 // Status tiles — ONE component and ONE row, used by every page that has
-// figures to show. There used to be two components (Stat and Stat) and
+// figures to show. There used to be two components (KpiTile and Stat) and
 // nine hand-written grids with three different gaps and two different
 // breakpoints, so the row's height and the value's baseline moved as you
 // navigated ("changing or navigating to other pages doesn't give a
@@ -171,68 +171,71 @@ export function PageRibbon({
 //
 // Three things are fixed on purpose, and each one is a thing that used to
 // move:
-//   · the label reserves two lines whether or not it needs them, so the
-//     value sits at the same y on a page with "Retired" and a page with
+//   · the label reserves one row whether or not it needs it, so the value
+//     sits at the same y on a page with "Retired" and a page with
 //     "Awaiting today's reading";
 //   · the detail is clamped to two lines, so a long one cannot grow the row;
 //   · the tile has a floor height, so a row of tiles with no detail is the
 //     same height as one with.
-// An icon is optional and sits in the CORNER rather than beside the text —
-// beside it, the text column started further right on the one page that
-// passes icons, which is exactly the drift this is meant to end.
-const STAT_TONE: Record<string, { bg: string; fg: string }> = {
-  accent: { bg: "var(--accent-subtle)", fg: "var(--accent)" },
-  ok: { bg: "var(--ok-bg)", fg: "var(--ok-fg)" },
-  warn: { bg: "var(--warn-bg)", fg: "var(--warn-fg)" },
-  bad: { bg: "var(--bad-bg)", fg: "var(--bad-fg)" },
-  info: { bg: "var(--info-bg)", fg: "var(--info-fg)" },
+//
+// There is deliberately NO icon variant. An icon bubble on the Portfolio's
+// tiles and not on the circuit page's is the same component wearing two
+// faces, which is the drift this consolidation exists to end (audit,
+// 2026-08-21). `tone` earns its keep instead by tinting the FIGURE — a held
+// month reads amber and a clear one green, in the one place the eye is
+// already looking.
+// Only a figure that needs attention is tinted. `ok` renders in the plain
+// text colour on purpose: a green number carries no information the absence
+// of amber does not already carry, and a row of mixed green-and-plain tiles
+// reads as if the colours mean something they do not.
+const STAT_TONE: Record<string, string> = {
+  accent: "var(--text)",
+  ok: "var(--text)",
+  info: "var(--text)",
+  warn: "var(--warn-fg)",
+  bad: "var(--bad-fg)",
 };
 
 export function StatRow({ children }: { children: ReactNode }) {
-  return <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">{children}</div>;
+  // A container query, not a viewport one. `lg:grid-cols-4` asked how wide
+  // the WINDOW was, so the society portal — whose reading column is ~700px
+  // inside a 1400px window — crammed four tiles into it and wrapped
+  // "507.32 kWh/day" across two lines. The row now measures the space it is
+  // actually in, so the same component behaves in a narrow column and a
+  // full-width one without either caller knowing about the other.
+  return (
+    <div className="stat-row-wrap">
+      <div className="stat-row">{children}</div>
+    </div>
+  );
 }
 
 export function Stat({
   label,
   value,
   detail,
-  icon,
   tone = "accent",
 }: {
   label: ReactNode;
   value: ReactNode;
   detail?: ReactNode;
-  icon?: ReactNode;
   tone?: keyof typeof STAT_TONE;
 }) {
-  const t = STAT_TONE[tone] ?? STAT_TONE.accent;
   return (
     <div className="card stat-tile p-4">
-      {/* The icon shares a flex row with the label rather than being
-          absolutely positioned over the tile. Absolute placement fails
-          DESTRUCTIVELY — if the offset utilities do not apply, the bubble
-          renders at its static position on top of the label and the value,
-          which is what a half-loaded stylesheet produced (2026-08-21). In a
-          flex row the worst case is a plainer tile, and the label still
-          starts at the same x whether or not a page passes an icon. */}
-      {/* min-h-9 on the ROW, not on the label: the icon is 36px and a
-          two-line label is ~31px, so whichever is present the row is the
-          same height and the value's baseline does not shift by a pixel
-          between a page that passes icons and one that does not. */}
-      <div className="flex items-start justify-between gap-2 mb-1.5 min-h-9">
-        <p className="lbl">{label}</p>
-        {icon && (
-          <span
-            aria-hidden
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-            style={{ background: t.bg, color: t.fg }}
-          >
-            {icon}
-          </span>
-        )}
-      </div>
-      <p className="num text-[20px] font-semibold leading-none">{value}</p>
-      {detail && <p className="stat-detail mt-1.5 text-xs text-[var(--text-subtle)]">{detail}</p>}
+      <p className="lbl mb-1.5 min-h-9">{label}</p>
+      <p
+        className="num text-[20px] font-semibold leading-none"
+        style={{ color: STAT_TONE[tone] ?? STAT_TONE.accent }}
+      >
+        {value}
+      </p>
+      {/* Always rendered, even when empty. A floor height alone was not
+          enough: a tile with a two-line detail came out at 134px next to a
+          one-line tile's 118px, which is the height drift this is here to
+          prevent. Two lines are reserved and at most two are shown, so the
+          tile is the same height whatever the copy. */}
+      <p className="stat-detail mt-1.5 text-xs text-[var(--text-subtle)]">{detail ?? "\u00A0"}</p>
     </div>
   );
 }

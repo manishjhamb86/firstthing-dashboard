@@ -92,7 +92,17 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
           </StatusChip>
         ) : undefined
       }
-      subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${surveyed} lights surveyed`}
+      // The project's own recorded scope, not a re-count of the survey's
+      // areas. Those two disagreed on screen — the header said "0 lights
+      // surveyed" directly above a Scope card reading SURVEYED 400 — because
+      // a project can be set up with a scope that the survey rows no longer
+      // (or do not yet) back. The project is the record installation runs
+      // against, so it is the one the header quotes.
+      subtitle={
+        project
+          ? `${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${project.contractedLightCount.toLocaleString("en-IN")} lights contracted`
+          : `${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${surveyed.toLocaleString("en-IN")} lights surveyed`
+      }
       // Top right, in line with the title — raising a blocker is a thing you
       // do from anywhere on this screen, not a control belonging to the
       // section that lists them (user-asked 2026-08-20).
@@ -267,17 +277,20 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     <>
       {header}
 
-      {installationDone && (
-        <StepComplete title="Installation complete — this step is done.">
-          The completion certificate is signed
-          {project.certificate?.billingStartDate
-            ? `, and billing started ${project.certificate.billingStartDate
-                .toISOString()
-                .slice(0, 10)} — the day after (CON-22).`
-            : "."}
-        </StepComplete>
-      )}
-      {afterInstall && <NextStepCallout next={afterInstall} />}
+      {/* One card, not two stacked — see the same merge on the KYC step. */}
+      {(() => {
+        const doneLine = installationDone
+          ? `Installation complete — the completion certificate is signed${
+              project.certificate?.billingStartDate
+                ? `, and billing started ${project.certificate.billingStartDate
+                    .toISOString()
+                    .slice(0, 10)}, the day after (CON-22).`
+                : "."
+            }`
+          : undefined;
+        if (afterInstall) return <NextStepCallout next={afterInstall} done={doneLine} />;
+        return doneLine ? <StepComplete title={doneLine} /> : null;
+      })()}
 
       <div className="max-w-none space-y-6">
         <Card className="p-5">
@@ -292,7 +305,12 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
               <dd className="num">{project.surveyedLightCount}</dd>
             </div>
             <div>
-              <dt className="lbl">Installed</dt>
+              {/* Named for what it counts. "Installed 0" sat on the same
+                  screen as the certificate's "Total installed 400" — two
+                  different quantities wearing one word, which is the same
+                  unnamed-figure problem as the baseline pair (2026-08-21).
+                  This one is the running total from the logged batches. */}
+              <dt className="lbl">Logged in batches</dt>
               <dd className="num">{totalInstalled}</dd>
             </div>
             <div>
@@ -337,6 +355,16 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 </tr>
               </thead>
               <tbody>
+                {project.plannedDays.length === 0 && (
+                  // INV-06 — every list surface defines its empty state. This
+                  // one rendered a header row over nothing at all.
+                  <tr>
+                    <td colSpan={7} className="text-[var(--text-muted)]">
+                      No days planned yet — publish a batch plan and each day appears here with its
+                      review gate.
+                    </td>
+                  </tr>
+                )}
                 {project.plannedDays.map((d) => {
                   const batch = project.batches.find((b) => b.plannedDayId === d.id);
                   const previous = project.batches.filter((b) => b.day === d.day - 1);
@@ -578,7 +606,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   </dd>
                 </div>
                 <div>
-                  <dt className="lbl">Total installed</dt>
+                  <dt className="lbl">Certified installed</dt>
                   <dd className="num">{project.certificate.totalInstalledCount}</dd>
                 </div>
               </dl>

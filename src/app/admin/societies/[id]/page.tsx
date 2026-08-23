@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { Building2, Users, Gauge, Layers } from "lucide-react";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import {
   ENGAGEMENT_STATUS,
@@ -100,16 +99,15 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         title={society.name}
         subtitle={`${society.location} · ${society.flatCount} flats`}
         action={
+          // One action and the status control, like every other page's
+          // header. "Log a lead" and "Add portal account" both lived here AND
+          // in the card that owns them — the same duplication reported on the
+          // catalog (2026-08-21) — so they stay with their own cards, where
+          // the thing they act on actually is.
           <div className="flex flex-wrap items-center gap-2">
             <Link href={`/admin/societies/${society.id}/circuits`} className="btn-outline btn-sm">
               Circuit registry
             </Link>
-            {/* Arriving from this society, the form should not ask again which
-                society it is — the id rides along and is preselected. */}
-            <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="btn-outline btn-sm">
-              Log a lead
-            </Link>
-            <AddPortalAccountButton societyId={society.id} variant="secondary" />
             <StatusControl societyId={society.id} status={society.status} />
           </div>
         }
@@ -120,45 +118,37 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           not have to guess which is being described. */}
       {coldStart && <NextStepCallout next={coldStart} />}
       {nextSteps.map((s) => (
-        <div key={s.serviceLine}>
-          <p className="lbl mb-1" style={{ color: "var(--text-subtle)" }}>
-            {SERVICE_LINE_LABEL[s.serviceLine] ?? s.serviceLine}
-          </p>
-          <NextStepCallout next={s.next} />
-        </div>
+        <NextStepCallout
+          key={s.serviceLine}
+          next={s.next}
+          eyebrow={SERVICE_LINE_LABEL[s.serviceLine] ?? s.serviceLine}
+        />
       ))}
 
       <StatRow>
         <Stat
           label="Flats"
           value={society.flatCount.toLocaleString("en-IN")}
-          icon={<Building2 size={20} strokeWidth={1.75} />}
-          tone="accent"
         />
         <Stat
           label="Service lines"
           value={engagements.filter((e) => e.status === "active").length}
           detail={engagements.length > 0 ? `${engagements.length} enrolled` : "None enrolled"}
-          icon={<Layers size={20} strokeWidth={1.75} />}
-          tone="info"
         />
         <Stat
           label="Circuits"
           value={circuitCount}
           detail={circuitCount === 0 ? "None registered" : "Registered, not removed"}
-          icon={<Gauge size={20} strokeWidth={1.75} />}
-          tone="warn"
         />
         <Stat
           label="Portal accounts"
           value={accounts.length}
           detail={accounts.length === 0 ? "Nobody can sign in" : "Active"}
-          icon={<Users size={20} strokeWidth={1.75} />}
           tone={accounts.length === 0 ? "bad" : "ok"}
         />
       </StatRow>
 
-      <div className="grid gap-6 lg:grid-cols-2 items-start">
+      <div className="grid gap-6 lg:grid-cols-2 items-start [&>*]:min-w-0">
         {/* Everything about the ENGAGEMENT: what the society is signed up
             for, and every deal that has run on it. */}
         <div className="space-y-6 min-w-0">

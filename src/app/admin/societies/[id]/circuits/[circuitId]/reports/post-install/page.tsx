@@ -77,7 +77,7 @@ export default async function PostInstallReportPage({
       {inventory.some((l) => l.replacementName) && (
         <section>
           <h2 className="text-base font-semibold mb-2">2. What was installed</h2>
-          <table className="tbl w-full">
+          <div className="print-table-scroll"><table className="tbl w-full">
             <thead>
               <tr>
                 <th>Was</th>
@@ -99,12 +99,13 @@ export default async function PostInstallReportPage({
               ))}
             </tbody>
           </table>
+        </div>
         </section>
       )}
 
       <section>
         <h2 className="text-base font-semibold mb-2">3. Post-installation consumption &amp; savings, day by day</h2>
-        <table className="tbl w-full">
+        <div className="print-table-scroll"><table className="tbl w-full">
           <thead>
             <tr>
               <th>Date</th>
@@ -143,6 +144,7 @@ export default async function PostInstallReportPage({
             ))}
           </tbody>
         </table>
+        </div>
         {excludedPost > 0 && (
           <p className="text-xs mt-2 text-[var(--text-muted)]">
             {excludedPost} excluded day{excludedPost === 1 ? "" : "s"} shown struck through — listed,

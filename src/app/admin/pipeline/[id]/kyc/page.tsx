@@ -78,14 +78,22 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
       {/* A finished step should say so unmistakably, and then say where to go
           — the checklist reading "2 of 2 settled" in a header chip was the
           only signal that GATE-01 was cleared (user-asked 2026-08-20). */}
-      {allSettled && (
-        <StepComplete title="KYC complete — this step is done.">
-          Every document is verified or recorded as not applicable, so GATE-01 no longer holds the
-          agreement.
-        </StepComplete>
+      {/* One card, not two stacked. When there is a next step the outcome
+          rides inside it; only a finished deal with nowhere to go still needs
+          a standalone confirmation. */}
+      {progress?.next ? (
+        <NextStepCallout
+          next={progress.next}
+          done={allSettled ? "KYC complete — every document is verified or recorded as not applicable, so GATE-01 no longer holds the agreement." : undefined}
+        />
+      ) : (
+        allSettled && (
+          <StepComplete title="KYC complete — this step is done.">
+            Every document is verified or recorded as not applicable, so GATE-01 no longer holds the
+            agreement.
+          </StepComplete>
+        )
       )}
-
-      {progress?.next && <NextStepCallout next={progress.next} />}
 
       <div className="max-w-none space-y-6">
         {items.map((item) => {

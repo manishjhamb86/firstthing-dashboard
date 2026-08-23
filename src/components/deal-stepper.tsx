@@ -209,7 +209,21 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
  * should be the first thing the eye lands on, because it is the only thing
  * on the page that says what to do.
  */
-export function NextStepCallout({ next }: { next: NextAction }) {
+export function NextStepCallout({
+  next,
+  eyebrow,
+  done,
+}: {
+  next: NextAction;
+  eyebrow?: string;
+  /**
+   * What this step just finished, when the page has both. A green "done"
+   * banner stacked directly above this blue one is two banners competing for
+   * the same glance — the shape the user rejected on the demo ribbon
+   * (2026-08-21). One card, the outcome above the next move.
+   */
+  done?: React.ReactNode;
+}) {
   return (
     <Link
       href={next.href}
@@ -217,8 +231,24 @@ export function NextStepCallout({ next }: { next: NextAction }) {
       style={{ background: "var(--accent)", color: "#fff", boxShadow: "var(--e1)" }}
     >
       <div className="min-w-0">
+        {done && (
+          <p className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <span
+              aria-hidden
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold"
+              style={{ background: "rgba(255,255,255,0.22)" }}
+            >
+              ✓
+            </span>
+            {done}
+          </p>
+        )}
         <p className="lbl mb-1" style={{ color: "rgba(255,255,255,0.75)" }}>
-          Next step
+          {/* A society running two service lines needs to know WHICH one this
+              is about. It used to be a bare label floating above the card,
+              which pushed everything below it down by a line on this page
+              only. */}
+          {eyebrow ? `${eyebrow} · next step` : "Next step"}
         </p>
         <p className="text-[17px] font-semibold leading-snug">{next.label}</p>
         <p className="text-sm mt-0.5" style={{ color: "rgba(255,255,255,0.85)" }}>

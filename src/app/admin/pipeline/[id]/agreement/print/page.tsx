@@ -43,7 +43,7 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
 
       <section className="mb-8">
         <h2 className="text-base font-semibold mb-2">1. Commercial terms</h2>
-        <table className="tbl">
+        <div className="print-table-scroll"><table className="tbl">
           <tbody>
             <tr>
               <td>Revenue share</td>
@@ -79,11 +79,12 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
             </tr>
           </tbody>
         </table>
+        </div>
       </section>
 
       <section className="mb-8">
         <h2 className="text-base font-semibold mb-2">2. Per-circuit benchmarks</h2>
-        <table className="tbl">
+        <div className="print-table-scroll"><table className="tbl">
           <thead>
             <tr>
               <th>Light type</th>
@@ -106,6 +107,7 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
             ))}
           </tbody>
         </table>
+        </div>
       </section>
 
       {exclusions.length > 0 && (

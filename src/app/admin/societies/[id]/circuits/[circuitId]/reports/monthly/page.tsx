@@ -30,7 +30,38 @@ export default async function MonthlyReportPage({
   const { circuit, society, effBaselineNow } = report;
 
   const months = monthsWithData(report);
-  if (months.length === 0) notFound();
+  // A circuit with no monitoring month yet is not a missing page — it is a
+  // page with nothing to report. notFound() here was a dead end of exactly
+  // the kind this codebase has already fixed twice: the reader is told the
+  // URL is wrong when the truth is that billing has not started.
+  if (months.length === 0) {
+    return (
+      <main className="print-doc mx-auto max-w-[820px] p-10 space-y-6">
+        <div className="no-print">
+          <BackButton fallbackHref={`/admin/societies/${id}/circuits/${circuitId}`} />
+        </div>
+        <header>
+          <p className="text-sm font-semibold tracking-wide uppercase">
+            FirsThing · Monthly savings report
+          </p>
+          <h1 className="text-2xl font-semibold mt-1">{society.name}</h1>
+          <p className="text-sm mt-1">
+            {society.location} · {circuit.location || circuit.lightType} circuit
+          </p>
+        </header>
+        <p className="text-sm">
+          No monitoring month has been recorded for this circuit yet. Monthly readings start after
+          the installation is signed off — billing begins the day after the completion certificate
+          (CON-22), so there is nothing to report against until then.
+        </p>
+        <p className="text-sm no-print">
+          <Link href={`/admin/societies/${id}/circuits/${circuitId}`} className="underline">
+            Open the circuit&apos;s commissioning record →
+          </Link>
+        </p>
+      </main>
+    );
+  }
   const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) && months.includes(monthParam)
     ? monthParam
     : months[months.length - 1];
@@ -95,7 +126,7 @@ export default async function MonthlyReportPage({
 
       <section>
         <h2 className="text-base font-semibold mb-2">Daily consumption &amp; savings</h2>
-        <table className="tbl w-full">
+        <div className="print-table-scroll"><table className="tbl w-full">
           <thead>
             <tr>
               <th>Date</th>
@@ -148,6 +179,7 @@ export default async function MonthlyReportPage({
             </tr>
           </tfoot>
         </table>
+        </div>
       </section>
 
       <section>

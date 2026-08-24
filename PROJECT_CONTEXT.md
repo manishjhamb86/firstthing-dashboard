@@ -2069,6 +2069,47 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## Saving closes the form, and correcting a record is operations' own act (2026-08-25) — user-caught
+
+**Reported**: "on edit and save the form should close instead it reloads and feels like nothing
+happened on click just a flicker." Then: "Here also give option to update date. But make sure all
+these edit options are for admin only."
+
+**The save worked every time.** The form submitted on the same URL, so a successful save re-rendered
+the identical open form over a card nobody could see — a flicker with nothing to show for it. Both
+lead-details and proposal forms now close on success and stay open on a refusal, which is the one
+case with something left to do there. **The proposal form had the same bug latent for one outcome**:
+"agreed" and "declined" move the deal on so the form stops rendering anyway, but "undecided" leaves
+it at the lead stage — the identical flicker, waiting for someone to pick that option. Both moved
+from `useActionState` to `useTransition` (the pattern `admin-users-client.tsx` already uses),
+because the action's own result is what decides whether to close.
+
+**The logged date is correctable now**, from the deal or from the society's own leads card where it
+is shown — and reads as a date there rather than as ISO.
+
+**Editing is OPERATIONS ONLY, deliberately stricter than `mayAct`.** `mayAct` governs acting *on* a
+deal — the assignee, the creator, or ops. Correcting what the record *says* (the date it happened,
+whose it is) is a different act: the owner and creator fields exist precisely so that the people
+they name cannot quietly rewrite them.
+
+**A second circular date rule, the twin of the meeting one fixed the same day**: the lead's logged
+date was ordered against the society record — but on the lead path the society row is created *by*
+the lead, so the rule refused every correction that moved the date back, which is the only direction
+anyone moves it. The create path carried it too, with the same effect on any backdated lead for a
+new society; it now applies that ordering only when the society already existed. A lead still cannot
+be logged in the future, nor after the decision that came out of its meeting. **Worth remembering as
+a class**: ordering a record against a row that the same act creates is always circular, and it
+fails in the direction nobody tests.
+
+**Verified in a browser (25 + 10 checks, zero console errors)**, then on stage: saving closes both
+forms and the card shows the new values immediately; a refused save keeps the form open, says why,
+and stays on the editing URL; an undecided proposal closes its step and its outcome appears on the
+page. **The operations gate was driven through a path the client cannot pre-block** — the form
+opened legitimately as operations, the actor's own team moved off operations in Postgres behind the
+open form, then saved: refused by name, wrote nothing, team restored afterwards. Sales sees no Edit
+and gets no form from a direct link either. Six neighbouring suites unchanged; 455 unit tests,
+`tsc`/`lint`/`build` clean.
+
 ## A lead can be corrected, and a team's permission says which one it is (2026-08-24/25) — user-asked
 
 **Two reports, one goal — hand a lead to marketing with the right date.** "Change the date to

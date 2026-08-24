@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format-date";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -14,7 +15,7 @@ import {
 
 function stepChip(done: Date | null) {
   return done ? (
-    <StatusChip tone="ok">{done.toISOString().slice(0, 10)}</StatusChip>
+    <StatusChip tone="ok">{formatDate(done)}</StatusChip>
   ) : (
     <StatusChip tone="warn">Outstanding</StatusChip>
   );
@@ -126,7 +127,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
           <Card className="p-5">
             <CardTitle>Execution steps</CardTitle>
             <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
-              Prepared {agreement.preparedAt.toISOString().slice(0, 10)} by{" "}
+              Prepared {formatDate(agreement.preparedAt)} by{" "}
               {agreement.preparedBy.name ?? agreement.preparedBy.email}.
             </p>
             <div className="overflow-x-auto">
@@ -221,9 +222,9 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
             <Card className="p-5">
               <CardTitle>Contract</CardTitle>
               <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
-                Activated {contract.activatedAt?.toISOString().slice(0, 10)} by{" "}
+                Activated {formatDate(contract.activatedAt)} by{" "}
                 {contract.activatedBy?.name ?? contract.activatedBy?.email ?? "—"} · term{" "}
-                {contract.termStart.toISOString().slice(0, 10)} → {contract.termEnd.toISOString().slice(0, 10)}
+                {formatDate(contract.termStart)} → {formatDate(contract.termEnd)}
               </p>
               {currentTerms && (
                 <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 text-sm">
@@ -248,7 +249,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
                   <div>
                     <dt className="lbl">Terms version</dt>
                     <dd className="num">
-                      v{currentTerms.version}, effective {currentTerms.effectiveFrom.toISOString().slice(0, 10)}
+                      v{currentTerms.version}, effective {formatDate(currentTerms.effectiveFrom)}
                     </dd>
                   </div>
                 </dl>

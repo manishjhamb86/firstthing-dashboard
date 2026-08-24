@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format-date";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -126,11 +127,11 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
               <div>
                 <CardTitle>Version {latest.version}</CardTitle>
                 <p className="text-sm text-[var(--text-muted)] mt-1">
-                  Generated {latest.generatedAt.toISOString().slice(0, 10)}
+                  Generated {formatDate(latest.generatedAt)}
                   {latest.sharedAt && (
                     <>
                       {" "}
-                      · shared {latest.sharedAt.toISOString().slice(0, 10)} by{" "}
+                      · shared {formatDate(latest.sharedAt)} by{" "}
                       {latest.sharedBy?.name ?? latest.sharedBy?.email ?? "—"}
                     </>
                   )}
@@ -159,7 +160,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
                   <li key={r.id} className="text-[var(--text-muted)]">
                     <span className="num">v{r.version}</span> ·{" "}
                     <span className="num">{r.measuredSavingsPct.toFixed(2)}%</span> measured ·{" "}
-                    generated {r.generatedAt.toISOString().slice(0, 10)}
+                    generated {formatDate(r.generatedAt)}
                     {r.sharedAt ? " · was shared" : ""}
                   </li>
                 ))}

@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -159,7 +160,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
                             <td>
                               <StatusChip tone={fs.tone}>{fs.label}</StatusChip>
                             </td>
-                            <td className="num">{f.uploadedAt.toISOString().slice(0, 10)}</td>
+                            <td className="num">{formatDate(f.uploadedAt)}</td>
                           </tr>
                         );
                       })}
@@ -174,7 +175,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
                   <ul className="text-sm space-y-1">
                     {record.followUps.map((f) => (
                       <li key={f.id} className="text-[var(--text-muted)]">
-                        <span className="num">{f.recordedAt.toISOString().slice(0, 10)}</span> —{" "}
+                        <span className="num">{formatDate(f.recordedAt)}</span> —{" "}
                         {f.note}
                       </li>
                     ))}

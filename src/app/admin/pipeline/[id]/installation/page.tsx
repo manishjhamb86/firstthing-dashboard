@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format-date";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -35,7 +36,7 @@ import {
 } from "./installation-controls";
 
 function day(d: Date | null | undefined) {
-  return d ? d.toISOString().slice(0, 10) : "—";
+  return formatDate(d);
 }
 function time(d: Date) {
   return d.toISOString().slice(11, 16);

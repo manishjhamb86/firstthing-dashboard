@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDate } from "@/lib/format-date";
 import { useState, useTransition } from "react";
 import type { BlockerType } from "@prisma/client";
 import { ErrorText, Field } from "@/components/ui";
@@ -618,7 +619,7 @@ export function CompletionForm({ pipelineId }: { pipelineId: string }) {
   // trip.
   const proration = prorateFirstMonth(new Date(`${signedAt}T00:00:00.000Z`));
   const preview = {
-    start: proration.billingStart.toISOString().slice(0, 10),
+    start: formatDate(proration.billingStart),
     days: proration.proratedDays,
     daysInMonth: proration.daysInMonth,
   };

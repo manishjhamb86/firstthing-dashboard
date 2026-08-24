@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -38,7 +39,7 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
           Between <strong>FirsThing</strong> and <strong>{pipeline.society.name}</strong>,{" "}
           {pipeline.society.location} — {SERVICE_LINE_LABEL[pipeline.serviceLine]}.
         </p>
-        <p className="text-sm">Offer version {offer.version}, accepted on {offer.respondedAt?.toISOString().slice(0, 10) ?? "—"}.</p>
+        <p className="text-sm">Offer version {offer.version}, accepted on {formatDate(offer.respondedAt)}.</p>
       </header>
 
       <section className="mb-8">

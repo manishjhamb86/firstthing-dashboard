@@ -9,6 +9,7 @@ import { canOwn, mayAct, teamMeta } from "@/lib/admin-teams";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { refuseOrderedDate } from "@/lib/step-dates";
 import { resolveBackdate } from "@/lib/backdate";
+import { formatDate } from "@/lib/format-date";
 
 const SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"] as const;
 
@@ -142,12 +143,18 @@ export async function createLead(input: {
   ]);
   if (typeof loggedAt === "string") return { error: loggedAt };
 
+  // The meeting is NOT ordered against the society record. Meeting the
+  // committee is what causes the record to exist, so a meeting held last week
+  // for a society being entered today is the ordinary case — ordering it
+  // against `society.createdAt` refused every real backdated lead, since a
+  // quick-created society is always stamped now(). The lead's own logged-at
+  // date above still is ordered that way, because that one IS about our
+  // records. Only "not in the future" applies here.
   const meetingDate = new Date(input.meetingDate);
   const meetingRefusal = refuseOrderedDate({
     subject: "The meeting",
     date: meetingDate,
     now: new Date(),
-    mustNotPrecede: [{ label: "the society record", date: society?.createdAt ?? null }],
   });
   if (meetingRefusal) return { error: meetingRefusal };
 
@@ -230,6 +237,138 @@ export async function approveLead(pipelineId: string) {
     onBehalf: right.onBehalf,
     ownerId: pipeline.salesOwnerId,
   });
+
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  revalidatePath("/admin/pipeline");
+  return {};
+}
+
+/**
+ * Correct a lead's own details — who it belongs to, when the meeting was, who
+ * to call.
+ *
+ * There was no way to change any of this after logging it (user-asked
+ * 2026-08-24, pointing at a lead assigned to an inspector with the wrong
+ * meeting date). Reassigning matters most: the whole team model exists so
+ * that work sits with the person who does it, and a lead that landed on the
+ * wrong account had no route to the right one short of logging a second lead
+ * against a society that already has one — which CON-24 refuses outright.
+ *
+ * The same three rules as everywhere else in this file: the row decides, not
+ * the token; the assignee, the creator and operations may act, nobody else;
+ * and a lead can only be handed to a team that owns leads.
+ */
+export async function updateLeadDetails(
+  pipelineId: string,
+  input: {
+    contactName: string;
+    contactPhone?: string;
+    meetingDate: string;
+    salesOwnerId: string;
+    notes?: string;
+  },
+): Promise<{ error?: string } | undefined> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_pipeline")) {
+    logger.warn("pipeline.lead_update_refused", { pipelineId, actorId: actor.id, reason: "permission" });
+    return { error: "Changing a lead is a sales or operations action." };
+  }
+
+  const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId } });
+  if (!pipeline) return { error: "Lead not found." };
+
+  const right = mayAct({
+    actorId: actor.id,
+    actorTeam: actor.team,
+    ownerId: pipeline.salesOwnerId,
+    creatorId: pipeline.loggedById,
+  });
+  if (!right.allowed) {
+    logger.warn("pipeline.lead_update_refused", { pipelineId, actorId: actor.id, reason: right.reason });
+    return { error: right.reason };
+  }
+
+  const contactName = input.contactName.trim();
+  if (!contactName) return { error: "Contact name is required." };
+
+  const owner = await db.adminUser.findFirst({
+    where: { id: input.salesOwnerId, isActive: true, deletedAt: null },
+    select: { id: true, team: true, name: true, email: true, permissions: true },
+  });
+  if (!owner) return { error: "That account cannot take a lead." };
+  if (!canOwn(owner.team, "lead")) {
+    logger.warn("pipeline.lead_update_refused", {
+      pipelineId,
+      actorId: actor.id,
+      reason: "owner-team",
+      ownerTeam: owner.team,
+    });
+    return {
+      error: `${owner.name ?? owner.email} is on the ${teamMeta(owner.team).label} team — a lead belongs to admin or sales.`,
+    };
+  }
+  // The picker filters on this too, but the picker is not the gate: without
+  // manage_pipeline the "owner" could not open the deal they own.
+  if (!owner.permissions.includes("manage_pipeline")) {
+    return {
+      error: `${owner.name ?? owner.email} does not hold Manage pipeline, so they could not open this deal. Grant it on the users screen first.`,
+    };
+  }
+
+  // Same rule as the create path: a meeting can predate the record it caused.
+  const meetingDate = new Date(input.meetingDate);
+  const refusal = refuseOrderedDate({ subject: "The meeting", date: meetingDate, now: new Date() });
+  if (refusal) return { error: refusal };
+  // A meeting cannot be moved to after the decision that came out of it —
+  // the proposal form already refuses the mirror image of this.
+  if (pipeline.proposalDecidedAt && meetingDate.getTime() > pipeline.proposalDecidedAt.getTime()) {
+    return {
+      error: `The meeting cannot be dated after the proposal decision (${formatDate(pipeline.proposalDecidedAt)}).`,
+    };
+  }
+
+  // Handing the lead to someone else puts it back in their hands to confirm —
+  // but ONLY while it is still a lead. Flipping it on a deal that has already
+  // advanced would freeze a live deal behind an approval nobody is waiting on
+  // (FEAT-001-AC-2 is about the meeting that has not happened yet).
+  const reassigned = owner.id !== pipeline.salesOwnerId;
+  const authoritative =
+    pipeline.stage !== "lead"
+      ? pipeline.authoritative
+      : reassigned
+        ? owner.id === actor.id
+        : pipeline.authoritative;
+
+  await db.pipeline.update({
+    where: { id: pipelineId },
+    data: {
+      contactName,
+      contactPhone: input.contactPhone?.trim() || null,
+      meetingDate,
+      notes: input.notes?.trim() || null,
+      salesOwnerId: owner.id,
+      authoritative,
+    },
+  });
+
+  logger.info("pipeline.lead_updated", {
+    pipelineId,
+    actorId: actor.id,
+    onBehalf: right.onBehalf,
+    reassignedFrom: reassigned ? pipeline.salesOwnerId : undefined,
+    reassignedTo: reassigned ? owner.id : undefined,
+    meetingDate: input.meetingDate,
+    authoritative,
+  });
+  if (reassigned && !authoritative) {
+    // Same honest stand-in for NFR-10 as the create path.
+    logger.info("pipeline.pending_approval_notify", {
+      pipelineId,
+      salesOwnerId: owner.id,
+      loggedById: actor.id,
+    });
+  }
 
   revalidatePath(`/admin/pipeline/${pipelineId}`);
   revalidatePath("/admin/pipeline");

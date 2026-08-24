@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { AdminTeam } from "@prisma/client";
-import { TEAMS, teamMeta } from "@/lib/admin-teams";
+import { TEAM_PERMISSIONS, TEAMS, missingTeamPermissions, teamMeta } from "@/lib/admin-teams";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
@@ -28,6 +28,7 @@ export type AdminListRow = {
 };
 
 const LABEL = new Map(PERMISSION_OPTIONS.map((p) => [p.value, p.label]));
+const PERM_LABEL = LABEL;
 
 /**
  * One form, two modes. "Add" opens it empty and "Edit" opens it populated —
@@ -53,8 +54,12 @@ function AdminForm({
   const [name, setName] = useState(editing?.name ?? "");
   const [email, setEmail] = useState(editing?.email ?? "");
   const [password, setPassword] = useState("");
-  const [perms, setPerms] = useState<AdminPermission[]>(editing?.permissions ?? []);
   const [team, setTeam] = useState<AdminTeam>(editing?.team ?? "sales");
+  // A new account starts with what its team actually needs, rather than five
+  // unchecked boxes none of which names the team just chosen.
+  const [perms, setPerms] = useState<AdminPermission[]>(
+    editing?.permissions ?? TEAM_PERMISSIONS[editing?.team ?? "sales"],
+  );
   const [isActive, setIsActive] = useState(editing?.isActive ?? true);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
@@ -62,6 +67,22 @@ function AdminForm({
   function toggle(p: AdminPermission) {
     setPerms((cur) => (cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]));
   }
+
+  /**
+   * Changing the team swaps the grants that came FROM a team and leaves
+   * anything granted by hand alone — an ops account that was also given
+   * manage_admins keeps it when it moves to finance, but stops carrying
+   * operations' own three.
+   */
+  function changeTeam(next: AdminTeam) {
+    const fromOldTeam = TEAM_PERMISSIONS[team];
+    setPerms((cur) => [
+      ...new Set([...cur.filter((p) => !fromOldTeam.includes(p)), ...TEAM_PERMISSIONS[next]]),
+    ]);
+    setTeam(next);
+  }
+
+  const missing = missingTeamPermissions(team, perms);
 
   function submit() {
     setError(undefined);
@@ -107,7 +128,7 @@ function AdminForm({
           id="af-team"
           className="field"
           value={team}
-          onChange={(e) => setTeam(e.target.value as AdminTeam)}
+          onChange={(e) => changeTeam(e.target.value as AdminTeam)}
         >
           {TEAMS.map((t) => (
             <option key={t.id} value={t.id}>
@@ -150,21 +171,55 @@ function AdminForm({
         </Field>
       )}
 
+      {/* There is no permission called "marketing" — the one a sales account
+          needs is manage_pipeline, and nothing said so (user-reported
+          2026-08-24). Each grant now states what it buys, and the ones this
+          team's own work requires are marked and pre-selected. */}
       <fieldset>
-        <legend className="lbl mb-2">Permissions</legend>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {PERMISSION_OPTIONS.map((p) => (
-            <label key={p.value} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={perms.includes(p.value)}
-                onChange={() => toggle(p.value)}
-                disabled={pending}
-              />
-              {p.label}
-            </label>
-          ))}
+        <legend className="lbl mb-1">Permissions</legend>
+        <p className="text-xs text-[var(--text-muted)] mb-2">
+          {TEAM_PERMISSIONS[team].length > 0
+            ? `${teamMeta(team).label} needs ${TEAM_PERMISSIONS[team]
+                .map((p) => PERM_LABEL.get(p) ?? p)
+                .join(" and ")}.`
+            : `${teamMeta(team).label} has no assignable work of its own yet — grant nothing unless this account also does something else.`}
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5">
+          {PERMISSION_OPTIONS.map((p) => {
+            const needed = TEAM_PERMISSIONS[team].includes(p.value);
+            return (
+              <label key={p.value} className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={perms.includes(p.value)}
+                  onChange={() => toggle(p.value)}
+                  disabled={pending}
+                />
+                <span className="min-w-0">
+                  <span className="font-medium">{p.label}</span>
+                  {needed && (
+                    <span
+                      className="ml-1.5 align-middle text-[11px] font-semibold uppercase tracking-wide"
+                      style={{ color: "var(--accent)" }}
+                    >
+                      needed
+                    </span>
+                  )}
+                  <span className="block text-xs text-[var(--text-muted)]">{p.scope}</span>
+                </span>
+              </label>
+            );
+          })}
         </div>
+        {missing.length > 0 && (
+          <p className="text-xs mt-2" style={{ color: "var(--warn-fg)" }}>
+            Without {missing.map((p) => PERM_LABEL.get(p) ?? p).join(" and ")}, this account cannot
+            do its own team&apos;s work
+            {missing.includes("manage_pipeline") ? " — it will not appear when assigning a lead" : ""}
+            .
+          </p>
+        )}
       </fieldset>
 
       {isEdit && (

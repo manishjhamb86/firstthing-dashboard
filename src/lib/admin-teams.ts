@@ -8,7 +8,7 @@
 // are checked — a lead owner needs `manage_pipeline` AND a team that owns
 // leads.
 
-import type { AdminTeam } from "@prisma/client";
+import type { AdminPermission, AdminTeam } from "@prisma/client";
 
 export type TeamMeta = {
   id: AdminTeam;
@@ -56,6 +56,43 @@ export const TEAMS: TeamMeta[] = [
     scope: "Releases billing (CON-33). Deliberately separate from the team that runs the month.",
   },
 ];
+
+/**
+ * What each team's work actually requires.
+ *
+ * The account form listed five permissions as bare nouns with nothing tying
+ * them to the team just chosen — "permission type not available for marketing
+ * team" (user-reported 2026-08-24), looking at a Sales / Marketing account
+ * and five checkboxes none of which says "marketing". They are not missing;
+ * the one that matters is `manage_pipeline`, and nothing said so. This map is
+ * what the form now preselects and explains.
+ *
+ * It is guidance, not a gate: operations holds everything by design, and a
+ * real deployment may grant more. What it must never do is leave someone
+ * guessing which box makes the account able to do its own job — a sales
+ * account without `manage_pipeline` cannot own a lead, and the only symptom
+ * is that it never appears in the owner picker.
+ */
+export const TEAM_PERMISSIONS: Record<AdminTeam, AdminPermission[]> = {
+  operations: ["manage_users", "manage_pipeline", "manage_survey"],
+  sales: ["manage_pipeline"],
+  engineering: ["manage_survey"],
+  inspection: ["manage_survey"],
+  // Society queries — no assignable work of its own yet, so no permission
+  // would be honest rather than a placeholder grant.
+  support: [],
+  // CON-33: deliberately the ONLY thing finance holds. An account that can
+  // run a month must not be able to release its own output.
+  finance: ["release_billing"],
+};
+
+/** The permissions this team needs that the given selection is missing. */
+export function missingTeamPermissions(
+  team: AdminTeam,
+  granted: AdminPermission[],
+): AdminPermission[] {
+  return TEAM_PERMISSIONS[team].filter((p) => !granted.includes(p));
+}
 
 export function teamMeta(id: AdminTeam): TeamMeta {
   const found = TEAMS.find((t) => t.id === id);

@@ -8,6 +8,9 @@ import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
 import { AssignSurvey } from "./assign-survey";
+import { LeadDetailsForm } from "./lead-details-form";
+import { formatDate, isoDate } from "@/lib/format-date";
+import Link from "next/link";
 import { DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
 import { DealStepper, NextStepCallout, WaitingOnCallout } from "@/components/deal-stepper";
 
@@ -22,7 +25,7 @@ export default async function PipelineDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ step?: string }>;
+  searchParams: Promise<{ step?: string; edit?: string }>;
 }) {
   const session = await requireAdminPage();
   // The deal is the marketing team's — an engineer gets the survey, the demo
@@ -38,7 +41,9 @@ export default async function PipelineDetailPage({
   // even when I cancelled it" (user-reported 2026-08-24). The step is in the
   // URL now: the callout opens it, Cancel drops the parameter, and coming
   // back later lands on the callout rather than a half-filled form.
-  const openProposal = (await searchParams).step === "proposal";
+  const sp = await searchParams;
+  const openProposal = sp.step === "proposal";
+  const editingLead = sp.edit === "lead";
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
@@ -77,6 +82,20 @@ export default async function PipelineDetailPage({
       })
     : [];
   const surveyOwnerName = pipeline.surveyOwner?.name ?? pipeline.surveyOwner?.email ?? null;
+  // Who a lead may be handed to: admin or sales, holding manage_pipeline.
+  // Queried only when the form is actually open.
+  const leadOwners = editingLead
+    ? await db.adminUser.findMany({
+        where: {
+          permissions: { has: "manage_pipeline" },
+          team: { in: teamsFor("lead") },
+          isActive: true,
+          deletedAt: null,
+        },
+        select: { id: true, name: true, email: true, team: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
   const turn =
     actor && progress.next
       ? whoseTurn({
@@ -187,30 +206,72 @@ export default async function PipelineDetailPage({
 
         <div className="lg:col-span-5 min-w-0 space-y-6">
           <Card className="p-6">
-            <CardTitle>Lead details</CardTitle>
-            <dl className="space-y-2.5 text-sm">
-          <div className="flex justify-between gap-4">
-            <dt className="text-[var(--text-muted)]">Contact</dt>
-            <dd>
-              {pipeline.contactName}
-              {pipeline.contactPhone ? ` · ${pipeline.contactPhone}` : ""}
-            </dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-[var(--text-muted)]">Meeting date</dt>
-            <dd className="num">{pipeline.meetingDate.toISOString().slice(0, 10)}</dd>
-          </div>
-          <div className="flex justify-between gap-4">
-            <dt className="text-[var(--text-muted)]">Owner</dt>
-            <dd>{pipeline.salesOwner.name ?? pipeline.salesOwner.email}</dd>
-          </div>
-          {pipeline.notes && (
-            <div>
-              <dt className="text-[var(--text-muted)] mb-1">Notes</dt>
-              <dd>{pipeline.notes}</dd>
+            <div className="flex items-start justify-between gap-3">
+              <CardTitle>Lead details</CardTitle>
+              {/* None of this could be corrected after logging it — a lead on
+                  the wrong account had no route to the right one, and CON-24
+                  refuses a second lead for the same society and service line
+                  (user-asked 2026-08-24). */}
+              {approval.allowed && !editingLead && (
+                <Link
+                  href={`/admin/pipeline/${pipeline.id}?edit=lead`}
+                  className="text-sm font-medium shrink-0"
+                  style={{ color: "var(--accent)" }}
+                >
+                  Edit
+                </Link>
+              )}
             </div>
-          )}
-            </dl>
+            {editingLead && approval.allowed ? (
+              <LeadDetailsForm
+                pipelineId={pipeline.id}
+                owners={leadOwners.map((o) => ({
+                  id: o.id,
+                  name: o.name ?? o.email,
+                  team: teamMeta(o.team).label,
+                }))}
+                current={{
+                  contactName: pipeline.contactName,
+                  contactPhone: pipeline.contactPhone ?? "",
+                  meetingDate: isoDate(pipeline.meetingDate),
+                  salesOwnerId: pipeline.salesOwnerId,
+                  notes: pipeline.notes ?? "",
+                }}
+              />
+            ) : (
+              <dl className="space-y-2.5 text-sm">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-muted)]">Contact</dt>
+                  <dd>
+                    {pipeline.contactName}
+                    {pipeline.contactPhone ? ` · ${pipeline.contactPhone}` : ""}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-muted)]">Meeting date</dt>
+                  <dd className="num">{formatDate(pipeline.meetingDate)}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-muted)]">Owner</dt>
+                  {/* The team, not just the name: every account predating the
+                      team column defaulted to operations, so an account named
+                      "Inspector" could legitimately own a lead and nothing on
+                      screen said why. */}
+                  <dd className="text-right">
+                    {ownerName}
+                    <span className="block text-xs text-[var(--text-muted)]">
+                      {teamMeta(pipeline.salesOwner.team).label}
+                    </span>
+                  </dd>
+                </div>
+                {pipeline.notes && (
+                  <div>
+                    <dt className="text-[var(--text-muted)] mb-1">Notes</dt>
+                    <dd>{pipeline.notes}</dd>
+                  </div>
+                )}
+              </dl>
+            )}
           </Card>
 
           {/* the recorded proposal, once one exists — previously the outcome
@@ -223,7 +284,7 @@ export default async function PipelineDetailPage({
               </p>
               {pipeline.proposalDecidedAt && (
                 <p className="text-xs text-[var(--text-muted)] mb-2">
-                  Decided {pipeline.proposalDecidedAt.toISOString().slice(0, 10)}
+                  Decided {formatDate(pipeline.proposalDecidedAt)}
                 </p>
               )}
               {pipeline.proposalSummary && (

@@ -1,3 +1,4 @@
+import { formatDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -108,7 +109,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 <dt className="lbl">Issued</dt>
                 <dd>
                   {current.issuedAt
-                    ? `${current.issuedAt.toISOString().slice(0, 10)} by ${current.issuedBy?.name ?? current.issuedBy?.email ?? "—"}`
+                    ? `${formatDate(current.issuedAt)} by ${current.issuedBy?.name ?? current.issuedBy?.email ?? "—"}`
                     : "Not yet issued"}
                 </dd>
               </div>

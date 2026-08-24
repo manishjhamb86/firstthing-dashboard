@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TEAMS, canOwn, mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
+import { TEAMS, TEAM_PERMISSIONS, canOwn, mayAct, missingTeamPermissions, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
 
 describe("teams are the blueprint's personas, not a new vocabulary", () => {
   it("names a persona for every team", () => {
@@ -119,5 +119,52 @@ describe("whose turn the next step is", () => {
     expect(whoseTurn({ owner: "sales", assigneeName: null, actorTeam: "sales" }).mine).toBe(true);
     expect(whoseTurn({ owner: "sales", assigneeName: null, actorTeam: "operations" }).mine).toBe(true);
     expect(whoseTurn({ owner: "sales", assigneeName: null, actorTeam: "engineering" }).mine).toBe(false);
+  });
+});
+
+describe("the permissions a team's own work needs", () => {
+  // "Permission type not available for marketing team" (user-reported
+  // 2026-08-24) — it was available, it just wasn't named after the team and
+  // nothing on the form connected the two.
+  it("sales needs the pipeline, and that is the one that lets it own a lead", () => {
+    expect(TEAM_PERMISSIONS.sales).toEqual(["manage_pipeline"]);
+    expect(canOwn("sales", "lead")).toBe(true);
+  });
+
+  it("the field teams need the survey, not the pipeline", () => {
+    expect(TEAM_PERMISSIONS.engineering).toEqual(["manage_survey"]);
+    expect(TEAM_PERMISSIONS.inspection).toEqual(["manage_survey"]);
+    expect(TEAM_PERMISSIONS.engineering).not.toContain("manage_pipeline");
+  });
+
+  it("finance holds release_billing and nothing else — CON-33", () => {
+    expect(TEAM_PERMISSIONS.finance).toEqual(["release_billing"]);
+  });
+
+  it("support gets nothing, because it has no assignable work yet", () => {
+    expect(TEAM_PERMISSIONS.support).toEqual([]);
+    expect(missingTeamPermissions("support", [])).toEqual([]);
+  });
+
+  it("names what a selection is missing for its team", () => {
+    expect(missingTeamPermissions("sales", [])).toEqual(["manage_pipeline"]);
+    expect(missingTeamPermissions("sales", ["manage_pipeline"])).toEqual([]);
+    expect(missingTeamPermissions("operations", ["manage_pipeline"])).toEqual([
+      "manage_users",
+      "manage_survey",
+    ]);
+  });
+
+  it("never suggests a grant no team needs — every entry is a real permission", () => {
+    const known = new Set([
+      "manage_admins",
+      "manage_users",
+      "manage_pipeline",
+      "manage_survey",
+      "release_billing",
+    ]);
+    for (const perms of Object.values(TEAM_PERMISSIONS)) {
+      for (const p of perms) expect(known.has(p)).toBe(true);
+    }
   });
 });

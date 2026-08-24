@@ -45,6 +45,28 @@ function readStack(): string[] {
   }
 }
 
+/**
+ * The same "go back" the Back control performs, for anything else that needs
+ * to leave a screen — a Cancel button, say. Exported rather than reimplemented
+ * so there is one notion of "back" in the app: pop our own stack if we put
+ * something on it, otherwise fall back to a real page.
+ *
+ * It does not record anything. The page's own BackButton does that, and every
+ * screen that has a Cancel also has a Back.
+ */
+export function useGoBack(fallbackHref: string) {
+  const router = useRouter();
+  return () => {
+    const stack = readStack();
+    if (stack.length > 1) {
+      sessionStorage.setItem(STACK_KEY, JSON.stringify(stack.slice(0, -1)));
+      router.back();
+    } else {
+      router.push(fallbackHref);
+    }
+  };
+}
+
 export function BackButton({ fallbackHref }: { fallbackHref: string }) {
   const router = useRouter();
   const pathname = usePathname();

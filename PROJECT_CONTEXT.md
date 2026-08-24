@@ -2069,6 +2069,48 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## The demo proposal is a step you open, not furniture (2026-08-24) — user-caught
+
+**Reported**: "Why does this box come back even when I cancelled it. I cancelled and when I came
+back it was still there." — then, on what closing should leave behind: "close as its still pending
+as it was in the previous step before this box opened."
+
+**Cause: Cancel had nothing to cancel.** `ProposalForm` rendered unconditionally on the deal page
+whenever `stage === "lead" && authoritative`, so the Cancel added the same day could only navigate
+away — and the box was back the moment the reader returned. The state that decided the box was the
+deal's own stage, which a Cancel must not touch (nothing was decided).
+
+**Fixed by making the open step addressable**: `?step=proposal`. The next-step callout links to it,
+the step map's own step-1 link and the "waiting on step 1" pointer use the same href, and Cancel
+drops the parameter (`router.replace(pathname)`) rather than walking history. Closing therefore
+leaves the deal exactly as the user described it should — step 1 still In progress, step 2 still
+locked, nothing written — and a later visit lands on the callout, not a half-filled form.
+
+**It also removed a duplicate the page had been carrying since the sequencing work**: a blue
+"Record the demo proposal decision · Continue" card sat directly above the very form it pointed at,
+and its href was the page the reader was already on — the dead-Continue defect already reported
+twice. One step is one box now: the form REPLACES the callout while open and carries the callout's
+own line as its subtitle. **Worth remembering as the general shape**: a Cancel is only meaningful
+when entering the thing was itself a state change. Adding one to a permanently-rendered panel
+produces a control that appears to do nothing, which is how this was reported.
+
+**A second defect, found by dumping the page rather than by the report**: the step map interpolated
+a missing assignee straight into its summary, so a deal that had plainly been surveyed but held no
+stored owner rendered the literal **"Assigned to null"**. It now says the record is missing,
+matching how the map already reports a rank-inferred step with no artifact behind it.
+
+**Verified in a browser (19 checks, zero console errors)**: closed on arrival; the callout opens it;
+a clean cancel asks nothing and a dirty one confirms; refusing keeps what was typed; leaving and
+returning does not reopen it; nothing is written by any of it — asserted against the row, not the
+screen; and the step still saves from where it now opens, on a disposable deal so the seed lead
+stays a fresh lead. Neighbouring suites unchanged (survey assignment 21/21, field access 16/16,
+lead ownership 18/18, smoke 23/23); 444 unit tests, `tsc`/`lint`/`build` clean.
+
+**One deploy note worth keeping**: `pnpm build 2>&1 | tail -3 && pm2 restart` does NOT stop on a
+failed build — a pipeline exits with `tail`'s status, so the restart fired against a `.next` a
+concurrent build was still rewriting, and stage served "Could not find a production build" until a
+clean build and restart. Check the build's own exit status, not the chain's.
+
 ## The circuit page is an accordion: the active step is the only open form (2026-08-15) — user-specified
 
 **The user's second round on the same screens, with screenshots**: "Not happy with this ui

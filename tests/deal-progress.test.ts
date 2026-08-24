@@ -236,7 +236,14 @@ describe("circuitSteps — the map one level down", () => {
     expect(steps.filter((s) => s.status === "current")).toHaveLength(1);
   });
 
-  it("completion gate pass comes BEFORE light replacement — CON-18's departure gate", () => {
+  it("light replacement comes BEFORE the completion gate pass — the pass lists the work", () => {
+    // This assertion used to read the other way round, on the grounds that
+    // CON-18 is a departure gate. It is — and a departure gate is the LAST
+    // thing that happens: the pass itemizes the equipment that physically
+    // changed at the site, so it cannot be written before the work it lists.
+    // FEAT-013-AC-1 has the same order ("records the replacement date and
+    // completes the gate-pass sign-off"), and AC-3 gates marking the circuit
+    // INSTALLED on the pass, not recording the work.
     const steps = circuitSteps({
       state: "awaiting_installation",
       hasInstallGatePass: true,
@@ -246,8 +253,22 @@ describe("circuitSteps — the map one level down", () => {
       benchmarkSavingsPct: null,
     });
     const keys = steps.map((s) => s.key);
-    expect(keys.indexOf("completion-gate")).toBeLessThan(keys.indexOf("replacement"));
+    expect(keys.indexOf("replacement")).toBeLessThan(keys.indexOf("completion-gate"));
+    expect(steps.find((s) => s.status === "current")?.key).toBe("replacement");
+  });
+
+  it("asks for the gate pass once the work is recorded, and not before", () => {
+    const steps = circuitSteps({
+      state: "awaiting_installation",
+      hasInstallGatePass: true,
+      hasCompletionGatePass: false,
+      preInstallBaseline: 30,
+      lightReplacementDate: new Date("2026-08-20"),
+      benchmarkSavingsPct: null,
+    });
     expect(steps.find((s) => s.status === "current")?.key).toBe("completion-gate");
+    // And the benchmark step stays locked behind it — the crew has not left.
+    expect(steps.find((s) => s.key === "benchmark")?.status).toBe("locked");
   });
 
   it("benchmark_review is current at the benchmark step and says why", () => {

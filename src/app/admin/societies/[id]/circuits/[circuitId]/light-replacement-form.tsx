@@ -182,8 +182,16 @@ export function LightReplacementForm({
         disabled={pending || (lines.length > 0 && incomplete)}
         className="btn-primary"
       >
-        Mark installation complete
+        {/* Not "Mark installation complete" any more: recording the work no
+            longer completes the install — CON-18's departure gate pass does,
+            and it comes after this step because it itemizes what was fitted
+            (user-reported 2026-08-24). */}
+        Record the replacement
       </button>
+      <p className="mt-2 text-[13px] text-[var(--text-muted)]">
+        The circuit moves to post-install monitoring once the completion gate pass is submitted —
+        CON-18 requires it before the crew leaves site.
+      </p>
     </Card>
   );
 }

@@ -446,7 +446,11 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
   const replacementDone = c.lightReplacementDate != null || rank >= 5;
   const benchmarkDone = c.benchmarkSavingsPct != null;
 
-  const flags = [eligibilityDone, meterDone, installGateDone, baselineDone, completionGateDone, replacementDone, benchmarkDone];
+  // Replacement BEFORE the completion gate pass. CON-18's pass itemizes the
+  // equipment that physically changed and is approved before the crew leaves
+  // — it is a departure gate, and it cannot be written before the work it
+  // lists. The screen used to ask for it first (user-reported 2026-08-24).
+  const flags = [eligibilityDone, meterDone, installGateDone, baselineDone, replacementDone, completionGateDone, benchmarkDone];
   const cur = flags.findIndex((d) => !d);
 
   return annotateBlockers([
@@ -466,19 +470,19 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
       "Baseline set from 5 valid days",
       "Record one reading per day below — 5 consecutive valid days set the baseline",
       "Unlocks once the install gate pass is submitted"),
-    mk("completion-gate", "Completion gate pass", completionGateDone, cur === 4,
-      "Submitted",
-      "Submit the completion gate pass below — required before the crew may leave site (CON-18)",
-      "Unlocks once the baseline window completes"),
-    mk("replacement", "Light replacement", replacementDone, cur === 5,
+    mk("replacement", "Light replacement", replacementDone, cur === 4,
       "Recorded — the replacement day is excluded, the post window starts the day after",
-      "Record the date the last light was replaced below",
-      "Unlocks once the completion gate pass is submitted"),
+      "Record what was installed and the date the last light was replaced below",
+      "Unlocks once the baseline window completes"),
+    mk("completion-gate", "Completion gate pass", completionGateDone, cur === 5,
+      "Submitted",
+      "Itemize what was installed and removed, get it signed, and submit it — CON-18 requires it before the crew may leave site",
+      "Unlocks once the replacement is recorded"),
     mk("benchmark", "Post-install window → benchmark", benchmarkDone, cur === 6,
       "Benchmark confirmed in CON-20's 60-80% band",
       c.state === "benchmark_review"
         ? "The measured result fell outside CON-20's band — resolve the review below"
         : "Record one reading per day below — 5 valid days compute the savings benchmark",
-      "Unlocks once the replacement is recorded"),
+      "Unlocks once the completion gate pass is submitted"),
   ]);
 }

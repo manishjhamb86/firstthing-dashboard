@@ -483,6 +483,21 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Problem:** The physical light swap is the actual "install" moment the whole benchmark depends on — it needs to be a clean, dated event (not a fuzzy multi-day process) since CON-19 explicitly excludes this day from both monitoring windows.
 - **Description:** PER-04 (or the society's own electricians under PER-04's guidance, per CON-14) replaces the circuit's lights on a single recorded calendar day. Completion triggers the demo-installation-completion instance of the cross-cutting gate-pass component (§5, CON-18).
 - **Behavioral rules:** The replacement date is recorded exactly (not a range) since it's the pivot day excluded from both windows. This gate-pass sign-off is a separate instance from the meter-install one in FEAT-011 — per CON-18, gate-pass applies at each of the 3 named stages independently, not once for the whole commissioning process.
+
+- **Sequencing clarification (2026-08-24, user-reported):** the completion gate
+  pass comes **after** the replacement is recorded, not before. CON-18's pass is a
+  *departure* gate — it itemizes the equipment that physically changed at the site
+  and is approved before the technician may leave — so it cannot be written before
+  the work it lists. AC-1's own wording has the same order ("records the replacement
+  date **and** completes the gate-pass sign-off"), and AC-3 gates *"cannot mark the
+  circuit as installed"*, which is the state transition, not the act of recording
+  what was fitted. The first implementation gated the recording itself, which put
+  the gate pass ahead of the replacement on screen and asked the crew to itemize
+  work they had not done yet. Recording the replacement is now unconditional; the
+  circuit advances to `post-install-pending` only once **both** the replacement date
+  and a completion gate pass exist, whichever lands second. The post-install window
+  still starts the day after the **last light was replaced** (CON-19 / AC-5), never
+  the day after the pass, which may be signed later.
 - **Acceptance criteria:**
   - AC-1 (happy): Given the baseline window (FEAT-012) is complete, when PER-04 records the replacement date and completes the gate-pass sign-off, then the circuit moves to `post-install-pending` and FEAT-014's window starts the next calendar day.
   - AC-2 (empty/first-run): Given replacement hasn't happened yet, the circuit clearly shows "awaiting installation" rather than an ambiguous mid-state.

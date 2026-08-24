@@ -211,6 +211,9 @@ export async function submitGatePass(
   await scheduleJob("gatepass_sweep", new Date());
 
   logger.info("gatepass.submitted", { gatePassId: gatePass.id, circuitId, kind, submittedBy: session.user.id });
+  // If the work was already recorded, this pass is the second half of the
+  // departure and the circuit moves on now.
+  if (kind === "demo_install_completion") await advanceAfterInstall(circuitId);
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   return {};
 }
@@ -271,6 +274,45 @@ export type ReplacementLine = {
   wattage: number;
 };
 
+/**
+ * CON-18 / FEAT-013-AC-1 — the circuit leaves `awaiting_installation` only
+ * when BOTH halves of the departure are on record: the work (a replacement
+ * date) and the pass that lets the crew leave with the old material.
+ *
+ * Called from whichever of the two happens second, so the order the crew
+ * works in does not change the outcome. The post-install window always
+ * starts the day after the LAST light was replaced (CON-19 / FEAT-013-AC-5)
+ * — never the day after the gate pass, which may be signed later.
+ */
+async function advanceAfterInstall(circuitId: string): Promise<boolean> {
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    select: { id: true, state: true, lightReplacementDate: true, societyId: true },
+  });
+  if (!circuit || circuit.state !== "awaiting_installation") return false;
+  if (!circuit.lightReplacementDate) return false;
+
+  const pass = await db.gatePass.findFirst({
+    where: { circuitId, kind: "demo_install_completion" },
+    select: { id: true },
+  });
+  if (!pass) return false;
+
+  const d = circuit.lightReplacementDate;
+  const windowStart = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() + 1));
+  await db.circuit.update({
+    where: { id: circuitId },
+    data: { state: "post_install_pending", postInstallWindowStartAt: windowStart },
+  });
+  logger.info("circuit.install_complete", {
+    circuitId,
+    lightReplacementDate: d.toISOString().slice(0, 10),
+    postInstallWindowStartAt: windowStart.toISOString().slice(0, 10),
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  return true;
+}
+
 export async function recordLightReplacement(
   circuitId: string,
   replacementDate: string,
@@ -289,12 +331,18 @@ export async function recordLightReplacement(
     return { error: "This circuit isn't ready for light replacement yet — the pre-install window must finish first." };
   }
 
-  const completionGatePass = await db.gatePass.findFirst({
-    where: { circuitId, kind: "demo_install_completion" },
-  });
-  if (!completionGatePass) {
-    return { error: "Submit the completion gate pass (itemized list + photo) before marking this circuit installed." };
-  }
+  // No gate-pass precondition here, deliberately. CON-18's pass is a
+  // DEPARTURE gate: it itemizes the equipment that physically changed at the
+  // site and must be approved before the technician leaves. It cannot be
+  // written before the work it lists — which is what requiring it here asked
+  // for, and what put "Completion gate pass" above "Light replacement" on
+  // screen (user-reported 2026-08-24).
+  //
+  // FEAT-013-AC-3 gates "PER-04 cannot mark the circuit as installed", and
+  // that is the act still gated: recording the replacement is free, and the
+  // circuit only advances to post-install monitoring once the pass exists
+  // (see advanceAfterInstall below, and FEAT-013-AC-1, which lists recording
+  // the date BEFORE the gate-pass sign-off).
 
   // CON-45 — an inventory-carrying circuit records what was installed
   // against every line, from that device's own mapped compatibility list.
@@ -365,7 +413,6 @@ export async function recordLightReplacement(
     logger.warn("circuit.replacement_date_refused", { circuitId, replacementDate, reason: dateRefusal });
     return { error: dateRefusal };
   }
-  const windowStart = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
 
   await db.$transaction(async (tx) => {
     for (const line of circuit.devices) {
@@ -383,19 +430,20 @@ export async function recordLightReplacement(
     }
     await tx.circuit.update({
       where: { id: circuitId },
-      data: {
-        state: "post_install_pending",
-        lightReplacementDate: date,
-        postInstallWindowStartAt: windowStart,
-      },
+      data: { lightReplacementDate: date },
     });
   });
+
+  // FEAT-013-AC-1 — the replacement date and the gate-pass sign-off together
+  // move the circuit on. Whichever of the two lands second does it.
+  const advanced = await advanceAfterInstall(circuitId);
 
   logger.info("circuit.light_replacement_recorded", {
     circuitId,
     replacementDate: date,
     linesRecorded: circuit.devices.length,
     recordedBy: session.user.id,
+    advanced,
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   return {};

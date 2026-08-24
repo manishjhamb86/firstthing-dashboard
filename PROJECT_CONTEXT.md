@@ -2069,6 +2069,65 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## A lead can be corrected, and a team's permission says which one it is (2026-08-24/25) — user-asked
+
+**Two reports, one goal — hand a lead to marketing with the right date.** "Change the date to
+02-01-2026 and also the person to whom assigned should be from marketing team", then, mid-build,
+"Permission type not available for marketing team."
+
+**Nothing about a lead could be changed after logging it.** Contact, phone, meeting date and owner
+were all fixed at creation, so a lead that landed on the wrong account had no route to the right
+one — CON-24 refuses a second lead for the same (society, service line), so the record was stuck
+with whoever it was first given to. The stage lead that prompted this was owned by an account
+called "Inspector". `updateLeadDetails` + an Edit on the Lead details card fix that, opening on
+`?edit=lead` and closing by dropping the parameter — the same "a step you open" shape as the demo
+proposal, for the same reason: a Cancel is only meaningful when getting there was a state change.
+The owner picker offers admin and sales only; the action re-checks the team **and** that the account
+holds `manage_pipeline`, since an "owner" without it could not open the deal they own. Handing a
+lead on **while it is still a lead** returns it to the new owner to confirm (FEAT-001-AC-2); on a
+deal that has already advanced it deliberately does not, because freezing a live deal behind an
+approval nobody is waiting on is not what that AC is for.
+
+**"Permission type not available for marketing team" — it was available, and that is the point.**
+The account form listed five grants as bare nouns (`Manage pipeline`, `Manage survey`, …) with
+nothing tying any of them to the team just chosen, so a Sales / Marketing account looked like it had
+no permission of its own. `TEAM_PERMISSIONS` (`src/lib/admin-teams.ts`) names what each team's work
+actually needs; the form preselects it, marks it NEEDED, gives every grant a line saying what it
+buys, and states the consequence when one is missing — "it will not appear when assigning a lead",
+which is the real symptom, since the owner picker filters on `manage_pipeline`. Changing the team
+swaps the team-derived grants and leaves anything granted by hand alone. It is guidance, not a gate:
+operations holds everything by design.
+
+**Dates now read DD-MM-YYYY** (`src/lib/format-date.ts`), across the deal screens. The parts are
+read in **UTC deliberately** — every date in this schema is stored at UTC midnight, and a local
+`getDate()` on one shifts the day backwards for any viewer west of Greenwich, the same off-by-one
+CON-22's billing arithmetic already avoids the same way. Form controls keep ISO, which is the only
+thing `<input type="date">` parses. Sites outside the deal screens (circuits, readings, portal)
+still render ISO and are a follow-up sweep, not silently done.
+
+**A real rule found wrong while building this, and fixed on both paths**: the meeting date was
+ordered against the **society record**, so a meeting held last week for a society being entered
+today was refused — and a quick-created society is always stamped `now()`, so that was *every*
+backdated lead. Meeting the committee is what causes the record to exist; the ordering was
+backwards. Removed from `createLead` and never added to the edit path. The lead's own logged-at date
+still carries it, because that one genuinely is about our records. The meeting still cannot be
+dated in the future, nor after the proposal decision that came out of it.
+
+**Verified in a browser (18 checks, zero console errors)**, then again on stage over the public
+HTTPS path: the date reads `02-08-2026` and the ISO form is gone; the owner's team is named on the
+card (which is how "Inspector · Field inspection" became visible as the anomaly it is); only
+lead-owning teams are offered; reassigning warns before it saves; the date and the owner both
+change, asserted against the row, not the screen; handing it on returns it to be confirmed. **The
+engineering refusal was driven through a path the client cannot pre-block** — the option smuggled
+into the `<select>` with `page.evaluate` and submitted — and refused by name, writing nothing.
+Regressions unchanged: proposal cancel 19/19, survey assignment 21/21, lead ownership 18/18, field
+access 16/16, smoke 23/23; 455 unit tests, `tsc`/`lint`/`build` clean.
+
+**Two harness notes**: `page.locator("form")` matches the sidebar's **Sign out** form first — the
+trap already recorded here once for `button[type=submit]`, now caught again; target the native
+`<dialog>`. And stage accounts all use `password123` while in development (the user's own note),
+which is what made the stage verification possible at all.
+
 ## The demo proposal is a step you open, not furniture (2026-08-24) — user-caught
 
 **Reported**: "Why does this box come back even when I cancelled it. I cancelled and when I came

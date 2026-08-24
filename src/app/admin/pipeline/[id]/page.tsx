@@ -17,7 +17,13 @@ const OUTCOME_LABEL: Record<string, string> = {
   declined: "Declined",
 };
 
-export default async function PipelineDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function PipelineDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ step?: string }>;
+}) {
   const session = await requireAdminPage();
   // The deal is the marketing team's — an engineer gets the survey, the demo
   // and the installation, not the commercial record (the user's call,
@@ -26,6 +32,13 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
   if (!session.user.adminPermissions?.includes("manage_pipeline")) redirect("/admin");
 
   const { id } = await params;
+  // The proposal form is a step you OPEN, not furniture. It used to render
+  // unconditionally at the lead stage, so Cancel could only navigate away and
+  // the box was back the moment you returned — "why does this box come back
+  // even when I cancelled it" (user-reported 2026-08-24). The step is in the
+  // URL now: the callout opens it, Cancel drops the parameter, and coming
+  // back later lands on the callout rather than a half-filled form.
+  const openProposal = (await searchParams).step === "proposal";
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
@@ -123,6 +136,18 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
             />
           )}
         </WaitingOnCallout>
+      ) : progress.next && openProposal && pipeline.stage === "lead" ? (
+        // The lead stage's workspace, opened from the callout. It REPLACES
+        // the callout rather than sitting under it: one step is one box, and
+        // a blue "Continue" card above the very form it points at was the
+        // duplication reported on the catalog page and again here.
+        <div className="mb-8">
+          <ProposalForm
+            pipelineId={pipeline.id}
+            demoMode={await isDemoMode()}
+            hint={progress.next.detail}
+          />
+        </div>
       ) : progress.next && progress.next.label === "Assign the survey" ? (
         // The step itself is the assignment, so the control lives in the
         // callout rather than sending the reader somewhere to find it.
@@ -147,14 +172,6 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
         />
       ) : (
         progress.next && <NextStepCallout next={progress.next} />
-      )}
-
-      {/* The lead stage's own workspace lives on this page, so it renders
-          right under the callout that points at it. */}
-      {pipeline.stage === "lead" && pipeline.authoritative && (
-        <div className="mb-8">
-          <ProposalForm pipelineId={pipeline.id} demoMode={await isDemoMode()} />
-        </div>
       )}
 
       <div className="grid gap-6 lg:grid-cols-12 items-start mb-6">

@@ -183,6 +183,11 @@ function annotateBlockers(steps: DealStep[]): DealStep[] {
 
 export function dealProgress(f: DealFacts): DealProgress {
   const base = `/admin/pipeline/${f.pipelineId}`;
+  // The demo proposal is recorded on the deal page itself, so "go and do it"
+  // used to link to the page the reader was already looking at — a Continue
+  // button that did nothing (user-reported twice). The step opens the form
+  // instead, which is also what lets Cancel close it again.
+  const proposalHref = `${base}?step=proposal`;
   const closed = f.stage === "closed_lost";
 
   // -- Per-step completion facts ------------------------------------------
@@ -251,16 +256,18 @@ export function dealProgress(f: DealFacts): DealProgress {
         ? "Proposal agreed — advanced to survey"
         : !f.authoritative
           ? "Pending the sales owner's approval — it can't advance until they approve it"
-          : "Record the demo-meeting outcome below",
-      href: base,
+          : "Record the demo-meeting outcome",
+      href: leadDone || !f.authoritative ? base : proposalHref,
     },
     {
       key: "assign-survey",
       title: "Assign the survey",
       status: status(1, surveyAssigned || surveyDone),
-      summary: surveyAssigned
+      summary: surveyAssigned && f.surveyOwnerName
         ? `Assigned to ${f.surveyOwnerName}`
-        : surveyDone
+        : surveyAssigned
+          ? "No stored record — the survey went ahead without one"
+          : surveyDone
           ? "Surveyed"
           : currentIdx === 1
             ? "Hand it to an engineer or inspector — they run the survey, not sales"
@@ -393,7 +400,7 @@ export function dealProgress(f: DealFacts): DealProgress {
     if (!leadDone) {
       next = !f.authoritative
         ? { label: "Get the lead approved", detail: "The sales owner approves it on this page.", href: base, owner: "sales" }
-        : { label: "Record the demo proposal decision", detail: "The outcome of the demo meeting moves this deal forward.", href: base, owner: "sales" };
+        : { label: "Record the demo proposal decision", detail: "The outcome of the demo meeting moves this deal forward.", href: proposalHref, owner: "sales" };
     } else if (!surveyAssigned && !surveyDone) {
       // The act that was invisible: somebody has to hand the field work to a
       // named engineer or inspector before it is anyone's to do

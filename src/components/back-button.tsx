@@ -68,8 +68,8 @@ export function useGoBack(fallbackHref: string) {
 }
 
 export function BackButton({ fallbackHref }: { fallbackHref: string }) {
-  const router = useRouter();
   const pathname = usePathname();
+  const goBack = useGoBack(fallbackHref);
 
   // Writes only — no state, so this cannot fight React's render.
   useEffect(() => {
@@ -84,16 +84,7 @@ export function BackButton({ fallbackHref }: { fallbackHref: string }) {
     <button
       type="button"
       className="btn-back"
-      onClick={() => {
-        const stack = readStack();
-        // Drop this page, then see whether anything of ours is behind it.
-        if (stack.length > 1) {
-          sessionStorage.setItem(STACK_KEY, JSON.stringify(stack.slice(0, -1)));
-          router.back();
-        } else {
-          router.push(fallbackHref);
-        }
-      }}
+      onClick={goBack}
     >
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
         <path

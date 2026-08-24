@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import { submitProposal } from "../actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import { BackdateField } from "@/components/backdate-field";
-import { useGoBack } from "@/components/back-button";
+import { usePathname, useRouter } from "next/navigation";
 
 type Outcome = "agreed" | "declined" | "undecided";
 
@@ -26,25 +26,33 @@ async function action(_prev: string | undefined, formData: FormData) {
 export function ProposalForm({
   pipelineId,
   demoMode = false,
+  hint,
 }: {
   pipelineId: string;
   demoMode?: boolean;
+  /** What the step is for — it replaces the callout that used to say so. */
+  hint?: string;
 }) {
   const [error, formAction, pending] = useActionState(action, undefined);
   const [summary, setSummary] = useState("");
   const [outcome, setOutcome] = useState<Outcome | "">("");
   const [closedLostReason, setClosedLostReason] = useState("");
   const [decidedOn, setDecidedOn] = useState("");
-  // The list, not this page: the form IS this page's step, so falling back
-  // to the deal would be cancelling into the thing being cancelled. Only used
-  // when there is no history of ours to pop — a deep link, or a fresh tab.
-  const goBack = useGoBack("/admin/pipeline");
+  // Cancel CLOSES the step. It used to navigate away, which left the form
+  // rendering unconditionally at the lead stage — so the box was back the
+  // moment the reader returned to the deal ("why does this box come back even
+  // when I cancelled it", 2026-08-24). The open step lives in the URL, so
+  // dropping the parameter is the whole of "put it back how it was".
+  const router = useRouter();
+  const pathname = usePathname();
+  const close = () => router.replace(pathname, { scroll: false });
   // Only worth confirming if there is something to lose.
   const dirty = summary !== "" || outcome !== "" || closedLostReason !== "" || decidedOn !== "";
 
   return (
     <Card className="max-w-xl p-6">
       <CardTitle>Demo proposal</CardTitle>
+      {hint && <p className="text-sm text-[var(--text-muted)] -mt-2 mb-4">{hint}</p>}
       <form action={formAction} className="space-y-4">
         <input type="hidden" name="pipelineId" value={pipelineId} />
 
@@ -105,29 +113,30 @@ export function ProposalForm({
         )}
 
         <div className="flex flex-wrap items-center gap-2">
-        <button type="submit" disabled={pending} className="btn-primary">
-          {pending ? "Saving…" : "Save proposal"}
-        </button>
-        {/* A way out. The form is the whole step, so leaving it should put
-            the operator back where they were rather than on a screen with
-            nothing to do (user-asked 2026-08-24). It confirms only when
-            there is typed input to discard. */}
-        <button
-          type="button"
-          className="btn-ghost"
-          disabled={pending}
-          onClick={() => {
-            if (
-              dirty &&
-              !window.confirm("Discard this proposal decision and go back? Nothing is saved.")
-            ) {
-              return;
-            }
-            goBack();
-          }}
-        >
-          Cancel
-        </button>
+          <button type="submit" disabled={pending} className="btn-primary">
+            {pending ? "Saving…" : "Save proposal"}
+          </button>
+          {/* A way out that actually undoes coming here: the step closes and
+              the deal page goes back to naming it as the next move. Confirms
+              only when there is typed input to discard. */}
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={pending}
+            onClick={() => {
+              if (
+                dirty &&
+                !window.confirm(
+                  "Discard this proposal decision and close the step? Nothing is saved.",
+                )
+              ) {
+                return;
+              }
+              close();
+            }}
+          >
+            Cancel
+          </button>
         </div>
       </form>
     </Card>

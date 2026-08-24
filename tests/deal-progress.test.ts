@@ -345,10 +345,12 @@ describe("a locked step names what it is waiting on", () => {
       title: "Assign the survey",
       href: "/admin/pipeline/p1",
     });
+    // And the link OPENS the blocking step rather than landing on the deal
+    // page with nothing highlighted — the proposal form is behind ?step.
     expect(steps["assign-survey"].blockedBy).toEqual({
       index: 1,
       title: "Lead & demo proposal",
-      href: "/admin/pipeline/p1",
+      href: "/admin/pipeline/p1?step=proposal",
     });
   });
 
@@ -526,5 +528,52 @@ describe("generating the report and sharing it are separate steps", () => {
     expect(dealProgress({ ...benchmarked, reportStatus: "draft" }).phase.label).toBe(
       "Share the report with the society",
     );
+  });
+});
+
+describe("the demo proposal is a step you open", () => {
+  // It used to render unconditionally at the lead stage, so a Cancel could
+  // only navigate away and the form was back on the next visit ("why does
+  // this box come back even when I cancelled it", 2026-08-24). Both routes
+  // into the step carry the parameter that opens it.
+  it("points the next action and the step at the same opener", () => {
+    const p = dealProgress(freshLead);
+    expect(p.next?.href).toBe("/admin/pipeline/p1?step=proposal");
+    expect(byKey(freshLead).lead.href).toBe("/admin/pipeline/p1?step=proposal");
+  });
+
+  it("stops opening it once the decision is recorded", () => {
+    const done: DealFacts = {
+      ...freshLead,
+      stage: "survey_pending",
+      surveyOwnerName: "Neha Kapoor",
+    };
+    expect(byKey(done).lead.href).toBe("/admin/pipeline/p1");
+  });
+
+  it("does not offer the form while the lead is still unconfirmed", () => {
+    const pending: DealFacts = { ...freshLead, authoritative: false };
+    expect(byKey(pending).lead.href).toBe("/admin/pipeline/p1");
+    expect(dealProgress(pending).next?.href).toBe("/admin/pipeline/p1");
+  });
+});
+
+describe("an assignment with no stored owner", () => {
+  // Rank-OR-artifact marks the step done when the deal has plainly moved
+  // past it, which is right — but the summary interpolated the missing name
+  // and rendered the literal "Assigned to null" (seen 2026-08-24).
+  it("says the record is missing rather than printing the gap", () => {
+    const surveyed: DealFacts = {
+      ...freshLead,
+      stage: "demo_reported",
+      surveyOwnerName: null,
+      areaCount: 3,
+      candidates: [
+        { id: "c1", state: "benchmark_confirmed", location: "Tower A", lightType: "LED" },
+      ],
+    };
+    const summary = byKey(surveyed)["assign-survey"].summary;
+    expect(summary).not.toContain("null");
+    expect(summary).toMatch(/no stored record/i);
   });
 });

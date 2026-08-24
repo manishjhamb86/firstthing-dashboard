@@ -62,6 +62,10 @@ export function NewLeadForm({
   const [notes, setNotes] = useState("");
   const [confirmDuplicate, setConfirmDuplicate] = useState(false);
   const [loggedOn, setLoggedOn] = useState("");
+  const ownerNameOf = (id: string) => {
+    const o = salesOwners.find((x) => x.id === id);
+    return o ? (o.name ?? o.email) : "them";
+  };
   const [salesOwnerId, setSalesOwnerId] = useState(
     salesOwners.some((o) => o.id === currentUserId) ? currentUserId : (salesOwners[0]?.id ?? ""),
   );
@@ -190,12 +194,16 @@ export function NewLeadForm({
         </Field>
 
         <Field
-          label="Belongs to"
+          label="Assign to"
           htmlFor="salesOwnerId"
+          // Say what the act IS. "Logging this on their behalf — it'll need
+          // their approval before it's authoritative" described a side effect
+          // in the system's own words; what the user is doing is assigning
+          // the lead to a named person (user-asked 2026-08-24).
           hint={
             salesOwnerId && salesOwnerId !== currentUserId
-              ? "Logging this on their behalf — it'll need their approval before it's authoritative."
-              : undefined
+              ? `Assigning this lead to ${ownerNameOf(salesOwnerId)}. It becomes theirs, and they confirm it after their meeting — until then the deal can't advance.`
+              : "This lead will be yours to take forward."
           }
         >
           <select

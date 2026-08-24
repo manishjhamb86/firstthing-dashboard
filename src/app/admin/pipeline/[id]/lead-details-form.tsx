@@ -1,22 +1,11 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { updateLeadDetails } from "../actions";
 import { ErrorText, Field } from "@/components/ui";
 
 export type OwnerOption = { id: string; name: string; team: string };
-
-async function action(_prev: string | undefined, formData: FormData) {
-  const result = await updateLeadDetails(formData.get("pipelineId") as string, {
-    contactName: formData.get("contactName") as string,
-    contactPhone: formData.get("contactPhone") as string,
-    meetingDate: formData.get("meetingDate") as string,
-    salesOwnerId: formData.get("salesOwnerId") as string,
-    notes: formData.get("notes") as string,
-  });
-  return result?.error;
-}
 
 /**
  * Editing the lead's own details, opened from the card (?edit=lead) and
@@ -39,14 +28,17 @@ export function LeadDetailsForm({
     contactName: string;
     contactPhone: string;
     meetingDate: string;
+    loggedOn: string;
     salesOwnerId: string;
     notes: string;
   };
 }) {
-  const [error, formAction, pending] = useActionState(action, undefined);
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
   const [contactName, setContactName] = useState(current.contactName);
   const [contactPhone, setContactPhone] = useState(current.contactPhone);
   const [meetingDate, setMeetingDate] = useState(current.meetingDate);
+  const [loggedOn, setLoggedOn] = useState(current.loggedOn);
   const [salesOwnerId, setSalesOwnerId] = useState(current.salesOwnerId);
   const [notes, setNotes] = useState(current.notes);
 
@@ -54,13 +46,41 @@ export function LeadDetailsForm({
   const pathname = usePathname();
   const close = () => router.replace(pathname, { scroll: false });
 
+  /**
+   * Saving CLOSES the form. It used to submit and stay open on the same URL,
+   * so a successful save re-rendered the identical form and read as a flicker
+   * with nothing to show for it (user-reported 2026-08-25) — the card behind
+   * it had the new values, but nobody could see the card. A refusal keeps the
+   * form open, because that is the one case where there IS something to do
+   * here.
+   */
+  function submit() {
+    setError(undefined);
+    startTransition(async () => {
+      const result = await updateLeadDetails(pipelineId, {
+        contactName,
+        contactPhone,
+        meetingDate,
+        loggedOn,
+        salesOwnerId,
+        notes,
+      });
+      if (result?.error) setError(result.error);
+      else close();
+    });
+  }
+
   const reassigning = salesOwnerId !== current.salesOwnerId;
   const newOwner = owners.find((o) => o.id === salesOwnerId);
 
   return (
-    <form action={formAction} className="space-y-4">
-      <input type="hidden" name="pipelineId" value={pipelineId} />
-
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        submit();
+      }}
+    >
       <Field label="Contact" htmlFor="ld-contact">
         <input
           id="ld-contact"
@@ -91,6 +111,26 @@ export function LeadDetailsForm({
           className="field"
           value={meetingDate}
           onChange={(e) => setMeetingDate(e.target.value)}
+          disabled={pending}
+        />
+      </Field>
+
+      {/* The day the lead was logged, shown on the society's own leads card
+          and correctable here (user-asked 2026-08-25). Unlike the meeting,
+          this one IS about our records, so it is ordered against the society
+          row and the proposal decision. */}
+      <Field
+        label="Logged on"
+        htmlFor="ld-logged"
+        hint="The day this lead was recorded — not the day of the meeting."
+      >
+        <input
+          id="ld-logged"
+          name="loggedOn"
+          type="date"
+          className="field"
+          value={loggedOn}
+          onChange={(e) => setLoggedOn(e.target.value)}
           disabled={pending}
         />
       </Field>

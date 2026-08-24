@@ -6,7 +6,7 @@ import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
+import { isOperations, mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
 import { AssignSurvey } from "./assign-survey";
 import { LeadDetailsForm } from "./lead-details-form";
 import { formatDate, isoDate } from "@/lib/format-date";
@@ -84,6 +84,12 @@ export default async function PipelineDetailPage({
   const surveyOwnerName = pipeline.surveyOwner?.name ?? pipeline.surveyOwner?.email ?? null;
   // Who a lead may be handed to: admin or sales, holding manage_pipeline.
   // Queried only when the form is actually open.
+  // Correcting the record is operations' own act, deliberately stricter than
+  // mayAct's "assignee, creator or ops" — the owner and creator fields exist
+  // so that the people they name cannot quietly rewrite them (the user,
+  // 2026-08-25: "make sure all these edit options are for admin only").
+  const canCorrect =
+    actor !== null && isOperations(actor.team) && actor.permissions.includes("manage_pipeline");
   const leadOwners = editingLead
     ? await db.adminUser.findMany({
         where: {
@@ -212,7 +218,7 @@ export default async function PipelineDetailPage({
                   the wrong account had no route to the right one, and CON-24
                   refuses a second lead for the same society and service line
                   (user-asked 2026-08-24). */}
-              {approval.allowed && !editingLead && (
+              {canCorrect && !editingLead && (
                 <Link
                   href={`/admin/pipeline/${pipeline.id}?edit=lead`}
                   className="text-sm font-medium shrink-0"
@@ -222,7 +228,7 @@ export default async function PipelineDetailPage({
                 </Link>
               )}
             </div>
-            {editingLead && approval.allowed ? (
+            {editingLead && canCorrect ? (
               <LeadDetailsForm
                 pipelineId={pipeline.id}
                 owners={leadOwners.map((o) => ({
@@ -234,6 +240,7 @@ export default async function PipelineDetailPage({
                   contactName: pipeline.contactName,
                   contactPhone: pipeline.contactPhone ?? "",
                   meetingDate: isoDate(pipeline.meetingDate),
+                  loggedOn: isoDate(pipeline.createdAt),
                   salesOwnerId: pipeline.salesOwnerId,
                   notes: pipeline.notes ?? "",
                 }}

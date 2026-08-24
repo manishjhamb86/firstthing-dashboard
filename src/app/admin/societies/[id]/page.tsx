@@ -13,7 +13,9 @@ import { StatusControl } from "./status-control";
 import { AddPortalAccountButton } from "./add-portal-account-button";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
-import { requireAdminPage } from "@/lib/admin-permissions";
+import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
+import { isOperations } from "@/lib/admin-teams";
+import { formatDate } from "@/lib/format-date";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { NextStepCallout } from "@/components/deal-stepper";
 import type { NextAction } from "@/lib/deal-progress";
@@ -25,6 +27,11 @@ const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 // reasoning.
 export default async function SocietyDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdminPage();
+  // Correcting a recorded fact is an operations act — "make sure all these
+  // edit options are for admin only" (the user, 2026-08-25).
+  const viewer = await resolveAdmin();
+  const canCorrect =
+    viewer !== null && isOperations(viewer.team) && viewer.permissions.includes("manage_pipeline");
 
   const { id } = await params;
   const society = await db.society.findUnique({ where: { id } });
@@ -260,8 +267,24 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                           <StatusChip tone={st.tone}>{st.label}</StatusChip>
                         </span>
                       </div>
+                      {/* The logged date is correctable, by operations, on
+                          the deal itself — the link goes straight to the
+                          form rather than leaving the reader to find it
+                          (user-asked 2026-08-25). */}
                       <p className="text-xs text-[var(--text-muted)] mt-1">
-                        {p.contactName} · logged {p.createdAt.toISOString().slice(0, 10)}
+                        {p.contactName} · logged {formatDate(p.createdAt)}
+                        {canCorrect && (
+                          <>
+                            {" · "}
+                            <Link
+                              href={`/admin/pipeline/${p.id}?edit=lead`}
+                              className="font-medium"
+                              style={{ color: "var(--accent)" }}
+                            >
+                              Edit
+                            </Link>
+                          </>
+                        )}
                       </p>
                     </li>
                   );

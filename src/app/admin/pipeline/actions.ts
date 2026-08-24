@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { canOwn, mayAct, teamMeta } from "@/lib/admin-teams";
+import { canOwn, isOperations, mayAct, teamMeta } from "@/lib/admin-teams";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { refuseOrderedDate } from "@/lib/step-dates";
 import { resolveBackdate } from "@/lib/backdate";
@@ -138,9 +138,15 @@ export async function createLead(input: {
     where: { id: societyId },
     select: { createdAt: true },
   });
-  const loggedAt = await resolveBackdate(input.loggedOn, "The lead", [
-    { label: "the society record", date: society?.createdAt ?? null },
-  ]);
+  // Ordered against the society only when the society already existed. A
+  // quick-created one is stamped now() by this very call, so ordering against
+  // it refuses every backdated lead for a new society — the same circularity
+  // the edit path documents.
+  const loggedAt = await resolveBackdate(
+    input.loggedOn,
+    "The lead",
+    input.societyId ? [{ label: "the society record", date: society?.createdAt ?? null }] : [],
+  );
   if (typeof loggedAt === "string") return { error: loggedAt };
 
   // The meeting is NOT ordered against the society record. Meeting the
@@ -254,9 +260,15 @@ export async function approveLead(pipelineId: string) {
  * wrong account had no route to the right one short of logging a second lead
  * against a society that already has one — which CON-24 refuses outright.
  *
- * The same three rules as everywhere else in this file: the row decides, not
- * the token; the assignee, the creator and operations may act, nobody else;
- * and a lead can only be handed to a team that owns leads.
+ * OPERATIONS ONLY — "make sure all these edit options are for admin only"
+ * (the user, 2026-08-25). This is deliberately stricter than `mayAct`, which
+ * governs acting ON a deal (the assignee, the creator and operations). This
+ * is correcting what the record SAYS — the date it happened, whose it is —
+ * and the whole point of the owner and creator fields is that the people they
+ * name cannot quietly rewrite them.
+ *
+ * The row decides, not the token, as everywhere else in this file; and a lead
+ * can only be handed to a team that owns leads.
  */
 export async function updateLeadDetails(
   pipelineId: string,
@@ -266,28 +278,27 @@ export async function updateLeadDetails(
     meetingDate: string;
     salesOwnerId: string;
     notes?: string;
+    /** The day the lead was logged, when that itself needs correcting. */
+    loggedOn?: string;
   },
 ): Promise<{ error?: string } | undefined> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
-  if (!actor.permissions.includes("manage_pipeline")) {
-    logger.warn("pipeline.lead_update_refused", { pipelineId, actorId: actor.id, reason: "permission" });
-    return { error: "Changing a lead is a sales or operations action." };
+  if (!isOperations(actor.team) || !actor.permissions.includes("manage_pipeline")) {
+    logger.warn("pipeline.lead_update_refused", {
+      pipelineId,
+      actorId: actor.id,
+      actorTeam: actor.team,
+      reason: "not-operations",
+    });
+    return { error: "Correcting a lead's details is an operations action." };
   }
 
-  const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId } });
-  if (!pipeline) return { error: "Lead not found." };
-
-  const right = mayAct({
-    actorId: actor.id,
-    actorTeam: actor.team,
-    ownerId: pipeline.salesOwnerId,
-    creatorId: pipeline.loggedById,
+  const pipeline = await db.pipeline.findUnique({
+    where: { id: pipelineId },
+    include: { society: { select: { createdAt: true } } },
   });
-  if (!right.allowed) {
-    logger.warn("pipeline.lead_update_refused", { pipelineId, actorId: actor.id, reason: right.reason });
-    return { error: right.reason };
-  }
+  if (!pipeline) return { error: "Lead not found." };
 
   const contactName = input.contactName.trim();
   if (!contactName) return { error: "Contact name is required." };
@@ -328,6 +339,29 @@ export async function updateLeadDetails(
     };
   }
 
+  // The logged date is NOT ordered against the society record either, and for
+  // a sharper reason than the meeting: on the lead path the society row is
+  // created BY the lead, so ordering one against the other is circular — it
+  // refuses every correction that moves the date back, which is the only
+  // direction anyone corrects it. What does bind is that a lead cannot be
+  // logged in the future, nor after the decision that came out of its meeting.
+  let loggedAt: Date | undefined;
+  if (input.loggedOn) {
+    const candidate = new Date(`${input.loggedOn}T00:00:00.000Z`);
+    const loggedRefusal = refuseOrderedDate({
+      subject: "The lead",
+      date: candidate,
+      now: new Date(),
+    });
+    if (loggedRefusal) return { error: loggedRefusal };
+    if (pipeline.proposalDecidedAt && candidate.getTime() > pipeline.proposalDecidedAt.getTime()) {
+      return {
+        error: `The lead cannot be logged after the proposal decision (${formatDate(pipeline.proposalDecidedAt)}).`,
+      };
+    }
+    loggedAt = candidate;
+  }
+
   // Handing the lead to someone else puts it back in their hands to confirm —
   // but ONLY while it is still a lead. Flipping it on a deal that has already
   // advanced would freeze a live deal behind an approval nobody is waiting on
@@ -349,16 +383,17 @@ export async function updateLeadDetails(
       notes: input.notes?.trim() || null,
       salesOwnerId: owner.id,
       authoritative,
+      ...(loggedAt ? { createdAt: loggedAt } : {}),
     },
   });
 
   logger.info("pipeline.lead_updated", {
     pipelineId,
     actorId: actor.id,
-    onBehalf: right.onBehalf,
     reassignedFrom: reassigned ? pipeline.salesOwnerId : undefined,
     reassignedTo: reassigned ? owner.id : undefined,
     meetingDate: input.meetingDate,
+    loggedOn: input.loggedOn,
     authoritative,
   });
   if (reassigned && !authoritative) {

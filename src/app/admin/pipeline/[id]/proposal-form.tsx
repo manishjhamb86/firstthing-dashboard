@@ -1,24 +1,12 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useState, useTransition } from "react";
 import { submitProposal } from "../actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import { BackdateField } from "@/components/backdate-field";
 import { usePathname, useRouter } from "next/navigation";
 
 type Outcome = "agreed" | "declined" | "undecided";
-
-async function action(_prev: string | undefined, formData: FormData) {
-  const pipelineId = formData.get("pipelineId") as string;
-  const outcome = formData.get("outcome") as Outcome;
-  const result = await submitProposal(pipelineId, {
-    summary: formData.get("summary") as string,
-    outcome,
-    closedLostReason: formData.get("closedLostReason") as string,
-    decidedOn: (formData.get("decidedOn") as string) || undefined,
-  });
-  return result?.error;
-}
 
 // FEAT-002-AC-2: empty until an outcome is chosen — the form itself is the
 // prompt, not a silently-optional field. Controlled inputs (React 19
@@ -33,7 +21,8 @@ export function ProposalForm({
   /** What the step is for — it replaces the callout that used to say so. */
   hint?: string;
 }) {
-  const [error, formAction, pending] = useActionState(action, undefined);
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
   const [summary, setSummary] = useState("");
   const [outcome, setOutcome] = useState<Outcome | "">("");
   const [closedLostReason, setClosedLostReason] = useState("");
@@ -46,6 +35,28 @@ export function ProposalForm({
   const router = useRouter();
   const pathname = usePathname();
   const close = () => router.replace(pathname, { scroll: false });
+
+  /**
+   * Saving closes the step too. "Agreed" and "declined" move the deal on, so
+   * the form would stop rendering anyway — but "undecided" leaves the deal at
+   * the lead stage, which re-rendered the identical open form and read as a
+   * click that did nothing (the shape reported on the lead-details form,
+   * 2026-08-25). A refusal keeps it open, since that is the case with
+   * something still to do here.
+   */
+  function submit() {
+    setError(undefined);
+    startTransition(async () => {
+      const result = await submitProposal(pipelineId, {
+        summary,
+        outcome: outcome as Outcome,
+        closedLostReason,
+        decidedOn: decidedOn || undefined,
+      });
+      if (result?.error) setError(result.error);
+      else close();
+    });
+  }
   // Only worth confirming if there is something to lose.
   const dirty = summary !== "" || outcome !== "" || closedLostReason !== "" || decidedOn !== "";
 
@@ -53,9 +64,13 @@ export function ProposalForm({
     <Card className="max-w-xl p-6">
       <CardTitle>Demo proposal</CardTitle>
       {hint && <p className="text-sm text-[var(--text-muted)] -mt-2 mb-4">{hint}</p>}
-      <form action={formAction} className="space-y-4">
-        <input type="hidden" name="pipelineId" value={pipelineId} />
-
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
         <Field label="What was pitched (optional)" htmlFor="summary">
           <textarea
             id="summary"

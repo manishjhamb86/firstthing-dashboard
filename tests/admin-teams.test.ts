@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { TEAMS, canOwn, mayAct, teamMeta, teamsFor } from "@/lib/admin-teams";
+import { TEAMS, canOwn, mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
 
 describe("teams are the blueprint's personas, not a new vocabulary", () => {
   it("names a persona for every team", () => {
@@ -75,5 +75,49 @@ describe("who may update a record assigned to someone else", () => {
   it("an unassigned record is not owned by whoever asks", () => {
     const r = mayAct({ actorId: "u-x", actorTeam: "sales", ownerId: null, creatorId: null });
     expect(r.allowed).toBe(false);
+  });
+});
+
+describe("whose turn the next step is", () => {
+  const field = { owner: "field" as const, assigneeName: null };
+
+  it("the survey is the field team's, not sales'", () => {
+    // The reported bug: a sales account was shown "Run the site survey ·
+    // Continue" as though it were theirs.
+    const v = whoseTurn({ ...field, actorTeam: "sales" });
+    expect(v.mine).toBe(false);
+    expect(!v.mine && v.waitingOn).toBe("the field team");
+    expect(!v.mine && v.canOverride).toBe(false);
+  });
+
+  it("and it IS the engineer's and the inspector's", () => {
+    expect(whoseTurn({ ...field, actorTeam: "engineering" }).mine).toBe(true);
+    expect(whoseTurn({ ...field, actorTeam: "inspection" }).mine).toBe(true);
+  });
+
+  it("names the assignee when there is one", () => {
+    const v = whoseTurn({ owner: "field", assigneeName: "Neha Kapoor", actorTeam: "sales" });
+    expect(!v.mine && v.waitingOn).toBe("Neha Kapoor");
+  });
+
+  it("operations is never blocked, but is told it is stepping in", () => {
+    const v = whoseTurn({ ...field, actorTeam: "operations" });
+    // Operations is in the field step's own team list, so it is simply theirs.
+    expect(v.mine).toBe(true);
+  });
+
+  it("a step waiting on the society can be overridden by nobody", () => {
+    for (const t of ["operations", "sales", "engineering"] as const) {
+      const v = whoseTurn({ owner: "society", assigneeName: null, actorTeam: t });
+      expect(v.mine).toBe(false);
+      expect(!v.mine && v.canOverride).toBe(false);
+      expect(!v.mine && v.note).toMatch(/their own portal/i);
+    }
+  });
+
+  it("a lead step is sales' and operations'", () => {
+    expect(whoseTurn({ owner: "sales", assigneeName: null, actorTeam: "sales" }).mine).toBe(true);
+    expect(whoseTurn({ owner: "sales", assigneeName: null, actorTeam: "operations" }).mine).toBe(true);
+    expect(whoseTurn({ owner: "sales", assigneeName: null, actorTeam: "engineering" }).mine).toBe(false);
   });
 });

@@ -323,3 +323,53 @@ export async function submitProposal(
   revalidatePath("/admin/pipeline");
   return {};
 }
+
+
+/**
+ * Hand the field work to a named person.
+ *
+ * The survey and the demo commissioning are the field team's, so only an
+ * engineering or inspection account may be handed them — the same rule that
+ * keeps a lead with sales. Assigning is an ops or sales act: whoever owns the
+ * deal decides who goes out to it.
+ */
+export async function assignSurveyOwner(input: { pipelineId: string; toId: string | null }) {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+
+  const pipeline = await db.pipeline.findUnique({ where: { id: input.pipelineId } });
+  if (!pipeline) return { error: "Lead not found." };
+
+  const right = mayAct({
+    actorId: actor.id,
+    actorTeam: actor.team,
+    ownerId: pipeline.salesOwnerId,
+    creatorId: pipeline.loggedById,
+  });
+  if (!right.allowed) return { error: "Only this deal's owner, whoever logged it, or operations can assign the survey." };
+
+  if (input.toId) {
+    const to = await db.adminUser.findFirst({
+      where: { id: input.toId, isActive: true, deletedAt: null },
+      select: { id: true, team: true, name: true, email: true },
+    });
+    if (!to) return { error: "That account cannot take the survey." };
+    if (!canOwn(to.team, "survey")) {
+      return {
+        error: `${to.name ?? to.email} is on the ${teamMeta(to.team).label} team — the survey goes to engineering or inspection.`,
+      };
+    }
+  }
+
+  await db.pipeline.update({
+    where: { id: input.pipelineId },
+    data: { surveyOwnerId: input.toId },
+  });
+  logger.info("pipeline.survey_assigned", {
+    pipelineId: input.pipelineId,
+    toId: input.toId,
+    byId: actor.id,
+  });
+  revalidatePath(`/admin/pipeline/${input.pipelineId}`);
+  return {};
+}

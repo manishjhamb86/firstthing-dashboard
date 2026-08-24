@@ -33,8 +33,11 @@ export default async function PipelinePage() {
   const session = await requireAdminPage();
 
   const canManagePipeline = session.user.adminPermissions?.includes("manage_pipeline") ?? false;
+  // Not the field team: the deal belongs to marketing. Engineers and
+  // inspectors find their own work on /admin/field.
+  const canRead = canManagePipeline;
 
-  const pipelines = canManagePipeline
+  const pipelines = canRead
     ? await db.pipeline.findMany({
         orderBy: { createdAt: "desc" },
         include: { society: true, salesOwner: true },
@@ -67,7 +70,7 @@ export default async function PipelinePage() {
 
       {/* The figures used to be a run-on subtitle; they are tiles like every
           other page's, so the row below them starts at the same y. */}
-      {canManagePipeline && (
+      {canRead && (
         <StatRow>
           <Stat label="Deals on record" value={pipelines.length} detail={`${grouped.length} stage${grouped.length === 1 ? "" : "s"} in play`} />
           <Stat label="Awaiting approval" value={pendingApproval} detail={pendingApproval === 0 ? "none held" : "owner has not confirmed"} />
@@ -76,7 +79,7 @@ export default async function PipelinePage() {
         </StatRow>
       )}
 
-      {!canManagePipeline ? (
+      {!canRead ? (
         <p className="max-w-xl text-[var(--text-muted)]">
           You don&apos;t have the <code>manage_pipeline</code> permission, so the sales pipeline isn&apos;t
           available to you.

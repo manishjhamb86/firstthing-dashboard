@@ -6,7 +6,8 @@ import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { mayAct } from "@/lib/admin-teams";
+import { mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
+import { AssignSurvey } from "./assign-survey";
 import { DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
 import { DealStepper, NextStepCallout, WaitingOnCallout } from "@/components/deal-stepper";
 
@@ -18,7 +19,11 @@ const OUTCOME_LABEL: Record<string, string> = {
 
 export default async function PipelineDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminPage();
-  if (!session.user.adminPermissions?.includes("manage_pipeline")) redirect("/admin/pipeline");
+  // The deal is the marketing team's — an engineer gets the survey, the demo
+  // and the installation, not the commercial record (the user's call,
+  // 2026-08-24). They reach their own work from /admin/field, which is why
+  // widening this page was the wrong fix for "assigned work you cannot see".
+  if (!session.user.adminPermissions?.includes("manage_pipeline")) redirect("/admin");
 
   const { id } = await params;
   const pipeline = await db.pipeline.findUnique({
@@ -49,6 +54,25 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
   // so is acting for them. Resolved from the row, like every other gate here.
   const actor = await resolveAdmin();
   const ownerName = pipeline.salesOwner.name ?? pipeline.salesOwner.email;
+  // Who the field work is on, and whether the next step is this account's to
+  // take at all.
+  const fieldCandidates = actor
+    ? await db.adminUser.findMany({
+        where: { team: { in: teamsFor("survey") }, isActive: true, deletedAt: null },
+        select: { id: true, name: true, email: true, team: true },
+        orderBy: { name: "asc" },
+      })
+    : [];
+  const surveyOwnerName = pipeline.surveyOwner?.name ?? pipeline.surveyOwner?.email ?? null;
+  const turn =
+    actor && progress.next
+      ? whoseTurn({
+          owner: progress.next.owner,
+          actorTeam: actor.team,
+          assigneeName: progress.next.owner === "field" ? surveyOwnerName : null,
+        })
+      : null;
+
   const approval = actor
     ? mayAct({
         actorId: actor.id,
@@ -99,6 +123,28 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
             />
           )}
         </WaitingOnCallout>
+      ) : progress.next && progress.next.label === "Assign the survey" ? (
+        // The step itself is the assignment, so the control lives in the
+        // callout rather than sending the reader somewhere to find it.
+        <NextStepCallout next={progress.next} inline>
+          <AssignSurvey
+            pipelineId={pipeline.id}
+            current={null}
+            candidates={fieldCandidates.map((c) => ({
+              id: c.id,
+              name: c.name ?? c.email,
+              team: teamMeta(c.team).label,
+            }))}
+            compact
+          />
+        </NextStepCallout>
+      ) : progress.next && turn && !turn.mine ? (
+        <WaitingOnCallout
+          who={turn.waitingOn}
+          title={progress.next.label}
+          detail={`${progress.next.detail} ${turn.note}`}
+          href={turn.canOverride ? progress.next.href : undefined}
+        />
       ) : (
         progress.next && <NextStepCallout next={progress.next} />
       )}

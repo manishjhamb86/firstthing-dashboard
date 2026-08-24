@@ -11,6 +11,14 @@ import { spawn } from "node:child_process";
 loadEnv({ path: ".env" });
 if (existsSync(".env.local")) loadEnv({ path: ".env.local", override: true });
 
+// The dev database lives on the server now, reached over SSH — open the
+// forward before Next starts, or the first request fails with a connection
+// error that looks like a broken app rather than a missing tunnel.
+if (process.argv.includes("dev") && /localhost:5433/.test(process.env.DATABASE_URL ?? "")) {
+  const { ensureTunnel } = await import("./db-tunnel.mjs");
+  await ensureTunnel({ quiet: true });
+}
+
 const child = spawn("next", process.argv.slice(2), { stdio: "inherit", env: process.env });
 
 child.on("exit", (code, signal) => {

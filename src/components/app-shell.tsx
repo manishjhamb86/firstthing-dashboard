@@ -10,6 +10,7 @@ import {
   Activity,
   SignalHigh,
   Gauge,
+  HardHat,
   Lightbulb,
   Receipt,
   Users,
@@ -39,6 +40,7 @@ export function AppShell({
   theme,
   email,
   showPipeline,
+  showField,
   showMonitoring,
   showReadings,
   showCatalog,
@@ -54,6 +56,7 @@ export function AppShell({
   /** DEMO_MODE is set in the environment, so the toggle may render. */
   demoAvailable?: boolean;
   showPipeline: boolean;
+  showField: boolean;
   showMonitoring: boolean;
   showReadings: boolean;
   showCatalog: boolean;
@@ -70,6 +73,8 @@ export function AppShell({
     ...(showPipeline ? [{ href: "/admin/pipeline", label: "Leads & pipeline", icon: Target }] : []),
     // Two tabs, not one: a circuit chasing a benchmark and a society holding
     // one are different questions with different cadences (2026-08-21).
+    // The field team's own list — they do not get the deal (2026-08-24).
+    ...(showField ? [{ href: "/admin/field", label: "Field work", icon: HardHat }] : []),
     ...(showMonitoring
       ? [{ href: "/admin/demo-monitoring", label: "Demo monitoring", icon: Activity }]
       : []),

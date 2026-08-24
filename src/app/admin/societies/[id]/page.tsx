@@ -84,11 +84,13 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             detail:
               "A deal is what produces a survey, circuits and a contract. Enrolling a service line on its own does not start one.",
             href: `/admin/pipeline/new?societyId=${society.id}`,
+            owner: "sales" as const,
           }
         : {
             label: "Log the first lead",
             detail: "Portal access exists, but no deal has been logged for this society yet.",
             href: `/admin/pipeline/new?societyId=${society.id}`,
+            owner: "sales" as const,
           }
       : null;
 

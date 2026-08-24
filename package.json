@@ -8,7 +8,8 @@
     "start": "node scripts/run-next.mjs start",
     "lint": "eslint",
     "test": "vitest run",
-    "worker": "tsx scripts/job-worker.ts"
+    "worker": "tsx scripts/job-worker.ts",
+    "db:tunnel": "node scripts/db-tunnel.mjs"
   },
   "dependencies": {
     "@auth/core": "0.41.3",

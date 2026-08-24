@@ -412,6 +412,7 @@ model AdminUser {
   deleted   AdminUser[] @relation("AdminDeletedBy")
 
   pipelinesOwned  Pipeline[] @relation("PipelineSalesOwner")
+  pipelinesSurveying     Pipeline[]  @relation("PipelineSurveyOwner")
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
 
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
@@ -494,6 +495,10 @@ model Pipeline {
   // salesOwner is notified (logged via logger.ts — see PROJECT_CONTEXT.md;
   // real notification delivery is NFR-10/R1, not built yet).
   salesOwnerId  String  @map("sales_owner_id")
+  /// The field person the survey and demo commissioning are handed to.
+  /// Null until someone assigns it — the work still belongs to the field
+  /// team, it just has no name on it yet.
+  surveyOwnerId String? @map("survey_owner_id")
   loggedById    String  @map("logged_by_id")
   authoritative Boolean @default(true)
 
@@ -516,6 +521,7 @@ model Pipeline {
   society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
   salesOwner AdminUser   @relation("PipelineSalesOwner", fields: [salesOwnerId], references: [id])
   loggedBy   AdminUser   @relation("PipelineLoggedBy", fields: [loggedById], references: [id])
+  surveyOwner AdminUser? @relation("PipelineSurveyOwner", fields: [surveyOwnerId], references: [id])
   siteSurvey SiteSurvey?
 
   // MS-05

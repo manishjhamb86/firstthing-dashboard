@@ -224,6 +224,7 @@ export function WaitingOnCallout({
   who,
   detail,
   loggedBy,
+  href,
   children,
 }: {
   title: string;
@@ -231,6 +232,8 @@ export function WaitingOnCallout({
   detail: string;
   /** Who created the record, when that is not the person it is waiting on. */
   loggedBy?: string;
+  /** Offered only to an account allowed to step in — usually operations. */
+  href?: string;
   children?: React.ReactNode;
 }) {
   return (
@@ -252,6 +255,15 @@ export function WaitingOnCallout({
         )}
       </div>
       {children && <div className="shrink-0">{children}</div>}
+      {href && !children && (
+        <Link
+          href={href}
+          className="shrink-0 inline-flex items-center gap-2 rounded-[var(--r-pill)] border px-4 py-2 text-sm font-semibold no-underline"
+          style={{ borderColor: "currentColor", color: "inherit" }}
+        >
+          Open it anyway →
+        </Link>
+      )}
     </div>
   );
 }
@@ -260,9 +272,14 @@ export function NextStepCallout({
   next,
   eyebrow,
   done,
+  inline,
+  children,
 }: {
   next: NextAction;
   eyebrow?: string;
+  /** Render a control in place of the Continue affordance, and do not link. */
+  inline?: boolean;
+  children?: React.ReactNode;
   /**
    * What this step just finished, when the page has both. A green "done"
    * banner stacked directly above this blue one is two banners competing for
@@ -271,12 +288,13 @@ export function NextStepCallout({
    */
   done?: React.ReactNode;
 }) {
-  return (
-    <Link
-      href={next.href}
-      className="group mb-8 flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-[var(--r-md)] p-5 no-underline transition-shadow hover:shadow-[var(--e2)]"
-      style={{ background: "var(--accent)", color: "#fff", boxShadow: "var(--e1)" }}
-    >
+  // When the step IS a control (assigning the survey, say), the card must not
+  // also be a link — a card that both navigates and holds a <select> is a
+  // click that does two things. Same body either way; only the wrapper
+  // differs, so it is built once rather than as a component-in-a-component
+  // (which would reset its state on every render).
+  const body = (
+    <>
       <div className="min-w-0">
         {done && (
           <p className="mb-2 flex items-center gap-2 text-sm font-medium">
@@ -291,10 +309,6 @@ export function NextStepCallout({
           </p>
         )}
         <p className="lbl mb-1" style={{ color: "rgba(255,255,255,0.75)" }}>
-          {/* A society running two service lines needs to know WHICH one this
-              is about. It used to be a bare label floating above the card,
-              which pushed everything below it down by a line on this page
-              only. */}
           {eyebrow ? `${eyebrow} · next step` : "Next step"}
         </p>
         <p className="text-[17px] font-semibold leading-snug">{next.label}</p>
@@ -302,15 +316,39 @@ export function NextStepCallout({
           {next.detail}
         </p>
       </div>
-      {/* An explicit target, so the card reads as something to click rather
-          than as a notice that happens to be coloured. */}
-      <span
-        className="shrink-0 inline-flex items-center gap-2 rounded-[var(--r-pill)] px-4 py-2 text-sm font-semibold transition-transform group-hover:translate-x-0.5"
-        style={{ background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.30)" }}
-        aria-hidden
-      >
-        Continue →
-      </span>
+      {inline && children ? (
+        <div className="shrink-0">{children}</div>
+      ) : (
+        /* An explicit target, so the card reads as something to click rather
+           than as a notice that happens to be coloured. */
+        <span
+          className="shrink-0 inline-flex items-center gap-2 rounded-[var(--r-pill)] px-4 py-2 text-sm font-semibold transition-transform group-hover:translate-x-0.5"
+          style={{ background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.30)" }}
+          aria-hidden
+        >
+          Continue →
+        </span>
+      )}
+    </>
+  );
+
+  const shell = "mb-8 flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-[var(--r-md)] p-5";
+  const paint = { background: "var(--accent)", color: "#fff", boxShadow: "var(--e1)" } as const;
+
+  if (inline) {
+    return (
+      <div className={shell} style={paint}>
+        {body}
+      </div>
+    );
+  }
+  return (
+    <Link
+      href={next.href}
+      className={`group ${shell} no-underline transition-shadow hover:shadow-[var(--e2)]`}
+      style={paint}
+    >
+      {body}
     </Link>
   );
 }

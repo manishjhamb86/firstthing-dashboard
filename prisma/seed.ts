@@ -179,6 +179,31 @@ async function main() {
       });
     }
   }
+  // One walkable deal, so a freshly-created database is not a dead end.
+  // Dev now runs against firsthing_dev on the server rather than a local
+  // Docker volume (2026-08-24), which means "the database everyone starts
+  // from" is this file — an empty pipeline list made half the app
+  // unreachable.
+  const sales = await db.adminUser.findUnique({ where: { email: "sales@firsthing.earth" } });
+  if (sales) {
+    await db.pipeline.upsert({
+      where: { id: "seed-pipeline-1" },
+      update: {},
+      create: {
+        id: "seed-pipeline-1",
+        societyId: "seed-society-1",
+        serviceLine: "lighting",
+        stage: "lead",
+        salesOwnerId: sales.id,
+        loggedById: sales.id,
+        authoritative: true,
+        contactName: "R. Mehta",
+        contactPhone: "9800000000",
+        meetingDate: new Date("2026-08-01T00:00:00Z"),
+      },
+    });
+  }
+
 }
 
 main()

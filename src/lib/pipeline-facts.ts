@@ -12,6 +12,7 @@ import { db } from "./db";
 import { dealProgress, type DealProgress } from "./deal-progress";
 
 export const DEAL_PROGRESS_INCLUDE = {
+  surveyOwner: { select: { id: true, name: true, email: true } },
   siteSurvey: { include: { areas: { select: { id: true } } } },
   demoReports: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
   kycRequirements: { select: { status: true } },
@@ -31,6 +32,7 @@ export function toDealProgress(
     societyId: pipeline.societyId,
     stage: pipeline.stage,
     authoritative: pipeline.authoritative,
+    surveyOwnerName: pipeline.surveyOwner?.name ?? pipeline.surveyOwner?.email ?? null,
     demoSkipped: pipeline.demoSkipped,
     surveyExists: !!pipeline.siteSurvey,
     areaCount: pipeline.siteSurvey?.areas.length ?? 0,

@@ -32,6 +32,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       demoAvailable={demoAvailable}
       demoMode={demoOn}
       showPipeline={perms.includes("manage_pipeline")}
+      showField={perms.includes("manage_survey")}
       showMonitoring={perms.includes("manage_survey")}
       // The readings area is readable by anyone who can see a pipeline;
       // ingesting into it needs both permissions (the PER-01 proxy), which

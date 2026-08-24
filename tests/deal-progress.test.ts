@@ -13,6 +13,7 @@ const freshLead: DealFacts = {
   societyId: "s1",
   stage: "lead",
   authoritative: true,
+  surveyOwnerName: null,
   demoSkipped: false,
   surveyExists: false,
   areaCount: 0,
@@ -56,6 +57,7 @@ describe("survey and commissioning", () => {
   const surveyed: DealFacts = {
     ...freshLead,
     stage: "survey_pending",
+    surveyOwnerName: "Neha Kapoor",
     surveyExists: true,
   };
 
@@ -112,6 +114,7 @@ describe("report → offer → agreement → installation → billing", () => {
   const benchmarked: DealFacts = {
     ...freshLead,
     stage: "survey_pending",
+    surveyOwnerName: "Neha Kapoor",
     surveyExists: true,
     areaCount: 3,
     candidates: [{ id: "c1", state: "benchmark_confirmed", location: null, lightType: "basement" }],
@@ -188,13 +191,13 @@ describe("report → offer → agreement → installation → billing", () => {
 describe("the KYC parallel track", () => {
   it("is locked on a fresh lead, parallel once the deal is moving, done when resolved", () => {
     expect(byKey(freshLead).kyc.status).toBe("locked");
-    const moving = { ...freshLead, stage: "survey_pending", surveyExists: true };
+    const moving = { ...freshLead, stage: "survey_pending", surveyExists: true, surveyOwnerName: "Neha Kapoor" };
     expect(byKey(moving).kyc.status).toBe("parallel");
     expect(byKey({ ...moving, kyc: { total: 3, resolved: 3 } }).kyc.status).toBe("done");
   });
 
   it("zero requirements is 'not started', never 'done'", () => {
-    const moving = { ...freshLead, stage: "survey_pending", surveyExists: true };
+    const moving = { ...freshLead, stage: "survey_pending", surveyExists: true, surveyOwnerName: "Neha Kapoor" };
     expect(byKey(moving).kyc.status).toBe("parallel");
     expect(byKey(moving).kyc.summary).toMatch(/start collecting early/i);
   });
@@ -211,6 +214,7 @@ describe("closed-lost and demo-skip", () => {
     const { steps, next } = dealProgress({
       ...freshLead,
       stage: "survey_pending",
+      surveyOwnerName: "Neha Kapoor",
       surveyExists: true,
       demoSkipped: true,
       candidates: [{ id: "c1", state: "eligible", location: null, lightType: "basement" }],
@@ -332,8 +336,16 @@ describe("a locked step names what it is waiting on", () => {
 
   it("points at the first earlier step that is not done", () => {
     const steps = byKey(freshLead);
-    // Everything is locked behind step 1, the lead itself.
+    // The NEAREST blocker, one link at a time: the survey waits on the
+    // assignment, and the assignment waits on the lead. Before the assign
+    // step existed the survey pointed straight at the lead; it should point
+    // at whatever is actually next, not at the start of the chain.
     expect(steps.survey.blockedBy).toEqual({
+      index: 2,
+      title: "Assign the survey",
+      href: "/admin/pipeline/p1",
+    });
+    expect(steps["assign-survey"].blockedBy).toEqual({
       index: 1,
       title: "Lead & demo proposal",
       href: "/admin/pipeline/p1",
@@ -345,6 +357,7 @@ describe("a locked step names what it is waiting on", () => {
     const mid: DealFacts = {
       ...freshLead,
       stage: "survey_pending",
+      surveyOwnerName: "Neha Kapoor",
       surveyExists: true,
       areaCount: 1,
       candidates: [{ id: "c1", state: "meter_installed", location: "Basement", lightType: "Tube" }],
@@ -426,7 +439,8 @@ describe("the header phase agrees with the map", () => {
   it("names the current step, not the stored stage", () => {
     const mid = dealProgress({
       ...freshLead,
-      stage: "survey_pending", // unchanged in the database…
+      stage: "survey_pending",
+      surveyOwnerName: "Neha Kapoor", // unchanged in the database…
       surveyExists: true,
       areaCount: 1,
       candidates: [{ id: "c1", state: "meter_installed", location: "Basement", lightType: "Tube" }],
@@ -471,6 +485,7 @@ describe("generating the report and sharing it are separate steps", () => {
   const benchmarked: DealFacts = {
     ...freshLead,
     stage: "survey_pending",
+    surveyOwnerName: "Neha Kapoor",
     surveyExists: true,
     areaCount: 1,
     candidates: [{ id: "c1", state: "benchmark_confirmed", location: null, lightType: "Tube" }],

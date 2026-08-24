@@ -108,6 +108,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
           label: circuitNextLabel(top.state),
           detail: `Commissioning continues on the circuit page for ${candidateLabel(top)} — not here.`,
           href: `/admin/societies/${pipeline.society.id}/circuits/${top.id}`,
+          owner: "field" as const,
         }
       : null;
 

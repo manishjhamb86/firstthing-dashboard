@@ -141,3 +141,63 @@ export function mayAct(rel: ActorRelation): ActRight {
     reason: "This is assigned to someone else, and you did not create it.",
   };
 }
+
+
+// ── Whose turn is it? ─────────────────────────────────────────────────────
+
+/** The teams that actually do each kind of step. */
+const STEP_TEAMS: Record<"sales" | "field" | "ops", AdminTeam[]> = {
+  sales: ["sales", "operations"],
+  field: ["engineering", "inspection", "operations"],
+  ops: ["operations"],
+};
+
+export type TurnVerdict =
+  | { mine: true }
+  | { mine: false; waitingOn: string; canOverride: boolean; note: string };
+
+/**
+ * Whether the next step belongs to the account looking at it.
+ *
+ * A deal is not one person's job. Showing every step as a blue "next step ·
+ * Continue" told a sales account that running the site survey was their task
+ * (user-reported 2026-08-24) — it is the field team's. Operations is never
+ * blocked, but it is told whose work it is stepping into, which is the same
+ * rule as `mayAct`.
+ *
+ * `society` steps are nobody internal's turn at all: the office-bearer acts
+ * in their own portal and no admin can do it for them.
+ */
+export function whoseTurn(input: {
+  owner: "sales" | "field" | "ops" | "society";
+  actorTeam: AdminTeam;
+  /** The named assignee for this kind of work, when there is one. */
+  assigneeName: string | null;
+}): TurnVerdict {
+  if (input.owner === "society") {
+    return {
+      mine: false,
+      waitingOn: "the society",
+      canOverride: false,
+      note: "The office-bearer does this in their own portal — it cannot be done for them from here.",
+    };
+  }
+  if (STEP_TEAMS[input.owner].includes(input.actorTeam)) return { mine: true };
+
+  const who =
+    input.assigneeName ??
+    (input.owner === "field"
+      ? "the field team"
+      : input.owner === "sales"
+        ? "the sales owner"
+        : "operations");
+  return {
+    mine: false,
+    waitingOn: who,
+    // Operations is never blocked — but it is told it is stepping in.
+    canOverride: isOperations(input.actorTeam),
+    note: isOperations(input.actorTeam)
+      ? `This is ${who}'s step. You can record it for them, but only if the work has actually been done.`
+      : `${who} does this. It is here so you can see where the deal is, not for you to record.`,
+  };
+}

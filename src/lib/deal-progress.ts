@@ -48,7 +48,22 @@ export type DealStep = {
   parallelTrack?: true;
 };
 
-export type NextAction = { label: string; detail: string; href: string };
+/**
+ * The team whose work the next step is. A deal is not one person's job —
+ * the lead is sales', the survey and the demo commissioning are the field
+ * team's, and the money is operations'. Naming the owner on the action is
+ * what lets a screen tell "your turn" from "waiting on somebody else"
+ * (user-asked 2026-08-24: the survey step showed a blue Continue card to a
+ * sales account whose task it was not).
+ */
+export type NextOwner = "sales" | "field" | "ops" | "society";
+
+export type NextAction = {
+  label: string;
+  detail: string;
+  href: string;
+  owner: NextOwner;
+};
 
 export type DealProgress = {
   steps: DealStep[];
@@ -77,6 +92,8 @@ export type DealFacts = {
   societyId: string;
   stage: string;
   authoritative: boolean;
+  /** The field person the survey is assigned to, if anyone. */
+  surveyOwnerName: string | null;
   demoSkipped: boolean;
   surveyExists: boolean;
   areaCount: number;
@@ -190,7 +207,27 @@ export function dealProgress(f: DealFacts): DealProgress {
   const installDone = f.certificateSigned || f.stage === "active_billing";
   const billingLive = f.stage === "active_billing";
 
-  const doneFlags = [leadDone, surveyDone, benchmarkDone, reportGenerated, reportShared, offerDone, contractDone, installDone, billingLive];
+  // Assigning the field work is its own step in the spine, so it is its own
+  // done-flag — leaving it out made every later step's index disagree with
+  // the map's, and the survey read as locked while it was current.
+  // …and it cannot be done before the lead is. Assigning early otherwise
+  // marked step 2 complete while step 1 was still open, so the map showed the
+  // assignment as finished and the deal sat on "record the demo proposal
+  // decision" with no visible way forward (user-reported 2026-08-24). Nothing
+  // past step 1 counts until the proposal decision is submitted.
+  const surveyAssignedFlag = leadDone && (f.surveyOwnerName !== null || surveyDone);
+  const doneFlags = [
+    leadDone,
+    surveyAssignedFlag,
+    surveyDone,
+    benchmarkDone,
+    reportGenerated,
+    reportShared,
+    offerDone,
+    contractDone,
+    installDone,
+    billingLive,
+  ];
   // The current step is the first not-done one along the spine (KYC is
   // handled separately as the parallel track).
   const currentIdx = closed ? -1 : doneFlags.findIndex((d) => !d);
@@ -202,6 +239,8 @@ export function dealProgress(f: DealFacts): DealProgress {
   };
 
   const circuitHref = top ? `/admin/societies/${f.societyId}/circuits/${top.id}` : undefined;
+
+  const surveyAssigned = surveyAssignedFlag;
 
   const steps: DealStep[] = [
     {
@@ -216,12 +255,25 @@ export function dealProgress(f: DealFacts): DealProgress {
       href: base,
     },
     {
+      key: "assign-survey",
+      title: "Assign the survey",
+      status: status(1, surveyAssigned || surveyDone),
+      summary: surveyAssigned
+        ? `Assigned to ${f.surveyOwnerName}`
+        : surveyDone
+          ? "Surveyed"
+          : currentIdx === 1
+            ? "Hand it to an engineer or inspector — they run the survey, not sales"
+            : "Unlocks when the demo proposal is agreed",
+      href: base,
+    },
+    {
       key: "survey",
       title: "Site survey",
-      status: status(1, surveyDone),
+      status: status(2, surveyDone),
       summary: surveyDone
         ? `${f.areaCount} areas · demo circuit selected`
-        : currentIdx === 1
+        : currentIdx === 2
           ? f.candidates.length === 0
             ? "Record the lighting inventory by area, then pick the demo circuit"
             : "Candidate recorded — awaiting the eligibility decision"
@@ -231,12 +283,12 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "commissioning",
       title: "Demo commissioning",
-      status: status(2, benchmarkDone),
+      status: status(3, benchmarkDone),
       summary: f.demoSkipped
         ? "Skipped — ops-approved demo skip"
         : benchmarkDone
           ? "Benchmark confirmed"
-          : currentIdx === 2 && top
+          : currentIdx === 3 && top
             ? `${candidateLabel(top)}: ${circuitNextLabel(top.state)}`
             : "Unlocks when the survey selects a demo circuit — meter, baseline window, light replacement and benchmark all happen on the circuit page",
       href: circuitHref,
@@ -244,12 +296,12 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "report",
       title: "Demo savings report",
-      status: status(3, reportGenerated),
+      status: status(4, reportGenerated),
       summary: f.demoSkipped
         ? "Skipped with the demo"
         : reportGenerated
           ? "Generated from the confirmed benchmark"
-          : currentIdx === 3
+          : currentIdx === 4
             // Generation is automatic on BenchmarkConfirmed (FEAT-020-AC-1),
             // so this state is only reached when the automatic run was
             // blocked — the screen names which circuit is holding it up.
@@ -260,12 +312,12 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "share-report",
       title: "Share the report with the society",
-      status: status(4, reportShared),
+      status: status(5, reportShared),
       summary: f.demoSkipped
         ? "Skipped with the demo"
         : reportShared
           ? "Shared — visible in the society's portal"
-          : currentIdx === 4
+          : currentIdx === 5
             ? "The draft is internal until you share it. Sharing is what puts it in the society's portal."
             : "Unlocks once the report exists",
       href: `${base}/report`,
@@ -287,10 +339,10 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "offer",
       title: "Offer",
-      status: status(5, offerDone),
+      status: status(6, offerDone),
       summary: offerDone
         ? "Accepted by the society"
-        : currentIdx === 4
+        : currentIdx === 5
           ? f.offerStatus === "issued" || f.offerStatus === "countered"
             ? "Issued — awaiting the society's decision in their portal"
             : "Generate the offer from the benchmark and issue it"
@@ -300,10 +352,10 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "agreement",
       title: "Agreement & contract",
-      status: status(6, contractDone),
+      status: status(7, contractDone),
       summary: contractDone
         ? "Contract active"
-        : currentIdx === 5
+        : currentIdx === 6
           ? kycDone
             ? "Prepare, execute and activate the agreement"
             : "Offer accepted — but KYC must be complete first (GATE-01)"
@@ -313,10 +365,10 @@ export function dealProgress(f: DealFacts): DealProgress {
     {
       key: "installation",
       title: "Full installation",
-      status: status(7, installDone),
+      status: status(8, installDone),
       summary: installDone
         ? "Completion certificate signed"
-        : currentIdx === 6
+        : currentIdx === 7
           ? f.installationState == null
             ? "Set up the installation project and batch plan"
             : f.installationState === "planning"
@@ -340,18 +392,29 @@ export function dealProgress(f: DealFacts): DealProgress {
   if (!closed && !billingLive) {
     if (!leadDone) {
       next = !f.authoritative
-        ? { label: "Get the lead approved", detail: "The sales owner approves it on this page.", href: base }
-        : { label: "Record the demo proposal decision", detail: "The outcome of the demo meeting moves this deal forward.", href: base };
+        ? { label: "Get the lead approved", detail: "The sales owner approves it on this page.", href: base, owner: "sales" }
+        : { label: "Record the demo proposal decision", detail: "The outcome of the demo meeting moves this deal forward.", href: base, owner: "sales" };
+    } else if (!surveyAssigned && !surveyDone) {
+      // The act that was invisible: somebody has to hand the field work to a
+      // named engineer or inspector before it is anyone's to do
+      // (user-asked 2026-08-24).
+      next = {
+        label: "Assign the survey",
+        detail: "An engineer or inspector runs it — pick who, on this page.",
+        href: base,
+        owner: "sales",
+      };
     } else if (!surveyDone) {
       next =
         f.candidates.length === 0
-          ? { label: "Run the site survey", detail: "Record the lighting inventory by area, then pick the demo circuit.", href: `${base}/survey` }
-          : { label: "Resolve the candidate's eligibility", detail: "The selected candidate is awaiting its eligibility decision on the survey page.", href: `${base}/survey` };
+          ? { label: "Run the site survey", detail: "Record the lighting inventory by area, then pick the demo circuit.", href: `${base}/survey`, owner: "field" }
+          : { label: "Resolve the candidate's eligibility", detail: "The selected candidate is awaiting its eligibility decision on the survey page.", href: `${base}/survey`, owner: "field" };
     } else if (!benchmarkDone && top) {
       next = {
         label: circuitNextLabel(top.state),
         detail: `Commissioning continues on the circuit page for ${candidateLabel(top)}.`,
         href: circuitHref as string,
+        owner: "field",
       };
     } else if (!reportGenerated) {
       next = {
@@ -359,27 +422,30 @@ export function dealProgress(f: DealFacts): DealProgress {
         detail:
           "It generates itself once the benchmark confirms — if it hasn't, the screen names the circuit holding it up.",
         href: `${base}/report`,
+        owner: "ops",
       };
     } else if (!reportShared) {
       next = {
         label: "Share the report with the society",
         detail: "The draft is internal. Sharing is what puts it in the society's portal.",
         href: `${base}/report`,
+        owner: "sales",
       };
     } else if (!offerDone) {
       next =
         f.offerStatus === "issued" || f.offerStatus === "countered"
-          ? { label: "Awaiting the society's offer decision", detail: "The office-bearer accepts or counters in their portal.", href: `${base}/offer` }
-          : { label: "Generate and issue the offer", detail: "Priced from the confirmed benchmark.", href: `${base}/offer` };
+          ? { label: "Awaiting the society's offer decision", detail: "The office-bearer accepts or counters in their portal.", href: `${base}/offer`, owner: "society" }
+          : { label: "Generate and issue the offer", detail: "Priced from the confirmed benchmark.", href: `${base}/offer`, owner: "sales" };
     } else if (!contractDone) {
       next = kycDone
-        ? { label: "Execute the agreement", detail: "Prepare, print, sign and activate the contract.", href: `${base}/agreement` }
-        : { label: "Complete KYC first", detail: "GATE-01 — the agreement can't proceed until every document is verified or waived.", href: `${base}/kyc` };
+        ? { label: "Execute the agreement", detail: "Prepare, print, sign and activate the contract.", href: `${base}/agreement`, owner: "sales" }
+        : { label: "Complete KYC first", detail: "GATE-01 — the agreement can't proceed until every document is verified or waived.", href: `${base}/kyc`, owner: "sales" };
     } else if (!installDone) {
       next = {
         label: f.installationState == null ? "Set up the installation project" : "Run the installation",
         detail: "Batch plan, daily society-approved batches, then the completion certificate.",
         href: `${base}/installation`,
+        owner: "field",
       };
     }
   }

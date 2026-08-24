@@ -1,13 +1,14 @@
 import { isDemoMode } from "@/lib/demo-mode";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Card, CardTitle, PageHeader, PageRibbon, StatusChip } from "@/components/ui";
+import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
-import { requireAdminPage } from "@/lib/admin-permissions";
+import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
+import { mayAct } from "@/lib/admin-teams";
 import { DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
-import { DealStepper, NextStepCallout } from "@/components/deal-stepper";
+import { DealStepper, NextStepCallout, WaitingOnCallout } from "@/components/deal-stepper";
 
 const OUTCOME_LABEL: Record<string, string> = {
   agreed: "Agreed — advanced to survey",
@@ -44,23 +45,26 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
   // shared with the KYC screen (src/lib/pipeline-facts.ts).
   const progress = toDealProgress(pipeline, candidates);
 
+  // Who may confirm a lead logged on someone else's behalf, and whether doing
+  // so is acting for them. Resolved from the row, like every other gate here.
+  const actor = await resolveAdmin();
+  const ownerName = pipeline.salesOwner.name ?? pipeline.salesOwner.email;
+  const approval = actor
+    ? mayAct({
+        actorId: actor.id,
+        actorTeam: actor.team,
+        ownerId: pipeline.salesOwnerId,
+        creatorId: pipeline.loggedById,
+      })
+    : ({ allowed: false, reason: "" } as const);
+
   return (
     <>
       {/* The whole deal is frozen behind this, so it leads the page rather
           than sitting under the header competing with the step map. */}
-      {!pipeline.authoritative && (
-        <PageRibbon
-          action={
-            session.user.id === pipeline.salesOwnerId ? (
-              <ApproveLeadButton pipelineId={pipeline.id} />
-            ) : undefined
-          }
-        >
-          Logged by {pipeline.loggedBy.name ?? pipeline.loggedBy.email} on{" "}
-          {pipeline.salesOwner.name ?? pipeline.salesOwner.email}&apos;s behalf — pending their approval. It
-          can&apos;t advance until they approve it.
-        </PageRibbon>
-      )}
+      {/* No ribbon here as well. The waiting callout below says who it is
+          assigned to, who logged it and what has to happen — a ribbon
+          repeating that is the duplication reported twice already. */}
 
       <PageHeader
         backHref="/admin/pipeline"
@@ -71,8 +75,33 @@ export default async function PipelineDetailPage({ params }: { params: Promise<{
         subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${pipeline.society.location}`}
       />
 
-      {/* The one thing the operator came here to learn: what to do now. */}
-      {progress.next && <NextStepCallout next={progress.next} />}
+      {/* The one thing the operator came here to learn: what to do now — or,
+          when the next step is somebody else's, who it is waiting on. A blue
+          "Continue" card for a step that happens on this very page linked to
+          this very page and did nothing (user-reported 2026-08-24). */}
+      {!pipeline.authoritative ? (
+        <WaitingOnCallout
+          who={ownerName}
+          title="This lead is waiting to be confirmed"
+          loggedBy={pipeline.loggedBy.name ?? pipeline.loggedBy.email}
+          detail={
+            approval.allowed && approval.onBehalf
+              ? `${ownerName} is meant to confirm this after their meeting. You can do it for them, but only once the meeting has actually happened.`
+              : approval.allowed
+                ? "Confirm it once the meeting has happened — the deal cannot advance until you do."
+                : `Only ${ownerName}, whoever logged it, or an operations account can confirm this.`
+          }
+        >
+          {approval.allowed && (
+            <ApproveLeadButton
+              pipelineId={pipeline.id}
+              onBehalfOf={approval.onBehalf ? ownerName : null}
+            />
+          )}
+        </WaitingOnCallout>
+      ) : (
+        progress.next && <NextStepCallout next={progress.next} />
+      )}
 
       {/* The lead stage's own workspace lives on this page, so it renders
           right under the callout that points at it. */}

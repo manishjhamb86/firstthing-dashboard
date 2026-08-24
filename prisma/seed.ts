@@ -20,6 +20,61 @@ async function main() {
     },
   });
 
+  // One demo account per team, so the assignment rules are exercisable
+  // without inventing accounts by hand (user-asked 2026-08-24). Password is
+  // the same `password123` as every other seeded account — these exist for a
+  // local walkthrough and a staging demo, nothing else.
+  //
+  // Permissions are what each account may DO; the team is what it may be
+  // HANDED. A sales account holds manage_pipeline and can own a lead; an
+  // engineer holds manage_survey and cannot.
+  const demoTeam: {
+    email: string;
+    name: string;
+    team: "operations" | "sales" | "engineering" | "inspection" | "finance" | "support";
+    permissions: ("manage_admins" | "manage_users" | "manage_pipeline" | "manage_survey" | "release_billing")[];
+  }[] = [
+    {
+      email: "ops@firsthing.earth",
+      name: "Ops Lead (demo)",
+      team: "operations",
+      permissions: ["manage_users", "manage_pipeline", "manage_survey"],
+    },
+    {
+      email: "sales@firsthing.earth",
+      name: "Sales / Marketing (demo)",
+      team: "sales",
+      permissions: ["manage_pipeline"],
+    },
+    {
+      email: "engineer@firsthing.earth",
+      name: "Engineer (demo)",
+      team: "engineering",
+      permissions: ["manage_survey"],
+    },
+    {
+      email: "inspector@firsthing.earth",
+      name: "Inspector (demo)",
+      team: "inspection",
+      permissions: ["manage_survey"],
+    },
+    {
+      email: "accounts@firsthing.earth",
+      name: "Accountant (demo)",
+      team: "finance",
+      // CON-33 — the accountant releases, and deliberately holds nothing that
+      // would let them run the month they are releasing.
+      permissions: ["release_billing"],
+    },
+  ];
+  for (const a of demoTeam) {
+    await db.adminUser.upsert({
+      where: { email: a.email },
+      update: { team: a.team, permissions: a.permissions, name: a.name },
+      create: { email: a.email, name: a.name, passwordHash, team: a.team, permissions: a.permissions },
+    });
+  }
+
   await db.society.upsert({
     where: { id: "seed-society-1" },
     update: {},

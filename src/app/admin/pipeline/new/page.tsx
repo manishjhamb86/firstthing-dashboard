@@ -1,6 +1,7 @@
 import { isDemoMode } from "@/lib/demo-mode";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { teamsFor } from "@/lib/admin-teams";
 import { PageHeader } from "@/components/ui";
 import { NewLeadForm } from "./new-lead-form";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -16,10 +17,19 @@ export default async function NewLeadPage({
   const { societyId } = await searchParams;
   const [societies, salesOwners] = await Promise.all([
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
+    // A lead belongs to admin or sales — "This belongs to either admin or
+    // marketing team" (the user, 2026-08-24). Permission alone listed every
+    // back-office account, including the engineers and inspectors who run the
+    // demo but never own the deal.
     db.adminUser.findMany({
-      where: { permissions: { has: "manage_pipeline" }, isActive: true },
+      where: {
+        permissions: { has: "manage_pipeline" },
+        team: { in: teamsFor("lead") },
+        isActive: true,
+        deletedAt: null,
+      },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, team: true },
     }),
   ]);
 

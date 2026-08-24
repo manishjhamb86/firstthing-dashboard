@@ -2,10 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { canOwn, mayAct, teamMeta } from "@/lib/admin-teams";
+import { resolveAdmin } from "@/lib/admin-permissions";
 import { refuseOrderedDate } from "@/lib/step-dates";
 import { resolveBackdate } from "@/lib/backdate";
 
@@ -43,6 +44,19 @@ export async function createLead(input: {
     return { error: "Service line is required." };
   }
   if (!input.salesOwnerId) return { error: "Choose who this lead belongs to." };
+
+  // The picker only offers eligible accounts, but the picker is not the gate:
+  // a lead may only be assigned to a team that owns leads (admin or sales).
+  const owner = await db.adminUser.findFirst({
+    where: { id: input.salesOwnerId, isActive: true, deletedAt: null },
+    select: { id: true, team: true, name: true, email: true },
+  });
+  if (!owner) return { error: "That account cannot take a lead." };
+  if (!canOwn(owner.team, "lead")) {
+    return {
+      error: `${owner.name ?? owner.email} is on the ${teamMeta(owner.team).label} team — a lead belongs to admin or sales.`,
+    };
+  }
 
   let societyId = input.societyId;
   if (!societyId) {
@@ -186,18 +200,36 @@ export async function createLead(input: {
 // (every possible salesOwnerId already holds manage_pipeline by construction,
 // since new-lead-form.tsx's own owner picker only lists such accounts).
 export async function approveLead(pipelineId: string) {
-  const session = await auth();
-  if (!session?.user || session.user.role !== "admin") redirect("/login");
+  // The row, not the token — the standing rule in this codebase.
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
 
   const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId } });
   if (!pipeline) return { error: "Lead not found." };
   if (pipeline.authoritative) return { error: "This lead is already authoritative." };
-  if (pipeline.salesOwnerId !== session.user.id) {
-    return { error: "Only the sales owner this lead was logged for can approve it." };
+
+  // Was: the sales owner ALONE. That locked the person who logged the lead
+  // out of the record they had just created, and locked out ops entirely
+  // (user-reported 2026-08-24). The assignee, the creator and operations may
+  // all act; only the first of those is acting for themselves.
+  const right = mayAct({
+    actorId: actor.id,
+    actorTeam: actor.team,
+    ownerId: pipeline.salesOwnerId,
+    creatorId: pipeline.loggedById,
+  });
+  if (!right.allowed) {
+    logger.warn("pipeline.lead_approval_refused", { pipelineId, actorId: actor.id, reason: right.reason });
+    return { error: right.reason };
   }
 
   await db.pipeline.update({ where: { id: pipelineId }, data: { authoritative: true } });
-  logger.info("pipeline.lead_approved", { pipelineId, actorId: session.user.id });
+  logger.info("pipeline.lead_approved", {
+    pipelineId,
+    actorId: actor.id,
+    onBehalf: right.onBehalf,
+    ownerId: pipeline.salesOwnerId,
+  });
 
   revalidatePath(`/admin/pipeline/${pipelineId}`);
   revalidatePath("/admin/pipeline");

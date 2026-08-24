@@ -2,7 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import type { AdminPermission } from "@prisma/client";
+import type { AdminPermission, AdminTeam } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
@@ -20,6 +20,7 @@ export async function createAdminUser(input: {
   name: string;
   password: string;
   permissions: AdminPermission[];
+  team: AdminTeam;
 }) {
   const session = await requireAdminPermission("manage_admins");
 
@@ -38,10 +39,22 @@ export async function createAdminUser(input: {
 
   const passwordHash = await bcrypt.hash(input.password, 10);
   const created = await db.adminUser.create({
-    data: { email, name: name || null, passwordHash, permissions: input.permissions, createdById: session.user.id },
+    data: {
+      email,
+      name: name || null,
+      passwordHash,
+      permissions: input.permissions,
+      team: input.team,
+      createdById: session.user.id,
+    },
   });
 
-  logger.info("admin_user.created", { actorId: session.user.id, newAdminId: created.id, permissions: input.permissions });
+  logger.info("admin_user.created", {
+    actorId: session.user.id,
+    newAdminId: created.id,
+    permissions: input.permissions,
+    team: input.team,
+  });
   revalidatePath("/admin/users");
   return {};
 }
@@ -51,6 +64,7 @@ export async function updateAdminUser(input: {
   name: string;
   permissions: AdminPermission[];
   isActive: boolean;
+  team?: AdminTeam;
 }) {
   const session = await requireAdminPermission("manage_admins");
 
@@ -68,7 +82,8 @@ export async function updateAdminUser(input: {
 
   await db.adminUser.update({
     where: { id: input.id },
-    data: { name: input.name.trim() || null, permissions: input.permissions, isActive: input.isActive },
+    data: {
+      ...(input.team ? { team: input.team } : {}), name: input.name.trim() || null, permissions: input.permissions, isActive: input.isActive },
   });
 
   logger.info("admin_user.updated", { actorId: session.user.id, targetId: input.id, permissions: input.permissions, isActive: input.isActive });

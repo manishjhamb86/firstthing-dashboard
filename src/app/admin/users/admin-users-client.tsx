@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { AdminTeam } from "@prisma/client";
+import { TEAMS, teamMeta } from "@/lib/admin-teams";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
@@ -22,6 +24,7 @@ export type AdminListRow = {
   isActive: boolean;
   removed: boolean;
   permissions: AdminPermission[];
+  team: AdminTeam;
 };
 
 const LABEL = new Map(PERMISSION_OPTIONS.map((p) => [p.value, p.label]));
@@ -51,6 +54,7 @@ function AdminForm({
   const [email, setEmail] = useState(editing?.email ?? "");
   const [password, setPassword] = useState("");
   const [perms, setPerms] = useState<AdminPermission[]>(editing?.permissions ?? []);
+  const [team, setTeam] = useState<AdminTeam>(editing?.team ?? "sales");
   const [isActive, setIsActive] = useState(editing?.isActive ?? true);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
@@ -63,8 +67,8 @@ function AdminForm({
     setError(undefined);
     startTransition(async () => {
       const result = isEdit
-        ? await updateAdminUser({ id: editing.id, name, permissions: perms, isActive })
-        : await createAdminUser({ email, name, password, permissions: perms });
+        ? await updateAdminUser({ id: editing.id, name, permissions: perms, isActive, team })
+        : await createAdminUser({ email, name, password, permissions: perms, team });
       if (result && "error" in result && result.error) setError(result.error);
       else onClose();
     });
@@ -91,6 +95,28 @@ function AdminForm({
         </>
       }
     >
+      {/* The team decides what this account can be HANDED — a lead only goes
+          to admin or sales, a survey only to the field. Permissions still
+          decide what it may do. */}
+      <Field
+        label="Team"
+        htmlFor="af-team"
+        hint={teamMeta(team).scope}
+      >
+        <select
+          id="af-team"
+          className="field"
+          value={team}
+          onChange={(e) => setTeam(e.target.value as AdminTeam)}
+        >
+          {TEAMS.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.label} ({t.persona})
+            </option>
+          ))}
+        </select>
+      </Field>
+
       <Field label="Name" htmlFor="af-name">
         <input id="af-name" className="field" value={name} onChange={(e) => setName(e.target.value)} disabled={pending} />
       </Field>
@@ -158,7 +184,7 @@ function matchesQuery(row: AdminListRow, q: string, labels: Map<string, string>)
   // Searching a permission by its label is the useful case: "who can release
   // billing" is a question this list should be able to answer.
   const perms = row.permissions.map((p) => labels.get(p) ?? p).join(" ");
-  return `${row.name ?? ""} ${row.email} ${perms}`.toLowerCase().includes(q.toLowerCase());
+  return `${row.name ?? ""} ${row.email} ${perms} ${teamMeta(row.team).label}`.toLowerCase().includes(q.toLowerCase());
 }
 
 export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfId: string }) {
@@ -223,7 +249,9 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
                 <td>
                   <span className="font-medium">{r.name ?? "—"}</span>
                   {r.id === selfId && <span className="text-[var(--text-muted)]"> (you)</span>}
-                  <p className="text-[13px] text-[var(--text-muted)]">{r.email}</p>
+                  <p className="text-[13px] text-[var(--text-muted)]">
+                    {r.email} · {teamMeta(r.team).label}
+                  </p>
                   {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
                 </td>
                 <td>
@@ -256,7 +284,7 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
                     disabled={pending}
                     onClick={() =>
                       act(r.id, () =>
-                        updateAdminUser({ id: r.id, name: r.name ?? "", permissions: r.permissions, isActive: !r.isActive }),
+                        updateAdminUser({ id: r.id, name: r.name ?? "", permissions: r.permissions, isActive: !r.isActive, team: r.team }),
                       )
                     }
                   >

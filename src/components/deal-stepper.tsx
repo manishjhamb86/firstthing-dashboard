@@ -209,6 +209,53 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
  * should be the first thing the eye lands on, because it is the only thing
  * on the page that says what to do.
  */
+
+/**
+ * The step is real, but it is not yours to take.
+ *
+ * A blue "next step · Continue" card said the opposite: it read as an action
+ * for whoever was looking, it was the same accent as every genuine next step,
+ * and — because the step happens on the page you are already on — clicking it
+ * did nothing at all (user-reported 2026-08-24). This says who is expected to
+ * do it and why, and carries the override rather than pretending to be one.
+ */
+export function WaitingOnCallout({
+  title,
+  who,
+  detail,
+  loggedBy,
+  children,
+}: {
+  title: string;
+  who: string;
+  detail: string;
+  /** Who created the record, when that is not the person it is waiting on. */
+  loggedBy?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div
+      className="mb-8 flex w-full flex-wrap items-center justify-between gap-x-6 gap-y-3 rounded-[var(--r-md)] border p-5"
+      style={{
+        background: "var(--warn-bg)",
+        borderColor: "var(--warn-line)",
+        color: "var(--warn-fg)",
+      }}
+      role="status"
+    >
+      <div className="min-w-0">
+        <p className="lbl mb-1">Waiting on {who}</p>
+        <p className="text-[17px] font-semibold leading-snug">{title}</p>
+        <p className="text-sm mt-0.5">{detail}</p>
+        {loggedBy && (
+          <p className="text-[13px] mt-1 opacity-80">Logged by {loggedBy} on their behalf.</p>
+        )}
+      </div>
+      {children && <div className="shrink-0">{children}</div>}
+    </div>
+  );
+}
+
 export function NextStepCallout({
   next,
   eyebrow,

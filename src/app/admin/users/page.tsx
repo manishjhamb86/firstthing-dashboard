@@ -88,6 +88,7 @@ export default async function UsersPage() {
                 isActive: a.isActive,
                 removed: a.deletedAt !== null,
                 permissions: a.permissions,
+                team: a.team,
               }))}
             />
           )}

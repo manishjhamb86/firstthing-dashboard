@@ -13,6 +13,26 @@ datasource db {
 // features need it — §5.2 itself says its field lists are "representative,
 // not exhaustive."
 
+/// Which part of FirsThing an internal account belongs to.
+///
+/// These are the blueprint's own personas (02-users-research.md §1), not a new
+/// vocabulary: operations = PER-01, sales = PER-07, support = PER-02,
+/// engineering = PER-04 (installer/commissioning), inspection = PER-03 (field
+/// inspector), finance = PER-08.
+///
+/// The team decides what work an account may be ASSIGNED and whose behalf it
+/// may act on. It is not a replacement for AdminPermission, which stays the
+/// authority gate — a sales account with manage_pipeline can own a lead; the
+/// team is what makes it eligible to be handed one in the first place.
+enum AdminTeam {
+  operations
+  sales
+  support
+  engineering
+  inspection
+  finance
+}
+
 enum AdminPermission {
   manage_admins
   manage_users
@@ -366,6 +386,8 @@ model AdminUser {
   passwordHash    String            @map("password_hash")
   name            String?
   isActive        Boolean           @default(true) @map("is_active")
+  /// PER-01 by default: every pre-existing account was an ops account.
+  team        AdminTeam        @default(operations)
   permissions     AdminPermission[]
   // DEMO_MODE's per-account switch. The env var is the master gate — with
   // it unset this column can never turn anything on, and no toggle renders.

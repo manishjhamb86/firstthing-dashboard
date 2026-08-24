@@ -256,11 +256,17 @@ export default async function CalculationPage({
                         {l.measuredSavingsPct.toFixed(2)}% against {l.benchmarkSavingsPct.toFixed(2)}%
                       </span>
                     </span>
-                    <StatusChip tone={l.deviationReview?.state === "closed" ? "ok" : "warn"}>
-                      {l.deviationReview?.state === "closed"
-                        ? `Closed · ${l.deviationReview.rootCause ?? "no root cause"}`
-                        : `Open · ${l.deviationReview?.owner?.name ?? l.deviationReview?.owner?.email ?? "no owner yet"}`}
-                    </StatusChip>
+                    {l.deviationReview ? (
+                      <Link href={`/admin/billing/deviations/${l.deviationReview.id}`}>
+                        <StatusChip tone={l.deviationReview.state === "closed" ? "ok" : "warn"}>
+                          {l.deviationReview.state === "closed"
+                            ? `Closed · ${l.deviationReview.rootCause?.replace(/_/g, " ") ?? "no root cause"}`
+                            : `Review it →`}
+                        </StatusChip>
+                      </Link>
+                    ) : (
+                      <StatusChip tone="neu">No review raised</StatusChip>
+                    )}
                   </li>
                 ))}
               </ul>

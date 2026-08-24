@@ -72,6 +72,12 @@
   --ok-line: #BEEFE4;
   --warn-bg: #FEF5E5;
   --warn-fg: #8A6410;
+  /* Chart marks — see the comment above the dark values. Validated:
+     light #4560E6 ↔ #8A6410 is ΔE 30.6 protan / 18.3 tritan, all checks pass. */
+  --chart-mark: #4560E6;
+  --chart-mark-alert: #8A6410;
+  --chart-mark-inert: #94A3B8;
+  --chart-rule: #5A6A85;
   --warn-line: #F6E3B8;
   --bad-bg: #FDEDE8;
   --bad-fg: #BA4A32;
@@ -207,6 +213,13 @@
 
   --e1: 0 0 0 1px rgba(255, 255, 255, 0.02);
   --e2: 0 8px 24px rgba(0, 0, 0, 0.6);
+  /* Dark marks are SELECTED, not flipped: --accent/--warn-fg are text steps
+     and sit above the L 0.48–0.67 band a mark needs on a dark surface.
+     #5E7BE0 ↔ #B6842B validated: ΔE 26.8 protan / 21.1 tritan, contrast ok. */
+  --chart-mark: #5E7BE0;
+  --chart-mark-alert: #B6842B;
+  --chart-mark-inert: #6B7A90;
+  --chart-rule: #8A99AE;
 }
 
 /* Slate repeats :root verbatim — stamping it is idempotent, same as never

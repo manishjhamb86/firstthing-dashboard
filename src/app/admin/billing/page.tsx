@@ -75,11 +75,12 @@ export default async function BillingPage({
       <PageHeader
         title="Billing"
         subtitle={`${period} · the month's calculation, per contract.`}
-        chip={
-          heldCount > 0 ? (
-            <StatusChip tone="warn">
-              {heldCount} held
-            </StatusChip>
+        chip={heldCount > 0 ? <StatusChip tone="warn">{heldCount} held</StatusChip> : undefined}
+        action={
+          isOps(gate.actor) ? (
+            <Link href="/admin/billing/deviations" className="btn-outline btn-sm">
+              Deviations
+            </Link>
           ) : undefined
         }
       />

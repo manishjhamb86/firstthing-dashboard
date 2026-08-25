@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Card, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
 import { LightingInventoryForm } from "./lighting-inventory-form";
 import { CircuitEligibilityForm } from "./circuit-eligibility-form";
@@ -27,6 +27,7 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
     where: { id },
     include: {
       society: true,
+      surveyOwner: { select: { id: true, name: true, email: true } },
       siteSurvey: { include: { areas: { orderBy: { createdAt: "asc" } } } },
     },
   });
@@ -119,6 +120,19 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
         title="Site survey"
         subtitle={pipeline.society.location}
       />
+
+      {/* The survey is somebody's job once it has been handed to them. Anyone
+          else recording it — operations especially, which is never blocked —
+          is doing it on their behalf and is told so, on the screen where the
+          recording actually happens rather than only on the deal page
+          (user-asked 2026-08-25). */}
+      {pipeline.surveyOwner && pipeline.surveyOwner.id !== session.user.id && (
+        <PageRibbon tone="warn">
+          <strong>Assigned to {pipeline.surveyOwner.name ?? pipeline.surveyOwner.email}.</strong>{" "}
+          They run this survey. You can record it for them, but only if the visit has actually
+          happened.
+        </PageRibbon>
+      )}
 
       {handoff && (
         <div className="max-w-none">

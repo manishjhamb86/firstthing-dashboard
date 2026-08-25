@@ -106,8 +106,14 @@ export default async function PipelineDetailPage({
     actor && progress.next
       ? whoseTurn({
           owner: progress.next.owner,
+          actorId: actor.id,
           actorTeam: actor.team,
+          // Once the survey is handed to someone it is THEIR step — operations
+          // included, which is on the field team list and so used to see a
+          // plain "Run the site survey · Continue" with no sign that an
+          // inspector was already holding it (user-reported 2026-08-25).
           assigneeName: progress.next.owner === "field" ? surveyOwnerName : null,
+          assigneeId: progress.next.owner === "field" ? pipeline.surveyOwnerId : null,
         })
       : null;
 

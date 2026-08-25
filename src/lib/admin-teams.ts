@@ -198,18 +198,26 @@ export type TurnVerdict =
  *
  * A deal is not one person's job. Showing every step as a blue "next step ·
  * Continue" told a sales account that running the site survey was their task
- * (user-reported 2026-08-24) — it is the field team's. Operations is never
- * blocked, but it is told whose work it is stepping into, which is the same
- * rule as `mayAct`.
+ * (user-reported 2026-08-24) — it is the field team's.
+ *
+ * A NAMED ASSIGNEE OUTRANKS THE TEAM. Once the survey has been handed to
+ * someone, the step is theirs and nobody else's — including operations, which
+ * is on the field step's team list and so was shown a plain blue "Run the site
+ * survey · Continue" with no hint that an inspector was already holding it
+ * (user-reported 2026-08-25). Operations is still never *blocked*: it can open
+ * the step from the warning. The point is that assigning work has to change
+ * what everyone else sees, or the assignment is decoration.
  *
  * `society` steps are nobody internal's turn at all: the office-bearer acts
  * in their own portal and no admin can do it for them.
  */
 export function whoseTurn(input: {
   owner: "sales" | "field" | "ops" | "society";
+  actorId?: string;
   actorTeam: AdminTeam;
   /** The named assignee for this kind of work, when there is one. */
   assigneeName: string | null;
+  assigneeId?: string | null;
 }): TurnVerdict {
   if (input.owner === "society") {
     return {
@@ -219,7 +227,15 @@ export function whoseTurn(input: {
       note: "The office-bearer does this in their own portal — it cannot be done for them from here.",
     };
   }
-  if (STEP_TEAMS[input.owner].includes(input.actorTeam)) return { mine: true };
+
+  const assigned = input.assigneeId ?? null;
+  const isAssignee = assigned !== null && assigned === input.actorId;
+  if (isAssignee) return { mine: true };
+
+  // Unassigned work falls back to the team that does it.
+  if (assigned === null && STEP_TEAMS[input.owner].includes(input.actorTeam)) {
+    return { mine: true };
+  }
 
   const who =
     input.assigneeName ??
@@ -228,12 +244,15 @@ export function whoseTurn(input: {
       : input.owner === "sales"
         ? "the sales owner"
         : "operations");
+  // Whoever could actually do the work may still step in — operations always,
+  // and the team that does this kind of step. They are told whose it is.
+  const canStepIn =
+    isOperations(input.actorTeam) || STEP_TEAMS[input.owner].includes(input.actorTeam);
   return {
     mine: false,
     waitingOn: who,
-    // Operations is never blocked — but it is told it is stepping in.
-    canOverride: isOperations(input.actorTeam),
-    note: isOperations(input.actorTeam)
+    canOverride: canStepIn,
+    note: canStepIn
       ? `This is ${who}'s step. You can record it for them, but only if the work has actually been done.`
       : `${who} does this. It is here so you can see where the deal is, not for you to record.`,
   };

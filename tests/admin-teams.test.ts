@@ -168,3 +168,65 @@ describe("the permissions a team's own work needs", () => {
     }
   });
 });
+
+describe("a named assignee outranks the team", () => {
+  // "After the assignment it can also be surveyed from here, but with a
+  // warning that it's assigned to this person" (the user, 2026-08-25).
+  // Operations is on the field step's team list, so it was shown a plain blue
+  // "Run the site survey · Continue" with nothing saying an inspector was
+  // already holding it.
+  const survey = { owner: "field" as const, assigneeName: "Inspector", assigneeId: "insp-1" };
+
+  it("is the assignee's own turn", () => {
+    expect(whoseTurn({ ...survey, actorId: "insp-1", actorTeam: "inspection" })).toEqual({
+      mine: true,
+    });
+  });
+
+  it("is NOT operations' turn once someone holds it — but it can still step in", () => {
+    const v = whoseTurn({ ...survey, actorId: "ops-1", actorTeam: "operations" });
+    expect(v.mine).toBe(false);
+    if (v.mine) return;
+    expect(v.waitingOn).toBe("Inspector");
+    expect(v.canOverride).toBe(true);
+    expect(v.note).toMatch(/record it for them/i);
+  });
+
+  it("is not another engineer's turn either, though they could cover it", () => {
+    const v = whoseTurn({ ...survey, actorId: "eng-9", actorTeam: "engineering" });
+    expect(v.mine).toBe(false);
+    if (v.mine) return;
+    expect(v.waitingOn).toBe("Inspector");
+    expect(v.canOverride).toBe(true);
+  });
+
+  it("leaves sales watching, with no way in", () => {
+    const v = whoseTurn({ ...survey, actorId: "sales-1", actorTeam: "sales" });
+    expect(v.mine).toBe(false);
+    if (v.mine) return;
+    expect(v.canOverride).toBe(false);
+    expect(v.note).toMatch(/not for you to record/i);
+  });
+
+  it("falls back to the team while nobody holds it", () => {
+    const open = { owner: "field" as const, assigneeName: null, assigneeId: null };
+    expect(whoseTurn({ ...open, actorId: "eng-9", actorTeam: "engineering" })).toEqual({ mine: true });
+    expect(whoseTurn({ ...open, actorId: "ops-1", actorTeam: "operations" })).toEqual({ mine: true });
+    const v = whoseTurn({ ...open, actorId: "sales-1", actorTeam: "sales" });
+    expect(v.mine).toBe(false);
+    if (v.mine) return;
+    expect(v.waitingOn).toBe("the field team");
+  });
+
+  it("still never lets anyone act for the society", () => {
+    const v = whoseTurn({
+      owner: "society",
+      actorId: "ops-1",
+      actorTeam: "operations",
+      assigneeName: null,
+    });
+    expect(v.mine).toBe(false);
+    if (v.mine) return;
+    expect(v.canOverride).toBe(false);
+  });
+});

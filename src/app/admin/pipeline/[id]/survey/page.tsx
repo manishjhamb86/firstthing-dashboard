@@ -11,7 +11,7 @@ import { resolveCircuitRemoval } from "@/lib/circuit-removal";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
 import { NextStepCallout, StepHeading } from "@/components/deal-stepper";
-import { SurveyVisitDetails } from "@/components/survey-visit";
+import { VisitDetails } from "@/components/visit-details";
 import { SurveyVisitForm } from "../survey-visit-form";
 import { isoDateTimeLocal } from "@/lib/format-date";
 import { teamMeta } from "@/lib/admin-teams";
@@ -190,7 +190,7 @@ export default async function SiteSurveyPage({
               leadContact={{ name: pipeline.contactName, phone: pipeline.contactPhone ?? "" }}
             />
           ) : (
-          <SurveyVisitDetails
+          <VisitDetails
             visit={{
               assigneeName: pipeline.surveyOwner.name ?? pipeline.surveyOwner.email,
               assigneeTeam: teamMeta(pipeline.surveyOwner.team).label,

@@ -10,7 +10,7 @@ import { isOperations, mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin
 import { AssignSurvey } from "./assign-survey";
 import { LeadDetailsForm } from "./lead-details-form";
 import { SurveyVisitForm } from "./survey-visit-form";
-import { SurveyVisitDetails } from "@/components/survey-visit";
+import { VisitDetails } from "@/components/visit-details";
 import { formatDate, isoDate, isoDateTimeLocal } from "@/lib/format-date";
 import Link from "next/link";
 import { DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
@@ -338,7 +338,7 @@ export default async function PipelineDetailPage({
                 />
               ) : (
                 <>
-                <SurveyVisitDetails
+                <VisitDetails
                   visit={{
                     assigneeName: surveyOwnerName ?? "—",
                     assigneeTeam: teamMeta(pipeline.surveyOwner.team).label,

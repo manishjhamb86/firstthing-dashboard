@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireAdminPermission } from "@/lib/admin-permissions";
+import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
+import { canOwn, teamMeta } from "@/lib/admin-teams";
+import { eventTitle } from "@/lib/schedule";
 import { logger } from "@/lib/logger";
 import { refuseOrderedDate, refuseReplacementDate } from "@/lib/step-dates";
 import { scheduleJob } from "@/lib/jobs";
@@ -446,5 +448,207 @@ export async function recordLightReplacement(
     advanced,
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  return {};
+}
+
+// ── FEAT-013 — the replacement is somebody's job before it is a record ─────
+//
+// "Before the light replacement record there should be an option to first
+// schedule the replacement and assign the task to the inspector/installation
+// team, who will do the job and update this record — which can also be done
+// by the assignee if needed, but with a relevant warning" (the user,
+// 2026-08-25). The form used to appear the moment the baseline window closed,
+// with nobody's name on it and no day agreed with the society.
+//
+// The day itself is a ScheduledEvent (installation_day), not a column on the
+// circuit: one schedule module for every appointment.
+
+/** Ops, or the person already holding this deal's field work, may hand it on. */
+async function mayAssignReplacement(circuitId: string) {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." } as const;
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    select: {
+      id: true,
+      societyId: true,
+      society: { select: { name: true } },
+      preInstallBaseline: true,
+      lightReplacementDate: true,
+      replacementOwnerId: true,
+      siteSurvey: { select: { pipeline: { select: { id: true, surveyOwnerId: true } } } },
+    },
+  });
+  if (!circuit) return { error: "Circuit not found." } as const;
+  const isOps =
+    actor.permissions.includes("manage_survey") && actor.permissions.includes("manage_pipeline");
+  const holdsTheFieldWork = circuit.siteSurvey?.pipeline?.surveyOwnerId === actor.id;
+  if (!isOps && !holdsTheFieldWork) {
+    logger.warn("circuit.replacement_assign_refused", { circuitId, actorId: actor.id });
+    return {
+      error: "Only operations, or whoever is holding this deal's field work, can hand on the replacement.",
+    } as const;
+  }
+  return { actor, circuit } as const;
+}
+
+export async function assignReplacement(input: { circuitId: string; toId: string | null }) {
+  const gate = await mayAssignReplacement(input.circuitId);
+  if ("error" in gate) return { error: gate.error };
+  const { actor, circuit } = gate;
+
+  if (circuit.preInstallBaseline == null) {
+    return { error: "The baseline window has not completed yet — there is nothing to replace against." };
+  }
+  if (circuit.lightReplacementDate) {
+    return { error: "The replacement is already recorded." };
+  }
+
+  if (input.toId) {
+    const to = await db.adminUser.findFirst({
+      where: { id: input.toId, isActive: true, deletedAt: null },
+      select: { id: true, team: true, name: true, email: true, permissions: true },
+    });
+    if (!to) return { error: "That account cannot take the replacement." };
+    if (!canOwn(to.team, "survey")) {
+      return {
+        error: `${to.name ?? to.email} is on the ${teamMeta(to.team).label} team — the replacement goes to engineering or inspection.`,
+      };
+    }
+    if (!to.permissions.includes("manage_survey")) {
+      return {
+        error: `${to.name ?? to.email} does not hold Manage survey, so they could not record the work. Grant it on the users screen first.`,
+      };
+    }
+  }
+
+  await db.circuit.update({
+    where: { id: input.circuitId },
+    data: {
+      replacementOwnerId: input.toId,
+      replacementAssignedAt: input.toId ? new Date() : null,
+      replacementAssignedById: input.toId ? actor.id : null,
+    },
+  });
+
+  // The booked day follows the person: reassigning moves it, clearing the
+  // assignment cancels it rather than leaving a day booked for nobody.
+  if (input.toId) {
+    await db.scheduledEvent.updateMany({
+      where: { circuitId: input.circuitId, kind: "installation_day", status: "scheduled" },
+      data: { assigneeId: input.toId },
+    });
+  } else {
+    await db.scheduledEvent.updateMany({
+      where: { circuitId: input.circuitId, kind: "installation_day", status: "scheduled" },
+      data: {
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancelledReason: "The replacement was unassigned — nobody is coming.",
+      },
+    });
+  }
+
+  logger.info("circuit.replacement_assigned", {
+    circuitId: input.circuitId,
+    toId: input.toId,
+    byId: actor.id,
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${input.circuitId}`);
+  revalidatePath("/admin/schedule");
+  return {};
+}
+
+export async function updateReplacementVisit(
+  circuitId: string,
+  input: { scheduledAt?: string; contactName?: string; contactPhone?: string; note?: string },
+): Promise<{ error?: string } | undefined> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    select: {
+      id: true,
+      societyId: true,
+      society: { select: { name: true } },
+      replacementOwnerId: true,
+    },
+  });
+  if (!circuit) return { error: "Circuit not found." };
+  if (!circuit.replacementOwnerId) {
+    return { error: "Assign the replacement to someone first — the visit is theirs to arrange." };
+  }
+  const mine = circuit.replacementOwnerId === actor.id;
+  const isOps =
+    actor.permissions.includes("manage_survey") && actor.permissions.includes("manage_pipeline");
+  if (!mine && !isOps) {
+    logger.warn("circuit.replacement_visit_refused", { circuitId, actorId: actor.id });
+    return { error: "Only the assignee or operations can arrange this visit." };
+  }
+
+  let scheduledAt: Date | null = null;
+  if (input.scheduledAt) {
+    scheduledAt = new Date(`${input.scheduledAt}:00.000Z`);
+    if (Number.isNaN(scheduledAt.getTime())) return { error: "That is not a valid date and time." };
+  }
+  const contactName = input.contactName?.trim() || null;
+  const contactPhone = input.contactPhone?.trim() || null;
+  if (contactPhone && !contactName) {
+    return { error: "Say who the number belongs to — a phone number with no name helps nobody at the gate." };
+  }
+
+  const existing = await db.scheduledEvent.findFirst({
+    where: { circuitId, kind: "installation_day", status: "scheduled" },
+    orderBy: { startAt: "asc" },
+  });
+
+  if (!scheduledAt) {
+    if (existing) {
+      await db.scheduledEvent.update({
+        where: { id: existing.id },
+        data: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledReason: "The slot was cleared — no visit is booked.",
+        },
+      });
+    }
+  } else if (existing) {
+    await db.scheduledEvent.update({
+      where: { id: existing.id },
+      data: {
+        startAt: scheduledAt,
+        assigneeId: circuit.replacementOwnerId,
+        contactName,
+        contactPhone,
+        note: input.note?.trim() || null,
+      },
+    });
+  } else {
+    await db.scheduledEvent.create({
+      data: {
+        kind: "installation_day",
+        title: eventTitle("installation_day", circuit.society.name),
+        startAt: scheduledAt,
+        assigneeId: circuit.replacementOwnerId,
+        createdById: actor.id,
+        societyId: circuit.societyId,
+        circuitId,
+        contactName,
+        contactPhone,
+        note: input.note?.trim() || null,
+      },
+    });
+  }
+
+  logger.info("circuit.replacement_visit_updated", {
+    circuitId,
+    actorId: actor.id,
+    byAssignee: mine,
+    scheduledAt: input.scheduledAt,
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  revalidatePath("/admin/schedule");
   return {};
 }

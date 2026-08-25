@@ -416,6 +416,8 @@ model AdminUser {
   pipelinesSurveying     Pipeline[]  @relation("PipelineSurveyOwner")
   pipelinesSurveyAssigned Pipeline[] @relation("PipelineSurveyAssignedBy")
   scheduledEvents         ScheduledEvent[] @relation("ScheduledEventAssignee")
+  circuitsReplacing       Circuit[]        @relation("CircuitReplacementOwner")
+  circuitsReplacementAssigned Circuit[]    @relation("CircuitReplacementAssignedBy")
   scheduledEventsCreated  ScheduledEvent[] @relation("ScheduledEventCreatedBy")
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
 
@@ -594,9 +596,11 @@ model ScheduledEvent {
   createdById String  @map("created_by_id")
 
   /// What it is about. A society is always known; the pipeline is set for
-  /// anything on the deal spine.
+  /// anything on the deal spine, the circuit for commissioning work that
+  /// happens on one metered circuit (the light replacement day).
   societyId  String  @map("society_id")
   pipelineId String? @map("pipeline_id")
+  circuitId  String? @map("circuit_id")
 
   /// Who to ask for on arrival, and anything the visitor needs to know. This
   /// is the coordination that used to live in one person's phone.
@@ -611,6 +615,7 @@ model ScheduledEvent {
   createdBy AdminUser @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
   society   Society   @relation(fields: [societyId], references: [id], onDelete: Cascade)
   pipeline  Pipeline? @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  circuit   Circuit?  @relation(fields: [circuitId], references: [id], onDelete: Cascade)
 
   @@index([assigneeId, startAt])
   @@index([startAt])
@@ -703,6 +708,12 @@ model Circuit {
   // completes (FEAT-012-AC-1/FEAT-014-AC-1).
   preInstallWindowStartAt       DateTime?    @map("pre_install_window_start_at")
   preInstallBaseline            Float?       @map("pre_install_baseline")
+  /// FEAT-013 — who is doing the replacement, and when it was handed to
+  /// them. The visit itself is a ScheduledEvent (installation_day), not a
+  /// column: an owning record never stores its own time.
+  replacementOwnerId            String?      @map("replacement_owner_id")
+  replacementAssignedAt         DateTime?    @map("replacement_assigned_at")
+  replacementAssignedById       String?      @map("replacement_assigned_by_id")
   lightReplacementDate          DateTime?    @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
   postInstallWindowStartAt      DateTime?    @map("post_install_window_start_at")
   postInstallBaseline           Float?       @map("post_install_baseline")
@@ -733,6 +744,9 @@ model Circuit {
   loadValidationOverrideBy AdminUser?              @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
   createdBy                AdminUser?              @relation("CircuitCreatedBy", fields: [createdById], references: [id])
   voidedBy                 AdminUser?              @relation("CircuitVoidedBy", fields: [voidedById], references: [id])
+  replacementOwner         AdminUser?              @relation("CircuitReplacementOwner", fields: [replacementOwnerId], references: [id])
+  replacementAssignedBy    AdminUser?              @relation("CircuitReplacementAssignedBy", fields: [replacementAssignedById], references: [id])
+  scheduledEvents          ScheduledEvent[]
   gatePasses               GatePass[]
   commissioningReadings    CommissioningReading[]
   rescaleEvents            BenchmarkRescaleEvent[]

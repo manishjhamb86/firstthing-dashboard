@@ -234,6 +234,8 @@ describe("circuitSteps — the map one level down", () => {
       hasCompletionGatePass: false,
       preInstallBaseline: null,
       lightReplacementDate: null,
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
       benchmarkSavingsPct: null,
     });
     expect(steps.find((s) => s.status === "current")?.key).toBe("meter");
@@ -254,11 +256,16 @@ describe("circuitSteps — the map one level down", () => {
       hasCompletionGatePass: false,
       preInstallBaseline: 30,
       lightReplacementDate: null,
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
       benchmarkSavingsPct: null,
     });
     const keys = steps.map((s) => s.key);
     expect(keys.indexOf("replacement")).toBeLessThan(keys.indexOf("completion-gate"));
-    expect(steps.find((s) => s.status === "current")?.key).toBe("replacement");
+    // …and the work is handed to a crew before anyone records it, so with
+    // nobody assigned the current step is the assignment, not the record.
+    expect(keys.indexOf("assign-replacement")).toBeLessThan(keys.indexOf("replacement"));
+    expect(steps.find((s) => s.status === "current")?.key).toBe("assign-replacement");
   });
 
   it("asks for the gate pass once the work is recorded, and not before", () => {
@@ -268,6 +275,8 @@ describe("circuitSteps — the map one level down", () => {
       hasCompletionGatePass: false,
       preInstallBaseline: 30,
       lightReplacementDate: new Date("2026-08-20"),
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
       benchmarkSavingsPct: null,
     });
     expect(steps.find((s) => s.status === "current")?.key).toBe("completion-gate");
@@ -282,6 +291,8 @@ describe("circuitSteps — the map one level down", () => {
       hasCompletionGatePass: true,
       preInstallBaseline: 30,
       lightReplacementDate: new Date("2026-08-01"),
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
       benchmarkSavingsPct: null,
     });
     const cur = steps.find((s) => s.status === "current");
@@ -296,6 +307,8 @@ describe("circuitSteps — the map one level down", () => {
       hasCompletionGatePass: false,
       preInstallBaseline: null,
       lightReplacementDate: null,
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
       benchmarkSavingsPct: null,
     });
     expect(steps).toHaveLength(1);
@@ -313,6 +326,8 @@ describe("circuitSteps — the map one level down", () => {
       hasCompletionGatePass: false, // …both of them
       preInstallBaseline: 30,
       lightReplacementDate: null, // and this one too
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
       benchmarkSavingsPct: null,
     });
     expect(steps.find((s) => s.key === "install-gate")?.status).toBe("done");
@@ -423,6 +438,8 @@ describe("a locked step names what it is waiting on", () => {
       hasCompletionGatePass: false,
       preInstallBaseline: null,
       lightReplacementDate: null,
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
       benchmarkSavingsPct: null,
     });
     const preWindow = steps.find((s) => s.key === "pre-window")!;
@@ -575,5 +592,66 @@ describe("an assignment with no stored owner", () => {
     const summary = byKey(surveyed)["assign-survey"].summary;
     expect(summary).not.toContain("null");
     expect(summary).toMatch(/no stored record/i);
+  });
+});
+
+describe("the replacement is handed to a crew before it is recorded", () => {
+  // "Before the light replacement record there should be an option to first
+  // schedule the replacement and assign the task to the inspector /
+  // installation team" (the user, 2026-08-25).
+  const afterBaseline = {
+    state: "awaiting_installation",
+    hasInstallGatePass: true,
+    hasCompletionGatePass: false,
+    preInstallBaseline: 30,
+    replacementOwnerName: null as string | null,
+    replacementScheduledAt: null as Date | null,
+    lightReplacementDate: null as Date | null,
+    benchmarkSavingsPct: null,
+  };
+
+  it("asks for the assignment first, and locks the record behind it", () => {
+    const steps = circuitSteps(afterBaseline);
+    const byKey = Object.fromEntries(steps.map((s) => [s.key, s]));
+    expect(byKey["assign-replacement"].status).toBe("current");
+    expect(byKey.replacement.status).toBe("locked");
+    expect(byKey.replacement.summary).toMatch(/unlocks once the replacement is assigned/i);
+  });
+
+  it("moves on to the record once somebody holds it", () => {
+    const steps = circuitSteps({ ...afterBaseline, replacementOwnerName: "Installation Team" });
+    const byKey = Object.fromEntries(steps.map((s) => [s.key, s]));
+    expect(byKey["assign-replacement"].status).toBe("done");
+    expect(byKey.replacement.status).toBe("current");
+  });
+
+  it("names who is going and when, once a day is booked", () => {
+    const steps = circuitSteps({
+      ...afterBaseline,
+      replacementOwnerName: "Installation Team",
+      replacementScheduledAt: new Date("2026-08-27T10:30:00.000Z"),
+    });
+    const summary = steps.find((s) => s.key === "assign-replacement")!.summary;
+    expect(summary).toBe("Installation Team · 27-08-2026 · 10:30");
+  });
+
+  it("says so plainly when it is assigned with no day yet", () => {
+    const summary = circuitSteps({ ...afterBaseline, replacementOwnerName: "Ravi" }).find(
+      (s) => s.key === "assign-replacement",
+    )!.summary;
+    expect(summary).toMatch(/no day booked yet/i);
+  });
+
+  it("reads as done for a circuit that replaced its lights before this step existed", () => {
+    // Rank-OR-artifact, the same rule as every other step here: the lifecycle
+    // is plainly past it, so an early step must not read as current.
+    const steps = circuitSteps({
+      ...afterBaseline,
+      lightReplacementDate: new Date("2026-08-20T00:00:00.000Z"),
+    });
+    const byKey = Object.fromEntries(steps.map((s) => [s.key, s]));
+    expect(byKey["assign-replacement"].status).toBe("done");
+    expect(byKey["assign-replacement"].summary).toMatch(/no stored record/i);
+    expect(byKey["completion-gate"].status).toBe("current");
   });
 });

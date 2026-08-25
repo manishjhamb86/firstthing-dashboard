@@ -1,6 +1,6 @@
 import { formatDate, formatDateTime } from "@/lib/format-date";
 
-export type SurveyVisit = {
+export type VisitDetails = {
   assigneeName: string;
   assigneeTeam: string;
   assignedAt: Date | null;
@@ -26,6 +26,10 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 /**
  * Who is going, when, and who to ask for at the gate.
  *
+ * Shared by every kind of site visit — the survey and the light-replacement
+ * day so far — because they answer the same four questions and a second copy
+ * would drift.
+ *
  * Every one of these was invisible until now: "assigned to Inspector" with no
  * date and no arranger could not be told from something the system had
  * inferred, and the visit slot the assignee agreed on the phone lived only in
@@ -33,7 +37,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
  * deal's own rather than showing a blank, because arriving with SOMEONE to
  * call beats arriving with nobody.
  */
-export function SurveyVisitDetails({ visit }: { visit: SurveyVisit }) {
+export function VisitDetails({ visit }: { visit: VisitDetails }) {
   const usingLeadContact = !visit.contactName;
   const name = visit.contactName ?? visit.leadContactName;
   const phone = visit.contactName ? visit.contactPhone : visit.leadContactPhone;

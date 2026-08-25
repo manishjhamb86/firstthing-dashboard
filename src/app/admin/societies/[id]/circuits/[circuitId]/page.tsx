@@ -17,6 +17,10 @@ import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
+import { AssignReplacement } from "./assign-replacement";
+import { VisitDetails } from "@/components/visit-details";
+import { teamMeta, teamsFor } from "@/lib/admin-teams";
+import { isoDateTimeLocal } from "@/lib/format-date";
 import { StepSection } from "@/components/step-section";
 import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
 import { loadDealProgress } from "@/lib/pipeline-facts";
@@ -96,7 +100,15 @@ export default async function CircuitDetailPage({
     where: { id: circuitId },
     include: {
       society: true,
-      siteSurvey: { select: { pipelineId: true } },
+      siteSurvey: { select: { pipelineId: true, pipeline: { select: { surveyOwnerId: true } } } },
+      replacementOwner: { select: { id: true, name: true, email: true, team: true } },
+      replacementAssignedBy: { select: { name: true, email: true } },
+      // FEAT-013 — the replacement day lives on the schedule module.
+      scheduledEvents: {
+        where: { kind: "installation_day", status: "scheduled" },
+        orderBy: { startAt: "asc" },
+        take: 1,
+      },
       gatePasses: { orderBy: { submittedAt: "desc" } },
       commissioningReadings: { orderBy: { date: "asc" } },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
@@ -315,11 +327,33 @@ export default async function CircuitDetailPage({
   const postInstallValidCount = postInstallReadings.filter((r) => r.status === "valid").length;
   const postInstallPendingAnomaly = postInstallReadings.some((r) => r.status === "anomaly");
 
+  // FEAT-013 — who is doing the replacement, when, and whether this viewer is
+  // that person. Ops is never blocked but is told whose work it is.
+  const replacementVisit = circuit.scheduledEvents[0] ?? null;
+  const replacementOwnerName =
+    circuit.replacementOwner?.name ?? circuit.replacementOwner?.email ?? null;
+  const isReplacementAssignee = circuit.replacementOwnerId === session.user.id;
+  const canAssignReplacement =
+    canOverride || circuit.siteSurvey?.pipeline?.surveyOwnerId === session.user.id;
+  const fieldCandidates = await db.adminUser.findMany({
+    where: {
+      team: { in: teamsFor("survey") },
+      permissions: { has: "manage_survey" },
+      isActive: true,
+      deletedAt: null,
+    },
+    select: { id: true, name: true, email: true, team: true },
+    orderBy: { name: "asc" },
+  });
+
   const steps = circuitSteps({
     state: circuit.state,
     hasInstallGatePass: !!installGatePass,
     hasCompletionGatePass: !!completionGatePass,
     preInstallBaseline: circuit.preInstallBaseline,
+    replacementOwnerName:
+      circuit.replacementOwner?.name ?? circuit.replacementOwner?.email ?? null,
+    replacementScheduledAt: replacementVisit?.startAt ?? null,
     lightReplacementDate: circuit.lightReplacementDate,
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
   });
@@ -663,13 +697,88 @@ export default async function CircuitDetailPage({
             }
 
             // FEAT-013 — light replacement / demo installation.
+            // FEAT-013 — the replacement is handed to a named crew and booked
+            // with the society before anybody records what was installed
+            // (user-asked 2026-08-25).
+            case "assign-replacement": {
+              if (step.status === "current" || (step.status === "done" && replacementOwnerName)) {
+                const details = replacementOwnerName ? (
+                  <VisitDetails
+                    visit={{
+                      assigneeName: replacementOwnerName,
+                      assigneeTeam: circuit.replacementOwner
+                        ? teamMeta(circuit.replacementOwner.team).label
+                        : "—",
+                      assignedAt: circuit.replacementAssignedAt,
+                      assignedByName:
+                        circuit.replacementAssignedBy?.name ??
+                        circuit.replacementAssignedBy?.email ??
+                        null,
+                      scheduledAt: replacementVisit?.startAt ?? null,
+                      contactName: replacementVisit?.contactName ?? null,
+                      contactPhone: replacementVisit?.contactPhone ?? null,
+                      note: replacementVisit?.note ?? null,
+                      leadContactName: circuit.society.name,
+                      leadContactPhone: null,
+                    }}
+                  />
+                ) : null;
+                body = (
+                  <div className="space-y-5">
+                    {details}
+                    {canAssignReplacement || isReplacementAssignee ? (
+                      <AssignReplacement
+                        circuitId={circuit.id}
+                        current={
+                          circuit.replacementOwnerId && replacementOwnerName
+                            ? { id: circuit.replacementOwnerId, name: replacementOwnerName }
+                            : null
+                        }
+                        candidates={fieldCandidates.map((c) => ({
+                          id: c.id,
+                          name: c.name ?? c.email,
+                          team: teamMeta(c.team).label,
+                        }))}
+                        visit={{
+                          scheduledAt: isoDateTimeLocal(replacementVisit?.startAt ?? null),
+                          contactName: replacementVisit?.contactName ?? "",
+                          contactPhone: replacementVisit?.contactPhone ?? "",
+                          note: replacementVisit?.note ?? "",
+                        }}
+                        canArrange={isReplacementAssignee || canOverride}
+                      />
+                    ) : (
+                      <p className="text-sm text-[var(--text-muted)]">
+                        Operations, or whoever is holding this deal&apos;s field work, hands the
+                        replacement to a crew.
+                      </p>
+                    )}
+                  </div>
+                );
+              }
+              break;
+            }
+
             case "replacement": {
               if (step.status === "current") {
                 body = canEdit ? (
-                  <LightReplacementForm circuitId={circuit.id} lines={replacementFormLines} />
+                  <div className="space-y-4">
+                    {/* The work is somebody's. Anyone else recording it is
+                        doing so on their behalf, and is told. */}
+                    {replacementOwnerName && !isReplacementAssignee && (
+                      <PageRibbon tone="warn">
+                        <strong>Assigned to {replacementOwnerName}.</strong> They are doing this
+                        replacement. You can record it for them, but only if the work has actually
+                        been done.
+                      </PageRibbon>
+                    )}
+                    <LightReplacementForm circuitId={circuit.id} lines={replacementFormLines} />
+                  </div>
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">
-                    Awaiting PER-04 to record the replacement date.
+                    {replacementOwnerName
+                      ? `Awaiting ${replacementOwnerName} to record the replacement.`
+                      : "Awaiting PER-04 to record the replacement date."}
                   </p>
                 );
               } else if (step.status === "done") {

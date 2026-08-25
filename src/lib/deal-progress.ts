@@ -481,9 +481,21 @@ export type CircuitFactsForSteps = {
   hasInstallGatePass: boolean;
   hasCompletionGatePass: boolean;
   preInstallBaseline: number | null;
+  /** Who the replacement was handed to, and when they are going. */
+  replacementOwnerName: string | null;
+  replacementScheduledAt: Date | null;
   lightReplacementDate: Date | null;
   benchmarkSavingsPct: number | null;
 };
+
+function formatVisitDay(d: Date): string {
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  const date = `${day}-${month}-${d.getUTCFullYear()}`;
+  return hh === "00" && mm === "00" ? date : `${date} · ${hh}:${mm}`;
+}
 
 export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
   const rank = CIRCUIT_RANK[c.state] ?? 0;
@@ -517,13 +529,27 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
   const baselineDone = c.preInstallBaseline != null || rank >= 4;
   const completionGateDone = c.hasCompletionGatePass || rank >= 5;
   const replacementDone = c.lightReplacementDate != null || rank >= 5;
+  // The replacement is somebody's job before it is a record. It used to be a
+  // form that appeared after the baseline window with nobody's name on it —
+  // "there should be an option to first schedule the replacement and assign
+  // it to the inspector/installation team" (the user, 2026-08-25).
+  const replacementAssignedDone = c.replacementOwnerName != null || replacementDone;
   const benchmarkDone = c.benchmarkSavingsPct != null;
 
   // Replacement BEFORE the completion gate pass. CON-18's pass itemizes the
   // equipment that physically changed and is approved before the crew leaves
   // — it is a departure gate, and it cannot be written before the work it
   // lists. The screen used to ask for it first (user-reported 2026-08-24).
-  const flags = [eligibilityDone, meterDone, installGateDone, baselineDone, replacementDone, completionGateDone, benchmarkDone];
+  const flags = [
+    eligibilityDone,
+    meterDone,
+    installGateDone,
+    baselineDone,
+    replacementAssignedDone,
+    replacementDone,
+    completionGateDone,
+    benchmarkDone,
+  ];
   const cur = flags.findIndex((d) => !d);
 
   return annotateBlockers([
@@ -543,15 +569,23 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
       "Baseline set from 5 valid days",
       "Record one reading per day below — 5 consecutive valid days set the baseline",
       "Unlocks once the install gate pass is submitted"),
-    mk("replacement", "Light replacement", replacementDone, cur === 4,
+    mk("assign-replacement", "Schedule & assign the replacement", replacementAssignedDone, cur === 4,
+      c.replacementOwnerName
+        ? c.replacementScheduledAt
+          ? `${c.replacementOwnerName} · ${formatVisitDay(c.replacementScheduledAt)}`
+          : `Assigned to ${c.replacementOwnerName} — no day booked yet`
+        : "No stored record — the lifecycle advanced past this step",
+      "Hand the replacement to an engineer or inspector and book the day with the society",
+      "Unlocks once the baseline window completes"),
+    mk("replacement", "Light replacement", replacementDone, cur === 5,
       "Recorded — the replacement day is excluded, the post window starts the day after",
       "Record what was installed and the date the last light was replaced below",
-      "Unlocks once the baseline window completes"),
-    mk("completion-gate", "Completion gate pass", completionGateDone, cur === 5,
+      "Unlocks once the replacement is assigned"),
+    mk("completion-gate", "Completion gate pass", completionGateDone, cur === 6,
       "Submitted",
       "Itemize what was installed and removed, get it signed, and submit it — CON-18 requires it before the crew may leave site",
       "Unlocks once the replacement is recorded"),
-    mk("benchmark", "Post-install window → benchmark", benchmarkDone, cur === 6,
+    mk("benchmark", "Post-install window → benchmark", benchmarkDone, cur === 7,
       "Benchmark confirmed in CON-20's 60-80% band",
       c.state === "benchmark_review"
         ? "The measured result fell outside CON-20's band — resolve the review below"

@@ -2069,6 +2069,34 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## Assigned work belongs to the person holding it, not to their team (2026-08-25) — user-caught
+
+**Reported**, looking at a deal whose step 2 already read "Assigned to Inspector": the next step
+should be the assignment, the assignee should see it in their own dashboard, "instead it is showing
+the form directly… after the assignment it can also be surveyed from here but with a warning that
+its assigned to this person."
+
+**The assignment was decoration for everyone except the assignee.** `whoseTurn` matched on **team**,
+and `STEP_TEAMS.field` includes `operations` — so an ops account looking at a survey already handed
+to an inspector still got the ordinary blue "Run the site survey · Continue", with nothing naming
+who held it. The rule is now: **a named assignee outranks the team.** The step is theirs; everyone
+else gets the amber waiting callout. Operations is still never blocked (the callout carries "Open it
+anyway"), and neither is another field account who could genuinely cover the visit — but both are
+told whose work they are stepping into. Sales is told and given no way in, as before. Unassigned
+work still falls back to the team that does it, so picking up unclaimed work is unchanged.
+
+**The warning follows through to the screen where the recording happens**: the survey page names the
+assignee for anyone who is not them. Warning on the deal page and then handing over a form that
+looks like anybody's is where the original complaint came from.
+
+**Verified in a browser (18 checks, zero console errors)** and on stage against the reported deal:
+ops is told whose step it is and can still open it; the assignee sees no warning about themselves
+and finds the survey in their own Field work list, which opens straight onto it; another engineer is
+told whose it is and does *not* see it in their list; sales is told, and the callout carries no
+link; with nobody holding it the deal asks for the assignment first. **One harness note**: the field
+list's rows are `ClickableRow`, not anchors, so "is there a link to it" proves nothing — click the
+row and assert where it lands.
+
 ## Saving closes the form, and correcting a record is operations' own act (2026-08-25) — user-caught
 
 **Reported**: "on edit and save the form should close instead it reloads and feels like nothing

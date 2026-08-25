@@ -2351,6 +2351,12 @@ model WaterTank {
   productName      String    @map("product_name")
   category         String
   hasLevelSignal   Boolean   @default(false) @map("has_level_signal")
+  /// The declared MAXIMUM of this device's level datapoint, from its thing
+  /// model. It is not always 100: the IT56WLCW controllers on this account
+  /// declare `liquid_level_percent` as 0-60, so a raw 45 is 75% full — which
+  /// is what the Smart Life app shows and what we showed as 45% until this
+  /// was found (2026-08-25). Every stored level is normalised through it.
+  levelMax         Int       @default(100) @map("level_max")
   /// The assignment that scopes portal visibility (INV-05): a society's
   /// portal accounts see exactly the tanks whose societyId is theirs.
   societyId        String?   @map("society_id")

@@ -96,7 +96,7 @@ export default async function TankStatusPage({
   if (cfg && tank.hasLevelSignal) {
     try {
       const props = await getTuyaShadow(cfg, tank.tuyaDeviceId);
-      const level = levelFromProperties(props);
+      const level = levelFromProperties(props, tank.levelMax);
       if (level) {
         live = { level: level.level, reportedAt: new Date(level.time), online: tank.lastOnline, fresh: true };
         await db.waterTank.update({

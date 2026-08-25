@@ -23,6 +23,7 @@ export type TuyaDevice = {
   tuyaDeviceId: string;
   name: string;
   productName: string;
+  productId: string;
   category: string;
   isOnline: boolean;
 };
@@ -143,6 +144,7 @@ export async function listTuyaDevices(cfg: TuyaConfig): Promise<TuyaDevice[]> {
     // the product's own label and reads like a part number.
     name: String((d.customName as string) || d.name || d.id),
     productName: String(d.productName ?? ""),
+    productId: String(d.productId ?? ""),
     category: String(d.category ?? ""),
     isOnline: Boolean(d.isOnline),
   }));
@@ -158,11 +160,74 @@ export async function getTuyaShadow(cfg: TuyaConfig, deviceId: string): Promise<
   return result.properties ?? [];
 }
 
-/** The one signal the product is about. Null when the device has none. */
-export function levelFromProperties(props: TuyaProperty[]): { level: number; time: number } | null {
+/**
+ * The one signal the product is about, normalised to a real percentage.
+ *
+ * The raw datapoint is NOT a percentage, despite its name and its `%` unit.
+ * Its declared range comes from the device's own thing model, and the
+ * IT56WLCW controllers on this account declare `liquid_level_percent` as
+ * **0-60** — so a raw 45 is 75% full. We displayed 45% while the Smart Life
+ * app showed 75%, and the app was right (user-caught 2026-08-25: "how is it
+ * showing 45% where it can only detect 25-50-75 and 100%" — the question
+ * that found it).
+ *
+ * `max` is whatever the model declares for that device, defaulting to 100
+ * only when it is unknown — never assumed.
+ */
+export function levelFromProperties(
+  props: TuyaProperty[],
+  max = 100,
+): { level: number; raw: number; time: number } | null {
   const p = props.find((x) => x.code === "liquid_level_percent");
   if (!p || typeof p.value !== "number") return null;
-  return { level: Math.max(0, Math.min(100, p.value)), time: p.time };
+  return { level: normaliseLevel(p.value, max), raw: p.value, time: p.time };
+}
+
+export function normaliseLevel(raw: number, max: number): number {
+  // A zero or nonsensical max would silently produce Infinity or NaN and land
+  // in a figure a society reads as its water. Fall back to "raw is already a
+  // percentage", which is the only safe reading when the model says nothing.
+  const span = Number.isFinite(max) && max > 0 ? max : 100;
+  return Math.max(0, Math.min(100, Math.round((raw / span) * 100)));
+}
+
+/**
+ * The declared maximum of a device's level datapoint, from its thing model.
+ * Cached per PRODUCT — every device of one product shares a model, so a
+ * 200-tank account costs a handful of calls, not 200.
+ */
+const levelMaxByProduct = new Map<string, number>();
+
+export async function getLevelMax(
+  cfg: TuyaConfig,
+  deviceId: string,
+  productId: string,
+): Promise<number> {
+  const cached = productId ? levelMaxByProduct.get(productId) : undefined;
+  if (cached !== undefined) return cached;
+  try {
+    const token = await getToken(cfg);
+    const result = await tuyaGet<{ model: string }>(
+      cfg,
+      `/v2.0/cloud/thing/${deviceId}/model`,
+      token,
+    );
+    const model = JSON.parse(result.model) as {
+      services?: { properties?: { code: string; typeSpec?: { max?: number } }[] }[];
+    };
+    for (const svc of model.services ?? []) {
+      for (const prop of svc.properties ?? []) {
+        if (prop.code === "liquid_level_percent" && typeof prop.typeSpec?.max === "number") {
+          const max = prop.typeSpec.max;
+          if (productId) levelMaxByProduct.set(productId, max);
+          return max;
+        }
+      }
+    }
+  } catch (err) {
+    logger.warn("tank.model_read_failed", { deviceId, error: String(err) });
+  }
+  return 100;
 }
 
 /**
@@ -174,11 +239,17 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
   const devices = await listTuyaDevices(cfg);
   let tanks = 0;
   for (const d of devices) {
-    let level: { level: number; time: number } | null = null;
+    let level: { level: number; raw: number; time: number } | null = null;
     let hasLevelSignal = false;
+    let levelMax = 100;
     try {
       const props = await getTuyaShadow(cfg, d.tuyaDeviceId);
-      level = levelFromProperties(props);
+      // The model first: without its declared max the raw value cannot be
+      // turned into a percentage, and guessing produced a wrong figure once.
+      if (props.some((p) => p.code === "liquid_level_percent")) {
+        levelMax = await getLevelMax(cfg, d.tuyaDeviceId, d.productId);
+      }
+      level = levelFromProperties(props, levelMax);
       hasLevelSignal = level !== null;
     } catch (err) {
       // A device whose shadow read fails stays listed with its cached state
@@ -194,6 +265,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
         productName: d.productName,
         category: d.category,
         hasLevelSignal,
+        levelMax,
         lastOnline: d.isOnline,
         ...(level ? { lastLevelPercent: level.level, lastReportedAt: new Date(level.time) } : {}),
       },
@@ -204,7 +276,12 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
         lastOnline: d.isOnline,
         syncedAt: new Date(),
         ...(level
-          ? { hasLevelSignal: true, lastLevelPercent: level.level, lastReportedAt: new Date(level.time) }
+          ? {
+              hasLevelSignal: true,
+              levelMax,
+              lastLevelPercent: level.level,
+              lastReportedAt: new Date(level.time),
+            }
           : {}),
       },
     });

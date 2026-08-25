@@ -70,7 +70,7 @@ export default async function PortalTanksPage() {
     await Promise.allSettled(
       tanks.map(async (t) => {
         try {
-          const level = levelFromProperties(await getTuyaShadow(cfg, t.tuyaDeviceId));
+          const level = levelFromProperties(await getTuyaShadow(cfg, t.tuyaDeviceId), t.levelMax);
           if (level) live.set(t.id, { level: level.level, reportedAt: new Date(level.time) });
         } catch (err) {
           logger.warn("tank.portal_live_read_failed", { tankId: t.id, error: String(err) });

@@ -10,7 +10,6 @@ import {
   SCHEDULE_KIND,
   dayRelation,
   groupByDay,
-  startOfDay,
   timeLabel,
   type CalendarEvent,
 } from "@/lib/schedule";
@@ -41,14 +40,15 @@ export default async function SchedulePage({
   const ops = isOperations(actor.team);
   const everyone = ops && (await searchParams).who === "everyone";
 
-  // Past days still matter: an appointment nobody closed out is exactly what
-  // a schedule is for. Two weeks back is enough to see what was missed
-  // without turning this into an archive.
-  const from = new Date(startOfDay(new Date()).getTime() - 14 * 86_400_000);
+  // Every OPEN appointment, however old. A fortnight's lookback silently hid
+  // a visit booked for an earlier date — the assignee's own calendar said
+  // "nothing booked for you" while the work sat there assigned (user-reported
+  // 2026-08-25). An event that is still `scheduled` has not been closed out
+  // by definition, which is exactly what a schedule is for; the ones that
+  // stop showing are the ones marked done or cancelled.
   const rows = await db.scheduledEvent.findMany({
     where: {
       status: "scheduled",
-      startAt: { gte: from },
       ...(everyone ? {} : { assigneeId: actor.id }),
     },
     orderBy: { startAt: "asc" },

@@ -2069,6 +2069,50 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## A raw level is not a percentage (2026-08-25) — user's question found it
+
+**"How is it showing 45%, where it can only detect 25-50-75 and 100%?"** — the question that found a
+real bug. The Smart Life app was right and we were wrong, for a reason no amount of staring at the
+staleness would have revealed.
+
+`liquid_level_percent` is named like a percentage and carries a `%` unit, and **is not one**. Its
+range comes from the device's own thing model, and these IT56WLCW controllers declare it **0–60**:
+
+```
+"liquid_level_percent": {"type":"value","min":0,"max":60,"step":1,"unit":"%"}
+```
+
+So raw `45` is 45/60 = **75% full** — exactly what the app draws, its fill sitting just above the
+75% marker. We clamped the raw to 0–100 and showed 45%, **understating every tank on the account by
+a third**. On a product that bills against measured figures, that is the class of error INV-02
+exists for.
+
+**The fix**: `WaterTank.levelMax` stores each device's declared maximum, learned from
+`/v2.0/cloud/thing/{id}/model` at sync time and **cached per product** (every device of one product
+shares a model, so a 200-tank account costs a handful of calls, not 200). `normaliseLevel()` does
+the arithmetic in one place and every read goes through it with that tank's own max. A device whose
+model declares nothing falls back to "already a percentage" — never assumed. **The guard that
+matters**: a zero, negative or NaN max would produce `Infinity`/`NaN` and land in a figure a society
+reads as its own water supply, so it falls back rather than divides.
+
+**This also corrects the previous entry's conclusion.** The cloud was never lying and our reads were
+never stale — the shadow said 45 because 45 is what the device reports; we were misreading it. The
+staleness work stands on its own (that controller really had not reported for two hours, and the
+energy-meter control proved the API fine), but it was **not** the cause of 45 vs 75. **Worth
+remembering as a class**: when an external value disagrees with a trusted display, check the units
+and the declared range before concluding the source is stale — a plausible wrong number survives
+every freshness check.
+
+**A second thing the raw response settled**: the four float probes are named `25% / 50% / 75% /
+100%`, and the app's screen draws exactly those markers. They have reported nothing since 18 June
+and all read *dry* while dp101 reports a live level — so the discrete probes and the analogue
+channel disagree, which is a question for whoever installed the controller, not for this codebase.
+
+**Deploy note**: migration adds one column defaulting to 100, so existing rows keep today's
+behaviour until the next sync learns their real range. Stage's already-stored readings hold the raw
+value and need a **one-time, non-idempotent** re-expression (`raw ÷ level_max × 100`) after the sync
+populates `level_max` — run once, verify counts before and after.
+
 ## Connected is not reporting, and a device instant is read in IST (2026-08-25) — user-caught
 
 **Three reports in one investigation**: "the Smart Life app shows 75% but our app shows 45%", "there

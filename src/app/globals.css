@@ -911,3 +911,46 @@ textarea.field {
     overflow-x: visible;
   }
 }
+
+/* ---- water tank visual (water tank monitoring, 2026-08-25) ------------- */
+/* The animated tank the portal and the tank status page share. The wave is
+   two over-large rounded squares spinning above the waterline — pure CSS, no
+   JS — paused (not hidden) when the sensor is offline, so a stale level
+   still reads as a level, just not a live one. */
+.tank-visual {
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px 16px 20px 20px;
+  background: var(--surface-sunken);
+  border: 2px solid var(--accent-line);
+}
+.tank-water {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--accent);
+}
+.tank-wave {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 250%;
+  padding-bottom: 250%;
+  border-radius: 44% 46% 43% 45%;
+  background: var(--accent);
+}
+.tank-wave-2 {
+  opacity: 0.5;
+  background: var(--accent-hover);
+}
+.tank-wave-1 { animation: tank-drift 9s linear infinite; }
+.tank-wave-2 { animation: tank-drift 15s linear infinite reverse; }
+@keyframes tank-drift {
+  from { transform: translate(-50%, -96.5%) rotate(0deg); }
+  to { transform: translate(-50%, -96.5%) rotate(360deg); }
+}
+.tank-offline .tank-water,
+.tank-offline .tank-wave { background: var(--neu-fg); }
+.tank-offline .tank-wave { animation-play-state: paused; }
+.tank-offline .tank-wave-2 { background: var(--neu-line); }

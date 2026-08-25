@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   CalendarDays,
+  Droplets,
   Building2,
   Target,
   Activity,
@@ -43,6 +44,7 @@ export function AppShell({
   showPipeline,
   showField,
   showMonitoring,
+  showTanks,
   showReadings,
   showCatalog,
   showUsers,
@@ -59,6 +61,7 @@ export function AppShell({
   showPipeline: boolean;
   showField: boolean;
   showMonitoring: boolean;
+  showTanks: boolean;
   showReadings: boolean;
   showCatalog: boolean;
   showUsers: boolean;
@@ -86,6 +89,9 @@ export function AppShell({
     ...(showMonitoring
       ? [{ href: "/admin/live-monitoring", label: "Live monitoring", icon: SignalHigh }]
       : []),
+    // Water tank monitoring (2026-08-25) — mirrors the Smart Life account,
+    // society-management's to run, so it follows the monitoring cluster.
+    ...(showTanks ? [{ href: "/admin/water-tanks", label: "Water tanks", icon: Droplets }] : []),
     ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
     ...(showCatalog ? [{ href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb }] : []),
     ...(showBilling ? [{ href: "/admin/billing", label: "Billing", icon: Receipt }] : []),

@@ -16,6 +16,7 @@ import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { formatDate } from "@/lib/format-date";
+import { TankLevelBar } from "@/components/tank-visual";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { NextStepCallout } from "@/components/deal-stepper";
 import type { NextAction } from "@/lib/deal-progress";
@@ -37,7 +38,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   const society = await db.society.findUnique({ where: { id } });
   if (!society) notFound();
 
-  const [accounts, engagements, pipelines, circuitCount] = await Promise.all([
+  const [accounts, engagements, pipelines, circuitCount, waterTanks] = await Promise.all([
     db.profile.findMany({ where: { societyId: id, isActive: true }, orderBy: { name: "asc" } }),
     db.engagement.findMany({ where: { societyId: id }, orderBy: { createdAt: "asc" } }),
     // An engagement records that the society is engaged on a service line;
@@ -58,6 +59,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       },
     }),
     db.circuit.count({ where: { societyId: id, voidedAt: null } }),
+    // Water tank monitoring (2026-08-25): the tanks assigned to this society,
+    // the same rows its portal renders.
+    db.waterTank.findMany({
+      where: { societyId: id, hasLevelSignal: true },
+      orderBy: { name: "asc" },
+    }),
   ]);
   const pipelineFor = new Map(pipelines.map((p) => [p.serviceLine as string, p]));
 
@@ -292,6 +299,48 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
               </ul>
             )}
           </Card>
+
+          {/* Water tank monitoring (user-specified 2026-08-25): the sensors
+              assigned to this society — the exact set its portal renders
+              (INV-05's scoping key is the assignment made on these rows). */}
+          {waterTanks.length > 0 && (
+            <Card className="p-6 min-w-0">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+                <CardTitle className="mb-0">Water tanks</CardTitle>
+                <Link href="/admin/water-tanks" className="btn-ghost btn-sm">
+                  Open tank monitoring
+                </Link>
+              </div>
+              <ul className="space-y-3">
+                {waterTanks.map((t) => (
+                  <li
+                    key={t.id}
+                    className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                      <Link href={`/admin/water-tanks/${t.id}`} className="font-medium hover:underline">
+                        {t.name}
+                      </Link>
+                      <span className="flex items-center gap-3">
+                        <TankLevelBar pct={t.lastLevelPercent ?? 0} />
+                        {t.lastOnline ? (
+                          <StatusChip tone="ok">Online</StatusChip>
+                        ) : (
+                          <StatusChip tone="warn">Offline</StatusChip>
+                        )}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                      Last report{" "}
+                      <span className="num">
+                        {t.lastReportedAt ? formatDate(t.lastReportedAt) : "—"}
+                      </span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
 
         {/* Everything about WHO at the society can sign in. */}

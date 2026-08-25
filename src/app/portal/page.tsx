@@ -14,6 +14,7 @@ import { OfferCard } from "./offer-card";
 import { BatchReviewCard } from "./batch-review-card";
 import { reviewDeadlineFor } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
+import { PortalTabs } from "./portal-tabs";
 
 // MS-02's demoable outcome, made literal: a society office-bearer/committee/
 // manager account logs in and lands on a role-scoped page reading its own
@@ -116,6 +117,8 @@ export default async function PortalHomePage() {
             )
           }
         />
+
+        <PortalTabs active="overview" />
 
         {/* What the society actually has to DO, before anything it merely
             needs to know. The batch review carries a three-hour deadline —

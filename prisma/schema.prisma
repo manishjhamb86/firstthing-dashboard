@@ -194,6 +194,7 @@ enum GatePassStatus {
 // feature.
 enum JobType {
   gatepass_sweep
+  tank_level_sample
 
   @@map("job_type")
 }
@@ -302,6 +303,7 @@ model Society {
   circuits    Circuit[]
   pipelines   Pipeline[]
   scheduledEvents ScheduledEvent[]
+  waterTanks  WaterTank[]
   contracts   Contract[]
   engagements Engagement[]
 
@@ -417,6 +419,8 @@ model AdminUser {
   pipelinesSurveyAssigned Pipeline[] @relation("PipelineSurveyAssignedBy")
   scheduledEvents         ScheduledEvent[] @relation("ScheduledEventAssignee")
   circuitsReplacing       Circuit[]        @relation("CircuitReplacementOwner")
+  waterTanksAssigned      WaterTank[]      @relation("WaterTankAssignedBy")
+  tankApiConfigUpdated    TankApiConfig[]  @relation("TankApiConfigUpdatedBy")
   circuitsReplacementAssigned Circuit[]    @relation("CircuitReplacementAssignedBy")
   scheduledEventsCreated  ScheduledEvent[] @relation("ScheduledEventCreatedBy")
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
@@ -2305,4 +2309,84 @@ model CircuitDevice {
 
   @@index([circuitId])
   @@map("circuit_devices")
+}
+
+
+// ── CAP — water tank monitoring (user-specified 2026-08-25) ────────────────
+//
+// Tank level sensors live in the company's Smart Life (Tuya) account; the
+// platform mirrors that account read-only and maps each sensor to the
+// society it serves. Monitor-only throughout — INV-08 applies to pump
+// relays exactly as it does to pump hardware: status is read, never
+// commanded.
+
+/// The one Tuya cloud project the sensors live in. A singleton row, editable
+/// only by operations. The secret is write-only from the UI: it is stored
+/// here and used server-side, but no action ever returns it to the browser.
+model TankApiConfig {
+  id              String    @id @default("singleton")
+  baseUrl         String    @default("https://openapi.tuyain.com") @map("base_url")
+  accessId        String    @map("access_id")
+  accessSecret    String    @map("access_secret")
+  updatedById     String?   @map("updated_by_id")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  /// The last successful token + device-list round trip, and what it saw.
+  lastOkAt        DateTime? @map("last_ok_at")
+  lastError       String?   @map("last_error")
+  lastDeviceCount Int?      @map("last_device_count")
+  lastSyncAt      DateTime? @map("last_sync_at")
+
+  updatedBy AdminUser? @relation("TankApiConfigUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("tank_api_config")
+}
+
+/// A device mirrored from the Smart Life account. Every device is mirrored —
+/// including ones with no water-level signal — so nothing in the account is
+/// invisible from the product; only level-bearing devices can be assigned.
+model WaterTank {
+  id               String    @id @default(cuid())
+  tuyaDeviceId     String    @unique @map("tuya_device_id")
+  name             String
+  productName      String    @map("product_name")
+  category         String
+  hasLevelSignal   Boolean   @default(false) @map("has_level_signal")
+  /// The assignment that scopes portal visibility (INV-05): a society's
+  /// portal accounts see exactly the tanks whose societyId is theirs.
+  societyId        String?   @map("society_id")
+  assignedAt       DateTime? @map("assigned_at")
+  assignedById     String?   @map("assigned_by_id")
+  /// Cache of the sensor's last known state, refreshed by the sampling job
+  /// and opportunistically by live page loads.
+  lastLevelPercent Int?      @map("last_level_percent")
+  lastOnline       Boolean   @default(false) @map("last_online")
+  lastReportedAt   DateTime? @map("last_reported_at")
+  syncedAt         DateTime  @default(now()) @map("synced_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  society    Society?           @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  assignedBy AdminUser?         @relation("WaterTankAssignedBy", fields: [assignedById], references: [id])
+  readings   TankLevelReading[]
+
+  @@index([societyId])
+  @@map("water_tanks")
+}
+
+/// One sample per tank per run of the half-hourly job — the store the
+/// history chart and portal sparklines read, so stats survive the sensor
+/// going offline (and survive the Smart Life account itself).
+model TankLevelReading {
+  id           String   @id @default(cuid())
+  tankId       String   @map("tank_id")
+  recordedAt   DateTime @map("recorded_at")
+  levelPercent Int      @map("level_percent")
+  online       Boolean
+  /// When the sensor itself last reported at sample time — an offline
+  /// sensor's level is its last report, and the row says so.
+  reportedAt   DateTime? @map("reported_at")
+
+  tank WaterTank @relation(fields: [tankId], references: [id], onDelete: Cascade)
+
+  @@index([tankId, recordedAt])
+  @@map("tank_level_readings")
 }

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { db } from "../src/lib/db";
 import { logger } from "../src/lib/logger";
+import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -17,6 +18,12 @@ const GATEPASS_PROVISIONAL_AFTER_MS = 30 * 60 * 1000;
 // The sweep re-schedules itself on every run — a self-perpetuating
 // recurring job, since this queue has no separate cron primitive.
 const GATEPASS_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+// Water tank levels are sampled on the half hour (user-specified 2026-08-25:
+// "record the water levels every half an hour and keep that record") — the
+// history charts and portal sparklines read the resulting store, so stats
+// survive a sensor going offline.
+const TANK_SAMPLE_INTERVAL_MS = 30 * 60 * 1000;
 
 // A job left `running` by a process that died mid-run would otherwise sit
 // there forever: it is not `done`, so it never schedules a successor, and it
@@ -81,8 +88,73 @@ async function processJob(job: { id: string; type: string }) {
     case "gatepass_sweep":
       await runGatepassSweep();
       break;
+    case "tank_level_sample":
+      await runTankLevelSample();
+      break;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
+  }
+}
+
+/**
+ * One half-hourly pass: mirror the Smart Life account into water_tanks, then
+ * file one TankLevelReading per level-bearing tank. Same single-link chain
+ * discipline as the gate-pass sweep — a forked chain here would double the
+ * sampling rate silently.
+ */
+async function runTankLevelSample() {
+  try {
+    const cfg = await resolveTuyaConfig();
+    if (!cfg) {
+      // Not configured yet is a normal state, not a failure — the chain keeps
+      // ticking so sampling starts the moment operations saves credentials.
+      logger.info("job.tank_sample_skipped", { reason: "no_config" });
+      return;
+    }
+    const synced = await syncTankDevices(cfg);
+    const tanks = await db.waterTank.findMany({
+      where: { hasLevelSignal: true },
+      select: { id: true, lastLevelPercent: true, lastOnline: true, lastReportedAt: true },
+    });
+    const now = new Date();
+    for (const t of tanks) {
+      if (t.lastLevelPercent === null) continue;
+      await db.tankLevelReading.create({
+        data: {
+          tankId: t.id,
+          recordedAt: now,
+          levelPercent: t.lastLevelPercent,
+          online: t.lastOnline,
+          reportedAt: t.lastReportedAt,
+        },
+      });
+    }
+    logger.info("job.tank_sample_done", { devices: synced.devices, tanks: tanks.length });
+  } finally {
+    // Reschedule even after a failed pass — a Tuya outage must not kill the
+    // chain, only skip the sample.
+    await scheduleTankSample(new Date(Date.now() + TANK_SAMPLE_INTERVAL_MS));
+  }
+}
+
+async function scheduleTankSample(runAt: Date) {
+  const existing = await db.job.findFirst({
+    where: { type: "tank_level_sample", status: "pending" },
+  });
+  if (existing) {
+    logger.warn("job.tank_sample_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "tank_level_sample", runAt } });
+}
+
+async function ensureTankSampleScheduled() {
+  const existing = await db.job.findFirst({
+    where: { type: "tank_level_sample", status: { in: ["pending", "running"] } },
+  });
+  if (!existing) {
+    await db.job.create({ data: { type: "tank_level_sample", runAt: new Date() } });
+    logger.info("job.tank_sample_seeded", {});
   }
 }
 
@@ -134,6 +206,7 @@ async function main() {
   logger.info("job.worker_started", {});
   await reclaimStaleJobs();
   await ensureGatepassSweepScheduled();
+  await ensureTankSampleScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

@@ -2069,6 +2069,48 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## Water tank monitoring: the Smart Life mirror (2026-08-25) — user-specified, designed then built
+
+**The ask**: water-level sensors on societies' domestic tanks live in the company's Smart Life
+(Tuya) account; mirror them into the product, assign each to the society it serves (bulk and
+singly), show residents their own tanks with a proper water animation, add an API configuration
+page, and — added mid-design — **record every level on the half hour** so stats and history exist.
+Designed first on a canvas (all five screens, matching the app's own tokens), then built end to end.
+
+**The client cannot send commands, structurally.** `src/lib/tuya.ts` knows the token endpoint, the
+device list and a shadow read — nothing else. INV-08 (monitor-only for pump hardware) is enforced by
+what the module is able to say. The signing scheme (string-to-sign construction, token splice,
+uppercase HMAC) is pinned by unit tests in `tests/tuya-sign.test.ts`, because Tuya answers any
+mistake with a bare "sign invalid". **Two live API shapes found the hard way**: `/v2.0/cloud/thing/
+device` returns a **bare array**, not the `{devices: []}` wrapper other Tuya listings use — the
+exploratory probe's fallback chain had masked this, and the lib read 0 devices until checked
+directly; and its `page_size` caps low (>20 → "param size too much"), so the listing paginates by
+`last_row_key`. **The general shape**: a probe whose result-extraction tries several shapes tells
+you it worked, not which shape worked.
+
+**Pages read the mirror, not Tuya.** `water_tanks` caches every device — energy meters stay listed,
+dimmed and unassignable, so nothing in the account is invisible — and `tank_level_readings` holds
+one sample per tank per run of the half-hourly job (ADR-003's queue, third job type; same
+single-link chain discipline as the gate-pass sweep, rescheduled in `finally` so a Tuya outage
+skips a sample without killing the chain, and "not configured" is a normal state it ticks through).
+The status page and the portal refresh live best-effort and fall back to the mirror.
+
+**Assignment is INV-05's scoping key**: bulk from the list or singly from the tank page, gated to
+`manage_users`, recorded with who and when. The portal (`/portal/tanks`, a new tabs row on the
+portal) is scoped server-side to the viewer's society — verified both directions. The society
+detail page lists its own tanks. **Credentials** are a singleton `TankApiConfig`, operations-only,
+save-and-test in one act; the secret is write-only (never returned, never logged; blank keeps it),
+with `TUYA_*` env fallback. Note: the access secret was pasted into chat by the user — worth
+rotating in the Tuya console at some point, same class as the AUTH_SECRET note in Current Blockers.
+
+**Verified against the real account** (28 browser checks, zero console errors; worker run live:
+seeded → 2 real readings filed → rescheduled 30 min out, one link). One UI bug found by the e2e:
+a checkbox inside a `ClickableRow` toggled twice — its own `onChange` plus the td's click handler —
+netting to unchecked; the td handler now skips clicks whose target is the input. 487 unit tests.
+Migration `20260825120000_add_water_tank_monitoring` purely additive. **Stage needs**: migrate,
+restart both pm2 processes (the worker carries the sampler), then enter the credentials on
+`/admin/water-tanks/settings` as an operations account.
+
 ## The light replacement is somebody's job before it is a record (2026-08-25) — user-asked
 
 **Reported against the circuit page**: "before light replacement record there should be an option to

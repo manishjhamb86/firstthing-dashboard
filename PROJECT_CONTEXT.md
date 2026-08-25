@@ -2069,6 +2069,49 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## The light replacement is somebody's job before it is a record (2026-08-25) — user-asked
+
+**Reported against the circuit page**: "before light replacement record there should be an option to
+first schedule the replacement and assign the replacement task to inspector/installation engineer
+team, who will do the job and update this record. which can also be done by the assignee if needed
+but with a relevant warning message."
+
+**The form appeared the moment the baseline window closed, with nobody's name on it.** A new step —
+**Schedule & assign the replacement** — sits in front of it in `circuitSteps()`, and the record is
+genuinely locked until the work is handed to a named engineer or inspector ("Unlocks once the
+replacement is assigned"), not merely discouraged.
+
+**The day is a `ScheduledEvent` (`installation_day`), not a column on `Circuit`** — the schedule
+module's third kind, and the reason it was built. The crew's replacement day lands on their own
+calendar beside their surveys; reassigning moves it; un-assigning cancels it rather than leaving a
+day booked for nobody. `Circuit` gained only `replacementOwnerId`/`replacementAssignedAt`/
+`replacementAssignedById` — the assignment's provenance, which is genuinely a circuit fact — and
+`ScheduledEvent` gained an optional `circuitId` so commissioning work can point at the circuit
+rather than only at the deal.
+
+**Authority, mirroring the survey**: operations *or* whoever holds this deal's field work may hand
+it on; the assignee or operations may book the day; the picker offers only engineering/inspection
+accounts holding `manage_survey`, and the action re-checks the team and the permission. Recording
+the work is unchanged for the assignee; anyone else recording it sees the warning ("You can record
+it for them, but only if the work has actually been done") — the same rule, same wording, as the
+survey.
+
+**`SurveyVisitDetails` became `VisitDetails`** (`src/components/visit-details.tsx`): the survey visit
+and the replacement day answer the same four questions — who is going, when it was handed over, when
+they are due, who to ask for — and a second copy would have drifted within a week.
+
+**Verified in a browser (17 checks, zero console errors)**: the step precedes the record and the
+record's form is absent from the DOM until assigned; sales is not offered; the assignment stores who
+did it and when; the day lands on the schedule module and on the assignee's own calendar with the
+site contact; ops is warned but not blocked; a field account who is *not* the assignee is not
+offered the arrangement; and a phone number with nobody's name against it is refused. Schedule
+16/16, survey visit 24/24, assigned-turn 18/18, smoke 23/23; 480 unit tests.
+
+**A harness note, not an app defect**: `billing-run-check` and `gatepass-order-check` both fail on
+the fresh `firsthing_dev` database because they expect fixtures (`bill-soc`, an active contract) that
+the new database has never had — the same "dev DB holds only the seed" gap already recorded. The
+billing board itself renders correctly with its empty state, checked directly.
+
 ## One schedule for every appointment (2026-08-25) — user-specified, mid-build redirect
 
 **Started as "show who the survey is assigned to, when, and who to call at the society", and the

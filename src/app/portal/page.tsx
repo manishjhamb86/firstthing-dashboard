@@ -2,12 +2,20 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
-import { TransferButton } from "./transfer-button";
-import { BrandMark } from "@/components/brand-mark";
-import { ThemeSwitcher } from "@/components/theme-switcher";
-import { SignOutButton } from "@/components/sign-out-button";
 import { resolveTheme } from "@/lib/resolve-theme";
-import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
+import {
+  Card,
+  CardTitle,
+  ChartPending,
+  PageHeader,
+  Stat,
+  StatPending,
+  StatRow,
+  StatusChip,
+} from "@/components/ui";
+import { PortalShell } from "./portal-shell";
+import { TankVisual } from "@/components/tank-visual";
+import Link from "next/link";
 import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 import { DemoReportView } from "@/components/demo-report-view";
 import { OfferCard } from "./offer-card";
@@ -30,12 +38,8 @@ export default async function PortalHomePage() {
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
 
   const societyId = viewer.societyId;
-  const [society, accounts, sharedReports, openOffer] = await Promise.all([
+  const [society, sharedReports, openOffer, tanks, benchmarked] = await Promise.all([
     db.society.findUnique({ where: { id: societyId } }),
-    db.profile.findMany({
-      where: { societyId, isActive: true },
-      orderBy: { name: "asc" },
-    }),
     // INV-05 — scoped to this viewer's own society, server-side. FEAT-020-AC-4
     // is the other half: `status: "shared"` is a hard filter here, so a draft
     // is not merely un-linked from the portal, it is unreachable through it.
@@ -51,7 +55,20 @@ export default async function PortalHomePage() {
       where: { status: "issued", pipeline: { societyId } },
       orderBy: { version: "desc" },
     }),
+    // The society's own tanks and its best verified benchmark — both scoped
+    // server-side like everything else here (INV-05).
+    db.waterTank.findMany({
+      where: { societyId, hasLevelSignal: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, lastLevelPercent: true, lastOnline: true },
+    }),
+    db.circuit.findFirst({
+      where: { societyId, voidedAt: null, benchmarkSavingsPct: { not: null } },
+      orderBy: { benchmarkSavingsPct: "desc" },
+      select: { benchmarkSavingsPct: true },
+    }),
   ]);
+  const benchmarkPct = benchmarked?.benchmarkSavingsPct ?? null;
 
   if (!society) redirect("/login");
 
@@ -89,36 +106,42 @@ export default async function PortalHomePage() {
   if (openOffer && isOfficeBearer) pendingActions.push("Respond to the offer FirsThing has issued");
 
   return (
-    <div className="min-h-screen">
-      <div
-        className="sticky top-0 z-20"
-        style={{ background: "var(--chrome)", borderBottom: "1px solid var(--chrome-border)" }}
-      >
-        <div className="mx-auto max-w-3xl flex flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 sm:px-8 py-3">
-          <BrandMark variant={theme === "light" ? "light" : "dark"} className="h-7" />
-          <div className="flex items-center gap-4">
-            <ThemeSwitcher current={theme} />
-            <SignOutButton className="text-sm font-medium hover:opacity-80" style={{ color: "var(--chrome-muted)" }} />
-          </div>
-        </div>
-      </div>
+    <PortalShell theme={theme}>
+      <PageHeader
+        title={society.name}
+        subtitle={`Signed in as ${viewer.email} · ${PORTAL_AUTHORITY_LABEL[viewer.role]}`}
+        chip={
+          pendingActions.length > 0 ? (
+            <StatusChip tone="warn">{pendingActions.length} awaiting you</StatusChip>
+          ) : (
+            <StatusChip tone="ok">Nothing needs you</StatusChip>
+          )
+        }
+      />
 
-      <div className="mx-auto max-w-3xl p-5 sm:p-8">
-        <PageHeader
-          title={society.name}
-          subtitle={`Signed in as ${viewer.email} · ${PORTAL_AUTHORITY_LABEL[viewer.role]}`}
-          chip={
-            pendingActions.length > 0 ? (
-              <StatusChip tone="warn">
-                {pendingActions.length} awaiting you
-              </StatusChip>
-            ) : (
-              <StatusChip tone="ok">Nothing needs you</StatusChip>
-            )
-          }
-        />
+      <PortalTabs active="dashboard" />
 
-        <PortalTabs active="overview" />
+      {/* The society's own numbers. Empty where the feature that produces
+          them is not built (the user's explicit choice 2026-08-25: visible,
+          named, never a fabricated figure). */}
+      <StatRow>
+        <StatPending label="Saved this month" detail="From your first released bill" />
+        {benchmarkPct !== null ? (
+          <Stat label="Verified saving" value={`${benchmarkPct.toFixed(1)}%`} tone="ok" detail="on your demo circuit" />
+        ) : (
+          <StatPending label="Verified saving" detail="Once the demo circuit completes" />
+        )}
+        {tanks.length > 0 ? (
+          <Stat
+            label="Water tanks"
+            value={`${tanks.filter((t) => t.lastOnline).length} of ${tanks.length}`}
+            detail="reporting right now"
+          />
+        ) : (
+          <StatPending label="Water tanks" detail="Once level sensors are installed" />
+        )}
+        <StatPending label="Electricity used" detail="Once monthly readings are ingested" />
+      </StatRow>
 
         {/* What the society actually has to DO, before anything it merely
             needs to know. The batch review carries a three-hour deadline —
@@ -215,45 +238,55 @@ export default async function PortalHomePage() {
           </div>
         )}
 
-        <Card className="p-6">
-          <CardTitle>Portal accounts</CardTitle>
-          <ul className="space-y-3">
-            {accounts.map((account) => {
-              const isSelf = account.id === viewer.id;
-              const isTargetOfficeBearer = account.portalAuthority === "office_bearer";
-              return (
-                <li
-                  key={account.id}
-                  className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
-                >
-                  <div>
-                    <p className="font-medium">
-                      {account.name ?? account.email}{" "}
-                      {isSelf && <span className="text-[var(--text-subtle)]">(you)</span>}
-                    </p>
-                    <p className="text-sm text-[var(--text-muted)]">{account.email}</p>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-3">
-                    {isTargetOfficeBearer ? (
-                      <StatusChip tone="ok">Office-bearer</StatusChip>
-                    ) : (
-                      <StatusChip tone="neu">
-                        {account.portalAuthority ? PORTAL_AUTHORITY_LABEL[account.portalAuthority] : "—"}
-                      </StatusChip>
-                    )}
-                    {!isTargetOfficeBearer &&
-                      (isOfficeBearer ? (
-                        <TransferButton profileId={account.id} />
-                      ) : (
-                        <p className="text-xs text-[var(--text-subtle)]">Only the office-bearer can change this</p>
-                      ))}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+      <div className="mb-5 grid items-start gap-5 lg:grid-cols-12">
+        <Card className="p-6 lg:col-span-7">
+          <CardTitle>Your electricity, month by month</CardTitle>
+          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            What the common-area lighting used, against what it used before the retrofit.
+          </p>
+          <ChartPending
+            title="Your consumption appears here"
+            note="once your first month is calculated"
+            height={170}
+          />
+        </Card>
+        <Card className="p-6 lg:col-span-5">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <CardTitle className="mb-0">Your tanks</CardTitle>
+            {tanks.length > 0 && (
+              <Link href="/portal/tanks" className="text-[13px] font-semibold">
+                See all →
+              </Link>
+            )}
+          </div>
+          {tanks.length === 0 ? (
+            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+              No level sensors on your tanks yet.
+            </p>
+          ) : (
+            <div className="flex flex-wrap justify-center gap-4">
+              {tanks.slice(0, 3).map((t) => (
+                <div key={t.id} className="flex flex-col items-center gap-2">
+                  <TankVisual
+                    pct={t.lastLevelPercent ?? 0}
+                    offline={!t.lastOnline}
+                    width={84}
+                    height={116}
+                    pctSize={20}
+                  />
+                  <span className="max-w-[96px] text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
+                    {t.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
       </div>
-    </div>
+
+      {/* The committee list lives on its own tab now — a second copy here
+          was the same list twice, and the tab is where adding and removing
+          happen. */}
+    </PortalShell>
   );
 }

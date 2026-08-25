@@ -3,10 +3,8 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { resolveTheme } from "@/lib/resolve-theme";
-import { BrandMark } from "@/components/brand-mark";
-import { ThemeSwitcher } from "@/components/theme-switcher";
-import { SignOutButton } from "@/components/sign-out-button";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { PortalShell } from "../portal-shell";
 import { TankVisual } from "@/components/tank-visual";
 import { formatDateTime } from "@/lib/format-date";
 import { PortalTabs } from "../portal-tabs";
@@ -90,33 +88,19 @@ export default async function PortalTanksPage() {
   const low = tanks.filter((t) => ((live.get(t.id)?.level ?? t.lastLevelPercent) ?? 100) < 25);
 
   return (
-    <div className="min-h-screen">
-      <div
-        className="sticky top-0 z-20"
-        style={{ background: "var(--chrome)", borderBottom: "1px solid var(--chrome-border)" }}
-      >
-        <div className="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-3 sm:px-8">
-          <BrandMark variant={theme === "light" ? "light" : "dark"} className="h-7" />
-          <div className="flex items-center gap-4">
-            <ThemeSwitcher current={theme} />
-            <SignOutButton className="text-sm font-medium hover:opacity-80" style={{ color: "var(--chrome-muted)" }} />
-          </div>
-        </div>
-      </div>
-
-      <div className="mx-auto max-w-3xl p-5 sm:p-8">
-        <PageHeader
-          title={society.name}
-          subtitle="Your society's water tanks, live."
-          chip={
-            tanks.length === 0 ? undefined : low.length > 0 ? (
-              <StatusChip tone="warn">{low.length} running low</StatusChip>
-            ) : (
-              <StatusChip tone="ok">All healthy</StatusChip>
-            )
-          }
-        />
-        <PortalTabs active="tanks" />
+    <PortalShell theme={theme}>
+      <PageHeader
+        title={society.name}
+        subtitle="Your society's water tanks, live."
+        chip={
+          tanks.length === 0 ? undefined : low.length > 0 ? (
+            <StatusChip tone="warn">{low.length} running low</StatusChip>
+          ) : (
+            <StatusChip tone="ok">All healthy</StatusChip>
+          )
+        }
+      />
+      <PortalTabs active="tanks" />
 
         {tanks.length === 0 ? (
           <EmptyState title="No tanks connected yet">
@@ -125,7 +109,7 @@ export default async function PortalTanksPage() {
           </EmptyState>
         ) : (
           <>
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
               {tanks.map((t) => {
                 const l = live.get(t.id);
                 const level = l?.level ?? t.lastLevelPercent ?? 0;
@@ -166,7 +150,6 @@ export default async function PortalTanksPage() {
             </p>
           </>
         )}
-      </div>
-    </div>
+    </PortalShell>
   );
 }

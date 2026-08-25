@@ -71,8 +71,8 @@ export function CommitteeClient({
   }
 
   return (
-    <>
-      <Card className="p-6 mb-5">
+    <div className="grid items-start gap-5 lg:grid-cols-12">
+      <Card className="p-6 lg:col-span-7">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <CardTitle className="mb-0">Committee accounts</CardTitle>
           {viewerIsOfficeBearer && !open && (
@@ -196,7 +196,7 @@ export function CommitteeClient({
         </ul>
       </Card>
 
-      <Card className="p-6">
+      <Card className="p-6 lg:col-span-5">
         <CardTitle>What you can and cannot do here</CardTitle>
         <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
           These accounts see only your society&apos;s data, and nothing else in FirsThing. The
@@ -205,6 +205,6 @@ export function CommitteeClient({
           has been passed on.
         </p>
       </Card>
-    </>
+    </div>
   );
 }

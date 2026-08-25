@@ -239,3 +239,102 @@ export function Stat({
     </div>
   );
 }
+
+/**
+ * A figure the product will show but cannot yet — never a fabricated one.
+ *
+ * The user's explicit choice (2026-08-25) when the society workspace was
+ * designed: sections land visible but empty, each naming the condition that
+ * will fill it, rather than carrying sample numbers that read as real. Same
+ * convention the Portfolio's untracked KPIs already use, given a component
+ * so every surface states it the same way.
+ */
+export function StatPending({ label, detail }: { label: string; detail: string }) {
+  return (
+    <div
+      className="stat-tile flex flex-col justify-center gap-2 rounded-[var(--r-md)] p-5"
+      style={{ background: "var(--surface)", border: "1px dashed var(--accent-line)" }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="lbl">{label}</span>
+        <span
+          className="text-[10px] font-bold uppercase tracking-wide"
+          style={{ color: "var(--text-subtle)" }}
+        >
+          Coming
+        </span>
+      </div>
+      <div className="num text-[28px] font-bold leading-none" style={{ color: "var(--text-subtle)" }}>
+        —
+      </div>
+      <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+        {detail}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * An empty chart: real axes, no invented series. Shows the shape the section
+ * will take and says what fills it.
+ */
+export function ChartPending({
+  title,
+  note,
+  height = 180,
+}: {
+  title: string;
+  note: string;
+  height?: number;
+}) {
+  const w = 960;
+  const h = height;
+  return (
+    <svg
+      viewBox={`0 0 ${w} ${h + 6}`}
+      className="block w-full"
+      role="img"
+      aria-label={`${title}. ${note}`}
+    >
+      {[0, 25, 50, 75, 100].map((g) => (
+        <line
+          key={g}
+          x1={0}
+          x2={w}
+          y1={h - (g / 100) * h}
+          y2={h - (g / 100) * h}
+          stroke="var(--border-subtle)"
+          strokeWidth={1}
+        />
+      ))}
+      {[0, 1, 2, 3, 4, 5].map((i) => (
+        <line
+          key={i}
+          x1={(i * w) / 5}
+          x2={(i * w) / 5}
+          y1={0}
+          y2={h}
+          stroke="var(--border-subtle)"
+          strokeWidth={1}
+        />
+      ))}
+      <line x1={0} x2={w} y1={h} y2={h} stroke="var(--border)" strokeWidth={1.5} />
+      <rect
+        x={w / 2 - 230}
+        y={h / 2 - 30}
+        width={460}
+        height={58}
+        rx={14}
+        fill="var(--surface)"
+        stroke="var(--accent-line)"
+        strokeDasharray="4 4"
+      />
+      <text x={w / 2} y={h / 2 - 6} textAnchor="middle" fontSize={14} fontWeight={700} fill="var(--text)">
+        {title}
+      </text>
+      <text x={w / 2} y={h / 2 + 15} textAnchor="middle" fontSize={12.5} fill="var(--text-muted)">
+        {note}
+      </text>
+    </svg>
+  );
+}

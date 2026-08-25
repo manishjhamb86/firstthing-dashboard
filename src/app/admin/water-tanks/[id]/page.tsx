@@ -159,9 +159,9 @@ export default async function TankStatusPage({
                   className="w-full rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]"
                   style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}
                 >
-                  Connected, but this sensor has not reported a new level in{" "}
-                  {timeAgo(live.reportedAt)}. The figure above is its last report — the Smart Life
-                  app may show a fresher one read directly from the device.
+                  Connected, but this sensor last reported {timeAgo(live.reportedAt)}. The figure
+                  above is that report — the Smart Life app may show a fresher one read directly
+                  from the device.
                 </div>
               )}
               {!tank.lastOnline && (

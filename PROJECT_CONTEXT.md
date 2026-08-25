@@ -2069,6 +2069,44 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## The portal is a workspace at any width (2026-08-25) — user-caught, twice
+
+**Two reports, both fair**: "why there is so much of empty space. it gives a feeling of a mobile page
+on desktop… current view is fine for mobile", and then "you havent applied the changes on society
+portal? it is not like how you shared in artifacts."
+
+**The width.** Every portal page capped itself at `max-w-3xl` — 768px — so on a wide monitor it read
+as a phone page down the middle of the screen. `src/app/portal/portal-shell.tsx` now owns the chrome
+*and* the container (fluid on a phone, up to **1200px** on a desktop), replacing the same header
+copied into three pages. 1200 rather than the whole screen because prose still has to be readable.
+Each page lays its own cards into columns at `lg`: dashboard 7/5, committee 7/5, tanks 2→3→4 across.
+
+**A real overflow, found by measuring rather than looking**: at 390px the tab row pushed its fourth
+tab **60px off-screen** — two tabs fitted a phone, four never could, and the row had no `flex-wrap`.
+Same class as the admin nav's wrap fix from 2026-08-14, caught this time because the check asserts
+`scrollWidth <= innerWidth` on every tab at both widths instead of eyeballing a screenshot.
+
+**The designed tabs are now built**, as the visible placeholders the user asked for ("for now they
+will be like a place holder. visible but dummy"): **Dashboard** (the real "needs you" work first,
+then pending tiles and an empty consumption chart), **Water tanks**, **Lighting** (the audit trail —
+before, after, saving — real when a benchmark exists, honestly empty when not), **Committee**.
+`StatPending` and `ChartPending` in `ui.tsx` are the shared primitives so every surface states an
+absent figure identically: a dashed tile reading `—` with the condition that will fill it, and a real
+axis frame naming what goes in it. **Nothing invents a number** — the suite asserts no currency
+figure appears anywhere on the portal.
+
+**Also removed**: the dashboard's own Portal accounts card, which was the committee list a second
+time once the Committee tab owned it.
+
+**One thing surfaced for the user rather than fixed**: their stage screenshot showed **two accounts
+both holding office-bearer**, which contradicts the copy on that very screen ("exactly one holds the
+office-bearer designation"). The portal path cannot produce it — `checkAccountCreate` refuses the
+authority outright — but `createPortalAccount` on the **admin** side accepts any authority with no
+"at most one" guard, and `03-features.md`'s own rule 2 only says *at least* one. Whether a society
+may hold several (the authority table lists "President, secretary, treasurer") or exactly one (which
+is what transfer semantics and every screen's copy imply) is a product decision, not a bug to pick
+unilaterally — raised, not silently resolved.
+
 ## A society manages its own committee (2026-08-25) — user-asked, and already in the blueprint
 
 **The ask**: "the society admin can add delete users under their own society… or if needed we can

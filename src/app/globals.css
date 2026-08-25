@@ -913,23 +913,59 @@ textarea.field {
 }
 
 /* ---- water tank visual (water tank monitoring, 2026-08-25) ------------- */
+/* The WATER keeps the accent — it is the brand blue and it reads as water
+   (the user's call, 2026-08-25). What changes is the VESSEL: a light,
+   shadowed box instead of a tinted one, so the empty part of the tank is
+   obvious and the waterline has a clean edge. The level figure then sits on
+   whichever of the two it overlaps, and takes its ink from that (see
+   tank-visual.tsx) rather than being one colour that fails on one of them:
+   #FFFFFF on the accent measures 4.9:1, --text on the vessel 12.6:1. */
+:root {
+  --tank-water: var(--accent);
+  --tank-wave: var(--accent-hover);
+  --tank-ink-dry: var(--text);
+  /* Ink ON the water. NOT a hardcoded white: dark theme's accent is a LIGHT
+     periwinkle, so white-on-water measured 2.2:1 there while reading fine in
+     light theme. --text-on-accent is the token that already answers this
+     question per theme (#FFFFFF light, #0F1222 dark) — 4.9:1 and 6.9:1. */
+  --tank-ink-wet: var(--text-on-accent);
+}
 /* The animated tank the portal and the tank status page share. The wave is
    two over-large rounded squares spinning above the waterline — pure CSS, no
    JS — paused (not hidden) when the sensor is offline, so a stale level
    still reads as a level, just not a live one. */
+/* The vessel is a white, elevated box (the user's own suggestion,
+   2026-08-25) — it reads as a tank rather than as a tinted rectangle, and it
+   gives the waterline a clean edge to sit against in every theme. */
 .tank-visual {
   position: relative;
   overflow: hidden;
   border-radius: 16px 16px 20px 20px;
-  background: var(--surface-sunken);
-  border: 2px solid var(--accent-line);
+  background: var(--surface);
+  /* The vessel sits on a card of the SAME surface colour, so it needs a real
+     edge and a broad lift or it disappears into it (user-reported
+     2026-08-25). --field-border is the token that already guarantees a ≥3:1
+     control boundary — the same one inputs use, for the same reason. */
+  border: 2px solid var(--field-border);
+  box-shadow:
+    0 14px 34px rgba(20, 30, 70, 0.16),
+    0 3px 8px rgba(20, 30, 70, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
 }
+/* overflow:hidden is load-bearing. The wave elements are deliberately far
+   larger than the tank and sit ABOVE their own top edge to make the surface
+   undulate — unclipped, they painted the entire empty half of the vessel, so
+   a 30%-full tank rendered as a full one. Invisible while the water was a
+   saturated accent; obvious the moment it became a light tint
+   (found 2026-08-25). The inset highlight is the waterline itself. */
 .tank-water {
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
-  background: var(--accent);
+  overflow: hidden;
+  background: var(--tank-water);
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.55);
 }
 .tank-wave {
   position: absolute;
@@ -938,17 +974,17 @@ textarea.field {
   width: 250%;
   padding-bottom: 250%;
   border-radius: 44% 46% 43% 45%;
-  background: var(--accent);
+  background: var(--tank-water);
 }
 .tank-wave-2 {
   opacity: 0.5;
-  background: var(--accent-hover);
+  background: var(--tank-wave);
 }
 .tank-wave-1 { animation: tank-drift 9s linear infinite; }
 .tank-wave-2 { animation: tank-drift 15s linear infinite reverse; }
 @keyframes tank-drift {
-  from { transform: translate(-50%, -96.5%) rotate(0deg); }
-  to { transform: translate(-50%, -96.5%) rotate(360deg); }
+  from { transform: translate(-50%, -92%) rotate(0deg); }
+  to { transform: translate(-50%, -92%) rotate(360deg); }
 }
 .tank-offline .tank-water,
 .tank-offline .tank-wave { background: var(--neu-fg); }

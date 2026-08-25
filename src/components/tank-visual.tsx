@@ -18,6 +18,11 @@ export function TankVisual({
   pctSize?: number;
 }) {
   const level = Math.max(0, Math.min(100, pct));
+  // The figure sits at 16% from the top, so it is over the WATER only on a
+  // nearly-full tank. Its ink follows what is actually behind it — one fixed
+  // colour would fail against one of the two (the 45%-on-accent case the
+  // user reported, 2026-08-25).
+  const labelOverWater = level >= 78;
   return (
     <div className={`tank-visual ${offline ? "tank-offline" : ""}`} style={{ width, height }}>
       <div className="tank-water" style={{ height: `${level}%` }}>
@@ -30,7 +35,18 @@ export function TankVisual({
           className="absolute right-2 flex items-center gap-1.5"
           style={{ bottom: `${t}%` }}
         >
-          <span className="num text-[10px]" style={{ color: "var(--text-subtle)" }}>
+          <span
+            className="num text-[10px] font-semibold"
+            style={{
+              // Submerged ticks need light ink, dry ones dark.
+              color: offline
+                ? "var(--text-subtle)"
+                : t <= level
+                  ? "var(--tank-ink-wet)"
+                  : "var(--text-muted)",
+              opacity: 0.9,
+            }}
+          >
             {t}
           </span>
           <span className="inline-block h-[1.5px] w-2.5" style={{ background: "var(--accent-line)" }} />
@@ -38,7 +54,15 @@ export function TankVisual({
       ))}
       <div
         className="num absolute left-0 right-0 text-center font-extrabold"
-        style={{ top: "16%", fontSize: pctSize, color: offline ? "var(--text-subtle)" : "var(--text)" }}
+        style={{
+          top: "16%",
+          fontSize: pctSize,
+          color: offline
+            ? "var(--text-subtle)"
+            : labelOverWater
+              ? "var(--tank-ink-wet)"
+              : "var(--tank-ink-dry)",
+        }}
       >
         {level}%
       </div>

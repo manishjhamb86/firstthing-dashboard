@@ -9,55 +9,12 @@ import { formatDate, formatInstant, timeAgo } from "@/lib/format-date";
 import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
 import { logger } from "@/lib/logger";
 import { AssignControl } from "./assign-control";
+import { TankHistoryChart } from "@/components/tank-history-chart";
 
 export const dynamic = "force-dynamic";
 
 const RANGES = { "24h": 1, "7d": 7, "30d": 30 } as const;
 type RangeKey = keyof typeof RANGES;
-
-/** Server-rendered area chart over the half-hourly samples. */
-function HistoryChart({ points }: { points: { at: Date; level: number }[] }) {
-  const w = 980;
-  const h = 170;
-  if (points.length < 2) {
-    return (
-      <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-        Not enough samples yet — the background job records one every 30 minutes; the chart appears
-        once a few exist.
-      </p>
-    );
-  }
-  const t0 = points[0].at.getTime();
-  const t1 = points[points.length - 1].at.getTime();
-  const x = (d: Date) => ((d.getTime() - t0) / Math.max(1, t1 - t0)) * w;
-  const y = (v: number) => h - (v / 100) * h;
-  const line = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${x(p.at).toFixed(1)} ${y(p.level).toFixed(1)}`)
-    .join(" ");
-  return (
-    <div className="overflow-x-auto">
-      <svg width="100%" viewBox={`0 0 ${w} ${h + 24}`} style={{ display: "block", minWidth: 560 }}>
-        {[25, 50, 75].map((g) => (
-          <g key={g}>
-            <line x1={0} x2={w} y1={y(g)} y2={y(g)} stroke="var(--border-subtle)" strokeWidth={1} />
-            <text x={4} y={y(g) - 4} fontSize={10} fill="var(--text-subtle)" fontFamily="ui-monospace,Menlo,monospace">
-              {g}%
-            </text>
-          </g>
-        ))}
-        <path d={`${line} L${w} ${h} L0 ${h} Z`} fill="var(--chart-mark)" opacity={0.1} />
-        <path d={line} fill="none" stroke="var(--chart-mark)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
-        <line x1={0} x2={w} y1={h} y2={h} stroke="var(--border)" strokeWidth={1.5} />
-        <text x={0} y={h + 16} fontSize={10} fill="var(--text-subtle)" fontFamily="ui-monospace,Menlo,monospace">
-          {formatInstant(points[0].at)}
-        </text>
-        <text x={w - 118} y={h + 16} fontSize={10} fill="var(--text-subtle)" fontFamily="ui-monospace,Menlo,monospace">
-          {formatInstant(points[points.length - 1].at)}
-        </text>
-      </svg>
-    </div>
-  );
-}
 
 export default async function TankStatusPage({
   params,
@@ -278,7 +235,9 @@ export default async function TankStatusPage({
               </>
             )}
           </p>
-          <HistoryChart points={readings.map((r) => ({ at: r.recordedAt, level: r.levelPercent }))} />
+          <TankHistoryChart
+            points={readings.map((r) => ({ at: r.recordedAt.toISOString(), level: r.levelPercent }))}
+          />
         </Card>
       )}
     </>

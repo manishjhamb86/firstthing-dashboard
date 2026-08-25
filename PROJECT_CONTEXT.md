@@ -2069,6 +2069,44 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## Connected is not reporting, and a device instant is read in IST (2026-08-25) — user-caught
+
+**Three reports in one investigation**: "the Smart Life app shows 75% but our app shows 45%", "there
+have been no reading logs since we deployed", and "time is also showing incorrect."
+
+**The 45 vs 75: our number was never wrong.** Read three ways — the shadow, the associated-users
+listing and the v2 device record — the **Tuya cloud itself holds 45**, timestamped `11:40:48Z`, and
+the device's own `update_time` matches. It is `online: true` and has pushed nothing since. So the
+Smart Life app is showing something the cloud API does not serve (it reads the device directly, over
+LAN or a push channel the shadow lags). **The defect was the screen implying that figure was live.**
+A sensor connected but silent for over an hour now reads **Not reporting**, keeps showing its last
+level, and the tank page says outright that the Smart Life app may show a fresher one read from the
+device. Worth remembering: `online` means *connected*, not *reporting* — treating them as the same
+thing is how a stale number gets presented as a live one.
+
+**The time was mine.** `formatDateTime` reads UTC parts — right for a **wall-clock appointment**
+somebody typed (a 10:30 survey visit must echo back 10:30), wrong for a **machine instant**, which
+happened at a moment and must be read where the reader lives. An 11:40Z reading rendered as "11:40"
+told an Indian reader it was 5½ hours older than it was. `formatInstant()` renders **Asia/Kolkata
+explicitly** — the server runs in UTC, so "local" on a Server Component would be exactly the wrong
+answer — and `timeAgo()` puts the age in words beside it. Both formatters keep their own tests so
+the distinction cannot quietly collapse; the rule is now: *typed by a person → UTC read; stamped by
+a machine → IST*.
+
+**A latent signing bug, found while probing**: Tuya verifies the signature over the path with query
+parameters **sorted by key**. Single-parameter calls sort by accident; the paginated device listing
+emitted `page_size` before `last_row_key`, so page 2 would have failed with a bare "sign invalid"
+the moment the account exceeded 20 devices. `signedPath()` sorts.
+
+**The readings were never missing** — 4 per tank on stage, filed every 30 minutes exactly as
+designed, all reading 45 because the source has not changed. "No new logs" and "no logs" look
+identical when the value is flat.
+
+**Verified in a browser (9 checks, zero console errors)** against fixtures built to the reported
+shape: a 2-minute-old sensor reads Online, a 2-hour-old one reads Not reporting with the
+explanation, and the rendered timestamp matches an **independently computed** IST string rather than
+a hardcoded one. 500 unit tests.
+
 ## The portal is a workspace at any width (2026-08-25) — user-caught, twice
 
 **Two reports, both fair**: "why there is so much of empty space. it gives a feeling of a mobile page

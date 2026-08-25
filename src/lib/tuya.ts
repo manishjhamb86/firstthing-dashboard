@@ -53,6 +53,20 @@ class TuyaError extends Error {
   }
 }
 
+/**
+ * Tuya verifies the signature over the path with its query parameters
+ * SORTED BY KEY — an unsorted one comes back "sign invalid", with nothing to
+ * say which half was wrong. Single-parameter calls are sorted by accident;
+ * the paginated device listing was not, so page 2 would have failed silently
+ * the moment this account exceeded 20 devices. Found by probing the log
+ * endpoints, which need four parameters (2026-08-25).
+ */
+function signedPath(base: string, params: Record<string, string | number> = {}): string {
+  const keys = Object.keys(params).sort();
+  if (keys.length === 0) return base;
+  return `${base}?${keys.map((k) => `${k}=${params[k]}`).join("&")}`;
+}
+
 async function tuyaGet<T>(cfg: TuyaConfig, path: string, token?: string): Promise<T> {
   const t = Date.now().toString();
   const sign = tuyaSign(
@@ -107,7 +121,10 @@ export async function listTuyaDevices(cfg: TuyaConfig): Promise<TuyaDevice[]> {
   const PAGE = 20;
   let lastRowKey: string | undefined;
   for (let pageN = 0; pageN < 25; pageN++) {
-    const path = `/v2.0/cloud/thing/device?page_size=${PAGE}${lastRowKey ? `&last_row_key=${lastRowKey}` : ""}`;
+    const path = signedPath("/v2.0/cloud/thing/device", {
+      page_size: PAGE,
+      ...(lastRowKey ? { last_row_key: lastRowKey } : {}),
+    });
     const result = await tuyaGet<
       Array<Record<string, unknown>> | { devices?: Array<Record<string, unknown>>; last_row_key?: string }
     >(cfg, path, token);

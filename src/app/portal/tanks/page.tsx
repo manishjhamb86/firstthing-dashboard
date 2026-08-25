@@ -6,12 +6,19 @@ import { resolveTheme } from "@/lib/resolve-theme";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { PortalShell } from "../portal-shell";
 import { TankVisual } from "@/components/tank-visual";
-import { formatDateTime } from "@/lib/format-date";
+import { formatInstant, timeAgo } from "@/lib/format-date";
 import { PortalTabs } from "../portal-tabs";
 import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
+
+// Connected is not the same as reporting: a sensor silent for an hour shows
+// its last level, labelled as last-reported rather than live.
+const STALE_AFTER_MS = 60 * 60 * 1000;
+function isStale(at: Date | null): boolean {
+  return at === null || new Date().getTime() - at.getTime() > STALE_AFTER_MS;
+}
 export const metadata = { title: "Water tanks" };
 
 /** The last 24 h of half-hourly samples, as a small sparkline. */
@@ -120,14 +127,17 @@ export default async function PortalTanksPage() {
                     <span className="text-center text-[15px] font-bold">{t.name}</span>
                     <TankVisual pct={level} offline={!t.lastOnline} width={170} height={225} pctSize={32} />
                     <div className="flex flex-col items-center gap-1.5">
-                      {t.lastOnline ? (
-                        <StatusChip tone="ok">Online</StatusChip>
-                      ) : (
+                      {!t.lastOnline ? (
                         <StatusChip tone="warn">Sensor offline</StatusChip>
+                      ) : isStale(reportedAt) ? (
+                        <StatusChip tone="warn">Not reporting</StatusChip>
+                      ) : (
+                        <StatusChip tone="ok">Online</StatusChip>
                       )}
-                      <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        {t.lastOnline ? "Updated" : "Last seen"}{" "}
-                        <span className="num">{reportedAt ? formatDateTime(reportedAt) : "—"}</span>
+                      <span className="text-center text-xs" style={{ color: "var(--text-muted)" }}>
+                        {t.lastOnline && !isStale(reportedAt) ? "Updated" : "Last reported"}{" "}
+                        <span className="num">{reportedAt ? formatInstant(reportedAt) : "—"}</span>
+                        <span className="block">{timeAgo(reportedAt)}</span>
                       </span>
                     </div>
                     {spark.length >= 2 && (

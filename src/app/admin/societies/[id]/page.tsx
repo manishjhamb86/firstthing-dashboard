@@ -15,7 +15,7 @@ import { DeactivatePortalButton } from "./deactivate-portal-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatInstant } from "@/lib/format-date";
 import { TankLevelBar } from "@/components/tank-visual";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { NextStepCallout } from "@/components/deal-stepper";
@@ -333,7 +333,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                     <p className="text-xs text-[var(--text-muted)] mt-1">
                       Last report{" "}
                       <span className="num">
-                        {t.lastReportedAt ? formatDate(t.lastReportedAt) : "—"}
+                        {t.lastReportedAt ? formatInstant(t.lastReportedAt) : "—"}
                       </span>
                     </p>
                   </li>

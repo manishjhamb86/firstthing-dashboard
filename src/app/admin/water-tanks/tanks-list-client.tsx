@@ -6,7 +6,7 @@ import { ClickableRow } from "@/components/clickable-row";
 import { Card, ErrorText, StatusChip } from "@/components/ui";
 import { SearchInput } from "@/components/search-input";
 import { TankLevelBar } from "@/components/tank-visual";
-import { formatDateTime } from "@/lib/format-date";
+import { formatInstant, timeAgo } from "@/lib/format-date";
 import { assignTanks, syncTanksNow } from "./actions";
 
 type Row = {
@@ -18,6 +18,8 @@ type Row = {
   level: number | null;
   online: boolean;
   reportedAt: string | null;
+  /** Connected, but its level has not changed in a long while. */
+  stale: boolean;
   society: { id: string; name: string; location: string } | null;
 };
 
@@ -149,7 +151,7 @@ export function TanksListClient({
         </button>
         {syncedAt && (
           <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Synced <span className="num">{formatDateTime(new Date(syncedAt))}</span>
+            Synced <span className="num">{formatInstant(new Date(syncedAt))}</span>
           </span>
         )}
       </div>
@@ -238,7 +240,9 @@ export function TanksListClient({
                     <TankLevelBar pct={t.hasLevelSignal ? (t.level ?? 0) : null} />
                   </td>
                   <td>
-                    {t.online ? (
+                    {t.online && t.stale ? (
+                      <StatusChip tone="warn">Not reporting</StatusChip>
+                    ) : t.online ? (
                       <StatusChip tone="ok">Online</StatusChip>
                     ) : t.hasLevelSignal ? (
                       <StatusChip tone="warn">Offline</StatusChip>
@@ -260,8 +264,13 @@ export function TanksListClient({
                       <span style={{ color: "var(--text-subtle)" }}>—</span>
                     )}
                   </td>
-                  <td className="num hidden text-[13px] lg:table-cell" style={{ color: "var(--text-muted)" }}>
-                    {t.reportedAt ? formatDateTime(new Date(t.reportedAt)) : "—"}
+                  <td className="hidden text-[13px] lg:table-cell" style={{ color: "var(--text-muted)" }}>
+                    <span className="num">{t.reportedAt ? formatInstant(new Date(t.reportedAt)) : "—"}</span>
+                    {t.reportedAt && (
+                      <span className="block text-xs" style={{ color: "var(--text-subtle)" }}>
+                        {timeAgo(new Date(t.reportedAt))}
+                      </span>
+                    )}
                   </td>
                   <td className="text-right" aria-hidden>
                     <span className="row-link-cue text-sm font-semibold">→</span>

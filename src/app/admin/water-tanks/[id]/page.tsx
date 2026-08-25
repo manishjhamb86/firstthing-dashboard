@@ -5,7 +5,7 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { BackButton } from "@/components/back-button";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { TankVisual } from "@/components/tank-visual";
-import { formatDate, formatDateTime } from "@/lib/format-date";
+import { formatDate, formatInstant, timeAgo } from "@/lib/format-date";
 import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
 import { logger } from "@/lib/logger";
 import { AssignControl } from "./assign-control";
@@ -49,10 +49,10 @@ function HistoryChart({ points }: { points: { at: Date; level: number }[] }) {
         <path d={line} fill="none" stroke="var(--chart-mark)" strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
         <line x1={0} x2={w} y1={h} y2={h} stroke="var(--border)" strokeWidth={1.5} />
         <text x={0} y={h + 16} fontSize={10} fill="var(--text-subtle)" fontFamily="ui-monospace,Menlo,monospace">
-          {formatDateTime(points[0].at)}
+          {formatInstant(points[0].at)}
         </text>
         <text x={w - 118} y={h + 16} fontSize={10} fill="var(--text-subtle)" fontFamily="ui-monospace,Menlo,monospace">
-          {formatDateTime(points[points.length - 1].at)}
+          {formatInstant(points[points.length - 1].at)}
         </text>
       </svg>
     </div>
@@ -109,6 +109,9 @@ export default async function TankStatusPage({
     }
   }
 
+  const stale =
+    live.reportedAt === null || new Date().getTime() - live.reportedAt.getTime() > 60 * 60 * 1000;
+
   const [societies, readings] = await Promise.all([
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
     db.tankLevelReading.findMany({
@@ -129,7 +132,13 @@ export default async function TankStatusPage({
       <PageHeader
         title={tank.name}
         chip={
-          tank.lastOnline ? <StatusChip tone="ok">Online</StatusChip> : <StatusChip tone="warn">Offline</StatusChip>
+          !tank.lastOnline ? (
+            <StatusChip tone="warn">Offline</StatusChip>
+          ) : stale ? (
+            <StatusChip tone="warn">Not reporting</StatusChip>
+          ) : (
+            <StatusChip tone="ok">Online</StatusChip>
+          )
         }
         subtitle={`${tank.productName || "Tank sensor"} · ${tank.tuyaDeviceId}`}
       />
@@ -142,8 +151,19 @@ export default async function TankStatusPage({
               <TankVisual pct={live.level ?? 0} offline={!tank.lastOnline} width={210} height={280} pctSize={38} />
               <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                 Last reading{" "}
-                <span className="num">{live.reportedAt ? formatDateTime(live.reportedAt) : "—"}</span>
+                <span className="num">{live.reportedAt ? formatInstant(live.reportedAt) : "—"}</span>
+                {live.reportedAt && ` · ${timeAgo(live.reportedAt)}`}
               </p>
+              {tank.lastOnline && stale && (
+                <div
+                  className="w-full rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]"
+                  style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}
+                >
+                  Connected, but this sensor has not reported a new level in{" "}
+                  {timeAgo(live.reportedAt)}. The figure above is its last report — the Smart Life
+                  app may show a fresher one read directly from the device.
+                </div>
+              )}
               {!tank.lastOnline && (
                 <div
                   className="w-full rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]"
@@ -212,7 +232,7 @@ export default async function TankStatusPage({
                 ["Product", tank.productName || "—"],
                 ["Category", <span key="v" className="num">{tank.category}</span>],
                 ["First seen here", <span key="v" className="num">{formatDate(tank.createdAt)}</span>],
-                ["Device list synced", <span key="v" className="num">{formatDateTime(tank.syncedAt)}</span>],
+                ["Device list synced", <span key="v" className="num">{formatInstant(tank.syncedAt)}</span>],
               ].map(([k, v]) => (
                 <div key={String(k)} className="flex justify-between gap-4">
                   <dt style={{ color: "var(--text-muted)" }}>{k}</dt>

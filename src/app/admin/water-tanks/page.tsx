@@ -6,6 +6,15 @@ import { EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/
 import { TanksListClient } from "./tanks-list-client";
 
 export const dynamic = "force-dynamic";
+
+// A sensor can be connected and still silent. Anything that has not reported
+// for an hour is shown as not reporting rather than as a live figure — the
+// level is still the best thing to show, it just is not current
+// (user-reported 2026-08-25: the app read 45% while the device had moved on).
+const STALE_AFTER_MS = 60 * 60 * 1000;
+function isStale(at: Date | null): boolean {
+  return at === null || new Date().getTime() - at.getTime() > STALE_AFTER_MS;
+}
 export const metadata = { title: "Water tanks" };
 
 // CAP — water tank monitoring. The list mirrors the Smart Life account: every
@@ -91,6 +100,7 @@ export default async function WaterTanksPage() {
             level: t.lastLevelPercent,
             online: t.lastOnline,
             reportedAt: t.lastReportedAt?.toISOString() ?? null,
+            stale: isStale(t.lastReportedAt),
             society: t.society ? { id: t.society.id, name: t.society.name, location: t.society.location } : null,
           }))}
         />

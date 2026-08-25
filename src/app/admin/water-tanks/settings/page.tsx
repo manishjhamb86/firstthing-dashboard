@@ -4,7 +4,7 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { BackButton } from "@/components/back-button";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
-import { formatDateTime } from "@/lib/format-date";
+import { formatInstant } from "@/lib/format-date";
 import { SettingsForm } from "./settings-form";
 
 export const dynamic = "force-dynamic";
@@ -65,8 +65,8 @@ export default async function TankApiSettingsPage() {
             {[
               ["Devices visible", <span key="v" className="num font-semibold">{config?.lastDeviceCount ?? deviceCount}</span>],
               ["Tank sensors", <span key="v" className="num font-semibold">{tankCount}</span>],
-              ["Last successful call", config?.lastOkAt ? <span key="v" className="num">{formatDateTime(config.lastOkAt)}</span> : "—"],
-              ["Device list synced", config?.lastSyncAt ? <span key="v" className="num">{formatDateTime(config.lastSyncAt)}</span> : "—"],
+              ["Last successful call", config?.lastOkAt ? <span key="v" className="num">{formatInstant(config.lastOkAt)}</span> : "—"],
+              ["Device list synced", config?.lastSyncAt ? <span key="v" className="num">{formatInstant(config.lastSyncAt)}</span> : "—"],
               [
                 "Last changed",
                 config

@@ -86,12 +86,12 @@ export type CandidateFacts = {
   location: string | null;
   lightType: string;
   /**
-   * Whether the light replacement has been handed to a crew. The circuit
-   * STATE cannot say — `awaiting_installation` covers both sides of it — so
-   * the deal-level label was telling an operator to record work nobody had
-   * been asked to do (user-reported 2026-08-25).
+   * Whether the light replacement has been handed to a crew AND booked with
+   * the society. The circuit STATE cannot say — `awaiting_installation`
+   * covers both sides of it — so the deal-level label was telling an operator
+   * to record work nobody had been asked to do (user-reported 2026-08-25).
    */
-  replacementAssigned?: boolean;
+  replacementScheduled?: boolean;
 };
 
 export type DealFacts = {
@@ -154,12 +154,12 @@ export function candidateLabel(c: CandidateFacts): string {
  * circuit spine has to be reflected here — the unit tests below assert the
  * two agree.
  */
-export function circuitNextLabel(c: { state: string; replacementAssigned?: boolean }): string {
+export function circuitNextLabel(c: { state: string; replacementScheduled?: boolean }): string {
   const state = c.state;
   if (state === "awaiting_installation") {
     // The replacement is somebody's job before it is a record, and the
     // completion gate pass lists work that has to have happened first.
-    return c.replacementAssigned
+    return c.replacementScheduled
       ? "Record the light replacement, then submit the completion gate pass"
       : "Schedule the replacement and assign it to a crew";
   }
@@ -555,7 +555,13 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
   // form that appeared after the baseline window with nobody's name on it —
   // "there should be an option to first schedule the replacement and assign
   // it to the inspector/installation team" (the user, 2026-08-25).
-  const replacementAssignedDone = c.replacementOwnerName != null || replacementDone;
+  // Assigned is not enough: the record must not be reachable before the day
+  // is booked ("this should not be accessible before the light installation
+  // is scheduled" — the user, 2026-08-25). The replacement date IS the pivot
+  // CON-19 excludes, so work recorded against a visit nobody arranged is a
+  // date nobody agreed.
+  const replacementAssignedDone =
+    (c.replacementOwnerName != null && c.replacementScheduledAt != null) || replacementDone;
   const benchmarkDone = c.benchmarkSavingsPct != null;
 
   // Replacement BEFORE the completion gate pass. CON-18's pass itemizes the
@@ -592,17 +598,17 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
       "Record one reading per day below — 5 consecutive valid days set the baseline",
       "Unlocks once the install gate pass is submitted"),
     mk("assign-replacement", "Schedule & assign the replacement", replacementAssignedDone, cur === 4,
-      c.replacementOwnerName
-        ? c.replacementScheduledAt
-          ? `${c.replacementOwnerName} · ${formatVisitDay(c.replacementScheduledAt)}`
-          : `Assigned to ${c.replacementOwnerName} — no day booked yet`
+      c.replacementOwnerName && c.replacementScheduledAt
+        ? `${c.replacementOwnerName} · ${formatVisitDay(c.replacementScheduledAt)}`
         : "No stored record — the lifecycle advanced past this step",
-      "Hand the replacement to an engineer or inspector and book the day with the society",
+      c.replacementOwnerName
+        ? `Assigned to ${c.replacementOwnerName} — book the day with the society to unlock the record`
+        : "Hand the replacement to an engineer or inspector and book the day with the society",
       "Unlocks once the baseline window completes"),
     mk("replacement", "Light replacement", replacementDone, cur === 5,
       "Recorded — the replacement day is excluded, the post window starts the day after",
       "Record what was installed and the date the last light was replaced below",
-      "Unlocks once the replacement is assigned"),
+      "Unlocks once the replacement is scheduled with a named crew"),
     mk("completion-gate", "Completion gate pass", completionGateDone, cur === 6,
       "Submitted",
       "Itemize what was installed and removed, get it signed, and submit it — CON-18 requires it before the crew may leave site",

@@ -74,6 +74,11 @@ export default async function PipelineDetailPage({
           location: true,
           lightType: true,
           replacementOwnerId: true,
+          scheduledEvents: {
+            where: { kind: "installation_day" as const, status: "scheduled" as const },
+            select: { id: true },
+            take: 1,
+          },
         },
       })
     : [];

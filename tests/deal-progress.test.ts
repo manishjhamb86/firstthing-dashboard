@@ -615,11 +615,27 @@ describe("the replacement is handed to a crew before it is recorded", () => {
     const byKey = Object.fromEntries(steps.map((s) => [s.key, s]));
     expect(byKey["assign-replacement"].status).toBe("current");
     expect(byKey.replacement.status).toBe("locked");
-    expect(byKey.replacement.summary).toMatch(/unlocks once the replacement is assigned/i);
+    expect(byKey.replacement.summary).toMatch(/unlocks once the replacement is scheduled/i);
   });
 
-  it("moves on to the record once somebody holds it", () => {
+  it("still asks for the day once somebody holds it but nothing is booked", () => {
+    // "This should not be accessible before the light installation is
+    // scheduled" (the user, 2026-08-25). The replacement date is CON-19's
+    // pivot, so work recorded against a visit nobody arranged is a date
+    // nobody agreed.
     const steps = circuitSteps({ ...afterBaseline, replacementOwnerName: "Installation Team" });
+    const byKey = Object.fromEntries(steps.map((s) => [s.key, s]));
+    expect(byKey["assign-replacement"].status).toBe("current");
+    expect(byKey["assign-replacement"].summary).toMatch(/book the day/i);
+    expect(byKey.replacement.status).toBe("locked");
+  });
+
+  it("moves on to the record once the day is booked", () => {
+    const steps = circuitSteps({
+      ...afterBaseline,
+      replacementOwnerName: "Installation Team",
+      replacementScheduledAt: new Date("2026-08-27T09:00:00.000Z"),
+    });
     const byKey = Object.fromEntries(steps.map((s) => [s.key, s]));
     expect(byKey["assign-replacement"].status).toBe("done");
     expect(byKey.replacement.status).toBe("current");
@@ -635,11 +651,12 @@ describe("the replacement is handed to a crew before it is recorded", () => {
     expect(summary).toBe("Installation Team · 27-08-2026 · 10:30");
   });
 
-  it("says so plainly when it is assigned with no day yet", () => {
+  it("names the missing day rather than reading as finished", () => {
     const summary = circuitSteps({ ...afterBaseline, replacementOwnerName: "Ravi" }).find(
       (s) => s.key === "assign-replacement",
     )!.summary;
-    expect(summary).toMatch(/no day booked yet/i);
+    expect(summary).toMatch(/Ravi/);
+    expect(summary).toMatch(/book the day/i);
   });
 
   it("reads as done for a circuit that replaced its lights before this step existed", () => {
@@ -679,11 +696,14 @@ describe("the deal-level label agrees with the circuit spine", () => {
     expect(circuitNextLabel({ state: "awaiting_installation" })).toMatch(/schedule the replacement/i);
   });
 
-  it("asks for the record once somebody does", () => {
+  it("asks for the record once the day is booked", () => {
     expect(
-      facts({ replacementOwnerName: "Crew" }).find((s) => s.status === "current")?.key,
+      facts({
+        replacementOwnerName: "Crew",
+        replacementScheduledAt: new Date("2026-08-27T09:00:00.000Z"),
+      }).find((s) => s.status === "current")?.key,
     ).toBe("replacement");
-    const label = circuitNextLabel({ state: "awaiting_installation", replacementAssigned: true });
+    const label = circuitNextLabel({ state: "awaiting_installation", replacementScheduled: true });
     expect(label).toMatch(/record the light replacement/i);
     // …and in the right order: the pass itemizes work that already happened.
     expect(label.indexOf("replacement")).toBeLessThan(label.indexOf("gate pass"));

@@ -33,6 +33,8 @@ export function toDealProgress(
     lightType: string;
     /** Null until the replacement is handed to a crew — see CandidateFacts. */
     replacementOwnerId?: string | null;
+    /** The booked installation day, if one exists. */
+    scheduledEvents?: { id: string }[];
   }[],
 ): DealProgress {
   return dealProgress({
@@ -44,7 +46,11 @@ export function toDealProgress(
     demoSkipped: pipeline.demoSkipped,
     surveyExists: !!pipeline.siteSurvey,
     areaCount: pipeline.siteSurvey?.areas.length ?? 0,
-    candidates: candidates.map((c) => ({ ...c, replacementAssigned: c.replacementOwnerId != null })),
+    candidates: candidates.map((c) => ({
+      ...c,
+      // Both halves: handed to a crew AND booked with the society.
+      replacementScheduled: c.replacementOwnerId != null && (c.scheduledEvents?.length ?? 0) > 0,
+    })),
     reportStatus: pipeline.demoReports[0]?.status ?? null,
     kyc: {
       total: pipeline.kycRequirements.length,

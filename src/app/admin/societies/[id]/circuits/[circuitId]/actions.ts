@@ -333,6 +333,25 @@ export async function recordLightReplacement(
     return { error: "This circuit isn't ready for light replacement yet — the pre-install window must finish first." };
   }
 
+  // FEAT-013 — the work has to be handed to a crew and booked with the
+  // society first ("this should not be accessible before the light
+  // installation is scheduled" — the user, 2026-08-25). The step is locked in
+  // the UI, but a locked step is not a gate: the refusal lives here.
+  if (!circuit.replacementOwnerId) {
+    logger.warn("circuit.replacement_record_refused", { circuitId, reason: "unassigned" });
+    return { error: "Assign the replacement to a crew first — nobody has been asked to do this work." };
+  }
+  const bookedDay = await db.scheduledEvent.findFirst({
+    where: { circuitId, kind: "installation_day", status: "scheduled" },
+    select: { id: true },
+  });
+  if (!bookedDay) {
+    logger.warn("circuit.replacement_record_refused", { circuitId, reason: "unscheduled" });
+    return {
+      error: "Book the replacement day with the society first — the date recorded here is the pivot CON-19 excludes.",
+    };
+  }
+
   // No gate-pass precondition here, deliberately. CON-18's pass is a
   // DEPARTURE gate: it itemizes the equipment that physically changed at the
   // site and must be approved before the technician leaves. It cannot be

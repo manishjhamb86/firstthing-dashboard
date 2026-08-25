@@ -62,6 +62,15 @@ export default async function SiteSurveyPage({
   const circuits = await db.circuit.findMany({
     where: { siteSurveyId: siteSurvey.id, voidedAt: null },
     orderBy: { createdAt: "asc" },
+    include: {
+      // Whether the replacement is booked, which is what the hand-off label
+      // turns on — assigned alone is not enough.
+      scheduledEvents: {
+        where: { kind: "installation_day", status: "scheduled" },
+        select: { id: true },
+        take: 1,
+      },
+    },
   });
 
   // A candidate added twice on site is the field team's own housekeeping —
@@ -129,7 +138,7 @@ export default async function SiteSurveyPage({
       state: c.state,
       location: c.location,
       lightType: c.lightType,
-      replacementAssigned: c.replacementOwnerId != null,
+      replacementScheduled: c.replacementOwnerId != null && c.scheduledEvents.length > 0,
     })),
   );
   const handoff =

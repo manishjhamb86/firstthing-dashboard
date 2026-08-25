@@ -2069,6 +2069,70 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## One schedule for every appointment (2026-08-25) — user-specified, mid-build redirect
+
+**Started as "show who the survey is assigned to, when, and who to call at the society", and the
+user redirected it while it was being built**: "keep a schedule/meetings module for this sole
+purpose… whenever a task is assigned to someone that needs to be on a specific schedule or is a
+meeting, schedule it as meeting in backend so everyone can see as a calendar their coming
+schedules", and "that common module be used everywhere." The first cut had put `surveyScheduledAt`
+and the contact fields on `Pipeline`; those columns were dropped again in the same session
+(migration `20260825061500_add_schedule_module` drops what `20260825060000` had just added) in
+favour of a `ScheduledEvent` table.
+
+**The rule the module establishes: an owning record never stores its own time.** A demo meeting, a
+survey visit and (next) an installation day are all `ScheduledEvent` rows pointing back at what they
+are about, so rescheduling, cancelling, who-is-expected and what the calendar shows are written once
+rather than per feature. A new kind is an enum value plus a caller. `src/lib/schedule.ts` holds only
+pure logic (labels, day grouping, `dayRelation`) so it unit-tests without a request context.
+
+**Two callers today, which is what makes it a module rather than a table**: logging a lead books the
+demo meeting (assignee = the sales owner), and arranging a survey visit books that (assignee = the
+field person holding it). `/admin/schedule` is the read side — your own by default, the whole team's
+for operations, grouped by day, with a past day whose appointment is still open flagged rather than
+hidden. It is deliberately **not** permission-gated: everyone has appointments.
+
+**Design decisions worth keeping:**
+- **A meeting may now be dated in the future** (scope note on FEAT-001). It could not be, which is
+  right for a lead recorded after the fact and makes a calendar of *coming* appointments impossible.
+- **A meeting already held is stored as `done`, and recording the proposal outcome closes it out.**
+  Otherwise every logged lead would sit on the calendar forever as an appointment nobody attended —
+  the "not closed out" flag would mean nothing within a week.
+- **"Overdue" is a property of the DAY, not the hour.** A visit booked for 10:30 is not overdue at
+  10:31; it is in progress.
+- **A date-only appointment reads "All day"**, never 00:00 — that would claim a precision nobody
+  entered.
+- **Un-assigning cancels the visit** rather than leaving it booked for someone who is not coming;
+  re-assigning moves it to the new person.
+
+**The visit card, which is what prompted all this.** The deal and survey screens both carry one:
+who is going, their team, when the hand-over happened and by whom, the visit slot, and who to ask
+for on arrival — falling back to the deal's own contact rather than showing a blank, because
+arriving with someone to call beats arriving with nobody. The field list shows the time and the
+contact, soonest first. **The assignee arranges it from the SURVEY page, not the deal** — a field
+account is redirected away from the deal, so the first version's link pointed at the one screen the
+intended user cannot open. The card also offers reassignment, since naming who is going with no way
+to change it is the dead end reported repeatedly this week.
+
+**The user's own question — "I didn't assign it yet, have I?" — was answerable only from the logs**,
+which is the gap this closes: `pipeline.survey_assigned` showed it was assigned 2026-08-24 20:49 UTC
+by their own account. `surveyAssignedAt`/`surveyAssignedById` now record it on the row.
+
+**Verified in a browser**: schedule module 16 checks, survey visit 24, both zero console errors,
+every figure asserted against rows rather than the screen; the non-assignee refusal was driven
+through a path the client cannot pre-block. Seven neighbouring suites unchanged; 475 unit tests,
+`tsc`/`lint`/`build` clean.
+
+**Three deploy lessons, all real, one of them mine:**
+- **`prisma migrate deploy` does not regenerate the client.** The stage build failed type-checking
+  on `scheduledEvents` until `prisma generate` ran on the box.
+- **Two builds against one `.next` corrupt each other.** The user's own deploy script failed with
+  `ENOENT … _clientMiddlewareManifest.js` because a build of mine was still running on the box when
+  theirs started. Deploys are theirs to run (`scripts/deploy-stage.sh`, git-based); do not build on
+  the server alongside it.
+- **A new route needs a clean `.next` on the server** — a stale cache reported `ENOENT` on
+  `src/app/admin/schedule/page.tsx` while the file was plainly there.
+
 ## Assigned work belongs to the person holding it, not to their team (2026-08-25) — user-caught
 
 **Reported**, looking at a deal whose step 2 already read "Assigned to Inspector": the next step

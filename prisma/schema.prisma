@@ -301,6 +301,7 @@ model Society {
   profiles    Profile[]
   circuits    Circuit[]
   pipelines   Pipeline[]
+  scheduledEvents ScheduledEvent[]
   contracts   Contract[]
   engagements Engagement[]
 
@@ -413,6 +414,9 @@ model AdminUser {
 
   pipelinesOwned  Pipeline[] @relation("PipelineSalesOwner")
   pipelinesSurveying     Pipeline[]  @relation("PipelineSurveyOwner")
+  pipelinesSurveyAssigned Pipeline[] @relation("PipelineSurveyAssignedBy")
+  scheduledEvents         ScheduledEvent[] @relation("ScheduledEventAssignee")
+  scheduledEventsCreated  ScheduledEvent[] @relation("ScheduledEventCreatedBy")
   pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
 
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
@@ -499,6 +503,15 @@ model Pipeline {
   /// Null until someone assigns it — the work still belongs to the field
   /// team, it just has no name on it yet.
   surveyOwnerId String? @map("survey_owner_id")
+  /// When the hand-over happened and who did it. The assignment left no trace
+  /// of either, so "assigned to Inspector" could not be told apart from
+  /// something the system had inferred (user-asked 2026-08-25).
+  surveyAssignedAt   DateTime? @map("survey_assigned_at")
+  surveyAssignedById String?   @map("survey_assigned_by_id")
+  /// The visit itself is NOT stored here. Anything that happens at a time,
+  /// with a person expected at it, is a ScheduledEvent — one module for every
+  /// kind of appointment so they can all appear on one calendar (the user's
+  /// call, 2026-08-25).
   loggedById    String  @map("logged_by_id")
   authoritative Boolean @default(true)
 
@@ -518,10 +531,13 @@ model Pipeline {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  scheduledEvents ScheduledEvent[]
+
   society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
   salesOwner AdminUser   @relation("PipelineSalesOwner", fields: [salesOwnerId], references: [id])
   loggedBy   AdminUser   @relation("PipelineLoggedBy", fields: [loggedById], references: [id])
   surveyOwner AdminUser? @relation("PipelineSurveyOwner", fields: [surveyOwnerId], references: [id])
+  surveyAssignedBy AdminUser? @relation("PipelineSurveyAssignedBy", fields: [surveyAssignedById], references: [id])
   siteSurvey SiteSurvey?
 
   // MS-05
@@ -545,6 +561,75 @@ model Pipeline {
 // 009/010) is much larger and explicitly not built here; this table only
 // carries what FEAT-006/007 need. One per Pipeline (a survey happens once
 // per deal, matching CON-24 — re-surveys are a later, separate concern).
+/// CAP — the schedule.
+///
+/// Everything in this product that happens AT A TIME with somebody expected
+/// at it: the demo meeting with the committee, the survey visit, later the
+/// installation days. One table rather than a scheduledAt column on each
+/// owning record, because the question people actually ask is "what do I have
+/// coming up" — which a per-feature column cannot answer without knowing
+/// every feature (the user's call, 2026-08-25).
+///
+/// The event points BACK at what it is about; the owning record never stores
+/// the time. Rescheduling, cancelling and "who is expected" therefore work
+/// the same way for every kind, and a new kind is a new enum value plus a
+/// caller, not a new mechanism.
+model ScheduledEvent {
+  id    String       @id @default(cuid())
+  kind  ScheduleKind
+  title String
+
+  startAt DateTime  @map("start_at")
+  /// Optional: most site work is booked as "10:30, allow a couple of hours"
+  /// rather than to a hard finish.
+  endAt   DateTime? @map("end_at")
+
+  status          ScheduleStatus @default(scheduled)
+  cancelledAt     DateTime?      @map("cancelled_at")
+  cancelledReason String?        @map("cancelled_reason")
+
+  /// The internal account expected to be there. Null means the team as a
+  /// whole — an event nobody has been handed yet.
+  assigneeId  String  @map("assignee_id")
+  createdById String  @map("created_by_id")
+
+  /// What it is about. A society is always known; the pipeline is set for
+  /// anything on the deal spine.
+  societyId  String  @map("society_id")
+  pipelineId String? @map("pipeline_id")
+
+  /// Who to ask for on arrival, and anything the visitor needs to know. This
+  /// is the coordination that used to live in one person's phone.
+  contactName  String? @map("contact_name")
+  contactPhone String? @map("contact_phone")
+  note         String?
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  assignee  AdminUser @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
+  createdBy AdminUser @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
+  society   Society   @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  pipeline  Pipeline? @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+
+  @@index([assigneeId, startAt])
+  @@index([startAt])
+  @@map("scheduled_events")
+}
+
+enum ScheduleKind {
+  demo_meeting
+  survey_visit
+  installation_day
+  other
+}
+
+enum ScheduleStatus {
+  scheduled
+  done
+  cancelled
+}
+
 model SiteSurvey {
   id         String   @id @default(cuid())
   pipelineId String   @unique @map("pipeline_id")

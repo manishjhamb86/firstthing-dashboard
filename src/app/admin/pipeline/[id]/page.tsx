@@ -9,7 +9,9 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations, mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
 import { AssignSurvey } from "./assign-survey";
 import { LeadDetailsForm } from "./lead-details-form";
-import { formatDate, isoDate } from "@/lib/format-date";
+import { SurveyVisitForm } from "./survey-visit-form";
+import { SurveyVisitDetails } from "@/components/survey-visit";
+import { formatDate, isoDate, isoDateTimeLocal } from "@/lib/format-date";
 import Link from "next/link";
 import { DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
 import { DealStepper, NextStepCallout, WaitingOnCallout } from "@/components/deal-stepper";
@@ -44,12 +46,20 @@ export default async function PipelineDetailPage({
   const sp = await searchParams;
   const openProposal = sp.step === "proposal";
   const editingLead = sp.edit === "lead";
+  const editingVisit = sp.edit === "visit";
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
       society: true,
       salesOwner: true,
       loggedBy: true,
+      surveyAssignedBy: { select: { name: true, email: true } },
+      // The visit is a ScheduledEvent, not a column here.
+      scheduledEvents: {
+        where: { kind: "survey_visit", status: "scheduled" },
+        orderBy: { startAt: "asc" },
+        take: 1,
+      },
       ...DEAL_PROGRESS_INCLUDE,
     },
   });
@@ -90,6 +100,12 @@ export default async function PipelineDetailPage({
   // 2026-08-25: "make sure all these edit options are for admin only").
   const canCorrect =
     actor !== null && isOperations(actor.team) && actor.permissions.includes("manage_pipeline");
+  // The visit is the assignee's own arrangement; operations may step in.
+  const visit = pipeline.scheduledEvents[0] ?? null;
+  const canArrangeVisit =
+    actor !== null &&
+    pipeline.surveyOwnerId !== null &&
+    (pipeline.surveyOwnerId === actor.id || isOperations(actor.team));
   const leadOwners = editingLead
     ? await db.adminUser.findMany({
         where: {
@@ -286,6 +302,82 @@ export default async function PipelineDetailPage({
               </dl>
             )}
           </Card>
+
+          {/* Who is running the survey, when they are going, and who to ask
+              for at the gate. None of this was visible anywhere before —
+              "assigned to Inspector" with no date, and the slot the assignee
+              agreed by phone lived only in their own head (user-asked
+              2026-08-25). */}
+          {pipeline.surveyOwner && (
+            <Card className="p-6">
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle>Survey visit</CardTitle>
+                {canArrangeVisit && !editingVisit && (
+                  <Link
+                    href={`/admin/pipeline/${pipeline.id}?edit=visit`}
+                    className="text-sm font-medium shrink-0"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    Edit
+                  </Link>
+                )}
+              </div>
+              {editingVisit && canArrangeVisit ? (
+                <SurveyVisitForm
+                  pipelineId={pipeline.id}
+                  current={{
+                    scheduledAt: isoDateTimeLocal(visit?.startAt ?? null),
+                    contactName: visit?.contactName ?? "",
+                    contactPhone: visit?.contactPhone ?? "",
+                    note: visit?.note ?? "",
+                  }}
+                  leadContact={{
+                    name: pipeline.contactName,
+                    phone: pipeline.contactPhone ?? "",
+                  }}
+                />
+              ) : (
+                <>
+                <SurveyVisitDetails
+                  visit={{
+                    assigneeName: surveyOwnerName ?? "—",
+                    assigneeTeam: teamMeta(pipeline.surveyOwner.team).label,
+                    assignedAt: pipeline.surveyAssignedAt,
+                    assignedByName:
+                      pipeline.surveyAssignedBy?.name ?? pipeline.surveyAssignedBy?.email ?? null,
+                    scheduledAt: visit?.startAt ?? null,
+                    contactName: visit?.contactName ?? null,
+                    contactPhone: visit?.contactPhone ?? null,
+                    note: visit?.note ?? null,
+                    leadContactName: pipeline.contactName,
+                    leadContactPhone: pipeline.contactPhone,
+                  }}
+                />
+                {/* A card that says who is going with no way to change it is
+                    the dead end this project has been reporting all week.
+                    Same gate as the assignment itself. */}
+                {approval.allowed && (
+                  <details className="mt-4">
+                    <summary className="text-sm font-medium cursor-pointer text-[var(--text-muted)]">
+                      Hand it to someone else
+                    </summary>
+                    <div className="mt-3">
+                      <AssignSurvey
+                        pipelineId={pipeline.id}
+                        current={{ id: pipeline.surveyOwnerId ?? "", name: surveyOwnerName ?? "" }}
+                        candidates={fieldCandidates.map((c) => ({
+                          id: c.id,
+                          name: c.name ?? c.email,
+                          team: teamMeta(c.team).label,
+                        }))}
+                      />
+                    </div>
+                  </details>
+                )}
+                </>
+              )}
+            </Card>
+          )}
 
           {/* the recorded proposal, once one exists — previously the outcome
               vanished from the UI the moment the stage moved on */}

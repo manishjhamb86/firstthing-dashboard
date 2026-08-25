@@ -10,6 +10,7 @@ import { resolveAdmin } from "@/lib/admin-permissions";
 import { refuseOrderedDate } from "@/lib/step-dates";
 import { resolveBackdate } from "@/lib/backdate";
 import { formatDate } from "@/lib/format-date";
+import { eventTitle } from "@/lib/schedule";
 
 const SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"] as const;
 
@@ -149,20 +150,19 @@ export async function createLead(input: {
   );
   if (typeof loggedAt === "string") return { error: loggedAt };
 
-  // The meeting is NOT ordered against the society record. Meeting the
-  // committee is what causes the record to exist, so a meeting held last week
-  // for a society being entered today is the ordinary case — ordering it
-  // against `society.createdAt` refused every real backdated lead, since a
-  // quick-created society is always stamped now(). The lead's own logged-at
-  // date above still is ordered that way, because that one IS about our
-  // records. Only "not in the future" applies here.
+  // The meeting is ordered against NOTHING. Two rules were removed here, both
+  // for the same reason — they refused ordinary cases:
+  //  · not before the society record: meeting the committee is what CAUSES
+  //    the record to exist, and a quick-created society is stamped now(), so
+  //    this refused every backdated lead;
+  //  · not in the future: a meeting can be booked before it happens, and once
+  //    appointments live on a shared calendar (the schedule module, the
+  //    user's call 2026-08-25) a future meeting is the whole point. Recorded
+  //    as a scope note on FEAT-001.
+  // The lead's own logged-at date above still carries its ordering, because
+  // that one genuinely is about our records.
   const meetingDate = new Date(input.meetingDate);
-  const meetingRefusal = refuseOrderedDate({
-    subject: "The meeting",
-    date: meetingDate,
-    now: new Date(),
-  });
-  if (meetingRefusal) return { error: meetingRefusal };
+  if (Number.isNaN(meetingDate.getTime())) return { error: "The meeting needs a valid date." };
 
   const pipeline = await db.pipeline.create({
     data: {
@@ -177,6 +177,31 @@ export async function createLead(input: {
       loggedById: session.user.id,
       authoritative,
       ...(loggedAt ? { createdAt: loggedAt } : {}),
+    },
+  });
+
+  // The demo meeting is an appointment like any other, so it goes on the
+  // schedule rather than living only as a column nobody's calendar can see
+  // (the user's call, 2026-08-25: one module, used everywhere).
+  await db.scheduledEvent.create({
+    data: {
+      kind: "demo_meeting",
+      title: eventTitle(
+        "demo_meeting",
+        (await db.society.findUnique({ where: { id: societyId }, select: { name: true } }))?.name ??
+          "the society",
+      ),
+      startAt: meetingDate,
+      // A meeting recorded after it happened is history, not something to
+      // show on a calendar of what is coming — and leaving it "scheduled"
+      // would flag every logged lead as an appointment nobody closed out.
+      ...(meetingDate.getTime() < Date.now() ? { status: "done" as const } : {}),
+      assigneeId: input.salesOwnerId,
+      createdById: session.user.id,
+      societyId,
+      pipelineId: pipeline.id,
+      contactName,
+      contactPhone: input.contactPhone?.trim() || null,
     },
   });
 
@@ -327,10 +352,10 @@ export async function updateLeadDetails(
     };
   }
 
-  // Same rule as the create path: a meeting can predate the record it caused.
+  // Same as the create path: a meeting can predate the record it caused, and
+  // can be booked before it happens.
   const meetingDate = new Date(input.meetingDate);
-  const refusal = refuseOrderedDate({ subject: "The meeting", date: meetingDate, now: new Date() });
-  if (refusal) return { error: refusal };
+  if (Number.isNaN(meetingDate.getTime())) return { error: "The meeting needs a valid date." };
   // A meeting cannot be moved to after the decision that came out of it —
   // the proposal form already refuses the mirror image of this.
   if (pipeline.proposalDecidedAt && meetingDate.getTime() > pipeline.proposalDecidedAt.getTime()) {
@@ -384,6 +409,24 @@ export async function updateLeadDetails(
       salesOwnerId: owner.id,
       authoritative,
       ...(loggedAt ? { createdAt: loggedAt } : {}),
+    },
+  });
+
+  // Keep the meeting on the calendar in step with the record it belongs to —
+  // including whether it is still ahead. Moving a meeting back to a past date
+  // closes it out; moving it forward puts it back on the calendar.
+  await db.scheduledEvent.updateMany({
+    where: { pipelineId, kind: "demo_meeting", status: { in: ["scheduled", "done"] } },
+    data: {
+      startAt: meetingDate,
+      assigneeId: owner.id,
+      contactName,
+      contactPhone: input.contactPhone?.trim() || null,
+      status: pipeline.proposalOutcome
+        ? "done"
+        : meetingDate.getTime() < Date.now()
+          ? "done"
+          : "scheduled",
     },
   });
 
@@ -493,6 +536,14 @@ export async function submitProposal(
     });
   }
 
+  // Recording the outcome IS the proof the meeting happened, so it closes out
+  // on the calendar rather than sitting there as an appointment nobody
+  // attended.
+  await db.scheduledEvent.updateMany({
+    where: { pipelineId, kind: "demo_meeting", status: "scheduled" },
+    data: { status: "done" },
+  });
+
   revalidatePath(`/admin/pipeline/${pipelineId}`);
   revalidatePath("/admin/pipeline");
   return {};
@@ -507,6 +558,120 @@ export async function submitProposal(
  * keeps a lead with sales. Assigning is an ops or sales act: whoever owns the
  * deal decides who goes out to it.
  */
+/**
+ * The visit itself: when the assignee is going, and who to ask for at the
+ * gate.
+ *
+ * "The assignee must have called someone in society to align a schedule…
+ * that detail should be visible for everyone" (the user, 2026-08-25).
+ * Whoever books the slot is rarely the person who walks up to the gate, and
+ * before this the arrangement lived in one person's phone.
+ *
+ * Who may set it: the assignee (it is their visit) and operations. NOT the
+ * sales owner — they are not the ones going, and a schedule nobody on site
+ * agreed to is worse than none.
+ */
+export async function updateSurveyVisit(
+  pipelineId: string,
+  input: {
+    scheduledAt?: string;
+    contactName?: string;
+    contactPhone?: string;
+    note?: string;
+  },
+): Promise<{ error?: string } | undefined> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+
+  const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId } });
+  if (!pipeline) return { error: "Lead not found." };
+  if (!pipeline.surveyOwnerId) {
+    return { error: "Assign the survey to someone first — the visit is theirs to arrange." };
+  }
+  const mine = pipeline.surveyOwnerId === actor.id;
+  if (!mine && !isOperations(actor.team)) {
+    logger.warn("pipeline.survey_visit_refused", { pipelineId, actorId: actor.id, reason: "not-assignee" });
+    return { error: "Only the assignee or operations can arrange this visit." };
+  }
+
+  let scheduledAt: Date | null = null;
+  if (input.scheduledAt) {
+    // A datetime-local value carries no zone; the visit is local to the site,
+    // and every other date here is stored as given rather than shifted.
+    scheduledAt = new Date(`${input.scheduledAt}:00.000Z`);
+    if (Number.isNaN(scheduledAt.getTime())) return { error: "That is not a valid date and time." };
+  }
+
+  const contactName = input.contactName?.trim() || null;
+  const contactPhone = input.contactPhone?.trim() || null;
+  if (contactPhone && !contactName) {
+    return { error: "Say who the number belongs to — a phone number with no name helps nobody at the gate." };
+  }
+
+  const existing = await db.scheduledEvent.findFirst({
+    where: { pipelineId, kind: "survey_visit", status: "scheduled" },
+    orderBy: { startAt: "asc" },
+  });
+
+  if (!scheduledAt) {
+    // No time means no appointment. The coordination details go with it —
+    // they describe a visit that is no longer booked.
+    if (existing) {
+      await db.scheduledEvent.update({
+        where: { id: existing.id },
+        data: {
+          status: "cancelled",
+          cancelledAt: new Date(),
+          cancelledReason: "The slot was cleared — no visit is booked.",
+        },
+      });
+    }
+  } else if (existing) {
+    await db.scheduledEvent.update({
+      where: { id: existing.id },
+      data: {
+        startAt: scheduledAt,
+        assigneeId: pipeline.surveyOwnerId,
+        contactName,
+        contactPhone,
+        note: input.note?.trim() || null,
+      },
+    });
+  } else {
+    const society = await db.society.findUnique({
+      where: { id: pipeline.societyId },
+      select: { name: true },
+    });
+    await db.scheduledEvent.create({
+      data: {
+        kind: "survey_visit",
+        title: eventTitle("survey_visit", society?.name ?? "the society"),
+        startAt: scheduledAt,
+        assigneeId: pipeline.surveyOwnerId,
+        createdById: actor.id,
+        societyId: pipeline.societyId,
+        pipelineId,
+        contactName,
+        contactPhone,
+        note: input.note?.trim() || null,
+      },
+    });
+  }
+
+  logger.info("pipeline.survey_visit_updated", {
+    pipelineId,
+    actorId: actor.id,
+    byAssignee: mine,
+    scheduledAt: input.scheduledAt,
+  });
+
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  revalidatePath(`/admin/pipeline/${pipelineId}/survey`);
+  revalidatePath("/admin/field");
+  revalidatePath("/admin/schedule");
+  return {};
+}
+
 export async function assignSurveyOwner(input: { pipelineId: string; toId: string | null }) {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -537,8 +702,34 @@ export async function assignSurveyOwner(input: { pipelineId: string; toId: strin
 
   await db.pipeline.update({
     where: { id: input.pipelineId },
-    data: { surveyOwnerId: input.toId },
+    data: {
+      surveyOwnerId: input.toId,
+      // Stamped so the screen can say when the hand-over happened and who did
+      // it — "I didn't assign it yet. Have I assigned it?" was unanswerable
+      // from the product, only from the logs (user-asked 2026-08-25).
+      surveyAssignedAt: input.toId ? new Date() : null,
+      surveyAssignedById: input.toId ? actor.id : null,
+    },
   });
+
+  // The visit belongs to the person who was going. Re-assigning or clearing
+  // hands it to the new person, or cancels it — the schedule is the one place
+  // that knows, so neither the deal page nor the calendar can disagree.
+  if (input.toId) {
+    await db.scheduledEvent.updateMany({
+      where: { pipelineId: input.pipelineId, kind: "survey_visit", status: "scheduled" },
+      data: { assigneeId: input.toId },
+    });
+  } else {
+    await db.scheduledEvent.updateMany({
+      where: { pipelineId: input.pipelineId, kind: "survey_visit", status: "scheduled" },
+      data: {
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancelledReason: "The survey was unassigned — nobody is coming.",
+      },
+    });
+  }
   logger.info("pipeline.survey_assigned", {
     pipelineId: input.pipelineId,
     toId: input.toId,

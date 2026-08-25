@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  CalendarDays,
   Building2,
   Target,
   Activity,
@@ -69,6 +70,10 @@ export function AppShell({
 
   const items: NavItem[] = [
     { href: "/admin", label: "Portfolio", icon: LayoutDashboard, exact: true },
+    // Everyone has appointments — meetings for sales, visits for the field —
+    // so this is not permission-gated (the user's call, 2026-08-25: one
+    // schedule module, visible to everyone as their own calendar).
+    { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
     { href: "/admin/societies", label: "Societies", icon: Building2 },
     ...(showPipeline ? [{ href: "/admin/pipeline", label: "Leads & pipeline", icon: Target }] : []),
     // Two tabs, not one: a circuit chasing a benchmark and a society holding

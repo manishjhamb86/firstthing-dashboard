@@ -12,7 +12,8 @@ import { db } from "./db";
 import { dealProgress, type DealProgress } from "./deal-progress";
 
 export const DEAL_PROGRESS_INCLUDE = {
-  surveyOwner: { select: { id: true, name: true, email: true } },
+  // team as well: the deal page names which team is holding the survey.
+  surveyOwner: { select: { id: true, name: true, email: true, team: true } },
   siteSurvey: { include: { areas: { select: { id: true } } } },
   demoReports: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
   kycRequirements: { select: { status: true } },

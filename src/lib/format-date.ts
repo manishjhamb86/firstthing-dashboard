@@ -24,3 +24,25 @@ export function formatDate(d: Date | string | null | undefined): string {
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
   return `${day}-${month}-${date.getUTCFullYear()}`;
 }
+
+/**
+ * A date with a time on it — the survey visit, so far the only thing here
+ * that happens at an hour rather than on a day. Same UTC reading as
+ * formatDate: these are stored exactly as the operator typed them, because a
+ * site visit is local to the site and shifting it by the viewer's zone would
+ * move an appointment somebody made by phone.
+ */
+export function formatDateTime(d: Date | string | null | undefined): string {
+  if (d == null) return "—";
+  const date = typeof d === "string" ? new Date(d) : d;
+  if (Number.isNaN(date.getTime())) return "—";
+  const hh = String(date.getUTCHours()).padStart(2, "0");
+  const mm = String(date.getUTCMinutes()).padStart(2, "0");
+  return `${formatDate(date)} · ${hh}:${mm}`;
+}
+
+/** The value an <input type="datetime-local"> parses. */
+export function isoDateTimeLocal(d: Date | null | undefined): string {
+  if (!d || Number.isNaN(d.getTime())) return "";
+  return d.toISOString().slice(0, 16);
+}

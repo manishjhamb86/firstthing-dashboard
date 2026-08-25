@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
 import { LightingInventoryForm } from "./lighting-inventory-form";
 import { CircuitEligibilityForm } from "./circuit-eligibility-form";
@@ -11,8 +11,19 @@ import { resolveCircuitRemoval } from "@/lib/circuit-removal";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
 import { NextStepCallout, StepHeading } from "@/components/deal-stepper";
+import { SurveyVisitDetails } from "@/components/survey-visit";
+import { SurveyVisitForm } from "../survey-visit-form";
+import { isoDateTimeLocal } from "@/lib/format-date";
+import { teamMeta } from "@/lib/admin-teams";
+import Link from "next/link";
 
-export default async function SiteSurveyPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SiteSurveyPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
+}) {
   const session = await requireAdminPage();
   const canView =
     session.user.adminPermissions?.includes("manage_survey") ||
@@ -23,11 +34,18 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
   const canApproveException = canEdit && (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
 
   const { id } = await params;
+  const editingVisit = (await searchParams).edit === "visit";
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
       society: true,
-      surveyOwner: { select: { id: true, name: true, email: true } },
+      surveyOwner: { select: { id: true, name: true, email: true, team: true } },
+      surveyAssignedBy: { select: { name: true, email: true } },
+      scheduledEvents: {
+        where: { kind: "survey_visit", status: "scheduled" },
+        orderBy: { startAt: "asc" },
+        take: 1,
+      },
       siteSurvey: { include: { areas: { orderBy: { createdAt: "asc" } } } },
     },
   });
@@ -53,6 +71,11 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
     { id: session.user.id, isOps: canApproveException },
   );
 
+  const visit = pipeline.scheduledEvents[0] ?? null;
+  // The visit is the assignee's own arrangement; operations may step in.
+  const canArrangeVisit =
+    pipeline.surveyOwnerId !== null &&
+    (pipeline.surveyOwnerId === session.user.id || canApproveException);
   const totalLights = siteSurvey.areas.reduce((sum, a) => sum + a.count, 0);
 
   // The survey's two steps, so their headings can say where the work is
@@ -132,6 +155,58 @@ export default async function SiteSurveyPage({ params }: { params: Promise<{ id:
           They run this survey. You can record it for them, but only if the visit has actually
           happened.
         </PageRibbon>
+      )}
+
+      {/* Everything the person walking up to the gate needs: when the visit
+          was agreed, and who to ask for. Shown to whoever opens the survey,
+          not only to the assignee — the slot is usually arranged by one
+          person and attended by another (user-asked 2026-08-25). */}
+      {pipeline.surveyOwner && (
+        <Card className="p-6 mb-6 max-w-xl">
+          <div className="flex items-start justify-between gap-3">
+            <CardTitle>Survey visit</CardTitle>
+            {/* The link used to point at the DEAL page, which the field team
+                is redirected away from — the one screen the assignee cannot
+                open. It is arranged here, where they already are. */}
+            {canArrangeVisit && !editingVisit && (
+              <Link
+                href={`/admin/pipeline/${pipeline.id}/survey?edit=visit`}
+                className="text-sm font-medium shrink-0"
+                style={{ color: "var(--accent)" }}
+              >
+                {visit ? "Edit" : "Arrange it"}
+              </Link>
+            )}
+          </div>
+          {editingVisit && canArrangeVisit ? (
+            <SurveyVisitForm
+              pipelineId={pipeline.id}
+              current={{
+                scheduledAt: isoDateTimeLocal(visit?.startAt ?? null),
+                contactName: visit?.contactName ?? "",
+                contactPhone: visit?.contactPhone ?? "",
+                note: visit?.note ?? "",
+              }}
+              leadContact={{ name: pipeline.contactName, phone: pipeline.contactPhone ?? "" }}
+            />
+          ) : (
+          <SurveyVisitDetails
+            visit={{
+              assigneeName: pipeline.surveyOwner.name ?? pipeline.surveyOwner.email,
+              assigneeTeam: teamMeta(pipeline.surveyOwner.team).label,
+              assignedAt: pipeline.surveyAssignedAt,
+              assignedByName:
+                pipeline.surveyAssignedBy?.name ?? pipeline.surveyAssignedBy?.email ?? null,
+              scheduledAt: visit?.startAt ?? null,
+              contactName: visit?.contactName ?? null,
+              contactPhone: visit?.contactPhone ?? null,
+              note: visit?.note ?? null,
+              leadContactName: pipeline.contactName,
+              leadContactPhone: pipeline.contactPhone,
+            }}
+          />
+          )}
+        </Card>
       )}
 
       {handoff && (

@@ -3053,7 +3053,7 @@ by auto-resolving. Tracked as ASSUM-28; revisit the rule rather than work around
 ### FEAT-108 — Society portal accounts & authority
 
 **Capability:** CAP-13 · **Actor:** PER-05 (office-bearer), PER-01 · **Serves:** GOAL-02, INV-05
-**Size:** M · **Status:** proposed · **Added:** 2026-08-13 (user's explicit decision, CON-45)
+**Size:** M · **Status:** proposed · **Added:** 2026-08-13 (user's explicit decision, CON-45) · **AC-10 added:** 2026-08-25
 
 **Problem.** Three things a society does through the portal are commercially binding — accepting an
 offer, signing the completion certificate that starts billing, and formally disputing an invoice.
@@ -3102,6 +3102,7 @@ binding acts reserved to office-bearers.
   - AC-7 (permission): Given an account belongs to one society, when it requests any other society's data or acts on it, then the request is refused server-side (INV-05).
   - AC-8 (empty): Given a society has no portal accounts, when PER-01 opens its account list, then an empty state explains the consequence and offers to create the first one.
   - AC-9 (edge): Given an approval was recorded under an authority that has since changed, when the record is read back, then it still states the authority held at the time of the act.
+  - AC-10 (happy, added 2026-08-25 — the user's instruction, "the society admin can add delete users under their own society"): Given an account holds `office-bearer`, when they add or remove a committee/manager account for their own society, then the account is created against **their own** society (INV-05 — the society is read from the viewer's row, never accepted from the request) or **deactivated, never deleted** (a portal account has acted, and AC-3's record must keep pointing at a real row). The office-bearer designation is not issuable this way — it moves by transfer (AC-5), so there is always exactly one, and the account holding it cannot be removed until it has been passed on. Society-level only throughout: a `Profile` can never mint an admin session (INV-01), and no admin surface becomes reachable. Rule 6 above already assigned this act to the office-bearer ("that person creates the rest") and the authority table already lists "manage the society's own portal accounts" — this AC is the missing statement of it, not a new capability. The temporary password is set by the office-bearer and shown once to hand over; an invite link supersedes that as soon as ADR-008 (email provider, still Proposed) is decided.
 
 **Data touched:** `Profile` gains a per-society `portalAuthority` (`office-bearer | committee |
 manager`); `socmgr` maps to `manager`. Approval records gain the authority held at the time.

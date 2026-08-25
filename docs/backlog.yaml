@@ -8007,6 +8007,12 @@ features:
         when: "the record is read back"
         then: "it still states the authority held at the time of the act"
         tests: [TC-108-9]
+      - id: FEAT-108-AC-10
+        type: happy
+        given: "an account holds `office-bearer`"
+        when: "they add or remove a committee/manager account for their own society"
+        then: "the account is created against their own society (INV-05) or deactivated, never deleted; the office-bearer designation itself cannot be issued this way, only transferred"
+        scope_note: "Added 2026-08-25 on the user's instruction ('the society admin can add delete users under their own society'). The blueprint had every account act sitting with PER-01 (AC-6, AC-8); this hands the routine part to the people who know when a committee changes. Society-level only: societyId is taken from the viewer's row and never from the request, a Profile can never mint an admin session (INV-01), and removal is deactivation because a portal account has acted (AC-3 records the authority it held). The temporary password is shown once to hand over — an invite link is the better answer and is blocked on ADR-008 (email provider), still Proposed."
     stories:
       - id: STORY-108-1
         title: "As ops, I want a society's portal accounts to carry named, differentiated authority, so that the binding acts CON-45 requires are only ever performed by someone who actually holds that authority."

@@ -6,7 +6,7 @@ import Link from "next/link";
  * society has no tanks yet — the page then says so (INV-06's empty state)
  * rather than the tab appearing and vanishing as assignments change.
  */
-export function PortalTabs({ active }: { active: "overview" | "tanks" }) {
+export function PortalTabs({ active }: { active: "overview" | "tanks" | "committee" }) {
   const tab = (href: string, label: string, on: boolean) => (
     <Link
       href={href}
@@ -24,6 +24,7 @@ export function PortalTabs({ active }: { active: "overview" | "tanks" }) {
     <div className="mb-6 flex gap-2.5">
       {tab("/portal", "Overview", active === "overview")}
       {tab("/portal/tanks", "Water tanks", active === "tanks")}
+      {tab("/portal/committee", "Committee", active === "committee")}
     </div>
   );
 }

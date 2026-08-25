@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { checkOfficeBearerTransfer } from "@/lib/portal-authority";
+import { checkAccountCreate, checkAccountDeactivate, checkOfficeBearerTransfer } from "@/lib/portal-authority";
 
 // First slice of NFR-05's tenancy-scoping suite (docs/backlog.yaml MS-02
 // exit criteria) plus GATE-04's binding-act check — both against the same
@@ -68,5 +68,62 @@ describe("NFR-05 (first slice): tenancy isolation on the binding act", () => {
     );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("no_society");
+  });
+});
+
+describe("a society manages its own membership (FEAT-108-AC-9)", () => {
+  const bearer = { id: "p1", role: "office_bearer", societyId: "s1" };
+  const committee = { id: "p2", role: "committee", societyId: "s1" };
+  const ok = { email: "new@society.test", authority: "committee", password: "temp1234" };
+
+  it("the office-bearer may add a committee or manager account", () => {
+    expect(checkAccountCreate(bearer, ok)).toEqual({ ok: true });
+    expect(checkAccountCreate(bearer, { ...ok, authority: "manager" })).toEqual({ ok: true });
+  });
+
+  it("but never another office-bearer — there is exactly one, and moving it is the transfer", () => {
+    const r = checkAccountCreate(bearer, { ...ok, authority: "office_bearer" });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("authority_not_assignable");
+    expect(r.error).toMatch(/transfer/i);
+  });
+
+  it("a committee member cannot add anyone", () => {
+    const r = checkAccountCreate(committee, ok);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe("not_office_bearer");
+  });
+
+  it("refuses a junk email and a short temporary password", () => {
+    expect(checkAccountCreate(bearer, { ...ok, email: "not-an-email" })).toMatchObject({ reason: "bad_email" });
+    expect(checkAccountCreate(bearer, { ...ok, password: "short" })).toMatchObject({ reason: "weak_password" });
+  });
+
+  it("removes an account of its own society, and only that", () => {
+    expect(
+      checkAccountDeactivate(bearer, { id: "p2", societyId: "s1", isActive: true, portalAuthority: "committee" }),
+    ).toEqual({ ok: true });
+    // INV-05: another society's account is not merely hidden, it is refused.
+    const cross = checkAccountDeactivate(bearer, {
+      id: "p9", societyId: "s2", isActive: true, portalAuthority: "committee",
+    });
+    expect(cross).toMatchObject({ reason: "cross_tenant_or_missing" });
+  });
+
+  it("refuses removing yourself, and refuses removing the office-bearer", () => {
+    expect(
+      checkAccountDeactivate(bearer, { id: "p1", societyId: "s1", isActive: true, portalAuthority: "office_bearer" }),
+    ).toMatchObject({ reason: "self" });
+    expect(
+      checkAccountDeactivate(bearer, { id: "p3", societyId: "s1", isActive: true, portalAuthority: "office_bearer" }),
+    ).toMatchObject({ reason: "office_bearer_target" });
+  });
+
+  it("an already-removed account cannot be removed twice", () => {
+    expect(
+      checkAccountDeactivate(bearer, { id: "p2", societyId: "s1", isActive: false, portalAuthority: "committee" }),
+    ).toMatchObject({ reason: "cross_tenant_or_missing" });
   });
 });

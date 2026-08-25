@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-15
+2026-08-25
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -2068,6 +2068,53 @@ map marking an early step current while later ones read done is exactly the inco
 exists to prevent. Unit-tested against that literal shape. Where a step reads done this way with no
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
+
+## The tank is a lit vessel, and the chart says when each reading arrived (2026-08-25) — user-corrected twice
+
+**Two corrections, both mine to make, and the second reversed the first.** Asked to make the water
+visible, the first attempt lightened the WATER — wrong twice over: it lost the brand blue and left a
+tint sitting on a tint. The user's own words settled it: *"keep the water color as it was. just
+lighten the color of tank"*, then, once the vessel went light, *"the tank is not visible with the
+white background. broad the box shadow. make the border more visible"*. So the water is `--accent`
+again and only the **vessel** changed: `--surface`, a real `2px solid var(--field-border)` edge — the
+token that already guarantees a ≥3:1 control boundary, used here for the same reason inputs use it —
+and a broad three-part lift, because the vessel sits on a card of the identical colour and dissolved
+into it without one.
+
+**The level figure takes its ink from whatever is actually behind it** (`--tank-ink-dry` on the dry
+vessel, `--tank-ink-wet` on the water), because one fixed colour necessarily fails against one of the
+two. `--tank-ink-wet` is `var(--text-on-accent)` and deliberately **not** a hardcoded white: dark
+theme's accent is a *light* periwinkle, where white-on-water measures 2.2:1 while reading fine in
+light theme. Submerged tick labels flip the same way.
+
+**A real bug the lighter palette exposed, present since the feature shipped.** The wave elements are
+deliberately far larger than the tank and sit above their own top edge to make the surface undulate —
+unclipped, they painted the whole **empty** half of the vessel, so a 30%-full tank rendered as a full
+one. Invisible while the water was a saturated accent on a tinted ground; obvious the moment the
+vessel went light. `.tank-water { overflow: hidden }` clips them, and the check asserts a 30% tank is
+drawn 30 ± 1.5% full rather than trusting the eye. **Worth remembering as a class**: a decorative
+overflow is only invisible while the two surfaces it spans are the same colour.
+
+**The chart now answers "when".** Every reading is a dot; hovering one reports its level, its moment
+in IST and its age, with a crosshair marking it — because a flat line of identical values is either a
+calm tank or a silent sensor, and only the timestamps distinguish them. Each point also carries a
+`<title>`, so touch and screen readers get the same fact without a pointer.
+
+Verified in a browser with contrast computed from the pixels actually painted rather than from the
+tokens intended (11 checks + 9 freshness), water tanks 28/28, portal 24/24, smoke 23/23; 505 unit
+tests, `tsc`/`lint`/`build` clean. No migration.
+
+**A dev-only false alarm, run to ground rather than dismissed** — reported as *"when I open the tank
+the first time it comes fine, but on refresh the older colors come back"*, and the app was never
+wrong. Turbopack serves `globals.css` at a **fixed URL** whose name does not change when the file's
+contents change — proved by editing the file and re-reading the served `<link>`:
+`chunks/[root-of-the-server]__1cibrky._.css` before and after. So a browser can hand back a pre-edit
+stylesheet on a reload while the still-open tab keeps whatever HMR pushed into it, which is exactly
+"fine until I refresh". A production build content-hashes the filename, which is why stage never
+showed it. A clean browser at HEAD rendered correctly on four consecutive loads, sampling
+`elementFromPoint` at three heights over three seconds each so a wave-animation phase could not hide
+the symptom. **The general shape**: before believing a style regression, check whether the stylesheet
+the browser is holding is the one on disk — in dev they can differ at the same URL.
 
 ## A raw level is not a percentage (2026-08-25) — user's question found it
 

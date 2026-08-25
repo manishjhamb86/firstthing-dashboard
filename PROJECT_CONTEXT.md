@@ -2107,6 +2107,17 @@ site contact; ops is warned but not blocked; a field account who is *not* the as
 offered the arrangement; and a phone number with nobody's name against it is refused. Schedule
 16/16, survey visit 24/24, assigned-turn 18/18, smoke 23/23; 480 unit tests.
 
+**A second defect the same report exposed, one level up**: the deal page still said "Submit the
+completion gate pass, then record the light replacement". `circuitNextLabel()` was a second,
+hand-written copy of the circuit ordering and had drifted **twice** — it kept the pre-2026-08-24
+order (the departure gate before the work it itemizes) and knew nothing about the new assignment
+step, so a deal told an operator to record work nobody had been asked to do. It now takes the same
+facts the spine does, and two unit tests assert the two agree either side of the assignment. The
+circuit *state* cannot distinguish them — `awaiting_installation` covers both — so `CandidateFacts`
+carries `replacementAssigned`, read from the row on both screens that render the label. **Worth
+remembering as a class**: a label that restates an ordering defined elsewhere will drift, and the
+drift shows up as a screen confidently naming the wrong next step.
+
 **A harness note, not an app defect**: `billing-run-check` and `gatepass-order-check` both fail on
 the fresh `firsthing_dev` database because they expect fixtures (`bill-soc`, an active contract) that
 the new database has never had — the same "dev DB holds only the seed" gap already recorded. The

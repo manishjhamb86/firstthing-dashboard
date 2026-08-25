@@ -2107,6 +2107,21 @@ site contact; ops is warned but not blocked; a field account who is *not* the as
 offered the arrangement; and a phone number with nobody's name against it is refused. Schedule
 16/16, survey visit 24/24, assigned-turn 18/18, smoke 23/23; 480 unit tests.
 
+**And a third report on the same feature: "I assigned it to the installation team but can't find the
+task in the installation team account."** Two separate causes, both real, neither in the assignment
+itself:
+- **Field work listed only surveys.** It queried pipelines by `surveyOwnerId`, and a light
+  replacement is assigned on the **circuit** — so the crew holding one saw "Nothing assigned to you"
+  under a heading promising "the surveys and installations assigned to you". It builds one list of
+  work rows from both sources now (survey, replacement, installation), each saying what the job is,
+  when they are due and who to ask for, and drops off when the work is recorded.
+- **The calendar hid anything older than a fortnight.** A 14-day lookback filtered out a visit
+  booked for an earlier date — ordinary on demo data, and the case that most needs chasing — so the
+  assignee's own schedule said "nothing booked for you" while the work sat assigned. Every event
+  still marked `scheduled` now shows, however old; being still-scheduled *is* being not closed out.
+  **The general shape**: a list scoped by one foreign key, under a heading that promises every kind
+  of assignment, is a lie the moment a second kind exists.
+
 **Then a correction to the same step, from the user, the same day**: "this should not be accessible
 before the light installation is scheduled." The step counted as done the moment a crew was named,
 so the record opened with no day agreed. It needs **both** now — and the reason is not tidiness: the

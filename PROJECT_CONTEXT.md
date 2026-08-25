@@ -2107,6 +2107,15 @@ site contact; ops is warned but not blocked; a field account who is *not* the as
 offered the arrangement; and a phone number with nobody's name against it is refused. Schedule
 16/16, survey visit 24/24, assigned-turn 18/18, smoke 23/23; 480 unit tests.
 
+**Then a correction to the same step, from the user, the same day**: "this should not be accessible
+before the light installation is scheduled." The step counted as done the moment a crew was named,
+so the record opened with no day agreed. It needs **both** now — and the reason is not tidiness: the
+date recorded there is CON-19's excluded pivot and the day the post-install window starts from, so
+work recorded against a visit nobody arranged is a date nobody agreed to. Until the day is booked
+the step stays current and names the missing half; the record reads "Unlocks once the replacement is
+scheduled with a named crew". **The refusal is server-side** — a locked step is not a gate —
+verified by cancelling the booked day in Postgres behind the open form and submitting.
+
 **A second defect the same report exposed, one level up**: the deal page still said "Submit the
 completion gate pass, then record the light replacement". `circuitNextLabel()` was a second,
 hand-written copy of the circuit ordering and had drifted **twice** — it kept the pre-2026-08-24

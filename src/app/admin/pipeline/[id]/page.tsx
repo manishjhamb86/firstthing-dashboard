@@ -68,7 +68,13 @@ export default async function PipelineDetailPage({
   const candidates = pipeline.siteSurvey
     ? await db.circuit.findMany({
         where: { siteSurveyId: pipeline.siteSurvey.id, voidedAt: null },
-        select: { id: true, state: true, location: true, lightType: true },
+        select: {
+          id: true,
+          state: true,
+          location: true,
+          lightType: true,
+          replacementOwnerId: true,
+        },
       })
     : [];
 

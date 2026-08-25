@@ -124,12 +124,18 @@ export default async function SiteSurveyPage({
   // CIRCUIT page — the hand-off this screen previously never stated, which
   // is exactly where the flow got lost.
   const top = mostAdvancedCandidate(
-    circuits.map((c) => ({ id: c.id, state: c.state, location: c.location, lightType: c.lightType })),
+    circuits.map((c) => ({
+      id: c.id,
+      state: c.state,
+      location: c.location,
+      lightType: c.lightType,
+      replacementAssigned: c.replacementOwnerId != null,
+    })),
   );
   const handoff =
     top && top.state !== "surveyed" && top.state !== "ineligible"
       ? {
-          label: circuitNextLabel(top.state),
+          label: circuitNextLabel(top),
           detail: `Commissioning continues on the circuit page for ${candidateLabel(top)} — not here.`,
           href: `/admin/societies/${pipeline.society.id}/circuits/${top.id}`,
           owner: "field" as const,

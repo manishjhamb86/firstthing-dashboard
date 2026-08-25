@@ -339,7 +339,7 @@ describe("circuitSteps — the map one level down", () => {
 
   it("every mid-lifecycle state has a next label in the operator's words", () => {
     for (const s of ["surveyed", "eligible", "meter_installed", "pre_install_monitoring", "awaiting_installation", "post_install_pending", "post_install_monitoring", "benchmark_review"]) {
-      expect(circuitNextLabel(s)).not.toBe("Open the circuit");
+      expect(circuitNextLabel({ state: s })).not.toBe("Open the circuit");
     }
   });
 });
@@ -653,5 +653,39 @@ describe("the replacement is handed to a crew before it is recorded", () => {
     expect(byKey["assign-replacement"].status).toBe("done");
     expect(byKey["assign-replacement"].summary).toMatch(/no stored record/i);
     expect(byKey["completion-gate"].status).toBe("current");
+  });
+});
+
+describe("the deal-level label agrees with the circuit spine", () => {
+  // It drifted twice: it still named the completion gate pass before the
+  // replacement months after that order was corrected, and it knew nothing
+  // about the replacement being assigned first — so a deal page told an
+  // operator to record work nobody had been asked to do (2026-08-25).
+  const facts = (over: Partial<Parameters<typeof circuitSteps>[0]> = {}) =>
+    circuitSteps({
+      state: "awaiting_installation",
+      hasInstallGatePass: true,
+      hasCompletionGatePass: false,
+      preInstallBaseline: 30,
+      replacementOwnerName: null,
+      replacementScheduledAt: null,
+      lightReplacementDate: null,
+      benchmarkSavingsPct: null,
+      ...over,
+    });
+
+  it("asks for the assignment while nobody holds the replacement", () => {
+    expect(facts().find((s) => s.status === "current")?.key).toBe("assign-replacement");
+    expect(circuitNextLabel({ state: "awaiting_installation" })).toMatch(/schedule the replacement/i);
+  });
+
+  it("asks for the record once somebody does", () => {
+    expect(
+      facts({ replacementOwnerName: "Crew" }).find((s) => s.status === "current")?.key,
+    ).toBe("replacement");
+    const label = circuitNextLabel({ state: "awaiting_installation", replacementAssigned: true });
+    expect(label).toMatch(/record the light replacement/i);
+    // …and in the right order: the pass itemizes work that already happened.
+    expect(label.indexOf("replacement")).toBeLessThan(label.indexOf("gate pass"));
   });
 });

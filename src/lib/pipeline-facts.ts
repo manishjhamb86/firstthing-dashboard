@@ -26,7 +26,14 @@ type PipelineWithProgress = Prisma.PipelineGetPayload<{ include: typeof DEAL_PRO
 
 export function toDealProgress(
   pipeline: PipelineWithProgress,
-  candidates: { id: string; state: string; location: string | null; lightType: string }[],
+  candidates: {
+    id: string;
+    state: string;
+    location: string | null;
+    lightType: string;
+    /** Null until the replacement is handed to a crew — see CandidateFacts. */
+    replacementOwnerId?: string | null;
+  }[],
 ): DealProgress {
   return dealProgress({
     pipelineId: pipeline.id,
@@ -37,7 +44,7 @@ export function toDealProgress(
     demoSkipped: pipeline.demoSkipped,
     surveyExists: !!pipeline.siteSurvey,
     areaCount: pipeline.siteSurvey?.areas.length ?? 0,
-    candidates,
+    candidates: candidates.map((c) => ({ ...c, replacementAssigned: c.replacementOwnerId != null })),
     reportStatus: pipeline.demoReports[0]?.status ?? null,
     kyc: {
       total: pipeline.kycRequirements.length,

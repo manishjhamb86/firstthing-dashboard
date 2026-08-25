@@ -85,6 +85,13 @@ export type CandidateFacts = {
   state: string;
   location: string | null;
   lightType: string;
+  /**
+   * Whether the light replacement has been handed to a crew. The circuit
+   * STATE cannot say — `awaiting_installation` covers both sides of it — so
+   * the deal-level label was telling an operator to record work nobody had
+   * been asked to do (user-reported 2026-08-25).
+   */
+  replacementAssigned?: boolean;
 };
 
 export type DealFacts = {
@@ -137,8 +144,25 @@ export function candidateLabel(c: CandidateFacts): string {
   return c.location || c.lightType;
 }
 
-/** What a mid-commissioning circuit needs next, in the operator's words. */
-export function circuitNextLabel(state: string): string {
+/**
+ * What a mid-commissioning circuit needs next, in the operator's words.
+ *
+ * Kept in step with `circuitSteps()` by hand, which is exactly how it went
+ * wrong twice: it still said "submit the completion gate pass, THEN record
+ * the light replacement" months after that order was corrected, and it knew
+ * nothing about the replacement being assigned first. Anything added to the
+ * circuit spine has to be reflected here — the unit tests below assert the
+ * two agree.
+ */
+export function circuitNextLabel(c: { state: string; replacementAssigned?: boolean }): string {
+  const state = c.state;
+  if (state === "awaiting_installation") {
+    // The replacement is somebody's job before it is a record, and the
+    // completion gate pass lists work that has to have happened first.
+    return c.replacementAssigned
+      ? "Record the light replacement, then submit the completion gate pass"
+      : "Schedule the replacement and assign it to a crew";
+  }
   switch (state) {
     case "surveyed":
       return "Awaiting the light-count exception decision";
@@ -148,8 +172,6 @@ export function circuitNextLabel(state: string): string {
       return "Submit the install gate pass";
     case "pre_install_monitoring":
       return "Record daily readings — 5 valid days set the baseline";
-    case "awaiting_installation":
-      return "Submit the completion gate pass, then record the light replacement";
     case "post_install_pending":
     case "post_install_monitoring":
       return "Record daily readings — 5 valid days compute the benchmark";
@@ -296,7 +318,7 @@ export function dealProgress(f: DealFacts): DealProgress {
         : benchmarkDone
           ? "Benchmark confirmed"
           : currentIdx === 3 && top
-            ? `${candidateLabel(top)}: ${circuitNextLabel(top.state)}`
+            ? `${candidateLabel(top)}: ${circuitNextLabel(top)}`
             : "Unlocks when the survey selects a demo circuit — meter, baseline window, light replacement and benchmark all happen on the circuit page",
       href: circuitHref,
     },
@@ -418,7 +440,7 @@ export function dealProgress(f: DealFacts): DealProgress {
           : { label: "Resolve the candidate's eligibility", detail: "The selected candidate is awaiting its eligibility decision on the survey page.", href: `${base}/survey`, owner: "field" };
     } else if (!benchmarkDone && top) {
       next = {
-        label: circuitNextLabel(top.state),
+        label: circuitNextLabel(top),
         detail: `Commissioning continues on the circuit page for ${candidateLabel(top)}.`,
         href: circuitHref as string,
         owner: "field",

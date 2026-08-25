@@ -2069,6 +2069,53 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## A society manages its own committee (2026-08-25) — user-asked, and already in the blueprint
+
+**The ask**: "the society admin can add delete users under their own society… or if needed we can
+leave the user update or add option from society portal if thats too much of a change", with a
+follow-up reminder: "the society doesnt have any admin access. They only have society level access."
+
+**It was a small change, and the rules were already written down.** `03-features.md`'s own authority
+table for FEAT-108 has always said the office-bearer may "manage the society's own portal accounts",
+and its rule 6 says "PER-01 creates the first office-bearer; that person creates the rest" — there
+was simply never an acceptance criterion for it and nothing built. **FEAT-108-AC-10** is that
+missing statement (AC-9 was taken), recorded in `03-features.md` and `backlog.yaml` per AGENTS.md's
+scope rule. `/portal/committee` is the screen; the pure rules are `checkAccountCreate` /
+`checkAccountDeactivate` in `portal-authority.ts`, the same split as the transfer act.
+
+**Society-level only, three ways, none of them a UI courtesy:**
+- the society is read from the signed-in `Profile` row and **`createSocietyAccount` takes no
+  `societyId` argument at all** — there is nothing for a request to lie about (INV-05);
+- **the office-bearer designation is not issuable here.** It moves by transfer, so there is always
+  exactly one; an "add another office-bearer" path would quietly produce two. Smuggling
+  `office_bearer` into the `<select>` is refused server-side and told to use the transfer instead;
+- a portal account is a `Profile`, which can never mint an admin session (INV-01, separate table).
+  An email belonging to an `AdminUser` is refused with the **same message** as any other collision —
+  whether an address is internal is not a society's business to learn.
+
+**Remove is deactivate, never delete**: a portal account has *acted* — it approves installation days
+and FEAT-108-AC-3 records the authority it held at that moment — so the row must survive or those
+records point at nothing. Self-removal is refused, and the office-bearer cannot be removed until the
+designation is passed on.
+
+**The password is the one genuinely unresolved part, and it is stated rather than hidden**: the
+office-bearer sets a temporary password and it is shown once, on screen, to hand over — because
+there is no email provider in this build (ADR-008 still Proposed, delivery is R1). An invite link is
+the better answer and should replace this the moment email exists; the code says so at the point it
+matters.
+
+**Verified in a browser (17 checks, zero console errors)**: the account lands against the viewer's
+own society as committee; only committee and manager are offered and the smuggled authority is
+refused with nothing written; removing deactivates; the office-bearer's own row offers no Remove; a
+committee member gets the list with no Add and no Remove; and a portal account still cannot reach
+`/admin/societies` or `/admin/users`. 7 new unit cases; 494 total. No migration.
+
+**Designed first**: the society page was redesigned as a tabbed workspace (admin: Dashboard · Users ·
+Water tanks · Lighting; portal: Dashboard · Water tanks · Lighting · Committee) on a canvas, with
+every unbuilt metric drawn as a dashed "—" tile naming the condition that produces it and every
+unbuilt chart as a real axis frame — the user's explicit choice over sample figures, and this repo's
+own convention since the Portfolio's untracked KPIs.
+
 ## Water tank monitoring: the Smart Life mirror (2026-08-25) — user-specified, designed then built
 
 **The ask**: water-level sensors on societies' domestic tanks live in the company's Smart Life

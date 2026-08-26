@@ -560,7 +560,8 @@ export function CircuitReadingPanel({
         {windowInfo && <ValidPeriod window={windowInfo} />}
         <div className="space-y-2">
           <p className="text-sm text-[var(--text-muted)]">
-            Upload the meter&apos;s exported CSV. The system reads the whole file, picks the days that
+            Upload the meter&apos;s export — a CSV, or a workbook with a sheet per circuit. The system
+            reads the whole file, picks the days that
             belong to this circuit&apos;s current step, and shows every one for review before anything
             is saved.
           </p>

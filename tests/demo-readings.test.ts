@@ -42,6 +42,7 @@ describe("circuitReadingWindow — one composition, shown and enforced", () => {
     const w = circuitReadingWindow({
       meterInstalledAt: d("2026-08-10"),
       lightReplacementDate: d("2026-08-19"),
+      preInstallBaseline: 48.7,
       benchmarkSavingsPct: null,
       lastStoredDate: d("2026-08-18"),
       demo: false,
@@ -58,6 +59,7 @@ describe("circuitReadingWindow — one composition, shown and enforced", () => {
     const w = circuitReadingWindow({
       meterInstalledAt: d("2026-06-01"),
       lightReplacementDate: d("2026-06-20"),
+      preInstallBaseline: 48.7,
       benchmarkSavingsPct: 68,
       lastStoredDate: d("2026-08-13"),
       demo: false,
@@ -71,6 +73,7 @@ describe("circuitReadingWindow — one composition, shown and enforced", () => {
     const plain = circuitReadingWindow({
       meterInstalledAt: d("2026-08-10"),
       lightReplacementDate: d("2026-08-19"),
+      preInstallBaseline: 48.7,
       benchmarkSavingsPct: null,
       lastStoredDate: null,
       demo: false,
@@ -79,6 +82,7 @@ describe("circuitReadingWindow — one composition, shown and enforced", () => {
     const demo = circuitReadingWindow({
       meterInstalledAt: d("2026-08-10"),
       lightReplacementDate: d("2026-08-19"),
+      preInstallBaseline: 48.7,
       benchmarkSavingsPct: null,
       lastStoredDate: null,
       demo: true,
@@ -234,6 +238,7 @@ describe("a monitoring window never opens before the lights changed", () => {
     const w = circuitReadingWindow({
       meterInstalledAt: d("2026-06-01"),
       lightReplacementDate: d("2026-07-10"),
+      preInstallBaseline: 48.7,
       benchmarkSavingsPct: 68,
       lastStoredDate: null,
       demo: false,
@@ -247,6 +252,7 @@ describe("a monitoring window never opens before the lights changed", () => {
     const w = circuitReadingWindow({
       meterInstalledAt: d("2026-06-01"),
       lightReplacementDate: d("2026-07-10"),
+      preInstallBaseline: 48.7,
       benchmarkSavingsPct: 68,
       lastStoredDate: d("2026-08-13"),
       demo: false,
@@ -261,6 +267,7 @@ describe("a monitoring window never opens before the lights changed", () => {
     const w = circuitReadingWindow({
       meterInstalledAt: d("2026-06-01"),
       lightReplacementDate: d("2026-07-10"),
+      preInstallBaseline: 48.7,
       benchmarkSavingsPct: 68,
       lastStoredDate: d("2026-07-11"),
       demo: false,

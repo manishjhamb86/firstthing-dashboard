@@ -259,6 +259,7 @@ export default async function CircuitDetailPage({
   const readingWindow = circuitReadingWindow({
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
+    preInstallBaseline: circuit.preInstallBaseline,
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
     lastStoredDate: lastStoredReadingDate,
     demo: demoMode,

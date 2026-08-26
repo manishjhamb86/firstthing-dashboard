@@ -137,16 +137,56 @@ describe("deriveUploadKind", () => {
     expect(deriveUploadKind({ lightReplacementDate: null, benchmarkSavingsPct: null })).toBe("pre_install");
   });
   it("replaced but no benchmark → post-install", () => {
-    expect(deriveUploadKind({ lightReplacementDate: d("2026-06-09"), benchmarkSavingsPct: null })).toBe("post_install");
+    expect(
+      deriveUploadKind({
+        lightReplacementDate: d("2026-06-09"),
+        preInstallBaseline: 48.7,
+        benchmarkSavingsPct: null,
+      }),
+    ).toBe("post_install");
+  });
+  it("replaced but the baseline was never computed → still pre-install", () => {
+    // A circuit backfilled from its demo report has both dates before it has
+    // a single reading. Reading the replacement date as "the baseline is
+    // settled" left it permanently unable to upload the days that would
+    // settle it.
+    expect(
+      deriveUploadKind({
+        lightReplacementDate: d("2026-06-09"),
+        preInstallBaseline: null,
+        benchmarkSavingsPct: null,
+      }),
+    ).toBe("pre_install");
   });
   it("benchmark confirmed → monitoring", () => {
-    expect(deriveUploadKind({ lightReplacementDate: d("2026-06-09"), benchmarkSavingsPct: 62 })).toBe("monitoring");
+    expect(
+      deriveUploadKind({
+        lightReplacementDate: d("2026-06-09"),
+        preInstallBaseline: 48.7,
+        benchmarkSavingsPct: 62,
+      }),
+    ).toBe("monitoring");
   });
 });
 
 describe("extractionWindow", () => {
   const meter = d("2026-05-21");
   const today = d("2026-08-17");
+
+  it("a pre-install window stops at the replacement when that day is known", () => {
+    // Otherwise a backfill's pre-install upload sweeps in every day AFTER
+    // the lights changed and averages the new fittings into the old
+    // fittings' baseline.
+    expect(
+      extractionWindow({
+        kind: "pre_install",
+        meterInstalledAt: meter,
+        lightReplacementDate: d("2026-06-09"),
+        lastStoredDate: null,
+        today,
+      }),
+    ).toEqual({ from: d("2026-05-22"), to: d("2026-06-08") });
+  });
 
   it("a PRE-install upload re-reads from the day after meter install through yesterday", () => {
     const w = extractionWindow({ kind: "pre_install", meterInstalledAt: meter, lastStoredDate: d("2026-06-20"), today });

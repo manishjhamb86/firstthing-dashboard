@@ -117,6 +117,7 @@ export default async function LiveMonitoringCircuitPage({
   const window = circuitReadingWindow({
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
+    preInstallBaseline: circuit.preInstallBaseline,
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
     lastStoredDate,
     demo: demoOn,

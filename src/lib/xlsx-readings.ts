@@ -94,22 +94,51 @@ function countReadings(sheet: Sheet, pairs: ColumnPair[], headerRow: number): nu
 export const WORKBOOK_HEADER = "data,consumption/KWh";
 
 /**
- * The blocks stacked into one series. Order is not preserved and does not
- * need to be: the pipeline sorts by timestamp, and every reading here is an
- * interval, never a running register whose order would carry meaning.
+ * The blocks as one series — with the overlap resolved, which is the whole
+ * difficulty.
+ *
+ * The blocks are not consecutive chunks. They are separate exports of the
+ * same meter taken on different days, so they overlap: in Ace City's own
+ * workbook two blocks share 128 dates and, on 126 of them, repeat the hourly
+ * readings value for value. Stacking them blindly sums each of those hours
+ * twice, which does not look wrong — every day is simply about double — and
+ * lands in a baseline a society is billed against.
+ *
+ * So a date belongs to ONE block: the one holding the most readings for it.
+ * With no time column there is no way to tell a day split across two blocks
+ * from a day repeated in both, and the two mistakes are not equal. Taking the
+ * fullest block can only under-report a day, which surfaces as a partial day
+ * and is excluded from averages; summing both silently inflates consumption,
+ * and on the pre-install side that inflates the saving, and the fee that is a
+ * share of it.
+ *
+ * Order within the file is not preserved and need not be: the pipeline sorts
+ * by timestamp, and these are interval readings, never a running register
+ * whose order would carry meaning.
  */
 export function sheetToReadingCsv(sheet: Sheet, chosen: ReadingSheet): string {
-  const lines = [WORKBOOK_HEADER];
+  const byDate = new Map<string, number[][]>();
   for (let r = chosen.headerRow + 1; r < sheet.rows.length; r++) {
     const row = sheet.rows[r] ?? [];
-    for (const p of chosen.pairs) {
+    chosen.pairs.forEach((p, block) => {
       const date = cellToIso(row[p.dateColumn] ?? "");
       const raw = (row[p.valueColumn] ?? "").trim();
-      if (!date || raw === "") continue;
+      if (!date || raw === "") return;
       const value = Number(raw.replace(/,/g, ""));
-      if (!Number.isFinite(value)) continue;
-      lines.push(`${date},${value}`);
-    }
+      if (!Number.isFinite(value)) return;
+      const blocks = byDate.get(date) ?? chosen.pairs.map(() => [] as number[]);
+      blocks[block].push(value);
+      byDate.set(date, blocks);
+    });
+  }
+
+  const lines = [WORKBOOK_HEADER];
+  for (const [date, blocks] of [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0]))) {
+    // Ties go to the earlier block, so the same workbook always converts the
+    // same way — a figure that moved between two identical uploads would be
+    // unexplainable.
+    const fullest = blocks.reduce((best, b) => (b.length > best.length ? b : best), blocks[0]);
+    for (const value of fullest) lines.push(`${date},${value}`);
   }
   return lines.join("\n");
 }

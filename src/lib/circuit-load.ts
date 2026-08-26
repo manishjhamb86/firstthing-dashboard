@@ -191,11 +191,33 @@ export type UploadKind = "pre_install" | "post_install" | "monitoring";
  *   - replaced, but no benchmark yet     → post-install upload
  *   - benchmark confirmed                → monitoring upload
  */
+/**
+ * Whether the pre-install baseline is still open to being computed.
+ *
+ * "The lights are not in yet" was the whole test, and for a circuit walked
+ * through commissioning in real time it is the same thing — the baseline
+ * always settles before the replacement is recorded. A society that predates
+ * the system reverses that order: both dates come off its demo report before
+ * a single reading exists, so the baseline was treated as settled when it was
+ * still null, and the days that would have produced it could never be
+ * uploaded (found walking Ace City's own history, 2026-08-26).
+ *
+ * Shared by the phase and the recompute so the two cannot disagree about
+ * which era an upload belongs to.
+ */
+export function baselineUnsettled(c: {
+  lightReplacementDate: Date | null;
+  preInstallBaseline?: number | null;
+}): boolean {
+  return c.lightReplacementDate === null || (c.preInstallBaseline ?? null) === null;
+}
+
 export function deriveUploadKind(c: {
   lightReplacementDate: Date | null;
+  preInstallBaseline?: number | null;
   benchmarkSavingsPct: number | null;
 }): UploadKind {
-  if (c.lightReplacementDate === null) return "pre_install";
+  if (baselineUnsettled(c)) return "pre_install";
   if (c.benchmarkSavingsPct === null) return "post_install";
   return "monitoring";
 }
@@ -268,6 +290,15 @@ export function extractionWindow(args: {
   // replacement day itself, exactly as the pre window excludes install day.
   if (args.kind === "post_install" && args.lightReplacementDate) {
     return { from: addDays(args.lightReplacementDate, 1), to: yesterday };
+  }
+  // A PRE-install window ends the day before the lights changed, when that
+  // day is known. It usually is not — during commissioning the replacement
+  // has not happened — but a backfilled circuit records both dates up front,
+  // and without the bound its pre-install upload would sweep in every day
+  // AFTER the replacement too and average the new fittings into the old
+  // fittings' baseline. CON-19 excludes the replacement day itself.
+  if (args.kind === "pre_install" && args.lightReplacementDate) {
+    return { from: addDays(args.meterInstalledAt, 1), to: addDays(args.lightReplacementDate, -1) };
   }
   return { from: addDays(args.meterInstalledAt, 1), to: yesterday };
 }
@@ -451,6 +482,8 @@ export type ReadingWindow = {
 export function circuitReadingWindow(args: {
   meterInstalledAt: Date | null;
   lightReplacementDate: Date | null;
+  /** Carried so the phase and the window agree on which era is still open. */
+  preInstallBaseline?: number | null;
   benchmarkSavingsPct: number | null;
   lastStoredDate: Date | null;
   demo: boolean;

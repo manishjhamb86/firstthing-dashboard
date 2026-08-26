@@ -83,12 +83,12 @@ describe("a sheet becomes the text the pipeline already reads", () => {
   };
   const chosen = readingSheets([sheet])[0];
 
-  it("stacks every block into one series", () => {
+  it("stacks every block into one series, a day at a time", () => {
     expect(sheetToReadingCsv(sheet, chosen).split("\n")).toEqual([
       WORKBOOK_HEADER,
       "2025-08-03,2.06",
-      "2025-08-04,1.1",
       "2025-08-03,1.94",
+      "2025-08-04,1.1",
       "2025-08-04,0.9",
     ]);
   });
@@ -110,6 +110,42 @@ describe("a sheet becomes the text the pipeline already reads", () => {
 
   it("a trailing label row is skipped, not counted as a reading", () => {
     expect(sheetToReadingCsv(sheet, chosen)).not.toContain("Total");
+  });
+
+  it("a date in two blocks is one day's readings, not two", () => {
+    // The blocks are separate exports of the same meter and they overlap.
+    // Summing both would double that day — invisible, and straight into a
+    // baseline a society is billed against.
+    const overlap = {
+      name: "Overlap",
+      rows: [
+        ["data", "consumption/KWh", "", "data", "consumption/KWh"],
+        ["45872", "2.00", "", "45872", "2.00"],
+        ["45872", "1.00", "", "45872", "1.00"],
+      ],
+    };
+    const pick = readingSheets([overlap])[0];
+    const csv = sheetToReadingCsv(overlap, pick);
+    const r = applyMapping(csv, matchKnownFormat(csv)!.mapping, "2025-08");
+    expect(r.days).toHaveLength(1);
+    expect(r.days[0].kWh).toBe(3.0);
+  });
+
+  it("and the fuller block wins, so a part-day copy cannot truncate the day", () => {
+    const partial = {
+      name: "Partial",
+      rows: [
+        ["data", "consumption/KWh", "", "data", "consumption/KWh"],
+        ["45872", "2.00", "", "45872", "9.99"],
+        ["45872", "1.00", "", "", ""],
+        ["45872", "0.50", "", "", ""],
+      ],
+    };
+    const pick = readingSheets([partial])[0];
+    const csv = sheetToReadingCsv(partial, pick);
+    const r = applyMapping(csv, matchKnownFormat(csv)!.mapping, "2025-08");
+    expect(r.days[0].kWh).toBe(3.5);
+    expect(r.days[0].intervalCount).toBe(3);
   });
 });
 
@@ -135,13 +171,29 @@ describe.runIf(existsSync(REAL))("Ace City's own workbook", () => {
     expect(names).toContain("LiftLobbyReadings");
   });
 
-  it("the basement sheet's three blocks become one hourly series", () => {
+  it("the basement sheet's three overlapping blocks become one hourly series", () => {
     const chosen = readingSheets(wb).find((s) => s.name === "BasementReadings")!;
     expect(chosen.pairs).toHaveLength(3);
     const csv = sheetToReadingCsv(wb.find((s) => s.name === "BasementReadings")!, chosen);
     const rows = csv.split("\n").slice(1);
-    expect(rows.length).toBeGreaterThan(9000);
     const days = new Set(rows.map((r) => r.split(",")[0]));
-    expect(days.size).toBeGreaterThan(280);
+    expect(days.size).toBe(291);
+    // 291 days at 24 hours is 6,984 readings; the raw blocks hold 10,368
+    // because two of them repeat 128 dates and a third repeats 15.
+    expect(rows.length).toBeLessThan(7100);
+  });
+
+  it("and the days it produces agree with what the report says they were", () => {
+    const chosen = readingSheets(wb).find((s) => s.name === "BasementReadings")!;
+    const csv = sheetToReadingCsv(wb.find((s) => s.name === "BasementReadings")!, chosen);
+    const aug = applyMapping(csv, matchKnownFormat(csv)!.mapping, "2025-08");
+    const byDate = new Map(aug.days.map((d) => [d.date.toISOString().slice(0, 10), d]));
+    // The report's own "Before Installation" table: 48.84, 48.79, 48.35…
+    expect(byDate.get("2025-08-03")!.kWh).toBeCloseTo(48.84, 2);
+    expect(byDate.get("2025-08-04")!.kWh).toBeCloseTo(48.79, 2);
+    expect(byDate.get("2025-08-05")!.kWh).toBeCloseTo(48.35, 2);
+    expect(byDate.get("2025-08-03")!.intervalCount).toBe(24);
+    // And after the lights went in, ~16 — the report says 16.36.
+    expect(byDate.get("2025-08-20")!.kWh).toBeCloseTo(17.32, 2);
   });
 });

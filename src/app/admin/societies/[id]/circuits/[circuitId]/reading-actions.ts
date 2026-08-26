@@ -19,6 +19,7 @@ import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { buildCircuitFlowReadingKey } from "@/lib/ingest-keys";
+import { baselineUnsettled } from "@/lib/circuit-load";
 import { matchKnownFormat } from "@/lib/reading-formats";
 import { readWorkbook } from "@/lib/xlsx";
 import { readingSheets, sheetToReadingCsv } from "@/lib/xlsx-readings";
@@ -213,6 +214,7 @@ function deriveReview(circuit: Circuit, fileText: string, demoWindow: boolean): 
   const resolved = circuitReadingWindow({
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
+    preInstallBaseline: circuit.preInstallBaseline,
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
     lastStoredDate,
     demo: demoWindow,
@@ -811,8 +813,18 @@ async function recomputeCircuitFigures(
   let baseline = circuit.preInstallBaseline;
   const updates: Record<string, unknown> = {};
 
-  // Baseline: recomputed while unfrozen (no replacement yet).
-  if (circuit.lightReplacementDate === null) {
+  // Baseline: recomputed while unfrozen.
+  //
+  // Unfrozen means "not yet settled", which is ALMOST the same as "the lights
+  // are not in yet" — and was written as the latter until a society that
+  // predates the system walked through here (Ace City, 2026-08-26). A
+  // backfill records both dates from its demo report before any reading
+  // exists, so the freeze fired before there was anything to freeze: the
+  // pre-install days imported, and the baseline stayed null forever, taking
+  // the benchmark with it. The freeze still holds for every circuit
+  // commissioned through the live flow, where the baseline is always settled
+  // before the replacement is recorded.
+  if (baselineUnsettled(circuit)) {
     const preDays = phases
       .filter((p) => p.phase === "pre_install")
       .map((p) => ({ date: p.r.date, kWh: p.r.kWh, excluded: p.r.excludedAt !== null }));
@@ -994,6 +1006,7 @@ export async function draftDemoReadings(input: {
   const window = circuitReadingWindow({
     meterInstalledAt: circuit.meterInstalledAt,
     lightReplacementDate: circuit.lightReplacementDate,
+    preInstallBaseline: circuit.preInstallBaseline,
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
     lastStoredDate,
     demo: true,

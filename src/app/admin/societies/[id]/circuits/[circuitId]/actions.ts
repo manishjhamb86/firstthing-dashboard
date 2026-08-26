@@ -692,3 +692,76 @@ export async function updateReplacementVisit(
   revalidatePath("/admin/schedule");
   return {};
 }
+
+/**
+ * Record what already happened, for a circuit that predates this system.
+ *
+ * A backfilled circuit must not be walked through commissioning — meter
+ * install, gate pass, a five-day baseline window, light replacement,
+ * completion gate. All of it happened years ago, and re-enacting it would be
+ * theatre that produces false timestamps.
+ *
+ * What the reading ingest genuinely needs is two dates: CON-45 derives an
+ * upload's phase from them (no replacement date means pre-install; a
+ * replacement date with no benchmark means post-install) and its extraction
+ * window from the meter's install date. Both are stated in the demo report.
+ *
+ * Deliberately NOT set here: the baseline and the benchmark. Those come from
+ * the readings themselves through the row-by-row review, because a figure
+ * printed in a report is evidence of what happened, not something this system
+ * can recompute (INV-02).
+ */
+export async function recordHistoricalCommissioning(input: {
+  circuitId: string;
+  /** YYYY-MM-DD — when the meter went on the circuit. */
+  meterInstalledOn: string;
+  /** YYYY-MM-DD — the last light replaced (CON-19's excluded pivot day). */
+  lightReplacementOn?: string;
+}): Promise<{ error?: string; ok?: true }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!(admin.permissions as string[]).includes("manage_survey")) {
+    return { error: "Recording a circuit's commissioning is a field-survey action." };
+  }
+
+  const circuit = await db.circuit.findUnique({ where: { id: input.circuitId } });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  const checklist = circuit.eligibilityChecklist as { backfilled?: boolean } | null;
+  if (checklist?.backfilled !== true) {
+    // A circuit this system commissioned has these dates from the acts that
+    // set them; overwriting those by hand would erase real provenance.
+    return { error: "This circuit was commissioned through the system — its dates come from those steps." };
+  }
+
+  const meterAt = new Date(`${input.meterInstalledOn}T00:00:00.000Z`);
+  if (Number.isNaN(meterAt.getTime())) return { error: "Give the meter's install date as YYYY-MM-DD." };
+  if (meterAt.getTime() > Date.now()) return { error: "The meter cannot have been installed in the future." };
+
+  let replacedAt: Date | null = null;
+  if (input.lightReplacementOn) {
+    replacedAt = new Date(`${input.lightReplacementOn}T00:00:00.000Z`);
+    if (Number.isNaN(replacedAt.getTime())) return { error: "Give the replacement date as YYYY-MM-DD." };
+    if (replacedAt.getTime() < meterAt.getTime()) {
+      return { error: "The lights cannot have been replaced before the meter was installed." };
+    }
+    if (replacedAt.getTime() > Date.now()) return { error: "The replacement cannot be in the future." };
+  }
+
+  await db.circuit.update({
+    where: { id: circuit.id },
+    data: {
+      meterInstalledAt: meterAt,
+      lightReplacementDate: replacedAt,
+      // The state its history supports — not one it was walked to.
+      state: replacedAt ? "post_install_pending" : "meter_installed",
+    },
+  });
+  logger.info("circuit.historical_commissioning_recorded", {
+    actorId: admin.id,
+    circuitId: circuit.id,
+    meterInstalledOn: input.meterInstalledOn,
+    lightReplacementOn: input.lightReplacementOn ?? null,
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuit.id}`);
+  return { ok: true };
+}

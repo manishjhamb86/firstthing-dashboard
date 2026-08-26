@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+import { HistoricalCommissioning } from "./historical-commissioning";
 import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/demo-mode";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -504,6 +505,18 @@ export default async function CircuitDetailPage({
         />
       </section>
 
+      {/* A circuit that predates the system takes the short path: record the
+          two dates the readings are phased against, then upload them —
+          rather than being walked through a commissioning that happened
+          years ago. */}
+      {(circuit.eligibilityChecklist as { backfilled?: boolean } | null)?.backfilled === true && (
+        <HistoricalCommissioning
+          circuitId={circuit.id}
+          meterInstalledAt={circuit.meterInstalledAt?.toISOString().slice(0, 10) ?? null}
+          lightReplacementDate={circuit.lightReplacementDate?.toISOString().slice(0, 10) ?? null}
+        />
+      )}
+
       {/* The commissioning sequence as an accordion — the user-specified
           arrangement (2026-08-15): only the step that needs action right now
           is an open form; done steps are closed headers with their record one
@@ -519,7 +532,22 @@ export default async function CircuitDetailPage({
 
           switch (step.key) {
             case "eligibility": {
-              if (step.status === "current") {
+              // A circuit backfilled from a document has no survey to send
+              // anyone to, and its demo already happened — so it says what
+              // is true rather than pointing at a page that does not exist.
+              const backfilled =
+                (circuit.eligibilityChecklist as { backfilled?: boolean; source?: string; note?: string } | null)
+                  ?.backfilled === true;
+              if (backfilled) {
+                const meta = circuit.eligibilityChecklist as { source?: string; note?: string };
+                summary = "Not assessed — already in service when it was recorded";
+                body = (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    {meta.note}
+                    {meta.source ? ` Built from ${meta.source}.` : ""}
+                  </p>
+                );
+              } else if (step.status === "current") {
                 body = (
                   <p className="text-sm text-[var(--text-muted)]">
                     The eligibility decision happens on the{" "}

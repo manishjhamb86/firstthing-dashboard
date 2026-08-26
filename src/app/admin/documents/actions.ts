@@ -473,6 +473,17 @@ export async function createCircuitFromDocument(input: {
         // CON-10 metadata, taken from the fixture being retrofitted rather
         // than left blank when the document plainly states it.
         workingHours: primary.hoursPerDay,
+        // CON-16's checklist decides whether to RUN a demo. This circuit's
+        // demo happened years ago — re-litigating its eligibility would be
+        // asking whether to do something already done, and it would send the
+        // operator to a survey page that does not exist for a circuit no
+        // survey produced. Recorded as not assessed, and why.
+        eligibilityChecklist: {
+          backfilled: true,
+          source: doc.fileName,
+          note: "Commissioned before this system existed — CON-16 eligibility was never assessed, and is not re-assessed for a circuit already in service.",
+        },
+        state: "eligible",
         createdById: actor.id,
       },
     });

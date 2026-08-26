@@ -3,7 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, StatusChip } from "@/components/ui";
-import { decideDeviceTypeProposal } from "./actions";
+import { suggestDeviceType, type CatalogDevice } from "@/lib/device-match";
+import { decideDeviceTypeProposal, mergeDeviceTypeProposal } from "./actions";
 
 export type Proposal = {
   id: string;
@@ -22,10 +23,20 @@ export type Proposal = {
  * offered to every surveyor from then on, or the catalog fills with
  * near-duplicates nobody can choose between.
  */
-export function PendingProposals({ proposals, canDecide }: { proposals: Proposal[]; canDecide: boolean }) {
+export function PendingProposals({
+  proposals,
+  canDecide,
+  catalog,
+}: {
+  proposals: Proposal[];
+  canDecide: boolean;
+  /** Confirmed devices this proposal might already be one of. */
+  catalog: CatalogDevice[];
+}) {
   const router = useRouter();
   const [addToCatalog, setAddToCatalog] = useState<Record<string, boolean>>({});
   const [rejecting, setRejecting] = useState<string | null>(null);
+  const [mergeInto, setMergeInto] = useState<Record<string, string>>({});
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
@@ -59,6 +70,60 @@ export function PendingProposals({ proposals, canDecide }: { proposals: Proposal
               {p.proposedBy ? `Proposed by ${p.proposedBy}` : "Proposed"} · {p.proposedAt}
               {p.note ? ` · ${p.note}` : ""}
             </p>
+
+            {(() => {
+              // Offer the device it is probably a duplicate of, before the
+              // Confirm/Reject choice — that pair has no answer for "this
+              // already exists under another name".
+              const match = suggestDeviceType(p.name, p.defaultWattage, catalog);
+              const chosen = mergeInto[p.id] ?? match?.device.id ?? "";
+              if (!canDecide || !match) return null;
+              return (
+                <div
+                  className="mt-2 rounded-[var(--r-sm)] border p-2.5 text-[13px]"
+                  style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
+                >
+                  <p className="mb-1.5" style={{ color: "var(--warn-fg)" }}>
+                    The catalog already has <strong>{match.device.name}</strong>
+                    {match.sameWattage ? ", at the same wattage" : ""} — this may be the same fixture
+                    under another name.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <select
+                      className="field field-auto"
+                      aria-label={`Merge ${p.name} into`}
+                      value={chosen}
+                      onChange={(e) => setMergeInto((m) => ({ ...m, [p.id]: e.target.value }))}
+                    >
+                      {catalog.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                          {c.defaultWattage !== null ? ` · ${c.defaultWattage}W` : ""}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn-primary"
+                      // Several proposals can be waiting at once, each with its
+                      // own button reading the same two words.
+                      aria-label={`${p.name} is an existing device`}
+                      disabled={pending || !chosen}
+                      onClick={() =>
+                        start(async () => {
+                          setError(null);
+                          const r = await mergeDeviceTypeProposal({ id: p.id, intoId: chosen });
+                          if ("error" in r) setError(r.error);
+                          else router.refresh();
+                        })
+                      }
+                    >
+                      It is this one
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
 
             {!canDecide ? null : rejecting === p.id ? (
               <div className="mt-2 space-y-2">

@@ -77,6 +77,9 @@ export default async function DeviceCatalogPage() {
           these, so it is the first thing an ops lead should see here. */}
       <PendingProposals
         canDecide={canEdit}
+        catalog={types
+          .filter((t) => t.status === "approved" && t.role === "original" && !t.deletedAt)
+          .map((t) => ({ id: t.id, name: t.name, defaultWattage: t.defaultWattage }))}
         proposals={proposals.map((p) => ({
           id: p.id,
           name: p.name,

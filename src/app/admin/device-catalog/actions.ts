@@ -320,3 +320,64 @@ export async function decideDeviceTypeProposal(input: {
   revalidatePath(PATH);
   return { ok: true };
 }
+
+/**
+ * This proposed device is one the catalog already has.
+ *
+ * Confirm/Reject was the whole choice, and neither fits a duplicate: rejecting
+ * leaves the circuit pointing at a device nobody will approve, and confirming
+ * puts a second entry for one fixture in the catalog — two answers to what
+ * that circuit should be drawing (user-reported 2026-08-26).
+ *
+ * Merging moves every inventory line onto the existing device and closes the
+ * proposal as merged. The proposal row survives, saying what it became: a
+ * device that silently disappeared would leave the surveyor who added it
+ * wondering whether it was ever seen.
+ */
+export async function mergeDeviceTypeProposal(input: { id: string; intoId: string }): Promise<Outcome> {
+  const admin = await requireCatalogEditor();
+  if (!admin) return { error: "Deciding a proposed device is an operations-lead action." };
+  if (input.id === input.intoId) return { error: "Choose a different device to merge it into." };
+
+  const [proposal, target] = await Promise.all([
+    db.deviceType.findUnique({ where: { id: input.id } }),
+    db.deviceType.findUnique({ where: { id: input.intoId } }),
+  ]);
+  if (!proposal || !target) return { error: "That device is no longer on record." };
+  if (proposal.status !== "proposed") return { error: `"${proposal.name}" has already been decided.` };
+  if (target.status !== "approved") return { error: `"${target.name}" is not a confirmed device.` };
+  if (target.role !== proposal.role) return { error: "A device can only be merged into one of the same kind." };
+
+  const moved = await db.$transaction(async (tx) => {
+    // The inventory lines keep their own wattage and hours — those were read
+    // from the document and are the circuit's own record. Only which
+    // catalogued device they point at changes.
+    const r = await tx.circuitDevice.updateMany({
+      where: { deviceTypeId: proposal.id },
+      data: { deviceTypeId: target.id },
+    });
+    await tx.circuitDevice.updateMany({
+      where: { replacementTypeId: proposal.id },
+      data: { replacementTypeId: target.id },
+    });
+    await tx.deviceType.update({
+      where: { id: proposal.id },
+      data: {
+        status: "rejected",
+        rejectionReason: `Merged into "${target.name}" — the same fixture under another name.`,
+        approvedById: admin.id,
+        approvedAt: new Date(),
+      },
+    });
+    return r.count;
+  });
+
+  logger.info("catalog.device_type_merged", {
+    actorId: admin.id,
+    from: proposal.name,
+    into: target.name,
+    linesMoved: moved,
+  });
+  revalidatePath(PATH);
+  return { ok: true };
+}

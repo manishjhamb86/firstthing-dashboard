@@ -5,9 +5,21 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import type { ExtractedDocument } from "@/lib/document-extract";
+import { suggestDeviceType, type CatalogDevice } from "@/lib/device-match";
 import { createCircuitFromDocument, readStoredDocument } from "../actions";
 
-type Line = { label: string; count: string; watts: string; hours: string; retrofitted: boolean; source: string };
+type Line = {
+  label: string;
+  count: string;
+  watts: string;
+  hours: string;
+  retrofitted: boolean;
+  source: string;
+  /** "" means "not in the list — add it", which needs operations to confirm. */
+  deviceTypeId: string;
+  /** Whether the id above was suggested by matching rather than chosen. */
+  suggested: boolean;
+};
 
 /**
  * The model proposes; a person decides. Every figure arrives with the words
@@ -27,6 +39,7 @@ export function ExtractionReview({
   societyName,
   societyId,
   existingCircuits,
+  catalog,
 }: {
   documentId: string;
   canRead: boolean;
@@ -41,10 +54,15 @@ export function ExtractionReview({
   societyName: string;
   societyId: string;
   existingCircuits: number;
+  catalog: CatalogDevice[];
 }) {
   const router = useRouter();
   const linesFrom = (d: ExtractedDocument | null): Line[] =>
-    (d?.fixtures ?? []).map((f) => ({
+    (d?.fixtures ?? []).map((f) => {
+      // Offer the catalogue entry this fixture already is, rather than
+      // silently creating a second one beside it.
+      const match = suggestDeviceType(f.label, f.watts, catalog);
+      return {
       label: f.label,
       count: f.count === null ? "" : String(f.count),
       watts: f.watts === null ? "" : String(f.watts),
@@ -54,7 +72,10 @@ export function ExtractionReview({
       // safer reading and the operator confirms.
       retrofitted: f.retrofitted === true,
       source: f.sourceText,
-    }));
+      deviceTypeId: match?.device.id ?? "",
+      suggested: Boolean(match),
+      };
+    });
 
   const [lines, setLines] = useState<Line[]>(linesFrom(proposed));
   const [lightType, setLightType] = useState("");
@@ -255,13 +276,37 @@ export function ExtractionReview({
               style={{ borderColor: "var(--border-subtle)" }}
             >
               <div className="flex flex-wrap items-end gap-3">
-                <Field label="Fixture" htmlFor={`fx-label-${i}`}>
+                <Field label="Fixture (as the document names it)" htmlFor={`fx-label-${i}`}>
                   <input
                     id={`fx-label-${i}`}
                     className="field field-auto"
                     value={l.label}
                     onChange={(e) => setLines((p) => p.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))}
                   />
+                </Field>
+                <Field
+                  label="Is this device"
+                  htmlFor={`fx-dev-${i}`}
+                  hint={l.deviceTypeId ? (l.suggested ? "Matched to the catalog." : "Chosen.") : "Not in the list — will need confirming."}
+                >
+                  <select
+                    id={`fx-dev-${i}`}
+                    className="field field-auto"
+                    value={l.deviceTypeId}
+                    onChange={(e) =>
+                      setLines((p) =>
+                        p.map((x, j) => (j === i ? { ...x, deviceTypeId: e.target.value, suggested: false } : x)),
+                      )
+                    }
+                  >
+                    {catalog.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                        {c.defaultWattage !== null ? ` · ${c.defaultWattage}W` : ""}
+                      </option>
+                    ))}
+                    <option value="">+ Not in the list — add it</option>
+                  </select>
                 </Field>
                 <Field label="Count" htmlFor={`fx-count-${i}`}>
                   <input
@@ -315,7 +360,16 @@ export function ExtractionReview({
           onClick={() =>
             setLines((p) => [
               ...p,
-              { label: "", count: "", watts: "", hours: "24", retrofitted: true, source: "Added by hand — not read from the document." },
+              {
+                label: "",
+                count: "",
+                watts: "",
+                hours: "24",
+                retrofitted: true,
+                source: "Added by hand — not read from the document.",
+                deviceTypeId: "",
+                suggested: false,
+              },
             ])
           }
         >
@@ -395,6 +449,7 @@ export function ExtractionReview({
                   watts: Number(l.watts),
                   hoursPerDay: Number(l.hours),
                   retrofitted: l.retrofitted,
+                  deviceTypeId: l.deviceTypeId || undefined,
                 })),
                 answers,
               });

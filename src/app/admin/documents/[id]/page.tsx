@@ -28,6 +28,11 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
 
   const label = DOCUMENT_TYPES.find((t) => t.id === doc.docType)?.label ?? doc.docType;
   const circuits = await db.circuit.count({ where: { societyId: doc.societyId, voidedAt: null } });
+  const catalog = await db.deviceType.findMany({
+    where: { role: "original", deletedAt: null, active: true, status: { in: ["approved", "proposed"] } },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, defaultWattage: true },
+  });
   const proposed = (doc.extraction?.proposed ?? null) as ExtractedDocument | null;
   const contracted =
     doc.docType === "agreement"
@@ -93,6 +98,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
             societyName={doc.society.name}
             societyId={doc.societyId}
             existingCircuits={circuits}
+            catalog={catalog}
           />
           )}
         </div>

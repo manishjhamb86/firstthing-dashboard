@@ -404,6 +404,14 @@ export type ConfirmedFixture = {
   hoursPerDay: number;
   /** False means it shares the circuit but was not part of the retrofit. */
   retrofitted: boolean;
+  /**
+   * The catalogued device this fixture IS, chosen by the operator from the
+   * list. Only when this is absent does a new device get proposed — a report
+   * saying "Tube lights" was creating a second entry beside the catalog's
+   * "Tube light 20W" (user-reported 2026-08-26), and two device types for one
+   * fixture are two answers to what a circuit should be drawing.
+   */
+  deviceTypeId?: string;
 };
 
 /**
@@ -460,9 +468,13 @@ export async function createCircuitFromDocument(input: {
   const lineTypeIds: string[] = [];
   for (const f of usable) {
     const name = f.label.trim();
-    let type = await db.deviceType.findFirst({
-      where: { name: { equals: name, mode: "insensitive" }, role: "original", deletedAt: null },
-    });
+    let type = f.deviceTypeId
+      ? await db.deviceType.findFirst({
+          where: { id: f.deviceTypeId, role: "original", deletedAt: null, status: { in: ["approved", "proposed"] } },
+        })
+      : await db.deviceType.findFirst({
+          where: { name: { equals: name, mode: "insensitive" }, role: "original", deletedAt: null },
+        });
     if (!type) {
       type = await db.deviceType.create({
         data: {

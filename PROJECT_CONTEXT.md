@@ -2106,6 +2106,60 @@ picker and submitted: refused by name, stored owner untouched. The worker's hour
 for real against Postgres: seeded, ran, and left exactly **one** pending link, no fork. 528 unit
 tests, `tsc`/`lint`/`build` clean; two additive migrations plus one enum value.
 
+## One place to file any document, and it checks what the file really is (2026-08-26) — user-asked
+
+**The ask**: a back-office tab where every kind of document can be uploaded, the type chosen from a
+dropdown, each type performing its own operation — and the system validating the file itself,
+rejecting one that does not match the format or file type the chosen type expects.
+
+**The validation is byte-level, because a name is a claim.** `src/lib/file-signature.ts` sniffs
+magic bytes (PDF, PNG, JPEG, GIF, WebP, and the ZIP container that XLSX/DOCX really are) and falls
+back to a text/binary judgement for CSVs, which have no signature. An extension is written by
+whoever named the file and the browser's MIME guess is usually derived from that same extension, so
+neither catches the ordinary mistake this exists for: a spreadsheet saved as `.pdf`, a photo renamed
+`.csv`. The refusal names **both halves** — "it is named .pdf but its contents are a text or CSV
+file" — because "rejected" alone sends the operator back to the same file to try again.
+
+**One registry decides everything about a type** (`src/lib/document-catalog.ts`): its label, what
+happens to the file, what it attaches to, whether it needs a period, the accepted kinds and
+extensions, the size cap and the permission. The tab, the permission check and the validator all
+read the same entry, so a document cannot be accepted here under rules its own screen would not
+apply. **The permission is derived from the type server-side** — a client choosing a type it has no
+permission for is refused rather than trusted.
+
+**Only the first 4 KB crosses the wire.** That is all the evidence needed to know what a file is, so
+the bytes still go straight to S3 by presigned PUT (the pattern since 2026-08-05) rather than
+through this process. The client runs the identical check for an instant message; the server's copy
+is the one that decides, and the e2e drives a rejected file through the button to prove it.
+
+**Three routing outcomes, deliberately.** A meter export becomes a `RawReadingFile` and opens
+CON-45's row-by-row review — nothing is stored until the operator accepts it. A KYC file goes
+through `recordKycDocument`, the same action its own screen calls, because two paths writing the
+same rows drift. The historical documents the user listed — pre/post-installation demo reports,
+previous savings reports, gate passes, inspection reports — had nowhere to live, so `StoredDocument`
+is a new generic attachment: society + type + period + provenance. It is **not** a shadow copy of
+documents that have a workflow (a KYC file stays a `KycDocumentFile`), for the same reason the
+archived app's unified listing was a live query rather than its own table.
+
+**The executed agreement is listed but deliberately not filed from here.** Attaching it is part of
+the execution sequence (printed → notarised → signed → scan), so doing it from a generic tab would
+either skip that state or invent it. The tab names where it belongs instead of half-doing it —
+and it still validates the file if you pick the type.
+
+**Historical documents feed nothing.** They are retrievable, not inputs: a scanned report is not
+evidence a figure can be recomputed from, which is what INV-02 asks of anything that reaches a
+billed total. The screen says so where the operator can read it.
+
+Verified in a browser, **21/21, zero console errors**: all eight types offered; a CSV named `.pdf`
+refused with both halves named; a PDF named `.csv` refused as a meter export; the agreement type
+pointing at its own screen and offering no file input at all; a real PDF accepted, filed against the
+society with **the period the operator chose rather than one read from the file** (INV-04), and
+appearing in Recently filed. **The rejection was driven through the server**, not just the browser —
+clicked past the client-side check and asserted on `document.rejected`, the action's own log line,
+per this repo's rule that a refusal you cannot distinguish from "the form never submitted" is not a
+verified refusal. 22 new unit cases across `file-signature` and `document-catalog`.
+`tsc`/`lint`/`build` clean. Migration `20260826140000_add_stored_documents` is purely additive.
+
 ## eWeLink (SONOFF) meter mirror: the account, the assignment, and what the docs will not tell us (2026-08-26) — user-asked
 
 **The ask**: pull every smart meter and its reading history out of the company's eWeLink account,

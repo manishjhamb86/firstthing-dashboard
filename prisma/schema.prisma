@@ -324,6 +324,7 @@ model Society {
 
   // MS-08
   monthlyCalculations MonthlyCalculation[]
+  storedDocuments     StoredDocument[]
 
   @@map("societies")
 }
@@ -433,6 +434,7 @@ model AdminUser {
   waterTanksAssigned          WaterTank[]        @relation("WaterTankAssignedBy")
   meterDevicesAssigned        MeterDevice[]      @relation("MeterDeviceAssignedBy")
   meterDevicesOwned           MeterDevice[]      @relation("MeterDeviceOwner")
+  storedDocuments             StoredDocument[]   @relation("StoredDocumentUploadedBy")
   ewelinkConfigsUpdated       EwelinkApiConfig[] @relation("EwelinkApiConfigUpdatedBy")
   tankApiConfigUpdated        TankApiConfig[]    @relation("TankApiConfigUpdatedBy")
   circuitsReplacementAssigned Circuit[]          @relation("CircuitReplacementAssignedBy")
@@ -2529,4 +2531,38 @@ model MeterSample {
 
   @@index([meterId, recordedAt])
   @@map("meter_samples")
+}
+
+/// A document that belongs to a society but has no workflow of its own —
+/// the pre/post demo reports, savings reports, gate passes and inspection
+/// reports that predate this system, plus anything filed for the record.
+///
+/// Deliberately NOT a shadow copy of documents that DO have a workflow: a
+/// KYC file is a KycDocumentFile and a meter export is a RawReadingFile,
+/// because those carry state this table has no way to represent. Two rows
+/// for one document would drift, which is exactly why the archived app's
+/// unified "Documents" listing was built as a live query across the real
+/// tables rather than as its own table (2026-08-06).
+model StoredDocument {
+  id        String @id @default(cuid())
+  /// The catalog id from src/lib/document-catalog.ts.
+  docType   String @map("doc_type")
+  societyId String @map("society_id")
+  /// INV-04 — always an explicit selection, never inferred from the file.
+  period    String
+
+  s3Key       String  @map("s3_key")
+  fileName    String  @map("file_name")
+  contentType String  @map("content_type")
+  byteSize    Int     @map("byte_size")
+  note        String?
+
+  uploadedById String   @map("uploaded_by_id")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  society    Society   @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  uploadedBy AdminUser @relation("StoredDocumentUploadedBy", fields: [uploadedById], references: [id])
+
+  @@index([societyId, docType])
+  @@map("stored_documents")
 }

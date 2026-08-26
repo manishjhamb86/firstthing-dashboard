@@ -12,7 +12,15 @@ export type DocType =
   // MS-06 — daily installation batch evidence (FEAT-034-AC-3) and the
   // society's dispute evidence (FEAT-035).
   | "installationBatch"
-  | "batchDispute";
+  | "batchDispute"
+  // Historical/external documents accepted through the Documents tab
+  // (2026-08-26). The 2026-08-05 convention already named these; they come
+  // back now that something actually files them.
+  | "preDemoReport"
+  | "postDemoReport"
+  | "savingsReport"
+  | "gatePass"
+  | "inspectionReport";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
@@ -20,6 +28,11 @@ const DOC_TYPE_FOLDER: Record<DocType, string> = {
   agreement: "Agreements",
   installationBatch: "Installation",
   batchDispute: "Installation",
+  preDemoReport: "Reports",
+  postDemoReport: "Reports",
+  savingsReport: "Reports",
+  gatePass: "GatePasses",
+  inspectionReport: "Reports",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -28,6 +41,11 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
   agreement: "Agreement",
   installationBatch: "BatchPhoto",
   batchDispute: "DisputeEvidence",
+  preDemoReport: "PreDemoReport",
+  postDemoReport: "PostDemoReport",
+  savingsReport: "SavingsReport",
+  gatePass: "GatePass",
+  inspectionReport: "InspectionReport",
 };
 
 function slugifySociety(name: string): string {

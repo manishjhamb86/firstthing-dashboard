@@ -23,6 +23,15 @@ const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline" | "manage_survey"> 
   // here — see src/app/portal/uploads.ts. Mapped to the strictest admin
   // permission so this action can never be the path that serves it.
   batchDispute: "manage_pipeline",
+  // Historical documents are filed through /admin/documents, which derives
+  // the permission from the catalog rather than from this map. Listed here
+  // only so the type stays exhaustive — a new DocType must be a deliberate
+  // decision in both places, not a silent default.
+  preDemoReport: "manage_pipeline",
+  postDemoReport: "manage_pipeline",
+  savingsReport: "manage_pipeline",
+  gatePass: "manage_pipeline",
+  inspectionReport: "manage_pipeline",
 };
 
 export async function getUploadUrl(input: {

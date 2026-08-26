@@ -15,6 +15,7 @@ import {
   Receipt,
   Users,
   Zap,
+  FileText,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NavShell, type NavItem } from "@/components/nav-shell";
@@ -81,6 +82,8 @@ export function AppShell({
     // vendor and a different assignment target — a circuit, not a society.
     ...(showMeters ? [{ href: "/admin/meters", label: "Meters", icon: Zap }] : []),
     ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
+    // One place to file any document, whatever kind it is (2026-08-26).
+    ...(showPipeline ? [{ href: "/admin/documents", label: "Documents", icon: FileText }] : []),
     ...(showCatalog ? [{ href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb }] : []),
     ...(showBilling ? [{ href: "/admin/billing", label: "Billing", icon: Receipt }] : []),
     ...(showUsers ? [{ href: "/admin/users", label: "Admin users", icon: Users }] : []),

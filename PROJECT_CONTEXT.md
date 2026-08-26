@@ -2257,6 +2257,17 @@ a conflict — "amend that one rather than creating a second", about the contrac
 A computed revenue share also rendered at fourteen decimal places; it is two now, because
 64.00013280653408 reads as a figure nobody could check.
 
+**6. Save did nothing at all for a workbook, silently.** The client holds no file text for one —
+the server reads it back from S3 — and `save()` guarded on that text being truthy. The button
+rendered, enabled, with the right count on it, and clicking it returned immediately: no request, no
+error, no loading state. The third time this codebase has produced that exact shape.
+
+**7. The commit's transaction was sized for a monthly upload, not a history.** 275 days at one
+`create` per row over the tunnel ran past Prisma's default 5-second interactive transaction, rolled
+the whole thing back, and surfaced as a raw `P2028` in the browser rather than a typed refusal. The
+plain inserts are one `createMany` now, and the transaction is given a deadline a history upload can
+actually meet.
+
 **What the walk proves, against the real files**: the society is created; the scanned agreement is
 read (share computed from ₹54,214 of ₹1,50,595 = 36.0% FirsThing / 64.0% society, matching the
 document's own "~36%"), recorded with the term start skipped, and the contract created when that
@@ -2264,7 +2275,14 @@ date is supplied; the demo report is read, **raises its own two questions** (the
 itself on the light count, 96 vs 20, and prints October dates with no year), and builds a
 96-light 20W 24h circuit with no baseline invented from its prose; the two dates are recorded; and
 the workbook produces days that reproduce the report's own printed table — 48.84, 48.79, 48.35
-before, ~16 after.
+before, ~16 after. The circuit finishes at **baseline 44.9647 kWh/day from 15 pre-install days and
+benchmark 63.44% from 275 post-install days**, inside CON-20's band, state `benchmark_confirmed`,
+zero console errors.
+
+**One figure worth keeping, because the system was right and the check was not**: a naive average of
+the file gives 63.5568%. The system says 63.4420% because two days are part-days in the export (10
+of 24 intervals, and 15 of 24) — stored, listed with their reason, and kept out of the average. A
+part-day total reads as an unusually low day, which would flatter the saving.
 
 **Still open, and not claimed**: the report's own extracted daily readings do not feed the reading
 store; `savings-math` is not wired to a screen. None of this is deployed to stage yet.

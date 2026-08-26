@@ -536,6 +536,8 @@ export async function commitCircuitReadings(
   let excluded = 0;
   let superseded = 0;
 
+  const newRows: NonNullable<Parameters<Tx["meterReading"]["createMany"]>[0]>["data"][] = [];
+
   const summaryAfter = await db.$transaction(async (tx) => {
     for (const row of derived.rows) {
       const decision = byDate.get(iso(row.date));
@@ -555,19 +557,21 @@ export async function commitCircuitReadings(
             ? decision.reason?.trim() || "Deselected from the average at review"
             : null;
         const exclusionReason = partialReason ?? deselected;
-        await tx.meterReading.create({
-          data: {
-            circuitId: circuit.id,
-            date: row.date,
-            kWh: row.kWh,
-            intervalCount: row.intervalCount,
-            expectedIntervals: row.expectedIntervals,
-            source: "csv",
-            rawFileId: file.id,
-            ...(exclusionReason
-              ? { excludedAt: now, excludedById: admin.id, excludedReason: exclusionReason }
-              : {}),
-          },
+        // Collected and inserted in one statement below rather than one round
+        // trip per day. A society's whole history is a legitimate single
+        // upload — Ace City's is 275 days — and at one create each it ran
+        // past the transaction's own deadline and rolled the lot back.
+        newRows.push({
+          circuitId: circuit.id,
+          date: row.date,
+          kWh: row.kWh,
+          intervalCount: row.intervalCount,
+          expectedIntervals: row.expectedIntervals,
+          source: "csv" as const,
+          rawFileId: file.id,
+          ...(exclusionReason
+            ? { excludedAt: now, excludedById: admin.id, excludedReason: exclusionReason }
+            : {}),
         });
         saved++;
         if (exclusionReason) excluded++;
@@ -626,13 +630,20 @@ export async function commitCircuitReadings(
       }
     }
 
+    if (newRows.length > 0) await tx.meterReading.createMany({ data: newRows.flat() });
+
     await tx.rawReadingFile.update({
       where: { id: file.id },
       data: { status: "committed", rangeStart: derived.window.from, rangeEnd: derived.window.to },
     });
 
     return recomputeCircuitFigures(tx, circuit.id);
-  });
+  },
+  // Even batched, a history upload does real work: a supersede is a lookup
+  // and an update each, and the recompute reads every stored day. The
+  // default five seconds is sized for a monthly upload, and a society's
+  // whole history is not that.
+  { timeout: 120_000, maxWait: 20_000 });
 
   // FEAT-020-AC-1 — generation is automatic on BenchmarkConfirmed. The
   // legacy window flow has always done this; the CON-45 commit path never

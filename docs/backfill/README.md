@@ -12,6 +12,16 @@ two documents, fill three CSVs, generate SQL, insert.
 |---|---|
 | The signed **agreement** | revenue share, ₹/kWh, term length, tolerance, contracted light count, monthly service charge, signature date |
 | The **post-installation savings report** | per circuit: the fixtures, counts, wattages, running hours, the pre-install baseline, the after figure, the savings %, and the commissioning dates |
+| The **first invoice** | the light count actually billed against, and — from the number of days it covers — the installation-completion date |
+
+The third one was the user's catch (2026-08-26) and it removes the only field
+that had no source at all. A first invoice covering 16 days of a 31-day
+December means billing ran 16–31 December, so installation completed on the
+15th. That date is `term_start`, and nothing else in the paperwork states it:
+the agreement only says the term runs "from the date of installation
+completion". The invoice also prints the light count it bills against — Ace
+City's says 2,508 where the agreement rounds to 2,500 — and the invoice is
+the figure that was actually charged.
 
 Everything else is either already in the database (the 19 societies, their
 locations, flat counts and portal accounts all exist) or comes from the
@@ -61,9 +71,12 @@ hand:
 
 ## Rules settled with the user (2026-08-26)
 
-- **`term_start`** is supplied per society from your own records. Neither
-  document states it — the agreement only says the term runs "from the date of
-  installation completion" — and it is the date billing runs from (CON-22).
+- **`term_start`** is derived from the **first invoice**: the month's length
+  minus the days it bills, giving the day installation completed. Neither the
+  agreement nor the report states it. (Superseded the original plan of taking
+  it from the operator's records — the invoice has it, for all 19.)
+- **`represented_light_count`** is the **first invoice's** light count, not the
+  agreement's contracted figure: the invoice bills what was actually installed.
 - **`tolerance_pct`** is **10** wherever the agreement states none, which is
   common.
 - **`lights_replaced_on`** is the **day before the post-installation readings

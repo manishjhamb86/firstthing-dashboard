@@ -11,19 +11,40 @@ images, and those go through the model instead.
 Written rather than installed because pdftotext is not on this machine and
 adding it needs a sudo the job does not otherwise require.
 """
-import re, sys, zlib
+import base64, re, sys, zlib
 
 def streams(data: bytes):
+    """
+    Every stream, decoded as far as it can be.
+
+    Filters are chained and vary by producer: Zoho's invoices are plain
+    FlateDecode, while the ones from xhtml2pdf are ASCII85 first and then
+    Flate. Applying 85 before inflating costs nothing when it does not apply
+    and is the difference between text and line noise when it does.
+    """
     for m in re.finditer(rb"stream\r?\n", data):
         start = m.end()
         end = data.find(b"endstream", start)
         if end < 0:
             continue
         raw = data[start:end].rstrip(b"\r\n")
+        body = raw.strip()
+        # The end-of-data marker is what identifies ASCII85 here. xhtml2pdf
+        # writes the trailing "~>" without the leading "<~", so keying off the
+        # start of the stream misses it entirely.
+        if body.endswith(b"~>"):
+            try:
+                raw = base64.a85decode(
+                    body[2:-2] if body.startswith(b"<~") else body[:-2],
+                    adobe=False,
+                    ignorechars=b" \t\r\n\v\f",
+                )
+            except Exception:
+                pass
         try:
             yield zlib.decompress(raw)
         except zlib.error:
-            yield raw            # already plain
+            yield raw            # already plain, or a filter we do not handle
 
 def unescape(s: bytes) -> str:
     out, i = [], 0

@@ -100,16 +100,45 @@ def decode(raw: str, cmap: dict) -> str:
     return "".join(cmap.get(int.from_bytes(b[i : i + 2], "big"), "") for i in range(0, len(b), 2))
 
 
-def text_of(content: bytes) -> str:
+def text_of(content: bytes) -> list:
+    """
+    The strings each text-showing operator draws, in order.
+
+    A string is written either as a literal in parentheses or as hex in angle
+    brackets, and which one is the producer's choice: Zoho writes literals,
+    macOS Preview writes hex. Handling only literals returns nothing at all
+    from half these files rather than failing loudly.
+
+    Each string is returned with one character per byte (latin-1), so the
+    ToUnicode map can be applied the same way to both forms.
+    """
     lines = []
-    # Tj / ' / " show one string; TJ shows an array of strings and kerns.
-    for m in re.finditer(rb"\[((?:[^\[\]\\]|\\.)*)\]\s*TJ|\(((?:[^()\\]|\\.)*)\)\s*(?:Tj|'|\")", content, re.S):
+
+    def one(raw: bytes, is_hex: bool) -> str:
+        if not is_hex:
+            return unescape(raw)
+        h = re.sub(rb"[^0-9A-Fa-f]", b"", raw)
+        if len(h) % 2:
+            h += b"0"                     # a trailing nibble is padded with 0
+        return bytes.fromhex(h.decode("ascii")).decode("latin-1")
+
+    # TJ takes an array of strings and kerning numbers; Tj / ' / " take one.
+    pattern = (
+        rb"\[((?:[^\[\]\\]|\\.)*)\]\s*TJ"
+        rb"|\(((?:[^()\\]|\\.)*)\)\s*(?:Tj|'|\")"
+        rb"|<([0-9A-Fa-f\s]*)>\s*(?:Tj|'|\")"
+    )
+    for m in re.finditer(pattern, content, re.S):
         if m.group(1) is not None:
-            parts = re.findall(rb"\(((?:[^()\\]|\\.)*)\)", m.group(1), re.S)
-            lines.append("".join(unescape(p) for p in parts))
+            parts = re.findall(rb"\(((?:[^()\\]|\\.)*)\)|<([0-9A-Fa-f\s]*)>", m.group(1), re.S)
+            lines.append("".join(one(a, False) if a is not None and a != b"" or b is None
+                                 else one(b, True) for a, b in parts))
+        elif m.group(2) is not None:
+            lines.append(one(m.group(2), False))
         else:
-            lines.append(unescape(m.group(2)))
+            lines.append(one(m.group(3), True))
     return lines
+
 
 def extract(path: str) -> str:
     data = open(path, "rb").read()

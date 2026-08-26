@@ -38,12 +38,33 @@ export function AgreementTerms({
   const router = useRouter();
   const firstFromDoc = proposed.firsthingSharePct.value;
   const socFromDoc = proposed.societySharePct.value;
-  const derivedSociety =
+
+  // The agreement usually prints the money the share is a share OF, so the
+  // share can be CHECKED rather than trusted. Ace City's says ₹54,214 out of
+  // ₹1,50,595 — 36% to FirsThing, 64% to the society — and the model read
+  // that as a society share of 100% (user-reported 2026-08-26). Arithmetic
+  // beats a misread sentence when the arithmetic is printed on the page.
+  const fee = proposed.monthlyServiceChargeInr?.value ?? null;
+  const savings = proposed.monthlySavingsInr?.value ?? null;
+  const computedFirsthing =
+    fee !== null && savings !== null && savings > 0 ? (fee / savings) * 100 : null;
+  const computedSociety = computedFirsthing === null ? null : 100 - computedFirsthing;
+
+  const statedSociety =
     socFromDoc !== null ? socFromDoc : firstFromDoc !== null ? 100 - firstFromDoc : null;
+  // Where both exist and disagree by more than rounding, the computed one is
+  // offered and the disagreement is shown — never silently resolved.
+  const shareDisagrees =
+    statedSociety !== null && computedSociety !== null && Math.abs(statedSociety - computedSociety) > 1;
+  const derivedSociety = computedSociety ?? statedSociety;
 
   const [societyShare, setSocietyShare] = useState(derivedSociety === null ? "" : String(derivedSociety));
   const [tolerance, setTolerance] = useState("10");
-  const [rate, setRate] = useState("");
+  const [rate, setRate] = useState(
+    proposed.unitElectricityRateInr?.value === null || proposed.unitElectricityRateInr?.value === undefined
+      ? ""
+      : String(proposed.unitElectricityRateInr.value),
+  );
   const [term, setTerm] = useState(
     proposed.contractTermMonths.value === null ? "" : String(proposed.contractTermMonths.value),
   );
@@ -59,13 +80,34 @@ export function AgreementTerms({
   // being chosen, because they are different dates and the wrong one moves
   // when billing starts.
   const dated = (proposed.dates ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.value));
+
+  // Which date is the signature, when several are printed.
+  //
+  // The user's rule (2026-08-26): take the stamped or front-page date. Ace
+  // City's document prints "10/11/2025" in one place and a signature dated
+  // "11/10/2025" in another — the same day in two formats, or two different
+  // days, and nothing on the page settles which. The stamp is unambiguous, so
+  // it wins; the rest stay one click away.
+  const RANK = [/stamp/i, /front|first page|agreement date/i, /effective/i, /sign/i];
+  const rankOf = (label: string) => {
+    const i = RANK.findIndex((r) => r.test(label));
+    return i === -1 ? RANK.length : i;
+  };
+  const preferred = [...dated].sort((a, b) => rankOf(a.label) - rankOf(b.label))[0] ?? null;
+  const whyPreferred = preferred
+    ? rankOf(preferred.label) === 0
+      ? "Taken from the stamp, which is unambiguous."
+      : rankOf(preferred.label) <= 2
+        ? "Taken from the date on the agreement itself."
+        : "Taken from the signature."
+    : "";
   // Two different dates, and conflating them was the bug: the agreement is
   // signed, then installation happens — sometimes two months later — and the
   // three-year term runs from the day it completes and the society approves
   // it (the user's correction, 2026-08-26). The system's live path already
   // works this way: CON-22 starts billing from the completion certificate the
   // society signs, never from the agreement.
-  const [executed, setExecuted] = useState(dated.length === 1 ? dated[0].value : "");
+  const [executed, setExecuted] = useState(preferred?.value ?? "");
   const [start, setStart] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -140,11 +182,13 @@ export function AgreementTerms({
   }
 
   const shareRow =
-    firstFromDoc !== null && socFromDoc === null
-      ? `The document states FirsThing's share as ${firstFromDoc}%, so the society's is ${100 - firstFromDoc}% — derived, not printed.`
-      : socFromDoc !== null
-        ? `The document states the society's share as ${socFromDoc}%.`
-        : "The document does not state either share — enter the society's.";
+    computedFirsthing !== null
+      ? `₹${fee?.toLocaleString("en-IN")} of ₹${savings?.toLocaleString("en-IN")} saved is ${computedFirsthing.toFixed(1)}% to FirsThing — so ${computedSociety!.toFixed(1)}% to the society. Computed from the document's own figures.`
+      : firstFromDoc !== null && socFromDoc === null
+        ? `The document states FirsThing's share as ${firstFromDoc}%, so the society's is ${100 - firstFromDoc}% — derived, not printed.`
+        : socFromDoc !== null
+          ? `The document states the society's share as ${socFromDoc}%.`
+          : "The document does not state either share — enter the society's.";
 
   return (
     <Card className="p-6">
@@ -165,9 +209,21 @@ export function AgreementTerms({
           take weeks — and the term runs from the day installation finished and the society approved
           it. A document usually prints the first and not the second.
         </span>
+        {shareDisagrees && (
+          <span className="mt-1.5 block font-semibold" style={{ color: "var(--warn-fg)" }}>
+            The document&apos;s wording reads as {statedSociety!.toFixed(0)}% to the society, but its own
+            figures give {computedSociety!.toFixed(1)}%. The figures are used — check the sentence
+            below before recording.
+          </span>
+        )}
         {proposed.firsthingSharePct.sourceText && (
           <span className="mt-1 block text-[11px]" style={{ color: "var(--text-subtle)" }}>
             {proposed.firsthingSharePct.sourceText}
+          </span>
+        )}
+        {proposed.monthlyServiceChargeInr?.sourceText && (
+          <span className="mt-1 block text-[11px]" style={{ color: "var(--text-subtle)" }}>
+            {proposed.monthlyServiceChargeInr.sourceText}
           </span>
         )}
       </div>
@@ -176,10 +232,11 @@ export function AgreementTerms({
         <Field label="Society's share %" htmlFor="at-share">
           <input id="at-share" type="number" className="field field-auto w-28" value={societyShare} onChange={(e) => setSocietyShare(e.target.value)} />
         </Field>
-        <Field label="Tolerance %" htmlFor="at-tol" hint="CON-01a — not usually printed; confirm it">
-          <input id="at-tol" type="number" className="field field-auto w-24" value={tolerance} onChange={(e) => setTolerance(e.target.value)} />
-        </Field>
-        <Field label="₹ per kWh" htmlFor="at-rate" hint="The rate the agreement's money figures use">
+        <Field
+          label="₹ per kWh"
+          htmlFor="at-rate"
+          hint={proposed.unitElectricityRateInr?.value != null ? "Read from the document." : "The rate the agreement's money figures use"}
+        >
           <input id="at-rate" type="number" step="0.01" className="field field-auto w-24" value={rate} onChange={(e) => setRate(e.target.value)} />
         </Field>
         <Field label="Term (months)" htmlFor="at-term">
@@ -191,23 +248,43 @@ export function AgreementTerms({
         <Field label="Agreed saving %" htmlFor="at-bench" hint="What the fee is a share of">
           <input id="at-bench" type="number" step="0.01" className="field field-auto w-28" value={benchmark} onChange={(e) => setBenchmark(e.target.value)} />
         </Field>
+        {/* Beside the saving it bounds, not the share — it is a tolerance on
+            the SAVING (CON-01a), and sitting next to the share read as a
+            tolerance on that (user-reported 2026-08-26). */}
+        <Field label="± on that saving %" htmlFor="at-tol" hint="CON-01a — how far a month may drift before it is a deviation">
+          <input id="at-tol" type="number" className="field field-auto w-24" value={tolerance} onChange={(e) => setTolerance(e.target.value)} />
+        </Field>
         <Field
           label="Agreement signed on"
           htmlFor="at-executed"
-          hint={
-            dated.length === 1
-              ? "Read from the document."
-              : dated.length > 1
-                ? "The document prints more than one date — pick the signature."
-                : "The document prints no usable date."
-          }
+          hint={preferred ? whyPreferred : "The document prints no usable date."}
         >
           <input id="at-executed" type="date" className="field field-auto" value={executed} onChange={(e) => setExecuted(e.target.value)} />
         </Field>
+        {/* The alternatives, right here rather than further down the page —
+            "pick the signature" with nothing to pick was the complaint. */}
+        {dated.length > 1 && (
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[12px]">
+            <span style={{ color: "var(--text-muted)" }}>or:</span>
+            {dated
+              .filter((d) => d.value !== executed)
+              .map((d, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setExecuted(d.value)}
+                  title={d.sourceText}
+                >
+                  {d.label} <span className="num">{d.value}</span>
+                </button>
+              ))}
+          </div>
+        )}
         <Field
-          label="Term started (optional)"
+          label="Term started — leave blank if you do not have it"
           htmlFor="at-start"
-          hint="When installation finished and the society approved it — not the signature date. Leave blank if you do not have it; the terms are recorded either way and the term can be started later."
+          hint="The day installation finished and the society approved it, from your own records rather than this document. Skip it and the agreement is still recorded; the contract is created when you come back with the date."
         >
           <input id="at-start" type="date" className="field field-auto" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>

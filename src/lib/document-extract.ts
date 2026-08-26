@@ -147,6 +147,16 @@ export type ExtractedDocument = {
   contractTermMonths: Figure;
   contractedLightCount: Figure;
   monthlyServiceChargeInr: Figure;
+  /**
+   * The three figures that let the share be CHECKED rather than trusted.
+   * Ace City's agreement prints "₹54,214" against "benchmarked monthly savings
+   * of ₹1,50,595" and calls it "~36%" — so the arithmetic is available, and a
+   * stated share that does not match it is a misreading worth catching
+   * (the user found exactly that: 36% read as a society share of 100%).
+   */
+  monthlySavingsInr: Figure;
+  monthlySavedKwh: Figure;
+  unitElectricityRateInr: Figure;
 
   /** Every date the document states, labelled as the document labels it. */
   dates: LabelledDate[];
@@ -188,6 +198,9 @@ const SCHEMA = {
     contractTermMonths: FIGURE,
     contractedLightCount: FIGURE,
     monthlyServiceChargeInr: FIGURE,
+    monthlySavingsInr: FIGURE,
+    monthlySavedKwh: FIGURE,
+    unitElectricityRateInr: FIGURE,
     dates: {
       type: "array",
       items: {
@@ -250,7 +263,8 @@ const SCHEMA = {
     "lightCount", "wattagePerLight", "operatingHoursPerDay", "theoreticalDailyKwh",
     "baselineDailyKwh", "afterDailyKwh", "savingsPct",
     "firsthingSharePct", "societySharePct", "contractTermMonths", "contractedLightCount",
-    "monthlyServiceChargeInr", "dates", "fixtures", "dailyReadings", "clarifications", "notFound", "notes",
+    "monthlyServiceChargeInr", "monthlySavingsInr", "monthlySavedKwh",
+    "unitElectricityRateInr", "dates", "fixtures", "dailyReadings", "clarifications", "notFound", "notes",
   ],
 };
 
@@ -281,6 +295,15 @@ Extract only what the document actually states. These rules are absolute:
    "firsthingSharePct" and "societySharePct" separately, and only from what is
    printed. If the document says one of them, leave the other null rather than
    subtracting from 100 yourself, and say in "notes" which one was printed.
+   A "service charge", "our fee" or "we will charge" is FIRSTHING's share; a
+   "society's share of savings" is the society's. A sentence like "the service
+   charge corresponds to ~36% of the benchmarked monthly savings" states
+   FirsThing's share as 36 — it does NOT state the society's as 36 or as 100.
+   Also record the money it is a share of: "monthlySavingsInr" is the total
+   monthly saving, "monthlyServiceChargeInr" is FirsThing's fee out of it,
+   "monthlySavedKwh" the units saved and "unitElectricityRateInr" the ₹ per
+   kWh the document uses ("23,904 kWh x 6.30 = 1,50,595 @ 6.30 per kWh" gives
+   all three).
 7. Put every genuine ambiguity in "clarifications": something a careful reader
    would have to ask about. Each needs a plain question, why it matters, the
    candidate answers you can see, and the surrounding text. Do not raise a
@@ -289,7 +312,10 @@ Extract only what the document actually states. These rules are absolute:
    the document, tagged with the window it appeared under in that document's
    own words ("Before installation", "Re-verification May 2026").
 9. "dates" is every date the document states, each with the label the document
-   gives it — "Effective Date", "Signature date", "Agreement date". Include a
+   gives it — "Stamp Date", "Effective Date", "Signature date". Where the same
+   day appears in two formats (10/11/2025 and 11/10/2025), say so in the label
+   of the second and in "notes" rather than silently treating them as two
+   different days. Include a
    date the document REFERS to but does not print (an effective date left
    blank, a signature block that is still a template placeholder) with an empty
    value, so the gap is visible rather than absent. If a clause says what the

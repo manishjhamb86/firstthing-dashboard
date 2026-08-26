@@ -106,21 +106,28 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
       "Filed against the society as the executed copy on record. No execution sequence is invented for it — a deal executed through the system still records printing, notarising and signing on its own step.",
     context: "society",
     needsPeriod: true,
-    // A signed agreement is a PDF. A photograph of one is a different
-    // artefact and should not be filed as if it were the executed copy.
-    acceptedKinds: ["pdf"],
-    acceptedExtensions: ["pdf"],
+    // What actually exists varies: a PDF, the Word original, or a scan —
+    // and sometimes the Word file is simply gone (the user's own note,
+    // 2026-08-26). Refusing a scan because it is an image would refuse the
+    // only copy some societies have. A scan of a signed agreement IS the
+    // executed copy; the earlier "an image is a different artefact" reading
+    // was about a photograph standing in for a document that exists
+    // elsewhere, which is not this case.
+    acceptedKinds: ["pdf", "zip", "png", "jpeg"],
+    acceptedExtensions: ["pdf", "docx", "png", "jpg", "jpeg"],
     maxBytes: 25 * MB,
     permission: "manage_pipeline",
     uploadHere: true,
   },
   ...(
     [
-      ["preDemoReport", "Pre-installation demo report", ["pdf"], ["pdf"], 25],
-      ["postDemoReport", "Post-installation demo report", ["pdf"], ["pdf"], 25],
-      ["savingsReport", "Savings report (previous)", ["pdf"], ["pdf"], 25],
-      ["gatePass", "Gate pass", ["pdf", "png", "jpeg"], ["pdf", "png", "jpg", "jpeg"], 15],
-      ["inspectionReport", "Inspection report", ["pdf"], ["pdf"], 25],
+      // Same reasoning as the agreement: a report may only exist as the Word
+      // original or as a scan, and refusing those refuses the only copy.
+      ["preDemoReport", "Pre-installation demo report", ["pdf", "zip", "png", "jpeg"], ["pdf", "docx", "png", "jpg", "jpeg"], 25],
+      ["postDemoReport", "Post-installation demo report", ["pdf", "zip", "png", "jpeg"], ["pdf", "docx", "png", "jpg", "jpeg"], 25],
+      ["savingsReport", "Savings report (previous)", ["pdf", "zip", "png", "jpeg"], ["pdf", "docx", "png", "jpg", "jpeg"], 25],
+      ["gatePass", "Gate pass", ["pdf", "zip", "png", "jpeg"], ["pdf", "docx", "png", "jpg", "jpeg"], 15],
+      ["inspectionReport", "Inspection report", ["pdf", "zip", "png", "jpeg"], ["pdf", "docx", "png", "jpg", "jpeg"], 25],
     ] as const
   ).map(([id, label, kinds, exts, mb]) => ({
     id: id as DocumentTypeId,
@@ -182,16 +189,28 @@ export function validateDocumentUpload(input: {
   }
 
   const actual = sniffKind(input.head);
+  const claimed = kindFromExtension(input.fileName);
+
+  // The rule is that the file IS what its name says, and that the name is one
+  // this type accepts — not merely that the contents land somewhere in the
+  // accepted list. That distinction started mattering the moment .docx was
+  // accepted (2026-08-26): a .docx and an .xlsx are both ZIP containers, so
+  // "contents are a zip" would let a spreadsheet through under a .pdf name.
+  // Comparing against what the EXTENSION claims closes that without giving up
+  // anything — the extension was already checked against the accepted list.
+  if (claimed && actual !== claimed) {
+    // Both halves are named: "rejected" without saying what the file actually
+    // turned out to be sends the operator back to the same file to try again.
+    return {
+      ok: false,
+      reason: `That file is not a valid ${spec.label.toLowerCase()}. It is named .${ext} but its contents are ${KIND_LABEL[actual]}.`,
+    };
+  }
   if (!spec.acceptedKinds.includes(actual)) {
-    const claimed = kindFromExtension(input.fileName);
-    // The message names both halves, because "rejected" without saying what
-    // the file actually turned out to be sends the operator back to the same
-    // file to try again.
-    const mismatch =
-      claimed && claimed !== actual
-        ? `It is named .${ext} but its contents are ${KIND_LABEL[actual]}.`
-        : `Its contents are ${KIND_LABEL[actual]}.`;
-    return { ok: false, reason: `That file is not a valid ${spec.label.toLowerCase()}. ${mismatch}` };
+    return {
+      ok: false,
+      reason: `That file is not a valid ${spec.label.toLowerCase()}. Its contents are ${KIND_LABEL[actual]}.`,
+    };
   }
 
   if (input.byteSize <= 0) return { ok: false, reason: "That file is empty." };

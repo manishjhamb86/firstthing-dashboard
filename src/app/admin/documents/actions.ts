@@ -342,6 +342,15 @@ export async function readStoredDocument(documentId: string): Promise<{ error?: 
   if (!doc) return { error: "That document is no longer on record." };
   if (doc.voidedAt) return { error: "That version has been withdrawn." };
   if (!EXTRACTABLE_TYPES.has(doc.docType)) return { error: "There are no figures to read out of that document type." };
+  // A .docx is a ZIP of XML, not a page the model can look at. It is accepted
+  // for the record — sometimes it is the only copy — but reading figures out
+  // of it needs the PDF or a scan.
+  if (/word|officedocument/.test(doc.contentType) || doc.fileName.toLowerCase().endsWith(".docx")) {
+    return {
+      error:
+        "This is the Word original, which is kept but cannot be read for figures. File the PDF or a scan of the same document and read that.",
+    };
+  }
 
   try {
     const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: doc.s3Key }));
@@ -404,6 +413,8 @@ export async function createCircuitFromDocument(input: {
   lightType: string;
   /** Where on site — the operator's words, not the file's name. */
   location?: string;
+  /** Who to ask for at the society, when a deal has to be created for it. */
+  contactName?: string;
   representedLightCount: number;
   fixtures: ConfirmedFixture[];
   /** The operator's answers to the model's questions, kept with the record. */
@@ -415,7 +426,10 @@ export async function createCircuitFromDocument(input: {
     return { error: "Creating a circuit is a field-survey action." };
   }
 
-  const doc = await db.storedDocument.findUnique({ where: { id: input.documentId } });
+  const doc = await db.storedDocument.findUnique({
+    where: { id: input.documentId },
+    include: { society: { select: { name: true } } },
+  });
   if (!doc || doc.voidedAt) return { error: "That document is no longer on record." };
 
   const lightType = input.lightType.trim();
@@ -456,9 +470,47 @@ export async function createCircuitFromDocument(input: {
 
   const circuit = await db.$transaction(async (tx) => {
     const primary = usable.find((f) => f.retrofitted)!;
+
+    // A circuit belongs to a survey, and a survey to a deal (CON-24). These
+    // societies have neither — the deal happened before the system existed —
+    // and leaving the circuit unattached is what left the survey link
+    // pointing nowhere. So the deal and its survey are created, marked as
+    // backfilled, rather than the circuit floating free (the user's call,
+    // 2026-08-26).
+    //
+    // What is NOT invented: no commercial terms. A Pipeline holds a contact,
+    // a date and an owner — operational facts — and the owner is honestly the
+    // person doing the backfill. An Offer, by contrast, carries the revenue
+    // share and the rate a bill is computed from, so it is not created here;
+    // that comes from the agreement, which states them.
+    let pipeline = await tx.pipeline.findFirst({
+      where: { societyId: doc.societyId, serviceLine: "lighting" },
+    });
+    if (!pipeline) {
+      pipeline = await tx.pipeline.create({
+        data: {
+          societyId: doc.societyId,
+          serviceLine: "lighting",
+          // Already signed and running — that is what a backfill means.
+          stage: "agreed",
+          contactName: input.contactName?.trim() || doc.society.name,
+          // The document's own period, which the operator chose (INV-04) —
+          // NOT a meeting anyone attended. Said so in the notes rather than
+          // presented as history.
+          meetingDate: new Date(`${doc.period}-01T00:00:00.000Z`),
+          salesOwnerId: actor.id,
+          loggedById: actor.id,
+          notes: `Backfilled from ${doc.fileName}. This deal predates the system: the date above is the document's period, not a meeting, and no commercial terms are recorded here — those come from the agreement.`,
+        },
+      });
+    }
+    const survey =
+      (await tx.siteSurvey.findUnique({ where: { pipelineId: pipeline.id } })) ??
+      (await tx.siteSurvey.create({ data: { pipelineId: pipeline.id } }));
     const created = await tx.circuit.create({
       data: {
         societyId: doc.societyId,
+        siteSurveyId: survey.id,
         serviceLine: "lighting",
         lightType,
         // The area the operator gave, not the filename. A file name in the

@@ -43,15 +43,31 @@ describe("rejecting the wrong file", () => {
     expect(!v.ok && v.reason).toMatch(/named \.csv but its contents are a PDF/);
   });
 
-  it("catches a spreadsheet where a PDF belongs", () => {
+  // A .docx and an .xlsx are both ZIP containers, so accepting Word files
+  // must not accept spreadsheets: the test is that the bytes match what the
+  // NAME claims, not merely that they land somewhere in the accepted list.
+  it("catches a spreadsheet wearing a .pdf name", () => {
     const v = ok({ docTypeId: "agreement", fileName: "agreement.pdf", byteSize: 900, head: XLSX });
     expect(v.ok).toBe(false);
-    expect(!v.ok && v.reason).toMatch(/spreadsheet/);
+    expect(!v.ok && v.reason).toMatch(/named \.pdf but its contents are a spreadsheet/);
   });
 
-  it("refuses a photograph of a contract as the executed agreement", () => {
-    // Deliberate: an image of an agreement is not the artefact the record means.
-    expect(ok({ docTypeId: "agreement", fileName: "signed.png", byteSize: 900, head: PNG }).ok).toBe(false);
+  it("takes the Word original of an agreement", () => {
+    // Sometimes it is the only copy there is (the user's note, 2026-08-26).
+    expect(ok({ docTypeId: "agreement", fileName: "agreement.docx", byteSize: 9000, head: XLSX }).ok).toBe(true);
+  });
+
+  it("and a scan of one", () => {
+    expect(ok({ docTypeId: "agreement", fileName: "signed-scan.png", byteSize: 9000, head: PNG }).ok).toBe(true);
+  });
+
+  // A KNOWN LIMIT, asserted so it is not mistaken for coverage: .docx and
+  // .xlsx are both ZIP containers, so a spreadsheet renamed .docx is
+  // indistinguishable from a Word file by its bytes and IS accepted. Catching
+  // it would mean reading the container's parts, which is a bigger job than
+  // the mistake warrants — the operator sees the filename on the record.
+  it("cannot tell a spreadsheet renamed .docx from a Word file, and does not pretend to", () => {
+    expect(ok({ docTypeId: "agreement", fileName: "numbers.docx", byteSize: 900, head: XLSX }).ok).toBe(true);
   });
 
   it("refuses a PDF as a meter reading export by extension, clearly", () => {
@@ -77,7 +93,7 @@ describe("rejecting the wrong file", () => {
   // Order matters: a wrong file that is also oversized should be told what is
   // wrong with it first, not sent away to shrink a file it cannot use.
   it("reports the wrong format before the size", () => {
-    const v = ok({ docTypeId: "agreement", fileName: "x.pdf", byteSize: 90 * 1024 * 1024, head: PNG });
+    const v = ok({ docTypeId: "meterReadings", fileName: "x.csv", byteSize: 90 * 1024 * 1024, head: PDF });
     expect(!v.ok && v.reason).toMatch(/not a valid/);
   });
 });

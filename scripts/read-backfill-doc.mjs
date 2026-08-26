@@ -93,14 +93,40 @@ async function withRetry(fn, attempts = 6) {
   }
 }
 
-const res = await withRetry(() =>
-  ai.interactions.create({
-    model: "gemini-3.6-flash",
-    input: [
-      { type: "text", text: PROMPTS[kind] },
-      { type: "document", data: readFileSync(path).toString("base64"), mime_type: "application/pdf" },
-    ],
-    response_format: { type: "text", mime_type: "application/json" },
-  }),
-);
+/**
+ * The free tier's quota is per MODEL, so an exhausted one is not an
+ * exhausted key. Ordered by preference; the first that answers is used, and
+ * which one it was goes to stderr so a figure can be traced to the model
+ * that read it.
+ */
+const MODELS = ["gemini-3.6-flash", "gemini-flash-latest"];
+
+async function readWith(model) {
+  return withRetry(() =>
+    ai.interactions.create({
+      model,
+      input: [
+        { type: "text", text: PROMPTS[kind] },
+        { type: "document", data: readFileSync(path).toString("base64"), mime_type: "application/pdf" },
+      ],
+      response_format: { type: "text", mime_type: "application/json" },
+    }),
+    // One wait, not six: a model whose daily quota is gone will never clear
+    // inside this run, and the next model is right there.
+    2,
+  );
+}
+
+let res, lastErr;
+for (const model of MODELS) {
+  try {
+    res = await readWith(model);
+    process.stderr.write(`read by ${model}\n`);
+    break;
+  } catch (err) {
+    lastErr = err;
+    process.stderr.write(`${model} unavailable, trying the next\n`);
+  }
+}
+if (!res) throw lastErr;
 console.log(res.output_text);

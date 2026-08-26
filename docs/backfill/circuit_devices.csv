@@ -1,2 +1,3 @@
 society_name,circuit_location,device_name,count,wattage_each,hours_per_day,excluded,replacement_device_name,replacement_wattage
 Ace City,Basement,Tube light 20W,96,20,24,no,Motion-enabled batten 20W,20
+Ace Aspire,,Tube light 20W,71,20,,no,Motion-enabled batten 20W,20

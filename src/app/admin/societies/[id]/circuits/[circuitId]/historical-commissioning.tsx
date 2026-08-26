@@ -14,10 +14,13 @@ export function HistoricalCommissioning({
   circuitId,
   meterInstalledAt,
   lightReplacementDate,
+  embedded = false,
 }: {
   circuitId: string;
   meterInstalledAt: string | null;
   lightReplacementDate: string | null;
+  /** Rendered as a step's body, where the step header already names it. */
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const [meter, setMeter] = useState(meterInstalledAt ?? "");
@@ -26,9 +29,9 @@ export function HistoricalCommissioning({
   const [pending, start] = useTransition();
   const done = Boolean(meterInstalledAt);
 
-  return (
-    <Card className="mb-5 p-6">
-      <CardTitle>What already happened</CardTitle>
+  const inner = (
+    <>
+      {!embedded && <CardTitle>What already happened</CardTitle>}
       <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
         This circuit was commissioned before the system existed, so it is not walked through meter
         install, gate passes and a baseline window — those happened. Two dates are still needed: the
@@ -85,6 +88,8 @@ export function HistoricalCommissioning({
           the benchmark through the usual review.
         </p>
       )}
-    </Card>
+    </>
   );
+
+  return embedded ? inner : <Card className="mb-5 p-6">{inner}</Card>;
 }

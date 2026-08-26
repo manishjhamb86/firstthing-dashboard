@@ -1709,6 +1709,12 @@ model RawReadingFile {
   byteSize    Int     @map("byte_size")
   vendor      String?
 
+  // Which sheet the readings were taken from, when the upload is a workbook.
+  // A society's history often arrives as one file covering several circuits
+  // (Ace City: Basement and LiftLobby in five sheets), so without this the
+  // provenance chain cannot say whose consumption a figure came from.
+  sheetName String? @map("sheet_name")
+
   status ReadingUploadStatus @default(pending_normalization)
 
   // The mapping the model proposed, and the one actually used. Both are kept:

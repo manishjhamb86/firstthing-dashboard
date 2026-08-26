@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import type { ExtractedDocument } from "@/lib/document-extract";
+import { dateOptions, readLooseDate } from "@/lib/loose-date";
 import { createContractFromAgreement, startContractTerm } from "../actions";
 
 const n = (v: string) => (v.trim() === "" ? NaN : Number(v));
@@ -24,6 +25,7 @@ export function AgreementTerms({
   societyId,
   canRecord,
   alreadyContracted,
+  isTheExecutedCopy,
   awaitingTermStart,
 }: {
   documentId: string;
@@ -32,6 +34,8 @@ export function AgreementTerms({
   societyId: string;
   canRecord: boolean;
   alreadyContracted: boolean;
+  /** The contract on record is the one this very document produced. */
+  isTheExecutedCopy: boolean;
   /** Terms are on record; only the day the term began is missing. */
   awaitingTermStart: boolean;
 }) {
@@ -58,7 +62,13 @@ export function AgreementTerms({
     statedSociety !== null && computedSociety !== null && Math.abs(statedSociety - computedSociety) > 1;
   const derivedSociety = computedSociety ?? statedSociety;
 
-  const [societyShare, setSocietyShare] = useState(derivedSociety === null ? "" : String(derivedSociety));
+  // Two decimals, not fourteen. ₹54,214 of ₹1,50,595 divides to
+  // 64.00013280653408, and every digit past the second is arithmetic
+  // precision the document does not have — it reads as a figure nobody
+  // could check.
+  const [societyShare, setSocietyShare] = useState(
+    derivedSociety === null ? "" : String(Math.round(derivedSociety * 100) / 100),
+  );
   const [tolerance, setTolerance] = useState("10");
   const [rate, setRate] = useState(
     proposed.unitElectricityRateInr?.value === null || proposed.unitElectricityRateInr?.value === undefined
@@ -79,7 +89,15 @@ export function AgreementTerms({
   // saying the term runs from installation — they are offered rather than one
   // being chosen, because they are different dates and the wrong one moves
   // when billing starts.
-  const dated = (proposed.dates ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.value));
+  // Not ISO-only: a document prints "23 Oct 2025", and treating that as
+  // unusable is what left this field empty under a list of five legible
+  // dates (found walking Ace City's own agreement, 2026-08-26).
+  const dated = (proposed.dates ?? [])
+    .map((d) => {
+      const read = readLooseDate(d.value);
+      return read?.kind === "exact" ? { ...d, value: read.iso } : null;
+    })
+    .filter((d): d is NonNullable<typeof d> => d !== null);
 
   // Which date is the signature, when several are printed.
   //
@@ -153,20 +171,7 @@ export function AgreementTerms({
     );
   }
 
-  if (alreadyContracted) {
-    return (
-      <Card className="p-6">
-        <CardTitle>{societyName} already has a lighting contract</CardTitle>
-        <p className="text-sm">
-          A second one would give the same society two sets of terms to be billed against. Amend the
-          existing contract instead — an amendment applies forward only, and the month already
-          computed stays on the version in force at the time.
-        </p>
-      </Card>
-    );
-  }
-
-  if (done) {
+  if (done || isTheExecutedCopy) {
     return (
       <Card className="p-6">
         <CardTitle>Contract recorded</CardTitle>
@@ -177,6 +182,19 @@ export function AgreementTerms({
         <Link href={`/admin/societies/${societyId}`} className="btn-primary mt-4 inline-block">
           Open the society →
         </Link>
+      </Card>
+    );
+  }
+
+  if (alreadyContracted) {
+    return (
+      <Card className="p-6">
+        <CardTitle>{societyName} already has a lighting contract</CardTitle>
+        <p className="text-sm">
+          A second one would give the same society two sets of terms to be billed against. Amend the
+          existing contract instead — an amendment applies forward only, and the month already
+          computed stays on the version in force at the time.
+        </p>
       </Card>
     );
   }
@@ -257,7 +275,13 @@ export function AgreementTerms({
         <Field
           label="Agreement signed on"
           htmlFor="at-executed"
-          hint={preferred ? whyPreferred : "The document prints no usable date."}
+          hint={
+            preferred
+              ? whyPreferred
+              : (proposed.dates ?? []).length > 0
+                ? "The dates this document prints are listed below — pick the one that is the signature."
+                : "The document prints no usable date."
+          }
         >
           <input id="at-executed" type="date" className="field field-auto" value={executed} onChange={(e) => setExecuted(e.target.value)} />
         </Field>
@@ -297,26 +321,41 @@ export function AgreementTerms({
             {(proposed.dates ?? []).map((d, i) => (
               <li key={i} className="flex flex-wrap items-baseline gap-2">
                 <span className="font-semibold">{d.label}:</span>
-                {d.value ? (
+                {d.value && dateOptions(d.value).length > 0 ? (
                   <>
                     <span className="num">{d.value}</span>
-                    <button
-                      type="button"
-                      className="btn-ghost text-[12px]"
-                      style={{ color: "var(--accent)" }}
-                      onClick={() => setExecuted(d.value)}
-                    >
-                      use as signed on
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost text-[12px]"
-                      style={{ color: "var(--accent)" }}
-                      onClick={() => setStart(d.value)}
-                    >
-                      use as term start
-                    </button>
+                    {dateOptions(d.value).map((o) => (
+                      <span key={o.iso} className="flex flex-wrap items-baseline gap-2">
+                        {/* An ambiguous numeric date offers both readings by
+                            name. 10/11 is a month apart from 11/10, and
+                            picking silently would move when billing starts. */}
+                        {dateOptions(d.value).length > 1 && (
+                          <span className="num" style={{ color: "var(--text-subtle)" }}>
+                            {o.label}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="btn-ghost text-[12px]"
+                          style={{ color: "var(--accent)" }}
+                          onClick={() => setExecuted(o.iso)}
+                        >
+                          use as signed on
+                        </button>
+                        <button
+                          type="button"
+                          className="btn-ghost text-[12px]"
+                          style={{ color: "var(--accent)" }}
+                          onClick={() => setStart(o.iso)}
+                        >
+                          use as term start
+                        </button>
+                      </span>
+                    ))}
                   </>
+                ) : d.value ? (
+                  // Printed, but not a date — a clause, or a blank line.
+                  <span className="num" style={{ color: "var(--text-subtle)" }}>{d.value}</span>
                 ) : (
                   // A blank date in the document is a fact about the document.
                   <span style={{ color: "var(--warn-fg)" }}>left blank in the document</span>

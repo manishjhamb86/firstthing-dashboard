@@ -20,6 +20,7 @@ import {
   draftDemoReadings,
   getCircuitReadingUploadUrl,
   previewCircuitReadings,
+  type SheetChoice,
   previewDemoReadings,
   recordCircuitRawUpload,
   type CircuitPreviewDTO,
@@ -164,7 +165,8 @@ export function CircuitReadingPanel({
   demoMode?: boolean;
 }) {
   const router = useRouter();
-  const [stage, setStage] = useState<"idle" | "working" | "fill" | "review" | "done">("idle");
+  const [stage, setStage] = useState<"idle" | "working" | "fill" | "sheet" | "review" | "done">("idle");
+  const [sheets, setSheets] = useState<SheetChoice[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [preview, setPreview] = useState<CircuitPreviewDTO | undefined>();
   const [rawFileId, setRawFileId] = useState<string | undefined>();
@@ -215,6 +217,7 @@ export function CircuitReadingPanel({
     setFileName(undefined);
     setRejected(new Set());
     setNoAverage(new Set());
+    setSheets([]);
     setSummary(undefined);
     setDraft(undefined);
     setDraftBasis(undefined);
@@ -276,6 +279,42 @@ export function CircuitReadingPanel({
     });
   }
 
+  /**
+   * A workbook covering more than one circuit stops here. Picking the sheet
+   * is not a formality — the file holds another circuit's consumption in the
+   * next block along, and guessing would bill one for the other.
+   */
+  function chooseSheet(name: string) {
+    if (!rawFileId) return;
+    setError(undefined);
+    setStage("working");
+    startTransition(async () => {
+      const previewed = await previewCircuitReadings(rawFileId, "", name);
+      if ("error" in previewed) {
+        setError(previewed.error);
+        setStage("sheet");
+      } else if ("chooseSheet" in previewed) {
+        setSheets(previewed.chooseSheet);
+        setStage("sheet");
+      } else {
+        acceptPreview(previewed.preview);
+      }
+    });
+  }
+
+  function acceptPreview(preview: CircuitPreviewDTO) {
+    // Partial days start deselected from the average, visibly.
+    setNoAverage(
+      new Set(
+        preview.rows
+          .filter((r) => (r.disposition === "new" || r.disposition === "supersede") && r.partial)
+          .map((r) => r.date),
+      ),
+    );
+    setPreview(preview);
+    setStage("review");
+  }
+
   function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -284,7 +323,10 @@ export function CircuitReadingPanel({
     setFileName(file.name);
     startTransition(async () => {
       try {
-        const text = await file.text();
+        // A workbook is binary — reading it as text would produce mojibake.
+        // The server fetches it back from S3 and converts it there.
+        const workbook = /\.xlsx$/i.test(file.name);
+        const text = workbook ? "" : await file.text();
         // Raw file to S3 first — a dead preview never costs the evidence.
         const presigned = await getCircuitReadingUploadUrl({
           circuitId,
@@ -308,19 +350,14 @@ export function CircuitReadingPanel({
         if ("error" in recorded) throw new Error(recorded.error);
         const previewed = await previewCircuitReadings(recorded.rawFileId, text);
         if ("error" in previewed) throw new Error(previewed.error);
-
-        // Partial days start deselected from the average, visibly — the
-        // operator can put one back deliberately.
-        const partials = new Set(
-          previewed.preview.rows
-            .filter((r) => (r.disposition === "new" || r.disposition === "supersede") && r.partial)
-            .map((r) => r.date),
-        );
-        setNoAverage(partials);
         setRawFileId(recorded.rawFileId);
         setFileText(text);
-        setPreview(previewed.preview);
-        setStage("review");
+        if ("chooseSheet" in previewed) {
+          setSheets(previewed.chooseSheet);
+          setStage("sheet");
+          return;
+        }
+        acceptPreview(previewed.preview);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));
         setStage("idle");
@@ -486,6 +523,37 @@ export function CircuitReadingPanel({
     );
   }
 
+  if (stage === "sheet") {
+    return (
+      <Card className="p-5 space-y-4">
+        <div>
+          <p className="font-medium text-sm">Which sheet holds this circuit&apos;s readings?</p>
+          <p className="text-xs text-[var(--text-muted)] mt-0.5">
+            {fileName} has more than one sheet of readings — a workbook usually covers every circuit
+            in the society. Nothing is read until you say which one is this circuit&apos;s.
+          </p>
+        </div>
+        <div className="flex flex-col items-start gap-2">
+          {sheets.map((sh) => (
+            <button
+              key={sh.name}
+              type="button"
+              className="btn-secondary"
+              disabled={pending}
+              onClick={() => chooseSheet(sh.name)}
+            >
+              {sh.name} — <span className="num">{sh.readingCount.toLocaleString()}</span> readings
+            </button>
+          ))}
+        </div>
+        {error && <ErrorText>{error}</ErrorText>}
+        <button type="button" onClick={reset} disabled={pending} className="btn-ghost">
+          Cancel
+        </button>
+      </Card>
+    );
+  }
+
   if (stage !== "review" || !preview) {
     return (
       <Card className="p-5 space-y-4">
@@ -499,7 +567,7 @@ export function CircuitReadingPanel({
           <input
             ref={inputRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.txt,.xlsx"
             onChange={onFileSelected}
             disabled={pending}
             aria-label="Meter readings CSV"

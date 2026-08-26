@@ -77,8 +77,11 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     // signature": an unrecognised layout is handled by the AI mapping path,
     // so requiring SONOFF's header here would refuse files the system can in
     // fact read. What it must not be is a PDF or a photo of a meter.
-    acceptedKinds: ["text"],
-    acceptedExtensions: ["csv", "txt"],
+    // A workbook as well as a CSV: a society's own history usually arrives
+    // as an .xlsx, often with a sheet per circuit (Ace City, 2026-08-26).
+    // The sheet is chosen at review, never guessed.
+    acceptedKinds: ["text", "zip"],
+    acceptedExtensions: ["csv", "txt", "xlsx"],
     maxBytes: 25 * MB,
     permission: "manage_pipeline",
     uploadHere: true,

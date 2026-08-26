@@ -18,6 +18,7 @@ import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
+import { formatDate } from "@/lib/format-date";
 import { AssignReplacement } from "./assign-replacement";
 import { VisitDetails } from "@/components/visit-details";
 import { teamMeta, teamsFor } from "@/lib/admin-teams";
@@ -347,8 +348,14 @@ export default async function CircuitDetailPage({
     orderBy: { name: "asc" },
   });
 
+  const backfilled =
+    (circuit.eligibilityChecklist as { backfilled?: boolean } | null)?.backfilled === true;
+
   const steps = circuitSteps({
     state: circuit.state,
+    backfilled,
+    meterInstalledAt: circuit.meterInstalledAt,
+    hasStoredReadings: storedReadings.length > 0,
     hasInstallGatePass: !!installGatePass,
     hasCompletionGatePass: !!completionGatePass,
     preInstallBaseline: circuit.preInstallBaseline,
@@ -505,18 +512,6 @@ export default async function CircuitDetailPage({
         />
       </section>
 
-      {/* A circuit that predates the system takes the short path: record the
-          two dates the readings are phased against, then upload them —
-          rather than being walked through a commissioning that happened
-          years ago. */}
-      {(circuit.eligibilityChecklist as { backfilled?: boolean } | null)?.backfilled === true && (
-        <HistoricalCommissioning
-          circuitId={circuit.id}
-          meterInstalledAt={circuit.meterInstalledAt?.toISOString().slice(0, 10) ?? null}
-          lightReplacementDate={circuit.lightReplacementDate?.toISOString().slice(0, 10) ?? null}
-        />
-      )}
-
       {/* The commissioning sequence as an accordion — the user-specified
           arrangement (2026-08-15): only the step that needs action right now
           is an open form; done steps are closed headers with their record one
@@ -531,6 +526,48 @@ export default async function CircuitDetailPage({
           let body: ReactNode = null;
 
           switch (step.key) {
+            // ---- the short path, for a circuit that predates the system ----
+            case "historical-dates": {
+              body = canEdit ? (
+                <HistoricalCommissioning
+                  circuitId={circuit.id}
+                  meterInstalledAt={circuit.meterInstalledAt?.toISOString().slice(0, 10) ?? null}
+                  lightReplacementDate={circuit.lightReplacementDate?.toISOString().slice(0, 10) ?? null}
+                  embedded
+                />
+              ) : (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Recording the commissioning dates is PER-04&apos;s action.
+                </p>
+              );
+              if (step.status === "done") {
+                summary = `Meter installed ${
+                  circuit.meterInstalledAt ? formatDate(circuit.meterInstalledAt) : "—"
+                }${
+                  circuit.lightReplacementDate
+                    ? ` · lights replaced ${formatDate(circuit.lightReplacementDate)}`
+                    : " · replacement date not recorded"
+                }`;
+              }
+              break;
+            }
+            case "readings": {
+              if (circuit.benchmarkSavingsPct != null) {
+                summary = `Benchmark ${circuit.benchmarkSavingsPct.toFixed(2)}% from the stored readings`;
+              }
+              body = canEdit ? (
+                <CircuitReadingPanel
+                  circuitId={circuit.id}
+                  window={readingWindowDTO}
+                  demoMode={demoMode}
+                />
+              ) : (
+                <p className="text-sm text-[var(--text-muted)]">
+                  Awaiting PER-04 to upload the meter&apos;s readings.
+                </p>
+              );
+              break;
+            }
             case "eligibility": {
               // A circuit backfilled from a document has no survey to send
               // anyone to, and its demo already happened — so it says what

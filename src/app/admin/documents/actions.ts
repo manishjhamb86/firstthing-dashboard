@@ -770,6 +770,16 @@ export async function createContractFromAgreement(input: {
       },
     });
 
+    // Confirming the document is about its TERMS having been read and
+    // accepted, which has happened by this point either way. It used to sit
+    // after the early return below, so an agreement recorded with the term
+    // start skipped — the normal case — stayed "Needs review" forever with
+    // nothing left to review.
+    await tx.documentExtraction.updateMany({
+      where: { documentId: doc.id },
+      data: { status: "confirmed", confirmed: t, confirmedAt: new Date(), confirmedById: actor.id },
+    });
+
     if (!termStart || !termEnd) {
       // The agreement is on record with its terms; the contract waits for the
       // date it runs from. Nothing here is lost — startContractTerm picks it
@@ -805,10 +815,6 @@ export async function createContractFromAgreement(input: {
       },
     });
 
-    await tx.documentExtraction.updateMany({
-      where: { documentId: doc.id },
-      data: { status: "confirmed", confirmed: t, confirmedAt: new Date(), confirmedById: actor.id },
-    });
     return created;
   });
 

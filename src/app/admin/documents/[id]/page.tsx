@@ -38,6 +38,17 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
     doc.docType === "agreement"
       ? (await db.contract.count({ where: { societyId: doc.societyId, serviceLine: "lighting" } })) > 0
       : false;
+  // Whether the contract that exists is the one THIS document produced. The
+  // page used to know only that a contract existed, so revisiting an
+  // agreement after recording it reported its own success as a conflict —
+  // "amend that one rather than creating a second" (user-reported
+  // 2026-08-26). The executed copy carries the link.
+  const isTheExecutedCopy =
+    doc.docType === "agreement" &&
+    contracted &&
+    (await db.agreement.count({
+      where: { executedS3Key: doc.s3Key, pipeline: { societyId: doc.societyId } },
+    })) > 0;
   // Terms on record, contract not yet created — the term start was skipped.
   const awaitingTermStart =
     doc.docType === "agreement" &&
@@ -79,6 +90,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
               societyId={doc.societyId}
               canRecord={Boolean(actor?.permissions.includes("manage_pipeline"))}
               alreadyContracted={contracted}
+              isTheExecutedCopy={isTheExecutedCopy}
               awaitingTermStart={awaitingTermStart}
             />
           ) : (

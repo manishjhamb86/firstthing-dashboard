@@ -507,7 +507,15 @@ export type CircuitFactsForSteps = {
   replacementOwnerName: string | null;
   replacementScheduledAt: Date | null;
   lightReplacementDate: Date | null;
+  meterInstalledAt?: Date | null;
   benchmarkSavingsPct: number | null;
+  /**
+   * Recorded from a document rather than walked through commissioning — a
+   * society that was live years before this system existed.
+   */
+  backfilled?: boolean;
+  /** Whether any reading has been stored against it yet. */
+  hasStoredReadings?: boolean;
 };
 
 function formatVisitDay(d: Date): string {
@@ -527,6 +535,41 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
     status: done ? "done" : current ? "current" : "locked",
     summary: done ? doneSummary : current ? currentSummary : lockedSummary,
   });
+
+  // A circuit that predates the system does not have a commissioning to walk.
+  // Showing the eight-step spine to one anyway put two contradictory next
+  // actions on the same screen — a panel saying "it is not walked through
+  // meter install, gate passes and a baseline window" directly above a step
+  // asking to install the meter and validate its load — and, worse, locked
+  // the readings upload behind a gate pass for work done years ago, so the
+  // circuit could not actually go anywhere (user-reported 2026-08-26:
+  // "what's next now, it's not clear").
+  if (c.backfilled) {
+    const datesDone = c.meterInstalledAt != null;
+    const benchmarkDone = c.benchmarkSavingsPct != null;
+    return annotateBlockers([
+      {
+        key: "eligibility",
+        title: "Eligibility (CON-16)",
+        status: "done",
+        summary: "Not assessed — already in service when it was recorded",
+      },
+      mk("historical-dates", "What already happened", datesDone, !datesDone,
+        c.lightReplacementDate
+          ? "Meter install and light replacement dates recorded"
+          : "Meter install date recorded",
+        "Record the two dates the readings are phased against — both are stated in the demo report",
+        ""),
+      mk("readings", "Readings → baseline & benchmark", benchmarkDone, datesDone && !benchmarkDone,
+        "Benchmark confirmed from the stored readings",
+        c.preInstallBaseline != null
+          ? "Baseline set — upload the readings from after the replacement to reach the benchmark"
+          : c.hasStoredReadings
+            ? "Keep uploading the meter export — the reviewed days set the baseline, then the benchmark"
+            : "Upload this circuit's meter export — every day is reviewed before it is saved",
+        "Unlocks once the two dates are recorded"),
+    ]);
+  }
 
   if (c.state === "ineligible") {
     return [

@@ -11,7 +11,7 @@
 // file plus the stored mapping before writing a thing.
 
 import { revalidatePath } from "next/cache";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -20,6 +20,8 @@ import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { buildCircuitFlowReadingKey } from "@/lib/ingest-keys";
 import { matchKnownFormat } from "@/lib/reading-formats";
+import { readWorkbook } from "@/lib/xlsx";
+import { readingSheets, sheetToReadingCsv } from "@/lib/xlsx-readings";
 import {
   buildSonoffCsv,
   demoAnchorKwh,
@@ -100,6 +102,64 @@ async function loadCircuitForReadings(circuitId: string) {
       },
     },
   });
+}
+
+/** A workbook covering several circuits cannot be resolved from the file. */
+export type SheetChoice = { name: string; readingCount: number };
+
+function isWorkbook(file: { fileName: string; contentType: string }): boolean {
+  return (
+    /\.xlsx$/i.test(file.fileName) ||
+    file.contentType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  );
+}
+
+/**
+ * The text every later step derives from.
+ *
+ * A CSV is what the client already read; a workbook is fetched back from S3
+ * and converted here. Deliberately server-side and deliberately from the
+ * stored object: the conversion picks which circuit's column block becomes
+ * the numbers, and that is not a decision to take on the client's word.
+ */
+async function textForUpload(
+  file: { s3Key: string; fileName: string; contentType: string; sheetName: string | null },
+  clientText: string,
+  chosenSheet?: string,
+): Promise<{ text: string; sheetName: string | null } | { chooseSheet: SheetChoice[] } | { error: string }> {
+  if (!isWorkbook(file)) return { text: clientText, sheetName: null };
+
+  let bytes: Uint8Array;
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: file.s3Key }));
+    bytes = await obj.Body!.transformToByteArray();
+  } catch {
+    return { error: "The stored workbook could not be read back. Upload it again." };
+  }
+
+  let sheets;
+  try {
+    sheets = readWorkbook(bytes);
+  } catch {
+    return { error: "That file is named .xlsx but could not be opened as a workbook." };
+  }
+
+  const candidates = readingSheets(sheets);
+  if (candidates.length === 0) {
+    return {
+      error:
+        "No sheet in this workbook holds readings — a sheet needs a date column and a consumption column side by side.",
+    };
+  }
+
+  const want = chosenSheet ?? file.sheetName ?? undefined;
+  const chosen = want ? candidates.find((c) => c.name === want) : candidates.length === 1 ? candidates[0] : undefined;
+  if (!chosen) {
+    return { chooseSheet: candidates.map((c) => ({ name: c.name, readingCount: c.readingCount })) };
+  }
+
+  const sheet = sheets.find((sh) => sh.name === chosen.name)!;
+  return { text: sheetToReadingCsv(sheet, chosen), sheetName: chosen.name };
 }
 
 type Derived = {
@@ -355,7 +415,8 @@ function toPreviewDTO(derived: Derived): CircuitPreviewDTO {
 export async function previewCircuitReadings(
   rawFileId: string,
   fileText: string,
-): Promise<{ preview: CircuitPreviewDTO } | { error: string }> {
+  chosenSheet?: string,
+): Promise<{ preview: CircuitPreviewDTO } | { chooseSheet: SheetChoice[] } | { error: string }> {
   const admin = await resolveAdmin();
   if (!admin || !(admin.permissions as string[]).includes("manage_survey")) {
     return { error: "Recording circuit readings is a field-survey action." };
@@ -369,7 +430,14 @@ export async function previewCircuitReadings(
   const circuit = await loadCircuitForReadings(file.circuitId);
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
 
-  const derived = deriveReview(circuit, fileText, await demoBypass("reading_window_end", { circuitId: circuit.id }));
+  const source = await textForUpload(file, fileText, chosenSheet);
+  if ("chooseSheet" in source) return source;
+  if ("error" in source) {
+    await db.rawReadingFile.update({ where: { id: file.id }, data: { aiError: source.error.slice(0, 500) } });
+    return { error: source.error };
+  }
+
+  const derived = deriveReview(circuit, source.text, await demoBypass("reading_window_end", { circuitId: circuit.id }));
   if ("error" in derived) {
     await db.rawReadingFile.update({
       where: { id: file.id },
@@ -383,6 +451,7 @@ export async function previewCircuitReadings(
     data: {
       status: "ready",
       vendor: derived.vendor,
+      sheetName: source.sheetName,
       confirmedMapping: derived.mapping as unknown as object,
       aiConfidence: "exact_signature",
       ingestPhase: derived.kind,
@@ -440,7 +509,15 @@ export async function commitCircuitReadings(
   // Everything is re-derived from the file — the client's rows were never
   // authority. A decision for a day the derivation doesn't consider
   // actionable is ignored, whatever the client claimed about it.
-  const derived = deriveReview(circuit, fileText, await demoBypass("reading_window_end", { circuitId: circuit.id }));
+  // The stored sheet name, never the client's — the preview settled which
+  // circuit's block these numbers are, and the commit re-derives from that.
+  const source = await textForUpload(file, fileText);
+  if ("chooseSheet" in source) {
+    return { error: "Which sheet these readings come from was not recorded. Upload the workbook again." };
+  }
+  if ("error" in source) return { error: source.error };
+
+  const derived = deriveReview(circuit, source.text, await demoBypass("reading_window_end", { circuitId: circuit.id }));
   if ("error" in derived) return { error: derived.error };
 
   const gate = await requireForKind(derived.kind);

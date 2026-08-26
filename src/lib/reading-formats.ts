@@ -36,6 +36,15 @@ function firstNonEmptyLine(text: string): string {
  */
 const SONOFF_HEADER = "data,time,consumption/kwh";
 
+/**
+ * The same export pasted into a workbook, which is how a society's own
+ * history usually reaches us (Ace City, 2026-08-26): the time column is
+ * dropped, leaving the day repeated once per hourly reading. Produced by
+ * xlsx-readings.ts, and matched here rather than special-cased there so a
+ * hand-made CSV of the same shape is read identically.
+ */
+const WORKBOOK_HEADER = "data,consumption/kwh";
+
 export function matchKnownFormat(rawText: string): FormatMatch | null {
   const header = firstNonEmptyLine(stripBom(rawText)).toLowerCase();
   if (header === SONOFF_HEADER) {
@@ -48,6 +57,27 @@ export function matchKnownFormat(rawText: string): FormatMatch | null {
         dateColumn: 0,
         timeColumn: 1,
         valueColumn: 2,
+        valueUnit: "kWh",
+        dateFormat: "ISO",
+        granularity: "sub_daily",
+        valueKind: "interval",
+        footerRowsToIgnore: 0,
+      },
+    };
+  }
+  if (header === WORKBOOK_HEADER) {
+    return {
+      vendor: "sonoff_workbook",
+      expectedIntervalsPerDay: 24,
+      mapping: {
+        delimiter: ",",
+        headerRowIndex: 0,
+        dateColumn: 0,
+        // No time column: every reading of a day carries the same date, and
+        // the rollup sums them. Safe because these are interval readings —
+        // a cumulative register would need the order the time gives.
+        timeColumn: null,
+        valueColumn: 1,
         valueUnit: "kWh",
         dateFormat: "ISO",
         granularity: "sub_daily",

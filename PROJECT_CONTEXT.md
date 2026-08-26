@@ -2158,6 +2158,27 @@ against, which is precisely what INV-02 forbids. The real path to an `Agreement`
 is to backfill Pipeline → Offer → Agreement → Contract from their ACTUAL commercial terms, which the
 price list already carries (per-light cost, monthly payable, GST) — not from defaults.
 
+**Versioning, the user's stated first priority (2026-08-26).** A re-upload into the same slot —
+same society, same type, same period — is a **new version**; the previous one stays exactly as
+filed. ADR-005's rule, applied to documents. Three details carry it:
+- **"Different from what is already there" is a fact, not a guess.** Each version stores the
+  SHA-256 of what actually landed in S3, hashed server-side from the stored object. An identical
+  re-upload is refused and names the version it matches, rather than becoming a second copy.
+  The browser hashes too, so the refusal happens *before* the bytes reach the bucket — this app's
+  credentials cannot delete an S3 object, so a file accepted and then discarded would sit there
+  forever with nothing pointing at it.
+- **Every version gets its own object key** (`…_v2.pdf`). Reusing one key would overwrite the
+  previous version's bytes, which is the single thing versioning exists to prevent: the rows would
+  say v1 and v2 while the bucket held only v2.
+- **Withdrawing is soft, and a number is never reused.** `voidedAt`/`voidedById`/`voidReason`,
+  with the reason required — a withdrawal with no stated reason is indistinguishable from a
+  mistake later. `@@unique([societyId, docType, period, version])` is the structural guarantee
+  that two concurrent uploads cannot both become v3, and the next version counts past withdrawn
+  ones so the history reads as what happened rather than as though it had been rewritten.
+
+Verified 13/13 in a browser, including that a withdrawn v2 still shows as withdrawn rather than
+vanishing, and that the next upload becomes v3.
+
 **Historical documents feed nothing.** They are retrievable, not inputs: a scanned report is not
 evidence a figure can be recomputed from, which is what INV-02 asks of anything that reaches a
 billed total. The screen says so where the operator can read it.

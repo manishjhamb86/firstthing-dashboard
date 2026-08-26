@@ -4,6 +4,7 @@ import { Card, CardTitle, PageHeader } from "@/components/ui";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
 import { formatInstant } from "@/lib/format-date";
 import { DocumentUploadClient } from "./upload-client";
+import { WithdrawButton } from "./withdraw-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents" };
@@ -30,8 +31,10 @@ export default async function DocumentsPage() {
       select: { id: true, location: true, lightType: true, society: { select: { name: true } } },
     }),
     db.storedDocument.findMany({
-      orderBy: { uploadedAt: "desc" },
-      take: 15,
+      // Every version, newest slot first — a withdrawn one still shows, or
+      // "withdrawn" would be indistinguishable from "never uploaded".
+      orderBy: [{ uploadedAt: "desc" }],
+      take: 40,
       include: { society: { select: { name: true } }, uploadedBy: { select: { email: true, name: true } } },
     }),
   ]);
@@ -79,14 +82,23 @@ export default async function DocumentsPage() {
           ) : (
             <ul className="space-y-3 text-[13px]">
               {recent.map((d) => (
-                <li key={d.id} className="border-b pb-2 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                  <p className="font-semibold">{label(d.docType)}</p>
+                <li key={d.id} className="border-b pb-2.5 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
+                  <p className="font-semibold" style={d.voidedAt ? { textDecoration: "line-through" } : undefined}>
+                    {label(d.docType)} <span className="num">v{d.version}</span>
+                  </p>
                   <p style={{ color: "var(--text-muted)" }}>
                     {d.society.name} · <span className="num">{d.period}</span>
                   </p>
                   <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>
                     {d.fileName} · {formatInstant(d.uploadedAt)} · {d.uploadedBy.name ?? d.uploadedBy.email}
                   </p>
+                  {d.voidedAt ? (
+                    <p className="text-[11px]" style={{ color: "var(--warn-fg)" }}>
+                      Withdrawn — {d.voidReason}
+                    </p>
+                  ) : (
+                    <WithdrawButton documentId={d.id} version={d.version} />
+                  )}
                 </li>
               ))}
             </ul>

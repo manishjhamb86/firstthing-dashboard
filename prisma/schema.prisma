@@ -426,20 +426,22 @@ model AdminUser {
   deletedBy AdminUser?  @relation("AdminDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   deleted   AdminUser[] @relation("AdminDeletedBy")
 
-  pipelinesOwned              Pipeline[]         @relation("PipelineSalesOwner")
-  pipelinesSurveying          Pipeline[]         @relation("PipelineSurveyOwner")
-  pipelinesSurveyAssigned     Pipeline[]         @relation("PipelineSurveyAssignedBy")
-  scheduledEvents             ScheduledEvent[]   @relation("ScheduledEventAssignee")
-  circuitsReplacing           Circuit[]          @relation("CircuitReplacementOwner")
-  waterTanksAssigned          WaterTank[]        @relation("WaterTankAssignedBy")
-  meterDevicesAssigned        MeterDevice[]      @relation("MeterDeviceAssignedBy")
-  meterDevicesOwned           MeterDevice[]      @relation("MeterDeviceOwner")
-  storedDocuments             StoredDocument[]   @relation("StoredDocumentUploadedBy")
-  ewelinkConfigsUpdated       EwelinkApiConfig[] @relation("EwelinkApiConfigUpdatedBy")
-  tankApiConfigUpdated        TankApiConfig[]    @relation("TankApiConfigUpdatedBy")
-  circuitsReplacementAssigned Circuit[]          @relation("CircuitReplacementAssignedBy")
-  scheduledEventsCreated      ScheduledEvent[]   @relation("ScheduledEventCreatedBy")
-  pipelinesLogged             Pipeline[]         @relation("PipelineLoggedBy")
+  pipelinesOwned              Pipeline[]           @relation("PipelineSalesOwner")
+  pipelinesSurveying          Pipeline[]           @relation("PipelineSurveyOwner")
+  pipelinesSurveyAssigned     Pipeline[]           @relation("PipelineSurveyAssignedBy")
+  scheduledEvents             ScheduledEvent[]     @relation("ScheduledEventAssignee")
+  circuitsReplacing           Circuit[]            @relation("CircuitReplacementOwner")
+  waterTanksAssigned          WaterTank[]          @relation("WaterTankAssignedBy")
+  meterDevicesAssigned        MeterDevice[]        @relation("MeterDeviceAssignedBy")
+  meterDevicesOwned           MeterDevice[]        @relation("MeterDeviceOwner")
+  storedDocuments             StoredDocument[]     @relation("StoredDocumentUploadedBy")
+  storedDocumentsVoided       StoredDocument[]     @relation("StoredDocumentVoidedBy")
+  documentExtractions         DocumentExtraction[] @relation("DocumentExtractionConfirmedBy")
+  ewelinkConfigsUpdated       EwelinkApiConfig[]   @relation("EwelinkApiConfigUpdatedBy")
+  tankApiConfigUpdated        TankApiConfig[]      @relation("TankApiConfigUpdatedBy")
+  circuitsReplacementAssigned Circuit[]            @relation("CircuitReplacementAssignedBy")
+  scheduledEventsCreated      ScheduledEvent[]     @relation("ScheduledEventCreatedBy")
+  pipelinesLogged             Pipeline[]           @relation("PipelineLoggedBy")
 
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
   circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
@@ -2551,18 +2553,83 @@ model StoredDocument {
   /// INV-04 — always an explicit selection, never inferred from the file.
   period    String
 
+  /// ADR-005's rule applied to documents (the user's call, 2026-08-26:
+  /// "versioning is first priority"). A re-upload into the same slot — same
+  /// society, same type, same period — is a NEW VERSION; the previous one
+  /// stays exactly as it was filed. Nothing here is ever overwritten.
+  version       Int    @default(1)
+  /// SHA-256 of what actually landed in S3, hashed server-side from the
+  /// stored object rather than trusted from the browser. It is what makes
+  /// "different from the one already there" a fact rather than a guess: an
+  /// identical re-upload is refused instead of filed as a second version.
+  contentSha256 String @map("content_sha256")
+
   s3Key       String  @map("s3_key")
   fileName    String  @map("file_name")
   contentType String  @map("content_type")
   byteSize    Int     @map("byte_size")
   note        String?
 
+  /// Removing a version is a soft delete, always. The S3 object cannot be
+  /// deleted by this app's own credentials (PutObject-only by design), so a
+  /// hard delete would claim the file was gone while it sat in the bucket —
+  /// and a version filed and then withdrawn is itself a fact worth keeping.
+  /// Same shape as circuit and rescale-event voiding.
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
   uploadedById String   @map("uploaded_by_id")
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
 
-  society    Society   @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  uploadedBy AdminUser @relation("StoredDocumentUploadedBy", fields: [uploadedById], references: [id])
+  society    Society             @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  uploadedBy AdminUser           @relation("StoredDocumentUploadedBy", fields: [uploadedById], references: [id])
+  voidedBy   AdminUser?          @relation("StoredDocumentVoidedBy", fields: [voidedById], references: [id])
+  extraction DocumentExtraction?
 
+  /// A version number is used once per slot — the structural guarantee that
+  /// two concurrent uploads cannot both become "version 3".
+  @@unique([societyId, docType, period, version])
   @@index([societyId, docType])
   @@map("stored_documents")
+}
+
+enum ExtractionStatus {
+  pending
+  proposed
+  confirmed
+  failed
+
+  @@map("extraction_status")
+}
+
+/// The figures read out of a historical report by the model, and the ones a
+/// person actually confirmed.
+///
+/// Both are kept, deliberately: keeping the proposal beside the confirmed
+/// version is what makes an operator's correction visible after the fact
+/// rather than indistinguishable from agreement — the same reason
+/// RawReadingFile keeps proposedMapping alongside confirmedMapping.
+///
+/// A confirmed figure here is "what this document says", tied to the scan it
+/// was read from. It is NOT merged into MeterReading: that store's grain is a
+/// day traceable to a raw file, which a monthly printed total cannot satisfy,
+/// and INV-02 would have nothing to trace.
+model DocumentExtraction {
+  id         String           @id @default(cuid())
+  documentId String           @unique @map("document_id")
+  status     ExtractionStatus @default(pending)
+
+  proposed   Json?
+  confirmed  Json?
+  modelError String? @map("model_error")
+
+  extractedAt   DateTime? @map("extracted_at")
+  confirmedAt   DateTime? @map("confirmed_at")
+  confirmedById String?   @map("confirmed_by_id")
+
+  document    StoredDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  confirmedBy AdminUser?     @relation("DocumentExtractionConfirmedBy", fields: [confirmedById], references: [id])
+
+  @@map("document_extractions")
 }

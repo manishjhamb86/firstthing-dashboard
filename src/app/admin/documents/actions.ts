@@ -1,7 +1,9 @@
 "use server";
 
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { createHash } from "node:crypto";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { s3, S3_BUCKET } from "@/lib/s3";
@@ -38,6 +40,8 @@ export async function presignDocument(input: {
   byteSize: number;
   /** First 4 KB, base64. The only part of an upload that cannot be mistyped. */
   headBase64: string;
+  /** SHA-256 of the whole file, computed in the browser — see below. */
+  clientSha256?: string;
 }): Promise<Presigned | { error: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -95,11 +99,39 @@ export async function presignDocument(input: {
   if (spec.context === "society") {
     const society = await db.society.findUnique({ where: { id: input.contextId }, select: { name: true } });
     if (!society) return { error: "Choose the society this document belongs to." };
+    // Refuse an identical re-upload HERE rather than after it lands: this
+    // app's credentials cannot delete an S3 object, so a file accepted and
+    // then discarded would sit in the bucket forever with nothing pointing
+    // at it. The browser's hash is enough for this check — it only decides
+    // whether to accept an upload, and the authoritative hash is taken from
+    // the stored object afterwards.
+    if (input.clientSha256) {
+      const same = await db.storedDocument.findFirst({
+        where: {
+          societyId: input.contextId,
+          docType: spec.id,
+          period: input.period,
+          contentSha256: input.clientSha256,
+          voidedAt: null,
+        },
+        select: { version: true },
+      });
+      if (same) {
+        return {
+          error: `That is the same file as version ${same.version} already on record — nothing to file. Upload it only if it has actually changed.`,
+        };
+      }
+    }
+    // Every version gets its own object. Reusing one key would overwrite the
+    // previous version's bytes, which is the one thing versioning exists to
+    // prevent — the row would say v1 and v2 while the bucket held only v2.
+    const next = await nextVersion(input.contextId, spec.id, input.period);
     const key = buildDocumentKey({
       society: society.name,
       month: input.period,
       docType: spec.id as DocType,
       dateLabel: input.period,
+      identifier: `v${next}`,
       extension: extensionOf(input.fileName) || "bin",
     });
     return await presign(key, input.contentType, actor.id, spec.id);
@@ -128,6 +160,24 @@ async function presign(key: string, contentType: string, actorId: string, docTyp
   );
   logger.info("document.presigned", { actorId, docTypeId, key });
   return { uploadUrl, key };
+}
+
+async function nextVersion(societyId: string, docType: string, period: string): Promise<number> {
+  // Counts VOIDED versions too: a withdrawn v2 must not let a later upload
+  // become v2 again, or the history would read as if it had been rewritten.
+  const latest = await db.storedDocument.findFirst({
+    where: { societyId, docType, period },
+    orderBy: { version: "desc" },
+    select: { version: true },
+  });
+  return (latest?.version ?? 0) + 1;
+}
+
+/** The hash of what actually landed, not of what the browser said it sent. */
+async function sha256OfStoredObject(key: string): Promise<string> {
+  const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+  const bytes = await obj.Body!.transformToByteArray();
+  return createHash("sha256").update(bytes).digest("hex");
 }
 
 /**
@@ -171,11 +221,28 @@ export async function finalizeDocument(input: {
   }
 
   if (spec.context === "society") {
-    await db.storedDocument.create({
+    const period = input.period ?? "";
+    const contentSha256 = await sha256OfStoredObject(input.s3Key);
+
+    // Re-checked against the AUTHORITATIVE hash, not the browser's: the
+    // presign check is a courtesy that keeps junk out of the bucket, this is
+    // the one that keeps a duplicate out of the history.
+    const identical = await db.storedDocument.findFirst({
+      where: { societyId: input.contextId, docType: spec.id, period, contentSha256, voidedAt: null },
+      select: { version: true },
+    });
+    if (identical) {
+      return { error: `That is the same file as version ${identical.version} already on record — nothing was filed.` };
+    }
+
+    const version = await nextVersion(input.contextId, spec.id, period);
+    const filed = await db.storedDocument.create({
       data: {
         docType: spec.id,
         societyId: input.contextId,
-        period: input.period ?? "",
+        period,
+        version,
+        contentSha256,
         s3Key: input.s3Key,
         fileName: input.fileName,
         contentType: input.contentType,
@@ -183,9 +250,18 @@ export async function finalizeDocument(input: {
         uploadedById: actor.id,
       },
     });
-    logger.info("document.filed", { actorId: actor.id, docTypeId: spec.id, societyId: input.contextId });
+    logger.info("document.filed", {
+      actorId: actor.id,
+      docTypeId: spec.id,
+      societyId: input.contextId,
+      version,
+      documentId: filed.id,
+    });
     return {
-      message: `${spec.label} filed against the society.`,
+      message:
+        version === 1
+          ? `${spec.label} filed against the society.`
+          : `${spec.label} filed as version ${version}. Version ${version - 1} is kept as it was.`,
       href: `/admin/societies/${input.contextId}`,
     };
   }
@@ -204,4 +280,46 @@ export async function finalizeDocument(input: {
     message: "Filed against the society's KYC checklist, awaiting verification.",
     href: `/admin/pipeline/${input.contextId}/kyc`,
   };
+}
+
+
+/**
+ * Withdraw a version that should not have been filed.
+ *
+ * Soft, always. The bytes cannot be removed from S3 by this app's own
+ * credentials, so a hard delete would tell the operator the file was gone
+ * while it sat in the bucket — and a version that was filed and withdrawn is
+ * itself a fact worth keeping. The version NUMBER is never reused either:
+ * a later upload becomes the next number up, so the history reads as what
+ * happened rather than as though it had been rewritten.
+ */
+export async function voidDocumentVersion(input: {
+  documentId: string;
+  reason: string;
+}): Promise<{ error?: string; done?: true }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_pipeline")) {
+    return { error: "Withdrawing a document needs the manage pipeline permission." };
+  }
+  const reason = input.reason.trim();
+  if (!reason) return { error: "Say why this version is being withdrawn." };
+
+  const doc = await db.storedDocument.findUnique({ where: { id: input.documentId } });
+  if (!doc) return { error: "That document is no longer on record." };
+  if (doc.voidedAt) return { error: "That version has already been withdrawn." };
+
+  await db.storedDocument.update({
+    where: { id: doc.id },
+    data: { voidedAt: new Date(), voidedById: actor.id, voidReason: reason },
+  });
+  logger.info("document.version_withdrawn", {
+    actorId: actor.id,
+    documentId: doc.id,
+    docType: doc.docType,
+    version: doc.version,
+  });
+  revalidatePath("/admin/documents");
+  revalidatePath(`/admin/societies/${doc.societyId}`);
+  return { done: true };
 }

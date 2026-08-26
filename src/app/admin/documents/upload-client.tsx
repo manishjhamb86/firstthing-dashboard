@@ -24,6 +24,17 @@ type Option = { id: string; label: string };
 async function headOf(file: File): Promise<Uint8Array> {
   return new Uint8Array(await file.slice(0, 4096).arrayBuffer());
 }
+/**
+ * Hashed in the browser so an identical re-upload can be refused BEFORE the
+ * bytes reach S3 — this app's credentials cannot delete an object, so a file
+ * accepted and then discarded would sit in the bucket forever. The server
+ * re-hashes what actually landed; this one only decides whether to start.
+ */
+async function sha256Of(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 function toBase64(bytes: Uint8Array): string {
   let s = "";
   for (const b of bytes) s += String.fromCharCode(b);
@@ -189,6 +200,7 @@ export function DocumentUploadClient({
                   contentType: file.type || "application/octet-stream",
                   byteSize: file.size,
                   headBase64: toBase64(head),
+                  clientSha256: await sha256Of(file),
                 });
                 if ("error" in presigned) return setError(presigned.error);
 

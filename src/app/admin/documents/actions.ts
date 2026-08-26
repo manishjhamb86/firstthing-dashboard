@@ -608,12 +608,17 @@ export type AgreementTerms = {
   executedOn: string;
   /**
    * YYYY-MM-DD — when installation completed AND the society approved it,
-   * which is when the term actually begins. This is the date the contract
-   * runs from, and the system's own live path agrees: CON-22 starts billing
-   * from the completion certificate the society signs, never from the
-   * agreement.
+   * which is when the term actually begins. The contract runs from this, and
+   * the system's live path agrees: CON-22 starts billing from the completion
+   * certificate the society signs, never from the agreement.
+   *
+   * OPTIONAL, because it comes from the operator's own records rather than
+   * the document (the user's call, 2026-08-26) and may not be to hand. Left
+   * out, the agreement is recorded and no contract is created — a contract
+   * with no start date is not a contract anyone can bill against, and
+   * inventing one to fill the column would be worse than its absence.
    */
-  termStart: string;
+  termStart?: string;
   contactName?: string;
 };
 
@@ -663,11 +668,14 @@ export async function createContractFromAgreement(input: {
   if (!(t.benchmarkPct > 0 && t.benchmarkPct < 100)) return bad("The agreed saving must be between 0 and 100%.");
   const executedOn = new Date(`${t.executedOn}T00:00:00.000Z`);
   if (Number.isNaN(executedOn.getTime())) return bad("Give the date the agreement was signed, as YYYY-MM-DD.");
-  const termStart = new Date(`${t.termStart}T00:00:00.000Z`);
-  if (Number.isNaN(termStart.getTime())) return bad("Give the date the term started as YYYY-MM-DD.");
-  if (termStart.getTime() < executedOn.getTime()) {
-    // The term cannot begin before the agreement that creates it.
-    return bad("The term cannot start before the agreement was signed — installation follows signing, not the other way round.");
+  let termStart: Date | null = null;
+  if (t.termStart) {
+    termStart = new Date(`${t.termStart}T00:00:00.000Z`);
+    if (Number.isNaN(termStart.getTime())) return bad("Give the date the term started as YYYY-MM-DD.");
+    if (termStart.getTime() < executedOn.getTime()) {
+      // The term cannot begin before the agreement that creates it.
+      return bad("The term cannot start before the agreement was signed — installation follows signing, not the other way round.");
+    }
   }
 
   const existing = await db.contract.findFirst({
@@ -678,8 +686,8 @@ export async function createContractFromAgreement(input: {
     return bad(`${doc.society.name} already has a lighting contract on the system — amend that one rather than creating a second.`);
   }
 
-  const termEnd = new Date(termStart);
-  termEnd.setUTCMonth(termEnd.getUTCMonth() + t.termMonths);
+  const termEnd = termStart ? new Date(termStart) : null;
+  if (termEnd) termEnd.setUTCMonth(termEnd.getUTCMonth() + t.termMonths);
 
   // One entry describing the contracted scope. Per-circuit benchmarks fill in
   // as circuits are backfilled from their own reports; what is recorded here
@@ -700,7 +708,8 @@ export async function createContractFromAgreement(input: {
         data: {
           societyId: doc.societyId,
           serviceLine: "lighting",
-          stage: "active_billing",
+          // Billing only once the term has actually started.
+          stage: termStart ? "active_billing" : "agreed",
           contactName: t.contactName?.trim() || doc.society.name,
           meetingDate: executedOn,
           salesOwnerId: actor.id,
@@ -708,7 +717,7 @@ export async function createContractFromAgreement(input: {
           notes: `Backfilled from ${doc.fileName}. This deal predates the system; every commercial figure below is read from that document, not defaulted.`,
         },
       });
-    } else {
+    } else if (termStart) {
       await tx.pipeline.update({ where: { id: pipeline.id }, data: { stage: "active_billing" } });
     }
 
@@ -749,6 +758,13 @@ export async function createContractFromAgreement(input: {
       },
     });
 
+    if (!termStart || !termEnd) {
+      // The agreement is on record with its terms; the contract waits for the
+      // date it runs from. Nothing here is lost — startContractTerm picks it
+      // up from the same offer.
+      return null;
+    }
+
     const created = await tx.contract.create({
       data: {
         pipelineId: pipeline.id,
@@ -784,12 +800,92 @@ export async function createContractFromAgreement(input: {
     return created;
   });
 
-  logger.info("document.contract_backfilled", {
+  logger.info("document.agreement_backfilled", {
+    actorId: actor.id,
+    documentId: doc.id,
+    contractId: contract?.id ?? null,
+    societySharePct: t.societySharePct,
+    termMonths: t.termMonths,
+  });
+  revalidatePath(`/admin/societies/${doc.societyId}`);
+  revalidatePath(`/admin/documents/${doc.id}`);
+  return { contractId: contract?.id };
+}
+
+/**
+ * The term start, recorded later.
+ *
+ * Skipping it at backfill is normal: it is the day installation finished and
+ * the society approved, which lives in the operator's own records rather than
+ * in the agreement. This creates the contract the agreement was always going
+ * to produce, from the offer already stored — no term is retyped, so the
+ * figures cannot drift between the two steps.
+ */
+export async function startContractTerm(input: {
+  documentId: string;
+  termStart: string;
+}): Promise<{ error?: string; contractId?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_pipeline")) {
+    return { error: "Starting a contract term is a sales action (Manage pipeline)." };
+  }
+  const doc = await db.storedDocument.findUnique({ where: { id: input.documentId } });
+  if (!doc || doc.voidedAt) return { error: "That document is no longer on record." };
+
+  const agreement = await db.agreement.findFirst({
+    where: { pipeline: { societyId: doc.societyId, serviceLine: "lighting" } },
+    include: { offer: true, contract: { select: { id: true } }, pipeline: { select: { id: true } } },
+  });
+  if (!agreement) return { error: "Record the agreement's terms first." };
+  if (agreement.contract) return { error: "This agreement's term has already started." };
+
+  const termStart = new Date(`${input.termStart}T00:00:00.000Z`);
+  if (Number.isNaN(termStart.getTime())) return { error: "Give the date the term started as YYYY-MM-DD." };
+  if (agreement.signedAt && termStart.getTime() < agreement.signedAt.getTime()) {
+    return { error: "The term cannot start before the agreement was signed." };
+  }
+  const termEnd = new Date(termStart);
+  termEnd.setUTCMonth(termEnd.getUTCMonth() + agreement.offer.termMonths);
+
+  const contract = await db.$transaction(async (tx) => {
+    const created = await tx.contract.create({
+      data: {
+        pipelineId: agreement.pipelineId,
+        societyId: doc.societyId,
+        serviceLine: "lighting",
+        agreementId: agreement.id,
+        status: "active",
+        termStart,
+        termEnd,
+        activatedAt: termStart,
+        activatedById: actor.id,
+      },
+    });
+    await tx.contractTermVersion.create({
+      data: {
+        contractId: created.id,
+        version: 1,
+        effectiveFrom: termStart,
+        benchmarkSource: agreement.offer.benchmarkSource,
+        tolerancePct: agreement.offer.tolerancePct,
+        // Taken from the stored offer, never retyped — the figures cannot
+        // drift between recording the agreement and starting its term.
+        revenueSharePct: agreement.offer.revenueSharePct,
+        unitElectricityRate: agreement.offer.unitElectricityRate,
+        circuitBenchmarks: agreement.offer.circuitTerms ?? [],
+        recordedById: actor.id,
+      },
+    });
+    await tx.pipeline.update({ where: { id: agreement.pipelineId }, data: { stage: "active_billing" } });
+    return created;
+  });
+
+  logger.info("document.contract_term_started", {
     actorId: actor.id,
     documentId: doc.id,
     contractId: contract.id,
-    societySharePct: t.societySharePct,
-    termMonths: t.termMonths,
+    termStart: input.termStart,
   });
   revalidatePath(`/admin/societies/${doc.societyId}`);
   revalidatePath(`/admin/documents/${doc.id}`);

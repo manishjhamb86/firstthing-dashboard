@@ -33,6 +33,13 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
     doc.docType === "agreement"
       ? (await db.contract.count({ where: { societyId: doc.societyId, serviceLine: "lighting" } })) > 0
       : false;
+  // Terms on record, contract not yet created — the term start was skipped.
+  const awaitingTermStart =
+    doc.docType === "agreement" &&
+    !contracted &&
+    (await db.agreement.count({
+      where: { pipeline: { societyId: doc.societyId, serviceLine: "lighting" } },
+    })) > 0;
 
   return (
     <>
@@ -67,6 +74,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
               societyId={doc.societyId}
               canRecord={Boolean(actor?.permissions.includes("manage_pipeline"))}
               alreadyContracted={contracted}
+              awaitingTermStart={awaitingTermStart}
             />
           ) : (
           <ExtractionReview

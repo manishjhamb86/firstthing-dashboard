@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import type { ExtractedDocument } from "@/lib/document-extract";
-import { createContractFromAgreement } from "../actions";
+import { createContractFromAgreement, startContractTerm } from "../actions";
 
 const n = (v: string) => (v.trim() === "" ? NaN : Number(v));
 
@@ -24,6 +24,7 @@ export function AgreementTerms({
   societyId,
   canRecord,
   alreadyContracted,
+  awaitingTermStart,
 }: {
   documentId: string;
   proposed: ExtractedDocument;
@@ -31,6 +32,8 @@ export function AgreementTerms({
   societyId: string;
   canRecord: boolean;
   alreadyContracted: boolean;
+  /** Terms are on record; only the day the term began is missing. */
+  awaitingTermStart: boolean;
 }) {
   const router = useRouter();
   const firstFromDoc = proposed.firsthingSharePct.value;
@@ -67,6 +70,46 @@ export function AgreementTerms({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, startT] = useTransition();
+
+  // Skipping the term start is normal — it comes from the operator's records,
+  // not the document — so the agreement waits here rather than the contract
+  // being created with a date nobody had.
+  if (awaitingTermStart && !done) {
+    return (
+      <Card className="p-6">
+        <CardTitle>Terms recorded — the term has not started yet</CardTitle>
+        <p className="mb-4 text-sm">
+          {societyName}&apos;s agreement and its figures are on record. The contract starts on the day
+          installation finished and the society approved it, which comes from your own records rather
+          than this document. Until then there is nothing to bill against, so no contract is created.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Term started" htmlFor="at-late-start">
+            <input id="at-late-start" type="date" className="field field-auto" value={start} onChange={(e) => setStart(e.target.value)} />
+          </Field>
+          <button
+            type="button"
+            className="btn-primary mb-2"
+            disabled={pending || !canRecord || !start}
+            onClick={() =>
+              startT(async () => {
+                setError(null);
+                const r = await startContractTerm({ documentId, termStart: start });
+                if (r.error) setError(r.error);
+                else {
+                  setDone(true);
+                  router.refresh();
+                }
+              })
+            }
+          >
+            {pending ? "Starting…" : "Start the term"}
+          </button>
+        </div>
+        {error && <ErrorText>{error}</ErrorText>}
+      </Card>
+    );
+  }
 
   if (alreadyContracted) {
     return (
@@ -162,9 +205,9 @@ export function AgreementTerms({
           <input id="at-executed" type="date" className="field field-auto" value={executed} onChange={(e) => setExecuted(e.target.value)} />
         </Field>
         <Field
-          label="Term started"
+          label="Term started (optional)"
           htmlFor="at-start"
-          hint="When installation finished and the society approved it — not the signature date. Often weeks later."
+          hint="When installation finished and the society approved it — not the signature date. Leave blank if you do not have it; the terms are recorded either way and the term can be started later."
         >
           <input id="at-start" type="date" className="field field-auto" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>

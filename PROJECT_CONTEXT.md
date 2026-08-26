@@ -2197,6 +2197,49 @@ store (they would go through CON-45's review like any other), the commercial ter
 not yet backfilled into Pipeline → Offer → Agreement → Contract, and `savings-math` is not yet wired
 to a screen.
 
+## Two reports of one circuit, and the map that disagreed with itself (2026-08-26) — user-caught on stage
+
+**Reported**: "Demo commissioning is complete but the demo report was not generated. So stuck in
+between", with the report page naming a second circuit, and separately "even though a light circuit
+is created it still shows lighting service not enrolled".
+
+**All three real, and the first is the one that cost the most.** Ace City had TWO circuits: one
+built from its post-installation report (benchmark 66.40%), and one built from the
+**pre-installation report of the same 96 lights, filed under the same month**, which never got a
+benchmark. FEAT-020-AC-3 holds the demo report until every circuit has one, so the report could
+never generate — and CON-11 makes a circuit the billing grain, so the same lights would have been
+billed twice.
+
+- **The duplicate is refused now** (`src/lib/circuit-duplicate.ts`): same society, same light type,
+  same metered count. A refusal rather than a warning, matching the call already made for duplicate
+  societies — an override is precisely how those duplicate rows got created. The message names the
+  circuit, where it is, that both documents are dated the same month, why it matters, and links to
+  it, so the refusal is a route rather than a dead end. The backfill records its document's period
+  in `eligibilityChecklist` so a later report can make that comparison.
+- **The deal map asked a different question from the thing it gates.** `benchmarkDone` read the
+  MOST advanced candidate while the report reads all of them, so the map said "Demo commissioning ·
+  Completed · Benchmark confirmed" over an unfinished demo. It now requires every live candidate,
+  and when one is holding the demo open it names **that** one — the least advanced — and links to
+  it. **The general shape**: a map whose step disagrees with the screen behind it is worse than no
+  map, and this is the third time in this codebase that two rules for one question have produced a
+  dead end.
+- **Neither backfill path enrolled the service line.** The lead path has created the `Engagement`
+  alongside the deal since the same gap was found there (FEAT-039-AC-1); the circuit-from-report
+  and contract-from-agreement paths created the Pipeline and not the Engagement, so a society with
+  two commissioned circuits still read "Lighting · Not enrolled". Both upsert it now.
+
+**Verified in a browser, 12/12 and 5/5, zero console errors**, against a reproduction of Ace City's
+exact shape — including that the refusal reached the server (nothing written, and the refused
+location absent from the table) rather than being a form that never submitted. Then **deployed and
+re-verified on stage against the reported deal itself**: step 4 now reads "In progress · Circuit
+with 96 lights: Install the meter and validate the load", with step 5 locked and waiting on it.
+
+**Two things the fix deliberately does not do**, both stated to the user rather than done silently:
+the duplicate circuit already on stage is not removed (the Remove control on the circuit registry
+does that, with a reason, soft and restorable), and Ace City's engagement row is not backfilled —
+the enrolment fires at creation, so an existing society enrols with the "Enroll" button on its own
+page.
+
 ## A pre-system society, walked end to end on its own documents (2026-08-26) — user-asked
 
 **The ask, verbatim**: "I share with you all the documents required. the agreement, the demo report,

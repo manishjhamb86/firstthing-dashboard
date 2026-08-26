@@ -59,6 +59,24 @@ hand:
    "projectedSavedKwhPerDay": 0 }]
 ```
 
+## Rules settled with the user (2026-08-26)
+
+- **`term_start`** is supplied per society from your own records. Neither
+  document states it — the agreement only says the term runs "from the date of
+  installation completion" — and it is the date billing runs from (CON-22).
+- **`tolerance_pct`** is **10** wherever the agreement states none, which is
+  common.
+- **`lights_replaced_on`** is the **day before the post-installation readings
+  start**, when the report does not say. Note this dates the *report's*
+  measurement, not necessarily the physical work: Ace City's meter shows the
+  drop two months before its report re-measured.
+- **The signature date** is the agreement's front-page date, falling back to the
+  stamp — these scans routinely carry four different dates.
+- Where a report **contradicts itself**, the reading that fits the measured
+  consumption wins, and the contradiction goes in `notes`. Ace City's
+  conclusion says 20 lights where the rest of it says 96; 20 lights cannot
+  draw 48.70 kWh/day.
+
 ## What I compute rather than ask for
 
 - `dedupe_key` — already set on every society

@@ -20,6 +20,7 @@ export function ExtractionReview({
   canCreate,
   modelError,
   proposed,
+  alreadyUsed,
   /** Changes when a new reading lands — see the state sync below. */
   extractedAt,
   societyName,
@@ -31,6 +32,8 @@ export function ExtractionReview({
   canCreate: boolean;
   modelError: string | null;
   proposed: ExtractedDocument | null;
+  /** A circuit has already been built from this reading. */
+  alreadyUsed: boolean;
   extractedAt: string | null;
   societyName: string;
   societyId: string;
@@ -51,7 +54,8 @@ export function ExtractionReview({
     }));
 
   const [lines, setLines] = useState<Line[]>(linesFrom(proposed));
-  const [lightType, setLightType] = useState(proposed?.areaOrCircuit ?? "");
+  const [lightType, setLightType] = useState("");
+  const [location, setLocation] = useState(proposed?.areaOrCircuit ?? "");
   // The reading arrives AFTER this component first mounted: "Read this
   // document" calls router.refresh(), and React keeps the same instance, so a
   // useState initialiser never runs again — the fixtures the model found sat
@@ -65,7 +69,7 @@ export function ExtractionReview({
   if (proposed && extractedAt && seededFrom !== extractedAt) {
     setSeededFrom(extractedAt);
     setLines(linesFrom(proposed));
-    setLightType(proposed.areaOrCircuit ?? "");
+    setLocation(proposed.areaOrCircuit ?? "");
   }
   const [represented, setRepresented] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -73,10 +77,39 @@ export function ExtractionReview({
   const [made, setMade] = useState<{ circuitId: string; proposedTypes: string[] } | null>(null);
   const [pending, start] = useTransition();
 
+  // The document names a society. If that is not the one it was filed
+  // against, the circuit is about to be built on the wrong society — which is
+  // silent and expensive to unpick, so it is said out loud before the button.
+  const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, "");
+  const onDoc = proposed?.societyNameOnDocument?.trim() ?? "";
+  const societyMismatch =
+    onDoc.length > 2 &&
+    norm(onDoc) !== norm(societyName) &&
+    !norm(onDoc).includes(norm(societyName)) &&
+    !norm(societyName).includes(norm(onDoc));
+
   const metered = lines
     .filter((l) => l.retrofitted)
     .reduce((n, l) => n + (Number(l.count) || 0), 0);
   const unanswered = (proposed?.clarifications ?? []).filter((c) => !answers[c.id]?.trim()).length;
+
+  // Offering "Create the circuit" again on a report that already produced one
+  // is how a society ends up with the same circuit twice — and a duplicate
+  // circuit bills twice (CON-11).
+  if (alreadyUsed && !made) {
+    return (
+      <Card className="p-6">
+        <CardTitle>A circuit has already been built from this report</CardTitle>
+        <p className="text-sm">
+          Reading it again would not change that. If the circuit is wrong, correct it in the registry
+          — or remove it there and file a corrected version of this document.
+        </p>
+        <Link href={`/admin/societies/${societyId}/circuits`} className="btn-primary mt-4 inline-block">
+          Open the circuit registry →
+        </Link>
+      </Card>
+    );
+  }
 
   if (made) {
     return (
@@ -176,6 +209,19 @@ export function ExtractionReview({
         </Card>
       )}
 
+      {societyMismatch && (
+        <Card className="p-6">
+          <p
+            className="rounded-[var(--r-sm)] border p-3.5 text-[13px]"
+            style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+          >
+            <strong>This document names {onDoc}</strong>, but it is filed against {societyName}. Check
+            it is the right society before creating a circuit — a circuit on the wrong society is
+            silent and awkward to unpick.
+          </p>
+        </Card>
+      )}
+
       <Card className="p-6">
         <CardTitle>The circuit this report describes</CardTitle>
         <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
@@ -268,12 +314,27 @@ export function ExtractionReview({
         )}
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
-          <Field label="Light type" htmlFor="fx-type" hint="Basement, staircase, lift lobby… (CON-11)">
-            <input
+          <Field label="Light type" htmlFor="fx-type" hint="What this circuit represents (CON-11)">
+            <select
               id="fx-type"
               className="field field-auto"
               value={lightType}
               onChange={(e) => setLightType(e.target.value)}
+            >
+              <option value="">Choose…</option>
+              {["basement", "stilt", "lift-lobby", "staircase", "external"].map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Location / area" htmlFor="fx-loc" hint="Where on site, in your words">
+            <input
+              id="fx-loc"
+              className="field field-auto"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
             />
           </Field>
           <Field
@@ -309,6 +370,7 @@ export function ExtractionReview({
               const r = await createCircuitFromDocument({
                 documentId,
                 lightType,
+                location,
                 representedLightCount: Number(represented),
                 fixtures: lines.map((l) => ({
                   label: l.label,

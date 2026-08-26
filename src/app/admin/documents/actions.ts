@@ -402,6 +402,8 @@ export type ConfirmedFixture = {
 export async function createCircuitFromDocument(input: {
   documentId: string;
   lightType: string;
+  /** Where on site — the operator's words, not the file's name. */
+  location?: string;
   representedLightCount: number;
   fixtures: ConfirmedFixture[];
   /** The operator's answers to the model's questions, kept with the record. */
@@ -453,17 +455,24 @@ export async function createCircuitFromDocument(input: {
   }
 
   const circuit = await db.$transaction(async (tx) => {
+    const primary = usable.find((f) => f.retrofitted)!;
     const created = await tx.circuit.create({
       data: {
         societyId: doc.societyId,
         serviceLine: "lighting",
         lightType,
-        location: `From ${doc.fileName}`,
+        // The area the operator gave, not the filename. A file name in the
+        // location field reads as a place and is not one (user-reported
+        // 2026-08-26); the document's own provenance is on every device line.
+        location: input.location?.trim() || null,
         meteredLightCount: metered,
         representedLightCount: input.representedLightCount,
         // The circuit's headline wattage is the retrofitted fixture's — the
         // one the saving is attributable to.
-        wattage: usable.find((f) => f.retrofitted)!.watts,
+        wattage: primary.watts,
+        // CON-10 metadata, taken from the fixture being retrofitted rather
+        // than left blank when the document plainly states it.
+        workingHours: primary.hoursPerDay,
         createdById: actor.id,
       },
     });

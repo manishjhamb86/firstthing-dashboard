@@ -54,6 +54,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
             canCreate={Boolean(actor?.permissions.includes("manage_survey"))}
             modelError={doc.extraction?.modelError ?? null}
             proposed={proposed}
+            alreadyUsed={doc.extraction?.status === "confirmed"}
             extractedAt={doc.extraction?.extractedAt?.toISOString() ?? null}
             societyName={doc.society.name}
             societyId={doc.societyId}

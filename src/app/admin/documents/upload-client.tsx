@@ -13,6 +13,7 @@ type TypeOption = {
   operation: string;
   context: "society" | "pipeline" | "circuit";
   needsPeriod: boolean;
+  periodHint: string;
   acceptedExtensions: string[];
   maxMb: number;
   uploadHere: boolean;
@@ -202,9 +203,9 @@ export function DocumentUploadClient({
 
           {spec.needsPeriod && (
             <Field
-              label="Filed under (period)"
+              label="Month it belongs to"
               htmlFor="doc-period"
-              hint="The slot it files under and versions against — not a claim about what it covers. A report spanning several months is fine; the span it states is read from the document itself."
+              hint={`${spec.periodHint} Filing another ${spec.label.toLowerCase()} for this society under the same month makes it version 2 of that one — so use the same month to replace it, a different month for a different document.`}
             >
               <input
                 id="doc-period"

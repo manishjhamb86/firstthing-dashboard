@@ -59,6 +59,7 @@ export default async function DocumentsPage() {
               operation: t.operation,
               context: t.context,
               needsPeriod: t.needsPeriod,
+              periodHint: t.periodHint,
               acceptedExtensions: t.acceptedExtensions,
               maxMb: Math.round(t.maxBytes / (1024 * 1024)),
               uploadHere: t.uploadHere,

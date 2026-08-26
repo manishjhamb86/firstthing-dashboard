@@ -30,6 +30,14 @@ export type DocumentTypeSpec = {
   context: DocumentContext;
   /** INV-04 — a period is an explicit selection where the type needs one. */
   needsPeriod: boolean;
+  /**
+   * What to actually type in the period box, for THIS type.
+   *
+   * The previous hint explained what the field was for and never said what to
+   * put in it (the user's question, 2026-08-26) — accurate and useless. A
+   * rule per type is answerable at the moment of filing.
+   */
+  periodHint: string;
   acceptedKinds: FileKind[];
   acceptedExtensions: string[];
   maxBytes: number;
@@ -48,6 +56,14 @@ export type DocumentTypeSpec = {
 
 const MB = 1024 * 1024;
 
+const HISTORICAL_PERIOD_HINT: Partial<Record<DocumentTypeId, string>> = {
+  preDemoReport: "The month the demo's readings start.",
+  postDemoReport: "The month the post-installation readings start.",
+  savingsReport: "The month the report's period starts.",
+  gatePass: "The month the pass was issued.",
+  inspectionReport: "The month of the inspection.",
+};
+
 export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
   {
     id: "meterReadings",
@@ -56,6 +72,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
       "Parsed into daily readings and opened for row-by-row review against the circuit — nothing is stored until you accept it (CON-45).",
     context: "circuit",
     needsPeriod: true,
+    periodHint: "The month these readings start.",
     // Deliberately text-only, and deliberately NOT "must be a known vendor
     // signature": an unrecognised layout is handled by the AI mapping path,
     // so requiring SONOFF's header here would refuse files the system can in
@@ -72,6 +89,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     operation: "Filed against the society's KYC checklist, awaiting verification.",
     context: "pipeline",
     needsPeriod: true,
+    periodHint: "The month the certificate was issued.",
     acceptedKinds: ["pdf", "png", "jpeg"],
     acceptedExtensions: ["pdf", "png", "jpg", "jpeg"],
     maxBytes: 15 * MB,
@@ -84,6 +102,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     operation: "Filed against the society's KYC checklist, awaiting verification.",
     context: "pipeline",
     needsPeriod: true,
+    periodHint: "The month the bill covers.",
     acceptedKinds: ["pdf", "png", "jpeg"],
     acceptedExtensions: ["pdf", "png", "jpg", "jpeg"],
     maxBytes: 15 * MB,
@@ -106,6 +125,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
       "Filed against the society as the executed copy on record. No execution sequence is invented for it — a deal executed through the system still records printing, notarising and signing on its own step.",
     context: "society",
     needsPeriod: true,
+    periodHint: "The month it was signed.",
     // What actually exists varies: a PDF, the Word original, or a scan —
     // and sometimes the Word file is simply gone (the user's own note,
     // 2026-08-26). Refusing a scan because it is an image would refuse the
@@ -136,6 +156,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
       "Filed against the society with its period, and retrievable from the society's documents. Not fed into any calculation — a scanned report is not evidence a figure can be recomputed from (INV-02).",
     context: "society" as const,
     needsPeriod: true,
+    periodHint: HISTORICAL_PERIOD_HINT[id as DocumentTypeId] ?? "The month this document belongs to.",
     acceptedKinds: [...kinds] as FileKind[],
     acceptedExtensions: [...exts],
     maxBytes: mb * MB,

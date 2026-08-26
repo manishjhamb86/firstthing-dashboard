@@ -70,12 +70,37 @@ const [kind, path] = process.argv.slice(2);
 if (!PROMPTS[kind]) throw new Error(`kind must be one of: ${Object.keys(PROMPTS).join(", ")}`);
 
 const ai = new GoogleGenAI({ apiKey: key });
-const res = await ai.interactions.create({
-  model: "gemini-3.6-flash",
-  input: [
-    { type: "text", text: PROMPTS[kind] },
-    { type: "document", data: readFileSync(path).toString("base64"), mime_type: "application/pdf" },
-  ],
-  response_format: { type: "text", mime_type: "application/json" },
-});
+
+/**
+ * The free tier allows 20 requests a minute, and this job is 19 societies
+ * times three documents. Hitting the ceiling is normal, not an error — the
+ * API says how long to wait, so wait that long and carry on. Without this
+ * the run dies a third of the way through and has to be nursed by hand.
+ */
+async function withRetry(fn, attempts = 6) {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const msg = String(err?.message ?? err);
+      const rateLimited = /429|quota|rate/i.test(msg);
+      if (!rateLimited || i >= attempts) throw err;
+      const stated = /retry in ([\d.]+)s/i.exec(msg)?.[1];
+      const waitMs = Math.ceil((stated ? Number(stated) : 2 ** i) * 1000) + 1500;
+      process.stderr.write(`rate limited; waiting ${Math.round(waitMs / 1000)}s (attempt ${i}/${attempts})\n`);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
+  }
+}
+
+const res = await withRetry(() =>
+  ai.interactions.create({
+    model: "gemini-3.6-flash",
+    input: [
+      { type: "text", text: PROMPTS[kind] },
+      { type: "document", data: readFileSync(path).toString("base64"), mime_type: "application/pdf" },
+    ],
+    response_format: { type: "text", mime_type: "application/json" },
+  }),
+);
 console.log(res.output_text);

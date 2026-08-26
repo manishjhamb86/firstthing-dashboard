@@ -23,12 +23,12 @@ export default async function DocumentsPage() {
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
     db.pipeline.findMany({
       orderBy: { createdAt: "desc" },
-      select: { id: true, serviceLine: true, society: { select: { name: true } } },
+      select: { id: true, serviceLine: true, societyId: true, society: { select: { name: true } } },
     }),
     db.circuit.findMany({
       where: { voidedAt: null },
       orderBy: [{ societyId: "asc" }],
-      select: { id: true, location: true, lightType: true, society: { select: { name: true } } },
+      select: { id: true, societyId: true, location: true, lightType: true, society: { select: { name: true } } },
     }),
     db.storedDocument.findMany({
       // Every version, newest slot first — a withdrawn one still shows, or
@@ -64,10 +64,15 @@ export default async function DocumentsPage() {
               handledAt: t.handledAt ?? null,
             }))}
             societies={societies.map((s) => ({ id: s.id, label: `${s.name} — ${s.location}` }))}
-            pipelines={pipelines.map((p) => ({ id: p.id, label: `${p.society.name} — ${p.serviceLine}` }))}
+            pipelines={pipelines.map((p) => ({
+              id: p.id,
+              societyId: p.societyId,
+              label: String(p.serviceLine),
+            }))}
             circuits={circuits.map((c) => ({
               id: c.id,
-              label: `${c.society.name} — ${c.location ?? "Unnamed"} · ${c.lightType}`,
+              societyId: c.societyId,
+              label: `${c.location ?? "Unnamed"} · ${c.lightType}`,
             }))}
           />
         </Card>

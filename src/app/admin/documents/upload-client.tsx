@@ -19,6 +19,7 @@ type TypeOption = {
   handledAt: string | null;
 };
 type Option = { id: string; label: string };
+type Scoped = { id: string; societyId: string; label: string };
 
 /** The first 4 KB is all the evidence needed to know what a file really is. */
 async function headOf(file: File): Promise<Uint8Array> {
@@ -51,11 +52,15 @@ export function DocumentUploadClient({
   canUpload: boolean;
   types: TypeOption[];
   societies: Option[];
-  pipelines: Option[];
-  circuits: Option[];
+  pipelines: Scoped[];
+  circuits: Scoped[];
 }) {
   const router = useRouter();
   const [typeId, setTypeId] = useState("");
+  // Society is asked FIRST, always (the user's call, 2026-08-26). Asking for a
+  // circuit up front dead-ends every society that has none yet — which is all
+  // of them until a survey has run — with an empty dropdown and no way on.
+  const [societyId, setSocietyId] = useState("");
   const [contextId, setContextId] = useState("");
   const [period, setPeriod] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -64,9 +69,13 @@ export function DocumentUploadClient({
   const [pending, start] = useTransition();
 
   const spec = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
-  const options = spec?.context === "circuit" ? circuits : spec?.context === "pipeline" ? pipelines : societies;
-  const contextLabel =
-    spec?.context === "circuit" ? "Circuit" : spec?.context === "pipeline" ? "Deal" : "Society";
+  const scoped: Scoped[] =
+    spec?.context === "circuit" ? circuits : spec?.context === "pipeline" ? pipelines : [];
+  const withinSociety = scoped.filter((o) => o.societyId === societyId);
+  const contextLabel = spec?.context === "circuit" ? "Circuit" : "Deal";
+  const societyName = societies.find((s) => s.id === societyId)?.label ?? "";
+  // For a society-scoped document the society IS the context.
+  const effectiveContextId = spec?.context === "society" ? societyId : contextId;
 
   if (!canUpload) {
     return (
@@ -119,16 +128,77 @@ export function DocumentUploadClient({
         </p>
       ) : spec ? (
         <>
-          <Field label={contextLabel} htmlFor="doc-context">
-            <select id="doc-context" className="field" value={contextId} onChange={(e) => setContextId(e.target.value)}>
-              <option value="">Choose the {contextLabel.toLowerCase()}…</option>
-              {options.map((o) => (
+          {/* Society first, always. Everything else narrows to it. */}
+          <Field label="Society" htmlFor="doc-society">
+            <select
+              id="doc-society"
+              className="field"
+              value={societyId}
+              onChange={(e) => {
+                setSocietyId(e.target.value);
+                setContextId("");
+                setError(null);
+              }}
+            >
+              <option value="">Choose the society…</option>
+              {societies.map((o) => (
                 <option key={o.id} value={o.id}>
                   {o.label}
                 </option>
               ))}
             </select>
           </Field>
+
+          {spec.context !== "society" && societyId && (
+            <Field label={contextLabel} htmlFor="doc-context">
+              {withinSociety.length === 0 ? (
+                // The dead end this replaced: an empty dropdown and no way on.
+                <div
+                  className="rounded-[var(--r-md)] border p-3.5 text-[13px]"
+                  style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+                >
+                  {spec.context === "circuit" ? (
+                    <>
+                      <p className="mb-1 font-semibold">{societyName} has no circuits yet.</p>
+                      <p>
+                        A circuit is what readings are recorded against. For a society commissioned before
+                        this system existed, file its <strong>pre-installation demo report</strong> here
+                        first — it carries the light counts, wattages and running hours a circuit is built
+                        from.
+                      </p>
+                      <button
+                        type="button"
+                        className="btn-secondary mt-2"
+                        onClick={() => {
+                          setTypeId("preDemoReport");
+                          setContextId("");
+                          setError(null);
+                        }}
+                      >
+                        File its demo report instead
+                      </button>
+                    </>
+                  ) : (
+                    <p>{societyName} has no deal on the system yet — log a lead for it first.</p>
+                  )}
+                </div>
+              ) : (
+                <select
+                  id="doc-context"
+                  className="field"
+                  value={contextId}
+                  onChange={(e) => setContextId(e.target.value)}
+                >
+                  <option value="">Choose the {contextLabel.toLowerCase()}…</option>
+                  {withinSociety.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+          )}
 
           {spec.needsPeriod && (
             <Field
@@ -185,7 +255,7 @@ export function DocumentUploadClient({
           <button
             type="button"
             className="btn-primary"
-            disabled={pending || !file || !contextId}
+            disabled={pending || !file || !effectiveContextId}
             onClick={() =>
               start(async () => {
                 if (!file) return;
@@ -194,7 +264,7 @@ export function DocumentUploadClient({
                 const head = await headOf(file);
                 const presigned = await presignDocument({
                   docTypeId: spec.id,
-                  contextId,
+                  contextId: effectiveContextId,
                   period,
                   fileName: file.name,
                   contentType: file.type || "application/octet-stream",
@@ -213,7 +283,7 @@ export function DocumentUploadClient({
 
                 const filed = await finalizeDocument({
                   docTypeId: spec.id,
-                  contextId,
+                  contextId: effectiveContextId,
                   s3Key: presigned.key,
                   fileName: file.name,
                   contentType: file.type || "application/octet-stream",

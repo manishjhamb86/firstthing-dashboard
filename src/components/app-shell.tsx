@@ -14,6 +14,7 @@ import {
   Lightbulb,
   Receipt,
   Users,
+  Zap,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NavShell, type NavItem } from "@/components/nav-shell";
@@ -29,6 +30,7 @@ export function AppShell({
   showField,
   showMonitoring,
   showTanks,
+  showMeters,
   showReadings,
   showCatalog,
   showUsers,
@@ -46,6 +48,7 @@ export function AppShell({
   showField: boolean;
   showMonitoring: boolean;
   showTanks: boolean;
+  showMeters: boolean;
   showReadings: boolean;
   showCatalog: boolean;
   showUsers: boolean;
@@ -73,6 +76,10 @@ export function AppShell({
     // Water tank monitoring (2026-08-25) — mirrors the Smart Life account,
     // society-management's to run, so it follows the monitoring cluster.
     ...(showTanks ? [{ href: "/admin/water-tanks", label: "Water tanks", icon: Droplets }] : []),
+    // The eWeLink meter mirror sits beside the tank mirror: same shape of
+    // job (an account's devices, assigned to what they serve), different
+    // vendor and a different assignment target — a circuit, not a society.
+    ...(showMeters ? [{ href: "/admin/meters", label: "Meters", icon: Zap }] : []),
     ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
     ...(showCatalog ? [{ href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb }] : []),
     ...(showBilling ? [{ href: "/admin/billing", label: "Billing", icon: Receipt }] : []),

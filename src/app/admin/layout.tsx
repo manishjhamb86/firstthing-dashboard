@@ -37,6 +37,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       // Tanks are society infrastructure: the same permission that manages
       // societies and their portal accounts manages what those portals see.
       showTanks={perms.includes("manage_users")}
+      showMeters={perms.includes("manage_users") || perms.includes("manage_pipeline")}
       // The readings area is readable by anyone who can see a pipeline;
       // ingesting into it needs both permissions (the PER-01 proxy), which
       // each action checks for itself.

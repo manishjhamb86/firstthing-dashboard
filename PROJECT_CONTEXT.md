@@ -2069,6 +2069,88 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+## eWeLink (SONOFF) meter mirror: the account, the assignment, and what the docs will not tell us (2026-08-26) — user-asked
+
+**The ask**: pull every smart meter and its reading history out of the company's eWeLink account,
+the same way the Tuya water tanks are mirrored, and let the back office bind a meter to a society
+**and to the circuit** selected during the demo for monitoring and the savings benchmark.
+
+**Researched first, per the Research Gate, against CoolKit's own published docs**
+(`CoolKit-Technologies/eWeLink-API`) rather than community write-ups —
+`docs/engineering/14-meter-ingest-ewelink.md` records it. Three findings shaped the build, and
+none of them is "Tuya again":
+
+1. **It is OAuth2, not a key pair.** Calls carry `X-CK-Appid` plus a *user* access token obtained
+   by sending an operator to `c2ccdn.coolkit.cc/oauth/index.html` — signed
+   `Base64(HMAC-SHA256("{clientId}_{seq}", clientSecret))` — who signs in to the eWeLink account
+   **there**, so this app never sees that password. The redirect URL must be **registered against
+   the application**, so every environment registers its own.
+2. **Tokens expire**: access 30 days, refresh 60, the code 30 seconds. The server refreshes ahead
+   of expiry and persists the rotated pair *before* using it — losing a rotated refresh token costs
+   a human re-authorisation. An idle integration past the refresh window is a real state a person
+   must clear, so the settings screen names it rather than letting a silent expiry read as an
+   outage.
+3. **The energy history is not in the public API.** `APICenterV2.md` documents the device list and a
+   status read and **no** consumption-statistics endpoint. The only published mechanism is the
+   per-device protocol, and it covers **UIID 5/32 only** (`{"hundredDaysKwh":"get"}` → 100 *daily*
+   values, hex, 600 characters, current day first). CoolKit states the complete protocol is *"only
+   available to paid APPID users"*, and the POWCT / POW Elite family is absent from the public
+   document entirely. Since the CSV this repo already parses is **hourly**
+   (`data,time,consumption/kwh`), these meters are almost certainly one of those undocumented
+   models — so **what history the API will yield cannot be settled from the documentation, only
+   from the account**. Discovery is therefore a first-class part of the screen: each device's UIID
+   and the params it actually returned are stored and shown.
+
+**INV-08 by construction.** eWeLink's control endpoint is `POST /v2/device/thing/status`, and these
+meters are switching relays — a POST could de-energise a society's common-area lighting.
+`src/lib/ewelink.ts` knows the token, refresh, device-list and status-**read** endpoints and nothing
+else. The guarantee is the absence of the call, exactly as in `tuya.ts`.
+
+**Signing is pinned to CoolKit's own worked examples** (`src/lib/ewelink-sign.ts`, 14 unit cases):
+the POST-body vector and the authorize-link vector both reproduce byte-for-byte, so the signature
+was known-good before the account was ever touched — the API answers any mistake with a bare "sign
+invalid". GET parameters are **sorted**, the same trap already found and fixed in the Tuya client.
+
+**The hundred-day decoder refuses rather than guesses.** The document gives the blob's length,
+units and ordering but **not** how each day's three bytes split. A plausible-but-wrong reading here
+lands a wrong number in a figure a society is billed on — precisely the class of the water-tank
+`levelMax` bug (a raw 45 that meant 75%). So `decodeHundredDaysKwh` refuses a fractional byte above
+99, and `todayAgrees()` checks day 0 against the device's *separately reported* `oneKwhData`:
+the device states today twice, and if the two disagree the blob is not decoded correctly and none
+of it is usable. Nothing reaches the reading store until that check passes.
+
+**Assignment is to the CIRCUIT** (`MeterDevice.circuitId`, unique), with the society carried
+alongside for scoping and settable on its own while the circuit is undecided — CON-11 makes the
+circuit the billing grain, and two meters on one circuit would be two sources for one billed figure
+that INV-02 cannot resolve. Non-metering devices stay listed and unassignable, the same call made
+for the Tuya energy meters on the tank list: a device simply missing from the screen reads as an
+account problem rather than as the wrong kind of device.
+
+**Deliberately not built, and stated rather than stubbed**: the history fetch itself. It needs the
+account — the App ID/secret, the registered redirect, and each meter's real UIID and params. When
+it lands, D-3 of the design doc governs it: a fetch writes its payload to the private `Ingest/`
+prefix, creates a `RawReadingFile` (`vendor: "ewelink"`, `source: api` — the enum value reserved
+for exactly this since MS-07) and goes through CON-45's row-by-row review. Auto-committing would
+put a billed figure into the store with nobody having looked at it, which is what INV-02 and INV-09
+exist to prevent.
+
+**Verified in a browser, 21/21, zero console errors** — the unconfigured state and where it points,
+the application saving without that counting as "authorised", the secret never rendered back, every
+device listed with its UIID, a non-metering device unassignable and saying why, the meter binding to
+the circuit with the society following and the actor recorded. **Two refusals were driven through
+paths the client cannot pre-block**: the second meter on one circuit (the option's `disabled`
+stripped so the action really ran — refused by name, nothing written) and the operations gate on the
+configuration (the actor's team moved off operations behind the open form — refused, stored app id
+untouched). The OAuth callback's own refusals are checked too: a `state` that does not match the
+cookie we set is ignored with no token stored, and a cancelled authorisation is not an error.
+519 unit tests, `tsc`/`lint`/`build` clean. Migration `20260826090000_add_ewelink_meter_mirror` is
+purely additive (2 tables, 3 indexes, 4 FKs).
+
+**One process note worth keeping**: `prisma migrate diff --to-schema-datamodel` is gone in this
+Prisma — it is `--to-schema` now — and `prisma db execute` silently printed its help text and did
+nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
+exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
+
 ## The tank is a lit vessel, and the chart says when each reading arrived (2026-08-25) — user-corrected twice
 
 **Two corrections, both mine to make, and the second reversed the first.** Asked to make the water

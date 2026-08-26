@@ -298,14 +298,15 @@ model Society {
   nextElectionDate DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
   createdAt        DateTime      @default(now()) @map("created_at")
 
-  contacts    SocietyContact[]
-  profiles    Profile[]
-  circuits    Circuit[]
-  pipelines   Pipeline[]
+  contacts        SocietyContact[]
+  profiles        Profile[]
+  circuits        Circuit[]
+  pipelines       Pipeline[]
   scheduledEvents ScheduledEvent[]
-  waterTanks  WaterTank[]
-  contracts   Contract[]
-  engagements Engagement[]
+  waterTanks      WaterTank[]
+  meterDevices    MeterDevice[]
+  contracts       Contract[]
+  engagements     Engagement[]
 
   // MS-06
   fieldVisits          FieldVisit[]
@@ -384,22 +385,22 @@ model Profile {
 // ever be minted by a row existing here; a Profile row can never carry admin
 // access, by construction rather than by a role check that could be bypassed.
 model AdminUser {
-  id              String            @id @default(cuid())
-  email           String            @unique
-  passwordHash    String            @map("password_hash")
-  name            String?
-  isActive        Boolean           @default(true) @map("is_active")
+  id           String            @id @default(cuid())
+  email        String            @unique
+  passwordHash String            @map("password_hash")
+  name         String?
+  isActive     Boolean           @default(true) @map("is_active")
   /// PER-01 by default: every pre-existing account was an ops account.
-  team        AdminTeam        @default(operations)
-  permissions     AdminPermission[]
+  team         AdminTeam         @default(operations)
+  permissions  AdminPermission[]
   // DEMO_MODE's per-account switch. The env var is the master gate — with
   // it unset this column can never turn anything on, and no toggle renders.
   // Default false so a missing choice reads as normal mode.
-  demoMode Boolean @default(false) @map("demo_mode")
+  demoMode     Boolean           @default(false) @map("demo_mode")
 
-  themePreference Theme?            @map("theme_preference")
-  createdById     String?           @map("created_by_id")
-  createdAt       DateTime          @default(now()) @map("created_at")
+  themePreference Theme?   @map("theme_preference")
+  createdById     String?  @map("created_by_id")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   // Soft delete. An AdminUser is the recorded actor on dozens of tables
   // below — who approved a gate pass, who released a month, who voided a
@@ -414,16 +415,18 @@ model AdminUser {
   deletedBy AdminUser?  @relation("AdminDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   deleted   AdminUser[] @relation("AdminDeletedBy")
 
-  pipelinesOwned  Pipeline[] @relation("PipelineSalesOwner")
-  pipelinesSurveying     Pipeline[]  @relation("PipelineSurveyOwner")
-  pipelinesSurveyAssigned Pipeline[] @relation("PipelineSurveyAssignedBy")
-  scheduledEvents         ScheduledEvent[] @relation("ScheduledEventAssignee")
-  circuitsReplacing       Circuit[]        @relation("CircuitReplacementOwner")
-  waterTanksAssigned      WaterTank[]      @relation("WaterTankAssignedBy")
-  tankApiConfigUpdated    TankApiConfig[]  @relation("TankApiConfigUpdatedBy")
-  circuitsReplacementAssigned Circuit[]    @relation("CircuitReplacementAssignedBy")
-  scheduledEventsCreated  ScheduledEvent[] @relation("ScheduledEventCreatedBy")
-  pipelinesLogged Pipeline[] @relation("PipelineLoggedBy")
+  pipelinesOwned              Pipeline[]         @relation("PipelineSalesOwner")
+  pipelinesSurveying          Pipeline[]         @relation("PipelineSurveyOwner")
+  pipelinesSurveyAssigned     Pipeline[]         @relation("PipelineSurveyAssignedBy")
+  scheduledEvents             ScheduledEvent[]   @relation("ScheduledEventAssignee")
+  circuitsReplacing           Circuit[]          @relation("CircuitReplacementOwner")
+  waterTanksAssigned          WaterTank[]        @relation("WaterTankAssignedBy")
+  meterDevicesAssigned        MeterDevice[]      @relation("MeterDeviceAssignedBy")
+  ewelinkConfigsUpdated       EwelinkApiConfig[] @relation("EwelinkApiConfigUpdatedBy")
+  tankApiConfigUpdated        TankApiConfig[]    @relation("TankApiConfigUpdatedBy")
+  circuitsReplacementAssigned Circuit[]          @relation("CircuitReplacementAssignedBy")
+  scheduledEventsCreated      ScheduledEvent[]   @relation("ScheduledEventCreatedBy")
+  pipelinesLogged             Pipeline[]         @relation("PipelineLoggedBy")
 
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
   circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
@@ -449,16 +452,16 @@ model AdminUser {
   contractsActivated Contract[]        @relation("ContractActivatedBy")
 
   // MS-08
-  calculationsReleased   MonthlyCalculation[]  @relation("CalculationReleasedBy")
-  calculationsSentBack   MonthlyCalculation[]  @relation("CalculationSentBackBy")
-  deviationsAssigned     DeviationReview[]     @relation("DeviationAssignedTo")
-  deviationsOwned        DeviationReview[]     @relation("DeviationOwner")
-  invoicesUploaded       BillingInvoice[]      @relation("InvoiceUploadedBy")
-  invoicePaymentsConfirmed BillingInvoice[]    @relation("InvoicePaymentConfirmedBy")
-  invoiceMismatchesAcked BillingInvoice[]      @relation("InvoiceMismatchAckBy")
-  paymentsRecorded       Payment[]             @relation("PaymentRecordedBy")
-  extensionsGranted      InvoiceExtension[]    @relation("ExtensionGrantedBy")
-  contractTermsRecorded  ContractTermVersion[] @relation("ContractTermRecordedBy")
+  calculationsReleased     MonthlyCalculation[]  @relation("CalculationReleasedBy")
+  calculationsSentBack     MonthlyCalculation[]  @relation("CalculationSentBackBy")
+  deviationsAssigned       DeviationReview[]     @relation("DeviationAssignedTo")
+  deviationsOwned          DeviationReview[]     @relation("DeviationOwner")
+  invoicesUploaded         BillingInvoice[]      @relation("InvoiceUploadedBy")
+  invoicePaymentsConfirmed BillingInvoice[]      @relation("InvoicePaymentConfirmedBy")
+  invoiceMismatchesAcked   BillingInvoice[]      @relation("InvoiceMismatchAckBy")
+  paymentsRecorded         Payment[]             @relation("PaymentRecordedBy")
+  extensionsGranted        InvoiceExtension[]    @relation("ExtensionGrantedBy")
+  contractTermsRecorded    ContractTermVersion[] @relation("ContractTermRecordedBy")
 
   // MS-06
   fieldVisitsJoined    FieldVisitParticipant[]  @relation("FieldVisitParticipant")
@@ -504,11 +507,11 @@ model Pipeline {
   // => authoritative immediately. Different => pending-approval, and
   // salesOwner is notified (logged via logger.ts — see PROJECT_CONTEXT.md;
   // real notification delivery is NFR-10/R1, not built yet).
-  salesOwnerId  String  @map("sales_owner_id")
+  salesOwnerId       String    @map("sales_owner_id")
   /// The field person the survey and demo commissioning are handed to.
   /// Null until someone assigns it — the work still belongs to the field
   /// team, it just has no name on it yet.
-  surveyOwnerId String? @map("survey_owner_id")
+  surveyOwnerId      String?   @map("survey_owner_id")
   /// When the hand-over happened and who did it. The assignment left no trace
   /// of either, so "assigned to Inspector" could not be told apart from
   /// something the system had inferred (user-asked 2026-08-25).
@@ -518,8 +521,8 @@ model Pipeline {
   /// with a person expected at it, is a ScheduledEvent — one module for every
   /// kind of appointment so they can all appear on one calendar (the user's
   /// call, 2026-08-25).
-  loggedById    String  @map("logged_by_id")
-  authoritative Boolean @default(true)
+  loggedById         String    @map("logged_by_id")
+  authoritative      Boolean   @default(true)
 
   // FEAT-002-AC-5 / FEAT-032 (not yet built) — demo-skip is recorded here
   // so the schema is ready for it; nothing in MS-03 sets these true yet.
@@ -539,12 +542,12 @@ model Pipeline {
 
   scheduledEvents ScheduledEvent[]
 
-  society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  salesOwner AdminUser   @relation("PipelineSalesOwner", fields: [salesOwnerId], references: [id])
-  loggedBy   AdminUser   @relation("PipelineLoggedBy", fields: [loggedById], references: [id])
-  surveyOwner AdminUser? @relation("PipelineSurveyOwner", fields: [surveyOwnerId], references: [id])
-  surveyAssignedBy AdminUser? @relation("PipelineSurveyAssignedBy", fields: [surveyAssignedById], references: [id])
-  siteSurvey SiteSurvey?
+  society          Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  salesOwner       AdminUser   @relation("PipelineSalesOwner", fields: [salesOwnerId], references: [id])
+  loggedBy         AdminUser   @relation("PipelineLoggedBy", fields: [loggedById], references: [id])
+  surveyOwner      AdminUser?  @relation("PipelineSurveyOwner", fields: [surveyOwnerId], references: [id])
+  surveyAssignedBy AdminUser?  @relation("PipelineSurveyAssignedBy", fields: [surveyAssignedById], references: [id])
+  siteSurvey       SiteSurvey?
 
   // MS-05
   demoReports     DemoReport[]
@@ -596,8 +599,8 @@ model ScheduledEvent {
 
   /// The internal account expected to be there. Null means the team as a
   /// whole — an event nobody has been handed yet.
-  assigneeId  String  @map("assignee_id")
-  createdById String  @map("created_by_id")
+  assigneeId  String @map("assignee_id")
+  createdById String @map("created_by_id")
 
   /// What it is about. A society is always known; the pipeline is set for
   /// anything on the deal spine, the circuit for commissioning work that
@@ -763,6 +766,7 @@ model Circuit {
   coverageAcceptances CoverageAcceptance[]
   feeLines            CircuitFeeLine[]
   devices             CircuitDevice[]
+  meterDevice         MeterDevice?
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -820,14 +824,14 @@ model BenchmarkRescaleEvent {
   // does neither: the entry stays visible with its owner and reason, and
   // stops counting toward the replay. A correction is a void plus a fresh
   // event, linked by `correctedByEventId`, in one transaction.
-  voidedAt          DateTime? @map("voided_at")
-  voidedById        String?   @map("voided_by_id")
-  voidReason        String?   @map("void_reason")
-  correctedByEventId String?  @unique @map("corrected_by_event_id")
+  voidedAt           DateTime? @map("voided_at")
+  voidedById         String?   @map("voided_by_id")
+  voidReason         String?   @map("void_reason")
+  correctedByEventId String?   @unique @map("corrected_by_event_id")
 
-  circuit     Circuit               @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  recordedBy  AdminUser             @relation("BenchmarkRescaleRecordedBy", fields: [recordedById], references: [id])
-  voidedBy    AdminUser?            @relation("BenchmarkRescaleVoidedBy", fields: [voidedById], references: [id])
+  circuit     Circuit                @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  recordedBy  AdminUser              @relation("BenchmarkRescaleRecordedBy", fields: [recordedById], references: [id])
+  voidedBy    AdminUser?             @relation("BenchmarkRescaleVoidedBy", fields: [voidedById], references: [id])
   correctedBy BenchmarkRescaleEvent? @relation("RescaleCorrection", fields: [correctedByEventId], references: [id])
   corrects    BenchmarkRescaleEvent? @relation("RescaleCorrection")
 
@@ -877,13 +881,13 @@ model DemoResultReview {
   preInstallBaseline Float @map("pre_install_baseline")
   postInstallAverage Float @map("post_install_average")
 
-  state      DemoResultReviewState  @default(open)
-  resolution DemoResultResolution?
+  state              DemoResultReviewState @default(open)
+  resolution         DemoResultResolution?
   // FEAT-015-AC-1 — what was actually found on site.
-  resolutionNote String? @map("resolution_note")
+  resolutionNote     String?               @map("resolution_note")
   // The description's "re-validates load (may re-trigger FEAT-011-style
   // checks)" — recorded when PER-01 actually did it, null when they didn't.
-  loadRevalidatedPct Float? @map("load_revalidated_pct")
+  loadRevalidatedPct Float?                @map("load_revalidated_pct")
 
   resolvedById String?   @map("resolved_by_id")
   resolvedAt   DateTime? @map("resolved_at")
@@ -2141,10 +2145,10 @@ model BillingInvoice {
 
   uploadedAt DateTime @default(now()) @map("uploaded_at")
 
-  calculation            MonthlyCalculation @relation(fields: [monthlyCalculationId], references: [id], onDelete: Cascade)
-  uploadedBy             AdminUser          @relation("InvoiceUploadedBy", fields: [uploadedById], references: [id])
-  mismatchAcknowledgedBy AdminUser?         @relation("InvoiceMismatchAckBy", fields: [mismatchAcknowledgedById], references: [id])
-  paymentStatusConfirmedBy AdminUser?       @relation("InvoicePaymentConfirmedBy", fields: [paymentStatusConfirmedById], references: [id])
+  calculation              MonthlyCalculation @relation(fields: [monthlyCalculationId], references: [id], onDelete: Cascade)
+  uploadedBy               AdminUser          @relation("InvoiceUploadedBy", fields: [uploadedById], references: [id])
+  mismatchAcknowledgedBy   AdminUser?         @relation("InvoiceMismatchAckBy", fields: [mismatchAcknowledgedById], references: [id])
+  paymentStatusConfirmedBy AdminUser?         @relation("InvoicePaymentConfirmedBy", fields: [paymentStatusConfirmedById], references: [id])
 
   payments   Payment[]
   extensions InvoiceExtension[]
@@ -2276,7 +2280,7 @@ model CircuitDevice {
 
   count       Int
   wattage     Float // per-unit watts — editable per line; the catalog only supplies a default
-  hoursPerDay Float  @map("hours_per_day") // 24 or 12 normally; custom allowed (user's call 2026-08-17)
+  hoursPerDay Float   @map("hours_per_day") // 24 or 12 normally; custom allowed (user's call 2026-08-17)
   note        String?
 
   // Stage-3 installation recording — what was actually installed against this
@@ -2295,9 +2299,9 @@ model CircuitDevice {
   // allowed through the freeze and carry this flag saying so. A figure
   // reconstructed from paper is not the same evidence as one captured on
   // site, and INV-02 means the difference has to be visible, not assumed.
-  historical      Boolean   @default(false)
-  historicalNote  String?   @map("historical_note")
-  recordedById    String?   @map("recorded_by_id")
+  historical     Boolean @default(false)
+  historicalNote String? @map("historical_note")
+  recordedById   String? @map("recorded_by_id")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2310,7 +2314,6 @@ model CircuitDevice {
   @@index([circuitId])
   @@map("circuit_devices")
 }
-
 
 // ── CAP — water tank monitoring (user-specified 2026-08-25) ────────────────
 //
@@ -2382,10 +2385,10 @@ model WaterTank {
 /// history chart and portal sparklines read, so stats survive the sensor
 /// going offline (and survive the Smart Life account itself).
 model TankLevelReading {
-  id           String   @id @default(cuid())
-  tankId       String   @map("tank_id")
-  recordedAt   DateTime @map("recorded_at")
-  levelPercent Int      @map("level_percent")
+  id           String    @id @default(cuid())
+  tankId       String    @map("tank_id")
+  recordedAt   DateTime  @map("recorded_at")
+  levelPercent Int       @map("level_percent")
   online       Boolean
   /// When the sensor itself last reported at sample time — an offline
   /// sensor's level is its last report, and the row says so.
@@ -2395,4 +2398,85 @@ model TankLevelReading {
 
   @@index([tankId, recordedAt])
   @@map("tank_level_readings")
+}
+
+// ---- eWeLink (SONOFF) meter mirror -------------------------------------
+// See docs/engineering/14-meter-ingest-ewelink.md. Unlike Tuya's static
+// key pair, eWeLink is OAuth2: a human authorises the account once and the
+// backend refreshes from then on, so the tokens and their expiries are part
+// of the configuration rather than derived on demand.
+model EwelinkApiConfig {
+  id     String @id @default("singleton")
+  /// as | us | eu | cn — CoolKit's regional hosts. India is served by Asia.
+  region String @default("as")
+
+  appId       String @map("app_id")
+  appSecret   String @map("app_secret")
+  /// Must match a redirect URL registered against the application, so every
+  /// environment (local, stage, production) registers its own.
+  redirectUrl String @map("redirect_url")
+
+  /// Access token 30 days, refresh token 60 days (CoolKit's own lifetimes).
+  /// Stored rather than re-minted because only a human can start the flow.
+  accessToken           String?   @map("access_token")
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshToken          String?   @map("refresh_token")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  /// Which eWeLink account was authorised, so a surprise device list has a
+  /// visible cause.
+  accountLabel          String?   @map("account_label")
+
+  lastOkAt        DateTime? @map("last_ok_at")
+  lastError       String?   @map("last_error")
+  lastDeviceCount Int?      @map("last_device_count")
+  lastSyncAt      DateTime? @map("last_sync_at")
+
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("EwelinkApiConfigUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("ewelink_api_config")
+}
+
+/// Every device in the authorised eWeLink account, mirrored. Non-metering
+/// devices stay listed and unassignable — a device that is simply absent
+/// from the screen reads as an account problem rather than as the wrong
+/// kind of device.
+model MeterDevice {
+  id              String @id @default(cuid())
+  ewelinkDeviceId String @unique @map("ewelink_device_id")
+  name            String
+  productModel    String @map("product_model")
+  /// CoolKit's device-type id. It decides which energy protocol the device
+  /// speaks, and the public protocol document only covers 5 and 32.
+  uiid            Int
+
+  online          Boolean @default(false)
+  /// Whether this device reports any energy datapoint at all, decided from
+  /// the params it actually returned rather than from its model name.
+  hasEnergySignal Boolean @default(false) @map("has_energy_signal")
+  /// The param keys the device really returned, so the model's protocol is
+  /// a recorded observation rather than an assumption (see the design doc).
+  observedParams  Json?   @map("observed_params")
+
+  /// The assignment. CON-11 makes the circuit the billing grain, so that is
+  /// what a meter is bound to; societyId is carried alongside for scoping
+  /// and may be set on its own while the circuit is still undecided.
+  societyId    String?   @map("society_id")
+  circuitId    String?   @unique @map("circuit_id")
+  assignedAt   DateTime? @map("assigned_at")
+  assignedById String?   @map("assigned_by_id")
+
+  lastPowerW     Float?    @map("last_power_w")
+  lastReportedAt DateTime? @map("last_reported_at")
+  syncedAt       DateTime  @default(now()) @map("synced_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  society    Society?   @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  circuit    Circuit?   @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  assignedBy AdminUser? @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])
+
+  @@index([societyId])
+  @@map("meter_devices")
 }

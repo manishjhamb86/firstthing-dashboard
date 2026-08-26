@@ -93,18 +93,26 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
   {
     id: "agreement",
     label: "Executed agreement",
-    operation: "Attached to the agreement record as the executed copy.",
-    context: "pipeline",
+    // For a society that was already signed before this system existed there
+    // is no sequence to walk (the user's correction, 2026-08-26): the deal
+    // happened, and what is being filed is the copy we hold. So it attaches
+    // to the SOCIETY as the executed copy on record, and no Agreement record
+    // is minted — inventing printed/notarised/signed timestamps for a deal
+    // this system never walked would be worse than not having them.
+    //
+    // A deal executed THROUGH the system is untouched: FEAT-029's Agreement
+    // step still owns that path and still records the sequence.
+    operation:
+      "Filed against the society as the executed copy on record. No execution sequence is invented for it — a deal executed through the system still records printing, notarising and signing on its own step.",
+    context: "society",
     needsPeriod: true,
-    // A signed agreement is a PDF. An image of one is a photograph of a
-    // contract, which is not the same artefact and should not be filed as if
-    // it were.
+    // A signed agreement is a PDF. A photograph of one is a different
+    // artefact and should not be filed as if it were the executed copy.
     acceptedKinds: ["pdf"],
     acceptedExtensions: ["pdf"],
     maxBytes: 25 * MB,
     permission: "manage_pipeline",
-    uploadHere: false,
-    handledAt: "the deal's Agreement step, where the executed copy is recorded against printing, notarising and signing",
+    uploadHere: true,
   },
   ...(
     [

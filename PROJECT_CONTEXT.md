@@ -2141,10 +2141,22 @@ is a new generic attachment: society + type + period + provenance. It is **not**
 documents that have a workflow (a KYC file stays a `KycDocumentFile`), for the same reason the
 archived app's unified listing was a live query rather than its own table.
 
-**The executed agreement is listed but deliberately not filed from here.** Attaching it is part of
-the execution sequence (printed → notarised → signed → scan), so doing it from a generic tab would
-either skip that state or invent it. The tab names where it belongs instead of half-doing it —
-and it still validates the file if you pick the type.
+**The executed agreement IS filed from here — corrected by the user the same day.** The first cut
+refused it, on the reasoning that attaching the executed copy belongs to the execution sequence
+(printed → notarised → signed → scan). That reasoning applies to a deal this system walks; it does
+not apply to the 18 societies just imported, which were signed years before the system existed.
+There is no sequence to invent for them — the deal happened, and what is being filed is the copy we
+hold. So it attaches to the SOCIETY as the executed copy on record, and no `Agreement` row is
+minted. FEAT-029's Agreement step still owns the live path unchanged.
+
+**Why an `Agreement` row is not created for a backfill, and why "just default the steps" does not
+reach it**: `printedAt`/`notarizedAt`/`signedAt` are already nullable, so they were never the
+obstacle. `Agreement` requires a `pipelineId` AND an `offerId`, both unique — and an `Offer` carries
+`tolerancePct`, `revenueSharePct`, `unitElectricityRate`, `termMonths` and `projectedMonthlyFee`,
+which `Contract` reads. Defaulting those would put invented money into the record a bill is computed
+against, which is precisely what INV-02 forbids. The real path to an `Agreement` for these societies
+is to backfill Pipeline → Offer → Agreement → Contract from their ACTUAL commercial terms, which the
+price list already carries (per-light cost, monthly payable, GST) — not from defaults.
 
 **Historical documents feed nothing.** They are retrievable, not inputs: a scanned report is not
 evidence a figure can be recomputed from, which is what INV-02 asks of anything that reaches a

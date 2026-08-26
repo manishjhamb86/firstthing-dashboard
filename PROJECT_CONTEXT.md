@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-25
+2026-08-26
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -2105,6 +2105,97 @@ through a path the client cannot pre-block** — an account without field access
 picker and submitted: refused by name, stored owner untouched. The worker's hourly chain was run
 for real against Postgres: seeded, ran, and left exactly **one** pending link, no fork. 528 unit
 tests, `tsc`/`lint`/`build` clean; two additive migrations plus one enum value.
+
+## A historical society becomes a billable one: documents in, circuit out (2026-08-26) — user-driven, in one long pass
+
+**The problem this arc solves.** Eighteen societies were imported as records, and every screen that
+mattered then dead-ended: the reading upload asked for a circuit, no society had one, and circuits
+only come from a survey (FEAT-007, and Phase 6's own finding that there is no backend shortcut to a
+billable circuit). These societies were commissioned years before this system existed. What they
+have instead of a survey is **paper** — demo reports, savings reports, agreements — so the paper had
+to become the way in.
+
+**Duplicates are refused, not flagged** (the user's call). FEAT-085-AC-3 let an operator confirm past
+a duplicate, and that override is how two "Mahagun Puram / Noida" rows reached real data. Both create
+paths refuse outright now, and the guarantee is a unique index on a normalised `name|location` key —
+an application check cannot win a race with itself, since two operators submitting at once both find
+nothing and both insert. Name AND location, because the same name in another city is a different
+society. Societies became **editable** (operations only) in the same change, and `flatCount` became
+**nullable**: the first import's researched counts were demonstrably wrong, and this repo states a
+gap rather than writing a figure nobody trusts.
+
+**The real documents rewrote the extraction design.** Reading actual samples before building — Gaur
+Saundaryam's savings report, Himalaya Pride's and The Princely States' analysis reports, two
+agreements — taught it what to ask about rather than guess:
+- reading tables print day and month only, with the year in a heading above;
+- figures are **adjusted in prose**, so the same day appears as 20.37 and 18.21;
+- documents **contradict themselves** (that May table averages 8.0071 under a sentence saying 8.58 —
+  which is the largest single value in the table, so somebody copied the wrong cell);
+- a service share is a share OF SOMEONE (Hyde Park: "35% of the energy savings", FirsThing's share,
+  where this system's own default is 58/42 the other way).
+
+So `extractDocument` returns figures **and clarifications** — each a plain question, why it matters,
+the candidate answers, and the surrounding text — and every figure carries the verbatim words it was
+read from. Against the real report it raised four, two of which nobody here had spotted by reading
+it. This deliberately does what `inferStructure` refuses to do (let a model return values); the
+difference is the artefact, not a change of mind — a savings report is one document with a few dozen
+printed figures a person can check, which is the shape the archived invoice extraction was judged
+safe for. A meter CSV is still mapping-only.
+
+**`savings-math.ts` turned the user's four rules into arithmetic**, asserted against that report so
+"we agree with the document" is proved rather than claimed — which is also what lets the same code
+say where it does not. An offline day is skipped, never counted as zero: a dead meter read as 0 kWh
+drags the average toward "we saved everything", the most dangerous direction for a billed figure.
+
+**CON-16 lost a criterion that is wrong in practice.** "No non-installation appliances share this
+circuit" would disqualify Gaur Saundaryam's own demo circuit, which is live and billing with five
+unreplaced surface lights on it. A shared fixture is now marked **excluded on its own device line**
+and its theoretical load comes off **both** sides of the savings calculation. Two figures, not one,
+because they answer different questions: the whole-circuit theoretical is what a READING is validated
+against (the meter sees everything), and only SAVINGS deducts. On that circuit it is 66.89% against
+59.79% naive — seven points of the number a fee is a share of. Recorded as an amendment in
+`00-intake.md` rather than silently softened.
+
+**A surveyor can add a fixture the catalog lacks**, and it arrives PROPOSED: its wattage feeds the
+theoretical load and from there a benchmark a society is billed on, so a number only its typist has
+seen must not travel that far. The gate is load validation — the first place the figure matters —
+and a rejected device blocks too, because it has to be replaced on the inventory rather than merely
+disapproved elsewhere. Approving and **listing** are separate decisions, or the catalog fills with
+near-duplicates nobody can choose between.
+
+**The way in: society → report → circuit.** The Documents tab asks which society first and narrows
+everything to it; a society with no circuits says so and offers the demo report instead of an empty
+dropdown. `/admin/documents/[id]` reads that report, asks its questions, and builds the circuit from
+the confirmed fixture lines — 42 tube at 20W retrofitted and 5 surface at 18W excluded, reproducing
+the report's own 22.32 kWh/day and 2.16 kWh/day from the created rows. **What it does not invent**:
+no baseline, no benchmark, no meter dates. Those come from readings through CON-45's review, because
+a figure printed in a report is evidence of what happened, not evidence this system can recompute.
+Every device line is marked `historical` for the same reason.
+
+**Four defects the user found by using it, all real:**
+1. **The reading arrived after the form mounted.** "Read this document" calls `router.refresh()`, and
+   React keeps the same instance, so a `useState` initialiser never re-ran — the fixtures the model
+   found sat in the props while the form showed none, and submitting failed with "record at least one
+   fixture line". Fixed by adjusting state during render against a tracked previous value, keyed on
+   the extraction's timestamp — the same pattern the monitoring window's date default already uses.
+2. **A filename in the location field.** Location now comes from the area the document names.
+3. **Light type was free text**, and got the document's phrasing ("33 Tube lights circuit"). CON-11
+   scopes extrapolation to a light TYPE, and a freeform string cannot be grouped — it is the fixed
+   list now.
+4. **A report naming one society was filed against another**, silently. Himalaya Pride's report went
+   against RG Residency and would have built RG Residency's circuit from Himalaya Pride's fixtures.
+   The review says so before the button — not a block, since paper names differ, but never silent.
+
+Also: a used report will not build a second circuit (a duplicate circuit bills twice), and the tank
+"not reporting" warning was **withdrawn** — those controllers report four discrete levels, so a tank
+that has not moved a quarter has nothing to send, and calling that a fault trained the reader to
+distrust a correct figure. That warning was written when the level itself looked wrong, and the cause
+of THAT turned out to be the `levelMax` scale bug, which is fixed.
+
+**Still not built, and not claimed**: the extracted daily readings are not yet fed into the reading
+store (they would go through CON-45's review like any other), the commercial terms in an agreement are
+not yet backfilled into Pipeline → Offer → Agreement → Contract, and `savings-math` is not yet wired
+to a screen.
 
 ## One place to file any document, and it checks what the file really is (2026-08-26) — user-asked
 

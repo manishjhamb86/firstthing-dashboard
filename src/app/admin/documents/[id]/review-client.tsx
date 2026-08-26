@@ -19,6 +19,7 @@ export function ExtractionReview({
   canRead,
   canCreate,
   modelError,
+  wordOriginal,
   proposed,
   alreadyUsed,
   /** Changes when a new reading lands — see the state sync below. */
@@ -31,6 +32,8 @@ export function ExtractionReview({
   canRead: boolean;
   canCreate: boolean;
   modelError: string | null;
+  /** The Word original — kept, but not a page figures can be read from. */
+  wordOriginal: boolean;
   proposed: ExtractedDocument | null;
   /** A circuit has already been built from this reading. */
   alreadyUsed: boolean;
@@ -129,6 +132,20 @@ export function ExtractionReview({
         <Link href={`/admin/societies/${societyId}/circuits`} className="btn-primary mt-4 inline-block">
           Open the circuit registry →
         </Link>
+      </Card>
+    );
+  }
+
+  if (!proposed && wordOriginal) {
+    return (
+      <Card className="p-6">
+        <CardTitle>This is the Word original</CardTitle>
+        <p className="text-sm">
+          It is kept on record — sometimes it is the only copy there is — but figures cannot be read
+          out of it: a .docx is a zipped bundle of XML, not a page anything can look at. File the
+          PDF or a scan of the same document against {societyName} and read that one. Both versions
+          stay; they are separate documents, not a replacement.
+        </p>
       </Card>
     );
   }

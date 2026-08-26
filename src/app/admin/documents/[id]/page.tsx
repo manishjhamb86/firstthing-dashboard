@@ -53,6 +53,11 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
             canRead={Boolean(actor?.permissions.includes("manage_pipeline"))}
             canCreate={Boolean(actor?.permissions.includes("manage_survey"))}
             modelError={doc.extraction?.modelError ?? null}
+            // A .docx is a ZIP of XML, not a page anything can look at. Say so
+            // before the button rather than after it (2026-08-26).
+            wordOriginal={
+              /word|officedocument/.test(doc.contentType) || doc.fileName.toLowerCase().endsWith(".docx")
+            }
             proposed={proposed}
             alreadyUsed={doc.extraction?.status === "confirmed"}
             extractedAt={doc.extraction?.extractedAt?.toISOString() ?? null}

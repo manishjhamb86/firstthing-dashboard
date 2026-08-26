@@ -8,6 +8,8 @@ import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
 import { authorizeUrl, EWELINK_STATE_COOKIE } from "@/lib/ewelink-sign";
 import { resolveEwelinkConfig, syncMeterDevices, EwelinkNeedsAuthorisation } from "@/lib/ewelink";
+import { resolveMeterProvider } from "@/lib/meter-provider";
+import { pollMeters } from "@/lib/meter-poll";
 
 /**
  * Save the eWeLink application credentials. Unlike the Tuya settings, this
@@ -204,4 +206,70 @@ export async function assignMeter(input: {
   if (societyId) revalidatePath(`/admin/societies/${societyId}`);
   if (input.circuitId) revalidatePath(`/admin/circuits/${input.circuitId}`);
   return { assigned: true };
+}
+
+/**
+ * Read a meter now, rather than waiting for the hourly pass. Goes through
+ * the same `pollMeters` the job uses, so a manual sync and an automatic one
+ * cannot produce different rows.
+ */
+export async function syncMeterNow(meterId: string): Promise<{
+  error?: string;
+  polled?: number;
+  reporting?: number;
+  unhealthy?: number;
+  failed?: number;
+}> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_users")) {
+    return { error: "Reading a meter is a society-management action (Manage users)." };
+  }
+  const meter = await db.meterDevice.findUnique({ where: { id: meterId }, select: { id: true, circuitId: true, societyId: true } });
+  if (!meter) return { error: "That meter is no longer in the mirror." };
+  if (!meter.circuitId && !meter.societyId) {
+    return { error: "Assign this meter to a circuit first — an unassigned meter has nothing to record against." };
+  }
+  const provider = await resolveMeterProvider();
+  if (!provider) return { error: "The meter API is not configured yet — set it up under API settings." };
+  try {
+    const result = await pollMeters({ meterId, provider });
+    logger.info("meter.sync_now", { actorId: actor.id, meterId, ...result });
+    revalidatePath("/admin/meters");
+    return result;
+  } catch (err) {
+    return { error: `The read failed: ${err instanceof Error ? err.message : "unknown error"}` };
+  }
+}
+
+/**
+ * Who gets chased when this meter stops answering. Work in this codebase has
+ * a named owner — the survey assignee, the installation onlooker — because an
+ * alert addressed to nobody is an alert nobody acts on.
+ */
+export async function setMeterOwner(input: {
+  meterId: string;
+  ownerId: string | null;
+}): Promise<{ error?: string; saved?: true }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_users")) {
+    return { error: "Naming a meter's owner is a society-management action (Manage users)." };
+  }
+  if (input.ownerId) {
+    const owner = await db.adminUser.findFirst({
+      where: { id: input.ownerId, isActive: true, deletedAt: null },
+      select: { id: true, permissions: true },
+    });
+    if (!owner) return { error: "That account is no longer active." };
+    // Fixing a meter is field work, so the owner has to be someone who can
+    // actually act on it rather than merely receive the message.
+    if (!owner.permissions.includes("manage_survey")) {
+      return { error: "A meter's owner has to hold field access (Manage survey) — they are the one who goes and fixes it." };
+    }
+  }
+  await db.meterDevice.update({ where: { id: input.meterId }, data: { ownerId: input.ownerId } });
+  logger.info("meter.owner_set", { actorId: actor.id, meterId: input.meterId, ownerId: input.ownerId });
+  revalidatePath("/admin/meters");
+  return { saved: true };
 }

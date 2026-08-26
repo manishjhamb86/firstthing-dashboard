@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { isAuthorised } from "@/lib/ewelink";
+import { evaluateMeterHealth, outageMessage, outageMinutes } from "@/lib/meter-health";
 import { MetersListClient } from "./meters-list-client";
 
 export const dynamic = "force-dynamic";
@@ -19,16 +20,22 @@ export default async function MetersPage() {
   await requireAdminPage();
   const actor = await resolveAdmin();
 
-  const [cfg, meters, societies, circuits] = await Promise.all([
+  const [cfg, meters, societies, fieldStaff, circuits] = await Promise.all([
     db.ewelinkApiConfig.findUnique({ where: { id: "singleton" } }),
     db.meterDevice.findMany({
       orderBy: [{ hasEnergySignal: "desc" }, { name: "asc" }],
       include: {
         society: { select: { id: true, name: true } },
         circuit: { select: { id: true, location: true, lightType: true, state: true } },
+        owner: { select: { id: true, email: true, name: true } },
       },
     }),
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    db.adminUser.findMany({
+      where: { isActive: true, deletedAt: null, permissions: { has: "manage_survey" } },
+      orderBy: { email: "asc" },
+      select: { id: true, email: true, name: true },
+    }),
     db.circuit.findMany({
       where: { voidedAt: null },
       orderBy: [{ societyId: "asc" }, { lightType: "asc" }],
@@ -44,6 +51,46 @@ export default async function MetersPage() {
   ]);
 
   const authorised = isAuthorised(cfg);
+  const now = new Date();
+  // The screen and the poll must agree about what "offline" means, so the
+  // same pure function decides it in both places.
+  const rows = meters.map((m) => {
+    const health = evaluateMeterHealth({
+      online: m.online,
+      reportedAt: m.lastReportedAt,
+      offlineSince: m.offlineSince,
+      now,
+    });
+    const circuitLabel = m.circuit ? `${m.circuit.location ?? "Unnamed"} · ${m.circuit.lightType}` : null;
+    return {
+      id: m.id,
+      name: m.name,
+      productModel: m.productModel,
+      uiid: m.uiid,
+      hasEnergySignal: m.hasEnergySignal,
+      lastPowerW: m.lastPowerW,
+      lastEnergyKwh: m.lastEnergyKwh,
+      lastSampleAt: m.lastSampleAt?.toISOString() ?? null,
+      state: m.hasEnergySignal && (m.circuitId || m.societyId) ? health.state : null,
+      offlineSince: m.offlineSince?.toISOString() ?? null,
+      outage: outageMessage({
+        meterName: m.name,
+        circuitLabel,
+        societyName: m.society?.name ?? null,
+        state: health.state,
+        minutes: outageMinutes(m.offlineSince, now),
+      }),
+      ownerId: m.ownerId,
+      ownerLabel: m.owner ? (m.owner.name ?? m.owner.email) : null,
+      societyId: m.societyId,
+      societyName: m.society?.name ?? null,
+      circuitId: m.circuitId,
+      circuitLabel,
+    };
+  });
+  // Only meters somebody is actually watching can be "in trouble" — an
+  // unassigned device in the account is not yet this product's problem.
+  const needAttention = rows.filter((r) => r.state !== null && r.state !== "reporting");
 
   return (
     <>
@@ -78,19 +125,9 @@ export default async function MetersPage() {
         <MetersListClient
           canAssign={Boolean(actor?.permissions.includes("manage_users"))}
           syncedAt={cfg.lastSyncAt?.toISOString() ?? null}
-          meters={meters.map((m) => ({
-            id: m.id,
-            name: m.name,
-            productModel: m.productModel,
-            uiid: m.uiid,
-            online: m.online,
-            hasEnergySignal: m.hasEnergySignal,
-            lastPowerW: m.lastPowerW,
-            societyId: m.societyId,
-            societyName: m.society?.name ?? null,
-            circuitId: m.circuitId,
-            circuitLabel: m.circuit ? `${m.circuit.location ?? "Unnamed"} · ${m.circuit.lightType}` : null,
-          }))}
+          meters={rows}
+          needAttention={needAttention.map((r) => ({ id: r.id, outage: r.outage, ownerLabel: r.ownerLabel }))}
+          fieldStaff={fieldStaff.map((f) => ({ id: f.id, label: f.name ?? f.email }))}
           societies={societies}
           circuits={circuits.map((c) => ({
             id: c.id,

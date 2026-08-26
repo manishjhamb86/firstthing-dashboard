@@ -2069,6 +2069,43 @@ exists to prevent. Unit-tested against that literal shape. Where a step reads do
 artifact behind it, the header says so honestly — "No stored record — the lifecycle advanced past
 this step" — rather than claiming "Submitted" about a row that does not exist.
 
+**Follow-on the same day — the polling, live figure and offline alerting, built against a stand-in.**
+The user asked for a per-meter "Sync readings" click, an hourly automatic fetch, and continuous
+online/offline checking so a named person can be chased. All of it is built and verified; only the
+vendor read itself is stubbed, because CoolKit publishes **no sandbox and issues no demo
+credentials** (checked: the free personal-developer tier is real and free, but still gated on their
+1–2 working-day audit). ADR-010's provider interface earns its keep immediately — `MeterProvider`
+has an eWeLink implementation and an env-gated `fakeProvider` (`EWELINK_FAKE_METERS=1`, which logs
+`meter.fake_provider_active` on every pass so a stand-in can never be mistaken for the account).
+
+**A sample is telemetry, and deliberately not a MeterReading.** `MeterSample` is its own table: the
+hourly poll writes live power/energy there, which is what the screen publishes. It never becomes
+the store a bill is computed from — that path still requires a reviewed `RawReadingFile` (CON-45),
+because INV-02 and INV-09 exist precisely to stop an unreviewed figure reaching a billed total.
+Conflating the two would have been the easy reading of "save the readings against that circuit".
+
+**`connected` is not `reporting`, again.** `evaluateMeterHealth` returns three states, and the
+middle one is the water-tank lesson made reusable: a meter can hold an open connection and have
+said nothing for hours. eWeLink's status read carries **no device timestamp**, so the provider
+returns `reportedAt: null` meaning *unknown* rather than *now*, and the screen says "read at"
+rather than claiming the device reported then.
+
+**The alert fires on the transition, and it is addressed.** `offlineSince` is stamped once and kept
+across a run of bad polls — "down since 09:00" is the fact somebody acts on, and restamping it
+hourly would erase it. A meter carries an `ownerId` who must hold field access, since they are the
+one who goes and fixes it; the banner names the meter, the circuit, the society and the outage
+length, and says outright when nobody has been named. Real delivery (email/SMS) is still R1 —
+ADR-008 is Proposed — so this is in-app plus a `meter.went_offline` log line, stated rather than
+stubbed.
+
+Verified in a browser, 16/16, zero console errors: the click files a sample and the row publishes
+the figure; an unreachable meter stamps its outage, raises by name, and a second failed poll does
+**not** restamp it; an unassigned meter is neither watched nor polled. **The owner gate was driven
+through a path the client cannot pre-block** — an account without field access smuggled into the
+picker and submitted: refused by name, stored owner untouched. The worker's hourly chain was run
+for real against Postgres: seeded, ran, and left exactly **one** pending link, no fork. 528 unit
+tests, `tsc`/`lint`/`build` clean; two additive migrations plus one enum value.
+
 ## eWeLink (SONOFF) meter mirror: the account, the assignment, and what the docs will not tell us (2026-08-26) — user-asked
 
 **The ask**: pull every smart meter and its reading history out of the company's eWeLink account,

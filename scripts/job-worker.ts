@@ -2,6 +2,7 @@ import "dotenv/config";
 import { db } from "../src/lib/db";
 import { logger } from "../src/lib/logger";
 import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";
+import { pollMeters } from "../src/lib/meter-poll";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -24,6 +25,8 @@ const GATEPASS_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 // history charts and portal sparklines read the resulting store, so stats
 // survive a sensor going offline.
 const TANK_SAMPLE_INTERVAL_MS = 30 * 60 * 1000;
+/** Hourly, per the user's own cadence for meter readings (2026-08-26). */
+const METER_POLL_INTERVAL_MS = 60 * 60 * 1000;
 
 // A job left `running` by a process that died mid-run would otherwise sit
 // there forever: it is not `done`, so it never schedules a successor, and it
@@ -88,6 +91,9 @@ async function processJob(job: { id: string; type: string }) {
     case "gatepass_sweep":
       await runGatepassSweep();
       break;
+    case "meter_poll":
+      await runMeterPoll();
+      break;
     case "tank_level_sample":
       await runTankLevelSample();
       break;
@@ -134,6 +140,43 @@ async function runTankLevelSample() {
     // Reschedule even after a failed pass — a Tuya outage must not kill the
     // chain, only skip the sample.
     await scheduleTankSample(new Date(Date.now() + TANK_SAMPLE_INTERVAL_MS));
+  }
+}
+
+/**
+ * One hourly pass over every assigned meter (the user's own cadence,
+ * 2026-08-26): read it, file a sample, and notice when it stops answering.
+ * Same single-link chain discipline as every other recurring job here — a
+ * forked chain would double the polling rate and, worse, double-count the
+ * transition that fires an alert.
+ */
+async function runMeterPoll() {
+  try {
+    const result = await pollMeters();
+    logger.info("job.meter_poll_done", result);
+  } finally {
+    // Reschedule even after a failed pass: a vendor outage must skip a
+    // sample, never kill the chain that would notice the outage ending.
+    await scheduleMeterPoll(new Date(Date.now() + METER_POLL_INTERVAL_MS));
+  }
+}
+
+async function scheduleMeterPoll(runAt: Date) {
+  const existing = await db.job.findFirst({ where: { type: "meter_poll", status: "pending" } });
+  if (existing) {
+    logger.warn("job.meter_poll_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "meter_poll", runAt } });
+}
+
+async function ensureMeterPollScheduled() {
+  const existing = await db.job.findFirst({
+    where: { type: "meter_poll", status: { in: ["pending", "running"] } },
+  });
+  if (!existing) {
+    await db.job.create({ data: { type: "meter_poll", runAt: new Date() } });
+    logger.info("job.meter_poll_seeded", {});
   }
 }
 
@@ -207,6 +250,7 @@ async function main() {
   await reclaimStaleJobs();
   await ensureGatepassSweepScheduled();
   await ensureTankSampleScheduled();
+  await ensureMeterPollScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

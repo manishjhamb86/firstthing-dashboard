@@ -195,6 +195,7 @@ enum GatePassStatus {
 enum JobType {
   gatepass_sweep
   tank_level_sample
+  meter_poll
 
   @@map("job_type")
 }
@@ -422,6 +423,7 @@ model AdminUser {
   circuitsReplacing           Circuit[]          @relation("CircuitReplacementOwner")
   waterTanksAssigned          WaterTank[]        @relation("WaterTankAssignedBy")
   meterDevicesAssigned        MeterDevice[]      @relation("MeterDeviceAssignedBy")
+  meterDevicesOwned           MeterDevice[]      @relation("MeterDeviceOwner")
   ewelinkConfigsUpdated       EwelinkApiConfig[] @relation("EwelinkApiConfigUpdatedBy")
   tankApiConfigUpdated        TankApiConfig[]    @relation("TankApiConfigUpdatedBy")
   circuitsReplacementAssigned Circuit[]          @relation("CircuitReplacementAssignedBy")
@@ -2469,14 +2471,53 @@ model MeterDevice {
   assignedById String?   @map("assigned_by_id")
 
   lastPowerW     Float?    @map("last_power_w")
+  /// The device's own energy counter at the last sample, when it reports one.
+  lastEnergyKwh  Float?    @map("last_energy_kwh")
   lastReportedAt DateTime? @map("last_reported_at")
+  /// When the hourly poll last actually reached this device.
+  lastSampleAt   DateTime? @map("last_sample_at")
+  /// Set the moment a poll finds the meter unreachable, cleared the moment
+  /// it reports again — so "how long has this been down" is a stored fact
+  /// rather than something inferred from a gap in the samples.
+  offlineSince   DateTime? @map("offline_since")
+  /// Who gets chased when this meter stops reporting. Work in this codebase
+  /// has a named owner (the survey assignee, the installation onlooker);
+  /// an alert addressed to nobody is an alert nobody acts on.
+  ownerId        String?   @map("owner_id")
   syncedAt       DateTime  @default(now()) @map("synced_at")
   createdAt      DateTime  @default(now()) @map("created_at")
 
-  society    Society?   @relation(fields: [societyId], references: [id], onDelete: SetNull)
-  circuit    Circuit?   @relation(fields: [circuitId], references: [id], onDelete: SetNull)
-  assignedBy AdminUser? @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])
+  society    Society?      @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  circuit    Circuit?      @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  assignedBy AdminUser?    @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])
+  owner      AdminUser?    @relation("MeterDeviceOwner", fields: [ownerId], references: [id])
+  samples    MeterSample[]
 
   @@index([societyId])
   @@map("meter_devices")
+}
+
+/// One row per hourly poll of an assigned meter: what it read and whether it
+/// answered. This is TELEMETRY, deliberately separate from MeterReading —
+/// the store a bill is computed from. A sample is a live observation; a
+/// MeterReading is evidence a society is billed on, and CON-45 requires the
+/// second to be reviewed before it is stored. Conflating them would put an
+/// unreviewed figure into a billed total, which is what INV-02 and INV-09
+/// exist to prevent.
+model MeterSample {
+  id         String    @id @default(cuid())
+  meterId    String    @map("meter_id")
+  recordedAt DateTime  @map("recorded_at")
+  online     Boolean
+  powerW     Float?    @map("power_w")
+  energyKwh  Float?    @map("energy_kwh")
+  /// When the device itself last reported, at sample time. Connected is not
+  /// the same as reporting — the distinction the water-tank work had to
+  /// learn the hard way.
+  reportedAt DateTime? @map("reported_at")
+
+  meter MeterDevice @relation(fields: [meterId], references: [id], onDelete: Cascade)
+
+  @@index([meterId, recordedAt])
+  @@map("meter_samples")
 }

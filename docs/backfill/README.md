@@ -12,7 +12,7 @@ two documents, fill three CSVs, generate SQL, insert.
 |---|---|
 | The signed **agreement** | revenue share, ₹/kWh, term length, tolerance, contracted light count, monthly service charge, signature date |
 | The **post-installation savings report** | per circuit: the fixtures, counts, wattages, running hours, the pre-install baseline, the after figure, the savings %, and the commissioning dates |
-| The **first invoice** | the light count actually billed against, and — from the number of days it covers — the installation-completion date |
+| The **first invoice** | the light count actually billed against, the society's postal address, and — from the number of days it covers — the installation-completion date |
 
 The third one was the user's catch (2026-08-26) and it removes the only field
 that had no source at all. A first invoice covering 16 days of a 31-day
@@ -47,7 +47,7 @@ re-run is detectable and any row can be traced back to its CSV line.
 
 | # | Table | One per | What goes in it | Source |
 |---|---|---|---|---|
-| 0 | `societies` | society | **already exists** — only `status` moves `prospect` → `active` | — |
+| 0 | `societies` | society | **already exists** — `status` moves `prospect` → `active`, and `location` + `dedupe_key` are replaced from the invoice's address | CSV 1 |
 | 1 | `engagements` | society × service line | `service_line='lighting'`, `status='active'` | fixed |
 | 2 | `pipelines` | society × service line | `stage='active_billing'`, contact name/phone, `meeting_date`, sales owner, `authoritative=true` | CSV 1 |
 | 3 | `site_surveys` | pipeline | nothing but the link — circuits must hang off one (CON-24) | fixed |
@@ -77,6 +77,12 @@ hand:
   it from the operator's records — the invoice has it, for all 19.)
 - **`represented_light_count`** is the **first invoice's** light count, not the
   agreement's contracted figure: the invoice bills what was actually installed.
+- **`location`** is replaced with the invoice's **billing address**. It is a tax
+  document, so the address on it is the one the society itself gave — better
+  than the researched string these rows were created with. Case is normalised;
+  the verbatim line goes in `notes`. **`dedupe_key` is recomputed with it**, or
+  the unique index that makes a duplicate society impossible would go on
+  describing the old address.
 - **`tolerance_pct`** is **10** wherever the agreement states none, which is
   common.
 - **`lights_replaced_on`** is the **day before the post-installation readings

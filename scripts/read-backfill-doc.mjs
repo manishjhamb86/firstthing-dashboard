@@ -56,7 +56,9 @@ phase "before" or "after".`,
   invoice: `You are reading FirsThing's invoice to a residential society in India for its
 share of measured energy savings. ${COMMON}
 
-Fields: societyName, invoiceNumber, invoiceDate, billingPeriodFrom,
+Fields: societyName, billingAddress (the society's full postal address as
+printed, on one line), gstin (the society's GST number if shown),
+invoiceNumber, invoiceDate, billingPeriodFrom,
 billingPeriodTo, daysBilled (how many days this invoice covers — if it says
 so, or if the period implies it, report it and quote the period),
 lightCount (the number of lights the invoice bills against),

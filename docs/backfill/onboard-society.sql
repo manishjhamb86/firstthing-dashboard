@@ -15,6 +15,7 @@
 -- The account credited with the backfill. NOTE: psql's \set takes the whole
 -- rest of the line as the value, so a trailing comment would become part of it.
 \set actor          'yogesh@firsthing.earth'
+\set location       'GH-01, Sector 1, Greater Noida West, Gautam Buddha Nagar, UP 201306'
 \set contact_name   'Ace City AOA'
 \set contact_phone  '9999999999'
 \set signed_on      '2025-10-23'
@@ -28,8 +29,23 @@
 
 BEGIN;
 
--- 0. The society exists already; onboarding makes it active.
-UPDATE societies SET status = 'active' WHERE id = :'soc';
+-- 0. The society exists already; onboarding makes it active and replaces the
+--    researched location with the invoice's billing address.
+--
+--    `dedupe_key` MUST move with the location. It is derived from
+--    name|location and carries the unique index that makes a duplicate
+--    society impossible; leaving it behind would have the key describing an
+--    address the row no longer has, so the next duplicate check compares
+--    against the wrong string. The expression below reproduces
+--    `societyDedupeKey()` exactly — lowercase, every run of non-alphanumerics
+--    to a single space, trimmed.
+UPDATE societies
+   SET status = 'active',
+       location = :'location',
+       dedupe_key = btrim(regexp_replace(lower(name), '[^a-z0-9]+', ' ', 'g'))
+                    || '|' ||
+                    btrim(regexp_replace(lower(:'location'), '[^a-z0-9]+', ' ', 'g'))
+ WHERE id = :'soc';
 
 -- 1. Engaged on the service line. This is what "Lighting · Not enrolled"
 --    reads off, and it is the same fact as the deal existing.

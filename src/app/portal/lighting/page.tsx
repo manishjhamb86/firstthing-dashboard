@@ -5,7 +5,6 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { resolveTheme } from "@/lib/resolve-theme";
 import { Card, CardTitle, ChartPending, EmptyState, PageHeader, Stat, StatPending, StatRow, StatusChip } from "@/components/ui";
 import { PortalShell } from "../portal-shell";
-import { PortalTabs } from "../portal-tabs";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Lighting" };
@@ -59,9 +58,9 @@ export default async function PortalLightingPage() {
       : null;
 
   return (
-    <PortalShell theme={theme}>
+    <PortalShell theme={theme} email={viewer.email} societyName={society.name}>
       <PageHeader
-        title={society.name}
+        title="Lighting"
         subtitle="What the lighting retrofit is doing for you."
         chip={
           best ? (
@@ -71,7 +70,6 @@ export default async function PortalLightingPage() {
           )
         }
       />
-      <PortalTabs active="lighting" />
 
       {circuits.length === 0 ? (
         <EmptyState title="No lighting work yet">

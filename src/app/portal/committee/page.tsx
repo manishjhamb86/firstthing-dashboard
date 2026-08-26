@@ -5,7 +5,6 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { resolveTheme } from "@/lib/resolve-theme";
 import { PageHeader, StatusChip } from "@/components/ui";
 import { PortalShell } from "../portal-shell";
-import { PortalTabs } from "../portal-tabs";
 import { CommitteeClient } from "./committee-client";
 
 export const dynamic = "force-dynamic";
@@ -34,9 +33,9 @@ export default async function PortalCommitteePage() {
   const isOfficeBearer = viewer.role === "office_bearer";
 
   return (
-    <PortalShell theme={theme}>
+    <PortalShell theme={theme} email={viewer.email} societyName={society.name}>
       <PageHeader
-        title={society.name}
+        title="Committee"
         subtitle="Who from your society can sign in."
         chip={
           isOfficeBearer ? (
@@ -46,7 +45,6 @@ export default async function PortalCommitteePage() {
           )
         }
       />
-      <PortalTabs active="committee" />
       <CommitteeClient
         viewerIsOfficeBearer={isOfficeBearer}
         accounts={accounts.map((a) => ({

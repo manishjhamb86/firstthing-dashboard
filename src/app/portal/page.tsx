@@ -22,7 +22,6 @@ import { OfferCard } from "./offer-card";
 import { BatchReviewCard } from "./batch-review-card";
 import { reviewDeadlineFor } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
-import { PortalTabs } from "./portal-tabs";
 
 // MS-02's demoable outcome, made literal: a society office-bearer/committee/
 // manager account logs in and lands on a role-scoped page reading its own
@@ -106,10 +105,10 @@ export default async function PortalHomePage() {
   if (openOffer && isOfficeBearer) pendingActions.push("Respond to the offer FirsThing has issued");
 
   return (
-    <PortalShell theme={theme}>
+    <PortalShell theme={theme} email={viewer.email} societyName={society.name}>
       <PageHeader
         title={society.name}
-        subtitle={`Signed in as ${viewer.email} · ${PORTAL_AUTHORITY_LABEL[viewer.role]}`}
+        subtitle={`Your society's account with FirsThing · you are ${PORTAL_AUTHORITY_LABEL[viewer.role].toLowerCase()}`}
         chip={
           pendingActions.length > 0 ? (
             <StatusChip tone="warn">{pendingActions.length} awaiting you</StatusChip>
@@ -118,8 +117,6 @@ export default async function PortalHomePage() {
           )
         }
       />
-
-      <PortalTabs active="dashboard" />
 
       {/* The society's own numbers. Empty where the feature that produces
           them is not built (the user's explicit choice 2026-08-25: visible,
@@ -273,6 +270,7 @@ export default async function PortalHomePage() {
                     width={84}
                     height={116}
                     pctSize={20}
+                    ticks={false}
                   />
                   <span className="max-w-[96px] text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
                     {t.name}

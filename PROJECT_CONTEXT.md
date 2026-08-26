@@ -2197,6 +2197,78 @@ store (they would go through CON-45's review like any other), the commercial ter
 not yet backfilled into Pipeline → Offer → Agreement → Contract, and `savings-math` is not yet wired
 to a screen.
 
+## A pre-system society, walked end to end on its own documents (2026-08-26) — user-asked
+
+**The ask, verbatim**: "I share with you all the documents required. the agreement, the demo report,
+the metering data. what i want you to do is test the full flow yourself on local. if you can
+complete everything then let me know. else fix till its complete. start fresh." Ace City's real
+scanned agreement, its post-demo report, and its 750 KB meter workbook.
+
+**Five things stood between those three files and a commissioned circuit. None was visible from the
+code; each turned up by driving it.**
+
+**1. The circuit page showed a backfilled circuit the full commissioning walk.** A panel reading
+"it is not walked through meter install, gate passes and a baseline window" sat directly above a
+step asking to install the meter and validate its load. Worse than contradictory: the readings
+upload lives behind the install gate pass, so a circuit built from a report could not go anywhere
+at all. A backfilled circuit now has its own three-step spine — eligibility not assessed, the two
+dates, the readings — and the dates panel is that step's own form rather than a card above the map.
+
+**2. The meter data is a workbook, and the pipeline read CSV only.** `src/lib/xlsx.ts` is a minimal
+reader (ZIP central directory + inflate + the four XML parts), written rather than depended on: the
+whole need is cell values as strings, and a library that parses untrusted uploads is a supply-chain
+decision. `xlsx-readings.ts` converts a chosen sheet to the delimited text the pipeline already
+reads, and stops there deliberately — everything downstream is proven, and a second pipeline for
+workbooks would be a second place for the arithmetic to differ. The sheet is asked, never guessed
+(`RawReadingFile.sheetName` records it): Ace City's workbook holds Basement and LiftLobby, and the
+next block along is another circuit's consumption.
+
+**3. The blocks overlap, and stacking them doubled 143 days.** This is the one that would have been
+expensive. The three column blocks are not consecutive chunks — they are separate exports of the
+same meter taken on different days. Two share **128 dates and repeat the hourly readings value for
+value on 126 of them**; a third shares 15 more. Summed, each of those days comes out about double,
+which does not look wrong in a column of plausible numbers and lands in a baseline a society is
+billed against. A date now belongs to ONE block, the one holding the most readings for it. With no
+time column there is no telling a day split across blocks from a day repeated in both, and the two
+mistakes are not equal: fullest-wins can only under-report a day (visible — it surfaces as partial
+and drops out of the averages), while summing both silently inflates the saving and the fee that is
+a share of it. **Found only by computing the expected figures independently, in another language,
+from the raw file — the system's own 291-day answer looked perfectly healthy.**
+
+**4. A backfill's baseline was treated as settled before it existed.** "The lights are not in yet"
+was the test for whether the pre-install baseline was still open, and for a circuit commissioned
+through the live flow that is the same question — the baseline always settles before the
+replacement is recorded. A pre-system society reverses the order: both dates come off its demo
+report before a single reading exists. So every upload classed post-install and the days that would
+have produced the baseline could never be uploaded. `baselineUnsettled()` is now one named
+predicate shared by the phase and the recompute so they cannot drift, and a pre-install window
+stops at the replacement day when that day is already known — otherwise it sweeps in the new
+fittings and averages them into the old fittings' baseline. **The general shape**: a condition that
+is equivalent to the right one under the ordering you have always seen is not the right one.
+
+**5. The agreement page called a date it could not parse no date at all.** It accepted ISO only, so
+"23 Oct 2025" left the signature field empty under a list of five perfectly legible dates.
+`src/lib/loose-date.ts` reads what documents actually print, and — the part that matters — returns
+**both readings** of an ambiguous numeric date rather than choosing: 10/11 is a month away from
+11/10, and that month is when billing starts. Two smaller ones alongside it: recording an agreement
+with the term start skipped left the document "Needs review" forever with nothing left to review
+(the confirm sat after the early return), and revisiting one afterwards reported its own success as
+a conflict — "amend that one rather than creating a second", about the contract it had just made.
+A computed revenue share also rendered at fourteen decimal places; it is two now, because
+64.00013280653408 reads as a figure nobody could check.
+
+**What the walk proves, against the real files**: the society is created; the scanned agreement is
+read (share computed from ₹54,214 of ₹1,50,595 = 36.0% FirsThing / 64.0% society, matching the
+document's own "~36%"), recorded with the term start skipped, and the contract created when that
+date is supplied; the demo report is read, **raises its own two questions** (the report contradicts
+itself on the light count, 96 vs 20, and prints October dates with no year), and builds a
+96-light 20W 24h circuit with no baseline invented from its prose; the two dates are recorded; and
+the workbook produces days that reproduce the report's own printed table — 48.84, 48.79, 48.35
+before, ~16 after.
+
+**Still open, and not claimed**: the report's own extracted daily readings do not feed the reading
+store; `savings-math` is not wired to a screen. None of this is deployed to stage yet.
+
 ## One place to file any document, and it checks what the file really is (2026-08-26) — user-asked
 
 **The ask**: a back-office tab where every kind of document can be uploaded, the type chosen from a

@@ -202,9 +202,9 @@ export function DocumentUploadClient({
 
           {spec.needsPeriod && (
             <Field
-              label="Period"
+              label="Filed under (period)"
               htmlFor="doc-period"
-              hint="Always chosen, never read out of the file (INV-04)."
+              hint="The slot it files under and versions against — not a claim about what it covers. A report spanning several months is fine; the span it states is read from the document itself."
             >
               <input
                 id="doc-period"

@@ -2585,7 +2585,19 @@ model StoredDocument {
   docType   String @map("doc_type")
   societyId String @map("society_id")
   /// INV-04 — always an explicit selection, never inferred from the file.
+  ///
+  /// This is a FILING SLOT, not a claim about what the document covers: it
+  /// keys the version history with (society, docType, version) and names the
+  /// folder the file lives in. A demo's two phases can be months apart and a
+  /// single phase can straddle a month end (28 Jul – 3 Aug), so what the
+  /// document actually covers is recorded below instead of being implied by
+  /// one month (the user's question, 2026-08-26).
   period    String
+
+  /// The span the document itself states, read from it and shown beside the
+  /// filing slot. Null until it has been read, or when it names no period.
+  coversFrom DateTime? @map("covers_from")
+  coversTo   DateTime? @map("covers_to")
 
   /// ADR-005's rule applied to documents (the user's call, 2026-08-26:
   /// "versioning is first priority"). A re-upload into the same slot — same

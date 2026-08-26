@@ -364,6 +364,18 @@ export async function readStoredDocument(documentId: string): Promise<{ error?: 
       create: { documentId: doc.id, status: "proposed", proposed, extractedAt: new Date() },
       update: { status: "proposed", proposed, modelError: null, extractedAt: new Date() },
     });
+    // The span the document states, kept beside the filing month — a demo's
+    // phases can be months apart and one phase can straddle a month end, so
+    // the slot it is filed under was never going to describe it.
+    const asDate = (v: string) => {
+      const d = new Date(`${v}T00:00:00.000Z`);
+      return /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(d.getTime()) ? d : null;
+    };
+    const from = asDate(proposed.periodStart);
+    const to = asDate(proposed.periodEnd);
+    if (from || to) {
+      await db.storedDocument.update({ where: { id: doc.id }, data: { coversFrom: from, coversTo: to } });
+    }
     logger.info("document.read", {
       actorId: actor.id,
       documentId: doc.id,

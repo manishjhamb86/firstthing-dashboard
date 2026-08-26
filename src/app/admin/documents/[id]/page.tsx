@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
-import { formatInstant } from "@/lib/format-date";
+import { formatDate, formatInstant } from "@/lib/format-date";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
 import type { ExtractedDocument } from "@/lib/document-extract";
 import { ExtractionReview } from "./review-client";
@@ -39,7 +39,11 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
       <PageHeader
         backHref="/admin/documents"
         title={label}
-        subtitle={`${doc.society.name} · ${doc.period} · version ${doc.version}`}
+        subtitle={`${doc.society.name} · filed under ${doc.period} · version ${doc.version}${
+          doc.coversFrom || doc.coversTo
+            ? ` · covers ${doc.coversFrom ? formatDate(doc.coversFrom) : "?"} – ${doc.coversTo ? formatDate(doc.coversTo) : "?"}`
+            : ""
+        }`}
         chip={
           doc.voidedAt ? (
             <StatusChip tone="warn">Withdrawn</StatusChip>
@@ -91,7 +95,13 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
             {(
               [
                 ["Society", doc.society.name],
-                ["Period", doc.period],
+                ["Filed under", doc.period],
+                [
+                  "Covers",
+                  doc.coversFrom || doc.coversTo
+                    ? `${doc.coversFrom ? formatDate(doc.coversFrom) : "?"} – ${doc.coversTo ? formatDate(doc.coversTo) : "?"}`
+                    : "— not read yet",
+                ],
                 ["Version", `v${doc.version}`],
                 ["File", doc.fileName],
                 ["Filed", `${formatInstant(doc.uploadedAt)} · ${doc.uploadedBy.name ?? doc.uploadedBy.email}`],

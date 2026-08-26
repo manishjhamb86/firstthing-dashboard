@@ -20,6 +20,8 @@ export function ExtractionReview({
   canCreate,
   modelError,
   proposed,
+  /** Changes when a new reading lands — see the state sync below. */
+  extractedAt,
   societyName,
   societyId,
   existingCircuits,
@@ -29,13 +31,14 @@ export function ExtractionReview({
   canCreate: boolean;
   modelError: string | null;
   proposed: ExtractedDocument | null;
+  extractedAt: string | null;
   societyName: string;
   societyId: string;
   existingCircuits: number;
 }) {
   const router = useRouter();
-  const [lines, setLines] = useState<Line[]>(
-    (proposed?.fixtures ?? []).map((f) => ({
+  const linesFrom = (d: ExtractedDocument | null): Line[] =>
+    (d?.fixtures ?? []).map((f) => ({
       label: f.label,
       count: f.count === null ? "" : String(f.count),
       watts: f.watts === null ? "" : String(f.watts),
@@ -45,9 +48,25 @@ export function ExtractionReview({
       // safer reading and the operator confirms.
       retrofitted: f.retrofitted === true,
       source: f.sourceText,
-    })),
-  );
+    }));
+
+  const [lines, setLines] = useState<Line[]>(linesFrom(proposed));
   const [lightType, setLightType] = useState(proposed?.areaOrCircuit ?? "");
+  // The reading arrives AFTER this component first mounted: "Read this
+  // document" calls router.refresh(), and React keeps the same instance, so a
+  // useState initialiser never runs again — the fixtures the model found sat
+  // in the props while the form showed none, and submitting then failed with
+  // "record at least one fixture line" (user-reported 2026-08-26). Adjusted
+  // during render against a tracked previous value, which is React's own
+  // documented pattern and the one this repo already used for the monitoring
+  // window's date default; an effect here would be a second render with the
+  // wrong values on screen in between.
+  const [seededFrom, setSeededFrom] = useState<string | null>(null);
+  if (proposed && extractedAt && seededFrom !== extractedAt) {
+    setSeededFrom(extractedAt);
+    setLines(linesFrom(proposed));
+    setLightType(proposed.areaOrCircuit ?? "");
+  }
   const [represented, setRepresented] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -226,6 +245,27 @@ export function ExtractionReview({
             </div>
           ))}
         </div>
+
+        <button
+          type="button"
+          className="btn-secondary mt-3"
+          onClick={() =>
+            setLines((p) => [
+              ...p,
+              { label: "", count: "", watts: "", hours: "24", retrofitted: true, source: "Added by hand — not read from the document." },
+            ])
+          }
+        >
+          Add a fixture line
+        </button>
+        {lines.length === 0 && (
+          // Some reports describe a circuit without breaking it down. Saying
+          // so beats an empty card and a refusal on submit.
+          <p className="mt-2 text-[13px]" style={{ color: "var(--warn-fg)" }}>
+            This document does not break the circuit down by fixture. Add the lines by hand from what
+            it does say.
+          </p>
+        )}
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
           <Field label="Light type" htmlFor="fx-type" hint="Basement, staircase, lift lobby… (CON-11)">

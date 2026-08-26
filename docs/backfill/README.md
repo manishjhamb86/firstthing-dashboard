@@ -120,6 +120,30 @@ hand:
   conclusion says 20 lights where the rest of it says 96; 20 lights cannot
   draw 48.70 kWh/day.
 
+## "Light type" means two different things — keep them apart
+
+CON-11 is explicit: `circuits.light_type` is the **operating profile**, one of
+basement parking, stilt parking, lift lobby, staircase, external. It exists
+because extrapolation is per profile, and the failure it names is scaling "a
+24h basement circuit onto dusk-to-dawn staircase lighting".
+
+The **fixture** — a 20W tube light or an 18W one — is a `circuit_devices` row,
+not the circuit's type. A circuit often carries more than one kind: surface
+lights or street lights frequently share it and are **excluded from the
+calculation**, their theoretical load coming off both sides of the savings
+figure (`excluded=yes`). That is what the third CSV is for.
+
+So a typical circuit is `light_type=basement` with one included line of
+20W or 18W tube lights and, sometimes, an excluded line of surface or street
+lights.
+
+- **Running hours are 24 for a basement tube-light circuit** (the user,
+  2026-08-26: "that's for sure"). Where a report omits them, the load
+  arithmetic is the check: Ace Aspire's 71 × 20W × 24h = 34.08 kWh/day
+  against a measured 32.91.
+- **Where a report does not name the area**, 24h running implies basement,
+  since every other profile is dusk-to-dawn.
+
 ## What I compute rather than ask for
 
 - `dedupe_key` — already set on every society

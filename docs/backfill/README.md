@@ -144,6 +144,29 @@ lights.
 - **Where a report does not name the area**, 24h running implies basement,
   since every other profile is dusk-to-dawn.
 
+### Which circuit is which (the user, 2026-08-26)
+
+- **The first demo, and the first circuit, are always basement lights.** So a
+  society with one circuit is a basement circuit, and its report needs no area
+  stated.
+- **A second circuit is usually lift lobby plus staircase** — one circuit
+  covering both, which is why they sit together: their operating profiles
+  match. Recorded as `light_type=lift-lobby` with the staircase fixtures as
+  their own `circuit_devices` line and both named in `circuit_location`.
+  CON-11 groups by profile, not by architectural label.
+- **Sometimes the basement alone carries two metered circuits, averaged.**
+  Then `circuit_location` has to tell them apart ("Basement — Tower A"), and
+  the society's basement light count must be **split between them, not
+  repeated** — `represented_light_count` is per circuit, and CON-11 sums the
+  per-circuit extrapolations. Repeating the full count on both would bill the
+  same lights twice.
+
+  *Known interaction:* the document-upload path refuses a second circuit with
+  the same society, light type and metered count (`circuit-duplicate.ts`).
+  Two genuine basement circuits normally differ in count so it never fires,
+  and it does not apply to this backfill at all, which inserts by SQL. Worth
+  knowing before that guard is trusted for a live second basement circuit.
+
 ## What I compute rather than ask for
 
 - `dedupe_key` — already set on every society

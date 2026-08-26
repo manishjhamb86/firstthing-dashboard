@@ -366,7 +366,10 @@ export function CircuitReadingPanel({
   }
 
   function save() {
-    if (!rawFileId || !fileText || !preview) return;
+    // Not gated on fileText: a workbook has none on the client — the server
+    // reads it back from S3 and converts it. Requiring it here made Save do
+    // nothing at all, silently, which is the worst way for a button to fail.
+    if (!rawFileId || !preview) return;
     setError(undefined);
     startTransition(async () => {
       const decisions: RowDecision[] = actionable.map((r) => ({
@@ -376,7 +379,7 @@ export function CircuitReadingPanel({
           ? { countInAverage: !noAverage.has(r.date) && !r.partial }
           : {}),
       }));
-      const result = await commitCircuitReadings(rawFileId, fileText, decisions);
+      const result = await commitCircuitReadings(rawFileId, fileText ?? "", decisions);
       if ("error" in result) {
         setError(result.error);
       } else {

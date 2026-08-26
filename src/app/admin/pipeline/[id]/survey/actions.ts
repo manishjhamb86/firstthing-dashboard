@@ -88,12 +88,21 @@ export async function submitCircuitCandidate(input: {
     return { error: "Record at least one device line — the circuit's inventory is what everything downstream compares against." };
   }
   const types = await db.deviceType.findMany({
-    where: { id: { in: input.lines.map((l) => l.deviceTypeId) }, role: "original", active: true, deletedAt: null },
+    where: {
+      id: { in: input.lines.map((l) => l.deviceTypeId) },
+      role: "original",
+      active: true,
+      deletedAt: null,
+      // A proposed type is allowed on the line — the surveyor has to be able
+      // to finish. A REJECTED one never is: operations already said that
+      // fixture is not what should be recorded here.
+      status: { in: ["approved", "proposed"] },
+    },
   });
   const typeById = new Map(types.map((t) => [t.id, t]));
   for (const line of input.lines) {
     if (!typeById.has(line.deviceTypeId)) {
-      return { error: "Pick every device from the catalog — if one is missing, ops can add it under Device catalog." };
+      return { error: "Pick every device from the list — if one is missing, add it and operations will confirm it." };
     }
     if (!Number.isInteger(line.count) || line.count < 1 || line.count > 5000) {
       return { error: "Each line's count must be a whole number between 1 and 5000." };

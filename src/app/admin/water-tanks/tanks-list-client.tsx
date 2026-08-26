@@ -240,9 +240,9 @@ export function TanksListClient({
                     <TankLevelBar pct={t.hasLevelSignal ? (t.level ?? 0) : null} />
                   </td>
                   <td>
-                    {t.online && t.stale ? (
-                      <StatusChip tone="warn">Not reporting</StatusChip>
-                    ) : t.online ? (
+                    {/* A quiet online sensor is not a fault: these report in
+                        25% steps, so no change means no news (2026-08-26). */}
+                    {t.online ? (
                       <StatusChip tone="ok">Online</StatusChip>
                     ) : t.hasLevelSignal ? (
                       <StatusChip tone="warn">Offline</StatusChip>

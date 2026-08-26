@@ -108,12 +108,18 @@ export default async function PortalTanksPage() {
   const rows = tanks.map((t) => {
     const l = live.get(t.id);
     const reportedAt = l?.reportedAt ?? t.lastReportedAt;
-    const quiet = !t.lastOnline || isStale(reportedAt);
+    // Offline is a fault; quiet is not. These controllers report four
+    // discrete levels, so a tank that has not moved a quarter has nothing to
+    // send — telling a resident it is "not reporting" made a correct figure
+    // look untrustworthy (the user's call, 2026-08-26).
+    const quiet = !t.lastOnline;
+    const unchangedFor = isStale(reportedAt);
     return {
       tank: t,
       level: l?.level ?? t.lastLevelPercent ?? null,
       reportedAt,
       quiet,
+      unchangedFor,
       offline: !t.lastOnline,
       spark: sparkByTank.get(t.id) ?? [],
     };
@@ -128,11 +134,11 @@ export default async function PortalTanksPage() {
     tanks.length === 0 ? undefined : lowCount > 0 ? (
       <StatusChip tone="warn">
         {lowCount} running low
-        {quietCount > 0 ? `, ${quietCount} not reporting` : ""}
+        {quietCount > 0 ? `, ${quietCount} offline` : ""}
       </StatusChip>
     ) : quietCount > 0 ? (
       <StatusChip tone="warn">
-        {quietCount} of {rows.length} not reporting
+        {quietCount} of {rows.length} offline
       </StatusChip>
     ) : (
       <StatusChip tone="ok">All healthy</StatusChip>
@@ -158,7 +164,7 @@ export default async function PortalTanksPage() {
             className="grid max-w-[1180px] gap-5"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}
           >
-            {rows.map(({ tank: t, level, reportedAt, quiet, offline, spark }) => {
+            {rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, spark }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-6 gap-y-5 p-5 sm:p-6">
@@ -170,8 +176,6 @@ export default async function PortalTanksPage() {
                     <div className="mt-2">
                       {offline ? (
                         <StatusChip tone="warn">Sensor offline</StatusChip>
-                      ) : quiet ? (
-                        <StatusChip tone="warn">Not reporting</StatusChip>
                       ) : isLow ? (
                         <StatusChip tone="warn">Running low</StatusChip>
                       ) : (
@@ -183,11 +187,18 @@ export default async function PortalTanksPage() {
                       <span className="num">{reportedAt ? formatInstant(reportedAt) : "—"}</span>
                       <span className="block">{timeAgo(reportedAt)}</span>
                     </p>
-                    {quiet && (
+                    {quiet ? (
                       <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
                         The level above is that last report, not a live reading.
                       </p>
-                    )}
+                    ) : unchangedFor ? (
+                      // Not a warning: the sensor reports four discrete levels,
+                      // so an unchanged reading is the level holding steady.
+                      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                        Unchanged since then — this sensor reports in steps of 25%, so a steady
+                        reading means the level has not moved a quarter.
+                      </p>
+                    ) : null}
                   </div>
                   {/* The history sits beside the facts when the card is wide
                       and wraps beneath them when it is not — one rule, both

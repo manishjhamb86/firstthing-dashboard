@@ -2,6 +2,7 @@
 
 import { useRef, useState, useTransition } from "react";
 import { submitCircuitCandidate, type CandidateLine } from "./actions";
+import { proposeDeviceType } from "@/app/admin/device-catalog/actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 
 // CON-16's "no non-installation appliances share this circuit" is gone
@@ -16,7 +17,13 @@ const CHECKLIST = [
   { name: "notOnDrivewayOrRamp", label: "Not on a driveway/ramp" },
 ] as const;
 
-export type CatalogOption = { id: string; name: string; defaultWattage: number | null };
+export type CatalogOption = {
+  id: string;
+  name: string;
+  defaultWattage: number | null;
+  /** "proposed" until operations confirms it — see proposeDeviceType. */
+  status?: string;
+};
 
 type LineDraft = {
   key: number;
@@ -27,6 +34,8 @@ type LineDraft = {
   /** On the circuit, but not part of the retrofit. */
   excluded: boolean;
 };
+
+type ProposeDraft = { forKey: number; name: string; watts: string; note: string };
 
 function lineWith(key: number): LineDraft {
   return { key, deviceTypeId: "", count: "", wattage: "", hours: "24", excluded: false };
@@ -50,6 +59,11 @@ export function CircuitEligibilityForm({
   catalog: CatalogOption[];
 }) {
   const [lightType, setLightType] = useState("");
+  // Devices proposed from this form, held locally so the surveyor can carry
+  // on recording the circuit instead of waiting on an approval.
+  const [proposed, setProposed] = useState<CatalogOption[]>([]);
+  const [propose, setPropose] = useState<ProposeDraft | null>(null);
+  const [proposeError, setProposeError] = useState<string | null>(null);
   // Key allocation lives in a ref, NOT at module level: a module counter
   // increments across the dev server's renders while the client bundle
   // starts at 1, which is a guaranteed hydration-id mismatch.
@@ -74,6 +88,11 @@ export function CircuitEligibilityForm({
       wattage: line.wattage.trim() === "" && t?.defaultWattage ? String(t.defaultWattage) : line.wattage,
     });
   }
+
+  // Deduped by id: the server query now returns proposed types too, so once
+  // a refresh lands a device added here appears in BOTH lists. Without this
+  // it renders twice and React warns about duplicate keys.
+  const options = [...catalog, ...proposed.filter((p) => !catalog.some((c) => c.id === p.id))];
 
   const complete = lines.filter(
     (l) => l.deviceTypeId && l.count.trim() !== "" && l.wattage.trim() !== "" && l.hours.trim() !== "",
@@ -184,9 +203,10 @@ export function CircuitEligibilityForm({
                       className="field field-auto max-w-full"
                     >
                       <option value="">Pick from the catalog…</option>
-                      {catalog.map((c) => (
+                      {options.map((c) => (
                         <option key={c.id} value={c.id}>
                           {c.name}
+                          {c.status === "proposed" ? " — awaiting confirmation" : ""}
                         </option>
                       ))}
                     </select>
@@ -250,6 +270,21 @@ export function CircuitEligibilityForm({
                   {/* Shares the circuit but is not being retrofitted, so the
                       meter sees it before AND after — its theoretical load
                       comes off both sides of the savings calculation. */}
+                  {/* The fixture in front of the surveyor is not always in
+                      the list, and waiting on an ops lead from a basement is
+                      how a survey ends up written from memory afterwards. */}
+                  <button
+                    type="button"
+                    className="btn-ghost pb-2 text-xs"
+                    style={{ color: "var(--accent)" }}
+                    disabled={pending}
+                    onClick={() => {
+                      setProposeError(null);
+                      setPropose({ forKey: l.key, name: "", watts: "", note: "" });
+                    }}
+                  >
+                    Not listed?
+                  </button>
                   <label
                     className="flex items-center gap-1.5 pb-2 text-xs"
                     style={{ color: l.excluded ? "var(--warn-fg)" : "var(--text-muted)" }}
@@ -279,6 +314,95 @@ export function CircuitEligibilityForm({
               );
             })}
           </div>
+          {propose && (
+            <div
+              className="rounded-[var(--r-sm)] border p-3.5"
+              style={{ borderColor: "var(--accent-line)", background: "var(--accent-subtle)" }}
+            >
+              <p className="mb-2 text-sm font-semibold">Add a device that is not in the list</p>
+              <p className="mb-3 text-[12px]" style={{ color: "var(--text-muted)" }}>
+                You can carry on recording the circuit straight away. Operations confirms the wattage
+                before it is used — it feeds the load check and the savings benchmark, so a figure
+                nobody else has seen cannot go that far on its own.
+              </p>
+              <div className="flex flex-wrap items-end gap-3">
+                <Field label="Device name" htmlFor="prop-name">
+                  <input
+                    id="prop-name"
+                    className="field field-auto"
+                    value={propose.name}
+                    onChange={(e) => setPropose({ ...propose, name: e.target.value })}
+                    placeholder="Surface light 18W"
+                  />
+                </Field>
+                <Field label="Watts each" htmlFor="prop-watts">
+                  <input
+                    id="prop-watts"
+                    type="number"
+                    min={1}
+                    max={2000}
+                    step="0.5"
+                    className="field field-auto w-24"
+                    value={propose.watts}
+                    onChange={(e) => setPropose({ ...propose, watts: e.target.value })}
+                  />
+                </Field>
+                <Field label="Note (optional)" htmlFor="prop-note">
+                  <input
+                    id="prop-note"
+                    className="field field-auto"
+                    value={propose.note}
+                    onChange={(e) => setPropose({ ...propose, note: e.target.value })}
+                    placeholder="Where it is, what it looks like"
+                  />
+                </Field>
+              </div>
+              {proposeError && <ErrorText>{proposeError}</ErrorText>}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  className="btn-primary"
+                  disabled={pending}
+                  onClick={() =>
+                    startTransition(async () => {
+                      setProposeError(null);
+                      const r = await proposeDeviceType({
+                        name: propose.name,
+                        role: "original",
+                        defaultWattage: propose.watts.trim() === "" ? null : Number(propose.watts),
+                        note: propose.note,
+                      });
+                      if ("error" in r) return setProposeError(r.error);
+                      const option: CatalogOption = {
+                        id: r.id,
+                        name: r.name,
+                        defaultWattage: propose.watts.trim() === "" ? null : Number(propose.watts),
+                        status: "proposed",
+                      };
+                      setProposed((prev) => [...prev, option]);
+                      patchLine(propose.forKey, {
+                        deviceTypeId: r.id,
+                        wattage: propose.watts.trim() === "" ? "" : propose.watts,
+                      });
+                      setPropose(null);
+                    })
+                  }
+                >
+                  Add and use it
+                </button>
+                <button type="button" className="btn-secondary" onClick={() => setPropose(null)} disabled={pending}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {proposed.length > 0 && (
+            <p className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+              {proposed.map((p) => p.name).join(", ")} {proposed.length === 1 ? "is" : "are"} waiting for
+              operations to confirm. The circuit can be recorded now, but its load cannot be validated
+              until then.
+            </p>
+          )}
           {complete.length > 0 && (
             <p className="text-sm">
               Derived: <span className="num font-semibold">{meteredCount}</span> lights ·{" "}

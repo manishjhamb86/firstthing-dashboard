@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { PendingProposals } from "./pending-proposals";
+import { formatInstant } from "@/lib/format-date";
 import { PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { CatalogList } from "./catalog-list";
@@ -15,6 +17,12 @@ export default async function DeviceCatalogPage() {
   const canView = perms.includes("manage_survey") || perms.includes("manage_pipeline");
   if (!canView) redirect("/admin");
   const canEdit = perms.includes("manage_survey") && perms.includes("manage_pipeline");
+
+  const proposals = await db.deviceType.findMany({
+    where: { status: "proposed", deletedAt: null },
+    orderBy: { createdAt: "asc" },
+    include: { proposedBy: { select: { name: true, email: true } } },
+  });
 
   const types = await db.deviceType.findMany({
     include: {
@@ -63,6 +71,20 @@ export default async function DeviceCatalogPage() {
             </Link>
           ) : undefined
         }
+      />
+
+      {/* Above the catalog itself: a circuit somewhere is blocked on each of
+          these, so it is the first thing an ops lead should see here. */}
+      <PendingProposals
+        canDecide={canEdit}
+        proposals={proposals.map((p) => ({
+          id: p.id,
+          name: p.name,
+          defaultWattage: p.defaultWattage,
+          note: p.proposedNote,
+          proposedBy: p.proposedBy?.name ?? p.proposedBy?.email ?? null,
+          proposedAt: formatInstant(p.createdAt),
+        }))}
       />
 
       <StatRow>

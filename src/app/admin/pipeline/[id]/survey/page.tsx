@@ -52,11 +52,19 @@ export default async function SiteSurveyPage({
   if (!pipeline || !pipeline.siteSurvey) notFound();
   const siteSurvey = pipeline.siteSurvey;
 
-  // CON-45 — the candidate form's device dropdowns read the catalog.
+  // CON-45 — the candidate form's device dropdowns read the catalog. A
+  // PROPOSED type is offered too (2026-08-26), so a surveyor who just added a
+  // fixture can finish recording the circuit — but it is marked, and the
+  // circuit cannot be load-validated until operations has decided on it.
   const catalogOriginals = await db.deviceType.findMany({
-    where: { role: "original", active: true, deletedAt: null },
+    where: {
+      role: "original",
+      active: true,
+      deletedAt: null,
+      OR: [{ status: "approved", inCatalog: true }, { status: "proposed" }],
+    },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, defaultWattage: true },
+    select: { id: true, name: true, defaultWattage: true, status: true },
   });
 
   const circuits = await db.circuit.findMany({

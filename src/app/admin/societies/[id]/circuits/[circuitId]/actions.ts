@@ -72,6 +72,27 @@ export async function submitLoadValidation(
   });
   if (!circuit) return { error: "Circuit not found." };
 
+  // A device somebody typed on site is not a figure this circuit can be
+  // measured against yet (2026-08-26). Its wattage feeds the theoretical
+  // load this very check compares the meter to, and from there the baseline
+  // and the benchmark a society is billed on — so the circuit waits for
+  // operations to decide, rather than validating against a number only its
+  // proposer has seen. A rejected one blocks too: it has to be replaced on
+  // the inventory, not merely disapproved somewhere else.
+  const undecided = await db.circuitDevice.findMany({
+    where: { circuitId, deviceType: { status: { in: ["proposed", "rejected"] } } },
+    select: { deviceType: { select: { name: true, status: true } } },
+  });
+  if (undecided.length > 0) {
+    const names = [...new Set(undecided.map((d) => d.deviceType.name))].join(", ");
+    const rejected = undecided.some((d) => d.deviceType.status === "rejected");
+    return {
+      error: rejected
+        ? `This circuit's inventory uses a device operations rejected (${names}). Record the fixture that is actually there before validating the load.`
+        : `${names} is still waiting for operations to confirm it. The load check compares the meter against this inventory, so it cannot run until then.`,
+    };
+  }
+
   const installed = resolveInstallDate(installedOn, circuit.siteSurvey?.createdAt ?? null);
   if (installed.at === undefined) return { error: installed.error };
   const installedAt: Date = installed.at;

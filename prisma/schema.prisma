@@ -495,6 +495,8 @@ model AdminUser {
   anomaliesResolved   ReadingAnomaly[]     @relation("ReadingAnomalyResolvedBy")
   coverageAccepted    CoverageAcceptance[] @relation("CoverageAcceptedBy")
   deviceTypesDeleted  DeviceType[]         @relation("DeviceTypeDeletedBy")
+  deviceTypesProposed DeviceType[]         @relation("DeviceTypeProposedBy")
+  deviceTypesApproved DeviceType[]         @relation("DeviceTypeApprovedBy")
 
   @@map("admin_users")
 }
@@ -2251,6 +2253,23 @@ model DeviceType {
   active         Boolean    @default(true)
   createdAt      DateTime   @default(now()) @map("created_at")
 
+  /// A surveyor on site meets fixtures the catalog does not have, so one can
+  /// be added from the survey itself (the user's call, 2026-08-26) — but it
+  /// arrives PROPOSED, not usable. Its wattage feeds the theoretical figure
+  /// a baseline is judged against and therefore a benchmark a society is
+  /// billed on, so a figure nobody but the person who typed it has seen must
+  /// not reach that. Approval is operations'.
+  status          DeviceTypeStatus @default(approved)
+  proposedById    String?          @map("proposed_by_id")
+  proposedNote    String?          @map("proposed_note")
+  approvedById    String?          @map("approved_by_id")
+  approvedAt      DateTime?        @map("approved_at")
+  rejectionReason String?          @map("rejection_reason")
+  /// Approving makes it usable on the circuit that proposed it; listing it
+  /// is a second, separate decision — a one-off fixture in one basement is
+  /// not necessarily something every surveyor should be offered.
+  inCatalog       Boolean          @default(true) @map("in_catalog")
+
   // Soft delete. A device type is referenced by every CircuitDevice line
   // recorded against it — a load inventory that produced a theoretical
   // figure a baseline was judged against. Removing the row would either fail
@@ -2264,7 +2283,9 @@ model DeviceType {
   replacementOptions DeviceReplacementOption[] @relation("OriginalType")
   replacementFor     DeviceReplacementOption[] @relation("ReplacementType")
 
-  deletedBy AdminUser? @relation("DeviceTypeDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  deletedBy  AdminUser? @relation("DeviceTypeDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
+  proposedBy AdminUser? @relation("DeviceTypeProposedBy", fields: [proposedById], references: [id], onDelete: SetNull)
+  approvedBy AdminUser? @relation("DeviceTypeApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
 
   circuitDevices      CircuitDevice[] @relation("CircuitDeviceType")
   circuitReplacements CircuitDevice[] @relation("CircuitReplacementType")
@@ -2645,4 +2666,13 @@ model DocumentExtraction {
   confirmedBy AdminUser?     @relation("DocumentExtractionConfirmedBy", fields: [confirmedById], references: [id])
 
   @@map("document_extractions")
+}
+
+enum DeviceTypeStatus {
+  /// Added from a survey; its wattage is not yet trusted anywhere.
+  proposed
+  approved
+  rejected
+
+  @@map("device_type_status")
 }

@@ -202,3 +202,121 @@ export async function restoreDeviceType(id: string): Promise<Outcome> {
   revalidatePath(PATH);
   return { ok: true };
 }
+
+/**
+ * A surveyor on site meets a fixture the catalog does not have.
+ *
+ * They can add it themselves — waiting on an ops lead while standing in a
+ * basement is how a survey ends up recorded from memory afterwards — but it
+ * arrives PROPOSED. Its wattage feeds the theoretical figure a baseline is
+ * judged against, and from there a benchmark a society is billed on, so a
+ * number only the person who typed it has seen must not reach that. It is
+ * usable on the circuit that proposed it once operations approves.
+ */
+export async function proposeDeviceType(input: {
+  name: string;
+  role: "original" | "replacement";
+  defaultWattage: number | null;
+  note?: string;
+}): Promise<{ error: string } | { ok: true; id: string; name: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!(admin.permissions as string[]).includes("manage_survey")) {
+    return { error: "Proposing a device needs field-survey access." };
+  }
+
+  const name = input.name.trim();
+  if (name.length < 2) return { error: "Name the device — that's what every dropdown shows." };
+  if (
+    input.defaultWattage !== null &&
+    (!Number.isFinite(input.defaultWattage) || input.defaultWattage <= 0 || input.defaultWattage > 2000)
+  ) {
+    return { error: "Wattage must be between 1 and 2000 W." };
+  }
+
+  const existing = await db.deviceType.findUnique({ where: { name } });
+  if (existing) {
+    // Including a rejected one: re-proposing under the same name would erase
+    // the decision that rejected it.
+    return {
+      error:
+        existing.status === "rejected"
+          ? `"${name}" was proposed before and rejected${existing.rejectionReason ? ` — ${existing.rejectionReason}` : ""}.`
+          : `"${name}" is already in the catalog.`,
+    };
+  }
+
+  const created = await db.deviceType.create({
+    data: {
+      name,
+      role: input.role,
+      defaultWattage: input.defaultWattage,
+      status: "proposed",
+      // Not offered to anyone else until somebody decides it should be.
+      inCatalog: false,
+      proposedById: admin.id,
+      proposedNote: input.note?.trim() || null,
+    },
+  });
+  logger.info("catalog.device_type_proposed", {
+    actorId: admin.id,
+    name,
+    role: input.role,
+    wattage: input.defaultWattage,
+  });
+  revalidatePath(PATH);
+  return { ok: true, id: created.id, name: created.name };
+}
+
+/**
+ * Operations decides. Approving makes the figure usable; listing it is a
+ * SECOND decision, because a one-off fixture in one basement is not
+ * necessarily something every surveyor should be offered from now on.
+ */
+export async function decideDeviceTypeProposal(input: {
+  id: string;
+  approve: boolean;
+  /** Only meaningful when approving. */
+  addToCatalog?: boolean;
+  /** Required when rejecting — a refusal with no reason cannot be acted on. */
+  reason?: string;
+}): Promise<Outcome> {
+  const admin = await requireCatalogEditor();
+  if (!admin) {
+    logger.warn("catalog.proposal_decision_refused", { deviceTypeId: input.id });
+    return { error: "Deciding a proposed device is an operations-lead action." };
+  }
+
+  const type = await db.deviceType.findUnique({ where: { id: input.id } });
+  if (!type) return { error: "That device is no longer on record." };
+  if (type.status !== "proposed") return { error: `"${type.name}" has already been decided.` };
+
+  if (!input.approve) {
+    const reason = input.reason?.trim();
+    if (!reason) return { error: "Say why it is being rejected — the surveyor has to know what to record instead." };
+    await db.deviceType.update({
+      where: { id: type.id },
+      data: { status: "rejected", rejectionReason: reason, approvedById: admin.id, approvedAt: new Date() },
+    });
+    logger.info("catalog.device_type_rejected", { actorId: admin.id, name: type.name, reason });
+    revalidatePath(PATH);
+    return { ok: true };
+  }
+
+  await db.deviceType.update({
+    where: { id: type.id },
+    data: {
+      status: "approved",
+      approvedById: admin.id,
+      approvedAt: new Date(),
+      inCatalog: input.addToCatalog ?? false,
+    },
+  });
+  logger.info("catalog.device_type_approved", {
+    actorId: admin.id,
+    name: type.name,
+    addedToCatalog: input.addToCatalog ?? false,
+  });
+  revalidatePath(PATH);
+  return { ok: true };
+}

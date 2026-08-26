@@ -89,10 +89,10 @@ export default async function TankStatusPage({
       <PageHeader
         title={tank.name}
         chip={
+          // Online is online, however long ago it last changed — see the
+          // note by the reading below (2026-08-26).
           !tank.lastOnline ? (
             <StatusChip tone="warn">Offline</StatusChip>
-          ) : stale ? (
-            <StatusChip tone="warn">Not reporting</StatusChip>
           ) : (
             <StatusChip tone="ok">Online</StatusChip>
           )
@@ -111,15 +111,21 @@ export default async function TankStatusPage({
                 <span className="num">{live.reportedAt ? formatInstant(live.reportedAt) : "—"}</span>
                 {live.reportedAt && ` · ${timeAgo(live.reportedAt)}`}
               </p>
+              {/* A quiet ONLINE sensor is not a fault (corrected 2026-08-26,
+                  the user's call). These controllers report four discrete
+                  levels — 25/50/75/100 — so a tank whose level has not moved a
+                  quarter genuinely has nothing new to say, sometimes for many
+                  hours. Warning about that trained the reader to distrust a
+                  figure that was correct. The earlier "connected is not
+                  reporting" warning was written when the level itself looked
+                  wrong; that turned out to be the levelMax scale bug, which is
+                  fixed. Only an OFFLINE sensor gets a warning now. */}
               {tank.lastOnline && stale && (
-                <div
-                  className="w-full rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]"
-                  style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}
-                >
-                  Connected, but this sensor last reported {timeAgo(live.reportedAt)}. The figure
-                  above is that report — the Smart Life app may show a fresher one read directly
-                  from the device.
-                </div>
+                <p className="w-full text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                  Last change {timeAgo(live.reportedAt)}. This sensor reports in steps of 25%, so a
+                  steady reading means the level has not moved a quarter — not that it has stopped
+                  reporting.
+                </p>
               )}
               {!tank.lastOnline && (
                 <div

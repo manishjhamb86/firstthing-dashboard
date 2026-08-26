@@ -4,8 +4,13 @@ import { useRef, useState, useTransition } from "react";
 import { submitCircuitCandidate, type CandidateLine } from "./actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 
+// CON-16's "no non-installation appliances share this circuit" is gone
+// (the user's call, 2026-08-26). It disqualified circuits that are in fact
+// live and billing — Gaur Saundaryam's five unreplaced surface lights are
+// exactly that case, and its own report deducts them by hand. A shared
+// fixture is now marked "exclude" on its own device line and subtracted from
+// both sides of the savings calculation instead of ruling the circuit out.
 const CHECKLIST = [
-  { name: "noSharedAppliances", label: "No non-installation appliances share this circuit" },
   { name: "wifiReachable", label: "WiFi/LAN reachable within 20–40m" },
   { name: "fixturesUnder15ft", label: "Fixtures ≤15 feet high" },
   { name: "notOnDrivewayOrRamp", label: "Not on a driveway/ramp" },
@@ -19,10 +24,12 @@ type LineDraft = {
   count: string;
   wattage: string;
   hours: string; // "24" | "12" | custom value
+  /** On the circuit, but not part of the retrofit. */
+  excluded: boolean;
 };
 
 function lineWith(key: number): LineDraft {
-  return { key, deviceTypeId: "", count: "", wattage: "", hours: "24" };
+  return { key, deviceTypeId: "", count: "", wattage: "", hours: "24", excluded: false };
 }
 
 // FEAT-007 + CON-45 (user's call, 2026-08-17): a candidate circuit is
@@ -73,10 +80,15 @@ export function CircuitEligibilityForm({
   );
   const meteredCount = complete.reduce((s, l) => s + (Number(l.count) || 0), 0);
   const connectedLoadW = complete.reduce((s, l) => s + (Number(l.count) || 0) * (Number(l.wattage) || 0), 0);
-  const theoreticalKwh = complete.reduce(
-    (s, l) => s + ((Number(l.count) || 0) * (Number(l.wattage) || 0) * (Number(l.hours) || 0)) / 1000,
-    0,
-  );
+  const kwhOf = (l: LineDraft) =>
+    ((Number(l.count) || 0) * (Number(l.wattage) || 0) * (Number(l.hours) || 0)) / 1000;
+  // The WHOLE circuit — what the meter sees, and therefore what a
+  // pre-installation reading is validated against (CON-17).
+  const theoreticalKwh = complete.reduce((s, l) => s + kwhOf(l), 0);
+  // The part that is not being retrofitted. Subtracted from both sides when
+  // savings are computed, never from the reading check above.
+  const excludedKwh = complete.filter((l) => l.excluded).reduce((s, l) => s + kwhOf(l), 0);
+  const retrofitCount = complete.filter((l) => !l.excluded).reduce((s, l) => s + (Number(l.count) || 0), 0);
 
   function submit() {
     startTransition(async () => {
@@ -85,6 +97,7 @@ export function CircuitEligibilityForm({
         count: Number(l.count),
         wattage: Number(l.wattage),
         hoursPerDay: Number(l.hours),
+        excludedFromCalculation: l.excluded,
       }));
       const result = await submitCircuitCandidate({
         siteSurveyId,
@@ -94,7 +107,6 @@ export function CircuitEligibilityForm({
         representedLightCount: Number(representedLightCount),
         lines: payload,
         workingHours: workingHours.trim() === "" ? undefined : Number(workingHours),
-        noSharedAppliances: checks.noSharedAppliances ?? false,
         wifiReachable: checks.wifiReachable ?? false,
         fixturesUnder15ft: checks.fixturesUnder15ft ?? false,
         notOnDrivewayOrRamp: checks.notOnDrivewayOrRamp ?? false,
@@ -235,6 +247,22 @@ export function CircuitEligibilityForm({
                   <span className="text-sm text-[var(--text-muted)] pb-2">
                     {kwh === null ? "— kWh/day" : <span className="num">{kwh.toFixed(2)} kWh/day</span>}
                   </span>
+                  {/* Shares the circuit but is not being retrofitted, so the
+                      meter sees it before AND after — its theoretical load
+                      comes off both sides of the savings calculation. */}
+                  <label
+                    className="flex items-center gap-1.5 pb-2 text-xs"
+                    style={{ color: l.excluded ? "var(--warn-fg)" : "var(--text-muted)" }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={l.excluded}
+                      onChange={(e) => patchLine(l.key, { excluded: e.target.checked })}
+                      disabled={pending}
+                      aria-label={`Exclude line ${idx + 1} from savings calculations`}
+                    />
+                    Exclude
+                  </label>
                   {lines.length > 1 && (
                     <button
                       type="button"
@@ -258,6 +286,14 @@ export function CircuitEligibilityForm({
               <span className="num font-semibold">{theoreticalKwh.toFixed(2)}</span> kWh/day theoretical
               {meteredCount > 0 && meteredCount < 50 && (
                 <span style={{ color: "var(--warn-fg)" }}> — below the 50-light minimum (CON-16)</span>
+              )}
+              {excludedKwh > 0 && (
+                <span className="mt-1 block text-[13px]" style={{ color: "var(--text-muted)" }}>
+                  Of that, <span className="num">{excludedKwh.toFixed(2)}</span> kWh/day is excluded from
+                  savings — <span className="num">{retrofitCount}</span> lights are being retrofitted. Readings
+                  are still checked against the full <span className="num">{theoreticalKwh.toFixed(2)}</span>,
+                  because the meter measures the whole circuit.
+                </span>
               )}
             </p>
           )}

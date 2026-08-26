@@ -21,11 +21,40 @@ export type LoadItem = {
   count: number;
   wattage: number; // per-unit watts
   hoursPerDay: number; // 24 or 12 normally; custom allowed
+  /**
+   * On the circuit, but not part of the retrofit (2026-08-26). The meter sees
+   * it before and after, so it belongs in the theoretical figure a READING is
+   * checked against — and must come off both sides before a SAVINGS
+   * percentage is taken. Those are different questions, so they are different
+   * functions rather than one with a flag.
+   */
+  excludedFromCalculation?: boolean;
 };
 
-/** Σ(count × wattage × hoursPerDay) ÷ 1000 — kWh per day. */
+/**
+ * Σ(count × wattage × hoursPerDay) ÷ 1000 — kWh per day, for the WHOLE
+ * circuit. This is what a pre-installation reading is validated against
+ * (CON-17), because the meter measures everything on the circuit including
+ * the fixtures nobody is replacing.
+ */
 export function theoreticalDailyKwh(items: LoadItem[]): number {
   return items.reduce((sum, i) => sum + (i.count * i.wattage * i.hoursPerDay) / 1000, 0);
+}
+
+/**
+ * The part of the theoretical figure that is NOT being retrofitted — deducted
+ * from both the before and after averages before savings are computed.
+ * Gaur Saundaryam's five unreplaced surface lights are 2.16 kWh/day of a
+ * 22.32 kWh/day circuit, and ignoring them reports 59.79% where the truth is
+ * 66.89% — seven points of the figure a fee is a share of.
+ */
+export function excludedDailyKwh(items: LoadItem[]): number {
+  return theoreticalDailyKwh(items.filter((i) => i.excludedFromCalculation));
+}
+
+/** The lights actually being replaced — what a saving is attributable to. */
+export function retrofitLightCount(items: LoadItem[]): number {
+  return items.filter((i) => !i.excludedFromCalculation).reduce((n, i) => n + i.count, 0);
 }
 
 // ── Pre-install: variance against theoretical ────────────────────────────

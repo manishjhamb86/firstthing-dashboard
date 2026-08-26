@@ -66,6 +66,8 @@ export type CandidateLine = {
   count: number;
   wattage: number;
   hoursPerDay: number;
+  /** Shares the circuit but is not being retrofitted — see the schema note. */
+  excludedFromCalculation?: boolean;
 };
 
 export async function submitCircuitCandidate(input: {
@@ -76,7 +78,6 @@ export async function submitCircuitCandidate(input: {
   representedLightCount: number;
   lines: CandidateLine[];
   workingHours?: number;
-  noSharedAppliances: boolean;
   wifiReachable: boolean;
   fixturesUnder15ft: boolean;
   notOnDrivewayOrRamp: boolean;
@@ -116,11 +117,13 @@ export async function submitCircuitCandidate(input: {
     return { error: "Represented light count must be at least the metered light count." };
   }
 
-  const hardCriteriaPass =
-    input.noSharedAppliances && input.wifiReachable && input.fixturesUnder15ft && input.notOnDrivewayOrRamp;
+  // CON-16's "no non-installation appliances share this circuit" was removed
+  // 2026-08-26 (the user's call). It disqualified circuits that are live and
+  // billing today; a shared fixture is now marked on its own device line and
+  // deducted from both sides of the savings calculation instead.
+  const hardCriteriaPass = input.wifiReachable && input.fixturesUnder15ft && input.notOnDrivewayOrRamp;
 
   const eligibilityChecklist = {
-    noSharedAppliances: input.noSharedAppliances,
     wifiReachable: input.wifiReachable,
     fixturesUnder15ft: input.fixturesUnder15ft,
     notOnDrivewayOrRamp: input.notOnDrivewayOrRamp,
@@ -156,6 +159,7 @@ export async function submitCircuitCandidate(input: {
         count: l.count,
         wattage: l.wattage,
         hoursPerDay: l.hoursPerDay,
+        excludedFromCalculation: l.excludedFromCalculation ?? false,
       })),
     });
     return created;
@@ -192,8 +196,12 @@ export async function approveLightCountException(circuitId: string, reason: stri
   if (circuit.meteredLightCount >= 50) return { error: "This circuit doesn't need an exception." };
 
   const checklist = (circuit.eligibilityChecklist as Record<string, boolean>) ?? {};
+  // Reads only the criteria that still exist. A circuit recorded before
+  // 2026-08-26 carries the retired noSharedAppliances flag in its stored
+  // checklist; it is simply not consulted, rather than being rewritten —
+  // the checklist is the record of what the surveyor was asked.
   const hardCriteriaPass =
-    checklist.noSharedAppliances && checklist.wifiReachable && checklist.fixturesUnder15ft && checklist.notOnDrivewayOrRamp;
+    checklist.wifiReachable && checklist.fixturesUnder15ft && checklist.notOnDrivewayOrRamp;
   if (!hardCriteriaPass) return { error: "This circuit fails a hard criterion — no exception path applies." };
 
   await db.circuit.update({

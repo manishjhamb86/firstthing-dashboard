@@ -2298,6 +2298,19 @@ model CircuitDevice {
   hoursPerDay Float   @map("hours_per_day") // 24 or 12 normally; custom allowed (user's call 2026-08-17)
   note        String?
 
+  /// This line is on the circuit but NOT part of the retrofit — the meter
+  /// sees it before and after, so its theoretical consumption is subtracted
+  /// from BOTH sides before a savings percentage is taken (the user's call,
+  /// 2026-08-26; replaces CON-16's "no non-installation appliances share
+  /// this circuit", which would have disqualified circuits that are in fact
+  /// live and billing — Gaur Saundaryam's five unreplaced surface lights are
+  /// exactly this case, and its own report deducts them by hand).
+  ///
+  /// It is NOT subtracted from the theoretical figure a pre-install READING
+  /// is validated against: the meter measures the whole circuit, so CON-17's
+  /// load check has to compare against the whole circuit too.
+  excludedFromCalculation Boolean @default(false) @map("excluded_from_calculation")
+
   // Stage-3 installation recording — what was actually installed against this
   // line, chosen from the compatibility mapping. Null until the engineer
   // records it; replacedAt on every line is what completes the installation.

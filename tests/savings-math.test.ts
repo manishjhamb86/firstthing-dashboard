@@ -134,3 +134,38 @@ describe("savings, with the shared load off both sides", () => {
     expect("error" in computeSavings({ baselineKwhPerDay: 10, afterKwhPerDay: 5, sharedLoadKwhPerDay: -1 })).toBe(true);
   });
 });
+
+// ── the circuit's own inventory feeds the deduction ─────────────────────
+import { excludedDailyKwh, retrofitLightCount, theoreticalDailyKwh } from "@/lib/circuit-load";
+
+describe("a circuit whose inventory includes fixtures nobody is replacing", () => {
+  // Gaur Saundaryam as the surveyor would record it: 42 tube lights being
+  // retrofitted, 5 surface lights that merely share the circuit.
+  const inventory = [
+    { count: 42, wattage: 20, hoursPerDay: 24 },
+    { count: 5, wattage: 18, hoursPerDay: 24, excludedFromCalculation: true },
+  ];
+
+  it("the reading check still sees the whole circuit", () => {
+    // The report's own theoretical figure: 22.32 kWh/day.
+    expect(theoreticalDailyKwh(inventory)).toBeCloseTo(22.32, 10);
+  });
+
+  it("the deduction is only the excluded lines", () => {
+    expect(excludedDailyKwh(inventory)).toBeCloseTo(2.16, 10);
+  });
+
+  it("and the saving is attributed to the lights actually replaced", () => {
+    expect(retrofitLightCount(inventory)).toBe(42);
+  });
+
+  it("end to end, it reproduces the report", () => {
+    const r = computeSavings({
+      baselineKwhPerDay: 20.37,
+      afterKwhPerDay: 8.19,
+      sharedLoadKwhPerDay: excludedDailyKwh(inventory),
+    });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.savingsPct).toBeCloseTo(66.8863, 4);
+  });
+});

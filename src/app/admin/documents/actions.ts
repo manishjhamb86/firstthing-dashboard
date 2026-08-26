@@ -13,6 +13,7 @@ import { documentType, validateDocumentUpload } from "@/lib/document-catalog";
 import { extractDocument, EXTRACTABLE_TYPES } from "@/lib/document-extract";
 import { extensionOf } from "@/lib/file-signature";
 import { logger } from "@/lib/logger";
+import { findDuplicateCircuit } from "@/lib/circuit-duplicate";
 import { recordKycDocument } from "@/app/admin/pipeline/[id]/kyc/actions";
 import { recordCircuitRawUpload } from "@/app/admin/societies/[id]/circuits/[circuitId]/reading-actions";
 import type { KycDocumentType } from "@prisma/client";
@@ -439,7 +440,13 @@ export async function createCircuitFromDocument(input: {
   fixtures: ConfirmedFixture[];
   /** The operator's answers to the model's questions, kept with the record. */
   answers: Record<string, string>;
-}): Promise<{ error?: string; circuitId?: string; proposedTypes?: string[] }> {
+}): Promise<{
+  error?: string;
+  circuitId?: string;
+  proposedTypes?: string[];
+  /** The circuit this report duplicates — so the refusal can link to it. */
+  existingCircuitId?: string;
+}> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
   if (!actor.permissions.includes("manage_survey")) {
@@ -460,6 +467,41 @@ export async function createCircuitFromDocument(input: {
   if (metered === 0) return { error: "At least one fixture has to be the one being retrofitted." };
   if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < metered) {
     return { error: `Represented count must be at least the ${metered} lights on this circuit (CON-11).` };
+  }
+
+  // A second report of a circuit the society already has (2026-08-26). Checked
+  // here, on the server, before anything is written — the client cannot see
+  // the other circuits and must not be trusted about them either.
+  const existing = await db.circuit.findMany({
+    where: { societyId: doc.societyId, serviceLine: "lighting", voidedAt: null },
+    select: {
+      id: true,
+      lightType: true,
+      meteredLightCount: true,
+      location: true,
+      eligibilityChecklist: true,
+    },
+  });
+  const dup = findDuplicateCircuit(
+    { lightType, meteredLightCount: metered, period: doc.period },
+    existing.map((c) => ({
+      id: c.id,
+      lightType: c.lightType,
+      meteredLightCount: c.meteredLightCount,
+      location: c.location,
+      sourcePeriod: (c.eligibilityChecklist as { period?: string } | null)?.period ?? null,
+    })),
+  );
+  if (dup) {
+    logger.warn("document.circuit_duplicate_refused", {
+      actorId: actor.id,
+      documentId: doc.id,
+      societyId: doc.societyId,
+      existingCircuitId: dup.duplicate.id,
+      lightType,
+      metered,
+    });
+    return { error: dup.reason, existingCircuitId: dup.duplicate.id };
   }
 
   // Match the catalog by name; propose what is missing rather than inventing
@@ -507,6 +549,17 @@ export async function createCircuitFromDocument(input: {
     // person doing the backfill. An Offer, by contrast, carries the revenue
     // share and the rate a bill is computed from, so it is not created here;
     // that comes from the agreement, which states them.
+    // FEAT-039-AC-1 — engaging a society on a service line is what a deal
+    // IS, so the row that records it is created alongside the deal. The lead
+    // path has done this since the same gap was found there; the backfill
+    // paths did not, so a society with two commissioned circuits still read
+    // "Lighting · Not enrolled" (user-reported 2026-08-26).
+    await tx.engagement.upsert({
+      where: { societyId_serviceLine: { societyId: doc.societyId, serviceLine: "lighting" } },
+      update: {},
+      create: { societyId: doc.societyId, serviceLine: "lighting" },
+    });
+
     let pipeline = await tx.pipeline.findFirst({
       where: { societyId: doc.societyId, serviceLine: "lighting" },
     });
@@ -557,6 +610,9 @@ export async function createCircuitFromDocument(input: {
         eligibilityChecklist: {
           backfilled: true,
           source: doc.fileName,
+          // The month the source document was filed under, so a later report
+          // of the same circuit can say the two describe the same period.
+          period: doc.period,
           note: "Commissioned before this system existed — CON-16 eligibility was never assessed, and is not re-assessed for a circuit already in service.",
         },
         state: "eligible",
@@ -714,6 +770,14 @@ export async function createContractFromAgreement(input: {
   ];
 
   const contract = await db.$transaction(async (tx) => {
+    // Same rule as the circuit backfill: the deal and the engagement are the
+    // same fact recorded twice, so neither path may create one without the other.
+    await tx.engagement.upsert({
+      where: { societyId_serviceLine: { societyId: doc.societyId, serviceLine: "lighting" } },
+      update: {},
+      create: { societyId: doc.societyId, serviceLine: "lighting" },
+    });
+
     let pipeline = await tx.pipeline.findFirst({ where: { societyId: doc.societyId, serviceLine: "lighting" } });
     if (!pipeline) {
       pipeline = await tx.pipeline.create({

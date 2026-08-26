@@ -216,8 +216,26 @@ export function dealProgress(f: DealFacts): DealProgress {
   const leadDone = f.stage !== "lead" && f.stage !== "closed_lost";
   const top = mostAdvancedCandidate(f.candidates);
   const surveyDone = top != null && top.state !== "surveyed" && top.state !== "ineligible";
+  // EVERY circuit, not the best one. The report this step gates covers the
+  // whole demo and waits for all of them (FEAT-020-AC-3), so reading the most
+  // advanced candidate here put two answers to one question on two screens:
+  // the map said "Demo commissioning · Completed · Benchmark confirmed" while
+  // the report it unlocked said a circuit was still mid-commissioning, and the
+  // operator was left between them (user-reported 2026-08-26, "stuck in
+  // between"). A map whose step disagrees with the thing behind it is worse
+  // than no map.
+  const unconfirmed = f.candidates.filter(
+    (c) => (CIRCUIT_RANK[c.state] ?? 0) < 7 && c.state !== "ineligible",
+  );
   const benchmarkDone =
-    f.demoSkipped || (top != null && (CIRCUIT_RANK[top.state] ?? 0) >= 7);
+    f.demoSkipped || (f.candidates.length > 0 && unconfirmed.length === 0);
+  // The one holding it up — the least advanced, not the most. Naming the
+  // best-progressed circuit while a different one is the blocker is how the
+  // step read "Completed" over an unfinished demo.
+  const holdout = unconfirmed.reduce<CandidateFacts | null>(
+    (worst, c) => (worst === null || (CIRCUIT_RANK[c.state] ?? 0) < (CIRCUIT_RANK[worst.state] ?? 0) ? c : worst),
+    null,
+  );
   // Generating and sharing are two different acts by two different rules —
   // the system generates automatically on BenchmarkConfirmed (FEAT-020-AC-1),
   // a person decides when the society sees it. They were one step whose
@@ -265,7 +283,12 @@ export function dealProgress(f: DealFacts): DealProgress {
     return idx === currentIdx ? "current" : "locked";
   };
 
-  const circuitHref = top ? `/admin/societies/${f.societyId}/circuits/${top.id}` : undefined;
+  // Point at the circuit the step NAMES. While one is holding the demo up,
+  // that is the one to open; otherwise the most advanced is the sensible one.
+  const shownCandidate = holdout ?? top;
+  const circuitHref = shownCandidate
+    ? `/admin/societies/${f.societyId}/circuits/${shownCandidate.id}`
+    : undefined;
 
   const surveyAssigned = surveyAssignedFlag;
 
@@ -316,9 +339,13 @@ export function dealProgress(f: DealFacts): DealProgress {
       summary: f.demoSkipped
         ? "Skipped — ops-approved demo skip"
         : benchmarkDone
-          ? "Benchmark confirmed"
-          : currentIdx === 3 && top
-            ? `${candidateLabel(top)}: ${circuitNextLabel(top)}`
+          ? f.candidates.length === 1
+            ? "Benchmark confirmed"
+            : `Benchmark confirmed on all ${f.candidates.length} circuits`
+          : currentIdx === 3 && holdout
+            ? unconfirmed.length > 1
+              ? `${unconfirmed.length} circuits still commissioning — ${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
+              : `${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
             : "Unlocks when the survey selects a demo circuit — meter, baseline window, light replacement and benchmark all happen on the circuit page",
       href: circuitHref,
     },
@@ -438,10 +465,13 @@ export function dealProgress(f: DealFacts): DealProgress {
         f.candidates.length === 0
           ? { label: "Run the site survey", detail: "Record the lighting inventory by area, then pick the demo circuit.", href: `${base}/survey`, owner: "field" }
           : { label: "Resolve the candidate's eligibility", detail: "The selected candidate is awaiting its eligibility decision on the survey page.", href: `${base}/survey`, owner: "field" };
-    } else if (!benchmarkDone && top) {
+    } else if (!benchmarkDone && holdout) {
       next = {
-        label: circuitNextLabel(top),
-        detail: `Commissioning continues on the circuit page for ${candidateLabel(top)}.`,
+        label: circuitNextLabel(holdout),
+        detail:
+          unconfirmed.length > 1
+            ? `The report covers the whole demo, so all ${unconfirmed.length} unfinished circuits have to reach a benchmark. ${candidateLabel(holdout)} is the furthest behind.`
+            : `Commissioning continues on the circuit page for ${candidateLabel(holdout)}.`,
         href: circuitHref as string,
         owner: "field",
       };

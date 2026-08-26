@@ -100,6 +100,40 @@ describe("survey and commissioning", () => {
     expect(top?.id).toBe("b");
   });
 
+  it("one unfinished circuit holds commissioning open, however far the others got", () => {
+    // Ace City: a post-installation report built a commissioned circuit, then
+    // a pre-installation report of the SAME lights built a second one that
+    // never got a benchmark. Reading the most advanced candidate made the map
+    // say "Completed" while the report it unlocks said the demo was still
+    // running — and the operator was stuck between the two.
+    const { steps, next } = dealProgress({
+      ...surveyed,
+      candidates: [
+        { id: "done", state: "benchmark_confirmed", location: "Basement", lightType: "basement" },
+        { id: "stuck", state: "eligible", location: "Circuit with 96 lights", lightType: "basement" },
+      ],
+    });
+    const step = steps.find((s) => s.key === "commissioning");
+    expect(step?.status).toBe("current");
+    // And it names the one actually holding it up, not the finished one.
+    expect(step?.summary).toContain("Circuit with 96 lights");
+    expect(step?.summary).not.toContain("Basement:");
+    expect(next?.href).toContain("stuck");
+  });
+
+  it("and reads as done only once every circuit has its benchmark", () => {
+    const { steps } = dealProgress({
+      ...surveyed,
+      candidates: [
+        { id: "a", state: "benchmark_confirmed", location: "Basement", lightType: "basement" },
+        { id: "b", state: "benchmark_confirmed", location: "Lift lobby", lightType: "lift_lobby" },
+      ],
+    });
+    const step = steps.find((s) => s.key === "commissioning");
+    expect(step?.status).toBe("done");
+    expect(step?.summary).toBe("Benchmark confirmed on all 2 circuits");
+  });
+
   it("benchmark_review does not read as a confirmed benchmark", () => {
     const { steps } = dealProgress({
       ...surveyed,

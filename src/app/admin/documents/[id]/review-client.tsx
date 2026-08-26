@@ -98,6 +98,7 @@ export function ExtractionReview({
   const [represented, setRepresented] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [duplicateOf, setDuplicateOf] = useState<string | null>(null);
   const [made, setMade] = useState<{ circuitId: string; proposedTypes: string[] } | null>(null);
   const [pending, start] = useTransition();
 
@@ -424,6 +425,14 @@ export function ExtractionReview({
         </div>
 
         {error && <ErrorText>{error}</ErrorText>}
+        {duplicateOf && (
+          <Link
+            href={`/admin/societies/${societyId}/circuits/${duplicateOf}`}
+            className="btn-secondary mt-2 inline-block"
+          >
+            Open the circuit this describes →
+          </Link>
+        )}
         {unanswered > 0 && (
           <p className="mt-3 text-[13px]" style={{ color: "var(--warn-fg)" }}>
             {unanswered} question{unanswered === 1 ? "" : "s"} above still unanswered — they are kept with
@@ -453,8 +462,11 @@ export function ExtractionReview({
                 })),
                 answers,
               });
-              if (r.error) setError(r.error);
-              else setMade({ circuitId: r.circuitId!, proposedTypes: r.proposedTypes ?? [] });
+              if (r.error) {
+                setError(r.error);
+                // A refusal that names a circuit has somewhere to send you.
+                setDuplicateOf(r.existingCircuitId ?? null);
+              } else setMade({ circuitId: r.circuitId!, proposedTypes: r.proposedTypes ?? [] });
             })
           }
         >

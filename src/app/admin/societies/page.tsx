@@ -197,7 +197,13 @@ export default async function SocietiesPage({
                         </div>
                       </div>
                     </td>
-                    <td className="num hidden md:table-cell">{s.flatCount.toLocaleString("en-IN")}</td>
+                    <td className="num hidden md:table-cell">
+                      {s.flatCount === null ? (
+                        <span style={{ color: "var(--text-subtle)" }}>—</span>
+                      ) : (
+                        s.flatCount.toLocaleString("en-IN")
+                      )}
+                    </td>
                     <td className="hidden lg:table-cell">
                       {s.engagements.length === 0 ? (
                         <span className="text-[13px] text-[var(--text-subtle)]">None enrolled</span>

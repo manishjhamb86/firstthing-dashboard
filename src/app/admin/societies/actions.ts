@@ -126,7 +126,8 @@ export async function updateSocietyDetails(input: {
   id: string;
   name: string;
   location: string;
-  flatCount: number;
+  /** Null means "not recorded yet" — better than a figure nobody trusts. */
+  flatCount: number | null;
 }): Promise<{ error?: string; saved?: true }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -138,8 +139,8 @@ export async function updateSocietyDetails(input: {
   const name = input.name.trim();
   const location = input.location.trim();
   if (!name || !location) return { error: "Society name and location are required." };
-  if (!Number.isFinite(input.flatCount) || input.flatCount <= 0) {
-    return { error: "Flat count must be a positive number." };
+  if (input.flatCount !== null && (!Number.isFinite(input.flatCount) || input.flatCount <= 0)) {
+    return { error: "Flat count must be a positive number, or left blank if it is not known." };
   }
 
   const society = await db.society.findUnique({ where: { id: input.id }, select: { id: true } });

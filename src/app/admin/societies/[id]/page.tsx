@@ -114,7 +114,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       <PageHeader
         backHref="/admin/societies"
         title={society.name}
-        subtitle={`${society.location} · ${society.flatCount} flats`}
+        subtitle={`${society.location}${society.flatCount === null ? "" : ` · ${society.flatCount} flats`}`}
         action={
           // One action and the status control, like every other page's
           // header. "Log a lead" and "Add portal account" both lived here AND
@@ -151,7 +151,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       <StatRow>
         <Stat
           label="Flats"
-          value={society.flatCount.toLocaleString("en-IN")}
+          value={society.flatCount === null ? "—" : society.flatCount.toLocaleString("en-IN")}
         />
         <Stat
           label="Service lines"

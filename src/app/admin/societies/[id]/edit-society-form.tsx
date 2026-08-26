@@ -21,13 +21,13 @@ export function EditSocietyForm({
   id: string;
   name: string;
   location: string;
-  flatCount: number;
+  flatCount: number | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState(initialName);
   const [location, setLocation] = useState(initialLocation);
-  const [flatCount, setFlatCount] = useState(String(initialFlats));
+  const [flatCount, setFlatCount] = useState(initialFlats === null ? "" : String(initialFlats));
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -53,7 +53,7 @@ export function EditSocietyForm({
         <Field label="Location" htmlFor="es-location">
           <input id="es-location" className="field" value={location} onChange={(e) => setLocation(e.target.value)} />
         </Field>
-        <Field label="Flats" htmlFor="es-flats">
+        <Field label="Flats" htmlFor="es-flats" hint="Leave blank if it is not known yet.">
           <input
             id="es-flats"
             type="number"
@@ -73,7 +73,13 @@ export function EditSocietyForm({
           onClick={() =>
             start(async () => {
               setError(null);
-              const r = await updateSocietyDetails({ id, name, location, flatCount: Number(flatCount) });
+              const r = await updateSocietyDetails({
+                id,
+                name,
+                location,
+                // Blank means "not recorded", not zero.
+                flatCount: flatCount.trim() === "" ? null : Number(flatCount),
+              });
               if (r.error) setError(r.error);
               else {
                 setOpen(false);

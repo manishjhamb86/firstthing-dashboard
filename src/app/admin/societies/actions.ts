@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SocietyStatus } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin-permissions";
+import { requireAdmin, resolveAdmin } from "@/lib/admin-permissions";
+import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
+import { societyDedupeKey } from "@/lib/society-key";
 import { resolveBackdate } from "@/lib/backdate";
 
 // FEAT-085: society record & lifecycle. A society starts as a `prospect`
@@ -28,7 +30,6 @@ export async function createSociety(input: {
   name: string;
   location: string;
   flatCount: number;
-  confirmDuplicate?: boolean;
   /** DEMO_MODE only — backdate the record so a past deal can start here. */
   createdOn?: string;
 }) {
@@ -42,22 +43,21 @@ export async function createSociety(input: {
     return { error: "Flat count must be a positive number." };
   }
 
-  // FEAT-085-AC-3: a same-name/same-location duplicate is flagged for
-  // review, never silently created — duplicates fracture a society's
-  // history across two records. There's no separate review queue built yet,
-  // so this blocks creation and asks the operator to explicitly confirm
-  // rather than defaulting to allow.
-  if (!input.confirmDuplicate) {
-    const existing = await db.society.findFirst({
-      where: { name: { equals: name, mode: "insensitive" }, location: { equals: location, mode: "insensitive" } },
-    });
-    if (existing) {
-      logger.warn("society.duplicate_flagged", { name, location, existingId: existing.id });
-      return {
-        error: `A society named "${existing.name}" in ${existing.location} already exists.`,
-        duplicateOf: existing.id,
-      };
-    }
+  // FEAT-085-AC-3, tightened 2026-08-26 (the user's call): a duplicate is
+  // REFUSED, not flagged-and-confirmable. The override is what put two
+  // "Mahagun Puram / Noida" rows into real data, and a society's history
+  // fractured across two records is not something anyone reconciles later.
+  // This lookup exists only to give a better message than a constraint
+  // violation would — the guarantee is the unique index on dedupeKey, since
+  // two operators submitting at once would both find nothing here.
+  const dedupeKey = societyDedupeKey(name, location);
+  const existing = await db.society.findUnique({ where: { dedupeKey } });
+  if (existing) {
+    logger.warn("society.duplicate_refused", { name, location, existingId: existing.id });
+    return {
+      error: `${existing.name} in ${existing.location} is already on the system. Open that record rather than creating a second one.`,
+      duplicateOf: existing.id,
+    };
   }
 
   // The first date in a backdated deal. Everything after it is ordered
@@ -69,6 +69,7 @@ export async function createSociety(input: {
     data: {
       name,
       location,
+      dedupeKey,
       flatCount: input.flatCount,
       status: "prospect",
       ...(createdAt ? { createdAt } : {}),
@@ -110,4 +111,61 @@ export async function enrollServiceLine(societyId: string, serviceLine: string) 
   logger.info("society.service_line_enrolled", { actorId: session.user.id, societyId, serviceLine });
   revalidatePath(`/admin/societies/${societyId}`);
   return {};
+}
+
+/**
+ * Correct a society's own record — its name, where it is, how many flats.
+ *
+ * Operations only, deliberately stricter than creating one. This follows the
+ * rule already set for lead details (2026-08-25): acting *on* a record is one
+ * thing, changing what the record *says* is another. Name and location are
+ * also the two halves of the uniqueness key, so an edit here can create a
+ * duplicate as easily as a create can — and is refused the same way.
+ */
+export async function updateSocietyDetails(input: {
+  id: string;
+  name: string;
+  location: string;
+  flatCount: number;
+}): Promise<{ error?: string; saved?: true }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team)) {
+    logger.warn("society.edit_refused", { actorId: actor.id, actorTeam: actor.team, societyId: input.id });
+    return { error: "Correcting a society's record is an operations action." };
+  }
+
+  const name = input.name.trim();
+  const location = input.location.trim();
+  if (!name || !location) return { error: "Society name and location are required." };
+  if (!Number.isFinite(input.flatCount) || input.flatCount <= 0) {
+    return { error: "Flat count must be a positive number." };
+  }
+
+  const society = await db.society.findUnique({ where: { id: input.id }, select: { id: true } });
+  if (!society) return { error: "That society no longer exists." };
+
+  const dedupeKey = societyDedupeKey(name, location);
+  const clash = await db.society.findUnique({ where: { dedupeKey }, select: { id: true, name: true, location: true } });
+  if (clash && clash.id !== input.id) {
+    logger.warn("society.edit_duplicate_refused", { actorId: actor.id, societyId: input.id, clashId: clash.id });
+    return {
+      error: `${clash.name} in ${clash.location} is already on the system — renaming this one to match would make two records for one society.`,
+    };
+  }
+
+  await db.society.update({
+    where: { id: input.id },
+    data: { name, location, flatCount: input.flatCount, dedupeKey },
+  });
+  logger.info("society.details_updated", {
+    actorId: actor.id,
+    societyId: input.id,
+    name,
+    location,
+    flatCount: input.flatCount,
+  });
+  revalidatePath(`/admin/societies/${input.id}`);
+  revalidatePath("/admin/societies");
+  return { saved: true };
 }

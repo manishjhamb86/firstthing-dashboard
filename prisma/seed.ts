@@ -1,6 +1,7 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { db } from "../src/lib/db";
+import { societyDedupeKey } from "../src/lib/society-key";
 
 // MS-01 seeded one admin + one society. MS-02 adds a second society (so
 // NFR-05's tenancy tests have a real foreign society to probe against) and
@@ -81,6 +82,7 @@ async function main() {
     create: {
       id: "seed-society-1",
       name: "Settlement Nexus",
+      dedupeKey: societyDedupeKey("Settlement Nexus", "Bengaluru"),
       flatCount: 240,
       location: "Bengaluru",
       status: "active",
@@ -93,6 +95,7 @@ async function main() {
     create: {
       id: "seed-society-2",
       name: "ASF Insignia",
+      dedupeKey: societyDedupeKey("ASF Insignia", "Gurugram"),
       flatCount: 180,
       location: "Gurugram",
       status: "active",

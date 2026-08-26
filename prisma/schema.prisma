@@ -291,6 +291,10 @@ enum LightCountMethod {
 model Society {
   id               String        @id @default(cuid())
   name             String
+  /// Normalised "name|location" — the DB-level guarantee that a society is
+  /// never entered twice (2026-08-26). An application check cannot win a
+  /// race with itself; a unique index can. See src/lib/society-key.ts.
+  dedupeKey        String        @unique @map("dedupe_key")
   flatCount        Int           @map("flat_count")
   location         String
   latitude         Float?

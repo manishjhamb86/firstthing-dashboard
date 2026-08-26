@@ -12,7 +12,6 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     name: formData.get("name") as string,
     location: formData.get("location") as string,
     flatCount: Number(formData.get("flatCount")),
-    confirmDuplicate: formData.get("confirmDuplicate") === "true",
     createdOn: (formData.get("createdOn") as string) || undefined,
   });
   // createSociety redirects on success, so reaching here means an error.
@@ -28,7 +27,6 @@ export function NewSocietyForm({ demoMode = false }: { demoMode?: boolean }) {
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [flatCount, setFlatCount] = useState("");
-  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
   const [createdOn, setCreatedOn] = useState("");
 
   return (
@@ -87,18 +85,6 @@ export function NewSocietyForm({ demoMode = false }: { demoMode?: boolean }) {
             <p className="mb-2" style={{ color: "var(--warn-fg)" }}>
               {state.error}
             </p>
-            {state.duplicateOf && (
-              <label className="flex items-center gap-2" style={{ color: "var(--warn-fg)" }}>
-                <input
-                  type="checkbox"
-                  name="confirmDuplicate"
-                  value="true"
-                  checked={confirmDuplicate}
-                  onChange={(e) => setConfirmDuplicate(e.target.checked)}
-                />
-                This is a genuinely different society — create it anyway
-              </label>
-            )}
           </div>
         )}
 

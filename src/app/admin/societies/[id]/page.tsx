@@ -17,6 +17,7 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { formatDate, formatInstant } from "@/lib/format-date";
 import { TankLevelBar } from "@/components/tank-visual";
+import { EditSocietyForm } from "./edit-society-form";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { NextStepCallout } from "@/components/deal-stepper";
 import type { NextAction } from "@/lib/deal-progress";
@@ -121,6 +122,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           // catalog (2026-08-21) — so they stay with their own cards, where
           // the thing they act on actually is.
           <div className="flex flex-wrap items-center gap-2">
+            <EditSocietyForm
+              id={society.id}
+              name={society.name}
+              location={society.location}
+              flatCount={society.flatCount}
+            />
             <Link href={`/admin/societies/${society.id}/circuits`} className="btn-outline btn-sm">
               Circuit registry
             </Link>

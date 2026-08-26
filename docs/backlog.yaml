@@ -6641,8 +6641,18 @@ features:
         type: failure
         given: "a duplicate society (same name/location) is created"
         when: "the action is attempted"
-        then: "it's flagged for review rather than silently allowed — duplicates fracture a society's history across two records, which is hard to unpick later"
+        then: "it is REFUSED — not flagged-and-confirmable — and the operator is pointed at the existing record"
         tests: [TC-085-3]
+        scope_note: >-
+          Tightened 2026-08-26 (the user's call). The original wording allowed a
+          flag the operator could confirm past, and that override is exactly how
+          two "Mahagun Puram / Noida" rows reached real data. The guarantee is now
+          a unique index on a normalised name|location key (src/lib/society-key.ts),
+          because an application-level check cannot win a race with itself: two
+          operators submitting the same society at the same moment both find
+          nothing and both insert. The query survives only to give a better message
+          than a constraint violation would. Same name in a different city is still
+          allowed — those are genuinely different societies.
       - id: FEAT-085-AC-4
         type: permission
         given: "a non-PER-01 actor"

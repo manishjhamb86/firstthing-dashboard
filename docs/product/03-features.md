@@ -182,6 +182,8 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Consumes:** none.
 - **Depends on:** none (this is the pipeline's entry point).
 - **Depended on by:** FEAT-002 (proposal), FEAT-004 (list view), ultimately CAP-16 (survey) once a demo is agreed.
+
+- **Duplicate societies (2026-08-26, user's call):** a society with the same normalised name and location as an existing one is **refused**, not flagged-and-confirmable — the override in FEAT-085-AC-3's original wording is what put two "Mahagun Puram / Noida" rows into real data. Enforced by a unique index, since an application check cannot win a race with itself. The same name in a different city remains a different society.
 - **Failure modes:** Duplicate lead for the same society+service line logged twice — not blocked automatically (a legitimate re-approach after an earlier lead went cold is valid), but the list view (FEAT-004) must surface prior leads for the same society prominently so it's not silently duplicated by accident.
 - **Limits & scale:** Trivial volume (tens of leads/month at current scale, per 00-intake.md §7).
 - **Minimum viable version:** Self-logged only, no backend-on-behalf/approval flow.

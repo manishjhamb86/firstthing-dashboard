@@ -28,7 +28,6 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     meetingDate: formData.get("meetingDate") as string,
     notes: formData.get("notes") as string,
     salesOwnerId: formData.get("salesOwnerId") as string,
-    confirmDuplicate: formData.get("confirmDuplicate") === "true",
     loggedOn: (formData.get("loggedOn") as string) || undefined,
   });
   return result;
@@ -60,7 +59,6 @@ export function NewLeadForm({
   const [contactPhone, setContactPhone] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
   const [notes, setNotes] = useState("");
-  const [confirmDuplicate, setConfirmDuplicate] = useState(false);
   const [loggedOn, setLoggedOn] = useState("");
   const ownerNameOf = (id: string) => {
     const o = salesOwners.find((x) => x.id === id);
@@ -240,19 +238,10 @@ export function NewLeadForm({
             className="rounded-[var(--r-md)] border p-4 text-sm"
             style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
           >
-            <p className="mb-2" style={{ color: "var(--warn-fg)" }}>
-              {state.error}
-            </p>
-            <label className="flex items-center gap-2" style={{ color: "var(--warn-fg)" }}>
-              <input
-                type="checkbox"
-                name="confirmDuplicate"
-                value="true"
-                checked={confirmDuplicate}
-                onChange={(e) => setConfirmDuplicate(e.target.checked)}
-              />
-              This is a genuinely different society — create it anyway
-            </label>
+            {/* No "create it anyway" any more: a duplicate society is
+                refused outright (2026-08-26). The override is what put two
+                Mahagun Puram rows into real data. */}
+            <p style={{ color: "var(--warn-fg)" }}>{state.error}</p>
           </div>
         ) : state?.error ? (
           <ErrorText>{state.error}</ErrorText>

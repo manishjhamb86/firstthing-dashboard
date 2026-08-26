@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { societyDedupeKey } from "@/lib/society-key";
 import { canOwn, isOperations, mayAct, teamMeta } from "@/lib/admin-teams";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { refuseOrderedDate } from "@/lib/step-dates";
@@ -31,7 +32,6 @@ export async function createLead(input: {
   meetingDate: string;
   notes?: string;
   salesOwnerId: string;
-  confirmDuplicate?: boolean;
   /** DEMO_MODE only — the day this lead was actually logged. */
   loggedOn?: string;
 }): Promise<{ error?: string; duplicateOf?: string } | undefined> {
@@ -70,21 +70,18 @@ export async function createLead(input: {
       return { error: "Flat count must be a positive number." };
     }
 
-    // FEAT-085-AC-3 — a same-name/same-location duplicate is flagged for
-    // review, never silently created. /admin/societies/new already had
-    // this; the lead quick-create path didn't, and actually produced a
-    // duplicate society row in real use before this check landed.
-    if (!input.confirmDuplicate) {
-      const existing = await db.society.findFirst({
-        where: { name: { equals: name, mode: "insensitive" }, location: { equals: location, mode: "insensitive" } },
-      });
-      if (existing) {
-        logger.warn("society.duplicate_flagged", { name, location, existingId: existing.id, via: "lead" });
-        return {
-          error: `A society named "${existing.name}" in ${existing.location} already exists — pick it from the list above, or confirm this is genuinely a different one.`,
-          duplicateOf: existing.id,
-        };
-      }
+    // FEAT-085-AC-3, tightened 2026-08-26: refused, not confirmable. This
+    // path is the one that actually produced a duplicate row in real use.
+    // The unique index on dedupeKey is the guarantee; this lookup only
+    // makes the refusal say something useful.
+    const dedupeKey = societyDedupeKey(name, location);
+    const existing = await db.society.findUnique({ where: { dedupeKey } });
+    if (existing) {
+      logger.warn("society.duplicate_refused", { name, location, existingId: existing.id, via: "lead" });
+      return {
+        error: `${existing.name} in ${existing.location} is already on the system — pick it from the list above instead of entering it again.`,
+        duplicateOf: existing.id,
+      };
     }
 
     // A society created BY this lead cannot postdate it: backdate the
@@ -96,6 +93,7 @@ export async function createLead(input: {
       data: {
         name,
         location,
+        dedupeKey,
         flatCount: ns.flatCount,
         status: "prospect",
         ...(quickCreatedAt ? { createdAt: quickCreatedAt } : {}),

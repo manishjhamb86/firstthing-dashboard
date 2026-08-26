@@ -94,12 +94,16 @@ async function withRetry(fn, attempts = 6) {
 }
 
 /**
- * The free tier's quota is per MODEL, so an exhausted one is not an
- * exhausted key. Ordered by preference; the first that answers is used, and
- * which one it was goes to stderr so a figure can be traced to the model
- * that read it.
+ * The free tier's quota is per MODEL and is 20 requests a DAY, so an
+ * exhausted model is not an exhausted key — but a run of 38 documents will
+ * work through several. Ordered strongest first; the one that answered goes
+ * to stderr, so a figure can be traced to the model that read it.
+ *
+ * Note "gemini-flash-latest" resolves to a concrete model (3.7 at the time of
+ * writing) with its own separate allowance, which is why it is worth listing
+ * alongside a pinned one rather than being a duplicate of it.
  */
-const MODELS = ["gemini-3.6-flash", "gemini-flash-latest"];
+const MODELS = ["gemini-3.6-flash", "gemini-flash-latest", "gemini-flash-lite-latest"];
 
 async function readWith(model) {
   return withRetry(() =>
@@ -128,5 +132,11 @@ for (const model of MODELS) {
     process.stderr.write(`${model} unavailable, trying the next\n`);
   }
 }
-if (!res) throw lastErr;
+if (!res) {
+  // A raw SDK error here dumps the whole request — including the base64 of
+  // the PDF — into the terminal. One line is what a person needs.
+  const msg = String(lastErr?.message ?? lastErr).split("\n").slice(0, 3).join(" ");
+  process.stderr.write(`\nno model could read this document: ${msg.slice(0, 300)}\n`);
+  process.exit(1);
+}
 console.log(res.output_text);

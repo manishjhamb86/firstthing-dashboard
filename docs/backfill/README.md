@@ -135,7 +135,13 @@ figure (`excluded=yes`). That is what the third CSV is for.
 
 So a typical circuit is `light_type=basement` with one included line of
 20W or 18W tube lights and, sometimes, an excluded line of surface or street
-lights.
+lights. Aditya Mega City is the worked example: 91 tube lights at 20W running
+24h, plus 7 street lights at 50W running 12h that share the circuit and are
+excluded — their 4.20 kWh/day comes off both the before and the after figure.
+
+**Device types the catalog does not yet have** must be created before the
+insert, or the `circuit_devices` row has nothing to point at. Street lights
+are the first: 50W. `prerequisite-devices.sql` collects them.
 
 - **Running hours are 24 for a basement tube-light circuit** (the user,
   2026-08-26: "that's for sure"). Where a report omits them, the load
@@ -143,6 +149,20 @@ lights.
   against a measured 32.91.
 - **Where a report does not name the area**, 24h running implies basement,
   since every other profile is dusk-to-dawn.
+
+### Where the report and the agreement disagree, the agreement wins
+
+`savings_pct` is **the benchmark the agreement states**, not the figure the
+report measured (the user, 2026-08-26). That is what the society is billed
+against, so it is what the circuit carries. For the first two societies the
+two agreed and nothing turned on it; Aditya Mega City is where they part
+company — its report prints 63.17% while its own tables give 58.48% raw, or
+64.16% once the excluded street lights come off both sides.
+
+The report's measured figures still go in `baseline_kwh_day` and
+`after_kwh_day`, and any disagreement goes in `notes`. A benchmark nobody can
+reproduce from the readings is exactly what INV-02 is about, so it is written
+down rather than smoothed over.
 
 ### Which circuit is which (the user, 2026-08-26)
 

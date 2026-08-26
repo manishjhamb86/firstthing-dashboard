@@ -7,6 +7,7 @@ import { formatInstant } from "@/lib/format-date";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
 import type { ExtractedDocument } from "@/lib/document-extract";
 import { ExtractionReview } from "./review-client";
+import { AgreementTerms } from "./agreement-terms";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,10 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
   const label = DOCUMENT_TYPES.find((t) => t.id === doc.docType)?.label ?? doc.docType;
   const circuits = await db.circuit.count({ where: { societyId: doc.societyId, voidedAt: null } });
   const proposed = (doc.extraction?.proposed ?? null) as ExtractedDocument | null;
+  const contracted =
+    doc.docType === "agreement"
+      ? (await db.contract.count({ where: { societyId: doc.societyId, serviceLine: "lighting" } })) > 0
+      : false;
 
   return (
     <>
@@ -48,6 +53,18 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
 
       <div className="grid max-w-[1180px] gap-5 lg:grid-cols-12">
         <div className="lg:col-span-8">
+          {/* An agreement produces a CONTRACT, not a circuit — different
+              document, different thing on the other side. */}
+          {doc.docType === "agreement" && proposed ? (
+            <AgreementTerms
+              documentId={doc.id}
+              proposed={proposed}
+              societyName={doc.society.name}
+              societyId={doc.societyId}
+              canRecord={Boolean(actor?.permissions.includes("manage_pipeline"))}
+              alreadyContracted={contracted}
+            />
+          ) : (
           <ExtractionReview
             documentId={doc.id}
             canRead={Boolean(actor?.permissions.includes("manage_pipeline"))}
@@ -65,6 +82,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
             societyId={doc.societyId}
             existingCircuits={circuits}
           />
+          )}
         </div>
 
         <Card className="p-6 lg:col-span-4">

@@ -578,3 +578,189 @@ export async function createCircuitFromDocument(input: {
   revalidatePath(`/admin/documents/${doc.id}`);
   return { circuitId: circuit.id, proposedTypes };
 }
+
+export type AgreementTerms = {
+  /** The SOCIETY's share of the saving. Offer.revenueSharePct means this. */
+  societySharePct: number;
+  tolerancePct: number;
+  unitElectricityRate: number;
+  termMonths: number;
+  contractedLightCount: number;
+  /** The saving the fee is a share of, as the agreement states it. */
+  benchmarkPct: number;
+  /** YYYY-MM-DD — when the term started. */
+  termStart: string;
+  contactName?: string;
+};
+
+/**
+ * Backfill a contract from the agreement that created it.
+ *
+ * These societies were signed years before this system existed, so the deal,
+ * the offer, the agreement and the contract are all created here from what
+ * the document actually states — which is the whole point: the alternative
+ * was defaulting the commercial terms, and a defaulted revenue share is
+ * invented money in the record a bill is computed against (INV-02).
+ *
+ * `revenueSharePct` is the SOCIETY's share — 58 in CON-11's worked example.
+ * Hyde Park's agreement states FirsThing's ("35% of the energy savings"), so
+ * the two are separate fields all the way from extraction to this call, and
+ * the caller passes the society's. This project has shipped that inversion
+ * twice; a bare percentage is never accepted anywhere in the chain.
+ */
+export async function createContractFromAgreement(input: {
+  documentId: string;
+  terms: AgreementTerms;
+}): Promise<{ error?: string; contractId?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_pipeline")) {
+    return { error: "Recording a contract is a sales action (Manage pipeline)." };
+  }
+
+  const doc = await db.storedDocument.findUnique({
+    where: { id: input.documentId },
+    include: { society: { select: { id: true, name: true } } },
+  });
+  if (!doc || doc.voidedAt) return { error: "That document is no longer on record." };
+  if (doc.docType !== "agreement") return { error: "Only an executed agreement produces a contract." };
+
+  const t = input.terms;
+  const bad = (m: string) => ({ error: m });
+  if (!(t.societySharePct > 0 && t.societySharePct < 100)) {
+    return bad("The society's share must be between 0 and 100 — and it is the SOCIETY's share, not FirsThing's.");
+  }
+  if (!(t.tolerancePct > 0 && t.tolerancePct <= 50)) return bad("Tolerance must be between 0 and 50%.");
+  if (!(t.unitElectricityRate > 0)) return bad("Give the electricity rate the agreement uses, in ₹/kWh.");
+  if (!Number.isInteger(t.termMonths) || t.termMonths <= 0) return bad("Term must be a whole number of months.");
+  if (!Number.isInteger(t.contractedLightCount) || t.contractedLightCount <= 0) {
+    return bad("Give the number of lights the agreement contracts for.");
+  }
+  if (!(t.benchmarkPct > 0 && t.benchmarkPct < 100)) return bad("The agreed saving must be between 0 and 100%.");
+  const termStart = new Date(`${t.termStart}T00:00:00.000Z`);
+  if (Number.isNaN(termStart.getTime())) return bad("Give the term's start date as YYYY-MM-DD.");
+
+  const existing = await db.contract.findFirst({
+    where: { societyId: doc.societyId, serviceLine: "lighting" },
+    select: { id: true },
+  });
+  if (existing) {
+    return bad(`${doc.society.name} already has a lighting contract on the system — amend that one rather than creating a second.`);
+  }
+
+  const termEnd = new Date(termStart);
+  termEnd.setUTCMonth(termEnd.getUTCMonth() + t.termMonths);
+
+  // One entry describing the contracted scope. Per-circuit benchmarks fill in
+  // as circuits are backfilled from their own reports; what is recorded here
+  // is what the agreement itself says, and nothing more.
+  const circuitTerms = [
+    {
+      scope: "As contracted",
+      lightCount: t.contractedLightCount,
+      benchmarkSavingsPct: t.benchmarkPct,
+      source: doc.fileName,
+    },
+  ];
+
+  const contract = await db.$transaction(async (tx) => {
+    let pipeline = await tx.pipeline.findFirst({ where: { societyId: doc.societyId, serviceLine: "lighting" } });
+    if (!pipeline) {
+      pipeline = await tx.pipeline.create({
+        data: {
+          societyId: doc.societyId,
+          serviceLine: "lighting",
+          stage: "active_billing",
+          contactName: t.contactName?.trim() || doc.society.name,
+          meetingDate: termStart,
+          salesOwnerId: actor.id,
+          loggedById: actor.id,
+          notes: `Backfilled from ${doc.fileName}. This deal predates the system; every commercial figure below is read from that document, not defaulted.`,
+        },
+      });
+    } else {
+      await tx.pipeline.update({ where: { id: pipeline.id }, data: { stage: "active_billing" } });
+    }
+
+    const offer = await tx.offer.create({
+      data: {
+        pipelineId: pipeline.id,
+        version: 1,
+        status: "accepted",
+        // The saving is the one the agreement fixes, not one this system
+        // measured — CON-20's own distinction.
+        benchmarkSource: "negotiated_fixed",
+        circuitTerms,
+        tolerancePct: t.tolerancePct,
+        revenueSharePct: t.societySharePct,
+        unitElectricityRate: t.unitElectricityRate,
+        termMonths: t.termMonths,
+        issuedAt: termStart,
+        issuedById: actor.id,
+        respondedAt: termStart,
+      },
+    });
+
+    const agreement = await tx.agreement.create({
+      data: {
+        pipelineId: pipeline.id,
+        offerId: offer.id,
+        preparedAt: termStart,
+        preparedById: actor.id,
+        // Printed, notarised and signed are left null: this system did not
+        // witness them, and stamping dates on acts nobody recorded would be
+        // inventing history. The executed copy itself is what we have.
+        signedAt: termStart,
+        executedS3Key: doc.s3Key,
+        executedFileName: doc.fileName,
+        uploadedAt: doc.uploadedAt,
+        uploadedById: doc.uploadedById,
+      },
+    });
+
+    const created = await tx.contract.create({
+      data: {
+        pipelineId: pipeline.id,
+        societyId: doc.societyId,
+        serviceLine: "lighting",
+        agreementId: agreement.id,
+        status: "active",
+        termStart,
+        termEnd,
+        activatedAt: termStart,
+        activatedById: actor.id,
+      },
+    });
+
+    await tx.contractTermVersion.create({
+      data: {
+        contractId: created.id,
+        version: 1,
+        effectiveFrom: termStart,
+        benchmarkSource: "negotiated_fixed",
+        tolerancePct: t.tolerancePct,
+        revenueSharePct: t.societySharePct,
+        unitElectricityRate: t.unitElectricityRate,
+        circuitBenchmarks: circuitTerms,
+        recordedById: actor.id,
+      },
+    });
+
+    await tx.documentExtraction.updateMany({
+      where: { documentId: doc.id },
+      data: { status: "confirmed", confirmed: t, confirmedAt: new Date(), confirmedById: actor.id },
+    });
+    return created;
+  });
+
+  logger.info("document.contract_backfilled", {
+    actorId: actor.id,
+    documentId: doc.id,
+    contractId: contract.id,
+    societySharePct: t.societySharePct,
+    termMonths: t.termMonths,
+  });
+  revalidatePath(`/admin/societies/${doc.societyId}`);
+  revalidatePath(`/admin/documents/${doc.id}`);
+  return { contractId: contract.id };
+}

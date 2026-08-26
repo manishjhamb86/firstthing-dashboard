@@ -84,6 +84,29 @@ export type Clarification = {
   sourceText: string;
 };
 
+/**
+ * One kind of fixture on the circuit, as the document describes it.
+ *
+ * The single lightCount/wattagePerLight pair below is not enough to build a
+ * circuit from: Gaur Saundaryam's has 42 tube lights at 20W being retrofitted
+ * AND 5 surface lights at 18W that are not, and the extraction correctly
+ * refused to collapse them into one number. A circuit's inventory is a LIST,
+ * so the extraction has to return one.
+ */
+export type ExtractedFixture = {
+  label: string;
+  count: number | null;
+  watts: number | null;
+  hoursPerDay: number | null;
+  /**
+   * Whether the document says this kind was replaced. Null when it does not
+   * say — the operator is asked rather than it being assumed, because getting
+   * it wrong moves the shared-load deduction and with it the savings figure.
+   */
+  retrofitted: boolean | null;
+  sourceText: string;
+};
+
 export type ExtractedDocument = {
   documentKind: string;
   societyNameOnDocument: string;
@@ -106,6 +129,9 @@ export type ExtractedDocument = {
   contractTermMonths: Figure;
   contractedLightCount: Figure;
   monthlyServiceChargeInr: Figure;
+
+  /** Each kind of fixture on the circuit, as the document describes it. */
+  fixtures: ExtractedFixture[];
 
   /** Every daily meter reading printed anywhere in the document. */
   dailyReadings: DailyReading[];
@@ -141,6 +167,21 @@ const SCHEMA = {
     contractTermMonths: FIGURE,
     contractedLightCount: FIGURE,
     monthlyServiceChargeInr: FIGURE,
+    fixtures: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string" },
+          count: { type: ["number", "null"] },
+          watts: { type: ["number", "null"] },
+          hoursPerDay: { type: ["number", "null"] },
+          retrofitted: { type: ["boolean", "null"] },
+          sourceText: { type: "string" },
+        },
+        required: ["label", "count", "watts", "hoursPerDay", "retrofitted", "sourceText"],
+      },
+    },
     dailyReadings: {
       type: "array",
       items: {
@@ -176,7 +217,7 @@ const SCHEMA = {
     "lightCount", "wattagePerLight", "operatingHoursPerDay", "theoreticalDailyKwh",
     "baselineDailyKwh", "afterDailyKwh", "savingsPct",
     "firsthingSharePct", "societySharePct", "contractTermMonths", "contractedLightCount",
-    "monthlyServiceChargeInr", "dailyReadings", "clarifications", "notFound", "notes",
+    "monthlyServiceChargeInr", "fixtures", "dailyReadings", "clarifications", "notFound", "notes",
   ],
 };
 
@@ -213,7 +254,14 @@ Extract only what the document actually states. These rules are absolute:
    clarification for something the document states plainly.
 8. "dailyReadings" must include every dated meter reading printed anywhere in
    the document, tagged with the window it appeared under in that document's
-   own words ("Before installation", "Re-verification May 2026").`;
+   own words ("Before installation", "Re-verification May 2026").
+9. "fixtures" is one entry per KIND of light or appliance on the metered
+   circuit — "42 Basement Tube Lights - 20W each" and "5 Surface Lights - 18W
+   each" are two entries, never one. Set "retrofitted" true only where the
+   document says that kind was replaced, false only where it says it was not,
+   and null when it does not say. Do not infer it from the fixture's name.
+   If the document mentions a circuit but never breaks it down by kind,
+   return an empty array rather than inventing a single line.`;
 
 export async function extractDocument(params: {
   base64: string;

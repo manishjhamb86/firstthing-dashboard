@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, PageHeader } from "@/components/ui";
@@ -88,9 +89,13 @@ export default async function DocumentsPage() {
             <ul className="space-y-3 text-[13px]">
               {recent.map((d) => (
                 <li key={d.id} className="border-b pb-2.5 last:border-b-0" style={{ borderColor: "var(--border-subtle)" }}>
-                  <p className="font-semibold" style={d.voidedAt ? { textDecoration: "line-through" } : undefined}>
-                    {label(d.docType)} <span className="num">v{d.version}</span>
-                  </p>
+                  <Link
+                    href={`/admin/documents/${d.id}`}
+                    className="font-semibold"
+                    style={d.voidedAt ? { textDecoration: "line-through" } : undefined}
+                  >
+                    {label(d.docType)} <span className="num">v{d.version}</span> →
+                  </Link>
                   <p style={{ color: "var(--text-muted)" }}>
                     {d.society.name} · <span className="num">{d.period}</span>
                   </p>

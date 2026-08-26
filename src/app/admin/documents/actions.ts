@@ -10,6 +10,7 @@ import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildDocumentKey, type DocType } from "@/lib/document-keys";
 import { buildRawReadingKey } from "@/lib/ingest-keys";
 import { documentType, validateDocumentUpload } from "@/lib/document-catalog";
+import { extractDocument, EXTRACTABLE_TYPES } from "@/lib/document-extract";
 import { extensionOf } from "@/lib/file-signature";
 import { logger } from "@/lib/logger";
 import { recordKycDocument } from "@/app/admin/pipeline/[id]/kyc/actions";
@@ -322,4 +323,186 @@ export async function voidDocumentVersion(input: {
   revalidatePath("/admin/documents");
   revalidatePath(`/admin/societies/${doc.societyId}`);
   return { done: true };
+}
+
+/**
+ * Read a filed document with the model, and keep the proposal.
+ *
+ * Nothing is written to a circuit here — this only fills in
+ * DocumentExtraction.proposed, which a person then reviews. The model's own
+ * questions come back with it, unanswered.
+ */
+export async function readStoredDocument(documentId: string): Promise<{ error?: string; ok?: true }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_pipeline")) {
+    return { error: "Reading a document needs the manage pipeline permission." };
+  }
+  const doc = await db.storedDocument.findUnique({ where: { id: documentId } });
+  if (!doc) return { error: "That document is no longer on record." };
+  if (doc.voidedAt) return { error: "That version has been withdrawn." };
+  if (!EXTRACTABLE_TYPES.has(doc.docType)) return { error: "There are no figures to read out of that document type." };
+
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: doc.s3Key }));
+    const bytes = await obj.Body!.transformToByteArray();
+    const proposed = await extractDocument({
+      base64: Buffer.from(bytes).toString("base64"),
+      mimeType: doc.contentType || "application/pdf",
+    });
+    await db.documentExtraction.upsert({
+      where: { documentId: doc.id },
+      create: { documentId: doc.id, status: "proposed", proposed, extractedAt: new Date() },
+      update: { status: "proposed", proposed, modelError: null, extractedAt: new Date() },
+    });
+    logger.info("document.read", {
+      actorId: actor.id,
+      documentId: doc.id,
+      fixtures: proposed.fixtures.length,
+      readings: proposed.dailyReadings.length,
+      questions: proposed.clarifications.length,
+    });
+    revalidatePath(`/admin/documents/${doc.id}`);
+    return { ok: true };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    await db.documentExtraction.upsert({
+      where: { documentId: doc.id },
+      create: { documentId: doc.id, status: "failed", modelError: message },
+      update: { status: "failed", modelError: message },
+    });
+    logger.warn("document.read_failed", { actorId: actor.id, documentId: doc.id, error: message });
+    return { error: `Could not read that document: ${message}` };
+  }
+}
+
+export type ConfirmedFixture = {
+  label: string;
+  count: number;
+  watts: number;
+  hoursPerDay: number;
+  /** False means it shares the circuit but was not part of the retrofit. */
+  retrofitted: boolean;
+};
+
+/**
+ * Build the circuit the report describes.
+ *
+ * This is the backfill path for a society commissioned before this system
+ * existed: there is no survey to have selected the circuit (FEAT-007), so the
+ * report is the record it comes from instead. What is NOT invented here: no
+ * baseline, no benchmark, no meter dates. Those come from the readings, which
+ * go through CON-45's review like any other — a figure printed in a report is
+ * evidence of what happened, not evidence this system can recompute.
+ *
+ * A fixture the catalog does not have is PROPOSED rather than created
+ * outright, so its wattage lands in operations' queue exactly as one typed by
+ * a surveyor would.
+ */
+export async function createCircuitFromDocument(input: {
+  documentId: string;
+  lightType: string;
+  representedLightCount: number;
+  fixtures: ConfirmedFixture[];
+  /** The operator's answers to the model's questions, kept with the record. */
+  answers: Record<string, string>;
+}): Promise<{ error?: string; circuitId?: string; proposedTypes?: string[] }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_survey")) {
+    return { error: "Creating a circuit is a field-survey action." };
+  }
+
+  const doc = await db.storedDocument.findUnique({ where: { id: input.documentId } });
+  if (!doc || doc.voidedAt) return { error: "That document is no longer on record." };
+
+  const lightType = input.lightType.trim();
+  if (!lightType) return { error: "Say which light type this circuit represents (CON-11)." };
+  const usable = input.fixtures.filter((f) => f.count > 0 && f.watts > 0 && f.hoursPerDay > 0);
+  if (usable.length === 0) return { error: "Record at least one fixture line — the inventory is what everything downstream compares against." };
+  const metered = usable.filter((f) => f.retrofitted).reduce((n, f) => n + f.count, 0);
+  if (metered === 0) return { error: "At least one fixture has to be the one being retrofitted." };
+  if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < metered) {
+    return { error: `Represented count must be at least the ${metered} lights on this circuit (CON-11).` };
+  }
+
+  // Match the catalog by name; propose what is missing rather than inventing
+  // a catalog entry nobody approved.
+  const proposedTypes: string[] = [];
+  const lineTypeIds: string[] = [];
+  for (const f of usable) {
+    const name = f.label.trim();
+    let type = await db.deviceType.findFirst({
+      where: { name: { equals: name, mode: "insensitive" }, role: "original", deletedAt: null },
+    });
+    if (!type) {
+      type = await db.deviceType.create({
+        data: {
+          name,
+          role: "original",
+          defaultWattage: f.watts,
+          status: "proposed",
+          inCatalog: false,
+          proposedById: actor.id,
+          proposedNote: `Read from ${doc.fileName}`,
+        },
+      });
+      proposedTypes.push(name);
+    }
+    lineTypeIds.push(type.id);
+  }
+
+  const circuit = await db.$transaction(async (tx) => {
+    const created = await tx.circuit.create({
+      data: {
+        societyId: doc.societyId,
+        serviceLine: "lighting",
+        lightType,
+        location: `From ${doc.fileName}`,
+        meteredLightCount: metered,
+        representedLightCount: input.representedLightCount,
+        // The circuit's headline wattage is the retrofitted fixture's — the
+        // one the saving is attributable to.
+        wattage: usable.find((f) => f.retrofitted)!.watts,
+        createdById: actor.id,
+      },
+    });
+    await tx.circuitDevice.createMany({
+      data: usable.map((f, i) => ({
+        circuitId: created.id,
+        deviceTypeId: lineTypeIds[i],
+        count: f.count,
+        wattage: f.watts,
+        hoursPerDay: f.hoursPerDay,
+        excludedFromCalculation: !f.retrofitted,
+        // Reconstructed from paper, not captured on site — INV-02 means the
+        // difference has to be visible rather than assumed.
+        historical: true,
+        historicalNote: `Read from ${doc.fileName}`,
+        recordedById: actor.id,
+      })),
+    });
+    await tx.documentExtraction.update({
+      where: { documentId: doc.id },
+      data: {
+        status: "confirmed",
+        confirmed: { lightType, representedLightCount: input.representedLightCount, fixtures: usable, answers: input.answers },
+        confirmedAt: new Date(),
+        confirmedById: actor.id,
+      },
+    });
+    return created;
+  });
+
+  logger.info("document.circuit_created", {
+    actorId: actor.id,
+    documentId: doc.id,
+    circuitId: circuit.id,
+    metered,
+    excluded: usable.filter((f) => !f.retrofitted).length,
+    proposedTypes,
+  });
+  revalidatePath(`/admin/societies/${doc.societyId}/circuits`);
+  revalidatePath(`/admin/documents/${doc.id}`);
+  return { circuitId: circuit.id, proposedTypes };
 }

@@ -107,6 +107,24 @@ export type ExtractedFixture = {
   sourceText: string;
 };
 
+/**
+ * A date the document states, and what it calls it.
+ *
+ * Agreements carry several — an effective date, signature dates, and a clause
+ * saying what the term actually runs from — and they do not always agree or
+ * even exist. Hyde Park's leaves "Effective Date:" blank, dates its signature
+ * blocks with template placeholders, and says the term is "valid for 3 years
+ * from the date of installation", which is a date printed nowhere in it. So
+ * every date is returned with the label the document gives it, and choosing
+ * the one the term starts from is a question, not an inference.
+ */
+export type LabelledDate = {
+  label: string;
+  /** YYYY-MM-DD, or "" when the document leaves it blank. */
+  value: string;
+  sourceText: string;
+};
+
 export type ExtractedDocument = {
   documentKind: string;
   societyNameOnDocument: string;
@@ -129,6 +147,9 @@ export type ExtractedDocument = {
   contractTermMonths: Figure;
   contractedLightCount: Figure;
   monthlyServiceChargeInr: Figure;
+
+  /** Every date the document states, labelled as the document labels it. */
+  dates: LabelledDate[];
 
   /** Each kind of fixture on the circuit, as the document describes it. */
   fixtures: ExtractedFixture[];
@@ -167,6 +188,18 @@ const SCHEMA = {
     contractTermMonths: FIGURE,
     contractedLightCount: FIGURE,
     monthlyServiceChargeInr: FIGURE,
+    dates: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          label: { type: "string" },
+          value: { type: "string" },
+          sourceText: { type: "string" },
+        },
+        required: ["label", "value", "sourceText"],
+      },
+    },
     fixtures: {
       type: "array",
       items: {
@@ -217,7 +250,7 @@ const SCHEMA = {
     "lightCount", "wattagePerLight", "operatingHoursPerDay", "theoreticalDailyKwh",
     "baselineDailyKwh", "afterDailyKwh", "savingsPct",
     "firsthingSharePct", "societySharePct", "contractTermMonths", "contractedLightCount",
-    "monthlyServiceChargeInr", "fixtures", "dailyReadings", "clarifications", "notFound", "notes",
+    "monthlyServiceChargeInr", "dates", "fixtures", "dailyReadings", "clarifications", "notFound", "notes",
   ],
 };
 
@@ -255,7 +288,17 @@ Extract only what the document actually states. These rules are absolute:
 8. "dailyReadings" must include every dated meter reading printed anywhere in
    the document, tagged with the window it appeared under in that document's
    own words ("Before installation", "Re-verification May 2026").
-9. "fixtures" is one entry per KIND of light or appliance on the metered
+9. "dates" is every date the document states, each with the label the document
+   gives it — "Effective Date", "Signature date", "Agreement date". Include a
+   date the document REFERS to but does not print (an effective date left
+   blank, a signature block that is still a template placeholder) with an empty
+   value, so the gap is visible rather than absent. If a clause says what the
+   term runs FROM — "valid for 3 years from the date of installation" — record
+   that as its own entry with the clause as sourceText, and if the date it
+   points at is not printed anywhere, RAISE A CLARIFICATION rather than
+   offering the signature date in its place. These are different dates and
+   picking the wrong one moves when billing starts.
+10. "fixtures" is one entry per KIND of light or appliance on the metered
    circuit — "42 Basement Tube Lights - 20W each" and "5 Surface Lights - 18W
    each" are two entries, never one. Set "retrofitted" true only where the
    document says that kind was replaced, false only where it says it was not,

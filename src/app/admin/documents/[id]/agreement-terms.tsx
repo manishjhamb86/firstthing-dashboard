@@ -50,7 +50,13 @@ export function AgreementTerms({
   const [benchmark, setBenchmark] = useState(
     proposed.savingsPct.value === null ? "" : String(proposed.savingsPct.value),
   );
-  const [start, setStart] = useState("");
+  // Pre-filled from the document when it prints exactly one usable date.
+  // When it prints several — an effective date, a signature date, a clause
+  // saying the term runs from installation — they are offered rather than one
+  // being chosen, because they are different dates and the wrong one moves
+  // when billing starts.
+  const dated = (proposed.dates ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.value));
+  const [start, setStart] = useState(dated.length === 1 ? dated[0].value : "");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, startT] = useTransition();
@@ -130,10 +136,52 @@ export function AgreementTerms({
         <Field label="Agreed saving %" htmlFor="at-bench" hint="What the fee is a share of">
           <input id="at-bench" type="number" step="0.01" className="field field-auto w-28" value={benchmark} onChange={(e) => setBenchmark(e.target.value)} />
         </Field>
-        <Field label="Term started" htmlFor="at-start">
+        <Field
+          label="Term started"
+          htmlFor="at-start"
+          hint={
+            dated.length === 1
+              ? "Read from the document."
+              : dated.length > 1
+                ? "The document prints more than one date — pick the one the term runs from."
+                : "The document prints no usable date."
+          }
+        >
           <input id="at-start" type="date" className="field field-auto" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>
       </div>
+
+      {(proposed.dates ?? []).length > 0 && (
+        <div className="mt-4">
+          <p className="lbl mb-1.5">Dates this document states</p>
+          <ul className="space-y-1.5 text-[12px]">
+            {(proposed.dates ?? []).map((d, i) => (
+              <li key={i} className="flex flex-wrap items-baseline gap-2">
+                <span className="font-semibold">{d.label}:</span>
+                {d.value ? (
+                  <>
+                    <span className="num">{d.value}</span>
+                    <button
+                      type="button"
+                      className="btn-ghost text-[12px]"
+                      style={{ color: "var(--accent)" }}
+                      onClick={() => setStart(d.value)}
+                    >
+                      use as term start
+                    </button>
+                  </>
+                ) : (
+                  // A blank date in the document is a fact about the document.
+                  <span style={{ color: "var(--warn-fg)" }}>left blank in the document</span>
+                )}
+                <span className="block w-full" style={{ color: "var(--text-subtle)" }}>
+                  {d.sourceText}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {proposed.notFound.length > 0 && (
         <p className="mt-3 text-[12px]" style={{ color: "var(--text-subtle)" }}>

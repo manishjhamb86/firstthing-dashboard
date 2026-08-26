@@ -56,7 +56,14 @@ export function AgreementTerms({
   // being chosen, because they are different dates and the wrong one moves
   // when billing starts.
   const dated = (proposed.dates ?? []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.value));
-  const [start, setStart] = useState(dated.length === 1 ? dated[0].value : "");
+  // Two different dates, and conflating them was the bug: the agreement is
+  // signed, then installation happens — sometimes two months later — and the
+  // three-year term runs from the day it completes and the society approves
+  // it (the user's correction, 2026-08-26). The system's live path already
+  // works this way: CON-22 starts billing from the completion certificate the
+  // society signs, never from the agreement.
+  const [executed, setExecuted] = useState(dated.length === 1 ? dated[0].value : "");
+  const [start, setStart] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [pending, startT] = useTransition();
@@ -110,6 +117,11 @@ export function AgreementTerms({
       >
         <strong>Whose share is whose:</strong> {shareRow} The field below is always the{" "}
         <strong>society&apos;s</strong> share of the saving.
+        <span className="mt-1.5 block">
+          <strong>Two dates, not one:</strong> the agreement is signed, then the lights go in — that can
+          take weeks — and the term runs from the day installation finished and the society approved
+          it. A document usually prints the first and not the second.
+        </span>
         {proposed.firsthingSharePct.sourceText && (
           <span className="mt-1 block text-[11px]" style={{ color: "var(--text-subtle)" }}>
             {proposed.firsthingSharePct.sourceText}
@@ -137,15 +149,22 @@ export function AgreementTerms({
           <input id="at-bench" type="number" step="0.01" className="field field-auto w-28" value={benchmark} onChange={(e) => setBenchmark(e.target.value)} />
         </Field>
         <Field
-          label="Term started"
-          htmlFor="at-start"
+          label="Agreement signed on"
+          htmlFor="at-executed"
           hint={
             dated.length === 1
               ? "Read from the document."
               : dated.length > 1
-                ? "The document prints more than one date — pick the one the term runs from."
+                ? "The document prints more than one date — pick the signature."
                 : "The document prints no usable date."
           }
+        >
+          <input id="at-executed" type="date" className="field field-auto" value={executed} onChange={(e) => setExecuted(e.target.value)} />
+        </Field>
+        <Field
+          label="Term started"
+          htmlFor="at-start"
+          hint="When installation finished and the society approved it — not the signature date. Often weeks later."
         >
           <input id="at-start" type="date" className="field field-auto" value={start} onChange={(e) => setStart(e.target.value)} />
         </Field>
@@ -161,6 +180,14 @@ export function AgreementTerms({
                 {d.value ? (
                   <>
                     <span className="num">{d.value}</span>
+                    <button
+                      type="button"
+                      className="btn-ghost text-[12px]"
+                      style={{ color: "var(--accent)" }}
+                      onClick={() => setExecuted(d.value)}
+                    >
+                      use as signed on
+                    </button>
                     <button
                       type="button"
                       className="btn-ghost text-[12px]"
@@ -206,6 +233,7 @@ export function AgreementTerms({
                 termMonths: n(term),
                 contractedLightCount: n(lights),
                 benchmarkPct: n(benchmark),
+                executedOn: executed,
                 termStart: start,
               },
             });

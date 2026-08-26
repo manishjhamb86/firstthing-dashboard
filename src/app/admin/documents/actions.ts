@@ -600,7 +600,19 @@ export type AgreementTerms = {
   contractedLightCount: number;
   /** The saving the fee is a share of, as the agreement states it. */
   benchmarkPct: number;
-  /** YYYY-MM-DD — when the term started. */
+  /**
+   * YYYY-MM-DD — when the agreement was SIGNED. Not when the term starts:
+   * installation can take weeks after signing (the user's correction,
+   * 2026-08-26).
+   */
+  executedOn: string;
+  /**
+   * YYYY-MM-DD — when installation completed AND the society approved it,
+   * which is when the term actually begins. This is the date the contract
+   * runs from, and the system's own live path agrees: CON-22 starts billing
+   * from the completion certificate the society signs, never from the
+   * agreement.
+   */
   termStart: string;
   contactName?: string;
 };
@@ -649,8 +661,14 @@ export async function createContractFromAgreement(input: {
     return bad("Give the number of lights the agreement contracts for.");
   }
   if (!(t.benchmarkPct > 0 && t.benchmarkPct < 100)) return bad("The agreed saving must be between 0 and 100%.");
+  const executedOn = new Date(`${t.executedOn}T00:00:00.000Z`);
+  if (Number.isNaN(executedOn.getTime())) return bad("Give the date the agreement was signed, as YYYY-MM-DD.");
   const termStart = new Date(`${t.termStart}T00:00:00.000Z`);
-  if (Number.isNaN(termStart.getTime())) return bad("Give the term's start date as YYYY-MM-DD.");
+  if (Number.isNaN(termStart.getTime())) return bad("Give the date the term started as YYYY-MM-DD.");
+  if (termStart.getTime() < executedOn.getTime()) {
+    // The term cannot begin before the agreement that creates it.
+    return bad("The term cannot start before the agreement was signed — installation follows signing, not the other way round.");
+  }
 
   const existing = await db.contract.findFirst({
     where: { societyId: doc.societyId, serviceLine: "lighting" },
@@ -684,7 +702,7 @@ export async function createContractFromAgreement(input: {
           serviceLine: "lighting",
           stage: "active_billing",
           contactName: t.contactName?.trim() || doc.society.name,
-          meetingDate: termStart,
+          meetingDate: executedOn,
           salesOwnerId: actor.id,
           loggedById: actor.id,
           notes: `Backfilled from ${doc.fileName}. This deal predates the system; every commercial figure below is read from that document, not defaulted.`,
@@ -707,9 +725,9 @@ export async function createContractFromAgreement(input: {
         revenueSharePct: t.societySharePct,
         unitElectricityRate: t.unitElectricityRate,
         termMonths: t.termMonths,
-        issuedAt: termStart,
+        issuedAt: executedOn,
         issuedById: actor.id,
-        respondedAt: termStart,
+        respondedAt: executedOn,
       },
     });
 
@@ -717,12 +735,13 @@ export async function createContractFromAgreement(input: {
       data: {
         pipelineId: pipeline.id,
         offerId: offer.id,
-        preparedAt: termStart,
+        preparedAt: executedOn,
         preparedById: actor.id,
         // Printed, notarised and signed are left null: this system did not
         // witness them, and stamping dates on acts nobody recorded would be
         // inventing history. The executed copy itself is what we have.
-        signedAt: termStart,
+        // The signature date, which is NOT the term start.
+        signedAt: executedOn,
         executedS3Key: doc.s3Key,
         executedFileName: doc.fileName,
         uploadedAt: doc.uploadedAt,

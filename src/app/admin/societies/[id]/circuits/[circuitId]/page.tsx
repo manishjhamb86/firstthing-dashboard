@@ -225,8 +225,55 @@ export default async function CircuitDetailPage({
         .filter((r): r is NonNullable<typeof r> => r !== null)
     : [];
   const effBaselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
+
+  // A circuit backfilled from paper has no reviewed meter export, and its
+  // pre- and post-installation days are the ones its demo report printed.
+  // Those ARE this circuit's pre/post readings, so they belong where every
+  // other circuit shows its readings rather than only behind the demos
+  // table (user-reported 2026-08-27: "still no pre post readings under any
+  // society"). They are never excludable: a figure read off paper cannot be
+  // re-reviewed, and the baseline it produced is already frozen.
+  //
+  // Only when exactly one demo counts. Two live demos measured on
+  // overlapping dates — Urban Casa's ran 14-19 and 15-17 December on
+  // different sets of lights — are two series, and flattening them into one
+  // list would show the same date twice with different values under a
+  // single average. That circuit keeps its per-demo tables, which is the
+  // reason those are stored per demo in the first place.
+  const liveDemosWithDays = circuit.demos.filter((d) => !d.rejected && d.readings.length > 0);
+  const demoDays: StoredReadingDTO[] =
+    storedReadings.length === 0 && liveDemosWithDays.length === 1
+      ? liveDemosWithDays[0].readings.map((r) => {
+          const isPre = r.phase === "pre";
+          const effB = isPre
+            ? null
+            : effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, r.date);
+          const sPct = isPre || effB === null ? null : savingsPct(effB, r.kWh);
+          const v = isPre && theoretical !== null ? varianceAgainstTheoretical(r.kWh, theoretical) : null;
+          return {
+            id: r.id,
+            date: r.date.toISOString().slice(0, 10),
+            kWh: r.kWh,
+            intervalCount: null,
+            expectedIntervals: null,
+            phase: isPre ? ("pre_install" as const) : ("post_install" as const),
+            excluded: false,
+            excludedReason: null,
+            released: false,
+            superseded: false,
+            variancePct: v?.pct ?? null,
+            varianceBand: v?.band ?? null,
+            savingsPct: sPct,
+            savingsBand: sPct === null ? null : savingsBand(sPct),
+            frozenReason:
+              "Read from the demo report — a figure printed on paper cannot be re-reviewed here.",
+          };
+        })
+      : [];
+  const displayReadings = storedReadings.length > 0 ? storedReadings : demoDays;
+
   const phaseSummaries = (["pre_install", "post_install", "monitoring"] as const).flatMap((phase) => {
-    const rows = storedReadings.filter((r) => r.phase === phase);
+    const rows = displayReadings.filter((r) => r.phase === phase);
     if (rows.length === 0) return [];
     const days = rows.map((r) => ({ kWh: r.kWh, excluded: r.excluded }));
     const summary = periodSavingsSummary(phase === "pre_install" ? null : effBaselineNow, days);
@@ -1024,8 +1071,9 @@ export default async function CircuitDetailPage({
       {circuit.meterInstalledAt && !usesLegacyFlow && (
         <section className="max-w-none mb-10 space-y-4">
           <StoredReadingsPanel
-            readings={storedReadings}
+            readings={displayReadings}
             canEdit={canEdit}
+            fromDemoReport={displayReadings === demoDays && demoDays.length > 0}
             demoDayCount={circuit.demos.reduce((n, d) => n + d._count.readings, 0)}
             summaries={phaseSummaries}
             allComplete={allStepsComplete}

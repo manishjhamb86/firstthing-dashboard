@@ -101,6 +101,7 @@ export function StoredReadingsPanel({
   allComplete = false,
   commissionedBaseline = null,
   demoDayCount = 0,
+  fromDemoReport = false,
 }: {
   readings: StoredReadingDTO[];
   canEdit: boolean;
@@ -124,6 +125,12 @@ export function StoredReadingsPanel({
    * screen naming a next step its reader cannot reach.
    */
   demoDayCount?: number;
+  /**
+   * These days were printed in the demo report rather than reviewed from a
+   * meter export. Said plainly at the top, because a reader who cannot tell
+   * the two apart cannot judge how much weight the figures carry.
+   */
+  fromDemoReport?: boolean;
   summaries: {
     phase: StoredReadingDTO["phase"];
     label: string;
@@ -160,6 +167,13 @@ export function StoredReadingsPanel({
 
   return (
     <div className="space-y-4">
+      {fromDemoReport && (
+        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+          These are the days this circuit&apos;s demo report printed, not a reviewed meter export —
+          this society was commissioned before the system existed. They are what its baseline and
+          benchmark were computed from, and they cannot be excluded or re-reviewed here.
+        </p>
+      )}
       {phases.map((phase) => {
         const rows = readings.filter((r) => r.phase === phase);
         if (rows.length === 0) return null;

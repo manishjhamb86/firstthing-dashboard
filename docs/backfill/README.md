@@ -95,6 +95,16 @@ hand:
 
 ## Rules settled with the user (2026-08-26)
 
+- **The first invoice is not always the first SAVINGS invoice.** Aditya Urban
+  Casa's run opens with a Feb-2026 invoice for the devices themselves (700 at
+  Rs 20 plus a service fee) and only then bills savings from March. Look for
+  the first invoice whose quantity is the LIGHT COUNT at a per-light rate, not
+  the one that happens to be earliest.
+- **A full first savings month bounds the completion date without pinning
+  it.** Where the first savings invoice covers a whole month, billing began on
+  or before the 1st, so completion was on or before the last day of the month
+  before. That is what Aditya Urban Casa's 28 Feb 2026 is — an inference worth
+  confirming, unlike the others which are read straight off a day count.
 - **`term_start`** is derived from the **first invoice**: the month's length
   minus the days it bills, giving the day installation completed. Neither the
   agreement nor the report states it. (Superseded the original plan of taking

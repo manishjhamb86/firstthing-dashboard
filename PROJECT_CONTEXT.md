@@ -3313,6 +3313,87 @@ for next time, pending which remote (origin is still the public third-party repo
 files exist); wiring MS-08's billing UI to consume this store (MS-08 remains the one `proposed`
 milestone); migrating legacy `CommissioningReading` circuits onto the unified store.
 
+## Nineteen pre-system societies onboarded by SQL, not by upload (2026-08-26/27) — user's redirect
+
+**The user stopped the document-upload backfill mid-build and replaced it**: "we should take a
+different approach... For the whole data we need only two documents per society. 1.) agreement and
+2.) post installation savings report... its a one time activity. and that too for only 19
+societies." So: read the two documents per society by hand, land the facts in CSVs, and generate
+one transaction per society. `docs/backfill/` holds the CSVs, the table map and every rule settled
+along the way; `scripts/backfill-sql.py` is the generator. It is **re-runnable** (it deletes its own
+`bf-*` rows first), matches a society **by name and refuses unless it exists exactly once**, and
+emits nothing for a fact the documents did not carry.
+
+**The working rule, the user's own, after I inferred a term-start date from a full first month**:
+"you ask questions for whats not awailable or missing. i tell you to leave or not." The distinction
+that survived into `docs/backfill/README.md`: **resolving a contradiction** is arithmetic's job (91
+lights not the report's 93, because 43.68 kWh/day can only be 91 at 20W × 24h; 46% not 20%, because
+that is what ₹23,299 divides to), while **filling a silence** is always a question.
+
+**Four societies imported and verified on stage** (Ace City, Ace Aspire, Aditya Mega City, Aditya
+Urban Casa), the remaining fifteen still to come.
+
+**Two bugs the import found that only a real environment could**: `psql`'s `\set` takes the whole
+rest of the line, so a trailing `-- comment` became part of the actor's email and every insert
+joining `admin_users` silently wrote **zero rows**; and `demo_reports.shared_by_id` points at
+`admin_users`, not `profiles` — FirsThing shares *with* the society — which **local never caught**,
+because the test societies had no portal accounts and the LEFT JOIN quietly gave NULL. Stage's real
+office-bearers made the FK refuse.
+
+## A circuit can be demonstrated more than once (2026-08-27) — user-specified
+
+**The ask**: "keep both demos. and in system keep that option to average two demos or reject one
+demo... if we can decide to reject it and do another demo... second demo will be used to
+calculations. and also we can do second demo on request of society... in this case both demos
+average is used for calculations." Existing practice, not new — Aditya Urban Casa's basement was
+demonstrated twice (100 lights at 48.28%, 22 at 85.19%) and its signed agreement carries 66.72%,
+which is their mean. Recorded as **FEAT-014-AC-7/AC-8** in `03-features.md` and `docs/backlog.yaml`.
+
+`CircuitDemo`/`CircuitDemoReading` are their own tables rather than `MeterReading` rows **because
+two demos of one circuit share dates** — Urban Casa's ran 14–19 and 15–17 December on different
+sets of lights — and one store keyed by circuit+date cannot hold both. Every write in
+`demo-actions.ts` re-derives the benchmark inside the same transaction, so the stored figure and
+the demos on record cannot drift; a survivor outside CON-20's band writes **no** benchmark, and an
+override cannot move it back into band.
+
+**No automatic rounding, the user's explicit correction** ("we can skip the default round of. we can
+do it manually since we have the feature"): a stored benchmark is either what the demos measured or
+what someone deliberately chose, and rounding would make it a third thing that is neither. Rounding
+64.16% to 64% is itself an override, named and dated like any other.
+
+## The demo reports' daily tables, so a benchmark has something behind it (2026-08-27) — user-caught
+
+**Reported against Ace City's circuit page**: "readings are still not added." The circuits carried a
+percentage with no evidence, and the readings section told the operator to upload a meter CSV for a
+society commissioned years before this system existed — the **same dead end this project has now
+fixed three times**: a screen naming a next step its reader cannot reach.
+
+**91 days read out of the documents themselves, no model in the loop** (`scripts/demo-readings.py`).
+The tables are a Date row over a Consumption row, and a parser means the figures trace to the
+report rather than to one response nobody can replay (INV-02). Every block is checked against the
+average the report prints. What that check caught, each a real shape rather than a hypothetical:
+a wide table printed as two stacked halves where only the second carries the Average cell (Urban
+Casa's lift lobby, 15 days as 8 then 7 — read apart the halves disagree with the report, merged
+they reproduce its 1.81 exactly); a year that appears only in the letterhead, which means allowing
+that a report written in January describes December's demo; and a printed 2dp average sitting up to
+a hundredth below the true mean, because some of these truncate rather than round.
+
+**Ace City's basement report is a PDF that extracts a glyph at a time**, so its days come from the
+meter workbook instead — which reproduces the report's own printed 48.6987 and 16.3629 **to four
+places**, every day whole at 24 intervals. The report and the meter agree completely, which is what
+made the substitution safe rather than convenient.
+
+**One report disagrees with itself, and is left saying so.** Urban Casa's first demo prints five
+days averaging 24.5580 under a stated 24.53 — and 24.53 is what its own 48.28%, and the signed
+agreement's 66.72%, were computed from. The recorded figure stays what was agreed, the days stay
+what was measured, and the screen states the gap rather than quietly picking a side. The same
+report also settles where this system's derived 66.7349% comes from: it computes
+`(48.28 + 85.16)/2`, and **85.16 is the report's own slip** for `10.64/12.49 = 85.19`.
+
+**Worth remembering as a class**: a document's printed summary and its printed table are two
+sources, and where they differ the one everything downstream was computed from is the figure of
+record — but erasing the other loses the only evidence that a dispute would turn on.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

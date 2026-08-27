@@ -743,9 +743,20 @@ model Circuit {
   postInstallBaseline           Float?       @map("post_install_baseline")
   // FEAT-014 — the number the contract prices against (CON-20's 60-80%
   // band). System-computed only; FEAT-014-AC-4 requires no manual entry
-  // path exists for it, so there is deliberately no action in this
-  // codebase that sets this field directly from user input.
+  // path exists for it. FEAT-014 AC-8 (2026-08-27) adds ONE: a recorded
+  // override, below — because the agreed figure a society is billed against
+  // does not always equal what the readings give. Nothing else writes it.
   benchmarkSavingsPct           Float?       @map("benchmark_savings_pct")
+
+  // The benchmark set by hand rather than derived from the demos. Aditya Mega
+  // City's tables give 58.48%; its agreement says 64%. Rounding counts as an
+  // override too, so a stored benchmark is always either measured or chosen.
+  // An override never moves a circuit into CON-20's band — that is judged on
+  // what the demos measured.
+  benchmarkOverridePct          Float?       @map("benchmark_override_pct")
+  benchmarkOverrideReason       String?      @map("benchmark_override_reason")
+  benchmarkOverrideById         String?      @map("benchmark_override_by_id")
+  benchmarkOverrideAt           DateTime?    @map("benchmark_override_at")
   state                         CircuitState @default(surveyed)
   createdAt                     DateTime     @default(now()) @map("created_at")
   // Who selected this candidate. Null for every circuit predating the column,
@@ -775,6 +786,7 @@ model Circuit {
   commissioningReadings    CommissioningReading[]
   rescaleEvents            BenchmarkRescaleEvent[]
   demoResultReviews        DemoResultReview[]
+  demos                    CircuitDemo[]
 
   // MS-07
   rawReadingFiles     RawReadingFile[]
@@ -806,6 +818,66 @@ model Circuit {
 // FEAT-041-AC-5: effectiveDate is what forward-application keys off. A
 // rescale dated into an already-invoiced month never restates that
 // invoice; the difference goes through CAP-05's deviation review instead.
+/// FEAT-014 AC-7 — a circuit can be demonstrated more than once.
+///
+/// Two reasons, and they lead to different benchmarks: a demo that ran badly
+/// is REJECTED and the one done in its place decides alone, while a second
+/// demo run at the society's own request counts alongside the first and the
+/// benchmark becomes the mean of their savings percentages.
+///
+/// Each demo carries its own metered light count, because they are not
+/// necessarily the same circuit twice — Aditya Urban Casa's were 100 lights
+/// and 22. Its readings hang off the demo rather than the circuit, which is
+/// also what lets two demos measured on overlapping dates coexist.
+model CircuitDemo {
+  id        String @id @default(cuid())
+  circuitId String @map("circuit_id")
+  /// 1, 2, 3 — the order they were run in, and how the screen orders them.
+  sequence  Int
+
+  meteredLightCount  Int    @map("metered_light_count")
+  preInstallBaseline Float  @map("pre_install_baseline")
+  postInstallAverage Float  @map("post_install_average")
+  /// Verbatim, never rounded (AC-8).
+  savingsPct         Float  @map("savings_pct")
+
+  /// A rejected demo stays on record and takes no part in the figure.
+  rejected        Boolean   @default(false)
+  rejectionReason String?   @map("rejection_reason")
+  decidedById     String?   @map("decided_by_id")
+  decidedAt       DateTime? @map("decided_at")
+
+  note      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  circuit  Circuit             @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  readings CircuitDemoReading[]
+
+  @@unique([circuitId, sequence])
+  @@map("circuit_demos")
+}
+
+/// A demo's own daily readings, kept apart from `MeterReading`.
+///
+/// Deliberately not the billing table: these are the days that produced a
+/// benchmark, not the days a month is billed on, and two demos on one circuit
+/// routinely share dates — Aditya Urban Casa's overlap for four of them.
+/// Putting them in `MeterReading` would either collide on its per-circuit
+/// uniqueness or force that guarantee to be loosened for every circuit.
+model CircuitDemoReading {
+  id     String   @id @default(cuid())
+  demoId String   @map("demo_id")
+  date   DateTime @db.Date
+  kWh    Float    @map("kwh")
+  /// "pre" or "post" — which side of the replacement this day sits.
+  phase  String
+
+  demo CircuitDemo @relation(fields: [demoId], references: [id], onDelete: Cascade)
+
+  @@unique([demoId, date, phase])
+  @@map("circuit_demo_readings")
+}
+
 model BenchmarkRescaleEvent {
   id        String @id @default(cuid())
   circuitId String @map("circuit_id")

@@ -2252,6 +2252,20 @@ features:
         then: "a FEAT-015 review is raised carrying those readings and the baseline they were judged against — 'record the fix and restart' is refused as an answer, because nothing was fixed"
         tests: []
         scope_note: "Added 2026-08-15 alongside the AC-3 detection change. Without it FEAT-015's queue is unreachable in practice: five days each judged in-band can only ever average in-band, so AC-5's completion path alone cannot raise a review."
+      - id: FEAT-014-AC-7
+        type: edge
+        given: "a circuit has been demonstrated more than once"
+        when: "the benchmark is derived"
+        then: "a rejected demo is excluded and the surviving demo decides alone; two demos that both count give a benchmark equal to the simple average of their savings percentages, and each demo keeps its own metered light count, baseline, post-install average and daily readings"
+        tests: []
+        scope_note: "Added 2026-08-27. Existing practice, surfaced by the backfill: Aditya Urban Casa's basement was demonstrated twice (100 lights at 48.28%, 22 lights at 85.19%) and its signed agreement carries 66.72%, which is their mean. A demo can be rejected because it ran badly, or a second run at the society's own request can count alongside the first. Per-demo readings are why two demos measured on overlapping dates no longer collide."
+      - id: FEAT-014-AC-8
+        type: edge
+        given: "the agreed benchmark differs from what the demos measured"
+        when: "an operations lead overrides it"
+        then: "the figure, the reason, who set it and when are recorded, the computed value stays visible beside it, and the override never moves an out-of-band result into CON-20's 60-80% band"
+        tests: []
+        scope_note: "Added 2026-08-27. There is deliberately no automatic rounding (the user's call) — a stored benchmark is either what the demos measured or what someone deliberately chose, and rounding would make it a third thing that is neither; rounding 64.16% to 64% is itself an override, recorded like any other. CON-20's band is judged on the measured figure, so overriding an out-of-band circuit is a deliberate recorded act rather than a way to make FEAT-015's review disappear."
     stories:
       - id: STORY-014-1
         title: "As ops, I want the post-install monitoring window to compute the benchmark automatically once it completes, so that the number the whole contract prices against is system-produced, not hand-calculated."

@@ -27,6 +27,7 @@ import { StepSection } from "@/components/step-section";
 import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
+import { DemosPanel, type DemoDTO } from "./demos-panel";
 import { CircuitReadingPanel, type ReadingWindowDTO } from "./circuit-reading-panel";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { exclusionRefusal } from "@/lib/reading-exclusion";
@@ -114,6 +115,7 @@ export default async function CircuitDetailPage({
       gatePasses: { orderBy: { submittedAt: "desc" } },
       commissioningReadings: { orderBy: { date: "asc" } },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
+      demos: { orderBy: { sequence: "asc" }, include: { _count: { select: { readings: true } } } },
       voidedBy: { select: { name: true, email: true } },
       demoResultReviews: {
         orderBy: { raisedAt: "desc" },
@@ -512,6 +514,27 @@ export default async function CircuitDetailPage({
           canRecordHistorical={canEdit && !circuit.voidedAt && demoMode}
         />
       </section>
+
+      {/* FEAT-014 AC-7/AC-8 — which demos the benchmark rests on, and the
+          override for when the agreed figure differs from what they measured. */}
+      <DemosPanel
+        circuitId={circuit.id}
+        demos={circuit.demos.map<DemoDTO>((d) => ({
+          id: d.id,
+          sequence: d.sequence,
+          savingsPct: d.savingsPct,
+          rejected: d.rejected,
+          meteredLightCount: d.meteredLightCount,
+          preInstallBaseline: d.preInstallBaseline,
+          postInstallAverage: d.postInstallAverage,
+          rejectionReason: d.rejectionReason,
+          note: d.note,
+          readingCount: d._count.readings,
+        }))}
+        overridePct={circuit.benchmarkOverridePct}
+        overrideReason={circuit.benchmarkOverrideReason}
+        canEdit={canEdit && !circuit.voidedAt}
+      />
 
       {/* The commissioning sequence as an accordion — the user-specified
           arrangement (2026-08-15): only the step that needs action right now

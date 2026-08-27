@@ -93,6 +93,21 @@ hand:
    "projectedSavedKwhPerDay": 0 }]
 ```
 
+## Missing means ask, not infer (the user, 2026-08-27)
+
+> "you ask questions for whats not available or missing. i tell you to leave
+> or not"
+
+Where a document does not state something, the gap is raised — it is not
+filled from surrounding evidence and quietly recorded. Deciding whether a
+gap can be left is the user's call, not a judgment to make on their behalf.
+
+That is different from RESOLVING a contradiction, which the arithmetic can
+settle: 91 lights rather than 93 because 43.68 kWh/day can only be 91, or
+46% rather than 20% because that is what the billed amount divides to. Those
+are readings of what the documents say. An inference fills a silence, and a
+silence gets a question.
+
 ## Rules settled with the user (2026-08-26)
 
 - **The first invoice is not always the first SAVINGS invoice.** Aditya Urban

@@ -4,8 +4,14 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { BLOCKER_MESSAGE, buildDemoReport, type DemoReportCircuitInput } from "@/lib/demo-report";
+import {
+  BLOCKER_MESSAGE,
+  buildDemoReport,
+  resolveSocietyLightCount,
+  type DemoReportCircuitInput,
+} from "@/lib/demo-report";
 import { classifyDay } from "@/lib/circuit-load";
+import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
 
 async function requirePer01() {
   await requireAdminPermission("manage_survey");
@@ -36,6 +42,14 @@ export async function collectDemoReportInput(pipelineId: string) {
               // the report could never generate and the whole deal spine
               // stopped at step 4 (user-reported 2026-08-20).
               meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
+              // The third store, and the only one a society commissioned
+              // before this system existed has: the daily tables its demo
+              // report printed, kept per demo because two demos of one
+              // circuit can share dates.
+              demos: {
+                orderBy: { sequence: "asc" },
+                include: { readings: { orderBy: { date: "asc" } } },
+              },
             },
           },
         },
@@ -53,7 +67,26 @@ export async function collectDemoReportInput(pipelineId: string) {
     const useCsv = csv.length > 0 && c.meterInstalledAt !== null;
     const day = (d: Date) => d.toISOString().slice(0, 10);
 
-    const preInstallReadings = useCsv
+    // Neither commissioning store has anything for a backfilled circuit, so
+    // before this the report named "no post-install readings to average" and
+    // there was no site visit left to make that would produce any.
+    const fromDemos =
+      !useCsv && c.commissioningReadings.length === 0
+        ? circuitDailyFromDemos(
+            c.demos.map((d) => ({
+              rejected: d.rejected,
+              readings: d.readings.map((r) => ({
+                date: day(r.date),
+                kWh: r.kWh,
+                phase: r.phase as "pre" | "post",
+              })),
+            })),
+          )
+        : null;
+
+    const preInstallReadings = fromDemos
+      ? fromDemos.pre.map((r) => ({ date: r.date, consumptionKwh: r.kWh }))
+      : useCsv
       ? csv
           .filter(
             (r) =>
@@ -65,7 +98,9 @@ export async function collectDemoReportInput(pipelineId: string) {
           .filter((r) => r.windowType === "pre_install" && r.status === "valid" && r.consumptionKwh != null)
           .map((r) => ({ date: day(r.date), consumptionKwh: r.consumptionKwh! }));
 
-    const postInstallReadings = useCsv
+    const postInstallReadings = fromDemos
+      ? fromDemos.post.map((r) => ({ date: r.date, consumptionKwh: r.kWh }))
+      : useCsv
       ? csv
           .filter(
             (r) =>
@@ -92,8 +127,16 @@ export async function collectDemoReportInput(pipelineId: string) {
     };
   });
 
-  const societyLightCount = (pipeline.siteSurvey?.areas ?? []).reduce((s, a) => s + a.count, 0);
-  return { pipeline, circuits, societyLightCount };
+  const resolved = resolveSocietyLightCount({
+    inventoryTotal: (pipeline.siteSurvey?.areas ?? []).reduce((s, a) => s + a.count, 0),
+    circuits,
+  });
+  return {
+    pipeline,
+    circuits,
+    societyLightCount: resolved.count,
+    lightCountSource: resolved.source,
+  };
 }
 
 // FEAT-020-AC-1. The spec says generation is automatic on

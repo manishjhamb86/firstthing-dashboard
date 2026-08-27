@@ -75,6 +75,33 @@ export const BLOCKER_MESSAGE: Record<DemoReportBlocker, string> = {
   "no-post-install-readings": "A benchmarked circuit has no post-install readings to average.",
 };
 
+/**
+ * The society-wide light count CON-11's extrapolation scales by, and where
+ * it came from.
+ *
+ * FEAT-006's walked inventory is the normal source. A society commissioned
+ * before this system existed never had one walked — its circuits were built
+ * from a demo report — so the figure comes instead from what each circuit
+ * already records as the population it represents, which is the same
+ * quantity read off the first invoice rather than off a clipboard.
+ *
+ * Falling back rather than blocking matters because the alternative is a
+ * report that can never generate: there is no site visit left to make, and
+ * asking for one is the dead end this screen has hit before. The source is
+ * returned so the report can say which figure it used instead of presenting
+ * two different provenances as one number.
+ */
+export function resolveSocietyLightCount(input: {
+  inventoryTotal: number;
+  circuits: { representedLightCount: number }[];
+}): { count: number; source: "inventory" | "represented" } {
+  if (input.inventoryTotal > 0) return { count: input.inventoryTotal, source: "inventory" };
+  return {
+    count: input.circuits.reduce((s, c) => s + c.representedLightCount, 0),
+    source: "represented",
+  };
+}
+
 export function averageOf(readings: DemoReportReading[]): number {
   if (readings.length === 0) return 0;
   return readings.reduce((sum, r) => sum + r.consumptionKwh, 0) / readings.length;

@@ -100,6 +100,20 @@ export default async function SiteSurveyPage({
   // is genuinely gated on step 1 — a candidate is judged against the
   // society-wide inventory, so there is nothing to judge it against yet.
   const inventoryDone = siteSurvey.areas.length > 0;
+
+  // A society commissioned before this system existed never had its site
+  // walked: its circuits were built from a demo report, so there is no
+  // lighting inventory and no visit left to make that would produce one.
+  // Showing step 1 as work in progress, over a Candidates tile reading
+  // "count the lighting first" while two candidates already exist, states a
+  // next step the reader cannot reach — the dead end this project has now
+  // fixed three times.
+  const backfilledSurvey =
+    !inventoryDone &&
+    circuits.length > 0 &&
+    circuits.every(
+      (c) => (c.eligibilityChecklist as { backfilled?: boolean } | null)?.backfilled === true,
+    );
   const candidateDone = circuits.length > 0;
 
   // CON-11's extrapolation base. Areas are how lights get COUNTED ("Tower B
@@ -242,14 +256,30 @@ export default async function SiteSurveyPage({
           from the rows below it, never stored separately. */}
       <StatRow>
         {[
-          { label: "Areas counted", value: siteSurvey.areas.length, detail: siteSurvey.areas.length === 0 ? "none yet" : "recorded" },
-          { label: "Lights", value: totalLights.toLocaleString("en-IN"), detail: "whole society" },
-          { label: "Light types", value: byLightType.length, detail: "each needs a circuit" },
+          {
+            label: "Areas counted",
+            value: siteSurvey.areas.length,
+            detail: backfilledSurvey ? "never walked" : siteSurvey.areas.length === 0 ? "none yet" : "recorded",
+          },
+          {
+            label: "Lights",
+            value: backfilledSurvey
+              ? circuits.reduce((n, c) => n + c.representedLightCount, 0).toLocaleString("en-IN")
+              : totalLights.toLocaleString("en-IN"),
+            detail: backfilledSurvey ? "represented by the circuits" : "whole society",
+          },
+          {
+            label: "Light types",
+            value: backfilledSurvey ? new Set(circuits.map((c) => typeKey(c.lightType))).size : byLightType.length,
+            detail: backfilledSurvey ? "each has its circuit" : "each needs a circuit",
+          },
           {
             label: "Candidates",
             value: circuits.length,
             detail:
-              byLightType.length === 0
+              backfilledSurvey
+                ? "built from the demo report"
+                : byLightType.length === 0
                 ? "count the lighting first"
                 : typesWithoutCandidate > 0
                   ? `${typesWithoutCandidate} type${typesWithoutCandidate === 1 ? "" : "s"} unresolved`
@@ -267,7 +297,7 @@ export default async function SiteSurveyPage({
         <StepHeading
           index={1}
           title="Lighting inventory by area"
-          status={inventoryDone ? "done" : "current"}
+          status={inventoryDone ? "done" : backfilledSurvey ? "done" : "current"}
           aside={
             siteSurvey.areas.length > 0 ? (
               <p className="text-xs text-[var(--text-muted)]">
@@ -279,10 +309,19 @@ export default async function SiteSurveyPage({
         />
         {siteSurvey.areas.length === 0 ? (
           <div className="mb-4">
-            <EmptyState title="No areas recorded yet">
-              Add each area present at the site below — the society-wide inventory is what the demo circuit
-              represents.
-            </EmptyState>
+            {backfilledSurvey ? (
+              <EmptyState title="No inventory was walked for this society">
+                It was commissioned before this system existed, so its circuits were built from its demo
+                report rather than from a site visit. The society-wide count each circuit stands in for is
+                recorded on the circuit itself, and that is what the extrapolation uses. Adding areas below
+                is optional — it would record what is at the site, and change no figure already agreed.
+              </EmptyState>
+            ) : (
+              <EmptyState title="No areas recorded yet">
+                Add each area present at the site below — the society-wide inventory is what the demo circuit
+                represents.
+              </EmptyState>
+            )}
           </div>
         ) : (
           <Card className="mb-4 overflow-x-auto">
@@ -292,7 +331,7 @@ export default async function SiteSurveyPage({
                   <th>Area</th>
                   <th>Light type</th>
                   <th>Count</th>
-                  <th>Method</th>
+                  <th>Method &amp; source</th>
                   {canEdit && <th />}
                 </tr>
               </thead>

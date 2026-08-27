@@ -52,15 +52,22 @@ IMPORT_ACTOR = f"""-- The import's own actor.
 INSERT INTO admin_users (id, email, password_hash, name, permissions, is_active, created_at)
 VALUES ('sys-data-import', 'import@firsthing.invalid', '{LOCKED}',
         'Data import', ARRAY[]::admin_permission[], false, now())
-ON CONFLICT (id) DO NOTHING;
+ON CONFLICT DO NOTHING;
 """
 
 
 def dump(tables: list[str], where: dict[str, str] | None = None) -> str:
-    """Rows as they stand on stage, as INSERTs that cannot overwrite anything."""
+    """Rows as they stand on stage, as INSERTs that cannot overwrite anything.
+
+    Bare ON CONFLICT DO NOTHING, with no target: naming (id) only catches an
+    id collision, and the dev database already held "Tube light 20W" under a
+    different id, so the migration died on device_types_name_key. Any database
+    that is not empty can have a row that is "already there" by some other
+    unique key, and the insert has to stand down for all of them.
+    """
     cols_sql = " UNION ALL ".join(
         f"""select {i} as ord, format(
-              'INSERT INTO %I (%s) VALUES (%s) ON CONFLICT (id) DO NOTHING;',
+              'INSERT INTO %I (%s) VALUES (%s) ON CONFLICT DO NOTHING;',
               '{t}',
               (select string_agg(quote_ident(column_name), ', ' order by ordinal_position)
                  from information_schema.columns
@@ -109,6 +116,30 @@ def rewrite_actors(sql: str, ids: list[str]) -> str:
     return sql
 
 
+def replacement_options() -> str:
+    """Each option as a lookup by the two type names it joins."""
+    out = subprocess.run(
+        ["ssh", "zenovaa", "bash", "-s"],
+        input="""set -euo pipefail
+cd /zenovaa/code/firsthing-dashboard
+URL=$(grep '^DATABASE_URL' .env | cut -d= -f2- | tr -d '"' | sed 's/?schema=public//')
+psql "$URL" -tAF'|' -c "select o.id, ot.name, rt.name from device_replacement_options o
+  join device_types ot on ot.id = o.original_type_id
+  join device_types rt on rt.id = o.replacement_type_id order by o.id" """,
+        capture_output=True, text=True, check=True,
+    )
+    lines = []
+    for row in out.stdout.strip().splitlines():
+        oid, orig, repl = row.split("|")
+        lines.append(
+            "INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id)\n"
+            f"SELECT '{oid}', ot.id, rt.id FROM device_types ot, device_types rt\n"
+            f" WHERE ot.name = '{orig}' AND rt.name = '{repl}'\n"
+            "ON CONFLICT DO NOTHING;"
+        )
+    return "\n\n".join(lines)
+
+
 def write(name: str, body: str) -> None:
     d = MIGRATIONS / name
     d.mkdir(parents=True, exist_ok=True)
@@ -131,11 +162,20 @@ def main() -> None:
 
     write("20260827120000_data_device_catalog", f"""-- The device catalog every circuit's load inventory points at.
 --
--- A circuit_devices row references a device_type by id, so these must exist
--- before any society's data lands. Nothing here is personal or secret: it is
--- a list of light fittings and their wattages.
+-- A circuit_devices row references a device_type, so these must exist before
+-- any society's data lands. Nothing here is personal or secret: it is a list
+-- of light fittings and their wattages.
+--
+-- The replacement options are inserted by NAME rather than by id, and that
+-- is not a stylistic choice. device_types.name is unique, so on a database
+-- that already knows "Tube light 20W" under some other id the type insert
+-- correctly stands down — and an option row carrying the id this file
+-- expected would then point at a type that was never inserted. Resolving the
+-- pair by name means the option lands against whichever row is really there.
 
-{rewrite_actors(dump(["device_types", "device_replacement_options"]), ids)}
+{rewrite_actors(dump(["device_types"]), ids)}
+
+{replacement_options()}
 """)
 
     write("20260827120100_data_societies", f"""-- The 19 societies this business serves.

@@ -8,6 +8,7 @@ import { Card, CardTitle, Stat, StatRow } from "@/components/ui";
 export function DemoReportView({
   report,
   showReadings = true,
+  lightCountSource,
 }: {
   report: {
     measuredSavingsPct: number;
@@ -20,6 +21,14 @@ export function DemoReportView({
     circuitSnapshot: unknown;
   };
   showReadings?: boolean;
+  /**
+   * Where the whole-society light count came from. A society commissioned
+   * before this system existed has no walked inventory, so the figure is the
+   * population each circuit already records itself as representing. Saying so
+   * matters: the two are the same quantity but not the same evidence, and a
+   * report that presents them identically is one a society cannot audit.
+   */
+  lightCountSource?: "inventory" | "represented";
 }) {
   const circuits = (report.circuitSnapshot as DemoReportCircuit[]) ?? [];
 
@@ -44,7 +53,11 @@ export function DemoReportView({
         <Stat
           label="Projected society-wide"
           value={`${report.projectedSavingsKwhPerDay.toFixed(2)} kWh/day`}
-          detail={`${report.meteredLightCount} metered of ${report.societyLightCount} lights`}
+          detail={
+            lightCountSource === "represented"
+              ? `${report.meteredLightCount} metered of ${report.societyLightCount} represented — from each circuit's recorded population, not a walked inventory`
+              : `${report.meteredLightCount} metered of ${report.societyLightCount} lights`
+          }
         />
       </StatRow>
 

@@ -148,7 +148,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
             )}
           </Card>
 
-          <DemoReportView report={latest} />
+          <DemoReportView report={latest} lightCountSource={collected?.lightCountSource} />
 
           {/* FEAT-020-AC-5 — a regenerated report never overwrites the one
               a society was already shown; earlier versions stay retrievable. */}

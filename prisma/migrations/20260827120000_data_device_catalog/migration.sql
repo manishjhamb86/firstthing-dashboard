@@ -1,24 +1,55 @@
 -- The device catalog every circuit's load inventory points at.
 --
--- A circuit_devices row references a device_type by id, so these must exist
--- before any society's data lands. Nothing here is personal or secret: it is
--- a list of light fittings and their wattages.
+-- A circuit_devices row references a device_type, so these must exist before
+-- any society's data lands. Nothing here is personal or secret: it is a list
+-- of light fittings and their wattages.
+--
+-- The replacement options are inserted by NAME rather than by id, and that
+-- is not a stylistic choice. device_types.name is unique, so on a database
+-- that already knows "Tube light 20W" under some other id the type insert
+-- correctly stands down — and an option row carrying the id this file
+-- expected would then point at a type that was never inserted. Resolving the
+-- pair by name means the option lands against whichever row is really there.
 
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-tube20', 'Tube light 20W', 'original', '20', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-tube18', 'Tube light 18W', 'original', '18', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-surface12', 'Surface light 12W', 'original', '12', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-bulb9', 'Bulb 9W', 'original', '9', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-fan', 'Ceiling fan', 'original', '60', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-batten20', 'Motion-enabled batten 20W', 'replacement', '20', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-batten18', 'Motion-enabled batten 18W', 'replacement', '18', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-dimsurf12', 'Motion-enabled dimmable surface 12W', 'replacement', '12', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-mbulb9', 'Motion-enabled bulb 9W', 'replacement', '9', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('cmta4pezh000398qslsp4lqcz', 'Tube lights', 'original', '20', 'false', '2026-08-26T13:27:43.902', '2026-08-26T13:46:31.992', 'sys-data-import', '2026-08-26T13:46:24.889', 'sys-data-import', 'false', 'sys-data-import', 'Read from ACE CITY - Energy Consumption Analysis and Recommendation Report After Demo.pdf', 'Merged into "Tube light 20W" — the same fixture under another name.', 'rejected') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('dt-street50', 'Street light 50W', 'original', '50', 'true', '2026-08-27T04:11:43.182', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('dt-surface9', 'Surface light 9W', 'original', '9', 'true', '2026-08-27T04:11:43.213', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id) VALUES ('seed-dro-1', 'seed-dt-tube20', 'seed-dt-batten20') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id) VALUES ('seed-dro-2', 'seed-dt-tube20', 'seed-dt-batten18') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id) VALUES ('seed-dro-3', 'seed-dt-tube18', 'seed-dt-batten18') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id) VALUES ('seed-dro-4', 'seed-dt-tube18', 'seed-dt-batten20') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id) VALUES ('seed-dro-5', 'seed-dt-surface12', 'seed-dt-dimsurf12') ON CONFLICT (id) DO NOTHING;
-INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id) VALUES ('seed-dro-6', 'seed-dt-bulb9', 'seed-dt-mbulb9') ON CONFLICT (id) DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-tube20', 'Tube light 20W', 'original', '20', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-tube18', 'Tube light 18W', 'original', '18', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-surface12', 'Surface light 12W', 'original', '12', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-bulb9', 'Bulb 9W', 'original', '9', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-fan', 'Ceiling fan', 'original', '60', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-batten20', 'Motion-enabled batten 20W', 'replacement', '20', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-batten18', 'Motion-enabled batten 18W', 'replacement', '18', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-dimsurf12', 'Motion-enabled dimmable surface 12W', 'replacement', '12', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('seed-dt-mbulb9', 'Motion-enabled bulb 9W', 'replacement', '9', 'true', '2026-08-17T13:14:54.881', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('cmta4pezh000398qslsp4lqcz', 'Tube lights', 'original', '20', 'false', '2026-08-26T13:27:43.902', '2026-08-26T13:46:31.992', 'sys-data-import', '2026-08-26T13:46:24.889', 'sys-data-import', 'false', 'sys-data-import', 'Read from ACE CITY - Energy Consumption Analysis and Recommendation Report After Demo.pdf', 'Merged into "Tube light 20W" — the same fixture under another name.', 'rejected') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('dt-street50', 'Street light 50W', 'original', '50', 'true', '2026-08-27T04:11:43.182', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+INSERT INTO device_types (id, name, role, default_wattage, active, created_at, deleted_at, deleted_by_id, approved_at, approved_by_id, in_catalog, proposed_by_id, proposed_note, rejection_reason, status) VALUES ('dt-surface9', 'Surface light 9W', 'original', '9', 'true', '2026-08-27T04:11:43.213', NULL, NULL, NULL, NULL, 'true', NULL, NULL, NULL, 'approved') ON CONFLICT DO NOTHING;
+
+INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id)
+SELECT 'seed-dro-1', ot.id, rt.id FROM device_types ot, device_types rt
+ WHERE ot.name = 'Tube light 20W' AND rt.name = 'Motion-enabled batten 20W'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id)
+SELECT 'seed-dro-2', ot.id, rt.id FROM device_types ot, device_types rt
+ WHERE ot.name = 'Tube light 20W' AND rt.name = 'Motion-enabled batten 18W'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id)
+SELECT 'seed-dro-3', ot.id, rt.id FROM device_types ot, device_types rt
+ WHERE ot.name = 'Tube light 18W' AND rt.name = 'Motion-enabled batten 18W'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id)
+SELECT 'seed-dro-4', ot.id, rt.id FROM device_types ot, device_types rt
+ WHERE ot.name = 'Tube light 18W' AND rt.name = 'Motion-enabled batten 20W'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id)
+SELECT 'seed-dro-5', ot.id, rt.id FROM device_types ot, device_types rt
+ WHERE ot.name = 'Surface light 12W' AND rt.name = 'Motion-enabled dimmable surface 12W'
+ON CONFLICT DO NOTHING;
+
+INSERT INTO device_replacement_options (id, original_type_id, replacement_type_id)
+SELECT 'seed-dro-6', ot.id, rt.id FROM device_types ot, device_types rt
+ WHERE ot.name = 'Bulb 9W' AND rt.name = 'Motion-enabled bulb 9W'
+ON CONFLICT DO NOTHING;

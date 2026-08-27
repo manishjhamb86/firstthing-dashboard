@@ -261,6 +261,22 @@ SELECT '{cid}', s.id, 'bf-{sl}-survey', 'lighting', {q(c['light_type'])},
                           'note', 'Commissioned before this system existed — CON-16 eligibility was never assessed.'),
        a.id, now()
 FROM societies s, admin_users a WHERE s.name = {q(name)} AND {actor_where()};""")
+            # FEAT-006's inventory line for this circuit's light type.
+            #
+            # The whole-society count is not missing for these societies — it
+            # is the population the circuit already records itself as
+            # representing, taken from the society's own first invoice. Not
+            # writing it left the survey showing an empty inventory over two
+            # real candidates, and the demo report refusing to generate for
+            # want of a figure that was sitting on the circuit.
+            #
+            # `estimated`, because nobody walked the site; the note carries
+            # where the number actually came from, and the screen shows it.
+            print(f"""INSERT INTO lighting_inventory_areas (id, site_survey_id, area, light_type, count, method, note, created_at)
+VALUES ('{cid}-inv', 'bf-{sl}-survey', {q(c['circuit_location'])}, {q(c['light_type'])},
+        {c['represented_light_count']}, 'estimated',
+        'Read from the society''s own documents — its first invoice and post-installation savings report. The site was never walked; this society was commissioned before this system existed.',
+        now());""")
             for j, d in enumerate(lines, 1):
                 excl = d["excluded"].lower() == "yes"
                 print(f"""INSERT INTO circuit_devices (id, circuit_id, device_type_id, count, wattage, hours_per_day,

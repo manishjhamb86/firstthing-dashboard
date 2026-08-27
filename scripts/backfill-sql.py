@@ -179,11 +179,12 @@ SELECT 'bf-{sl}-demo-report', 'bf-{sl}-pipe', 1, 'shared',
        c.represented_light_count::double precision / c.metered_light_count,
        (c.pre_install_baseline * c.benchmark_savings_pct / 100)
          * (c.represented_light_count::double precision / c.metered_light_count),
-       '{terms_json}'::jsonb, now(), {q(s['agreement_signed_on'])}::date, p.id
-FROM circuits c
-LEFT JOIN profiles p ON p.society_id = c.society_id
-     AND p.portal_authority = 'office_bearer' AND p.is_active
-WHERE c.id = 'bf-{sl}-ckt-1';
+       '{terms_json}'::jsonb, now(), {q(s['agreement_signed_on'])}::date, a.id
+FROM circuits c, admin_users a
+-- shared_by_id is an ADMIN, not a profile: FirsThing shares the report WITH
+-- the society, so the sharer is internal. The mirror of offers, where
+-- responded_by_id IS a profile because accepting is the society's act.
+WHERE c.id = 'bf-{sl}-ckt-1' AND a.email = {q(ACTOR)};
 
 INSERT INTO offers (id, pipeline_id, version, status, benchmark_source, circuit_terms,
                     tolerance_pct, revenue_share_pct, unit_electricity_rate, term_months,

@@ -24,6 +24,21 @@ from datetime import date
 ROOT = "docs/backfill"
 ACTOR = "yogesh@firsthing.earth"
 
+# --migration: emit the same data as a Prisma data migration instead of a
+# re-runnable script. Two differences, both forced by what a migration is.
+#
+# It runs exactly once per database and can never be allowed to destroy
+# anything, so the DELETE preamble goes and every INSERT becomes ON CONFLICT
+# DO NOTHING — on a database that already holds these rows (stage today) it
+# writes nothing at all, and on an empty one it writes everything.
+#
+# And it attributes the rows to an import actor rather than to a person,
+# because a fresh production database has no people in it yet: pipelines
+# .logged_by_id and agreements.prepared_by_id are NOT NULL, so something has
+# to own these rows, and the truthful owner is the import itself.
+MIGRATION = "--migration" in sys.argv
+IMPORT_ACTOR_ID = "sys-data-import"
+
 
 def society_slug(name: str) -> str:
     """slugifySociety() from src/lib/document-keys.ts, so the key matches."""
@@ -104,6 +119,42 @@ def circuit_term(soc_slug: str, i: int, c: dict) -> dict:
     }
 
 
+def preamble(sl: str) -> str:
+    """What runs before a society's rows, which differs by what this output is.
+
+    A script is re-run whenever a CSV changes, so it clears what its own
+    previous run wrote — every id it touches is prefixed 'bf-', so it cannot
+    reach a row someone made in the app. A migration runs once per database
+    and must never destroy anything, so it deletes nothing and relies on
+    ON CONFLICT DO NOTHING instead.
+    """
+    if MIGRATION:
+        return ("-- Runs once per database, deletes nothing, and is a no-op\n"
+                "-- wherever the rows are already present.\n"
+                "-- (the DELETEs below are suppressed in migration mode)\n/*")
+    return ("-- Re-runnable: clear anything a previous run of THIS generator left\n"
+            "-- for the society, and nothing else. Every id it writes is prefixed\n"
+            "-- 'bf-', so this cannot reach a row someone made in the app.")
+
+
+def override_guard() -> str:
+    """A migration may establish an override; it must never rewrite one.
+
+    This UPDATE is not an INSERT, so ON CONFLICT DO NOTHING cannot protect
+    it, and re-running it on a database that already holds the import
+    reattributed a real person's billing decision to the import and restamped
+    its date — silently rewriting who decided what a society is billed on,
+    which is the thing INV-02 and INV-03 exist to prevent. In a script the
+    UPDATE is unconditional, because the row was just deleted and rewritten.
+    """
+    return " AND benchmark_override_pct IS NULL" if MIGRATION else ""
+
+
+def actor_where() -> str:
+    """Which admin_users row owns the imported rows."""
+    return f"a.id = {q(IMPORT_ACTOR_ID)}" if MIGRATION else f"{actor_where()}"
+
+
 def main() -> None:
     only = None
     if "--only" in sys.argv:
@@ -130,9 +181,7 @@ def main() -> None:
         print(f"-- ═══ {name} " + "═" * max(0, 60 - len(name)))
         print("BEGIN;")
         print(f"""
--- Re-runnable: clear anything a previous run of THIS generator left for the
--- society, and nothing else. Every id it writes is prefixed 'bf-', so this
--- cannot reach a row someone made in the app.
+{preamble(sl)}
 DELETE FROM contract_term_versions WHERE contract_id = 'bf-{sl}-contract';
 DELETE FROM contracts   WHERE id = 'bf-{sl}-contract';
 DELETE FROM agreements  WHERE id = 'bf-{sl}-agreement';
@@ -145,7 +194,7 @@ DELETE FROM circuit_devices WHERE circuit_id LIKE 'bf-{sl}-ckt-%';
 DELETE FROM circuits    WHERE id LIKE 'bf-{sl}-ckt-%';
 DELETE FROM site_surveys WHERE id = 'bf-{sl}-survey';
 DELETE FROM pipelines   WHERE id = 'bf-{sl}-pipe';
-DELETE FROM engagements WHERE id = 'bf-{sl}-eng';""")
+DELETE FROM engagements WHERE id = 'bf-{sl}-eng';{'*/' if MIGRATION else ''}""")
         print(f"""
 -- The society must already exist, and exactly once. These were imported with
 -- their flat counts and portal accounts, so a missing one is a mistake to
@@ -185,7 +234,7 @@ SELECT 'bf-{sl}-pipe', s.id, 'lighting', {"'active_billing'" if has_contract els
        a.id, a.id, true,
        {q('Backfilled from the signed agreement, the post-installation savings report and the first invoice. This deal predates the system: the date above is the agreement signature, not a meeting.')},
        now(), now()
-FROM societies s, admin_users a WHERE s.name = {q(name)} AND a.email = {q(ACTOR)};
+FROM societies s, admin_users a WHERE s.name = {q(name)} AND {actor_where()};
 
 INSERT INTO site_surveys (id, pipeline_id, created_at) VALUES ('bf-{sl}-survey', 'bf-{sl}-pipe', now());""")
 
@@ -211,7 +260,7 @@ SELECT '{cid}', s.id, 'bf-{sl}-survey', 'lighting', {q(c['light_type'])},
        jsonb_build_object('backfilled', true, 'source', 'signed agreement + post-installation savings report',
                           'note', 'Commissioned before this system existed — CON-16 eligibility was never assessed.'),
        a.id, now()
-FROM societies s, admin_users a WHERE s.name = {q(name)} AND a.email = {q(ACTOR)};""")
+FROM societies s, admin_users a WHERE s.name = {q(name)} AND {actor_where()};""")
             for j, d in enumerate(lines, 1):
                 excl = d["excluded"].lower() == "yes"
                 print(f"""INSERT INTO circuit_devices (id, circuit_id, device_type_id, count, wattage, hours_per_day,
@@ -220,7 +269,7 @@ SELECT '{cid}-dev-{j}', '{cid}', dt.id, {d['count']}, {d['wattage_each']}, {d['h
        {str(excl).lower()}, true, 'Read from the post-installation savings report', a.id, now()
 FROM device_types dt, admin_users a
 WHERE dt.name = {q(d['device_name'])} AND dt.role = 'original' AND dt.deleted_at IS NULL
-  AND a.email = {q(ACTOR)};""")
+  AND {actor_where()};""")
             # FEAT-014 AC-7 — the demos this circuit's benchmark rests on.
             mine_demos = [d for d in demos
                           if d["society_name"] == name and d["circuit_location"] == c["circuit_location"]]
@@ -270,9 +319,9 @@ VALUES ('{cid}-demo-{d["demo"]}-{r["phase"]}-{r["date"]}', '{cid}-demo-{d["demo"
                 print(f"""UPDATE circuits
    SET benchmark_override_pct = {agreed},
        benchmark_override_reason = {q(why)},
-       benchmark_override_by_id = (SELECT id FROM admin_users WHERE email = {q(ACTOR)}),
+       benchmark_override_by_id = (SELECT a.id FROM admin_users a WHERE {actor_where()}),
        benchmark_override_at = now()
- WHERE id = '{cid}';""")
+ WHERE id = '{cid}'{override_guard()};""")
 
             snapshot.append(snapshot_circuit(sl, i, c, metered))
             if c["billing"].lower() == "yes":
@@ -301,7 +350,7 @@ FROM circuits c, admin_users a
 -- shared_by_id is an ADMIN, not a profile: FirsThing shares the report WITH
 -- the society, so the sharer is internal. The mirror of offers, where
 -- responded_by_id IS a profile because accepting is the society's act.
-WHERE c.id = 'bf-{sl}-ckt-1' AND a.email = {q(ACTOR)};
+WHERE c.id = 'bf-{sl}-ckt-1' AND {actor_where()};
 
 INSERT INTO offers (id, pipeline_id, version, status, benchmark_source, circuit_terms,
                     tolerance_pct, revenue_share_pct, unit_electricity_rate, term_months,
@@ -313,7 +362,7 @@ SELECT 'bf-{sl}-offer', 'bf-{sl}-pipe', 1, 'accepted', 'negotiated_fixed', '{ter
 FROM admin_users a
 LEFT JOIN societies soc ON soc.name = {q(name)}
 LEFT JOIN profiles p ON p.society_id = soc.id AND p.portal_authority = 'office_bearer' AND p.is_active
-WHERE a.email = {q(ACTOR)};
+WHERE {actor_where()};
 
 INSERT INTO agreements (id, pipeline_id, offer_id, prepared_at, prepared_by_id,
                         printed_at, notarized_at, signed_at,
@@ -329,7 +378,7 @@ SELECT 'bf-{sl}-agreement', 'bf-{sl}-pipe', 'bf-{sl}-offer', {q(s['agreement_sig
        {q(society_slug(name) + '_Agreement_' + s['agreement_signed_on'] + '.pdf')},
        -- The scan reaches us the day after signing.
        ({q(s['agreement_signed_on'])}::date + 1), a.id
-FROM admin_users a WHERE a.email = {q(ACTOR)};""")
+FROM admin_users a WHERE {actor_where()};""")
         void(first)
 
         if has_contract:
@@ -339,7 +388,7 @@ INSERT INTO contracts (id, pipeline_id, society_id, service_line, agreement_id, 
 SELECT 'bf-{sl}-contract', 'bf-{sl}-pipe', s.id, 'lighting', 'bf-{sl}-agreement', 'active',
        {q(s['term_start'])}::date, ({q(s['term_start'])}::date + '{s['term_months']} months'::interval),
        {q(s['term_start'])}::date, a.id, now()
-FROM societies s, admin_users a WHERE s.name = {q(name)} AND a.email = {q(ACTOR)};
+FROM societies s, admin_users a WHERE s.name = {q(name)} AND {actor_where()};
 
 INSERT INTO contract_term_versions (id, contract_id, version, effective_from, benchmark_source,
                                     tolerance_pct, revenue_share_pct, unit_electricity_rate,
@@ -347,7 +396,7 @@ INSERT INTO contract_term_versions (id, contract_id, version, effective_from, be
 SELECT 'bf-{sl}-terms', 'bf-{sl}-contract', 1, {q(s['term_start'])}::date, 'negotiated_fixed',
        {s['tolerance_pct']}, {s['society_share_pct']}, {s['unit_rate_inr']},
        '{terms_json}'::jsonb, a.id, now()
-FROM admin_users a WHERE a.email = {q(ACTOR)};""")
+FROM admin_users a WHERE {actor_where()};""")
         else:
             print(f"\n-- No contract: term_start is unknown, so there is nothing to run the term from.")
             print(f"-- The agreement and its offer stand; the deal waits at 'agreed'.")
@@ -358,5 +407,41 @@ def void(_):
     return None
 
 
+def as_migration(sql: str) -> str:
+    r"""Turn the script output into something Prisma can apply.
+
+    Three differences, none cosmetic:
+
+    - `\set` is a psql meta-command. Prisma applies migrations through its own
+      engine, which never sees psql, so the line is a syntax error there.
+    - Prisma already runs each migration inside a transaction. An explicit
+      COMMIT would end Prisma's transaction half way through the file, which
+      is far worse than the stray BEGIN it pairs with.
+    - Every INSERT becomes a no-op where the row is already there, so applying
+      this to a database that already holds the import changes nothing.
+
+    The INSERTs are matched to the first `;` that ENDS a line, not to the
+    first `;` anywhere: a circuit snapshot is JSON and carries semicolons of
+    its own, and splitting on those cut statements in half.
+    """
+    kept = [
+        ln for ln in sql.splitlines()
+        if ln.strip() not in ("BEGIN;", "COMMIT;") and not ln.strip().startswith("\\set")
+    ]
+    body = "\n".join(kept)
+    return re.sub(
+        r"(?ms)^(INSERT\b.*?);[ \t]*$",
+        lambda m: m.group(1) + " ON CONFLICT DO NOTHING;",
+        body,
+    )
+
+
 if __name__ == "__main__":
-    main()
+    if MIGRATION:
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            main()
+        print(as_migration(buf.getvalue()))
+    else:
+        main()

@@ -3394,6 +3394,62 @@ report also settles where this system's derived 66.7349% comes from: it computes
 sources, and where they differ the one everything downstream was computed from is the figure of
 record — but erasing the other loses the only evidence that a dispute would turn on.
 
+## The data ships with the migrations (2026-08-27) — user-specified, for go-live
+
+**The ask**: "make it part of migration script so it happens automatically even when we deploy on
+proction while goin live." So the business records are Prisma **data migrations** now
+(`prisma/migrations/2026082711*`, `2026082712*`, written by `scripts/make-data-migrations.py`):
+the import actor, the device catalog, the 19 societies, and the deals backfilled from each
+society's agreement and demo report. `prisma migrate deploy` carries them to any database,
+production included, with nobody having to remember a script.
+
+**What is deliberately NOT in a migration, because a migration is a tracked file in git:**
+- **Passwords.** `admin_users.password_hash` and `profiles.password_hash` are NOT NULL, and stage's
+  36 portal accounts share **two hashes between them** — they are all `password123`. Committing
+  those would ship a known password for every account in production.
+- **The Tuya API id and secret.**
+- **The 36 portal accounts themselves** — real people's names and email addresses, with SPIKE-02
+  (the India DPDP review) still open. Production creates them the way the product already
+  specifies: PER-01 creates the first office-bearer, who creates the rest (FEAT-108 rule 6).
+
+Those come from `scripts/rebuild-sql.sh`, whose output (`restore/`) is **gitignored**.
+
+**The imported rows belong to an import actor, not to a person.** `pipelines.logged_by_id` and
+`agreements.prepared_by_id` are NOT NULL and a fresh production database has no people in it, so
+something has to own them and the truthful owner is the import. `sys-data-import` is inactive, holds
+no permissions, and its password hash is of random bytes nobody kept — verified that `bcrypt.compare`
+returns false for every plausible guess, so the row check and bcrypt refuse it independently.
+
+**Four real defects, each found by rehearsing rather than by reading:**
+1. **A dumped row carries the id of whoever did the thing on stage.** The device catalog referenced
+   a real admin three times; that row does not exist in a fresh database, so the foreign key
+   refuses. Every actor column is rewritten to the import.
+2. **`admin_users` points at itself** — stage's `admin@` was created by `yogesh@` — and pg_dump
+   emits the child first, so the plain dump fails on its own foreign key. The load defers exactly
+   the self-referencing constraints and puts them back as declared.
+3. **pg_dump sets `search_path` to empty** and qualifies every table, so the trailing `ALTER`s
+   could not see `admin_users` until they were qualified too.
+4. **The benchmark-override `UPDATE` is not an INSERT**, so `ON CONFLICT DO NOTHING` could not
+   protect it: re-running the migration on a database that already held the import **reattributed a
+   real person's billing decision to the import and restamped its date** — silently rewriting who
+   decided what a society is billed on, which is what INV-02 and INV-03 exist to prevent. It is
+   guarded with `AND benchmark_override_pct IS NULL`: a migration may establish an override, never
+   rewrite one.
+
+**Verified in both directions, against real databases.** On an empty one, all 46 migrations apply
+and every business table matches stage row for row (19 societies, 5 circuits, 6 demos, 91 demo
+readings, 4 contracts, 12 device types, 3 filed documents); `offers.responded_by_id` degrades to
+NULL through its LEFT JOIN because no portal accounts exist yet, and the offer is still `accepted`.
+On a database that already holds the data, applying them changes **nothing** but the one inert
+import-actor row. And a full environment rebuild — `migrate deploy` plus the two gitignored files —
+reproduces stage exactly, every table, including the 36 profiles and the Tuya credentials.
+
+**Stage itself was dropped and rebuilt to prove it** (2026-08-27). Backup first, checked for a real
+header *and* a completion marker rather than just a size; app and worker stopped so nothing could
+write during the freeze; then drop, create, migrate, restore. Every count came back identical, a
+real society account signed in (so the bcrypt hashes survived), INV-05 scoping held, and all three
+job chains re-seeded with exactly one pending link each — no forks.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

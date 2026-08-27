@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { columnIndex, readWorkbook, serialToIso } from "@/lib/xlsx";
 import {
   cellToIso,
@@ -150,10 +152,22 @@ describe("a sheet becomes the text the pipeline already reads", () => {
 });
 
 // Against the real workbook when it is present — proof, not a fixture that
-// agrees with itself.
-const REAL = "/Users/yugeshmkumar/Downloads/Document Samples/Ace City/Ace City Meter Reading.xlsx";
-describe.runIf(existsSync(REAL))("Ace City's own workbook", () => {
-  const wb = readWorkbook(readFileSync(REAL));
+// agrees with itself. The samples live outside the repo (they are a
+// customer's documents), so this suite is skipped wherever they are not,
+// and it looks in both layouts the folder has had.
+const SAMPLES = join(homedir(), "Downloads", "Document Samples", "Ace City");
+const REAL = [
+  join(SAMPLES, "Live Meter Reading", "Ace City Meter Reading.xlsx"),
+  join(SAMPLES, "Ace City Meter Reading.xlsx"),
+].find(existsSync);
+
+// The factory of a skipped describe still RUNS — only its tests are skipped —
+// so reading the file here rather than in the body would throw during
+// collection on any machine without the samples, which is a failing suite,
+// not a skipped one.
+describe.runIf(REAL)("Ace City's own workbook", () => {
+  let wb: ReturnType<typeof readWorkbook>;
+  beforeAll(() => { wb = readWorkbook(readFileSync(REAL!)); });
 
   it("reads all five sheets", () => {
     expect(wb.map((s) => s.name)).toEqual([

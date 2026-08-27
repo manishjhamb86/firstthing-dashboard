@@ -1,0 +1,92 @@
+society_name,circuit_location,demo,phase,date,kwh
+Ace Aspire,Basement,1,pre,2026-02-19,33.08
+Ace Aspire,Basement,1,pre,2026-02-20,33.01
+Ace Aspire,Basement,1,pre,2026-02-21,33.02
+Ace Aspire,Basement,1,pre,2026-02-22,33.09
+Ace Aspire,Basement,1,pre,2026-02-23,32.95
+Ace Aspire,Basement,1,pre,2026-02-24,32.94
+Ace Aspire,Basement,1,pre,2026-02-25,32.94
+Ace Aspire,Basement,1,pre,2026-02-26,32.91
+Ace Aspire,Basement,1,pre,2026-02-27,31.96
+Ace Aspire,Basement,1,pre,2026-02-28,32.99
+Ace Aspire,Basement,1,pre,2026-03-01,33.09
+Ace Aspire,Basement,1,post,2026-03-03,10.31
+Ace Aspire,Basement,1,post,2026-03-04,10.49
+Ace Aspire,Basement,1,post,2026-03-05,11.27
+Ace Aspire,Basement,1,post,2026-03-06,13.11
+Ace Aspire,Basement,1,post,2026-03-07,13.16
+Ace Aspire,Basement,1,post,2026-03-08,13.14
+Ace Aspire,Basement,1,post,2026-03-09,13.14
+Ace Aspire,Basement,1,post,2026-03-10,12.72
+Ace Aspire,Basement,1,post,2026-03-11,12.89
+Ace Aspire,Basement,1,post,2026-03-12,12.34
+Aditya Mega City,Basement,1,pre,2025-01-29,46.82
+Aditya Mega City,Basement,1,pre,2025-01-30,48.95
+Aditya Mega City,Basement,1,pre,2025-01-31,45.32
+Aditya Mega City,Basement,1,pre,2025-02-01,46.55
+Aditya Mega City,Basement,1,pre,2025-02-02,45.43
+Aditya Mega City,Basement,1,pre,2025-02-03,48.73
+Aditya Mega City,Basement,1,pre,2025-02-04,48.7
+Aditya Mega City,Basement,1,pre,2025-02-05,48.69
+Aditya Mega City,Basement,1,post,2025-02-13,20.74
+Aditya Mega City,Basement,1,post,2025-02-14,15.85
+Aditya Mega City,Basement,1,post,2025-02-15,20.62
+Aditya Mega City,Basement,1,post,2025-02-16,20.37
+Aditya Mega City,Basement,1,post,2025-02-17,20.64
+Aditya Mega City,Basement,1,post,2025-02-18,20.6
+Aditya Mega City,Basement,1,post,2025-02-19,18.95
+Aditya Urban Casa,Basement,1,pre,2025-12-15,46.82
+Aditya Urban Casa,Basement,1,pre,2025-12-16,48.09
+Aditya Urban Casa,Basement,1,pre,2025-12-17,47.38
+Aditya Urban Casa,Basement,1,post,2025-12-22,23.58
+Aditya Urban Casa,Basement,1,post,2025-12-23,25.12
+Aditya Urban Casa,Basement,1,post,2025-12-24,25.03
+Aditya Urban Casa,Basement,1,post,2025-12-25,24.15
+Aditya Urban Casa,Basement,1,post,2025-12-26,24.91
+Aditya Urban Casa,Basement,2,pre,2025-12-14,12.37
+Aditya Urban Casa,Basement,2,pre,2025-12-15,12.35
+Aditya Urban Casa,Basement,2,pre,2025-12-16,12.72
+Aditya Urban Casa,Basement,2,pre,2025-12-17,12.11
+Aditya Urban Casa,Basement,2,pre,2025-12-18,12.72
+Aditya Urban Casa,Basement,2,pre,2025-12-19,12.69
+Aditya Urban Casa,Basement,2,post,2025-12-21,1.83
+Aditya Urban Casa,Basement,2,post,2025-12-22,1.66
+Aditya Urban Casa,Basement,2,post,2025-12-23,1.93
+Aditya Urban Casa,Basement,2,post,2025-12-24,2.03
+Aditya Urban Casa,Basement,2,post,2025-12-25,1.82
+Aditya Urban Casa,Lift Lobby,1,pre,2026-04-24,1.73
+Aditya Urban Casa,Lift Lobby,1,pre,2026-04-25,1.5
+Aditya Urban Casa,Lift Lobby,1,pre,2026-04-26,1.47
+Aditya Urban Casa,Lift Lobby,1,pre,2026-04-27,2.09
+Aditya Urban Casa,Lift Lobby,1,pre,2026-04-28,2.19
+Aditya Urban Casa,Lift Lobby,1,pre,2026-04-29,1.75
+Aditya Urban Casa,Lift Lobby,1,pre,2026-04-30,1.65
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-01,1.4
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-02,2.15
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-03,1.49
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-04,2.13
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-05,1.92
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-06,1.83
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-07,1.93
+Aditya Urban Casa,Lift Lobby,1,pre,2026-05-08,1.98
+Aditya Urban Casa,Lift Lobby,1,post,2026-05-11,0.4
+Aditya Urban Casa,Lift Lobby,1,post,2026-05-12,0.37
+Aditya Urban Casa,Lift Lobby,1,post,2026-05-13,0.39
+Aditya Urban Casa,Lift Lobby,1,post,2026-05-14,0.5
+Aditya Urban Casa,Lift Lobby,1,post,2026-05-15,0.37
+Aditya Urban Casa,Lift Lobby,1,post,2026-05-16,0.39
+Ace City,Basement,1,pre,2025-08-03,48.84
+Ace City,Basement,1,pre,2025-08-04,48.79
+Ace City,Basement,1,pre,2025-08-05,48.35
+Ace City,Basement,1,pre,2025-08-06,48.33
+Ace City,Basement,1,pre,2025-08-07,48.83
+Ace City,Basement,1,pre,2025-08-08,48.71
+Ace City,Basement,1,pre,2025-08-09,48.55
+Ace City,Basement,1,pre,2025-08-10,49.19
+Ace City,Basement,1,post,2025-10-16,16.58
+Ace City,Basement,1,post,2025-10-17,16.54
+Ace City,Basement,1,post,2025-10-18,16.88
+Ace City,Basement,1,post,2025-10-19,16.62
+Ace City,Basement,1,post,2025-10-20,16.11
+Ace City,Basement,1,post,2025-10-21,15.86
+Ace City,Basement,1,post,2025-10-22,15.95

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { Fragment, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
 import { describeBasis, deriveBenchmark, type DemoInput } from "@/lib/circuit-demos";
@@ -13,6 +13,8 @@ export type DemoDTO = DemoInput & {
   rejectionReason: string | null;
   note: string | null;
   readingCount: number;
+  /** The demo's own daily table, as printed in the report it came from. */
+  readings: { date: string; kWh: number; phase: "pre" | "post" }[];
 };
 
 export function DemosPanel({
@@ -35,6 +37,7 @@ export function DemosPanel({
   const [rejecting, setRejecting] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [overriding, setOverriding] = useState(false);
+  const [openDemo, setOpenDemo] = useState<string | null>(null);
   const [pct, setPct] = useState(overridePct === null ? "" : String(overridePct));
   const [why, setWhy] = useState(overrideReason ?? "");
   const [lights, setLights] = useState("");
@@ -92,13 +95,24 @@ export function DemosPanel({
             </thead>
             <tbody>
               {demos.map((d) => (
-                <tr key={d.id} style={d.rejected ? { opacity: 0.6 } : undefined}>
+                <Fragment key={d.id}>
+                <tr style={d.rejected ? { opacity: 0.6 } : undefined}>
                   <td className="num">#{d.sequence}</td>
                   <td className="num">{d.meteredLightCount}</td>
                   <td className="num">{d.preInstallBaseline.toFixed(2)}</td>
                   <td className="num">{d.postInstallAverage.toFixed(2)}</td>
                   <td className="num">{d.savingsPct.toFixed(2)}%</td>
-                  <td className="num">{d.readingCount || "—"}</td>
+                  <td className="num">
+                    {d.readingCount === 0 ? (
+                      "—"
+                    ) : (
+                      <button type="button" className="btn-ghost btn-sm"
+                        aria-expanded={openDemo === d.id}
+                        onClick={() => setOpenDemo(openDemo === d.id ? null : d.id)}>
+                        {d.readingCount}
+                      </button>
+                    )}
+                  </td>
                   <td>
                     {d.rejected ? (
                       <StatusChip tone="warn">Rejected</StatusChip>
@@ -138,6 +152,14 @@ export function DemosPanel({
                     ))}
                   </td>
                 </tr>
+                {openDemo === d.id && (
+                  <tr>
+                    <td colSpan={8} className="p-0">
+                      <DemoReadings readings={d.readings} recorded={{ pre: d.preInstallBaseline, post: d.postInstallAverage }} />
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -230,5 +252,67 @@ export function DemosPanel({
 
       {error && <ErrorText>{error}</ErrorText>}
     </Card>
+  );
+}
+
+/**
+ * A demo's own daily table, as the report printed it.
+ *
+ * The mean of the days is shown beside the figure the demo was recorded
+ * with, and where the two differ the difference is stated rather than
+ * quietly reconciled: Aditya Urban Casa's first demo prints five days that
+ * average 24.5580 under a stated 24.53, and every downstream figure in that
+ * report — its 48.28%, and the 66.72% in the signed agreement — was
+ * computed from 24.53. The recorded figure stays what was agreed; the days
+ * stay what was measured; the gap is visible to whoever needs to chase it.
+ */
+function DemoReadings({
+  readings,
+  recorded,
+}: {
+  readings: { date: string; kWh: number; phase: "pre" | "post" }[];
+  recorded: { pre: number; post: number };
+}) {
+  const groups = [
+    { phase: "pre" as const, label: "Before the lights were replaced", recorded: recorded.pre },
+    { phase: "post" as const, label: "After", recorded: recorded.post },
+  ];
+  return (
+    <div className="grid gap-4 p-4 sm:grid-cols-2" style={{ background: "var(--surface-sunken)" }}>
+      {groups.map((g) => {
+        const rows = readings.filter((r) => r.phase === g.phase);
+        if (rows.length === 0) return null;
+        const mean = rows.reduce((a, r) => a + r.kWh, 0) / rows.length;
+        const agrees = Math.abs(mean - g.recorded) < 0.0101;
+        return (
+          <div key={g.phase}>
+            <p className="text-[13px] font-medium">{g.label}</p>
+            <p className="mb-2 text-[12px]" style={{ color: "var(--text-muted)" }}>
+              {rows.length} days averaging <span className="num">{mean.toFixed(4)}</span> kWh/day
+              {agrees ? (
+                <> — the figure this demo was recorded with.</>
+              ) : (
+                <>
+                  {" "}— but this demo was recorded at{" "}
+                  <span className="num">{g.recorded}</span>, which is the figure the report&apos;s
+                  own savings and the signed agreement were computed from.
+                </>
+              )}
+            </p>
+            <table className="tbl">
+              <thead><tr><th>Date</th><th>kWh</th></tr></thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.date}>
+                    <td className="num">{r.date}</td>
+                    <td className="num">{r.kWh.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })}
+    </div>
   );
 }

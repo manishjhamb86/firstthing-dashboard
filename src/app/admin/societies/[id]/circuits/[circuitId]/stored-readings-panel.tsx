@@ -100,6 +100,7 @@ export function StoredReadingsPanel({
   summaries,
   allComplete = false,
   commissionedBaseline = null,
+  demoDayCount = 0,
 }: {
   readings: StoredReadingDTO[];
   canEdit: boolean;
@@ -113,6 +114,16 @@ export function StoredReadingsPanel({
    * "the window states 12.47 but the readings show 12.59").
    */
   commissionedBaseline?: number | null;
+  /**
+   * Days held against this circuit's demos rather than in this store.
+   *
+   * A circuit commissioned before this system existed has no reviewed
+   * meter days at all — its evidence is the demo report's own table. The
+   * empty state used to send that operator off to upload a CSV nobody has,
+   * which is the same dead end this project has now fixed three times: a
+   * screen naming a next step its reader cannot reach.
+   */
+  demoDayCount?: number;
   summaries: {
     phase: StoredReadingDTO["phase"];
     label: string;
@@ -134,7 +145,11 @@ export function StoredReadingsPanel({
   );
 
   if (readings.length === 0) {
-    return (
+    return demoDayCount ? (
+      <EmptyState title="No monthly readings stored yet">
+        {`This circuit was commissioned before this system existed, so its evidence is the ${demoDayCount} days recorded against its demos above, not a reviewed meter export. Each month's readings are added from here once they are uploaded.`}
+      </EmptyState>
+    ) : (
       <EmptyState title="No daily readings stored yet">
         Upload the meter&apos;s CSV in the step above — every day is reviewed before it is saved.
       </EmptyState>

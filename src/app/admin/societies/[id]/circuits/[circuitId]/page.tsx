@@ -115,7 +115,13 @@ export default async function CircuitDetailPage({
       gatePasses: { orderBy: { submittedAt: "desc" } },
       commissioningReadings: { orderBy: { date: "asc" } },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
-      demos: { orderBy: { sequence: "asc" }, include: { _count: { select: { readings: true } } } },
+      demos: {
+        orderBy: { sequence: "asc" },
+        include: {
+          _count: { select: { readings: true } },
+          readings: { orderBy: [{ phase: "asc" }, { date: "asc" }] },
+        },
+      },
       voidedBy: { select: { name: true, email: true } },
       demoResultReviews: {
         orderBy: { raisedAt: "desc" },
@@ -530,6 +536,11 @@ export default async function CircuitDetailPage({
           rejectionReason: d.rejectionReason,
           note: d.note,
           readingCount: d._count.readings,
+          readings: d.readings.map((r) => ({
+            date: r.date.toISOString().slice(0, 10),
+            kWh: r.kWh,
+            phase: r.phase as "pre" | "post",
+          })),
         }))}
         overridePct={circuit.benchmarkOverridePct}
         overrideReason={circuit.benchmarkOverrideReason}
@@ -1015,6 +1026,7 @@ export default async function CircuitDetailPage({
           <StoredReadingsPanel
             readings={storedReadings}
             canEdit={canEdit}
+            demoDayCount={circuit.demos.reduce((n, d) => n + d._count.readings, 0)}
             summaries={phaseSummaries}
             allComplete={allStepsComplete}
             commissionedBaseline={circuit.preInstallBaseline}

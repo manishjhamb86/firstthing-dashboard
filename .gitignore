@@ -45,3 +45,6 @@ package-lock.json
 
 # local db dumps (e.g. pg_dump output) — root-level only, doesn't touch prisma/migrations/**
 /*.sql
+
+# Rebuild scripts: they carry an API secret and password hashes.
+/restore/

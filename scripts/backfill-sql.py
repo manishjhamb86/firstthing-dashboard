@@ -25,6 +25,16 @@ ROOT = "docs/backfill"
 ACTOR = "yogesh@firsthing.earth"
 
 
+def society_slug(name: str) -> str:
+    """slugifySociety() from src/lib/document-keys.ts, so the key matches."""
+    return re.sub(r"^_+|_+$", "", re.sub(r"[^a-zA-Z0-9]+", "_", name.strip()))
+
+
+def agreement_key(name: str, signed: str) -> str:
+    sl = society_slug(name)
+    return f"Documents/{sl}/{signed[:7]}/Agreements/{sl}_Agreement_{signed}.pdf"
+
+
 def slug(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
 
@@ -43,6 +53,39 @@ def num(value):
 def rows(name: str):
     with open(f"{ROOT}/{name}.csv") as fh:
         return list(csv.DictReader(fh))
+
+
+def snapshot_circuit(soc_slug: str, i: int, c: dict, metered: int) -> dict:
+    """
+    demo_reports.circuit_snapshot holds DemoReportCircuit, which is NOT the
+    OfferCircuitTerm shape the offer and contract carry — it adds the
+    extrapolation factor, the post-install average and the day-by-day
+    readings. Writing the offer's shape here made the report page throw,
+    because the view maps over readings that were not there.
+
+    The readings are empty arrays and not omitted: no daily readings are
+    imported by this backfill, and an absent array is the crash.
+    """
+    base = float(c["baseline_kwh_day"])
+    after = float(c["after_kwh_day"])
+    pct = float(c["savings_pct"])
+    rep = int(c["represented_light_count"])
+    factor = rep / metered
+    return {
+        "circuitId": f"bf-{soc_slug}-ckt-{i}",
+        "lightType": c["light_type"],
+        "location": c["circuit_location"] or None,
+        "meteredLightCount": metered,
+        "representedLightCount": rep,
+        "extrapolationFactor": round(factor, 6),
+        "preInstallBaseline": base,
+        "postInstallAverage": after,
+        "savedKwhPerDay": round(base - after, 4),
+        "benchmarkSavingsPct": pct,
+        "projectedSavedKwhPerDay": round(base * pct / 100 * factor, 4),
+        "preInstallReadings": [],
+        "postInstallReadings": [],
+    }
 
 
 def circuit_term(soc_slug: str, i: int, c: dict) -> dict:
@@ -84,6 +127,21 @@ def main() -> None:
 
         print(f"-- ═══ {name} " + "═" * max(0, 60 - len(name)))
         print("BEGIN;")
+        print(f"""
+-- Re-runnable: clear anything a previous run of THIS generator left for the
+-- society, and nothing else. Every id it writes is prefixed 'bf-', so this
+-- cannot reach a row someone made in the app.
+DELETE FROM contract_term_versions WHERE contract_id = 'bf-{sl}-contract';
+DELETE FROM contracts   WHERE id = 'bf-{sl}-contract';
+DELETE FROM agreements  WHERE id = 'bf-{sl}-agreement';
+DELETE FROM offers      WHERE id = 'bf-{sl}-offer';
+DELETE FROM demo_reports WHERE id = 'bf-{sl}-demo-report';
+DELETE FROM meter_readings  WHERE circuit_id LIKE 'bf-{sl}-ckt-%';
+DELETE FROM circuit_devices WHERE circuit_id LIKE 'bf-{sl}-ckt-%';
+DELETE FROM circuits    WHERE id LIKE 'bf-{sl}-ckt-%';
+DELETE FROM site_surveys WHERE id = 'bf-{sl}-survey';
+DELETE FROM pipelines   WHERE id = 'bf-{sl}-pipe';
+DELETE FROM engagements WHERE id = 'bf-{sl}-eng';""")
         print(f"""
 -- The society must already exist, and exactly once. These were imported with
 -- their flat counts and portal accounts, so a missing one is a mistake to
@@ -127,7 +185,7 @@ FROM societies s, admin_users a WHERE s.name = {q(name)} AND a.email = {q(ACTOR)
 
 INSERT INTO site_surveys (id, pipeline_id, created_at) VALUES ('bf-{sl}-survey', 'bf-{sl}-pipe', now());""")
 
-        terms = []
+        terms, snapshot = [], []
         for i, c in enumerate(mine, 1):
             cid = f"bf-{sl}-ckt-{i}"
             lines = [d for d in devices
@@ -159,12 +217,14 @@ SELECT '{cid}-dev-{j}', '{cid}', dt.id, {d['count']}, {d['wattage_each']}, {d['h
 FROM device_types dt, admin_users a
 WHERE dt.name = {q(d['device_name'])} AND dt.role = 'original' AND dt.deleted_at IS NULL
   AND a.email = {q(ACTOR)};""")
+            snapshot.append(snapshot_circuit(sl, i, c, metered))
             if c["billing"].lower() == "yes":
                 t = circuit_term(sl, i, c)
                 t["meteredLightCount"] = metered
                 terms.append(t)
 
         terms_json = json.dumps(terms).replace("'", "''")
+        snapshot_json = json.dumps(snapshot).replace("'", "''")
         first = mine[0]
         print(f"""
 -- The demo report. Not needed for billing, but without it the deal map sits
@@ -179,7 +239,7 @@ SELECT 'bf-{sl}-demo-report', 'bf-{sl}-pipe', 1, 'shared',
        c.represented_light_count::double precision / c.metered_light_count,
        (c.pre_install_baseline * c.benchmark_savings_pct / 100)
          * (c.represented_light_count::double precision / c.metered_light_count),
-       '{terms_json}'::jsonb, now(), {q(s['agreement_signed_on'])}::date, a.id
+       '{snapshot_json}'::jsonb, now(), {q(s['agreement_signed_on'])}::date, a.id
 FROM circuits c, admin_users a
 -- shared_by_id is an ADMIN, not a profile: FirsThing shares the report WITH
 -- the society, so the sharer is internal. The mirror of offers, where
@@ -198,9 +258,20 @@ LEFT JOIN societies soc ON soc.name = {q(name)}
 LEFT JOIN profiles p ON p.society_id = soc.id AND p.portal_authority = 'office_bearer' AND p.is_active
 WHERE a.email = {q(ACTOR)};
 
-INSERT INTO agreements (id, pipeline_id, offer_id, prepared_at, prepared_by_id, signed_at)
+INSERT INTO agreements (id, pipeline_id, offer_id, prepared_at, prepared_by_id,
+                        printed_at, notarized_at, signed_at,
+                        executed_s3_key, executed_file_name, uploaded_at, uploaded_by_id)
 SELECT 'bf-{sl}-agreement', 'bf-{sl}-pipe', 'bf-{sl}-offer', {q(s['agreement_signed_on'])}::date, a.id,
-       {q(s['agreement_signed_on'])}::date
+       -- Printed and notarised are the same day, and it is the e-stamp
+       -- certificate date on page 1 (the user, 2026-08-27). It can fall after
+       -- the front-page date, which is a backdated effective date rather than
+       -- a mistake.
+       {q(s['printed_notarized_on'])}::date, {q(s['printed_notarized_on'])}::date,
+       {q(s['agreement_signed_on'])}::date,
+       {q(agreement_key(name, s['agreement_signed_on']))},
+       {q(society_slug(name) + '_Agreement_' + s['agreement_signed_on'] + '.pdf')},
+       -- The scan reaches us the day after signing.
+       ({q(s['agreement_signed_on'])}::date + 1), a.id
 FROM admin_users a WHERE a.email = {q(ACTOR)};""")
         void(first)
 

@@ -104,7 +104,7 @@ export function DemoReportView({
                     </tr>
                   </thead>
                   <tbody>
-                    {c.preInstallReadings.map((r) => (
+                    {(c.preInstallReadings ?? []).map((r) => (
                       <tr key={r.date}>
                         <td className="num">{r.date}</td>
                         <td className="num">{r.consumptionKwh.toFixed(2)}</td>
@@ -123,7 +123,7 @@ export function DemoReportView({
                     </tr>
                   </thead>
                   <tbody>
-                    {c.postInstallReadings.map((r) => (
+                    {(c.postInstallReadings ?? []).map((r) => (
                       <tr key={r.date}>
                         <td className="num">{r.date}</td>
                         <td className="num">{r.consumptionKwh.toFixed(2)}</td>

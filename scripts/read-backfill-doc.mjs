@@ -34,7 +34,9 @@ const PROMPTS = {
 residential society in India. ${COMMON}
 
 Fields: societyName, contactName, contactPhone, agreementSignedOn (the
-front-page or stamp date), termMonths, firsthingSharePct, societySharePct,
+front-page or stamp date), stampCertificateDate (the "Certificate Issued
+Date" on the e-stamp certificate, page 1 — report it exactly as printed),
+termMonths, firsthingSharePct, societySharePct,
 tolerancePct (the permitted +/- on the SAVINGS percentage), unitRateInr
 (rupees per kWh), monthlyFeeInr (the service charge excluding GST),
 benchmarkedMonthlySavingsInr, agreedSavingsPct, contractedLightCount,

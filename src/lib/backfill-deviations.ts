@@ -39,6 +39,7 @@ export type DeviationCode =
   | "proration-on-a-30-day-month"
   | "two-versions-of-the-demo-report"
   | "report-dates-contradict-its-tables"
+  | "additional-light-clause-not-applied"
   | "not-billing";
 
 type Meta = { label: string; what: string; standard: string };
@@ -148,6 +149,11 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
     label: "Opening month prorated on a 30-day month",
     what: "The first invoice divides the monthly charge by 30 rather than by the days the month actually has.",
     standard: "CON-22 prorates by the real remaining days of the calendar month.",
+  },
+  "additional-light-clause-not-applied": {
+    label: "Lights beyond the minimum billed at the base rate",
+    what: "The agreement prices lights above the contracted minimum at their own per-light rate; the invoices apply the base rate to every light instead.",
+    standard: "An offer prices what the contract says it prices.",
   },
   "report-dates-contradict-its-tables": {
     label: "The report's prose names different dates from its own tables",

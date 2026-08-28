@@ -127,6 +127,7 @@ BATCHES = [
         ["stored_documents", "document_extractions"],
     ),
     ("20260828060000_data_amrapali_princely_estate", "Amrapali Princely Estate", []),
+    ("20260828090000_data_arihant_arden", "Arihant Arden", []),
 ]
 
 

@@ -279,6 +279,15 @@ VALUES ('{cid}-inv', 'bf-{sl}-survey', {q(c['circuit_location'])}, {q(c['light_t
         now());""")
             for j, d in enumerate(lines, 1):
                 excl = d["excluded"].lower() == "yes"
+                # This insert resolves the device type by NAME, so a name the
+                # catalog does not have writes no row at all and says nothing
+                # — leaving a circuit with an incomplete load inventory and a
+                # theoretical figure that is quietly too low. Fail instead.
+                print(f"""DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM device_types WHERE name = {q(d['device_name'])} AND role = 'original' AND deleted_at IS NULL) THEN
+    RAISE EXCEPTION 'device type % is not in the catalog', {q(d['device_name'])};
+  END IF;
+END $$;""")
                 print(f"""INSERT INTO circuit_devices (id, circuit_id, device_type_id, count, wattage, hours_per_day,
                              excluded_from_calculation, historical, historical_note, recorded_by_id, created_at)
 SELECT '{cid}-dev-{j}', '{cid}', dt.id, {d['count']}, {d['wattage_each']}, {d['hours_per_day']},

@@ -17,3 +17,10 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO device_types (id, name, role, default_wattage, status, in_catalog, created_at)
 VALUES ('dt-surface9', 'Surface light 9W', 'original', 9, 'approved', true, now())
 ON CONFLICT (id) DO NOTHING;
+
+-- Arihant Arden's basement carries 9 ramp lights at 12W on the same circuit,
+-- excluded from the calculation because they are not replaced. The catalog's
+-- "Surface light 12W" is a different fitting.
+INSERT INTO device_types (id, name, role, default_wattage, status, in_catalog, created_at)
+VALUES ('dt-ramp12', 'Ramp light 12W', 'original', 12, 'approved', true, now())
+ON CONFLICT DO NOTHING;

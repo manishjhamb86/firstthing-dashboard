@@ -130,6 +130,7 @@ BATCHES = [
     ("20260828090000_data_arihant_arden", "Arihant Arden", []),
     ("20260828110000_data_ats_greens_paradiso", "ATS Greens Paradiso", []),
     ("20260828130000_data_bestech_park_view", "Bestech Park View Residency", []),
+    ("20260828160000_data_elite_homz", "Elite Homz", []),
 ]
 
 

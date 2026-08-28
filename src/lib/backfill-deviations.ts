@@ -30,6 +30,7 @@ export type DeviationCode =
   | "represented-count-from-invoice"
   | "eligibility-never-assessed"
   | "agreement-figures-do-not-reconcile"
+  | "minimum-light-clause-not-enforced"
   | "not-billing";
 
 type Meta = { label: string; what: string; standard: string };
@@ -109,6 +110,11 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
     label: "CON-16 eligibility was never assessed",
     what: "The circuit was already in service when it was recorded, so the eligibility checklist was never run against it.",
     standard: "FEAT-007 assesses eligibility before a circuit is selected.",
+  },
+  "minimum-light-clause-not-enforced": {
+    label: "Fewer lights installed than the agreement's minimum",
+    what: "The agreement states that below its minimum the full monthly charge stays payable. Fewer went in, and the charge was scaled to the actual count instead — in the society's favour.",
+    standard: "An offer prices the lights actually contracted.",
   },
   "agreement-figures-do-not-reconcile": {
     label: "The agreement's own commercial figures do not reconcile",

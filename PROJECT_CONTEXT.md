@@ -2499,6 +2499,13 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The links became buttons, and "commissioning record" got a name its reader understands (2026-08-28)
+
+Follow-up to the rehoming below: the two in-card links are `btn-outline` buttons now, and the
+commissioning one is retitled **"Circuit setup & history"** — "commissioning record" is this
+blueprint's own vocabulary, and it meant nothing to the person the button is for. The rule worth
+keeping: a control is named for what the reader GETS, not for the internal phase that produced it.
+
 ## Two floating links found their homes (2026-08-28) — user-questioned
 
 "What are these two links doing here? are they required?" — the underlined pair sitting between

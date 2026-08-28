@@ -326,11 +326,14 @@ export default async function LiveMonitoringCircuitPage({
                     </p>
                   )}
               </dl>
-              <p className="mt-3 border-t pt-2 text-[13px]" style={{ borderColor: "var(--border)" }}>
-                <Link href={circuitHref} className="underline">
-                  Commissioning record →
+              {/* Named for what the reader gets, not for the internal phase:
+                  "commissioning record" meant nothing to its own audience
+                  (user, 2026-08-28). */}
+              <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                <Link href={circuitHref} className="btn-outline btn-sm">
+                  Circuit setup &amp; history
                 </Link>
-              </p>
+              </div>
             </Card>
 
             <Card className="p-5">
@@ -373,8 +376,8 @@ export default async function LiveMonitoringCircuitPage({
                     ` · ${monitoringDays.filter((d) => d.flagged).length} flagged`}
                 </span>
                 {monitoringDays.length > 0 && (
-                  <Link href={`${circuitHref}/reports/monthly`} className="text-[13px] underline" style={{ color: "var(--accent)" }}>
-                    Monthly savings report →
+                  <Link href={`${circuitHref}/reports/monthly`} className="btn-outline btn-sm">
+                    Monthly savings report
                   </Link>
                 )}
               </p>

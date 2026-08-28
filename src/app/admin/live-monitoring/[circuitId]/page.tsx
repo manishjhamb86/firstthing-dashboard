@@ -326,6 +326,11 @@ export default async function LiveMonitoringCircuitPage({
                     </p>
                   )}
               </dl>
+              <p className="mt-3 border-t pt-2 text-[13px]" style={{ borderColor: "var(--border)" }}>
+                <Link href={circuitHref} className="underline">
+                  Commissioning record →
+                </Link>
+              </p>
             </Card>
 
             <Card className="p-5">
@@ -359,27 +364,24 @@ export default async function LiveMonitoringCircuitPage({
                   </div>
                 ))}
               </dl>
-              <p className="mt-3 border-t pt-2 text-[12px] text-[var(--text-subtle)]" style={{ borderColor: "var(--border)" }}>
-                {monitoringDays.length} days recorded
-                {monitoringDays.filter((d) => d.excluded).length > 0 &&
-                  ` · ${monitoringDays.filter((d) => d.excluded).length} excluded`}
-                {monitoringDays.filter((d) => d.flagged).length > 0 &&
-                  ` · ${monitoringDays.filter((d) => d.flagged).length} flagged`}
+              <p className="mt-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-t pt-2 text-[12px] text-[var(--text-subtle)]" style={{ borderColor: "var(--border)" }}>
+                <span>
+                  {monitoringDays.length} days recorded
+                  {monitoringDays.filter((d) => d.excluded).length > 0 &&
+                    ` · ${monitoringDays.filter((d) => d.excluded).length} excluded`}
+                  {monitoringDays.filter((d) => d.flagged).length > 0 &&
+                    ` · ${monitoringDays.filter((d) => d.flagged).length} flagged`}
+                </span>
+                {monitoringDays.length > 0 && (
+                  <Link href={`${circuitHref}/reports/monthly`} className="text-[13px] underline" style={{ color: "var(--accent)" }}>
+                    Monthly savings report →
+                  </Link>
+                )}
               </p>
             </Card>
           </div>
 
           <section className="max-w-none">
-            <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-sm">
-              <Link href={circuitHref} className="underline">
-                Commissioning record →
-              </Link>
-              {monitoringDays.length > 0 && (
-                <Link href={`${circuitHref}/reports/monthly`} className="underline">
-                  Monthly savings report →
-                </Link>
-              )}
-            </div>
             {/* The readings are what this screen is FOR — they open at the
                 top, latest first, with the recording flow behind the header
                 button rather than a card pushing them below the fold. */}

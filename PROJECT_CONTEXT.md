@@ -2499,6 +2499,17 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Two floating links found their homes (2026-08-28) — user-questioned
+
+"What are these two links doing here? are they required?" — the underlined pair sitting between
+the header cards and the filters. The DESTINATIONS are required (they are this screen's only routes
+to the circuit's commissioning record and to the monthly savings report); the PLACEMENT was not —
+two orphaned links between sections read as leftovers. Each moved into the card whose story it
+completes: **Commissioning record →** into "The demo behind it" (which IS that record's summary,
+and was the sparsest card), **Monthly savings report →** into the Savings card footer beside the
+day counts, rendered only when there are days to report. Verified that both live inside their
+cards and still resolve to real pages.
+
 ## The dialog parked itself top-left, and a "removed" button that was never removed (2026-08-28)
 
 **The popup was not centered** (user-caught): a modal `<dialog>` centers through the UA's own

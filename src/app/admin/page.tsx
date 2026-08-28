@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { allMeterRows } from "@/lib/meter-view";
 import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -33,6 +34,7 @@ export default async function AdminHomePage() {
   const perms = session.user.adminPermissions ?? [];
   const canSeePipeline = perms.includes("manage_pipeline");
   const canSeeMonitoring = perms.includes("manage_survey");
+  const canSeeMeters = perms.includes("manage_users");
 
   const [
     societyCount,
@@ -46,6 +48,7 @@ export default async function AdminHomePage() {
     circuitsNeedingAttention,
     stageGroups,
     benchmarkedCircuits,
+    meterRows,
   ] = await Promise.all([
     db.society.count(),
     db.society.count({ where: { status: "active" } }),
@@ -85,7 +88,17 @@ export default async function AdminHomePage() {
       take: 6,
       include: { society: { select: { name: true } } },
     }),
+    canSeeMeters ? allMeterRows() : Promise.resolve([]),
   ]);
+
+  // The meter fleet, summarised — the same view model the meters page uses,
+  // so the dashboard cannot disagree with it about what is reporting.
+  const metering = meterRows.filter((m) => m.hasEnergySignal);
+  const watched = meterRows.filter((m) => m.state !== null);
+  const reportingMeters = watched.filter((m) => m.state === "reporting");
+  const meterAlerts = meterRows.flatMap((m) =>
+    m.openAlerts.map((a) => ({ ...a, meterId: m.id, meterName: m.name, societyName: m.societyName })),
+  );
 
   const stageCount = new Map(stageGroups.map((g) => [g.stage as string, g._count._all]));
   const funnel = FUNNEL_STAGES.map((s) => ({ stage: s, count: stageCount.get(s) ?? 0 }));
@@ -258,6 +271,89 @@ export default async function AdminHomePage() {
 
         {/* ── Right column: what needs a person ──────────────────────── */}
         <div className="lg:col-span-5 min-w-0 space-y-6">
+          {/* Meters sit at the top of this column deliberately: an offline
+              meter is the only thing on this page that is going wrong RIGHT
+              NOW, and it stops a month billing if nobody looks. */}
+          {canSeeMeters && metering.length > 0 && (
+            <Card className="p-6">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <CardTitle>Meters</CardTitle>
+                {meterAlerts.length > 0 ? (
+                  <Link href="/admin/notifications" className="text-[13px] font-semibold underline" style={{ color: "var(--bad-fg)" }}>
+                    {meterAlerts.length} need{meterAlerts.length === 1 ? "s" : ""} attention →
+                  </Link>
+                ) : (
+                  <StatusChip tone="ok">All reporting</StatusChip>
+                )}
+              </div>
+
+              <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
+                {(
+                  [
+                    [reportingMeters.length, "var(--signal)"],
+                    [watched.filter((m) => m.state === "silent").length, "var(--warn-fg)"],
+                    [watched.filter((m) => m.state === "offline").length, "var(--bad-fg)"],
+                    [metering.length - watched.length, "var(--border)"],
+                  ] as const
+                )
+                  .filter(([n]) => n > 0)
+                  .map(([n, color], i) => (
+                    <div key={i} style={{ flexGrow: n, minWidth: 6, background: color, borderRadius: 5 }} />
+                  ))}
+              </div>
+
+              <dl className="mt-3.5 grid grid-cols-3 gap-3 text-[13px]">
+                <div>
+                  <dt className="text-[var(--text-subtle)]">Reporting</dt>
+                  <dd className="num text-[17px] font-semibold">
+                    {reportingMeters.length}
+                    <span className="text-[13px] font-normal text-[var(--text-muted)]">/{watched.length}</span>
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--text-subtle)]">Not assigned</dt>
+                  <dd className="num text-[17px] font-semibold">{metering.length - watched.length}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--text-subtle)]">Hours held</dt>
+                  <dd className="num text-[17px] font-semibold">
+                    {meterRows.reduce((n, m) => n + m.hourlyCount, 0).toLocaleString()}
+                  </dd>
+                </div>
+              </dl>
+
+              {meterAlerts.length > 0 && (
+                <ul className="mt-4 space-y-2 border-t pt-3" style={{ borderColor: "var(--border)" }}>
+                  {meterAlerts.slice(0, 3).map((a) => (
+                    <li key={a.id} className="text-[13px]">
+                      <Link href={`/admin/meters/${a.meterId}`} className="font-medium underline">
+                        {a.meterName}
+                      </Link>
+                      <span className="text-[var(--text-muted)]">
+                        {" "}
+                        — {a.kind === "offline" ? "not reachable" : "out of range"}
+                        {a.societyName ? ` · ${a.societyName}` : ""}
+                      </span>
+                    </li>
+                  ))}
+                  {meterAlerts.length > 3 && (
+                    <li className="text-[13px]">
+                      <Link href="/admin/notifications" className="underline">
+                        and {meterAlerts.length - 3} more →
+                      </Link>
+                    </li>
+                  )}
+                </ul>
+              )}
+
+              <p className="mt-3 text-[13px]">
+                <Link href="/admin/meters" className="underline">
+                  All meters →
+                </Link>
+              </p>
+            </Card>
+          )}
+
           {canSeeMonitoring && (
             <Card className="p-6" >
               <div id="needs-decision" className="scroll-mt-24">

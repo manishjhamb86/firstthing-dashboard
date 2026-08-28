@@ -1,6 +1,7 @@
 import { resolveTheme } from "@/lib/resolve-theme";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { AppShell } from "@/components/app-shell";
+import { unreadNotificationCount } from "@/lib/notifications";
 import { demoModeAvailable } from "@/lib/demo-mode";
 
 // One shell for every /admin route — the sidebar nav from 05a-theme-system
@@ -18,7 +19,14 @@ import { demoModeAvailable } from "@/lib/demo-mode";
 // the link until the next sign-in. resolveAdmin() is cache()d, so this costs
 // nothing beyond the lookup the pages below already make.
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const [theme, admin] = await Promise.all([resolveTheme(), resolveAdmin()]);
+  const [theme, admin, unreadCount] = await Promise.all([
+    resolveTheme(),
+    resolveAdmin(),
+    // Read in the layout, not the shell: AppShell is a client component and
+    // cannot touch the database. Every admin page renders this layout, so the
+    // badge is current on all of them without a per-page call site.
+    unreadNotificationCount(),
+  ]);
   // The env var decides whether the toggle exists at all; the account's own
   // column decides whether it is on.
   const demoAvailable = demoModeAvailable();
@@ -27,6 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <AppShell
+      unreadCount={unreadCount}
       theme={theme}
       email={admin?.email ?? ""}
       demoAvailable={demoAvailable}

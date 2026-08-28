@@ -18,6 +18,7 @@ import {
   FileText,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 import { NavShell, type NavItem } from "@/components/nav-shell";
 import type { ThemeId } from "@/lib/theme";
 
@@ -38,6 +39,7 @@ export function AppShell({
   showBilling,
   demoMode = false,
   demoAvailable = false,
+  unreadCount = 0,
   children,
 }: {
   theme: ThemeId;
@@ -45,6 +47,8 @@ export function AppShell({
   demoMode?: boolean;
   /** DEMO_MODE is set in the environment, so the toggle may render. */
   demoAvailable?: boolean;
+  /** Open, unacknowledged alerts — read in the layout; this is a client component. */
+  unreadCount?: number;
   showPipeline: boolean;
   showField: boolean;
   showMonitoring: boolean;
@@ -95,7 +99,12 @@ export function AppShell({
       email={email}
       items={items}
       footerNote="FirsThing · verified savings"
-      extras={demoAvailable ? <DemoModeToggle on={demoMode} surface="content" /> : null}
+      extras={
+        <>
+          {demoAvailable && <DemoModeToggle on={demoMode} surface="content" />}
+          <NotificationBell count={unreadCount} />
+        </>
+      }
     >
       {/* No demo ribbon here. Two stacked amber bars — this one and whatever
           the page itself is warning about — is one too many, and the toggle in

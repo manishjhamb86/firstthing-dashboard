@@ -1,4 +1,4 @@
-import { getDeviceParams, resolveEwelinkConfig, type EwelinkConfig } from "@/lib/ewelink";
+import { getDeviceParams, listEwelinkDevices, resolveEwelinkConfig, type EwelinkConfig } from "@/lib/ewelink";
 import { LIVE_PARAM_KEYS, readElectrical } from "@/lib/ewelink-scale";
 
 /**
@@ -38,6 +38,13 @@ export type MeterProvider = {
   name: string;
   /** Whether this provider can date a device's own report. */
   reportsDeviceTime: boolean;
+  /**
+   * Which devices the vendor currently considers connected, for the whole
+   * account in one call. Separate from `readNow` because the per-device
+   * STATUS read carries no connectivity at all (see below) — without this,
+   * an offline meter is indistinguishable from a healthy one.
+   */
+  connectivity(): Promise<Map<string, boolean>>;
   /** `uiid` decides how the vendor's raw figures are scaled. */
   readNow(deviceId: string, uiid: number): Promise<MeterRead>;
 };
@@ -46,12 +53,23 @@ export function ewelinkProvider(cfg: EwelinkConfig): MeterProvider {
   return {
     name: "ewelink",
     reportsDeviceTime: false,
+    async connectivity(): Promise<Map<string, boolean>> {
+      const devices = await listEwelinkDevices(cfg);
+      return new Map(devices.map((d) => [d.deviceid, d.online]));
+    },
     async readNow(deviceId: string, uiid: number): Promise<MeterRead> {
       const params = await getDeviceParams(cfg, deviceId, LIVE_PARAM_KEYS);
       return {
-        // A device that answers with parameters is reachable; the absence of
-        // an explicit false is not evidence of trouble.
-        online: params.online === undefined ? true : Boolean(params.online),
+        // NOT from the status read: `/v2/device/thing/status` returns no
+        // connectivity field whatsoever for these devices — the only
+        // online-ish key is `sledOnline`, which is the status-LED SETTING,
+        // not whether the meter is reachable. The first version defaulted a
+        // missing field to `true`, so every poll reported healthy and an
+        // offline meter could never be detected (found 2026-08-28: 142
+        // samples on stage, not one of them offline, while the account
+        // plainly showed drop-outs). The poll supplies this from
+        // `connectivity()` instead.
+        online: true,
         ...readElectrical(uiid, params),
         reportedAt: null,
       };
@@ -75,6 +93,9 @@ export function fakeProvider(): MeterProvider {
   return {
     name: "fake",
     reportsDeviceTime: true,
+    async connectivity(): Promise<Map<string, boolean>> {
+      return new Map();
+    },
     async readNow(deviceId: string): Promise<MeterRead> {
       // Derived from the device id and the hour, so a series looks like a
       // series rather than noise, and a device ending in "-down" is always

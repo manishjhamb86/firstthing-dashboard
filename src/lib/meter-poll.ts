@@ -78,6 +78,17 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
     },
   });
 
+  // One account-wide connectivity read per pass, before any device is polled:
+  // the per-device status call carries no connectivity at all. A failure here
+  // is not fatal — an unknown map simply leaves the per-device read to decide,
+  // which is exactly the old behaviour rather than a fleet-wide false alarm.
+  let connected = new Map<string, boolean>();
+  try {
+    connected = await provider.connectivity();
+  } catch (err) {
+    logger.warn("meter.connectivity_read_failed", { error: String(err) });
+  }
+
   const now = new Date();
 
   for (const m of meters) {
@@ -104,12 +115,18 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       logger.warn("meter.read_failed", { meterId: m.id, error: String(err) });
     }
 
+    // The vendor's own connectivity answer wins when it has one; a thrown
+    // read is offline regardless. Absent both, the meter is treated as
+    // reachable — it answered with figures.
+    const vendorOnline = connected.get(m.ewelinkDeviceId);
+    const isOnline = readOk && (vendorOnline === undefined ? read.online : vendorOnline);
+
     // When the vendor cannot date the device's own report, a successful read
     // is the freshest fact available — and it is recorded as OUR read time,
     // not claimed as the device's.
-    const reportedAt = read.reportedAt ?? (readOk && read.online ? now : m.lastReportedAt);
+    const reportedAt = read.reportedAt ?? (isOnline ? now : m.lastReportedAt);
     const health = evaluateMeterHealth({
-      online: read.online,
+      online: isOnline,
       readOk,
       reportedAt,
       offlineSince: m.offlineSince,
@@ -123,7 +140,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       data: {
         meterId: m.id,
         recordedAt: now,
-        online: read.online && readOk,
+        online: isOnline,
         powerW: read.powerW,
         voltageV: read.voltageV,
         currentA: read.currentA,
@@ -135,7 +152,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
     await db.meterDevice.update({
       where: { id: m.id },
       data: {
-        online: read.online && readOk,
+        online: isOnline,
         // Keep the last KNOWN value when a read fails — a screen showing
         // "last known, 3 hours ago" is more use than a blank one, provided it
         // says so, which is what lastReadAt is for.

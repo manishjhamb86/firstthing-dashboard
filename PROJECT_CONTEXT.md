@@ -2499,6 +2499,42 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Offline was undetectable, and the alerts had nowhere to be read (2026-08-28) — user-caught
+
+**"This meter has been offline many times but the Events section shows none of it."** True, and the
+cause was a bug of mine, not a missing feature: **142 samples on stage, not one of them offline.**
+`/v2/device/thing/status` returns NO connectivity field for these devices — the only online-ish key
+is `sledOnline`, which is the status-LED SETTING — and the provider read
+`params.online === undefined ? true`, so **every poll reported healthy, unconditionally**. An
+offline meter could never be detected except by the HTTP call itself throwing.
+
+**Connectivity is its own signal now**: the provider gained `connectivity()`, one account-wide
+device-list read per pass (the list DOES carry `online` per device), and the poll takes the vendor's
+answer when it has one, a thrown read as offline regardless, and falls back to the old behaviour
+when the map is empty — a failed connectivity read must not raise a fleet-wide false alarm.
+Verified against real rows through the full cycle: account-says-offline beats status-says-quiet,
+one failure raises nothing, the second opens an alert, recovery closes it with a reason and the
+closed alert stays on record, and an unknown map fabricates no outage.
+
+**A notification centre, deliberately with no new table.** `MeterAlert` was already a durable row
+with an open/closed lifecycle, an owner and a stated reason; what was missing was a place to READ
+them, so an alert that opened and closed overnight left no trace anyone would find.
+`/admin/notifications` has Open (still true) and Resolved (kept, with how each ended), and the
+top-bar bell counts **open AND unacknowledged**.
+
+**Acknowledging is not closing** — the distinction the whole thing rests on. Only the meter
+reporting again closes an offline alert; acknowledging takes it off the badge while the condition
+is still true. Otherwise a meter down all week keeps the badge lit until the number means nothing,
+or people close alerts to clear it and the record becomes fiction.
+
+**The dashboard's Meters card sits at the TOP of the right column**: an offline meter is the only
+thing on the Portfolio that is going wrong right now, and it stops a month billing if nobody looks.
+Segmented health bar, reporting/unassigned/hours-held, then the first three alerts by name.
+
+**One build error worth remembering**: `app-shell.tsx` is `"use client"`, so it can neither be
+async nor import anything that touches `db`. The count is read in `admin/layout.tsx` (a Server
+Component, rendered by every admin page) and passed down as a prop.
+
 ## A form that opened below 45 rows, and a Modal this codebase already had (2026-08-28) — user-caught
 
 **"It feels like the button is not working"** — clicking Reassign on the meters list rendered the

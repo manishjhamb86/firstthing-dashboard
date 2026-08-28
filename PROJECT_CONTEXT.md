@@ -2515,6 +2515,15 @@ new meter cards mostly did not — so the fleet bar, the readout, the charts and
 against the rounded corners. All padded, and the verification now asserts in PIXELS that no card
 child sits within 8px of its card's edge on either page, rather than trusting a screenshot glance.
 
+**The Imports card could not contain its content** (user-caught, same round): a four-column table
+in a half-page card, holding vendor filenames that are themselves wider than half a page, can only
+overflow into a horizontal scroll — so the match method and the uploader were off-screen until the
+reader scrolled. Rebuilt as a stacked list, matching the Events card beside it: filename on its own
+line, then range · hours · match · uploader as a wrapping metadata row. The audit gained the
+general rule rather than a fix for this one card — **no `.card` may need a horizontal scroll at
+desktop width** (`scrollWidth > clientWidth` on the card or any descendant), which is the class of
+defect a screenshot catches and a render-only check never does.
+
 **The hero wrapped at ordinary laptop widths**: at 1024–1280px the 5/12 gauge column is narrower
 than the gauge plus its labels, so V/A/PF fell underneath and dragged the panel tall, leaving the
 counters panel with a hollow middle. Two changes: the label column takes `flex-1` (zero flex-basis

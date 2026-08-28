@@ -196,61 +196,43 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
             )}
           </Card>
 
-          {imports.length > 0 ? (
-            <Card className="p-6">
-              <CardTitle>Imports</CardTitle>
-              <p className="mt-1 text-[13px] text-[var(--text-muted)]">
-                Every hourly series traces to the file it came from and how the meter was matched.
-              </p>
-              <div className="mt-3 overflow-x-auto">
-                <table className="tbl">
-                  <thead>
-                    <tr>
-                      <th>File</th>
-                      <th>Covers</th>
-                      <th className="text-right">Hours</th>
-                      <th>Matched by</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {imports.map((i) => (
-                      <tr key={i.id}>
-                        <td className="font-medium">{i.fileName}</td>
-                        <td className="num whitespace-nowrap text-[13px]">
-                          {i.firstDay.toISOString().slice(0, 10)} → {i.lastDay.toISOString().slice(0, 10)}
-                        </td>
-                        <td className="num text-right">
-                          {i.hoursInFile.toLocaleString()}
-                          {i.hoursSuperseded > 0 && (
-                            <div className="text-xs" style={{ color: "var(--warn-fg)" }}>
-                              {i.hoursSuperseded} replaced
-                            </div>
-                          )}
-                        </td>
-                        <td className="text-[13px]">
-                          {i.overrodeMatch ? (
-                            <span style={{ color: "var(--warn-fg)" }}>Chosen by hand</span>
-                          ) : (
-                            <span style={{ color: "var(--ok-fg)" }}>Overlapping hours</span>
-                          )}
-                          <div className="text-xs text-[var(--text-subtle)]">
-                            {i.uploadedBy.name ?? i.uploadedBy.email}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          ) : (
-            <Card className="p-6">
-              <CardTitle>Imports</CardTitle>
+          {/* A stacked list, deliberately not a table: this card is half the
+              page, and vendor filenames alone are wider than half a page —
+              a four-column table here can only overflow into a scroll. */}
+          <Card className="p-6">
+            <CardTitle>Imports</CardTitle>
+            <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+              Every hourly series traces to the file it came from and how the meter was matched.
+            </p>
+            {imports.length === 0 ? (
               <p className="mt-4 text-[13px] text-[var(--text-subtle)]">
                 No exports have been uploaded for this meter yet.
               </p>
-            </Card>
-          )}
+            ) : (
+              <ul className="mt-3">
+                {imports.map((i) => (
+                  <li key={i.id} className="border-t py-3" style={{ borderColor: "var(--border)" }}>
+                    <p className="break-words text-[13px] font-medium">{i.fileName}</p>
+                    <p className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-[var(--text-subtle)]">
+                      <span className="num whitespace-nowrap">
+                        {i.firstDay.toISOString().slice(0, 10)} → {i.lastDay.toISOString().slice(0, 10)}
+                      </span>
+                      <span className="num">{i.hoursInFile.toLocaleString()} hours</span>
+                      {i.hoursSuperseded > 0 && (
+                        <span style={{ color: "var(--warn-fg)" }}>{i.hoursSuperseded} replaced</span>
+                      )}
+                      {i.overrodeMatch ? (
+                        <span style={{ color: "var(--warn-fg)" }}>Chosen by hand</span>
+                      ) : (
+                        <span style={{ color: "var(--ok-fg)" }}>Matched on overlapping hours</span>
+                      )}
+                      <span>{i.uploadedBy.name ?? i.uploadedBy.email}</span>
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
         </div>
       </div>
     </>

@@ -228,6 +228,21 @@ export function ReadingsExplorer({
                     {r.intervalCount !== null && r.expectedIntervals !== null && r.intervalCount < r.expectedIntervals && (
                       <span style={{ color: "var(--warn-fg)" }}> / {r.expectedIntervals}</span>
                     )}
+                    {/* The export writes 0 for an hour the meter was offline
+                        or off — so a 24-row day can be mostly silence, and
+                        the row count alone would call it complete. */}
+                    {r.dataHours !== undefined &&
+                      r.dataHours !== null &&
+                      r.intervalCount !== null &&
+                      r.dataHours < r.intervalCount && (
+                        <div
+                          className="whitespace-nowrap text-[11px] font-normal"
+                          style={{ color: "var(--warn-fg)" }}
+                          title="Hours the meter reported a reading. The export writes 0 for an hour the meter was offline or switched off."
+                        >
+                          {r.dataHours === 0 ? "no hours with data" : `${r.dataHours}h with data`}
+                        </div>
+                      )}
                   </td>
                   <td className="text-right">
                     {r.savingsPct === null || band === null ? (

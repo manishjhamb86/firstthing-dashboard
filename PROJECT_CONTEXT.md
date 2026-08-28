@@ -2499,6 +2499,28 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## A 24-row day can still be mostly silence — the listing now says so (2026-08-28) — user-specified
+
+**The user's domain fact, and the gap it exposed**: the vendor's export writes **0 for an hour the
+meter was offline or switched off**, so a day can hold all 24 rows and read as complete while the
+meter was silent for most of it. The row count (`intervalCount`) — the only completeness signal the
+listing had — cannot see this.
+
+**The marking**: the readings listing (the live-monitoring explorer, **back office only** — the
+portal never renders this listing and gains nothing) derives per-day *hours with data* from the
+bound meter's own hourly store and marks any day short of its row count: "24 · 18h with data" in
+warn, "no hours with data" for a fully-silent day, with the vendor's 0-means-offline behaviour
+explained in the title text.
+
+**Two honesty rules carried the implementation**: a day the hourly store never covered shows NO
+marking — a reading from the upload era has no hour-level truth behind it, and "0h with data" there
+would be a claim about silence where there is simply no evidence; and the marking never changes
+exclusion or flag semantics — it is information, the operator's exclusion mechanism is the act.
+
+**Verified 27/27**, including a manufactured partial-silence day: six hours of a real complete day
+zeroed in the meter store behind the running page → the row read "24 · 18h with data" → the six
+hours restored from the CSV's own values, confirmed by sum.
+
 ## Live monitoring's circuit page: readings first, grouped context, and a freeze that gripped the wrong days (2026-08-28) — user-specified
 
 **The layout ask**: the always-open upload card pushed the stored readings below the fold, and the

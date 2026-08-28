@@ -58,6 +58,7 @@ export default async function LiveMonitoringCircuitPage({
         orderBy: { sequence: "asc" },
         select: { id: true, sequence: true, savingsPct: true, preInstallBaseline: true, rejected: true },
       },
+      meterDevice: { select: { id: true } },
     },
   });
 
@@ -102,6 +103,34 @@ export default async function LiveMonitoringCircuitPage({
     installationCertificateSigned: installationSignedOff,
   });
 
+  // Hours per day that actually carried a reading, from the bound meter's
+  // own hourly store: the export writes 0 for an hour the meter was offline
+  // or off, so a 24-row day can still be mostly silence. Backend only — the
+  // portal never sees this listing.
+  const dataHoursByDay = new Map<string, number>();
+  if (circuit.meterDevice) {
+    const [covered, nonZero] = await Promise.all([
+      db.meterHourlyReading.groupBy({
+        by: ["day"],
+        where: { meterId: circuit.meterDevice.id },
+        _count: { _all: true },
+      }),
+      db.meterHourlyReading.groupBy({
+        by: ["day"],
+        where: { meterId: circuit.meterDevice.id, kWh: { gt: 0 } },
+        _count: { _all: true },
+      }),
+    ]);
+    // Only days the hourly store actually covers get a figure: a reading
+    // that predates the meter store would otherwise read "0h data" — a claim
+    // about silence where there is simply no hour-level truth at all.
+    const nz = new Map(nonZero.map((g) => [g.day.toISOString().slice(0, 10), g._count._all]));
+    for (const g of covered) {
+      const key = g.day.toISOString().slice(0, 10);
+      dataHoursByDay.set(key, nz.get(key) ?? 0);
+    }
+  }
+
   const circuitHref = `/admin/societies/${circuit.societyId}/circuits/${circuit.id}`;
   const baselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
 
@@ -127,6 +156,9 @@ export default async function LiveMonitoringCircuitPage({
               phase: "monitoring" as const,
               excluded: r.excludedAt !== null,
               flagged: r.anomalyFlag,
+              // Days the meter store never saw (upload-era rows) stay null —
+              // absence of hour-level truth is not evidence of silence.
+              dataHours: dataHoursByDay.get(r.date.toISOString().slice(0, 10)) ?? null,
               excludedReason: r.excludedReason,
               released: r.usedInCalculationId !== null,
               superseded: r.supersededAt !== null,

@@ -29,6 +29,14 @@ export type StoredReadingDTO = {
   superseded: boolean;
   /** INV-09's day check — a stored day whose figure looks impossible. */
   flagged?: boolean;
+  /**
+   * Hours that actually carried a reading, from the meter's own hourly
+   * store. The vendor's export writes 0 for an hour the meter was offline
+   * or switched off, so a day can hold 24 rows and still be mostly silence —
+   * this is what tells them apart. Null when no meter is bound (an upload
+   * has no hour-level truth to check against).
+   */
+  dataHours?: number | null;
   variancePct: number | null;
   varianceBand: VarianceBand | null;
   savingsPct: number | null;

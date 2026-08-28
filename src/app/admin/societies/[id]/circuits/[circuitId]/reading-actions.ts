@@ -759,7 +759,9 @@ export async function setReadingExclusion(
           meterInstalledAt: true,
           lightReplacementDate: true,
           benchmarkSavingsPct: true,
+          benchmarkOverridePct: true,
           voidedAt: true,
+          demos: { where: { rejected: false }, select: { id: true }, take: 1 },
         },
       },
     },
@@ -767,9 +769,25 @@ export async function setReadingExclusion(
   if (!reading || reading.circuit.voidedAt) return { error: "That reading no longer exists." };
   if (exclude && !reason.trim()) return { error: "Say why this day is being excluded — the report will show it." };
 
-  const phase = reading.circuit.meterInstalledAt
+  let phase: ReturnType<typeof classifyDay> | "monitoring" | null = reading.circuit.meterInstalledAt
     ? classifyDay(reading.date, reading.circuit.meterInstalledAt, reading.circuit.lightReplacementDate)
     : null;
+  // classifyDay cannot tell a post-install COMMISSIONING day from a
+  // MONITORING day — both sit after the replacement. The difference that
+  // matters to the freeze rule is what the benchmark rests on: when it was
+  // derived from demos, or set by an explicit override, these stored days
+  // never fed it, so excluding one cannot restate the benchmark — they are
+  // monitoring days (found 2026-08-28: Ace City's monthly readings were
+  // frozen by a rule protecting a computation they were never part of). A
+  // circuit whose benchmark WAS computed from its post-install days keeps
+  // the freeze, exactly as before.
+  if (
+    phase === "post_install" &&
+    reading.circuit.benchmarkSavingsPct !== null &&
+    (reading.circuit.demos.length > 0 || reading.circuit.benchmarkOverridePct !== null)
+  ) {
+    phase = "monitoring";
+  }
   if (phase === null || phase === "before_meter" || phase === "replacement_day") {
     return { error: "That day does not belong to any of this circuit's phases." };
   }

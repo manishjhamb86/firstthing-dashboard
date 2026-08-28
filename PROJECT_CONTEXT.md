@@ -2499,6 +2499,42 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Live monitoring's circuit page: readings first, grouped context, and a freeze that gripped the wrong days (2026-08-28) — user-specified
+
+**The layout ask**: the always-open upload card pushed the stored readings below the fold, and the
+readings are what the visit is for. The recording flow now lives behind a **Record readings**
+button in the page header, opening a native `<dialog>` (the repo's established modal pattern);
+the readings open at the top as a working table — **latest first, sortable by clicking any header,
+filterable** (one date, a range, status, in/out of savings band), **paginated at 10/20/30 per page**
+so the list is never longer than a month. Per-row **exclusion survived the redesign** — nearly
+shipped as a silent loss, since the old panel carried it and the new table's spec didn't mention
+it; it is the operator's main correction tool on this screen, so it is a column now, with the
+reason required inline.
+
+**The header cards ask**: grouped stories, not one tile per figure. Three cards — **The agreement**
+(benchmark fixed for the term · contract in force since · billing started, each "not recorded"
+stated rather than blanked), **The demo behind it** (the demo baseline, titled "· in force" when no
+rescale has moved it, else both figures; the demo-measured benchmark via `deriveBenchmark` over the
+live demos, with a note when the agreed figure differs from what was measured), and **Savings**
+(this month · last month · this year · overall, each band-chipped over its own days, against the
+baseline in force; days recorded/excluded/flagged in the footer).
+
+**A real freeze bug found by the e2e, not by the report**: excluding a monitoring day on Ace City
+was refused with "Frozen — the benchmark is confirmed and fixed for the term." That rule protects
+the post-install days a benchmark was COMPUTED from — but `classifyDay` cannot tell a post-install
+commissioning day from a monitoring day, and Ace City's benchmark came from its DEMOS: these
+monthly rows never fed it, so the freeze was gripping days that were never part of the computation.
+Fixed in the phase derivation, not by weakening the rule: benchmark confirmed AND resting on demos
+or an explicit override → the day is a monitoring day; a circuit whose benchmark was computed from
+its own post-install days keeps the freeze exactly as before.
+
+**Verified 25/25** (dialog open/close; latest-first; both sort directions on date and kWh; all four
+filters partitioning correctly against the flagged dead-meter days; single-date; 10/20/30 with the
+30 cap; paging; exclusion round-tripped against the row and re-included). **Two harness lessons in
+one suite**: assertions must derive expectations from the data on screen, not hardcode the other
+environment's file — and a suite that leaves the table sorted by kWh ascending hands the next
+section a first page of zero-kWh days.
+
 ## The billing rows are a projection of the meter store now — the review gate is gone from this path (2026-08-28) — user's decision, reaffirmed
 
 **The review-gated hand-off shipped earlier today lasted a few hours.** The user looked at stage —

@@ -27,6 +27,8 @@ export type StoredReadingDTO = {
   excludedReason: string | null;
   released: boolean;
   superseded: boolean;
+  /** INV-09's day check — a stored day whose figure looks impossible. */
+  flagged?: boolean;
   variancePct: number | null;
   varianceBand: VarianceBand | null;
   savingsPct: number | null;

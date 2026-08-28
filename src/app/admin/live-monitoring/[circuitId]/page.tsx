@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Card, PageHeader, StatusChip } from "@/components/ui";
 import { isDemoMode } from "@/lib/demo-mode";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
@@ -18,7 +18,10 @@ import {
   CircuitReadingPanel,
   type ReadingWindowDTO,
 } from "../../societies/[id]/circuits/[circuitId]/circuit-reading-panel";
-import { StoredReadingsPanel, type StoredReadingDTO } from "../../societies/[id]/circuits/[circuitId]/stored-readings-panel";
+import { type StoredReadingDTO } from "../../societies/[id]/circuits/[circuitId]/stored-readings-panel";
+import { deriveBenchmark } from "@/lib/circuit-demos";
+import { ReadingsExplorer } from "@/components/readings-explorer";
+import { RecordReadingsDialog } from "@/components/record-readings-dialog";
 
 // Live monitoring for one circuit — the monthly readings that feed billing.
 //
@@ -51,6 +54,10 @@ export default async function LiveMonitoringCircuitPage({
       siteSurvey: { select: { pipelineId: true } },
       rescaleEvents: true,
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
+      demos: {
+        orderBy: { sequence: "asc" },
+        select: { id: true, sequence: true, savingsPct: true, preInstallBaseline: true, rejected: true },
+      },
     },
   });
 
@@ -78,7 +85,13 @@ export default async function LiveMonitoringCircuitPage({
   const pipeline = circuit.siteSurvey
     ? await db.pipeline.findUnique({
         where: { id: circuit.siteSurvey.pipelineId },
-        select: { stage: true, installationProject: { select: { certificate: { select: { signedAt: true } } } } },
+        select: {
+          stage: true,
+          contract: { select: { termStart: true, activatedAt: true } },
+          installationProject: {
+            select: { certificate: { select: { signedAt: true, billingStartDate: true } } },
+          },
+        },
       })
     : null;
   const installationSignedOff =
@@ -113,6 +126,7 @@ export default async function LiveMonitoringCircuitPage({
               expectedIntervals: r.expectedIntervals,
               phase: "monitoring" as const,
               excluded: r.excludedAt !== null,
+              flagged: r.anomalyFlag,
               excludedReason: r.excludedReason,
               released: r.usedInCalculationId !== null,
               superseded: r.supersededAt !== null,
@@ -124,11 +138,32 @@ export default async function LiveMonitoringCircuitPage({
           })
       : [];
 
-  const summary = periodSavingsSummary(
-    baselineNow,
-    monitoringDays.map((d) => ({ kWh: d.kWh, excluded: d.excluded })),
-  );
-  const band = summary.band ? SAVINGS_BAND_META[summary.band] : null;
+  // The demo record behind the agreement: what the demos measured, before
+  // any override, and the baseline they measured against.
+  const demoDerived = deriveBenchmark(circuit.demos);
+  const demoBaseline = circuit.preInstallBaseline;
+  const baselineRescaled = baselineNow !== null && demoBaseline !== null && Math.abs(baselineNow - demoBaseline) > 0.005;
+
+  // Savings by period, each over its own days against the baseline in force.
+  const monthOf = (d: string) => d.slice(0, 7);
+  const nowIso = new Date().toISOString();
+  const thisMonth = monthOf(nowIso);
+  const lastMonth = monthOf(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)).toISOString());
+  const thisYear = nowIso.slice(0, 4);
+  const periodPct = (days: StoredReadingDTO[]) => {
+    const s = periodSavingsSummary(baselineNow, days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })));
+    return s.savingsPct === null ? null : { pct: s.savingsPct, band: s.band, days: days.filter((d) => !d.excluded).length };
+  };
+  const savingsRows = [
+    { label: "This month", value: periodPct(monitoringDays.filter((d) => monthOf(d.date) === thisMonth)) },
+    { label: "Last month", value: periodPct(monitoringDays.filter((d) => monthOf(d.date) === lastMonth)) },
+    { label: "This year", value: periodPct(monitoringDays.filter((d) => d.date.startsWith(thisYear))) },
+    { label: "Overall", value: periodPct(monitoringDays) },
+  ];
+
+  const fmtDate = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+  const contractSince = fmtDate(pipeline?.contract?.termStart ?? pipeline?.contract?.activatedAt);
+  const billingStarted = fmtDate(pipeline?.installationProject?.certificate?.billingStartDate);
 
   const lastStoredDate =
     circuit.meterReadings.length > 0
@@ -174,6 +209,22 @@ export default async function LiveMonitoringCircuitPage({
           )
         }
         subtitle={`${circuit.society.name} · ${circuit.lightType} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`}
+        action={
+          !blocker && canIngest ? (
+            <RecordReadingsDialog label="Record readings" waiting={resumeFile !== null}>
+              <p className="mb-3 text-sm text-[var(--text-muted)]">
+                Billing started after the completion certificate (CON-22). A released month can no
+                longer be changed (INV-03).
+              </p>
+              <CircuitReadingPanel
+                circuitId={circuit.id}
+                window={windowDTO}
+                demoMode={demoOn}
+                resumeFile={resumeFile}
+              />
+            </RecordReadingsDialog>
+          ) : undefined
+        }
       />
 
       {blocker ? (
@@ -187,50 +238,104 @@ export default async function LiveMonitoringCircuitPage({
         </Card>
       ) : (
         <>
-          <StatRow>
-            <Stat
-              label="Benchmark"
-              value={circuit.benchmarkSavingsPct?.toFixed(1) ?? "—"}
-              detail="% savings, fixed for the term"
-            />
-            <Stat
-              label="Baseline in force"
-              value={baselineNow?.toFixed(2) ?? "—"}
-              detail="kWh/day"
-            />
-            <Stat
-              label="Days recorded"
-              value={monitoringDays.length}
-              detail={monitoringDays.filter((d) => d.excluded).length > 0
-                ? `${monitoringDays.filter((d) => d.excluded).length} excluded`
-                : "none excluded"}
-            />
-            <Stat
-              label="Measured savings"
-              value={summary.savingsPct != null ? summary.savingsPct.toFixed(1) : "—"}
-              detail={band ? `% · ${band.label}` : "% — no days yet"}
-            />
-          </StatRow>
-
-          <section className="max-w-none mb-8">
-            <h2 className="text-[15px] font-semibold mb-1">Record this month&apos;s readings</h2>
-            <p className="text-sm text-[var(--text-muted)] mb-3">
-              Billing started after the completion certificate (CON-22). Every day here is reviewed
-              before it is saved, and a released month can no longer be changed (INV-03).
-            </p>
-            {canIngest ? (
-              <CircuitReadingPanel
-                circuitId={circuit.id}
-                window={windowDTO}
-                demoMode={demoOn}
-                resumeFile={resumeFile}
-              />
-            ) : (
-              <p className="text-sm text-[var(--text-muted)]">
-                Monthly readings feed billing — recording them is an operations-lead action.
+          {/* Grouped, not one tile per figure (the user's call, 2026-08-28):
+              the agreement, the demo record it rests on, and the savings by
+              period each read as one story rather than eight loose numbers. */}
+          <div className="mb-8 grid gap-4 lg:grid-cols-3">
+            <Card className="p-5">
+              <p className="lbl mb-3">The agreement</p>
+              <p className="flex items-baseline gap-2">
+                <span className="num text-[28px] font-semibold leading-none">
+                  {circuit.benchmarkSavingsPct?.toFixed(1) ?? "—"}%
+                </span>
+                <span className="text-[13px] text-[var(--text-muted)]">benchmark, fixed for the term</span>
               </p>
-            )}
-          </section>
+              <dl className="mt-4 space-y-2 text-[13px]">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-subtle)]">Contract in force since</dt>
+                  <dd className="num">{contractSince ?? <span className="text-[var(--text-subtle)]">not recorded</span>}</dd>
+                </div>
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-subtle)]">Billing started</dt>
+                  <dd className="num">{billingStarted ?? <span className="text-[var(--text-subtle)]">not recorded</span>}</dd>
+                </div>
+              </dl>
+            </Card>
+
+            <Card className="p-5">
+              <p className="lbl mb-3">The demo behind it</p>
+              <dl className="space-y-2 text-[13px]">
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-subtle)]">
+                    {baselineRescaled ? "Baseline at demo" : "Demo baseline · in force"}
+                  </dt>
+                  <dd className="num">{demoBaseline !== null ? `${demoBaseline.toFixed(2)} kWh/day` : "—"}</dd>
+                </div>
+                {baselineRescaled && (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-[var(--text-subtle)]">Baseline in force (rescaled)</dt>
+                    <dd className="num">{baselineNow?.toFixed(2)} kWh/day</dd>
+                  </div>
+                )}
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-subtle)]">Demo-measured benchmark</dt>
+                  <dd className="num">
+                    {demoDerived.raw !== null ? `${demoDerived.raw.toFixed(2)}%` : (
+                      <span className="text-[var(--text-subtle)]">no demo on record</span>
+                    )}
+                  </dd>
+                </div>
+                {demoDerived.raw !== null &&
+                  circuit.benchmarkSavingsPct !== null &&
+                  Math.abs(demoDerived.raw - circuit.benchmarkSavingsPct) > 0.05 && (
+                    <p className="pt-1 text-[12px] text-[var(--text-muted)]">
+                      The agreed figure differs from what the demo measured — the agreement is what
+                      billing follows; the measurement stays on record.
+                    </p>
+                  )}
+              </dl>
+            </Card>
+
+            <Card className="p-5">
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                <p className="lbl">Savings</p>
+                <span className="text-[12px] text-[var(--text-subtle)]">
+                  against {baselineNow?.toFixed(2) ?? "—"} kWh/day
+                </span>
+              </div>
+              <dl className="space-y-2 text-[13px]">
+                {savingsRows.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between gap-4">
+                    <dt className="text-[var(--text-subtle)]">{row.label}</dt>
+                    <dd>
+                      {row.value === null ? (
+                        <span className="text-[var(--text-subtle)]">no days</span>
+                      ) : (
+                        <span
+                          className="num inline-block rounded-[var(--r-sm)] px-2 py-0.5 text-[12px] font-semibold"
+                          style={{
+                            background: row.value.band ? SAVINGS_BAND_META[row.value.band].bg : "var(--neu-bg)",
+                          }}
+                        >
+                          {row.value.pct.toFixed(1)}%
+                          <span className="ml-1.5 font-normal text-[var(--text-muted)]">
+                            · {row.value.days}d
+                          </span>
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              <p className="mt-3 border-t pt-2 text-[12px] text-[var(--text-subtle)]" style={{ borderColor: "var(--border)" }}>
+                {monitoringDays.length} days recorded
+                {monitoringDays.filter((d) => d.excluded).length > 0 &&
+                  ` · ${monitoringDays.filter((d) => d.excluded).length} excluded`}
+                {monitoringDays.filter((d) => d.flagged).length > 0 &&
+                  ` · ${monitoringDays.filter((d) => d.flagged).length} flagged`}
+              </p>
+            </Card>
+          </div>
 
           <section className="max-w-none">
             <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-sm">
@@ -243,24 +348,10 @@ export default async function LiveMonitoringCircuitPage({
                 </Link>
               )}
             </div>
-            <StoredReadingsPanel
-              readings={monitoringDays}
-              canEdit={canIngest}
-              summaries={
-                summary.averageKwh === null
-                  ? []
-                  : [
-                      {
-                        phase: "monitoring",
-                        label: "monitoring",
-                        averageKwh: summary.averageKwh,
-                        savingsPct: summary.savingsPct,
-                        savingsBand: summary.band,
-                        warn: summary.warn,
-                      },
-                    ]
-              }
-            />
+            {/* The readings are what this screen is FOR — they open at the
+                top, latest first, with the recording flow behind the header
+                button rather than a card pushing them below the fold. */}
+            <ReadingsExplorer readings={monitoringDays} canEdit={canIngest} />
           </section>
         </>
       )}

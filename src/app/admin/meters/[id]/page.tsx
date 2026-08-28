@@ -235,20 +235,15 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
                       ) : (
                         <span style={{ color: "var(--ok-fg)" }}>Matched on overlapping hours</span>
                       )}
-                      {i.rawReadingFile &&
-                        (i.rawReadingFile.status === "committed" ? (
-                          <span style={{ color: "var(--ok-fg)" }}>Billing review done</span>
-                        ) : i.rawReadingFile.status === "abandoned" ? (
-                          <span>Billing review abandoned</span>
-                        ) : (
-                          <a
-                            href={`/admin/societies/${i.rawReadingFile.circuit.societyId}/circuits/${i.rawReadingFile.circuitId}`}
-                            className="font-semibold underline"
-                            style={{ color: "var(--warn-fg)" }}
-                          >
-                            Billing review pending →
-                          </a>
-                        ))}
+                      {i.rawReadingFile && i.rawReadingFile.status === "committed" && (
+                        <a
+                          href={`/admin/live-monitoring/${i.rawReadingFile.circuitId}`}
+                          className="font-semibold underline"
+                          style={{ color: "var(--ok-fg)" }}
+                        >
+                          In billing →
+                        </a>
+                      )}
                       <span>{i.uploadedBy.name ?? i.uploadedBy.email}</span>
                     </p>
                   </li>

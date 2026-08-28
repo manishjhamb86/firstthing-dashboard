@@ -2499,6 +2499,48 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The billing rows are a projection of the meter store now — the review gate is gone from this path (2026-08-28) — user's decision, reaffirmed
+
+**The review-gated hand-off shipped earlier today lasted a few hours.** The user looked at stage —
+meter section full of readings, live monitoring still "awaiting readings" — and reaffirmed the
+instruction the hand-off had answered only halfway: "i told you to centralise them they both should
+use the same table same readings." The reaffirmation is the decision (the case for the review gate
+was made and overruled), so the gate went, recorded as **CON-45 amendment (k)** in `00-intake.md`.
+
+**The design now**: `MeterHourlyReading` is the single source of readings; `MeterReading` (the
+billing grain) is its **automatic daily projection**, maintained by `projectMeterStoreToCircuit`
+(`src/lib/meter-billing-handoff.ts`, rewritten) whenever a bound meter's import commits. One upload
+on the meter page → figures on the meter dashboard, live monitoring, the circuit page and billing
+at once. Correction is post-hoc via the existing exclusion/supersession mechanisms, not a gate in
+front of the numbers.
+
+**The invariants hold without the human gate, and the e2e drives each one:**
+- **INV-02**: `MeterReading.rawFileId` is required, so every projected row traces to a
+  `RawReadingFile` whose bytes are in S3 under `Ingest/`. An import made before this pipeline
+  (stage's) has no stored bytes — its file is **reconstructed from its own hourly rows** and named
+  "(reconstructed from meter store)" rather than passed off as the original.
+- **INV-09**: each day is checked as it lands — partials stored but auto-excluded; a day above
+  CON-20's >80% suspect bound or negative is stored and flagged. On stage this immediately caught
+  **15 days of exactly 0 kWh in April** — a dead meter reading as "100% savings".
+- **INV-03**: a row a released calculation consumed is never restated — driven in the e2e by
+  locking a row behind the open form and re-importing: left byte-identical, conflict counted.
+- **ADR-005**: a changed value supersedes (old value kept), never overwrites; an auto-partial
+  exclusion clears when the day fills out to 24 hours (the MS-07 "resolution against a replaced
+  value" lesson), while a human exclusion is never touched.
+- **Idempotent**: re-importing the same file changes nothing, asserted on counts and superseded sums.
+
+**The row-wise pre-save review is NOT dead**: it remains the flow for uploads made on the circuit
+page itself — files with no bound meter behind them — and the S3-resume fix from the earlier stitch
+(a pending CSV readable back from storage) stays, since it also un-strands reviews interrupted by a
+reload.
+
+**Stage was backfilled live**: the projection ran from the local checkout against the stage DB
+(schema was already current — the user had deployed), reconstructing the raw file for the existing
+import and creating 190 daily rows. Verified over the public HTTPS path on the DEPLOYED UI: Ace
+City reads **On target · benchmark 66.4% · measured 64.8% · 190 days · last reading 2026-08-28** —
+from the single upload the user had already made. Dev verified 11/11 (both stores provably equal:
+every daily figure asserted equal to the sum of its own hours in SQL).
+
 ## One upload, one pipeline: the meter store and the billing store are stitched (2026-08-28) — user-caught gap
 
 **The report**: readings uploaded on the meter page showed on the meter dashboard, while live

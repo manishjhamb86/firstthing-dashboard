@@ -56,7 +56,7 @@ function UploadHistory({ meterId }: { meterId: string }) {
   const [fileName, setFileName] = useState<string>("");
   const [done, setDone] = useState<{
     text: string;
-    review?: { href: string; circuitLabel: string };
+    billing?: { href: string; circuitLabel: string; days: number; flagged: number; partialExcluded: number };
     note?: string;
   } | null>(null);
 
@@ -107,17 +107,22 @@ function UploadHistory({ meterId }: { meterId: string }) {
       {done && (
         <div className="mt-2 text-[13px]">
           <p style={{ color: "var(--ok-fg)" }}>{done.text}</p>
-          {done.review && (
+          {done.billing && (
             <p className="mt-1">
-              Sent to <strong>{done.review.circuitLabel}</strong> for billing review —{" "}
-              <a href={done.review.href} className="font-semibold underline">
-                review its days now →
+              <strong>{done.billing.days}</strong> days projected to <strong>{done.billing.circuitLabel}</strong>
+              {done.billing.partialExcluded > 0 && `, ${done.billing.partialExcluded} partial excluded`}
+              {done.billing.flagged > 0 && (
+                <span style={{ color: "var(--warn-fg)" }}>, {done.billing.flagged} flagged</span>
+              )}
+              {" — "}
+              <a href={done.billing.href} className="font-semibold underline">
+                see live monitoring →
               </a>
             </p>
           )}
           {done.note && (
             <p className="mt-1" style={{ color: "var(--text-subtle)" }}>
-              Not sent for billing review: {done.note}.
+              Not projected to billing: {done.note}.
             </p>
           )}
         </div>
@@ -234,10 +239,8 @@ function UploadHistory({ meterId }: { meterId: string }) {
                   setPreview(null);
                   setDone({
                     text: `Stored ${r.stored} hours${r.superseded ? `, replacing ${r.superseded}` : ""}.`,
-                    review: r.review
-                      ? { href: r.review.href, circuitLabel: r.review.circuitLabel }
-                      : undefined,
-                    note: r.reviewSkipped,
+                    billing: r.billing,
+                    note: r.billingSkipped,
                   });
                   router.refresh();
                 })

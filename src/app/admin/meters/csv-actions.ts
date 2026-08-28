@@ -7,7 +7,7 @@ import { logger } from "@/lib/logger";
 import { matchKnownFormat } from "@/lib/reading-formats";
 import { hourlyPoints, type HourlyPoint } from "@/lib/reading-normalize";
 import { circuitLabelOf } from "@/lib/meter-view";
-import { handOffToBillingReview } from "@/lib/meter-billing-handoff";
+import { projectMeterStoreToCircuit, recordMeterRawFile } from "@/lib/meter-billing-handoff";
 import {
   matchMeter,
   dayKeyOf,
@@ -192,10 +192,17 @@ export async function commitMeterCsv(input: {
   stored?: number;
   superseded?: number;
   importId?: string;
-  /** Where the same file went for billing review, when the meter is bound. */
-  review?: { href: string; circuitLabel: string; reused: boolean };
-  /** Why it could not be filed for review, when it could not. */
-  reviewSkipped?: string;
+  /** The same readings, projected into the circuit's daily billing rows. */
+  billing?: {
+    href: string;
+    circuitLabel: string;
+    days: number;
+    flagged: number;
+    partialExcluded: number;
+    lockedSkipped: number;
+  };
+  /** Why the projection could not run, when it could not. */
+  billingSkipped?: string;
 }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -297,51 +304,53 @@ export async function commitMeterCsv(input: {
     overrodeMatch: input.overrodeMatch,
   });
 
-  // One upload, one pipeline: the same file goes to the circuit's billing
-  // review, where the row-by-row acceptance (CON-45) is the only remaining
-  // step between this import and every billing surface. A failure here must
-  // not roll back the hours — the meter store is already correct — so it is
-  // reported rather than thrown.
-  let review: { href: string; circuitLabel: string; reused: boolean } | undefined;
-  let reviewSkipped: string | undefined;
+  // One upload, one store of readings. The daily billing rows are a
+  // PROJECTION of the hourly store — the user's decision: "they both should
+  // use the same table same readings" — so the figures appear on live
+  // monitoring, the circuit page and billing the moment the import lands,
+  // with correction post-hoc rather than a review gating them from view.
+  let billing:
+    | { href: string; circuitLabel: string; days: number; flagged: number; partialExcluded: number; lockedSkipped: number }
+    | undefined;
+  let billingSkipped: string | undefined;
   if (meter.circuitId && meter.circuit) {
     try {
-      const handoff = await handOffToBillingReview({
+      const society = await db.society.findUnique({
+        where: { id: meter.circuit.societyId },
+        select: { name: true },
+      });
+      await recordMeterRawFile({
         actorId: actor.id,
+        importId,
         circuitId: meter.circuitId,
+        societyName: society?.name ?? "Unknown",
         fileName: input.fileName,
         text: input.text,
       });
-      if (handoff.filed) {
-        await db.meterCsvImport.update({
-          where: { id: importId },
-          data: { rawReadingFileId: handoff.rawFileId },
-        });
-        review = {
-          // The link goes where the review is actually VISIBLE: a circuit
-          // still commissioning reviews on its own page's current step; one
-          // in live monitoring reviews on the monitoring screen — on a
-          // finished circuit the readings step is a collapsed "done" section,
-          // and a link into a collapsed section is a dead end.
-          href:
-            handoff.kind === "monitoring"
-              ? `/admin/live-monitoring/${meter.circuitId}`
-              : `/admin/societies/${meter.circuit.societyId}/circuits/${meter.circuitId}`,
-          circuitLabel: circuitLabelOf(meter.circuit.location, meter.circuit.lightType),
-          reused: handoff.reused,
-        };
+      const projected = await projectMeterStoreToCircuit({ meterId: meter.id, actorId: actor.id });
+      if ("error" in projected) {
+        billingSkipped = projected.error;
       } else {
-        reviewSkipped = handoff.reason;
+        billing = {
+          href: `/admin/live-monitoring/${meter.circuitId}`,
+          circuitLabel: circuitLabelOf(meter.circuit.location, meter.circuit.lightType),
+          days: projected.days,
+          flagged: projected.flagged,
+          partialExcluded: projected.partialExcluded,
+          lockedSkipped: projected.lockedSkipped,
+        };
       }
     } catch (err) {
-      logger.warn("meter.billing_review_handoff_failed", { importId, error: String(err) });
-      reviewSkipped = "the file could not be stored for review — upload it on the circuit page instead";
+      // The hourly store is already correct — a projection failure is
+      // reported, never allowed to roll the import back.
+      logger.warn("meter.projection_failed", { importId, error: String(err) });
+      billingSkipped = "the readings could not be projected to billing — see the server log";
     }
   } else {
-    reviewSkipped = "the meter is not bound to a circuit, so there is no billing review to send it to";
+    billingSkipped = "the meter is not bound to a circuit, so there are no billing rows to project";
   }
 
   revalidatePath(`/admin/meters/${meter.id}`);
   revalidatePath("/admin/meters");
-  return { stored: points.length, superseded: effect.supersededHours, importId, review, reviewSkipped };
+  return { stored: points.length, superseded: effect.supersededHours, importId, billing, billingSkipped };
 }

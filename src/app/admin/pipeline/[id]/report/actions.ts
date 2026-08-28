@@ -11,7 +11,7 @@ import {
   type DemoReportCircuitInput,
 } from "@/lib/demo-report";
 import { classifyDay } from "@/lib/circuit-load";
-import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
+import { circuitDailyFromDemos, demoCircuitAverages } from "@/lib/demo-readings-series";
 
 async function requirePer01() {
   await requireAdminPermission("manage_survey");
@@ -83,6 +83,7 @@ export async function collectDemoReportInput(pipelineId: string) {
             })),
           )
         : null;
+    const demoAverages = fromDemos ? demoCircuitAverages(c.demos) : null;
 
     const preInstallReadings = fromDemos
       ? fromDemos.pre.map((r) => ({ date: r.date, consumptionKwh: r.kWh }))
@@ -120,6 +121,9 @@ export async function collectDemoReportInput(pipelineId: string) {
       representedLightCount: c.representedLightCount,
       wattage: c.wattage,
       preInstallBaseline: c.preInstallBaseline,
+      // A circuit demonstrated in batches has no day on which all of it was
+      // measured, so its post figure is the demos' own averages added up.
+      postInstallAverage: demoAverages?.post ?? null,
       benchmarkSavingsPct: c.benchmarkSavingsPct,
       state: c.state,
       preInstallReadings,

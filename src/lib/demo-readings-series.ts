@@ -45,5 +45,40 @@ export function circuitDailyFromDemos(
     }));
   };
 
-  return { pre: phase("pre"), post: phase("post") };
+  const shared = { pre: phase("pre"), post: phase("post") };
+  // Demos that ran a month apart share no dates at all — Amrapali Princely
+  // Estate demonstrated 40 lights in December and 100 in January — so no day
+  // exists on which the whole circuit was measured and the summed series is
+  // empty. The days themselves are still the evidence, so fall back to all of
+  // them. Their average is NOT the circuit's: that comes from the demos' own
+  // recorded figures, which is why demoPostAverage exists.
+  const union = (p: "pre" | "post"): DemoDay[] =>
+    live
+      .flatMap((d) => d.readings.filter((r) => r.phase === p))
+      .map(({ date, kWh }) => ({ date, kWh }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  return {
+    pre: shared.pre.length > 0 ? shared.pre : union("pre"),
+    post: shared.post.length > 0 ? shared.post : union("post"),
+  };
+}
+
+/**
+ * What a backfilled circuit consumed per day, before and after.
+ *
+ * Each demo covers a disjoint set of the circuit's lights, so the circuit's
+ * figure is their averages added together — 6.68 + 18.53 for Amrapali's 40
+ * and 100 lights. Taken from what each demo recorded rather than re-averaged
+ * from days, because the days were measured a month apart and their mean
+ * would be neither figure.
+ */
+export function demoCircuitAverages(
+  demos: { rejected: boolean; preInstallBaseline: number; postInstallAverage: number }[],
+): { pre: number; post: number } | null {
+  const live = demos.filter((d) => !d.rejected);
+  if (live.length === 0) return null;
+  return {
+    pre: live.reduce((n, d) => n + d.preInstallBaseline, 0),
+    post: live.reduce((n, d) => n + d.postInstallAverage, 0),
+  };
 }

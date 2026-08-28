@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
+import { circuitDailyFromDemos, demoCircuitAverages } from "@/lib/demo-readings-series";
 
 const day = (date: string, kWh: number, phase: "pre" | "post") => ({ date, kWh, phase });
 
@@ -54,5 +54,33 @@ describe("a backfilled circuit's daily series", () => {
   it("has nothing to say about a circuit with no demo readings", () => {
     expect(circuitDailyFromDemos([])).toEqual({ pre: [], post: [] });
     expect(circuitDailyFromDemos([{ rejected: false, readings: [] }])).toEqual({ pre: [], post: [] });
+  });
+});
+
+describe("a circuit demonstrated in batches", () => {
+  const d = (rejected: boolean, pre: number, post: number) => ({ rejected, preInstallBaseline: pre, postInstallAverage: post });
+
+  it("adds the demos' own averages, since no day measured the whole circuit", () => {
+    // Amrapali Princely Estate: 40 lights in December, 100 in January.
+    expect(demoCircuitAverages([d(false, 19.14, 6.68), d(false, 47.17, 18.53)]))
+      .toEqual({ pre: 19.14 + 47.17, post: 6.68 + 18.53 });
+  });
+
+  it("leaves out a rejected demo", () => {
+    expect(demoCircuitAverages([d(true, 99, 99), d(false, 19.14, 6.68)]))
+      .toEqual({ pre: 19.14, post: 6.68 });
+  });
+
+  it("has no answer when nothing counts", () => {
+    expect(demoCircuitAverages([])).toBeNull();
+    expect(demoCircuitAverages([d(true, 1, 1)])).toBeNull();
+  });
+
+  it("falls back to every demo day when the demos share no dates", () => {
+    const s = circuitDailyFromDemos([
+      { rejected: false, readings: [{ date: "2025-12-21", kWh: 19.04, phase: "pre" }] },
+      { rejected: false, readings: [{ date: "2026-01-14", kWh: 47.91, phase: "pre" }] },
+    ]);
+    expect(s.pre.map((r) => r.date)).toEqual(["2025-12-21", "2026-01-14"]);
   });
 });

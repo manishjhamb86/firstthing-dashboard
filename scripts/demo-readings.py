@@ -60,6 +60,8 @@ def parse(text: str):
     lines = [re.sub(r"\s+", " ", ln) for ln in lines]
 
     demo, phase, year = 1, None, None
+    explicit_demo = False
+    emitted = False
     i = 0
     while i < len(lines):
         ln = lines[i]
@@ -67,6 +69,13 @@ def parse(text: str):
         m = re.search(r"\bDemo\s*-?\s*(\d)\b", ln)
         if m:
             demo = int(m.group(1))
+            explicit_demo = True
+        elif HEADER_DATE.search(ln) and emitted and not explicit_demo:
+            # Amrapali Princely Estate's file is two reports and a combined
+            # summary in one document, 40 lights then 100, with no marker
+            # anywhere but the second letterhead.
+            demo += 1
+            phase = None
 
         if re.search(r"pre[- ]?installation|before installation", ln, re.I):
             phase = "pre"
@@ -106,6 +115,7 @@ def parse(text: str):
                         raise SystemExit(f"unreadable month in {cell!r}")
                     days.append((mon, int(d), float(val)))
                 if days:
+                    emitted = True
                     yield {"demo": demo, "phase": phase, "days": days,
                            "stated": stated, "year": year}
             continue
@@ -123,9 +133,14 @@ def merge_split_tables(blocks):
     out = []
     for b in blocks:
         prev = out[-1] if out else None
-        if prev and prev["demo"] == b["demo"] and prev["phase"] == b["phase"] and prev["stated"] is None:
+        same = prev and prev["demo"] == b["demo"] and prev["phase"] == b["phase"]
+        # Either half may hold the Average cell: Urban Casa's lift lobby puts
+        # it in the second, Amrapali Princely Estate's second demo in the
+        # first. A half with no average of its own is a continuation.
+        if same and (prev["stated"] is None or b["stated"] is None):
             prev["days"].extend(b["days"])
-            prev["stated"] = b["stated"]
+            if prev["stated"] is None:
+                prev["stated"] = b["stated"]
             continue
         out.append(b)
     return out

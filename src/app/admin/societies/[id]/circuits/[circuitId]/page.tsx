@@ -14,6 +14,7 @@ import { LightReplacementForm } from "./light-replacement-form";
 import { RescaleRowActions } from "./rescale-row-actions";
 import { RescaleForm } from "./rescale-form";
 import { DemoReviewPanel } from "./demo-review-panel";
+import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -240,36 +241,47 @@ export default async function CircuitDetailPage({
   // list would show the same date twice with different values under a
   // single average. That circuit keeps its per-demo tables, which is the
   // reason those are stored per demo in the first place.
-  const liveDemosWithDays = circuit.demos.filter((d) => !d.rejected && d.readings.length > 0);
+  const demoSeries = circuitDailyFromDemos(
+    circuit.demos.map((d) => ({
+      rejected: d.rejected,
+      readings: d.readings.map((r) => ({
+        date: r.date.toISOString().slice(0, 10),
+        kWh: r.kWh,
+        phase: r.phase as "pre" | "post",
+      })),
+    })),
+  );
   const demoDays: StoredReadingDTO[] =
-    storedReadings.length === 0 && liveDemosWithDays.length === 1
-      ? liveDemosWithDays[0].readings.map((r) => {
-          const isPre = r.phase === "pre";
-          const effB = isPre
-            ? null
-            : effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, r.date);
-          const sPct = isPre || effB === null ? null : savingsPct(effB, r.kWh);
-          const v = isPre && theoretical !== null ? varianceAgainstTheoretical(r.kWh, theoretical) : null;
-          return {
-            id: r.id,
-            date: r.date.toISOString().slice(0, 10),
-            kWh: r.kWh,
-            intervalCount: null,
-            expectedIntervals: null,
-            phase: isPre ? ("pre_install" as const) : ("post_install" as const),
-            excluded: false,
-            excludedReason: null,
-            released: false,
-            superseded: false,
-            variancePct: v?.pct ?? null,
-            varianceBand: v?.band ?? null,
-            savingsPct: sPct,
-            savingsBand: sPct === null ? null : savingsBand(sPct),
-            frozenReason:
-              "Read from the demo report — a figure printed on paper cannot be re-reviewed here.",
-          };
-        })
-      : [];
+    storedReadings.length > 0
+      ? []
+      : (["pre", "post"] as const).flatMap((p) =>
+          demoSeries[p].map((r) => {
+            const isPre = p === "pre";
+            const effB = isPre
+              ? null
+              : effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date(r.date));
+            const sPct = isPre || effB === null ? null : savingsPct(effB, r.kWh);
+            const v = isPre && theoretical !== null ? varianceAgainstTheoretical(r.kWh, theoretical) : null;
+            return {
+              id: `${circuit.id}-demo-${p}-${r.date}`,
+              date: r.date,
+              kWh: r.kWh,
+              intervalCount: null,
+              expectedIntervals: null,
+              phase: isPre ? ("pre_install" as const) : ("post_install" as const),
+              excluded: false,
+              excludedReason: null,
+              released: false,
+              superseded: false,
+              variancePct: v?.pct ?? null,
+              varianceBand: v?.band ?? null,
+              savingsPct: sPct,
+              savingsBand: sPct === null ? null : savingsBand(sPct),
+              frozenReason:
+                "Read from the demo report — a figure printed on paper cannot be re-reviewed here.",
+            };
+          }),
+        );
   const displayReadings = storedReadings.length > 0 ? storedReadings : demoDays;
 
   const phaseSummaries = (["pre_install", "post_install", "monitoring"] as const).flatMap((phase) => {

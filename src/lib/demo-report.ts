@@ -20,6 +20,15 @@ export type DemoReportCircuitInput = {
   state: string;
   preInstallReadings: DemoReportReading[];
   postInstallReadings: DemoReportReading[];
+  /**
+   * The circuit's post-install figure when its days cannot produce it.
+   *
+   * A circuit demonstrated in batches has no day on which the whole of it was
+   * measured, so the figure is each demo's own recorded average added
+   * together. Mirrors preInstallBaseline, which has always come from the
+   * circuit's record rather than from re-averaging days.
+   */
+  postInstallAverage?: number | null;
 };
 
 export type DemoReportCircuit = {
@@ -155,10 +164,12 @@ export function buildDemoReport(input: {
 
   const built: DemoReportCircuit[] = [];
   for (const c of benchmarked) {
-    if (c.postInstallReadings.length === 0) return { ok: false, blocker: "no-post-install-readings" };
+    if (c.postInstallReadings.length === 0 && c.postInstallAverage == null) {
+      return { ok: false, blocker: "no-post-install-readings" };
+    }
 
     const preInstallBaseline = c.preInstallBaseline!;
-    const postInstallAverage = averageOf(c.postInstallReadings);
+    const postInstallAverage = c.postInstallAverage ?? averageOf(c.postInstallReadings);
     const savedKwhPerDay = preInstallBaseline - postInstallAverage;
     const extrapolationFactor = c.representedLightCount / c.meteredLightCount;
     // CON-11's extrapolation scales the AGREED saving, so the projected

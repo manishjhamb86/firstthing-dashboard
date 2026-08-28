@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { isAuthorised } from "@/lib/ewelink";
-import { allMeterRows } from "@/lib/meter-view";
+import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
 import { MetersListClient } from "./meters-list-client";
 
 export const dynamic = "force-dynamic";
@@ -158,7 +158,7 @@ export default async function MetersPage() {
             circuits={circuits.map((c) => ({
               id: c.id,
               societyId: c.societyId,
-              label: `${c.location ?? "Unnamed"} · ${c.lightType}`,
+              label: circuitLabelOf(c.location, c.lightType),
               state: c.state,
               takenBy: c.meterDevice?.id ?? null,
             }))}

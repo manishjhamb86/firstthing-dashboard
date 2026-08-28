@@ -52,6 +52,18 @@ export type MeterRow = {
   hourlyTo: string | null;
 };
 
+/**
+ * A circuit reads as "location · light type", except when those are the same
+ * word — several backfilled circuits are located in the Basement and carry
+ * the light type "basement", and "Basement · basement" reads as a rendering
+ * fault rather than as data.
+ */
+export function circuitLabelOf(location: string | null, lightType: string): string {
+  const place = location?.trim() || "Unnamed";
+  if (place.toLowerCase() === lightType.trim().toLowerCase()) return place;
+  return `${place} · ${lightType}`;
+}
+
 const meterInclude = {
   circuit: {
     select: {
@@ -105,7 +117,7 @@ function toRow(
     consecutiveFailures: m.consecutiveFailures,
     now,
   });
-  const circuitLabel = m.circuit ? `${m.circuit.location ?? "Unnamed"} · ${m.circuit.lightType}` : null;
+  const circuitLabel = m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null;
   const devices = m.circuit?.devices ?? [];
 
   return {

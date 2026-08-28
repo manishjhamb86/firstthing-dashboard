@@ -6,6 +6,7 @@ import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import { matchKnownFormat } from "@/lib/reading-formats";
 import { hourlyPoints, type HourlyPoint } from "@/lib/reading-normalize";
+import { circuitLabelOf } from "@/lib/meter-view";
 import {
   matchMeter,
   dayKeyOf,
@@ -142,7 +143,7 @@ export async function analyseMeterCsv(input: {
   const candidates: Candidate[] = meters.map((m) => ({
     meterId: m.id,
     meterName: m.name,
-    circuitLabel: m.circuit ? `${m.circuit.location ?? "Unnamed"} · ${m.circuit.lightType}` : null,
+    circuitLabel: m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null,
     societyName: m.society?.name ?? null,
     stored: byMeter.get(m.id) ?? [],
   }));

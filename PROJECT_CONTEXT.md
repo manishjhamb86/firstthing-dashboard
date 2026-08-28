@@ -2607,6 +2607,24 @@ whose figures are billed, a scale that flatters the low end is one that misleads
 measuring the painted pixels rather than by eye — the two regimes now sit at 0.80 and 0.61 oklab
 lightness where before they were identical — and screenshotted in all three themes.
 
+**A screenshot of the detail page then caught the meter module's worst copy defect: it said two
+opposite things at once.** "Last known, read 16 min ago. These are not current figures." sat
+directly above "Answering and sending fresh readings." The cause was a staleness threshold picked
+by feel — 15 minutes — against a poll that runs HOURLY, so every healthy meter would have carried
+that warning for 45 minutes out of every 60. A warning that fires on the normal case is one people
+learn to ignore, and the real one goes with it. The threshold is tied to the poll cadence now (90
+minutes means a scheduled read was actually missed), and the two sentences are one: `readingCaption`
+covers age and reachability together, because two independent sentences about one fact will
+eventually disagree.
+
+**Three smaller defects from the same screenshots**: `Basement · basement` (several backfilled
+circuits sit in the Basement and carry the light type "basement", so the label read as a rendering
+fault — `circuitLabelOf` collapses it, and the four places that built that string by hand now share
+it); `4536` without a thousands separator next to a tile that had one; and a `<select>` for the
+meter's owner rendered in all 45 table rows, which made the list read as a form and gave the one
+column nobody scans the most visual weight. The owner moved into the assign panel that already
+opens per meter, and both are saved together.
+
 **15 of the 45 device names in the account carry surrounding whitespace** ("AIPL S70 A Gurgaon "),
 which is invisible on screen and silently breaks every exact match against them — it is what made
 one verification fixture appear not to apply at all. `syncMeterDevices` trims on the way in.

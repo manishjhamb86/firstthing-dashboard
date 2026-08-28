@@ -4,6 +4,7 @@ import { theoreticalDailyKwh } from "@/lib/circuit-load";
 import { closeAlert, openAlert } from "@/lib/meter-alerts";
 import { evaluateCapacity, evaluateMeterHealth, outageMessage, outageMinutes } from "@/lib/meter-health";
 import { resolveMeterProvider, type MeterProvider } from "@/lib/meter-provider";
+import { circuitLabelOf } from "@/lib/meter-view";
 
 /**
  * One pass over the assigned meters. It answers exactly two questions, which
@@ -155,7 +156,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       },
     });
 
-    const circuitLabel = m.circuit ? `${m.circuit.location ?? "Unnamed"} · ${m.circuit.lightType}` : null;
+    const circuitLabel = m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null;
 
     // --- 1. Reachability. Fires on the SECOND consecutive failure only. ---
     if (health.shouldAlert) {

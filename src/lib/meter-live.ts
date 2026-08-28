@@ -63,8 +63,24 @@ export function freshnessLabel(lastReadAt: Date | null, now: Date): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
+/**
+ * How old a reading may be before it is no longer the current picture.
+ *
+ * Tied to the POLL CADENCE, not to a feeling about freshness. The hourly job
+ * reads every assigned meter once an hour, so a 20-minute-old figure is
+ * exactly what a healthy meter looks like — the first version of this used
+ * 15 minutes and consequently told the reader "these are not current
+ * figures" for 45 minutes out of every 60, directly under a chip saying the
+ * meter was answering and sending fresh readings. A warning that fires on
+ * the normal case is a warning people learn to ignore, and then the real one
+ * goes with it.
+ *
+ * 90 minutes means a scheduled read was actually missed.
+ */
+export const STALE_AFTER_MS = 90 * 60 * 1000;
+
 /** True when a figure is old enough that calling it current would mislead. */
 export function isStale(lastReadAt: Date | null, now: Date): boolean {
   if (!lastReadAt) return true;
-  return now.getTime() - lastReadAt.getTime() > 15 * 60 * 1000;
+  return now.getTime() - lastReadAt.getTime() > STALE_AFTER_MS;
 }

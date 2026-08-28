@@ -4,6 +4,7 @@ import {
   freshnessLabel,
   isStale,
   minIntervalFor,
+  STALE_AFTER_MS,
   LIVE_FRESH_MS,
   PORTAL_MIN_INTERVAL_MS,
 } from "@/lib/meter-live";
@@ -49,9 +50,23 @@ describe("freshnessLabel", () => {
 });
 
 describe("isStale", () => {
-  it("a quarter-hour-old figure may still be called current; an hour-old one may not", () => {
-    expect(isStale(ago(10 * 60_000), NOW)).toBe(false);
-    expect(isStale(ago(60 * 60_000), NOW)).toBe(true);
+  it("does not call a healthy hourly reading stale — the cry-wolf bug", () => {
+    // The poll runs once an hour, so these are what a working meter looks
+    // like. Warning on them would fire for most of every hour.
+    expect(isStale(ago(16 * 60_000), NOW)).toBe(false);
+    expect(isStale(ago(55 * 60_000), NOW)).toBe(false);
+  });
+
+  it("calls it stale once a scheduled read has actually been missed", () => {
+    expect(isStale(ago(91 * 60_000), NOW)).toBe(true);
+    expect(isStale(ago(5 * 3_600_000), NOW)).toBe(true);
+  });
+
+  it("treats a meter never read as stale rather than as current", () => {
     expect(isStale(null, NOW)).toBe(true);
+  });
+
+  it("is looser than the read interval, so a poll cannot make its own figure stale", () => {
+    expect(STALE_AFTER_MS).toBeGreaterThan(60 * 60 * 1000);
   });
 });

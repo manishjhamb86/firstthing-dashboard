@@ -42,6 +42,7 @@ export function MetersListClient({
   const [editing, setEditing] = useState<string | null>(null);
   const [society, setSociety] = useState("");
   const [circuit, setCircuit] = useState("");
+  const [owner, setOwner] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -63,6 +64,7 @@ export function MetersListClient({
     setEditing(m.id);
     setSociety(m.societyId ?? "");
     setCircuit(m.circuitId ?? "");
+    setOwner(m.ownerId ?? "");
     setError(null);
   }
 
@@ -204,7 +206,7 @@ export function MetersListClient({
                         <span style={{ color: m.stale ? "var(--text-muted)" : "var(--text)" }}>
                           {m.powerW.toFixed(0)} W
                         </span>
-                        <div className="text-xs text-[var(--text-subtle)]">{m.readAge}</div>
+                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">{m.readAge}</div>
                       </>
                     )}
                   </td>
@@ -214,7 +216,7 @@ export function MetersListClient({
                     ) : (
                       <>
                         {m.dayKwh.toFixed(2)}
-                        <div className="text-xs text-[var(--text-subtle)]">
+                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">
                           {m.capacityKwh === null ? "no ceiling" : `of ${m.capacityKwh.toFixed(1)}`}
                         </div>
                       </>
@@ -226,36 +228,15 @@ export function MetersListClient({
                     ) : (
                       <>
                         {m.hourlyCount.toLocaleString()} h
-                        <div className="text-xs text-[var(--text-subtle)]">to {m.hourlyTo}</div>
+                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">to {m.hourlyTo}</div>
                       </>
                     )}
                   </td>
                   <td className="text-[13px]">
-                    {canAssign && m.hasEnergySignal ? (
-                      <select
-                        className="field field-auto"
-                        value={m.ownerId ?? ""}
-                        disabled={pending}
-                        aria-label={`Who is chased when ${m.name} stops reporting`}
-                        onChange={(e) => {
-                          const ownerId = e.target.value || null;
-                          start(async () => {
-                            setError(null);
-                            const r = await setMeterOwner({ meterId: m.id, ownerId });
-                            if (r.error) setError(r.error);
-                            else router.refresh();
-                          });
-                        }}
-                      >
-                        <option value="">Nobody</option>
-                        {fieldStaff.map((f) => (
-                          <option key={f.id} value={f.id}>
-                            {f.label}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      (m.ownerLabel ?? <span className="text-[var(--text-subtle)]">—</span>)
+                    {m.ownerLabel ?? (
+                      <span className="text-[var(--text-subtle)]">
+                        {m.state === null ? "—" : "Nobody"}
+                      </span>
                     )}
                   </td>
                   {canAssign && (
@@ -306,12 +287,15 @@ export function MetersListClient({
           circuits={circuits}
           society={society}
           circuit={circuit}
+          owner={owner}
+          fieldStaff={fieldStaff}
           pending={pending}
           onSociety={(v) => {
             setSociety(v);
             setCircuit("");
           }}
           onCircuit={setCircuit}
+          onOwner={setOwner}
           onCancel={() => setEditing(null)}
           onSave={() =>
             start(async () => {
@@ -321,11 +305,19 @@ export function MetersListClient({
                 societyId: society || null,
                 circuitId: circuit || null,
               });
-              if (r.error) setError(r.error);
-              else {
-                setEditing(null);
-                router.refresh();
+              if (r.error) {
+                setError(r.error);
+                return;
               }
+              if ((owner || null) !== editingMeter.ownerId) {
+                const o = await setMeterOwner({ meterId: editingMeter.id, ownerId: owner || null });
+                if (o.error) {
+                  setError(o.error);
+                  return;
+                }
+              }
+              setEditing(null);
+              router.refresh();
             })
           }
         />
@@ -340,9 +332,12 @@ function AssignPanel({
   circuits,
   society,
   circuit,
+  owner,
+  fieldStaff,
   pending,
   onSociety,
   onCircuit,
+  onOwner,
   onCancel,
   onSave,
 }: {
@@ -351,9 +346,12 @@ function AssignPanel({
   circuits: Circuit[];
   society: string;
   circuit: string;
+  owner: string;
+  fieldStaff: { id: string; label: string }[];
   pending: boolean;
   onSociety: (v: string) => void;
   onCircuit: (v: string) => void;
+  onOwner: (v: string) => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -368,7 +366,7 @@ function AssignPanel({
         A meter binds to one circuit, because a circuit is what gets billed — two meters on one circuit
         would be two sources for one figure. Leave the circuit blank while it is still undecided.
       </p>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <label className="block">
           <span className="lbl mb-1 block">Society</span>
           <select className="field" value={society} disabled={pending} onChange={(e) => onSociety(e.target.value)}>
@@ -397,7 +395,22 @@ function AssignPanel({
             ))}
           </select>
         </label>
+        <label className="block">
+          <span className="lbl mb-1 block">Chased when it stops</span>
+          <select className="field" value={owner} disabled={pending} onChange={(e) => onOwner(e.target.value)}>
+            <option value="">Nobody</option>
+            {fieldStaff.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+      <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>
+        An alert addressed to nobody is an alert nobody acts on — the owner is who goes and looks at
+        the meter, so only accounts with field access are offered.
+      </p>
       <div className="mt-3 flex flex-wrap gap-2">
         <button type="button" className="btn-primary btn-sm" disabled={pending} onClick={onSave}>
           {pending ? "Saving…" : "Save"}

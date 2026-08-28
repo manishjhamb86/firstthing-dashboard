@@ -13,25 +13,50 @@ import type { MeterRow } from "@/lib/meter-view";
  * number into a decision.
  */
 
-const STATE_META: Record<string, { label: string; tone: ChipTone; hint: string }> = {
-  reporting: { label: "Reporting", tone: "ok", hint: "Answering and sending fresh readings." },
-  silent: {
-    label: "Not reporting",
-    tone: "warn",
-    hint: "Connected, but it has sent nothing for over two hours. The figures below are the last it sent.",
-  },
-  offline: { label: "Offline", tone: "bad", hint: "The meter could not be reached." },
+const STATE_META: Record<string, { label: string; tone: ChipTone }> = {
+  reporting: { label: "Reporting", tone: "ok" },
+  silent: { label: "Not reporting", tone: "warn" },
+  offline: { label: "Offline", tone: "bad" },
 };
+
+/**
+ * ONE sentence about the figures, covering both how old they are and whether
+ * the meter is still answering.
+ *
+ * It was two — a freshness line and a state hint — and they contradicted each
+ * other on screen: "Last known, read 16 min ago. These are not current
+ * figures." sat directly above "Answering and sending fresh readings." Two
+ * independent sentences about one fact will eventually disagree, so there is
+ * one now, and its shape makes disagreement impossible.
+ */
+function readingCaption(meter: MeterRow): { text: string; warn: boolean } {
+  if (meter.readAt === null) return { text: "This meter has not been read yet.", warn: false };
+  if (meter.state === "offline") {
+    return {
+      text: `Last known, read ${meter.readAge}. The meter is not reachable, so these are not current figures.`,
+      warn: true,
+    };
+  }
+  if (meter.state === "silent") {
+    return {
+      text: `Last known, read ${meter.readAge}. The meter is connected but has stopped sending, so these are not current figures.`,
+      warn: true,
+    };
+  }
+  if (meter.stale) {
+    return {
+      text: `Read ${meter.readAge}. The hourly check has not run since — read it now for the current figures.`,
+      warn: true,
+    };
+  }
+  return { text: `Read ${meter.readAge} from the meter itself.`, warn: false };
+}
 
 export function MeterStateChip({ state }: { state: string | null }) {
   if (!state) return <StatusChip tone="neu">Unassigned</StatusChip>;
   const meta = STATE_META[state];
   if (!meta) return <StatusChip tone="neu">{state}</StatusChip>;
   return <StatusChip tone={meta.tone}>{meta.label}</StatusChip>;
-}
-
-export function meterStateHint(state: string | null): string | null {
-  return state ? (STATE_META[state]?.hint ?? null) : null;
 }
 
 function fmt(n: number | null, digits = 2): string {
@@ -90,33 +115,21 @@ function Reading({
  * reader cannot take one of them as live while another is old.
  */
 export function MeterReadout({ meter, action }: { meter: MeterRow; action?: ReactNode }) {
-  const hint = meterStateHint(meter.state);
+  const caption = readingCaption(meter);
   return (
     <Card>
-      <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div>
           <CardTitle>Live reading</CardTitle>
-          <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            {meter.readAt === null ? (
-              "This meter has not been read yet."
-            ) : meter.stale ? (
-              <>
-                <span style={{ color: "var(--warn-fg)" }}>Last known</span>, read {meter.readAge}. These are
-                not current figures.
-              </>
-            ) : (
-              <>Read {meter.readAge} from the meter itself.</>
-            )}
+          <p
+            className="mt-1 text-[13px]"
+            style={{ color: caption.warn ? "var(--warn-fg)" : "var(--text-muted)" }}
+          >
+            {caption.text}
           </p>
         </div>
         {action}
       </div>
-
-      {hint && (
-        <p className="mb-3 text-[13px]" style={{ color: "var(--text-muted)" }}>
-          {hint}
-        </p>
-      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Reading
@@ -148,7 +161,7 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
         />
         <Reading
           label="Exported history"
-          value={meter.hourlyCount === 0 ? "—" : String(meter.hourlyCount)}
+          value={meter.hourlyCount === 0 ? "—" : meter.hourlyCount.toLocaleString()}
           unit={meter.hourlyCount === 0 ? undefined : "hours"}
           detail={
             meter.hourlyFrom

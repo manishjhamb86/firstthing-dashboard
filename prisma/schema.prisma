@@ -1791,6 +1791,9 @@ model RawReadingFile {
 
   status ReadingUploadStatus @default(pending_normalization)
 
+  /// Meter-page imports that filed this review (see MeterCsvImport).
+  meterCsvImports MeterCsvImport[]
+
   // The mapping the model proposed, and the one actually used. Both are kept:
   // FEAT-047-AC-1 needs the mapping in the provenance chain, and keeping the
   // proposal beside the confirmed version is what makes FEAT-044-AC-5's
@@ -2763,6 +2766,13 @@ model MeterCsvImport {
   /// The S3 key of the file as uploaded, kept for the same reason CON-30
   /// keeps raw reading files: the figures have to trace to the bytes.
   s3Key    String? @map("s3_key")
+  /// The billing-review hand-off: when the meter was bound to a circuit at
+  /// import time, the same file was filed into CON-45's review queue, and
+  /// this is that record. Null means there was no circuit to hand off to.
+  /// The two stores stay deliberately separate — hourly telemetry here,
+  /// reviewed daily figures there — but they share ONE upload and this link
+  /// is what makes them one pipeline rather than two tools.
+  rawReadingFileId String? @map("raw_reading_file_id")
 
   /// The range the file covers, as printed in it.
   firstDay DateTime @map("first_day")
@@ -2784,9 +2794,10 @@ model MeterCsvImport {
   uploadedById String   @map("uploaded_by_id")
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
 
-  meter      MeterDevice          @relation(fields: [meterId], references: [id], onDelete: Cascade)
-  uploadedBy AdminUser            @relation("MeterCsvImportUploadedBy", fields: [uploadedById], references: [id])
-  readings   MeterHourlyReading[]
+  meter          MeterDevice          @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  uploadedBy     AdminUser            @relation("MeterCsvImportUploadedBy", fields: [uploadedById], references: [id])
+  rawReadingFile RawReadingFile?      @relation(fields: [rawReadingFileId], references: [id], onDelete: SetNull)
+  readings       MeterHourlyReading[]
 
   @@index([meterId, uploadedAt])
   @@map("meter_csv_imports")

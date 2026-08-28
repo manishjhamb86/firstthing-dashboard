@@ -53,6 +53,26 @@ export default async function LiveMonitoringCircuitPage({
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
     },
   });
+
+  // A file waiting in the review queue — filed by the meter page's import.
+  // Surfaced here because for a circuit in live monitoring, THIS is the
+  // screen the review happens on.
+  const pendingRawFile = await db.rawReadingFile.findFirst({
+    where: {
+      circuitId,
+      status: { in: ["pending_normalization", "awaiting_mapping", "ready"] },
+    },
+    orderBy: { uploadedAt: "desc" },
+    select: { id: true, fileName: true, meterCsvImports: { select: { id: true }, take: 1 } },
+  });
+  const resumeFile = pendingRawFile
+    ? {
+        id: pendingRawFile.id,
+        fileName: pendingRawFile.fileName,
+        fromMeter: pendingRawFile.meterCsvImports.length > 0,
+      }
+    : null;
+
   if (!circuit || circuit.voidedAt) notFound();
 
   const pipeline = circuit.siteSurvey
@@ -203,6 +223,7 @@ export default async function LiveMonitoringCircuitPage({
                 circuitId={circuit.id}
                 window={windowDTO}
                 demoMode={demoOn}
+                resumeFile={resumeFile}
               />
             ) : (
               <p className="text-sm text-[var(--text-muted)]">

@@ -139,6 +139,27 @@ export default async function CircuitDetailPage({
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
     },
   });
+
+  // A file already waiting in the review queue — filed by the meter page's
+  // import, or left behind by a reload mid-review — surfaced so it can be
+  // resumed instead of sitting invisible forever. `fromMeter` is decided by
+  // whether a meter import points at it.
+  const pendingRawFile = await db.rawReadingFile.findFirst({
+    where: {
+      circuitId,
+      status: { in: ["pending_normalization", "awaiting_mapping", "ready"] },
+    },
+    orderBy: { uploadedAt: "desc" },
+    select: { id: true, fileName: true, meterCsvImports: { select: { id: true }, take: 1 } },
+  });
+  const resumeFile = pendingRawFile
+    ? {
+        id: pendingRawFile.id,
+        fileName: pendingRawFile.fileName,
+        fromMeter: pendingRawFile.meterCsvImports.length > 0,
+      }
+    : null;
+
   if (!circuit || circuit.societyId !== id) notFound();
 
   // CON-45 — the inventory dropdown reads the catalog's active originals.
@@ -655,6 +676,7 @@ export default async function CircuitDetailPage({
                   circuitId={circuit.id}
                   window={readingWindowDTO}
                   demoMode={demoMode}
+                  resumeFile={resumeFile}
                 />
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">
@@ -837,6 +859,7 @@ export default async function CircuitDetailPage({
                     circuitId={circuit.id}
                     window={readingWindowDTO}
                     demoMode={demoMode}
+                    resumeFile={resumeFile}
                   />
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">
@@ -1074,6 +1097,7 @@ export default async function CircuitDetailPage({
                       circuitId={circuit.id}
                       window={readingWindowDTO}
                       demoMode={demoMode}
+                      resumeFile={resumeFile}
                     />
                   ) : (
                     <p className="text-sm text-[var(--text-muted)]">

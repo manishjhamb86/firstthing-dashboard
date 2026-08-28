@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger";
 import { matchKnownFormat } from "@/lib/reading-formats";
 import { hourlyPoints, type HourlyPoint } from "@/lib/reading-normalize";
 import { circuitLabelOf } from "@/lib/meter-view";
+import { handOffToBillingReview } from "@/lib/meter-billing-handoff";
 import {
   matchMeter,
   dayKeyOf,
@@ -186,7 +187,16 @@ export async function commitMeterCsv(input: {
   /** True when the operator filed it against a meter the evidence did not propose. */
   overrodeMatch: boolean;
   matchDetail?: CandidateScore | null;
-}): Promise<{ error?: string; stored?: number; superseded?: number; importId?: string }> {
+}): Promise<{
+  error?: string;
+  stored?: number;
+  superseded?: number;
+  importId?: string;
+  /** Where the same file went for billing review, when the meter is bound. */
+  review?: { href: string; circuitLabel: string; reused: boolean };
+  /** Why it could not be filed for review, when it could not. */
+  reviewSkipped?: string;
+}> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
   if (!actor.permissions.includes(PERMISSION)) {
@@ -196,7 +206,13 @@ export async function commitMeterCsv(input: {
 
   const meter = await db.meterDevice.findUnique({
     where: { id: input.meterId },
-    select: { id: true, name: true, circuitId: true, societyId: true },
+    select: {
+      id: true,
+      name: true,
+      circuitId: true,
+      societyId: true,
+      circuit: { select: { location: true, lightType: true, societyId: true } },
+    },
   });
   if (!meter) return { error: "That meter is no longer in the mirror." };
   if (!meter.circuitId && !meter.societyId) {
@@ -280,7 +296,52 @@ export async function commitMeterCsv(input: {
     superseded: effect.supersededHours,
     overrodeMatch: input.overrodeMatch,
   });
+
+  // One upload, one pipeline: the same file goes to the circuit's billing
+  // review, where the row-by-row acceptance (CON-45) is the only remaining
+  // step between this import and every billing surface. A failure here must
+  // not roll back the hours — the meter store is already correct — so it is
+  // reported rather than thrown.
+  let review: { href: string; circuitLabel: string; reused: boolean } | undefined;
+  let reviewSkipped: string | undefined;
+  if (meter.circuitId && meter.circuit) {
+    try {
+      const handoff = await handOffToBillingReview({
+        actorId: actor.id,
+        circuitId: meter.circuitId,
+        fileName: input.fileName,
+        text: input.text,
+      });
+      if (handoff.filed) {
+        await db.meterCsvImport.update({
+          where: { id: importId },
+          data: { rawReadingFileId: handoff.rawFileId },
+        });
+        review = {
+          // The link goes where the review is actually VISIBLE: a circuit
+          // still commissioning reviews on its own page's current step; one
+          // in live monitoring reviews on the monitoring screen — on a
+          // finished circuit the readings step is a collapsed "done" section,
+          // and a link into a collapsed section is a dead end.
+          href:
+            handoff.kind === "monitoring"
+              ? `/admin/live-monitoring/${meter.circuitId}`
+              : `/admin/societies/${meter.circuit.societyId}/circuits/${meter.circuitId}`,
+          circuitLabel: circuitLabelOf(meter.circuit.location, meter.circuit.lightType),
+          reused: handoff.reused,
+        };
+      } else {
+        reviewSkipped = handoff.reason;
+      }
+    } catch (err) {
+      logger.warn("meter.billing_review_handoff_failed", { importId, error: String(err) });
+      reviewSkipped = "the file could not be stored for review — upload it on the circuit page instead";
+    }
+  } else {
+    reviewSkipped = "the meter is not bound to a circuit, so there is no billing review to send it to";
+  }
+
   revalidatePath(`/admin/meters/${meter.id}`);
   revalidatePath("/admin/meters");
-  return { stored: points.length, superseded: effect.supersededHours, importId };
+  return { stored: points.length, superseded: effect.supersededHours, importId, review, reviewSkipped };
 }

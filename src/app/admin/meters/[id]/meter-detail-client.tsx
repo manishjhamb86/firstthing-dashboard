@@ -54,7 +54,11 @@ function UploadHistory({ meterId }: { meterId: string }) {
   const [preview, setPreview] = useState<CsvPreview | null>(null);
   const [text, setText] = useState<string>("");
   const [fileName, setFileName] = useState<string>("");
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{
+    text: string;
+    review?: { href: string; circuitLabel: string };
+    note?: string;
+  } | null>(null);
 
   function choose(file: File) {
     setError(null);
@@ -101,9 +105,22 @@ function UploadHistory({ meterId }: { meterId: string }) {
 
       {error && <ErrorText>{error}</ErrorText>}
       {done && (
-        <p className="mt-2 text-[13px]" style={{ color: "var(--ok-fg)" }}>
-          {done}
-        </p>
+        <div className="mt-2 text-[13px]">
+          <p style={{ color: "var(--ok-fg)" }}>{done.text}</p>
+          {done.review && (
+            <p className="mt-1">
+              Sent to <strong>{done.review.circuitLabel}</strong> for billing review —{" "}
+              <a href={done.review.href} className="font-semibold underline">
+                review its days now →
+              </a>
+            </p>
+          )}
+          {done.note && (
+            <p className="mt-1" style={{ color: "var(--text-subtle)" }}>
+              Not sent for billing review: {done.note}.
+            </p>
+          )}
+        </div>
       )}
 
       {preview && (
@@ -215,9 +232,13 @@ function UploadHistory({ meterId }: { meterId: string }) {
                     return;
                   }
                   setPreview(null);
-                  setDone(
-                    `Stored ${r.stored} hours${r.superseded ? `, replacing ${r.superseded}` : ""}.`,
-                  );
+                  setDone({
+                    text: `Stored ${r.stored} hours${r.superseded ? `, replacing ${r.superseded}` : ""}.`,
+                    review: r.review
+                      ? { href: r.review.href, circuitLabel: r.review.circuitLabel }
+                      : undefined,
+                    note: r.reviewSkipped,
+                  });
                   router.refresh();
                 })
               }

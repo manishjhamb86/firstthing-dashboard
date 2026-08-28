@@ -159,10 +159,18 @@ export function CircuitReadingPanel({
   circuitId,
   window: windowInfo,
   demoMode = false,
+  resumeFile,
 }: {
   circuitId: string;
   window: ReadingWindowDTO | null;
   demoMode?: boolean;
+  /**
+   * A file already waiting in the review queue — filed by the meter page's
+   * import, or left behind by a reload mid-review. Without this, a pending
+   * file was invisible: the panel only knew about files chosen in its own
+   * session, so a hand-off would have sat in the queue forever.
+   */
+  resumeFile?: { id: string; fileName: string; fromMeter: boolean } | null;
 }) {
   const router = useRouter();
   const [stage, setStage] = useState<"idle" | "working" | "fill" | "sheet" | "review" | "done">("idle");
@@ -313,6 +321,31 @@ export function CircuitReadingPanel({
     );
     setPreview(preview);
     setStage("review");
+  }
+
+  /** Open a file already in the queue. The server reads its text back from S3. */
+  function resumePending() {
+    if (!resumeFile) return;
+    setError(undefined);
+    setStage("working");
+    setFileName(resumeFile.fileName);
+    startTransition(async () => {
+      try {
+        const previewed = await previewCircuitReadings(resumeFile.id, "");
+        if ("error" in previewed) throw new Error(previewed.error);
+        setRawFileId(resumeFile.id);
+        setFileText(undefined);
+        if ("chooseSheet" in previewed) {
+          setSheets(previewed.chooseSheet);
+          setStage("sheet");
+          return;
+        }
+        acceptPreview(previewed.preview);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err));
+        setStage("idle");
+      }
+    });
   }
 
   function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
@@ -561,6 +594,30 @@ export function CircuitReadingPanel({
     return (
       <Card className="p-5 space-y-4">
         {windowInfo && <ValidPeriod window={windowInfo} />}
+
+        {/* A file already in the queue comes first: the meter page filed it,
+            and making the operator re-upload what the system already holds
+            is the two-tools feeling this hand-off exists to end. */}
+        {resumeFile && (
+          <div
+            className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r-md)] p-4"
+            style={{ background: "var(--info-bg)", border: "1px solid var(--info-line)" }}
+          >
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">
+                {resumeFile.fromMeter ? "A meter export is waiting for review" : "An upload was left mid-review"}
+              </p>
+              <p className="mt-0.5 break-words text-xs text-[var(--text-muted)]">
+                {resumeFile.fileName}
+                {resumeFile.fromMeter && " — filed by the meter page's import; review its days to store them for billing."}
+              </p>
+            </div>
+            <button type="button" onClick={resumePending} disabled={pending} className="btn-primary shrink-0">
+              Review it
+            </button>
+          </div>
+        )}
+
         <div className="space-y-2">
           <p className="text-sm text-[var(--text-muted)]">
             Upload the meter&apos;s export — a CSV, or a workbook with a sheet per circuit. The system

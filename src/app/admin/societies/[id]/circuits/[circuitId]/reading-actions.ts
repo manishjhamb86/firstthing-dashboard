@@ -128,7 +128,20 @@ async function textForUpload(
   clientText: string,
   chosenSheet?: string,
 ): Promise<{ text: string; sheetName: string | null } | { chooseSheet: SheetChoice[] } | { error: string }> {
-  if (!isWorkbook(file)) return { text: clientText, sheetName: null };
+  if (!isWorkbook(file)) {
+    if (clientText) return { text: clientText, sheetName: null };
+    // No client text means this file is being RESUMED — a reload mid-review,
+    // or a hand-off from the meter page's import. The bytes are already in
+    // S3 (CON-30 puts them there before anything interprets them), so read
+    // them back rather than stranding the file in the review queue forever.
+    try {
+      const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: file.s3Key }));
+      const bytes = await obj.Body!.transformToByteArray();
+      return { text: new TextDecoder("utf-8").decode(bytes), sheetName: null };
+    } catch {
+      return { error: "The stored file could not be read back from storage. Upload it again." };
+    }
+  }
 
   let bytes: Uint8Array;
   try {

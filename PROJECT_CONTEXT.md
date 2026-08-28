@@ -2499,6 +2499,55 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## One upload, one pipeline: the meter store and the billing store are stitched (2026-08-28) — user-caught gap
+
+**The report**: readings uploaded on the meter page showed on the meter dashboard, while live
+monitoring still said "awaiting readings" — "they are acting as two different tools." The user
+offered a full merge as an alternative, with the condition that whichever answer wins had to be
+argued, not asserted.
+
+**The answer: two stores, one pipeline — and that split is the industry's own shape, not this
+codebase's quirk.** Utility metering architecture runs a validation step (VEE — validate, estimate,
+edit) between raw interval telemetry and "revenue-grade" data, and billing consumes only the
+validated side. That maps exactly onto what was already here: `MeterHourlyReading` is raw hourly
+telemetry, CON-45's row-by-row review is the VEE step, and `MeterReading` is the revenue-grade
+daily store that benchmarks, live monitoring and bills read. Merging the stores would either let
+unreviewed numbers reach a billed figure (what INV-02/INV-09 exist to prevent) or block the
+monitoring view behind a review it does not need. **What was genuinely broken was the seam: one
+file had to be uploaded twice, once per store.** Now the meter import files the same bytes into the
+circuit's review queue by itself, and the operator's review is the only step left between one
+upload and every surface.
+
+**The pieces, each load-bearing:**
+- `handOffToBillingReview` (`src/lib/meter-billing-handoff.ts`): after the hourly commit, the same
+  text goes to S3 under the private `Ingest/` prefix (CON-30 — bytes before interpretation) and a
+  `RawReadingFile` is created for the bound circuit. Deduped by filename+size against files already
+  awaiting review, so a re-import cannot queue the same review twice. A meter with no circuit, or a
+  circuit with no install date, is stated on screen rather than silently skipped.
+- **A pending CSV is now resumable from S3.** `textForUpload` read a CSV's text only from the
+  client, so any pending file not opened in the same session — a hand-off, or simply a reload
+  mid-review — was stranded in the queue forever with no way to open it. It falls back to reading
+  the stored object now; this also fixed the pre-existing reload case nobody had hit yet.
+- **The circuit page and the live-monitoring page both announce a waiting file** ("filed by the
+  meter page's import — Review it") instead of leaving it invisible: the panel only knew about
+  files chosen in its own session.
+- **The review link goes where the review is visible.** A commissioning-phase file links to the
+  circuit page's current step; a monitoring-phase file links to `/admin/live-monitoring/[circuitId]`
+  — on a finished circuit the readings step is a collapsed done-section, and a link into a
+  collapsed section is a dead end (the e2e caught exactly this: the callout present but hidden).
+- `MeterCsvImport.rawReadingFileId` links the import to its review, so the meter page's imports
+  list shows "Billing review pending →" / "Billing review done" — the file's whole journey from
+  one row.
+
+**Verified end to end with the real 190-day export, 14/14, zero console errors**: one upload on the
+meter page → 4,536 hours in the meter store AND a review filed (bytes confirmed under `Ingest/`) →
+the live-monitoring page announces it → Review it renders 190 rows read back from S3 with no client
+text → Save 190 readings → 190 `MeterReading` rows (`source: csv`) → live monitoring flips Ace City
+from "awaiting readings" to a measured figure with day count and last-reading date. Two harness
+traps, both this repo's documented classes: a wait on `/average/i` matched the review screen itself
+and raced the commit (the DB probe then honestly read 0), and the "no 'none yet' anywhere" assertion
+was wrong because fourteen OTHER circuits honestly say "none yet".
+
 ## Sortable columns, an assigned-by-default filter, and a rename eWeLink will not allow (2026-08-28)
 
 **Renaming a meter cannot be done, and the finding is worth keeping so nobody rebuilds it.** The

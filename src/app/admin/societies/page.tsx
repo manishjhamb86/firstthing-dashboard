@@ -50,6 +50,15 @@ export default async function SocietiesPage({
       include: {
         engagements: { select: { serviceLine: true, status: true } },
         _count: { select: { circuits: true } },
+        // What each society's live circuits stand in for. The Flats column is
+        // empty for exactly the societies we know most about — their imported
+        // flat counts turned out to be light counts and were cleared — so the
+        // list was blankest where there is most on record. This is the figure
+        // that actually matters for these: what they are billed against.
+        circuits: {
+          where: { voidedAt: null },
+          select: { representedLightCount: true },
+        },
       },
     }),
     db.society.groupBy({ by: ["status"], _count: { _all: true } }),
@@ -166,6 +175,7 @@ export default async function SocietiesPage({
               <tr>
                 <th>Society</th>
                 <th className="hidden md:table-cell">Flats</th>
+                <th className="hidden md:table-cell">Lights</th>
                 <th className="hidden lg:table-cell">Service lines</th>
                 <th className="hidden md:table-cell">Circuits</th>
                 <th>Status</th>
@@ -202,6 +212,15 @@ export default async function SocietiesPage({
                         <span style={{ color: "var(--text-subtle)" }}>—</span>
                       ) : (
                         s.flatCount.toLocaleString("en-IN")
+                      )}
+                    </td>
+                    <td className="num hidden md:table-cell">
+                      {s.circuits.length === 0 ? (
+                        <span style={{ color: "var(--text-subtle)" }}>—</span>
+                      ) : (
+                        s.circuits
+                          .reduce((n, c) => n + c.representedLightCount, 0)
+                          .toLocaleString("en-IN")
                       )}
                     </td>
                     <td className="hidden lg:table-cell">

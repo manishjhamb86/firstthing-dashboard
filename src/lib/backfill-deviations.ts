@@ -33,6 +33,10 @@ export type DeviationCode =
   | "minimum-light-clause-not-enforced"
   | "billing-predates-agreement-execution"
   | "agreement-re-executed-after-changes"
+  | "fee-flat-monthly-charge"
+  | "excluded-share-prorated-from-measured"
+  | "represented-count-mixes-fixture-types"
+  | "proration-on-a-30-day-month"
   | "not-billing";
 
 type Meta = { label: string; what: string; standard: string };
@@ -122,6 +126,26 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
     label: "Signed twice — the second execution is the one on record",
     what: "An earlier version was signed, then the terms changed and the agreement was re-executed. The dates held here are the second signing; the earlier one is not on file.",
     standard: "An amendment is appended to the agreement it changes, and both stay retrievable.",
+  },
+  "fee-flat-monthly-charge": {
+    label: "Flat monthly charge, not a share",
+    what: "The fee is a fixed rupee amount rather than a percentage of the savings. The share stored is what that amount works out to against the agreement's own savings figure.",
+    standard: "A single revenue share of the verified savings.",
+  },
+  "excluded-share-prorated-from-measured": {
+    label: "Unreplaced fittings deducted pro-rata, not by their theoretical load",
+    what: "The fittings sharing the circuit that are not replaced are taken out by their share of the MEASURED total (count ÷ total count × measured), not by count × wattage × hours.",
+    standard: "CON-16's amendment deducts the excluded fittings' theoretical load, as Aditya Mega City and Arihant Arden do.",
+  },
+  "represented-count-mixes-fixture-types": {
+    label: "The represented count is not one kind of fitting",
+    what: "The contracted population includes fittings that behave differently from the demonstrated ones — always-on inverter lights alongside motion-sensor ones — so the demo does not represent all of it equally.",
+    standard: "CON-11 extrapolates a circuit to every light OF ITS TYPE.",
+  },
+  "proration-on-a-30-day-month": {
+    label: "Opening month prorated on a 30-day month",
+    what: "The first invoice divides the monthly charge by 30 rather than by the days the month actually has.",
+    standard: "CON-22 prorates by the real remaining days of the calendar month.",
   },
   "minimum-light-clause-not-enforced": {
     label: "Fewer lights installed than the agreement's minimum",

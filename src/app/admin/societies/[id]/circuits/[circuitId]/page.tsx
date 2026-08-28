@@ -15,6 +15,7 @@ import { RescaleRowActions } from "./rescale-row-actions";
 import { RescaleForm } from "./rescale-form";
 import { DemoReviewPanel } from "./demo-review-panel";
 import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
+import { describeDeviations } from "@/lib/backfill-deviations";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -670,13 +671,50 @@ export default async function CircuitDetailPage({
                 (circuit.eligibilityChecklist as { backfilled?: boolean; source?: string; note?: string } | null)
                   ?.backfilled === true;
               if (backfilled) {
-                const meta = circuit.eligibilityChecklist as { source?: string; note?: string };
-                summary = "Not assessed — already in service when it was recorded";
+                const meta = circuit.eligibilityChecklist as {
+                  source?: string;
+                  note?: string;
+                  deviations?: string[];
+                  basisNote?: string;
+                };
+                const dev = describeDeviations(meta.deviations ?? []);
+                summary =
+                  dev.length > 0
+                    ? `Not assessed — ${dev.length} exception${dev.length === 1 ? "" : "s"} on record`
+                    : "Not assessed — already in service when it was recorded";
                 body = (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {meta.note}
-                    {meta.source ? ` Built from ${meta.source}.` : ""}
-                  </p>
+                  <div className="space-y-4">
+                    <p className="text-sm text-[var(--text-muted)]">
+                      {meta.note}
+                      {meta.source ? ` Built from ${meta.source}.` : ""}
+                    </p>
+                    {dev.length > 0 && (
+                      <div>
+                        <p className="text-sm font-medium">How this circuit&apos;s figures were arrived at</p>
+                        <p className="mb-3 text-[13px] text-[var(--text-muted)]">
+                          These societies were commissioned before the system existed and share no single
+                          method. None of it can be corrected — it is what was signed and billed on — so
+                          it is recorded, because a figure whose basis is unstated cannot be defended
+                          when it is questioned.
+                        </p>
+                        <ul className="space-y-2">
+                          {dev.map(({ code, meta: m }) => (
+                            <li key={code} className="text-[13px]">
+                              <span className="font-medium">{m.label}</span>
+                              <span className="block text-[var(--text-muted)]">{m.what}</span>
+                              <span className="block text-[var(--text-subtle)]">Standard: {m.standard}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {meta.basisNote && (
+                      <div>
+                        <p className="text-sm font-medium">Read from the documents</p>
+                        <p className="text-[13px] text-[var(--text-muted)]">{meta.basisNote}</p>
+                      </div>
+                    )}
+                  </div>
                 );
               } else if (step.status === "current") {
                 body = (

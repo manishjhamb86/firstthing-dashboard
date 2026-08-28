@@ -262,6 +262,24 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
           ) : null}
           </div>
 
+          {/* Two different meanings share this field, and they must not read as
+              one. hasDeviation means the signed paper differs from the offer
+              that was accepted. Without it, the note is how a pre-system
+              deal's figures were arrived at — recorded because these
+              societies predate the standard and share no single method. */}
+          {!agreement.hasDeviation && agreement.deviationNote && (
+            <div className="rounded-[var(--r-md)] border p-4 text-sm"
+              style={{ borderColor: "var(--hairline)", background: "var(--surface-sunken)" }}>
+              <strong>How this deal&apos;s figures were arrived at</strong>
+              <p className="mt-1 text-[var(--text-muted)]">{agreement.deviationNote}</p>
+              <p className="mt-1 text-[var(--text-subtle)]">
+                None of this can be corrected — it is what was signed and what this society has been
+                billed on. It is recorded so the basis of a figure is available when the figure is
+                questioned.
+              </p>
+            </div>
+          )}
+
           {agreement.hasDeviation && (
             <div
               className="rounded-[var(--r-md)] border p-4 text-sm"

@@ -119,6 +119,30 @@ def circuit_term(soc_slug: str, i: int, c: dict) -> dict:
     }
 
 
+def deal_basis(s: dict) -> str:
+    """The deal-level exception record, for agreements.deviation_note."""
+    codes = [c.strip() for c in (s.get("deviations") or "").split(";") if c.strip()]
+    head = ("Commissioned before this system existed. There was no single method across these "
+            "societies, so how this deal's figures were arrived at is recorded here rather than "
+            "assumed.")
+    if codes:
+        head += " Departures from the standard: " + ", ".join(codes) + "."
+    return head + " " + (s.get("notes") or "")
+
+
+def deviations(row: dict) -> str:
+    """The named exceptions this row departs from the standard by.
+
+    Stored, not just written in a CSV comment: these societies were
+    commissioned before the system existed and there was no single method,
+    so how each figure was arrived at has to travel with the figure. A number
+    whose basis is unstated cannot be defended when it is questioned, which
+    is what INV-02 is for.
+    """
+    codes = [c.strip() for c in (row.get("deviations") or "").split(";") if c.strip()]
+    return q(json.dumps(codes))
+
+
 def preamble(sl: str) -> str:
     """What runs before a society's rows, which differs by what this output is.
 
@@ -258,7 +282,9 @@ SELECT '{cid}', s.id, 'bf-{sl}-survey', 'lighting', {q(c['light_type'])},
        {q(c['meter_installed_on'])}::date, {q(c['lights_replaced_on'])}::date,
        {c['baseline_kwh_day']}, {c['savings_pct']},
        jsonb_build_object('backfilled', true, 'source', 'signed agreement + post-installation savings report',
-                          'note', 'Commissioned before this system existed — CON-16 eligibility was never assessed.'),
+                          'note', 'Commissioned before this system existed — CON-16 eligibility was never assessed.',
+                          'deviations', {deviations(c)}::jsonb,
+                          'basisNote', {q(c['notes'])}),
        a.id, now()
 FROM societies s, admin_users a WHERE s.name = {q(name)} AND {actor_where()};""")
             # FEAT-006's inventory line for this circuit's light type.
@@ -390,7 +416,7 @@ LEFT JOIN profiles p ON p.society_id = soc.id AND p.portal_authority = 'office_b
 WHERE {actor_where()};
 
 INSERT INTO agreements (id, pipeline_id, offer_id, prepared_at, prepared_by_id,
-                        printed_at, notarized_at, signed_at,
+                        printed_at, notarized_at, signed_at, deviation_note,
                         executed_s3_key, executed_file_name, uploaded_at, uploaded_by_id)
 SELECT 'bf-{sl}-agreement', 'bf-{sl}-pipe', 'bf-{sl}-offer', {q(s['agreement_signed_on'])}::date, a.id,
        -- Printed and notarised are the same day, and it is the e-stamp
@@ -399,6 +425,10 @@ SELECT 'bf-{sl}-agreement', 'bf-{sl}-pipe', 'bf-{sl}-offer', {q(s['agreement_sig
        -- a mistake.
        {q(s['printed_notarized_on'])}::date, {q(s['printed_notarized_on'])}::date,
        {q(s['agreement_signed_on'])}::date,
+       -- How this deal's figures were arrived at, in the field named for it.
+       -- These societies predate the system and share no single method, so
+       -- the basis travels with the agreement rather than living in a CSV.
+       {q(deal_basis(s))},
        {q(agreement_key(name, s['agreement_signed_on']))},
        {q(society_slug(name) + '_Agreement_' + s['agreement_signed_on'] + '.pdf')},
        -- The scan reaches us the day after signing.

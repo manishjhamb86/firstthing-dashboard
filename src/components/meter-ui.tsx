@@ -239,7 +239,7 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
   const caption = readingCaption(meter);
   const hasGauge = meter.powerW !== null && meter.connectedLoadW !== null && meter.connectedLoadW > 0;
   return (
-    <Card>
+    <Card className="p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
         <div>
           <CardTitle>Live reading</CardTitle>
@@ -253,8 +253,12 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
         {action}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         {/* Power now, against everything the circuit could draw at once. */}
+        {/* flex-1 on the text column gives it a zero flex-basis, so the line
+            can never overflow on a wide screen and wrap is left for phones —
+            the wrap that put V/A/PF under the gauge came from the column
+            sizing to its caption's full unwrapped width. */}
         <div
           className="flex flex-wrap items-center gap-6 rounded-[var(--r-md)] p-5"
           style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)" }}
@@ -271,7 +275,7 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
               </span>
             </div>
           )}
-          <div className="flex min-w-[130px] flex-col gap-3">
+          <div className="min-w-0 flex-1 flex flex-col gap-3" style={{ minWidth: 130 }}>
             <p className="lbl" style={{ color: "var(--ok-fg)" }}>
               Power now
             </p>
@@ -354,7 +358,7 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
 export function MeterAlerts({ meter }: { meter: MeterRow }) {
   if (meter.openAlerts.length === 0) return null;
   return (
-    <Card className="border-l-4" >
+    <Card className="p-6">
       <CardTitle>Needs attention</CardTitle>
       <ul className="mt-3 space-y-2">
         {meter.openAlerts.map((a) => (

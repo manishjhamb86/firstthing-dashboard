@@ -2499,6 +2499,35 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The user's stage screenshots caught three defects in the new meter screens (2026-08-28)
+
+**The worst was a false claim, proved by arithmetic before touching anything**: the daily chart
+showed 08-14 as "3.8 kWh · partial" while the stage database held a complete 24-hour day totalling
+18.58. `meterHourly` took the newest `days x 24` ROWS — and with today only 18 hours old, the
+window reached just 6 hours into the oldest day (336 − 18 − 13×24 = 6; 6 × ~0.64 ≈ 3.8, exactly
+the figure on screen). A truncated query dressed as a partial day is a false statement about a
+complete one, and partiality is precisely what this chart promises to report honestly. It windows
+by DAY now, from the latest stored day back.
+
+**"Touching the edges and spilling out of corners" — the user was right, and the audit now measures
+it.** `.card` deliberately carries no padding of its own; every older caller adds `p-*`, and the
+new meter cards mostly did not — so the fleet bar, the readout, the charts and the tables sat flush
+against the rounded corners. All padded, and the verification now asserts in PIXELS that no card
+child sits within 8px of its card's edge on either page, rather than trusting a screenshot glance.
+
+**The hero wrapped at ordinary laptop widths**: at 1024–1280px the 5/12 gauge column is narrower
+than the gauge plus its labels, so V/A/PF fell underneath and dragged the panel tall, leaving the
+counters panel with a hollow middle. Two changes: the label column takes `flex-1` (zero flex-basis
+— it can never overflow the line and trigger a wrap on a wide screen), and the two-panel split
+starts at `xl` rather than `lg`, so below it the panels stack full-width.
+
+**Also learned from the same screenshots**: the user had already deployed to stage themselves and
+put the module to real use — 15 meters assigned, and the CURRENT Ace City export (Feb 20 → Aug 28,
+4,536 hours, ~18 kWh/day steady) imported cleanly, "chosen by hand" because a first import has
+nothing to match against. Which also settles something about the older sample file: its Dec–Jun
+data (92% zeros, then ~6/day) cannot be the same meter — it remains in dev as test data only, and
+stage never saw it.
+
 ## The meter screens rebuilt to the researched design (2026-08-28) — user-directed, canvas first
 
 **The sequence the user chose**: a fresh design on a canvas first ("do fresh design", then "do it

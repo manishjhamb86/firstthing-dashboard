@@ -221,12 +221,28 @@ export async function meterRow(id: string, societyId?: string): Promise<MeterRow
   return toRow(m, spans.get(m.id), sparks.get(m.id), new Date());
 }
 
-/** The exported hourly series for a meter, most recent day first. */
+/**
+ * The exported hourly series for a meter, most recent day first.
+ *
+ * Windowed by DAY, deliberately not by row count. The first version took the
+ * newest `days * 24` rows — and on a day only 18 hours old, that window
+ * reached just 6 hours into the oldest day, which then rendered as
+ * "3.8 kWh · partial" while the store held a complete 18.58 kWh day. A
+ * truncated query dressed as a partial day is a false claim, and partiality
+ * is exactly the fact this chart promises to report honestly.
+ */
 export async function meterHourly(meterId: string, days = 14) {
-  const rows = await db.meterHourlyReading.findMany({
+  const latest = await db.meterHourlyReading.findFirst({
     where: { meterId },
+    orderBy: { day: "desc" },
+    select: { day: true },
+  });
+  if (!latest) return [];
+  const cutoff = new Date(latest.day);
+  cutoff.setUTCDate(cutoff.getUTCDate() - (days - 1));
+  const rows = await db.meterHourlyReading.findMany({
+    where: { meterId, day: { gte: cutoff } },
     orderBy: [{ day: "desc" }, { hour: "asc" }],
-    take: days * 24,
     select: { day: true, hour: true, kWh: true },
   });
   const byDay = new Map<string, { hour: number; kWh: number }[]>();

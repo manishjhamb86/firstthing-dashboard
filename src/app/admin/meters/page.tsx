@@ -89,7 +89,7 @@ export default async function MetersPage() {
         <div className="space-y-6">
           {/* What needs doing, before the inventory. */}
           {alerts.length > 0 && (
-            <Card>
+            <Card className="p-6">
               <div className="mb-3 flex flex-wrap items-center gap-3">
                 <CardTitle>Needs attention</CardTitle>
                 <StatusChip tone="bad">{alerts.length}</StatusChip>
@@ -132,7 +132,7 @@ export default async function MetersPage() {
           {/* The fleet band answers one question before the inventory does:
               is everything reporting? A segmented bar carries the proportions;
               the counts carry the facts. */}
-          <Card>
+          <Card className="p-6">
             <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
               <CardTitle>Fleet health</CardTitle>
               <span className="text-[13px] text-[var(--text-subtle)]">

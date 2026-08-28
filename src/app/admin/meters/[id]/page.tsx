@@ -99,7 +99,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
           action={canManage ? <MeterDetailActions meterId={meter.id} mode="read" /> : undefined}
         />
 
-        <Card>
+        <Card className="p-6">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div>
               <CardTitle>What this meter measures</CardTitle>
@@ -126,7 +126,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         </Card>
 
         {days.length > 0 && (
-          <Card>
+          <Card className="p-6">
             <div className="mb-2 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
               <div>
                 <CardTitle>Daily consumption — last {days.length} days</CardTitle>
@@ -140,7 +140,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
           </Card>
         )}
 
-        <Card>
+        <Card className="p-6">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
             <div>
               <CardTitle>Hour by hour{days.length > 0 ? ` — last ${Math.min(7, days.length)} days` : ""}</CardTitle>
@@ -163,7 +163,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         </Card>
 
         <div className="grid gap-6 lg:grid-cols-2">
-          <Card>
+          <Card className="p-6">
             <CardTitle>Events</CardTitle>
             <p className="mt-1 text-[13px] text-[var(--text-muted)]">
               Alerts open on the second consecutive failure and close themselves with a stated reason.
@@ -197,7 +197,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
           </Card>
 
           {imports.length > 0 ? (
-            <Card>
+            <Card className="p-6">
               <CardTitle>Imports</CardTitle>
               <p className="mt-1 text-[13px] text-[var(--text-muted)]">
                 Every hourly series traces to the file it came from and how the meter was matched.
@@ -244,7 +244,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
               </div>
             </Card>
           ) : (
-            <Card>
+            <Card className="p-6">
               <CardTitle>Imports</CardTitle>
               <p className="mt-4 text-[13px] text-[var(--text-subtle)]">
                 No exports have been uploaded for this meter yet.

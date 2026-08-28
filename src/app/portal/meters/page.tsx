@@ -65,7 +65,7 @@ export default async function PortalMetersPage() {
       ) : (
         <div className="space-y-6">
           {troubled.length > 0 && (
-            <Card>
+            <Card className="p-6">
               <ul className="space-y-2">
                 {troubled.flatMap((m) =>
                   m.openAlerts.map((a) => (
@@ -105,7 +105,7 @@ export default async function PortalMetersPage() {
 
           <div className="grid gap-4 lg:grid-cols-2">
             {meters.map((m) => (
-              <Card key={m.id}>
+              <Card key={m.id} className="p-5">
                 <div className="mb-3 flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
                   <div className="min-w-0">
                     <Link href={`/portal/meters/${m.id}`} className="text-[15px] font-semibold underline">

@@ -45,7 +45,7 @@ export default async function PortalMeterPage({ params }: { params: Promise<{ id
         <MeterAlerts meter={meter} />
         <MeterReadout meter={meter} />
 
-        <Card>
+        <Card className="p-6">
           <CardTitle>Hourly consumption</CardTitle>
           <p className="mb-4 mt-1 text-[13px] text-[var(--text-muted)]">
             Read from the meter&rsquo;s own recorded history. These are the hours the meter measured —

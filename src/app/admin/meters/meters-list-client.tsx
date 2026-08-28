@@ -71,7 +71,7 @@ export function MetersListClient({
   const editingMeter = meters.find((m) => m.id === editing) ?? null;
 
   return (
-    <Card>
+    <Card className="p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div>
           <CardTitle>Devices</CardTitle>

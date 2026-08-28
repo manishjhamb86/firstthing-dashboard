@@ -330,7 +330,7 @@ export default async function LiveMonitoringCircuitPage({
                   "commissioning record" meant nothing to its own audience
                   (user, 2026-08-28). */}
               <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                <Link href={circuitHref} className="btn-outline btn-sm">
+                <Link href={circuitHref} className="btn-secondary btn-sm">
                   Circuit setup &amp; history
                 </Link>
               </div>
@@ -376,7 +376,7 @@ export default async function LiveMonitoringCircuitPage({
                     ` · ${monitoringDays.filter((d) => d.flagged).length} flagged`}
                 </span>
                 {monitoringDays.length > 0 && (
-                  <Link href={`${circuitHref}/reports/monthly`} className="btn-outline btn-sm">
+                  <Link href={`${circuitHref}/reports/monthly`} className="btn-secondary btn-sm">
                     Monthly savings report
                   </Link>
                 )}

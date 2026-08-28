@@ -2501,6 +2501,13 @@ exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `p
 
 ## The links became buttons, and "commissioning record" got a name its reader understands (2026-08-28)
 
+**Round three of a recorded lesson**: the first cut used `.btn-outline`, and the user's "they
+doesnt look like buttons" is the same taste the design history already logged twice (2026-08-18,
+both rounds): to this product's owner a button is a SOLID fill with lift — an outline pill reads
+as a tag. `.btn-secondary` (the deep solid of the same blue, with its shadow) is what they are now.
+When adding any secondary action in this codebase, reach for solid-with-lift, not outline.
+
+
 Follow-up to the rehoming below: the two in-card links are `btn-outline` buttons now, and the
 commissioning one is retitled **"Circuit setup & history"** — "commissioning record" is this
 blueprint's own vocabulary, and it meant nothing to the person the button is for. The rule worth

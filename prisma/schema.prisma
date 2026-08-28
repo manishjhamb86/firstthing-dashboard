@@ -798,6 +798,7 @@ model Circuit {
   feeLines            CircuitFeeLine[]
   devices             CircuitDevice[]
   meterDevice         MeterDevice?
+  alerts              MeterAlert[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -2679,6 +2680,10 @@ enum MeterAlertKind {
   offline
   /// Its day's consumption sits outside what the circuit can physically draw.
   out_of_range
+  /// CON-01a — measured savings have fallen below the agreed benchmark by
+  /// more than the contract's own tolerance. A COMMERCIAL condition, unlike
+  /// the two above: nothing is broken, the circuit is under-delivering.
+  savings_out_of_band
 }
 
 /// A meter needing somebody's attention, kept open until it is resolved.
@@ -2689,8 +2694,14 @@ enum MeterAlertKind {
 /// matters goes down with the rest. The alert stays open while the condition
 /// holds, and closes with a stated reason.
 model MeterAlert {
-  id       String         @id @default(cuid())
-  meterId  String         @map("meter_id")
+  id String @id @default(cuid())
+
+  /// What the alert is about. A hardware condition names the METER; a
+  /// commercial one (savings out of band) names the CIRCUIT, which may have
+  /// readings from an upload and no meter bound at all. Exactly one is set.
+  meterId   String? @map("meter_id")
+  circuitId String? @map("circuit_id")
+
   kind     MeterAlertKind
   openedAt DateTime       @default(now()) @map("opened_at")
   /// The line a person is chased with — it names the meter, what it
@@ -2703,13 +2714,22 @@ model MeterAlert {
   acknowledgedAt   DateTime? @map("acknowledged_at")
   acknowledgedById String?   @map("acknowledged_by_id")
 
+  /// An acknowledged alert whose condition has NOT gone away comes back to
+  /// the badge after a cool-off, and this counts how often. One row per
+  /// ongoing condition, not one per reminder: a continuing problem is one
+  /// problem, and duplicating it would make the history unreadable.
+  reraisedAt DateTime? @map("reraised_at")
+  raiseCount Int       @default(1) @map("raise_count")
+
   closedAt     DateTime? @map("closed_at")
   closedReason String?   @map("closed_reason")
 
-  meter          MeterDevice @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  meter          MeterDevice? @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  circuit        Circuit?     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
   acknowledgedBy AdminUser?  @relation("MeterAlertAcknowledgedBy", fields: [acknowledgedById], references: [id])
 
   @@index([meterId, openedAt])
+  @@index([circuitId, openedAt])
   @@index([closedAt])
   @@map("meter_alerts")
 }

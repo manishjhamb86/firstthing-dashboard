@@ -5,6 +5,7 @@ import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildCircuitFlowReadingKey } from "@/lib/ingest-keys";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { savingsPct, SAVINGS_SUSPECT_ABOVE } from "@/lib/circuit-load";
+import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
 
 /**
  * The meter store and the billing store hold THE SAME READINGS — the user's
@@ -322,5 +323,9 @@ export async function projectMeterStoreToCircuit(input: {
   }
 
   logger.info("meter.projected_to_billing", { meterId: meter.id, circuitId: circuit.id, ...summary });
+  // The savings figure just changed, so where it stands against the
+  // contracted band may have too. Evaluated here rather than only on a timer,
+  // so an import that pushes a circuit out of band is noticed at once.
+  await syncCircuitBandAlert(circuit.id);
   return summary;
 }

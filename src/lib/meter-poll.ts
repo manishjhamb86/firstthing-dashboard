@@ -4,6 +4,8 @@ import { theoreticalDailyKwh } from "@/lib/circuit-load";
 import { closeAlert, openAlert } from "@/lib/meter-alerts";
 import { evaluateCapacity, evaluateMeterHealth, outageMessage, outageMinutes } from "@/lib/meter-health";
 import { resolveMeterProvider, type MeterProvider } from "@/lib/meter-provider";
+import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
+import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
 import { circuitLabelOf } from "@/lib/meter-view";
 
 /**
@@ -36,6 +38,7 @@ export type PollResult = {
   failed: number;
   alertsOpened: number;
   alertsClosed: number;
+  alertsRearmed: number;
 };
 
 export async function pollMeters(opts?: { meterId?: string; provider?: MeterProvider }): Promise<PollResult> {
@@ -47,6 +50,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
     failed: 0,
     alertsOpened: 0,
     alertsClosed: 0,
+    alertsRearmed: 0,
   };
   if (!provider) {
     logger.info("meter.poll_skipped", { reason: "no_provider" });
@@ -247,6 +251,24 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       // A device type whose scale has never been established reports nulls
       // rather than raw figures. Loud, because it is silently unmonitored.
       logger.warn("meter.scale_unknown", { meterId: m.id, uiid: m.uiid, productModel: m.productModel });
+    }
+  }
+
+  // Every live-monitoring circuit's commercial band, once per pass. This is
+  // what brings an acknowledged-but-still-short circuit back to the badge
+  // after the cool-off — without it, acknowledging would silence a real
+  // shortfall permanently.
+  if (!opts?.meterId) {
+    const live = await db.circuit.findMany({ where: LIVE_MONITORING_WHERE, select: { id: true } });
+    for (const c of live) {
+      try {
+        const r = await syncCircuitBandAlert(c.id, now);
+        if (r.opened) result.alertsOpened++;
+        if (r.closed) result.alertsClosed++;
+        if (r.rearmed) result.alertsRearmed++;
+      } catch (err) {
+        logger.warn("circuit.band_sync_failed", { circuitId: c.id, error: String(err) });
+      }
     }
   }
 

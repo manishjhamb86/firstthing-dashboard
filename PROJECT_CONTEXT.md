@@ -2499,6 +2499,48 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## A circuit below its contracted band is a notification, and it comes back (2026-08-29) — user-specified
+
+**The ask**: any circuit outside the ± band raises a notification that stays until acknowledged —
+and if it is STILL out of band after being acknowledged, it must come back; plus a dashboard card
+for everything currently below the margin.
+
+**The band is CON-01a's, not a new one.** `syncCircuitBandAlert` calls the same
+`evaluateCompliance` the monthly billing run uses — measured savings minus the agreed benchmark,
+out of band when short by more than the CONTRACT'S OWN tolerance (5–10% across stage's 14 term
+versions), read from the in-force `ContractTermVersion`. So a circuit cannot read "fine" here and
+out of band on the invoice. Deliberately asymmetric, as that rule already is: beating the benchmark
+is never a complaint, so the "±" only ever bites downwards. A circuit with no tolerance recorded
+returns **unknown** rather than borrowing a default — a fabricated band would put an invented
+commercial term behind a real alert.
+
+**Alerts are no longer meter-only.** `MeterAlert.meterId` became nullable and `circuitId` was added
+(with a CHECK that exactly one is set, and a second partial unique index for the circuit case),
+because a circuit can carry readings from an upload with no meter bound at all — and the ask was
+"any circuit".
+
+**Re-raising is one row, not one row per reminder.** An acknowledged alert whose condition persists
+has its acknowledgement CLEARED after a 24-hour cool-off and `raiseCount` incremented, so it returns
+to the badge and the list says "raised 3× — acknowledged before and still not resolved". The
+cool-off is a day because the figure is a period average that cannot meaningfully move within an
+hour; re-arming on the next hourly sweep would make acknowledging pointless. Writing a second row
+per reminder was rejected: a continuing problem is one problem, and duplicates make the history
+unreadable.
+
+**Evaluated wherever the figure can change**: after the meter-import projection, after the
+circuit-page commit, and once per hourly poll pass over every live-monitoring circuit — that last
+one is what actually performs the re-arm.
+
+**The dashboard card sits ABOVE the meters card**: a circuit under its contracted band is a
+shortfall being billed on right now, which outranks a meter that has stopped answering.
+
+**Verified 16/16 on the rule** (opens once, never duplicates, does not return inside the cool-off,
+returns after it with the same row and a raised count, closes on recovery with the figures that
+ended it, and opens nothing for a healthy circuit) and **9/9 across the UI**. One fixture note: dev's
+sample file is 92% zeros so it measures ~98% savings, and no believable benchmark is short of that —
+the shortfall is driven through the BASELINE instead, which makes the same readings represent a real
+under-delivery.
+
 ## Offline was undetectable, and the alerts had nowhere to be read (2026-08-28) — user-caught
 
 **"This meter has been offline many times but the Events section shows none of it."** True, and the

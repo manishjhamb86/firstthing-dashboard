@@ -5,6 +5,12 @@ import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/component
 import { openNotifications, pastNotifications } from "@/lib/notifications";
 import { AcknowledgeButton } from "./acknowledge-button";
 
+const KIND_LABEL: Record<string, string> = {
+  offline: "Not reachable",
+  out_of_range: "Out of range",
+  savings_out_of_band: "Below the agreed band",
+};
+
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Notifications" };
 
@@ -65,11 +71,16 @@ export default async function NotificationsPage() {
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <StatusChip tone={n.kind === "offline" ? "bad" : "warn"}>
-                          {n.kind === "offline" ? "Not reachable" : "Out of range"}
+                          {KIND_LABEL[n.kind] ?? n.kind}
                         </StatusChip>
                         <span className="num text-xs text-[var(--text-subtle)]">
                           since {n.openedAt.slice(0, 16).replace("T", " ")}
                         </span>
+                        {n.raiseCount > 1 && (
+                          <span className="text-xs font-semibold" style={{ color: "var(--bad-fg)" }}>
+                            raised {n.raiseCount}× — acknowledged before and still not resolved
+                          </span>
+                        )}
                         {n.acknowledgedAt && (
                           <span className="text-xs text-[var(--text-subtle)]">
                             · acknowledged {n.acknowledgedAt.slice(0, 16).replace("T", " ")}
@@ -123,12 +134,12 @@ export default async function NotificationsPage() {
                     <tr key={n.id}>
                       <td>
                         <StatusChip tone={n.kind === "offline" ? "bad" : "warn"}>
-                          {n.kind === "offline" ? "Not reachable" : "Out of range"}
+                          {KIND_LABEL[n.kind] ?? n.kind}
                         </StatusChip>
                       </td>
                       <td className="text-[13px]">
                         <Link href={n.href} className="font-medium underline">
-                          {n.meterName}
+                          {n.subject}
                         </Link>
                         <div className="text-xs text-[var(--text-subtle)]">
                           {[n.societyName, n.circuitLabel].filter(Boolean).join(" · ") || "not assigned"}

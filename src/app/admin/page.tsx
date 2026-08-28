@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
-import { allMeterRows } from "@/lib/meter-view";
+import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
 import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -49,6 +49,7 @@ export default async function AdminHomePage() {
     stageGroups,
     benchmarkedCircuits,
     meterRows,
+    belowBand,
   ] = await Promise.all([
     db.society.count(),
     db.society.count({ where: { status: "active" } }),
@@ -89,6 +90,23 @@ export default async function AdminHomePage() {
       include: { society: { select: { name: true } } },
     }),
     canSeeMeters ? allMeterRows() : Promise.resolve([]),
+    canSeeMonitoring
+      ? db.meterAlert.findMany({
+          where: { kind: "savings_out_of_band", closedAt: null },
+          orderBy: { openedAt: "asc" },
+          select: {
+            id: true,
+            message: true,
+            openedAt: true,
+            acknowledgedAt: true,
+            raiseCount: true,
+            detail: true,
+            circuit: {
+              select: { id: true, location: true, lightType: true, society: { select: { name: true } } },
+            },
+          },
+        })
+      : Promise.resolve([]),
   ]);
 
   // The meter fleet, summarised — the same view model the meters page uses,
@@ -271,6 +289,66 @@ export default async function AdminHomePage() {
 
         {/* ── Right column: what needs a person ──────────────────────── */}
         <div className="lg:col-span-5 min-w-0 space-y-6">
+          {/* Money before machinery: a circuit under its contracted band is
+              a shortfall being billed on right now, which outranks a meter
+              that has stopped answering. */}
+          {canSeeMonitoring && belowBand.length > 0 && (
+            <Card className="p-6">
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <CardTitle>Below the agreed band</CardTitle>
+                <StatusChip tone="bad">{belowBand.length}</StatusChip>
+              </div>
+              <p className="mb-3 text-[13px] text-[var(--text-muted)]">
+                Measured savings short of the benchmark by more than the contract&rsquo;s own
+                tolerance (CON-01a). Each stays here until it recovers.
+              </p>
+              <ul className="space-y-2">
+                {belowBand.map((a) => {
+                  const d = (a.detail ?? {}) as {
+                    measuredPct?: number;
+                    benchmarkPct?: number;
+                    tolerancePct?: number;
+                  };
+                  return (
+                    <li
+                      key={a.id}
+                      className="rounded-[var(--r-sm)] p-3"
+                      style={{ background: "var(--bad-bg)", border: "1px solid var(--bad-line)" }}
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                        <span className="text-[13px] font-semibold">
+                          {a.circuit?.society.name ?? "Unknown"}
+                          {a.circuit && ` · ${circuitLabelOf(a.circuit.location, a.circuit.lightType)}`}
+                        </span>
+                        {d.measuredPct !== undefined && d.benchmarkPct !== undefined && (
+                          <span className="num text-[13px]">
+                            {d.measuredPct.toFixed(1)}%{" "}
+                            <span className="text-[var(--text-muted)]">
+                              vs {d.benchmarkPct.toFixed(1)}% ±{d.tolerancePct}
+                            </span>
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1 text-xs text-[var(--text-subtle)]">
+                        since {a.openedAt.toISOString().slice(0, 10)}
+                        {a.raiseCount > 1 && ` · raised ${a.raiseCount}×`}
+                        {a.acknowledgedAt ? " · acknowledged" : ""}
+                        {a.circuit && (
+                          <>
+                            {" · "}
+                            <Link href={`/admin/live-monitoring/${a.circuit.id}`} className="underline">
+                              open
+                            </Link>
+                          </>
+                        )}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          )}
+
           {/* Meters sit at the top of this column deliberately: an offline
               meter is the only thing on this page that is going wrong RIGHT
               NOW, and it stops a month billing if nobody looks. */}

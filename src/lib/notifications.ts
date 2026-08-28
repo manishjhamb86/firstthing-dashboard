@@ -21,8 +21,10 @@ export type Notification = {
   closedAt: string | null;
   closedReason: string | null;
   acknowledgedAt: string | null;
-  meterId: string;
-  meterName: string;
+  /** How many times this same condition has come back after acknowledgement. */
+  raiseCount: number;
+  /** What the alert is about — a meter's name, or a circuit's label. */
+  subject: string;
   societyName: string | null;
   circuitLabel: string | null;
   ownerLabel: string | null;
@@ -35,8 +37,20 @@ const include = {
       id: true,
       name: true,
       society: { select: { name: true } },
-      circuit: { select: { location: true, lightType: true } },
+      circuit: { select: { id: true, societyId: true, location: true, lightType: true } },
       owner: { select: { name: true, email: true } },
+    },
+  },
+  // A commercial alert names the circuit, which may carry readings from an
+  // upload and have no meter bound at all.
+  circuit: {
+    select: {
+      id: true,
+      societyId: true,
+      location: true,
+      lightType: true,
+      society: { select: { name: true } },
+      meterDevice: { select: { owner: { select: { name: true, email: true } } } },
     },
   },
 } as const;
@@ -44,6 +58,8 @@ const include = {
 type Row = Awaited<ReturnType<typeof db.meterAlert.findMany<{ include: typeof include }>>>[number];
 
 function toNotification(a: Row): Notification {
+  const circuit = a.circuit ?? a.meter?.circuit ?? null;
+  const owner = a.meter?.owner ?? a.circuit?.meterDevice?.owner ?? null;
   return {
     id: a.id,
     kind: a.kind,
@@ -52,12 +68,21 @@ function toNotification(a: Row): Notification {
     closedAt: a.closedAt?.toISOString() ?? null,
     closedReason: a.closedReason,
     acknowledgedAt: a.acknowledgedAt?.toISOString() ?? null,
-    meterId: a.meter.id,
-    meterName: a.meter.name,
-    societyName: a.meter.society?.name ?? null,
-    circuitLabel: a.meter.circuit ? circuitLabelOf(a.meter.circuit.location, a.meter.circuit.lightType) : null,
-    ownerLabel: a.meter.owner ? (a.meter.owner.name ?? a.meter.owner.email) : null,
-    href: `/admin/meters/${a.meter.id}`,
+    raiseCount: a.raiseCount,
+    subject: a.meter?.name ?? (circuit ? circuitLabelOf(circuit.location, circuit.lightType) : "Unknown"),
+    societyName: a.meter?.society?.name ?? a.circuit?.society?.name ?? null,
+    circuitLabel: circuit ? circuitLabelOf(circuit.location, circuit.lightType) : null,
+    ownerLabel: owner ? (owner.name ?? owner.email) : null,
+    // A commercial shortfall belongs on the monitoring screen where the
+    // figures are; a hardware fault belongs on the meter.
+    href:
+      a.kind === "savings_out_of_band" && circuit
+        ? `/admin/live-monitoring/${circuit.id}`
+        : a.meter
+          ? `/admin/meters/${a.meter.id}`
+          : circuit
+            ? `/admin/live-monitoring/${circuit.id}`
+            : "/admin/notifications",
   };
 }
 

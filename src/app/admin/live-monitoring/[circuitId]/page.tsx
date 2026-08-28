@@ -244,10 +244,6 @@ export default async function LiveMonitoringCircuitPage({
         action={
           !blocker && canIngest ? (
             <RecordReadingsDialog label="Record readings" waiting={resumeFile !== null}>
-              <p className="mb-3 text-sm text-[var(--text-muted)]">
-                Billing started after the completion certificate (CON-22). A released month can no
-                longer be changed (INV-03).
-              </p>
               <CircuitReadingPanel
                 circuitId={circuit.id}
                 window={windowDTO}

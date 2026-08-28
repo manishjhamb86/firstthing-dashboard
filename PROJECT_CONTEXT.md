@@ -2499,6 +2499,24 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## A form that opened below 45 rows, and a Modal this codebase already had (2026-08-28) — user-caught
+
+**"It feels like the button is not working"** — clicking Reassign on the meters list rendered the
+assign form at the BOTTOM of the card, below all 45 rows, so nothing visibly happened. It is a
+modal now, which cannot be off-screen: verified by clicking Assign on the third-from-last row and
+asserting the dialog's box sits inside the viewport and centred.
+
+**The finding worth keeping is what that exposed**: `src/components/modal.tsx` ALREADY existed — a
+proper controlled native `<dialog>` with Esc/backdrop handling and, crucially, the `m-auto`
+centring — and the earlier "Record readings" dialog had hand-rolled its own instead, which is why
+it had to rediscover the top-left-corner bug the shared component had solved months earlier. Both
+now use the one component (which gained an optional `size="wide"` rather than being forked again).
+**Before writing a dialog, an overlay, or any other common shell here, look for the existing one.**
+
+**One regression caught by the suites, not by eye**: the shared Modal put its buttons in a
+`footer`, and the recording flow passes none — so it briefly had no visible way out at all, Esc
+only. The Modal now carries a close control in its own header, for every consumer.
+
 ## Three buttons that were three different things, and a figure that moved when its neighbour was missing (2026-08-28) — user-caught
 
 **"None of them have any synchronisation between them"** — correct, and the cause was a category

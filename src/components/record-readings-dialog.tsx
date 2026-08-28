@@ -1,15 +1,16 @@
 "use client";
 
-import { useRef, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Modal } from "@/components/modal";
 
 /**
- * The recording flow behind a button, in a modal — the user's call
- * (2026-08-28): the always-open upload card pushed the stored readings below
- * the fold, and on this screen the READINGS are what the visit is for.
+ * The recording flow behind a button — the user's call (2026-08-28): the
+ * always-open upload card pushed the stored readings below the fold, and on
+ * this screen the READINGS are what the visit is for.
  *
- * A native <dialog>, the pattern this repo already settled on: Esc and
- * backdrop-click close for free, focus is trapped, and the page behind
- * cannot scroll out from under it.
+ * Uses the shared Modal rather than its own dialog. The first version
+ * hand-rolled one and had to rediscover that `m-auto` is load-bearing —
+ * which this component had already solved.
  */
 export function RecordReadingsDialog({
   label,
@@ -21,10 +22,10 @@ export function RecordReadingsDialog({
   waiting?: boolean;
   children: ReactNode;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" className="btn-primary" onClick={() => ref.current?.showModal()}>
+      <button type="button" className="btn-primary" onClick={() => setOpen(true)}>
         {label}
         {waiting && (
           <span
@@ -35,30 +36,15 @@ export function RecordReadingsDialog({
           </span>
         )}
       </button>
-      <dialog
-        ref={ref}
-        onClick={(e) => {
-          // A click on the backdrop (the dialog element itself, outside the
-          // inner panel) closes; clicks inside the panel never bubble here
-          // as the dialog target.
-          if (e.target === ref.current) ref.current?.close();
-        }}
-        // m-auto is load-bearing: the UA centers a modal dialog via
-        // `margin: auto`, and the CSS reset zeroes it — which parks the
-        // dialog in the top-left corner (user-reported 2026-08-28).
-        className="m-auto w-[min(880px,92vw)] rounded-[var(--r-lg)] p-0 backdrop:bg-black/50"
-        style={{ background: "var(--ground)", border: "1px solid var(--border)" }}
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={label}
+        description="Billing started after the completion certificate (CON-22). A released month can no longer be changed (INV-03)."
+        size="wide"
       >
-        <div className="max-h-[85vh] overflow-y-auto p-5">
-          <div className="mb-3 flex items-center justify-between gap-4">
-            <h2 className="text-[15px] font-semibold">{label}</h2>
-            <button type="button" className="btn-ghost btn-sm" onClick={() => ref.current?.close()}>
-              Close
-            </button>
-          </div>
-          {children}
-        </div>
-      </dialog>
+        {children}
+      </Modal>
     </>
   );
 }

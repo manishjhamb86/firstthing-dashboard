@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, EmptyState, ErrorText, StatusChip } from "@/components/ui";
+import { Modal } from "@/components/modal";
 import { CeilingBar, MeterStateChip, Sparkline, SPARKLINE_WIDTH } from "@/components/meter-ui";
 import type { MeterRow } from "@/lib/meter-view";
 import { assignMeter, setMeterOwner, syncMeterNow, syncMetersNow } from "./actions";
@@ -133,6 +134,34 @@ export function MetersListClient({
   }
 
   const editingMeter = meters.find((m) => m.id === editing) ?? null;
+
+  // Assignment first, then the owner if it changed — the owner write is ours
+  // and cannot fail for outside reasons, so a refusal here is always the
+  // assignment's, and the modal stays open with the reason.
+  function saveAssignment() {
+    if (!editingMeter) return;
+    start(async () => {
+      setError(null);
+      const r = await assignMeter({
+        meterId: editingMeter.id,
+        societyId: society || null,
+        circuitId: circuit || null,
+      });
+      if (r.error) {
+        setError(r.error);
+        return;
+      }
+      if ((owner || null) !== editingMeter.ownerId) {
+        const o = await setMeterOwner({ meterId: editingMeter.id, ownerId: owner || null });
+        if (o.error) {
+          setError(o.error);
+          return;
+        }
+      }
+      setEditing(null);
+      router.refresh();
+    });
+  }
 
   return (
     <Card className="p-6">
@@ -362,53 +391,52 @@ export function MetersListClient({
         </div>
       )}
 
-      {editingMeter && (
-        <AssignPanel
-          meter={editingMeter}
-          societies={societies}
-          circuits={circuits}
-          society={society}
-          circuit={circuit}
-          owner={owner}
-          fieldStaff={fieldStaff}
-          pending={pending}
-          onSociety={(v) => {
-            setSociety(v);
-            setCircuit("");
-          }}
-          onCircuit={setCircuit}
-          onOwner={setOwner}
-          onCancel={() => setEditing(null)}
-          onSave={() =>
-            start(async () => {
-              setError(null);
-              const r = await assignMeter({
-                meterId: editingMeter.id,
-                societyId: society || null,
-                circuitId: circuit || null,
-              });
-              if (r.error) {
-                setError(r.error);
-                return;
-              }
-              if ((owner || null) !== editingMeter.ownerId) {
-                const o = await setMeterOwner({ meterId: editingMeter.id, ownerId: owner || null });
-                if (o.error) {
-                  setError(o.error);
-                  return;
-                }
-              }
-              setEditing(null);
-              router.refresh();
-            })
-          }
-        />
-      )}
+      {/* In a modal, not appended to the card: the panel used to render
+          below 45 rows of meters, so clicking Reassign scrolled nothing into
+          view and read as a dead button (user-reported 2026-08-28). */}
+      <Modal
+        open={editingMeter !== null}
+        onClose={() => setEditing(null)}
+        title={editingMeter ? `Assign ${editingMeter.name}` : ""}
+        description="A meter binds to one circuit, because a circuit is what gets billed — two meters on one circuit would be two sources for one figure. Leave the circuit blank while it is still undecided."
+        size="wide"
+        footer={
+          <>
+            <button type="button" className="btn-primary" disabled={pending} onClick={saveAssignment}>
+              {pending ? "Saving…" : "Save"}
+            </button>
+            <button type="button" className="btn-ghost" disabled={pending} onClick={() => setEditing(null)}>
+              Cancel
+            </button>
+          </>
+        }
+      >
+        {editingMeter && (
+          <AssignFields
+            meter={editingMeter}
+            societies={societies}
+            circuits={circuits}
+            society={society}
+            circuit={circuit}
+            owner={owner}
+            fieldStaff={fieldStaff}
+            pending={pending}
+            error={error}
+            onSociety={(v) => {
+              setSociety(v);
+              setCircuit("");
+            }}
+            onCircuit={setCircuit}
+            onOwner={setOwner}
+          />
+        )}
+      </Modal>
     </Card>
   );
 }
 
-function AssignPanel({
+/** The assign form's fields. Chrome, title and buttons belong to the Modal. */
+function AssignFields({
   meter,
   societies,
   circuits,
@@ -417,11 +445,10 @@ function AssignPanel({
   owner,
   fieldStaff,
   pending,
+  error,
   onSociety,
   onCircuit,
   onOwner,
-  onCancel,
-  onSave,
 }: {
   meter: MeterRow;
   societies: Society[];
@@ -431,23 +458,15 @@ function AssignPanel({
   owner: string;
   fieldStaff: { id: string; label: string }[];
   pending: boolean;
+  error: string | null;
   onSociety: (v: string) => void;
   onCircuit: (v: string) => void;
   onOwner: (v: string) => void;
-  onCancel: () => void;
-  onSave: () => void;
 }) {
   const forSociety = circuits.filter((c) => c.societyId === society);
   return (
-    <div
-      className="mt-5 rounded-[var(--r-md)] p-4"
-      style={{ background: "var(--surface-sunken)", border: "1px solid var(--accent-line)" }}
-    >
-      <p className="mb-1 text-[15px] font-semibold">Assign {meter.name}</p>
-      <p className="mb-3 text-[13px] text-[var(--text-muted)]">
-        A meter binds to one circuit, because a circuit is what gets billed — two meters on one circuit
-        would be two sources for one figure. Leave the circuit blank while it is still undecided.
-      </p>
+    <>
+      {error && <ErrorText>{error}</ErrorText>}
       <div className="grid gap-3 sm:grid-cols-3">
         <label className="block">
           <span className="lbl mb-1 block">Society</span>
@@ -489,19 +508,11 @@ function AssignPanel({
           </select>
         </label>
       </div>
-      <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>
+      <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
         An alert addressed to nobody is an alert nobody acts on — the owner is who goes and looks at
         the meter, so only accounts with field access are offered.
       </p>
-      <div className="mt-3 flex flex-wrap gap-2">
-        <button type="button" className="btn-primary btn-sm" disabled={pending} onClick={onSave}>
-          {pending ? "Saving…" : "Save"}
-        </button>
-        <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -526,7 +537,10 @@ function SortHeader({
 }) {
   const active = k === sortKey;
   return (
-    <th className={align === "right" ? "text-right" : undefined} aria-sort={active ? (dir === 1 ? "ascending" : "descending") : "none"}>
+    <th
+      className={align === "right" ? "text-right" : undefined}
+      aria-sort={active ? (dir === 1 ? "ascending" : "descending") : "none"}
+    >
       <button
         type="button"
         onClick={() => onSort(k)}

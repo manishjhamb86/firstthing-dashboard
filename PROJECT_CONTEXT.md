@@ -2499,6 +2499,44 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Sortable columns, an assigned-by-default filter, and a rename eWeLink will not allow (2026-08-28)
+
+**Renaming a meter cannot be done, and the finding is worth keeping so nobody rebuilds it.** The
+ask was to rename in the vendor system rather than locally, which is the right instinct — a
+local-only name would drift from the eWeLink app and make it unclear which meter somebody is
+standing in front of. CoolKit does document the endpoint (`POST /v2/device/update-info`, taking
+`deviceid` and `name`), and it is metadata rather than actuation, so INV-08 would not have stood in
+the way. **The live account refuses it: `error 407 — the path of request is not allowed with
+appid`.** This application's API role is not granted that path, which is CoolKit's to change, not
+something this end can work around. The user's call was "if it cant be done then leave it", so the
+action, the vendor write and the field were all removed rather than shipping a control that always
+errors — the eWeLink client is read-only again, and its lack of any device write is once again the
+guarantee INV-08 rests on. The route that works today needs no code: rename in the eWeLink app,
+then Sync account. Only the 407 → `EwelinkPathNotAllowed` mapping was kept, because any endpoint
+can return it and a named error beats a bare number.
+
+**A local `displayName` column was built, applied to dev, and then withdrawn in the same session** —
+correctly. It was the answer to the wrong question: with the rename living in the vendor, a second
+local name is exactly the drift to avoid. Withdrawn rather than dropped by a follow-up migration,
+since it was uncommitted and dev-only.
+
+**The list defaults to ASSIGNED meters.** On this account 30 of 45 devices are unbound, and an
+unassigned device is mirrored but not watched — it raises no alerts and is not yet the product's
+problem, so by default it buried the fifteen that are. Chips are Assigned · Needs attention · Not
+assigned · All devices, each carrying its own count.
+
+**Columns sort on click**, with two rules that are the whole design: text starts ascending while
+figures and state start at the end that answers why anyone sorted (biggest power, worst state
+first); and **a meter with nothing in the sorted column always sinks, in both directions** — thirty
+dashes floating to the top is not an ordering anybody asked for, and "sort by power" means "show me
+the ones that have one". Asserted in both directions.
+
+**Two card actions were wrapping below their heading and reading as stray controls** (user-caught,
+screenshot). The heading column sized to its own unwrapped paragraph, which is wider than the row,
+so the button had nowhere to go but the next line — `min-w-0 flex-1` on the text and `shrink-0` on
+the action, the shape `PageHeader` already used. The layout audit gained the rule: a card's action
+must sit on the heading's line, within 40px of the card's right edge.
+
 ## The user's stage screenshots caught three defects in the new meter screens (2026-08-28)
 
 **The worst was a false claim, proved by arithmetic before touching anything**: the daily chart

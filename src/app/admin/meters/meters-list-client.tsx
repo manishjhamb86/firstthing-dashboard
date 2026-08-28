@@ -11,14 +11,57 @@ import { assignMeter, setMeterOwner, syncMeterNow, syncMetersNow } from "./actio
 type Society = { id: string; name: string };
 type Circuit = { id: string; societyId: string; label: string; state: string; takenBy: string | null };
 
-type Filter = "all" | "attention" | "unassigned" | "metering";
+type Filter = "assigned" | "attention" | "unassigned" | "all";
 
+// Assigned first and by default: an unassigned device is mirrored but not
+// watched, so it is not yet this product's problem — and on an account where
+// 30 of 45 are unbound, they bury the ones that are.
 const FILTERS: { key: Filter; label: string }[] = [
-  { key: "all", label: "All devices" },
+  { key: "assigned", label: "Assigned" },
   { key: "attention", label: "Needs attention" },
   { key: "unassigned", label: "Not assigned" },
-  { key: "metering", label: "Metering only" },
+  { key: "all", label: "All devices" },
 ];
+
+type SortKey = "name" | "society" | "state" | "power" | "today" | "history" | "owner";
+
+const STATE_ORDER: Record<string, number> = { offline: 0, silent: 1, reporting: 2 };
+
+/**
+ * How a column sorts, and which way it starts.
+ *
+ * Text starts ascending; figures start descending, because the reason to
+ * sort by power or by today is to find the biggest. State starts with the
+ * worst — the point of sorting by state is to bring trouble to the top.
+ */
+const SORTS: Record<SortKey, { label: string; numeric: boolean; get: (m: MeterRow) => string | number | null }> = {
+  name: { label: "Meter", numeric: false, get: (m) => m.name.toLowerCase() },
+  society: { label: "Measures", numeric: false, get: (m) => m.societyName?.toLowerCase() ?? null },
+  state: { label: "State", numeric: true, get: (m) => (m.state ? STATE_ORDER[m.state] : null) },
+  power: { label: "Power now · 24h", numeric: true, get: (m) => m.powerW },
+  today: { label: "Today vs ceiling", numeric: true, get: (m) => m.dayKwh },
+  history: { label: "History", numeric: true, get: (m) => (m.hourlyCount === 0 ? null : m.hourlyCount) },
+  owner: { label: "Chased by", numeric: false, get: (m) => m.ownerLabel?.toLowerCase() ?? null },
+};
+
+/**
+ * A meter with nothing to show in the sorted column always sinks, whichever
+ * way the sort runs. Thirty dashes floating to the top is not an ordering
+ * anybody asked for — "sort by power" means "show me the meters that have
+ * one", in either direction.
+ */
+function compareBy(key: SortKey, dir: 1 | -1) {
+  const { get } = SORTS[key];
+  return (a: MeterRow, b: MeterRow) => {
+    const av = get(a);
+    const bv = get(b);
+    if (av === null && bv === null) return a.name.localeCompare(b.name);
+    if (av === null) return 1;
+    if (bv === null) return -1;
+    if (av === bv) return a.name.localeCompare(b.name);
+    return (av > bv ? 1 : -1) * dir;
+  };
+}
 
 export function MetersListClient({
   canAssign,
@@ -37,7 +80,9 @@ export function MetersListClient({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>("assigned");
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<1 | -1>(1);
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [society, setSociety] = useState("");
@@ -48,17 +93,36 @@ export function MetersListClient({
 
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return meters.filter((m) => {
+    const matched = meters.filter((m) => {
+      if (filter === "assigned" && m.state === null) return false;
       if (filter === "attention" && (m.state === null || m.state === "reporting") && m.openAlerts.length === 0)
         return false;
       if (filter === "unassigned" && (m.state !== null || !m.hasEnergySignal)) return false;
-      if (filter === "metering" && !m.hasEnergySignal) return false;
       if (!q) return true;
       return [m.name, m.societyName, m.circuitLabel, m.productModel]
         .filter(Boolean)
         .some((s) => s!.toLowerCase().includes(q));
     });
-  }, [meters, filter, query]);
+    return [...matched].sort(compareBy(sortKey, sortDir));
+  }, [meters, filter, query, sortKey, sortDir]);
+
+  // Clicking the sorted column reverses it; clicking another starts that
+  // column at its own natural direction.
+  function sortBy(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 1 ? -1 : 1));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(SORTS[key].numeric ? -1 : 1);
+  }
+
+  const counts: Record<Filter, number> = {
+    assigned: meters.filter((m) => m.state !== null).length,
+    attention: meters.filter((m) => (m.state !== null && m.state !== "reporting") || m.openAlerts.length > 0).length,
+    unassigned: meters.filter((m) => m.state === null && m.hasEnergySignal).length,
+    all: meters.length,
+  };
 
   function openAssign(m: MeterRow) {
     setEditing(m.id);
@@ -117,7 +181,10 @@ export function MetersListClient({
                 : undefined
             }
           >
-            {f.label}
+            <span className="flex items-center gap-2">
+              {f.label}
+              <span className="num text-[12px] opacity-75">{counts[f.key]}</span>
+            </span>
           </button>
         ))}
         <input
@@ -148,13 +215,13 @@ export function MetersListClient({
           <table className="tbl">
             <thead>
               <tr>
-                <th>Meter</th>
-                <th>Measures</th>
-                <th>State</th>
-                <th className="text-right">Power now · 24h</th>
-                <th>Today vs ceiling</th>
-                <th className="text-right">History</th>
-                <th>Chased by</th>
+                <SortHeader k="name" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                <SortHeader k="state" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                <SortHeader k="power" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" />
+                <SortHeader k="today" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                <SortHeader k="history" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" />
+                <SortHeader k="owner" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
                 {canAssign && <th />}
               </tr>
             </thead>
@@ -428,5 +495,44 @@ function AssignPanel({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * A sortable column header. Hoisted to module scope rather than defined
+ * inside the list — a component declared in another component's render body
+ * is a new type every render, which throws away its state and is what this
+ * repo's own lint rule already caught once.
+ */
+function SortHeader({
+  k,
+  sortKey,
+  dir,
+  onSort,
+  align = "left",
+}: {
+  k: SortKey;
+  sortKey: SortKey;
+  dir: 1 | -1;
+  onSort: (k: SortKey) => void;
+  align?: "left" | "right";
+}) {
+  const active = k === sortKey;
+  return (
+    <th className={align === "right" ? "text-right" : undefined} aria-sort={active ? (dir === 1 ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className="inline-flex items-center gap-1.5 hover:opacity-80"
+        style={{ color: active ? "var(--text)" : "inherit", font: "inherit", letterSpacing: "inherit", textTransform: "inherit" }}
+      >
+        {SORTS[k].label}
+        {/* The caret shows only on the sorted column: an arrow on every
+            header says nothing about which one is in force. */}
+        <span aria-hidden style={{ opacity: active ? 1 : 0.25 }}>
+          {active ? (dir === 1 ? "↑" : "↓") : "↕"}
+        </span>
+      </button>
+    </th>
   );
 }

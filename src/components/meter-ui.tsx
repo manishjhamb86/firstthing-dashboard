@@ -241,7 +241,7 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
   return (
     <Card className="p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div>
+        <div className="min-w-0 flex-1">
           <CardTitle>Live reading</CardTitle>
           <p
             className="mt-1 text-[13px]"
@@ -250,7 +250,7 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
             {caption.text}
           </p>
         </div>
-        {action}
+        {action && <div className="shrink-0">{action}</div>}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">

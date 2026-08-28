@@ -39,6 +39,25 @@ export type EwelinkDevice = {
 /** Refresh this far ahead of expiry rather than on the failing request. */
 const REFRESH_MARGIN_MS = 3 * 24 * 60 * 60 * 1000;
 
+/**
+ * eWeLink error 407: this application's API role does not permit the path.
+ *
+ * Verified against the live account on 2026-08-28 while attempting a device
+ * rename: `POST /v2/device/update-info` is documented and real, and this
+ * application is refused it. Renaming a device therefore happens in the
+ * eWeLink app, and `syncMeterDevices` reads the new name back. This client
+ * stays read-only, and its lack of any write is once again the guarantee.
+ * A different failure from "not signed in" — no amount of re-authorising
+ * fixes it, so it must not be reported as an auth problem. CoolKit grants
+ * paths per application, and the grant is a request to them.
+ */
+export class EwelinkPathNotAllowed extends Error {
+  constructor(public readonly path: string) {
+    super(`eWeLink has not granted this application permission to call ${path}`);
+    this.name = "EwelinkPathNotAllowed";
+  }
+}
+
 export class EwelinkNeedsAuthorisation extends Error {
   constructor(message = "The eWeLink account needs to be authorised again.") {
     super(message);
@@ -102,6 +121,7 @@ async function readEnvelope<T>(res: Response, what: string): Promise<T> {
   // with error: 401 is the normal shape of an expired token.
   if (body.error && body.error !== 0) {
     if (body.error === 401 || body.error === 402) throw new EwelinkNeedsAuthorisation();
+    if (body.error === 407) throw new EwelinkPathNotAllowed(what);
     throw new Error(`${what}: eWeLink error ${body.error}${body.msg ? ` — ${body.msg}` : ""}`);
   }
   return body.data as T;

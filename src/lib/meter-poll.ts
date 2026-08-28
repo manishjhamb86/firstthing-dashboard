@@ -157,11 +157,12 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
     });
 
     const circuitLabel = m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null;
+    const meterName = m.name;
 
     // --- 1. Reachability. Fires on the SECOND consecutive failure only. ---
     if (health.shouldAlert) {
       const message = outageMessage({
-        meterName: m.name,
+        meterName,
         circuitLabel,
         societyName: m.society?.name ?? null,
         state: health.state,
@@ -199,7 +200,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
     const capacity = evaluateCapacity({
       dayKwh: read.dayKwh,
       theoreticalDailyKwh: devices.length > 0 ? theoreticalDailyKwh(devices) : null,
-      meterName: m.name,
+      meterName,
     });
     if (capacity.verdict === "over") {
       const { opened } = await openAlert({

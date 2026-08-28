@@ -141,15 +141,23 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         )}
 
         <Card className="p-6">
+          {/* min-w-0 flex-1 on the text, shrink-0 on the action: without it
+              the heading column sizes to its unwrapped paragraph, which is
+              wider than the row, so the button wrapped underneath and sat
+              left. Same shape PageHeader already uses. */}
           <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
-            <div>
+            <div className="min-w-0 flex-1">
               <CardTitle>Hour by hour{days.length > 0 ? ` — last ${Math.min(7, days.length)} days` : ""}</CardTitle>
               <p className="mt-1 text-[13px] text-[var(--text-muted)]">
                 From the meter&rsquo;s own exported history. The live API gives a running counter,
                 never the hours themselves, so this series only grows when an export is uploaded.
               </p>
             </div>
-            {canManage && <MeterDetailActions meterId={meter.id} mode="upload" />}
+            {canManage && (
+              <div className="shrink-0">
+                <MeterDetailActions meterId={meter.id} mode="upload" />
+              </div>
+            )}
           </div>
 
           {days.length === 0 ? (

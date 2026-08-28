@@ -19,8 +19,41 @@ export const dynamic = "force-dynamic";
  * is a signed-in operations admin, the `state` matches the cookie set when
  * WE started the flow, and the code exchanges cleanly.
  */
+/**
+ * This deployment's public origin.
+ *
+ * `request.nextUrl.origin` is the origin the Node process itself is listening
+ * on — https://localhost:3005 behind nginx — so building the return URL from
+ * it sends the operator to a host that does not exist outside the box. The
+ * eWeLink round trip landed there on its first real run (2026-08-28), and it
+ * is the same shape as the NextAuth redirect bug already recorded for this
+ * deployment: a self-hosted `next start` does not re-derive its own URL from
+ * proxy headers.
+ *
+ * AUTH_URL is already set to the public origin on every environment for
+ * exactly this reason, so it is the first choice rather than a second env var
+ * that could drift out of step with it. The forwarded headers nginx does send
+ * are the fallback, and the request's own origin the last resort.
+ */
+function publicOrigin(request: NextRequest): string {
+  const configured = process.env.AUTH_URL;
+  if (configured) {
+    try {
+      return new URL(configured).origin;
+    } catch {
+      /* a malformed AUTH_URL must not break the callback */
+    }
+  }
+  const host = request.headers.get("x-forwarded-host");
+  if (host) {
+    const proto = request.headers.get("x-forwarded-proto") ?? "https";
+    return `${proto}://${host}`;
+  }
+  return request.nextUrl.origin;
+}
+
 function back(request: NextRequest, params: Record<string, string>) {
-  const url = new URL("/admin/meters/settings", request.nextUrl.origin);
+  const url = new URL("/admin/meters/settings", publicOrigin(request));
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
   return NextResponse.redirect(url);
 }

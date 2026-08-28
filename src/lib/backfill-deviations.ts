@@ -38,6 +38,7 @@ export type DeviationCode =
   | "represented-count-mixes-fixture-types"
   | "proration-on-a-30-day-month"
   | "two-versions-of-the-demo-report"
+  | "report-dates-contradict-its-tables"
   | "not-billing";
 
 type Meta = { label: string; what: string; standard: string };
@@ -147,6 +148,11 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
     label: "Opening month prorated on a 30-day month",
     what: "The first invoice divides the monthly charge by 30 rather than by the days the month actually has.",
     standard: "CON-22 prorates by the real remaining days of the calendar month.",
+  },
+  "report-dates-contradict-its-tables": {
+    label: "The report's prose names different dates from its own tables",
+    what: "The monitoring window quoted in the text is not the window the table lists. The tables are the data and are what is stored.",
+    standard: "One window, stated once.",
   },
   "two-versions-of-the-demo-report": {
     label: "Two versions of the demo report exist",

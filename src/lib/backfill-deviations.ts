@@ -31,6 +31,8 @@ export type DeviationCode =
   | "eligibility-never-assessed"
   | "agreement-figures-do-not-reconcile"
   | "minimum-light-clause-not-enforced"
+  | "billing-predates-agreement-execution"
+  | "agreement-re-executed-after-changes"
   | "not-billing";
 
 type Meta = { label: string; what: string; standard: string };
@@ -110,6 +112,16 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
     label: "CON-16 eligibility was never assessed",
     what: "The circuit was already in service when it was recorded, so the eligibility checklist was never run against it.",
     standard: "FEAT-007 assesses eligibility before a circuit is selected.",
+  },
+  "billing-predates-agreement-execution": {
+    label: "Billing began before the agreement was executed",
+    what: "The contract's billing period starts months before the document governing it was signed. The agreement sets that period out itself, so it is backdated by intent rather than by accident.",
+    standard: "A contract's term runs from the completion its own agreement records.",
+  },
+  "agreement-re-executed-after-changes": {
+    label: "Signed twice — the second execution is the one on record",
+    what: "An earlier version was signed, then the terms changed and the agreement was re-executed. The dates held here are the second signing; the earlier one is not on file.",
+    standard: "An amendment is appended to the agreement it changes, and both stay retrievable.",
   },
   "minimum-light-clause-not-enforced": {
     label: "Fewer lights installed than the agreement's minimum",

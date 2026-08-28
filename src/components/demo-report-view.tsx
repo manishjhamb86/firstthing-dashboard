@@ -32,13 +32,31 @@ export function DemoReportView({
 }) {
   const circuits = (report.circuitSnapshot as DemoReportCircuit[]) ?? [];
 
+  // The figure that governs is the benchmark each circuit carries — what the
+  // agreement says and what the bill is computed from. The report used to
+  // re-ratio the stored totals into a second percentage, which disagreed
+  // with the contract wherever a circuit excludes a shared fitting from the
+  // calculation or was demonstrated more than once. Derived from the
+  // snapshot rather than stored, so reports written before this render it too.
+  const baselineTotal = circuits.reduce((n, c) => n + c.preInstallBaseline, 0);
+  const agreedSavingsPct =
+    baselineTotal > 0
+      ? (circuits.reduce((n, c) => n + c.preInstallBaseline * (c.benchmarkSavingsPct / 100), 0) /
+          baselineTotal) *
+        100
+      : report.measuredSavingsPct;
+
   return (
     <div className="space-y-6">
       <StatRow>
         <Stat
-          label="Measured savings"
-          value={`${report.measuredSavingsPct.toFixed(2)}%`}
-          detail="Across the metered demo circuits"
+          label="Agreed savings"
+          value={`${agreedSavingsPct.toFixed(2)}%`}
+          detail={
+            circuits.length > 1
+              ? "Each circuit's benchmark, weighted by its baseline"
+              : "The benchmark on record for this circuit"
+          }
         />
         <Stat
           label="Before (daily)"

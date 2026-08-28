@@ -34,7 +34,20 @@ export type DemoReportCircuit = {
   extrapolationFactor: number;
   preInstallBaseline: number;
   postInstallAverage: number;
+  /** What the days measured: baseline minus the post-install average. */
   savedKwhPerDay: number;
+  /**
+   * What the benchmark on record says this circuit saves.
+   *
+   * The two differ, and where they do the agreed figure is the one that
+   * governs: Aditya Mega City's raw readings ratio to 58.48% while its
+   * agreement carries 64%, because the street lights sharing the circuit
+   * come off both sides of the calculation; Aditya Urban Casa's basement was
+   * demonstrated twice and its benchmark is the mean of the two
+   * percentages, not the ratio of the summed totals. A report that showed
+   * its own recomputed number would disagree with the contract and the bill.
+   */
+  agreedSavedKwhPerDay: number;
   benchmarkSavingsPct: number;
   projectedSavedKwhPerDay: number;
   // INV-02 — the days behind both figures travel with the report, so a
@@ -46,7 +59,10 @@ export type DemoReportCircuit = {
 export type DemoReportFigures = {
   preInstallBaselineTotal: number;
   postInstallAverageTotal: number;
+  /** The ratio the stored days give. Kept because it is what was measured. */
   measuredSavingsPct: number;
+  /** The benchmarks on record, weighted by each circuit's baseline. */
+  agreedSavingsPct: number;
   societyLightCount: number;
   meteredLightCount: number;
   extrapolationFactor: number;
@@ -145,6 +161,10 @@ export function buildDemoReport(input: {
     const postInstallAverage = averageOf(c.postInstallReadings);
     const savedKwhPerDay = preInstallBaseline - postInstallAverage;
     const extrapolationFactor = c.representedLightCount / c.meteredLightCount;
+    // CON-11's extrapolation scales the AGREED saving, so the projected
+    // figure — which feeds the offer's fee and from there a rupee amount a
+    // society is billed on — can never disagree with what was signed.
+    const agreedSavedKwhPerDay = preInstallBaseline * (c.benchmarkSavingsPct! / 100);
 
     built.push({
       circuitId: c.id,
@@ -156,8 +176,9 @@ export function buildDemoReport(input: {
       preInstallBaseline,
       postInstallAverage,
       savedKwhPerDay,
+      agreedSavedKwhPerDay,
       benchmarkSavingsPct: c.benchmarkSavingsPct!,
-      projectedSavedKwhPerDay: savedKwhPerDay * extrapolationFactor,
+      projectedSavedKwhPerDay: agreedSavedKwhPerDay * extrapolationFactor,
       preInstallReadings: c.preInstallReadings,
       postInstallReadings: c.postInstallReadings,
     });
@@ -174,6 +195,8 @@ export function buildDemoReport(input: {
       postInstallAverageTotal,
       measuredSavingsPct:
         ((preInstallBaselineTotal - postInstallAverageTotal) / preInstallBaselineTotal) * 100,
+      agreedSavingsPct:
+        (built.reduce((s, c) => s + c.agreedSavedKwhPerDay, 0) / preInstallBaselineTotal) * 100,
       societyLightCount,
       meteredLightCount,
       extrapolationFactor: societyLightCount / meteredLightCount,

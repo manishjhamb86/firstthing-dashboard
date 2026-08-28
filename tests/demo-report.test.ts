@@ -168,3 +168,55 @@ describe("the report reads whichever store a circuit actually used", () => {
     if (!r.ok) expect(r.blocker).toBe("no-post-install-readings");
   });
 });
+
+describe("the report agrees with the contract", () => {
+  const circuit = (over: Partial<Parameters<typeof buildDemoReport>[0]["circuits"][number]> = {}) => ({
+    id: "c1",
+    lightType: "basement",
+    location: "Basement",
+    meteredLightCount: 91,
+    representedLightCount: 605,
+    wattage: 20,
+    preInstallBaseline: 47.4,
+    benchmarkSavingsPct: 64,
+    state: "benchmark_confirmed" as const,
+    preInstallReadings: [{ date: "2025-01-29", consumptionKwh: 47.4 }],
+    postInstallReadings: [{ date: "2025-02-13", consumptionKwh: 19.68 }],
+    ...over,
+  });
+
+  it("reports the benchmark on record, not the ratio of the stored days", () => {
+    // Aditya Mega City: the days ratio to 58.48% because the street lights
+    // sharing the circuit are still consuming; the agreement says 64%,
+    // because they come off both sides. 64% is what the society is billed on.
+    const r = buildDemoReport({ circuits: [circuit()], societyLightCount: 605 });
+    if (!r.ok) throw new Error(r.blocker);
+    expect(r.figures.agreedSavingsPct).toBeCloseTo(64, 10);
+    expect(r.figures.measuredSavingsPct).toBeCloseTo(58.4810126582, 6);
+  });
+
+  it("extrapolates the agreed saving, so the projection matches the contract", () => {
+    const r = buildDemoReport({ circuits: [circuit()], societyLightCount: 605 });
+    if (!r.ok) throw new Error(r.blocker);
+    // 47.4 × 64% × (605 / 91), and deliberately not (47.4 − 19.68) × the factor.
+    expect(r.figures.projectedSavingsKwhPerDay).toBeCloseTo(47.4 * 0.64 * (605 / 91), 10);
+    expect(r.figures.projectedSavingsKwhPerDay).not.toBeCloseTo((47.4 - 19.68) * (605 / 91), 2);
+  });
+
+  it("weights two circuits by their baselines rather than averaging blind", () => {
+    // Urban Casa: 59.92 kWh/day at 66.72% and 1.81 at 78%. A plain mean would
+    // give 72.36% and let a circuit a seventieth the size pull the figure up.
+    const r = buildDemoReport({
+      circuits: [
+        circuit({ id: "a", preInstallBaseline: 59.92, benchmarkSavingsPct: 66.72, meteredLightCount: 122, representedLightCount: 736 }),
+        circuit({ id: "b", preInstallBaseline: 1.81, benchmarkSavingsPct: 78, meteredLightCount: 16, representedLightCount: 1153 }),
+      ],
+      societyLightCount: 1889,
+    });
+    if (!r.ok) throw new Error(r.blocker);
+    const expected = ((59.92 * 0.6672 + 1.81 * 0.78) / (59.92 + 1.81)) * 100;
+    expect(r.figures.agreedSavingsPct).toBeCloseTo(expected, 10);
+    expect(r.figures.agreedSavingsPct).toBeGreaterThan(66.72);
+    expect(r.figures.agreedSavingsPct).toBeLessThan(67.1);
+  });
+});

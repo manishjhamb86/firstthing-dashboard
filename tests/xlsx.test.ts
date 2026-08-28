@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, type Dirent } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { columnIndex, readWorkbook, serialToIso } from "@/lib/xlsx";
@@ -156,13 +156,35 @@ describe("a sheet becomes the text the pipeline already reads", () => {
 // customer's documents), so this suite is skipped wherever they are not,
 // and it looks in both layouts the folder has had.
 const SAMPLES = join(homedir(), "Downloads", "Document Samples");
-const REAL = [
-  // Onboarded societies get filed under Registered/ once their documents
-  // have been read, so both live and archived locations are looked in.
-  join(SAMPLES, "Registered", "Ace City", "Live Meter Reading", "Ace City Meter Reading.xlsx"),
-  join(SAMPLES, "Ace City", "Live Meter Reading", "Ace City Meter Reading.xlsx"),
-  join(SAMPLES, "Ace City", "Ace City Meter Reading.xlsx"),
-].find(existsSync);
+
+/**
+ * Find the workbook by NAME, wherever it currently sits.
+ *
+ * The sample folders are reorganised as societies are onboarded — into
+ * Registered/, then into numbered folders — and a hardcoded path has now
+ * silently taken this file's tests down twice, which reads as "18 tests
+ * passed" becoming "4 skipped" and nobody noticing. Searching by name
+ * survives the next reshuffle.
+ */
+function findSample(name: string, dir = SAMPLES, depth = 0): string | undefined {
+  if (depth > 4 || !existsSync(dir)) return undefined;
+  let entries: Dirent[];
+  try {
+    entries = readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return undefined;
+  }
+  const hit = entries.find((e) => e.isFile() && e.name === name);
+  if (hit) return join(dir, name);
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.startsWith(".")) continue;
+    const found = findSample(name, join(dir, e.name), depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+const REAL = findSample("Ace City Meter Reading.xlsx");
 
 // The factory of a skipped describe still RUNS — only its tests are skipped —
 // so reading the file here rather than in the body would throw during

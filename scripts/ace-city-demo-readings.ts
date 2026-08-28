@@ -13,12 +13,22 @@ import { readingSheets, sheetToReadingCsv } from "../src/lib/xlsx-readings";
 import { matchKnownFormat } from "../src/lib/reading-formats";
 import { applyMapping } from "../src/lib/reading-normalize";
 
-import { existsSync } from "node:fs";
-const CANDIDATES = [
-  "/Downloads/Document Samples/Registered/Ace City/Live Meter Reading/Ace City Meter Reading.xlsx",
-  "/Downloads/Document Samples/Ace City/Live Meter Reading/Ace City Meter Reading.xlsx",
-].map((p) => process.env.HOME + p);
-const F = CANDIDATES.find(existsSync) ?? CANDIDATES[0];
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+// By name, wherever the sample folders have been reorganised to today.
+function findSample(name: string, dir: string, depth = 0): string | undefined {
+  if (depth > 4 || !existsSync(dir)) return undefined;
+  const entries = readdirSync(dir, { withFileTypes: true });
+  if (entries.some((e) => e.isFile() && e.name === name)) return join(dir, name);
+  for (const e of entries) {
+    if (!e.isDirectory() || e.name.startsWith(".")) continue;
+    const found = findSample(name, join(dir, e.name), depth + 1);
+    if (found) return found;
+  }
+  return undefined;
+}
+const F =
+  findSample("Ace City Meter Reading.xlsx", process.env.HOME + "/Downloads/Document Samples") ?? "";
 const SHEET = "BasementReadings";
 const BLOCKS = [
   { phase: "pre", period: "2025-08", from: "2025-08-03", to: "2025-08-10", stated: 48.6987 },

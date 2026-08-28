@@ -2499,6 +2499,21 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The dialog parked itself top-left, and a "removed" button that was never removed (2026-08-28)
+
+**The popup was not centered** (user-caught): a modal `<dialog>` centers through the UA's own
+`margin: auto`, and the CSS reset zeroes every margin — so `showModal()` parked it in the top-left
+corner. One class (`m-auto`) restores the load-bearing margin; verified by measuring the open
+dialog's box against the viewport centre, not by eye. **Worth remembering**: any future native
+dialog in this codebase needs its `m-auto` back, for the same reason.
+
+**"There was a different button here before this — why was it removed?"** It was not: the button
+remembered is demo mode's **"Fill readings form"**, which lives inside the recording panel and
+renders only while the app-shell toggle is set to demo. The toggle read NORMAL in the screenshot,
+so the section was hidden — flip it and the button is back, now inside the popup. The user also
+confirmed the hours-with-data marking design as shipped ("this works better"), so it stands
+unchanged.
+
 ## A 24-row day can still be mostly silence — the listing now says so (2026-08-28) — user-specified
 
 **The user's domain fact, and the gap it exposed**: the vendor's export writes **0 for an hour the

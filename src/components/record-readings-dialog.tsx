@@ -43,7 +43,10 @@ export function RecordReadingsDialog({
           // as the dialog target.
           if (e.target === ref.current) ref.current?.close();
         }}
-        className="w-[min(880px,92vw)] rounded-[var(--r-lg)] p-0 backdrop:bg-black/50"
+        // m-auto is load-bearing: the UA centers a modal dialog via
+        // `margin: auto`, and the CSS reset zeroes it — which parks the
+        // dialog in the top-left corner (user-reported 2026-08-28).
+        className="m-auto w-[min(880px,92vw)] rounded-[var(--r-lg)] p-0 backdrop:bg-black/50"
         style={{ background: "var(--ground)", border: "1px solid var(--border)" }}
       >
         <div className="max-h-[85vh] overflow-y-auto p-5">

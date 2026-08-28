@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-26
+2026-08-28
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -2498,6 +2498,112 @@ purely additive (2 tables, 3 indexes, 4 FKs).
 Prisma — it is `--to-schema` now — and `prisma db execute` silently printed its help text and did
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
+
+## The meter module: a hundred-fold scale error, and the hours the API will not give (2026-08-28) — user-specified
+
+**The ask, settled over several rounds**: the vendor API is used ONLY for the realtime picture of a
+meter when somebody opens it; only the last read value is stored; the hourly series comes from CSVs
+downloaded off each meter; an hourly cron checks two things — offline after **two consecutive**
+failed fetches, and whether the day's consumption is beyond what the circuit can draw; and because
+a CSV carries no meter identity, the system matches it against stored hours and **always asks the
+operator to confirm**.
+
+**The defect underneath all of it, found before building on top of it: every stored power figure
+was a hundred times too large.** UIID 190 meters (POWR316/316D/320D — all 45 on the account) report
+each electrical datapoint in HUNDREDTHS, and both the poll and the device sync stored the raw
+integer. A 1,153 W lighting circuit sat in the database as **115,335 W**. The scale is not inferred
+from the model name — it is proved by physics the device reports alongside the figure: `voltage:
+22945` is 229.45 V and `24224` is 242.24 V, Indian mains, and only the hundredths reading puts them
+there; V x I then reconciles with the reported power at a power factor of 0.88–0.90 on every device
+checked. Same class as the water tank's `levelMax` (a raw 45 that meant 75%): **a plausible wrong
+number survives every freshness check ever written, because nothing about it looks stale.**
+`src/lib/ewelink-scale.ts` owns it, `mainsPlausible` keeps the same check available at runtime, and
+a device type whose scale has never been established returns **nulls, never raw figures** — a number
+shown at an unknown scale reads as fact. The poll was also asking for `oneKwhData`, which these
+devices do not report at all; it asks for `dayKwh`/`monthKwh` now.
+
+**The sync no longer stamps `lastReportedAt`.** It was taking the account listing's cached `online`
+flag — already observed stale — and claiming the device reported at that moment. Mirroring what
+devices exist is the sync's job; deciding health is the poll's, against a live read.
+
+**Alerting is on the transition, and the database enforces it.** One OPEN alert per meter per kind,
+guaranteed by a partial unique index (`meter_alerts_open_unique`), not by an application check an
+hourly job can race itself past. The outage start is stamped once and kept across a run of bad polls
+— "down since 09:00" is the fact somebody acts on, and restamping it hourly would erase it. An
+alert is never deleted; it closes with a stated reason.
+
+**The out-of-range check is a physical ceiling, not a statistical band.** A circuit cannot draw more
+than everything on it running flat out all day, so the ceiling is `theoreticalDailyKwh` of the
+ORIGINAL fixtures (what the wiring ever carried, so a partly-completed retrofit cannot make it
+fire), with 10% headroom for metering tolerance. A band around recent days would fire on a festival
+or a season, and this alert has to mean *go and look at this meter*. A circuit with no load
+inventory yields **`unknown`**, which neither opens nor closes an alert — not knowing whether a
+reading is possible is not evidence that it is.
+
+**The hourly series cannot come from the API, and that is settled rather than assumed.** The devices
+do hold their own hourly buffer — `getHoursKwh` reports a descriptor spanning 744 slots, a month of
+hours — but no public REST endpoint returns its contents. So the series comes from the CSV, parsed
+by the pipeline CON-45 already built: the user's real export was recognised as `sonoff` with **zero
+unreadable rows**, 4,536 hourly values over 190 days, no new parser needed.
+
+**The finding that shaped the matching, and it came from measuring the file rather than reasoning
+about it: 92% of those 4,536 values are exactly zero, and the first non-zero reading is 174 days
+in.** A run of zeros identifies nothing — every idle meter agrees with every other idle meter,
+perfectly, for as long as you like. So a match is counted in DISTINCTIVE hours (both sides non-zero
+and equal, minimum 8), and a comparison with too few of those reports **no evidence** rather than a
+confident wrong answer. A meter that disagrees on more than 2% of the overlap is ruled out however
+much else lines up — and the proposal is the qualifying candidate, deliberately **not** the top of
+the sort, because a meter can lead on matches and still be the one the evidence excludes.
+
+**Filing a file against the wrong meter is the mistake this is built around**: it puts one society's
+consumption into another's monitoring and looks entirely normal afterwards. So analyse and commit
+are two acts, nothing is written by the first, the screen names the meter the evidence points at
+when it is not the one being viewed, and the button then reads "Import here anyway" with the
+override recorded on the import row. The commit re-derives everything from the file text — the
+browser's parsed rows are never trusted.
+
+**Two performance traps avoided by reasoning about the real file, not the test one**: an `OR` of
+4,536 clauses is a query Postgres plans badly or refuses, so the delete is grouped by day (complete
+days in one statement, only a genuine partial day gets its own) — and deleting the whole day range
+instead would be wrong, dropping hours a denser earlier import held that this file does not cover.
+The insert is one `createMany`, the lesson the 275-day Ace City import already paid for.
+
+**A figure is never shown without its age** (`meter-live.ts`), on either surface. A meter unreachable
+for three hours still has a last known reading worth seeing; presenting it as the current one is the
+water-tank lesson. The portal is held to a longer read floor than the back office, so a page left
+open cannot spend the account's vendor allowance.
+
+**Screens**: the back office list opens with what needs attention rather than the inventory (forty-
+five healthy meters bury the two that stopped answering last night), then summary tiles, then a
+table carrying state, power now, today against the circuit's ceiling, history held, and who is
+chased. `/admin/meters/[id]` adds the live readout, what the meter measures, the hourly chart and
+the import history. The portal gets its own Meters tab, list and detail, built from the SAME view
+model (`meter-view.ts`) so the two surfaces cannot disagree about what is true — they differ only in
+what they let you do. INV-05 is enforced in the query, which takes the viewer's own societyId as its
+only scope.
+
+**Verified against real devices and real rows** — 42 browser checks across three scripts and 18
+against the database, zero console errors, zero page errors. A live poll of two real meters stored
+934.13 W / 244.88 V / 4.33 A and 615.12 W / 252.07 V / 2.71 A, confirmed by `psql`; the alert
+lifecycle was driven through first-failure, second-failure, staying-down, recovery, the capacity
+ceiling and an unreachable poll leaving a capacity alert standing, with the index itself refusing a
+duplicate; the user's real 190-day export was imported through the browser (4,536 hours stored),
+re-uploading it then matched its own meter **on the 354 hours that carry a reading**, a re-import
+changed nothing, and uploading it on another meter was flagged by name. **The refusal was driven
+through a path the client cannot pre-block** — the permission revoked behind the open form — and
+refused by name, writing neither readings nor an import record. 691 unit tests (was 651);
+`tsc`/`lint`/`build` clean.
+
+**Two test-harness notes, both already recorded once here and both caught again**: `.lbl` uppercases
+and `innerText` returns RENDERED text, so "Power now" is "POWER NOW" — match case-insensitively.
+And a wait target has to be unique: `Covers` is the preview's label *and* the imports table's
+column header, so the wait resolved instantly against the wrong element and the assertions read the
+wrong part of the page.
+
+**Not built, and not claimed**: an S3 copy of the uploaded CSV (`MeterCsvImport.s3Key` exists and is
+unused — the readings trace to the import row, not yet to the bytes); real delivery of an alert by
+email or SMS (ADR-008 is still Proposed, so an alert is in-app plus a log line); and none of this is
+deployed to stage.
 
 ## The tank is a lit vessel, and the chart says when each reading arrived (2026-08-25) — user-corrected twice
 

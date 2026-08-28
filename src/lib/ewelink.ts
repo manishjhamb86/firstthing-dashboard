@@ -229,20 +229,21 @@ export async function getDeviceParams(
 }
 
 /** The datapoints that mean "this device measures electricity". */
-const ENERGY_KEYS = ["power", "voltage", "current", "oneKwhData", "hundredDaysKwhData", "energy"];
+const ENERGY_KEYS = ["power", "voltage", "current", "dayKwh", "monthKwh", "oneKwhData", "hundredDaysKwhData", "energy"];
 
 export function hasEnergySignal(params: Record<string, unknown>): boolean {
   return ENERGY_KEYS.some((k) => params[k] !== undefined);
 }
 
-function powerOf(params: Record<string, unknown>): number | null {
-  const raw = params.power;
-  const n = typeof raw === "string" ? Number(raw) : typeof raw === "number" ? raw : NaN;
-  return Number.isFinite(n) ? n : null;
-}
-
 /**
- * Mirror the account. Non-metering devices are kept and marked, not dropped:
+ * Mirror the account: which devices exist, what they are, and what protocol
+ * they speak. It deliberately does NOT decide health or stamp a report time
+ * — the device list serves the cloud's cached view, whose `online` flag has
+ * been observed stale, and stamping `lastReportedAt` from it would claim a
+ * device reported at a moment it may have been unreachable. That is the
+ * poll's job, against a live status read.
+ *
+ * Non-metering devices are kept and marked, not dropped:
  * a device missing from the screen reads as an account problem rather than
  * as the wrong kind of device — the same call made for the Tuya energy
  * meters on the water-tank list.
@@ -263,17 +264,16 @@ export async function syncMeterDevices(cfg: EwelinkConfig): Promise<{ devices: n
         online: d.online,
         hasEnergySignal: energy,
         observedParams: Object.keys(d.params),
-        lastPowerW: powerOf(d.params),
-        lastReportedAt: energy ? new Date() : null,
       },
       update: {
         name: d.name,
         productModel: d.productModel,
         uiid: d.uiid,
+        // `online` here is the account listing's cached flag, refined by the
+        // next poll; the name/model/uiid are what this sync is actually for.
         online: d.online,
         hasEnergySignal: energy,
         observedParams: Object.keys(d.params),
-        ...(powerOf(d.params) === null ? {} : { lastPowerW: powerOf(d.params), lastReportedAt: new Date() }),
         syncedAt: new Date(),
       },
     });

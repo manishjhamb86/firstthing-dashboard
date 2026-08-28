@@ -1,0 +1,13 @@
+-- Every `last_power_w` written before this point was stored at the vendor's
+-- RAW scale: UIID 190 meters report hundredths, so a 1,153 W lighting
+-- circuit sat in this column as 115335. See src/lib/ewelink-scale.ts.
+--
+-- The values are cleared rather than divided. After the fact there is no way
+-- to tell a raw 11500 from a genuine one, and this column is a last-known
+-- cache with no history value — the next poll refills it at the true scale,
+-- and a screen showing nothing is honest where a screen showing a
+-- hundred-fold figure is not.
+--
+-- A migration runs exactly once per database, so this cannot reach a value
+-- the corrected code wrote.
+UPDATE "meter_devices" SET "last_power_w" = NULL WHERE "last_power_w" IS NOT NULL;

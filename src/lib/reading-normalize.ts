@@ -273,6 +273,68 @@ function parseIntervals(text: string, mapping: ReadingMapping): PointsResult {
   return { intervals, rowsAttempted: dataLines.length, rowsUnparseable, rowsNegative, problems };
 }
 
+/** One hour of the export, exactly as it printed it. */
+export type HourlyPoint = {
+  /** The local calendar day the file printed, at UTC midnight. */
+  day: Date;
+  /** 0-23, the hour the file printed (`10:00-11:00` is hour 10). */
+  hour: number;
+  kWh: number;
+};
+
+export type HourlyResult = {
+  points: HourlyPoint[];
+  rowsAttempted: number;
+  rowsUnparseable: number;
+  /** Rows that were not hourly at all — a daily export has no hours to store. */
+  rowsNotHourly: number;
+  problems: string[];
+};
+
+/**
+ * The file's hours, for the meter-level monitoring series.
+ *
+ * Deliberately NOT period-filtered, unlike `applyMapping`: a meter export is
+ * downloaded as a range and filed against the METER, not against a month an
+ * operator selected for a bill. INV-04's rule is about the period a document
+ * belongs to; this is the device's own log.
+ *
+ * Nothing is converted on the way in — the day and hour are stored exactly
+ * as printed. A half-hour timezone offset is precisely the conversion that
+ * silently moves a reading into the wrong day.
+ */
+export function hourlyPoints(text: string, mapping: ReadingMapping): HourlyResult {
+  const parsed = parseIntervals(text, mapping);
+  const scale = UNIT_TO_KWH[mapping.valueUnit];
+  const points: HourlyPoint[] = [];
+  let rowsNotHourly = 0;
+
+  for (const p of parsed.intervals) {
+    // A row with no time component carries a whole day, not an hour. It is
+    // counted and dropped rather than filed as hour 0, which would claim a
+    // day's consumption happened at midnight.
+    if (mapping.timeColumn === null) {
+      rowsNotHourly++;
+      continue;
+    }
+    points.push({ day: utcDayOf(p.at), hour: p.at.getUTCHours(), kWh: p.value * scale });
+  }
+
+  const problems = [...parsed.problems];
+  if (rowsNotHourly > 0) {
+    problems.push(
+      `${rowsNotHourly} row${rowsNotHourly === 1 ? "" : "s"} carried no time of day — an hourly series cannot be built from them.`,
+    );
+  }
+  return {
+    points,
+    rowsAttempted: parsed.rowsAttempted,
+    rowsUnparseable: parsed.rowsUnparseable,
+    rowsNotHourly,
+    problems,
+  };
+}
+
 export function applyMapping(text: string, mapping: ReadingMapping, period: string): ParseResult {
   const parsed = parseIntervals(text, mapping);
   const { intervals, rowsAttempted, rowsUnparseable, rowsNegative } = parsed;

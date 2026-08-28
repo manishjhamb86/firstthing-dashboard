@@ -1,35 +1,55 @@
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { evaluateMeterHealth, outageMessage, outageMinutes } from "@/lib/meter-health";
+import { theoreticalDailyKwh } from "@/lib/circuit-load";
+import { closeAlert, openAlert } from "@/lib/meter-alerts";
+import { evaluateCapacity, evaluateMeterHealth, outageMessage, outageMinutes } from "@/lib/meter-health";
 import { resolveMeterProvider, type MeterProvider } from "@/lib/meter-provider";
 
 /**
- * One pass over the assigned meters: read each, file a sample, and decide
- * whether it is healthy.
+ * One pass over the assigned meters. It answers exactly two questions, which
+ * are the only two the hourly job exists for:
+ *
+ *   1. Is this meter reachable? Two consecutive failures raise an alert.
+ *   2. Is what it reports physically possible? A day's consumption above
+ *      everything on the circuit running flat out raises another.
+ *
+ * It deliberately does NOT build an hourly series. The device holds its own
+ * hourly buffer but no public endpoint returns it, and an hourly poll of a
+ * counter would only ever give a counter — the hourly series comes from the
+ * CSV exported off the meter (see MeterHourlyReading).
+ *
+ * A sample is TELEMETRY. It never becomes a MeterReading (the store a bill
+ * is computed from) by this path: CON-45 requires those to be reviewed row
+ * by row before they are stored, and INV-09 requires anomaly detection
+ * before a month bills.
  *
  * The hourly job and the "Sync now" button both come through here, for the
  * reason `applyCommissioningReading` exists — two entry points that write
  * the same rows by two code paths drift, and the drift shows up as a figure
  * that depends on which button somebody pressed.
- *
- * A sample is TELEMETRY. It never becomes a MeterReading (the store a bill
- * is computed from) by this path: CON-45 requires those to be reviewed row
- * by row before they are stored, and INV-09 requires anomaly detection
- * before a month bills. What this gives is the live picture and the
- * online/offline signal.
  */
 export type PollResult = {
   polled: number;
   reporting: number;
   unhealthy: number;
   failed: number;
+  alertsOpened: number;
+  alertsClosed: number;
 };
 
 export async function pollMeters(opts?: { meterId?: string; provider?: MeterProvider }): Promise<PollResult> {
   const provider = opts?.provider ?? (await resolveMeterProvider());
+  const result: PollResult = {
+    polled: 0,
+    reporting: 0,
+    unhealthy: 0,
+    failed: 0,
+    alertsOpened: 0,
+    alertsClosed: 0,
+  };
   if (!provider) {
     logger.info("meter.poll_skipped", { reason: "no_provider" });
-    return { polled: 0, reporting: 0, unhealthy: 0, failed: 0 };
+    return result;
   }
 
   if (provider.name === "fake") {
@@ -45,36 +65,54 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       ...(opts?.meterId ? { id: opts.meterId } : { OR: [{ circuitId: { not: null } }, { societyId: { not: null } }] }),
     },
     include: {
-      circuit: { select: { location: true, lightType: true } },
+      circuit: {
+        select: {
+          location: true,
+          lightType: true,
+          devices: { select: { count: true, wattage: true, hoursPerDay: true } },
+        },
+      },
       society: { select: { name: true } },
       owner: { select: { email: true } },
     },
   });
 
   const now = new Date();
-  const result: PollResult = { polled: 0, reporting: 0, unhealthy: 0, failed: 0 };
 
   for (const m of meters) {
     result.polled++;
     let read;
+    let readOk = true;
     try {
-      read = await provider.readNow(m.ewelinkDeviceId);
+      read = await provider.readNow(m.ewelinkDeviceId, m.uiid);
     } catch (err) {
       // A failed read is evidence about the meter, not a reason to abandon
-      // the pass — one unreachable device must not stop the other 199.
+      // the pass — one unreachable device must not stop the other 44.
+      readOk = false;
       result.failed++;
-      read = { online: false, powerW: null, energyKwh: null, reportedAt: null };
+      read = {
+        online: false,
+        powerW: null,
+        voltageV: null,
+        currentA: null,
+        dayKwh: null,
+        monthKwh: null,
+        scaleKnown: true,
+        reportedAt: null,
+      };
       logger.warn("meter.read_failed", { meterId: m.id, error: String(err) });
     }
 
     // When the vendor cannot date the device's own report, a successful read
     // is the freshest fact available — and it is recorded as OUR read time,
     // not claimed as the device's.
-    const reportedAt = read.reportedAt ?? (read.online ? now : m.lastReportedAt);
+    const reportedAt = read.reportedAt ?? (readOk && read.online ? now : m.lastReportedAt);
     const health = evaluateMeterHealth({
       online: read.online,
+      readOk,
       reportedAt,
       offlineSince: m.offlineSince,
+      consecutiveFailures: m.consecutiveFailures,
       now,
     });
     if (health.state === "reporting") result.reporting++;
@@ -84,42 +122,112 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       data: {
         meterId: m.id,
         recordedAt: now,
-        online: read.online,
+        online: read.online && readOk,
         powerW: read.powerW,
-        energyKwh: read.energyKwh,
+        voltageV: read.voltageV,
+        currentA: read.currentA,
+        dayKwh: read.dayKwh,
+        monthKwh: read.monthKwh,
         reportedAt: read.reportedAt,
       },
     });
     await db.meterDevice.update({
       where: { id: m.id },
       data: {
-        online: read.online,
-        lastPowerW: read.powerW ?? m.lastPowerW,
-        lastEnergyKwh: read.energyKwh ?? m.lastEnergyKwh,
+        online: read.online && readOk,
+        // Keep the last KNOWN value when a read fails — a screen showing
+        // "last known, 3 hours ago" is more use than a blank one, provided it
+        // says so, which is what lastReadAt is for.
+        ...(readOk
+          ? {
+              lastPowerW: read.powerW ?? m.lastPowerW,
+              lastVoltageV: read.voltageV ?? m.lastVoltageV,
+              lastCurrentA: read.currentA ?? m.lastCurrentA,
+              lastDayKwh: read.dayKwh ?? m.lastDayKwh,
+              lastMonthKwh: read.monthKwh ?? m.lastMonthKwh,
+              lastReadAt: now,
+            }
+          : {}),
         lastReportedAt: reportedAt,
         lastSampleAt: now,
         offlineSince: health.offlineSince,
+        consecutiveFailures: health.consecutiveFailures,
       },
     });
 
-    // Fire on the TRANSITION only. An alert that repeats every hour is an
-    // alert people filter out, and then the one that matters goes with it.
-    if (health.becameUnhealthy) {
+    const circuitLabel = m.circuit ? `${m.circuit.location ?? "Unnamed"} · ${m.circuit.lightType}` : null;
+
+    // --- 1. Reachability. Fires on the SECOND consecutive failure only. ---
+    if (health.shouldAlert) {
+      const message = outageMessage({
+        meterName: m.name,
+        circuitLabel,
+        societyName: m.society?.name ?? null,
+        state: health.state,
+        minutes: outageMinutes(health.offlineSince, now),
+      });
+      const { opened } = await openAlert({
+        meterId: m.id,
+        kind: "offline",
+        message,
+        detail: {
+          state: health.state,
+          consecutiveFailures: health.consecutiveFailures,
+          offlineSince: health.offlineSince?.toISOString() ?? null,
+          ownerEmail: m.owner?.email ?? null,
+        },
+      });
+      if (opened) result.alertsOpened++;
       logger.warn("meter.went_offline", {
         meterId: m.id,
         state: health.state,
         ownerEmail: m.owner?.email ?? null,
-        message: outageMessage({
-          meterName: m.name,
-          circuitLabel: m.circuit ? `${m.circuit.location ?? "Unnamed"} · ${m.circuit.lightType}` : null,
-          societyName: m.society?.name ?? null,
-          state: health.state,
-          minutes: outageMinutes(health.offlineSince, now),
-        }),
+        message,
       });
     }
     if (health.recovered) {
+      const { closed } = await closeAlert({ meterId: m.id, kind: "offline", reason: "The meter is reporting again." });
+      result.alertsClosed += closed;
       logger.info("meter.recovered", { meterId: m.id, ownerEmail: m.owner?.email ?? null });
+    }
+
+    // --- 2. Is the day's consumption physically possible? ---
+    // The ceiling is the ORIGINAL fixture load: it is what the circuit could
+    // ever draw, so a partly-completed retrofit cannot make this alert fire.
+    const devices = m.circuit?.devices ?? [];
+    const capacity = evaluateCapacity({
+      dayKwh: read.dayKwh,
+      theoreticalDailyKwh: devices.length > 0 ? theoreticalDailyKwh(devices) : null,
+      meterName: m.name,
+    });
+    if (capacity.verdict === "over") {
+      const { opened } = await openAlert({
+        meterId: m.id,
+        kind: "out_of_range",
+        message: capacity.message,
+        detail: {
+          dayKwh: read.dayKwh,
+          ceilingKwh: capacity.ceilingKwh,
+          overBy: capacity.overBy,
+          circuitLabel,
+        },
+      });
+      if (opened) result.alertsOpened++;
+    } else if (capacity.verdict === "within") {
+      const { closed } = await closeAlert({
+        meterId: m.id,
+        kind: "out_of_range",
+        reason: "The day's consumption is back inside what the circuit can draw.",
+      });
+      result.alertsClosed += closed;
+    }
+    // `unknown` deliberately neither opens nor closes: not knowing whether a
+    // reading is possible is not evidence that it is.
+
+    if (!read.scaleKnown) {
+      // A device type whose scale has never been established reports nulls
+      // rather than raw figures. Loud, because it is silently unmonitored.
+      logger.warn("meter.scale_unknown", { meterId: m.id, uiid: m.uiid, productModel: m.productModel });
     }
   }
 

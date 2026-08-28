@@ -434,6 +434,8 @@ model AdminUser {
   waterTanksAssigned          WaterTank[]          @relation("WaterTankAssignedBy")
   meterDevicesAssigned        MeterDevice[]        @relation("MeterDeviceAssignedBy")
   meterDevicesOwned           MeterDevice[]        @relation("MeterDeviceOwner")
+  meterAlertsAcknowledged     MeterAlert[]         @relation("MeterAlertAcknowledgedBy")
+  meterCsvImports             MeterCsvImport[]     @relation("MeterCsvImportUploadedBy")
   storedDocuments             StoredDocument[]     @relation("StoredDocumentUploadedBy")
   storedDocumentsVoided       StoredDocument[]     @relation("StoredDocumentVoidedBy")
   documentExtractions         DocumentExtraction[] @relation("DocumentExtractionConfirmedBy")
@@ -2595,9 +2597,19 @@ model MeterDevice {
   assignedAt   DateTime? @map("assigned_at")
   assignedById String?   @map("assigned_by_id")
 
+  /// The last known live reading, at its true scale (see ewelink-scale.ts).
+  /// Only the LAST value is kept: the hourly series comes from the device's
+  /// own exported CSV, not from sampling the API once an hour.
   lastPowerW     Float?    @map("last_power_w")
-  /// The device's own energy counter at the last sample, when it reports one.
-  lastEnergyKwh  Float?    @map("last_energy_kwh")
+  lastVoltageV   Float?    @map("last_voltage_v")
+  lastCurrentA   Float?    @map("last_current_a")
+  /// The device's own counter for the calendar day, at the last read.
+  lastDayKwh     Float?    @map("last_day_kwh")
+  /// The device's own counter for the calendar month, at the last read.
+  lastMonthKwh   Float?    @map("last_month_kwh")
+  /// When the last successful read happened, so a screen showing the values
+  /// above can say how old they are instead of implying they are live.
+  lastReadAt     DateTime? @map("last_read_at")
   lastReportedAt DateTime? @map("last_reported_at")
   /// When the hourly poll last actually reached this device.
   lastSampleAt   DateTime? @map("last_sample_at")
@@ -2605,6 +2617,10 @@ model MeterDevice {
   /// it reports again — so "how long has this been down" is a stored fact
   /// rather than something inferred from a gap in the samples.
   offlineSince   DateTime? @map("offline_since")
+  /// Consecutive failed or unreachable polls. An alert is raised on the
+  /// second, not the first: one missed hour is a flaky connection, two in a
+  /// row is a meter somebody has to go and look at.
+  consecutiveFailures Int   @default(0) @map("consecutive_failures")
   /// Who gets chased when this meter stops reporting. Work in this codebase
   /// has a named owner (the survey assignee, the installation onlooker);
   /// an alert addressed to nobody is an alert nobody acts on.
@@ -2617,6 +2633,9 @@ model MeterDevice {
   assignedBy AdminUser?    @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])
   owner      AdminUser?    @relation("MeterDeviceOwner", fields: [ownerId], references: [id])
   samples    MeterSample[]
+  alerts     MeterAlert[]
+  hourly     MeterHourlyReading[]
+  csvImports MeterCsvImport[]
 
   @@index([societyId])
   @@map("meter_devices")
@@ -2635,7 +2654,11 @@ model MeterSample {
   recordedAt DateTime  @map("recorded_at")
   online     Boolean
   powerW     Float?    @map("power_w")
-  energyKwh  Float?    @map("energy_kwh")
+  voltageV   Float?    @map("voltage_v")
+  currentA   Float?    @map("current_a")
+  /// The device's own day and month counters at sample time.
+  dayKwh     Float?    @map("day_kwh")
+  monthKwh   Float?    @map("month_kwh")
   /// When the device itself last reported, at sample time. Connected is not
   /// the same as reporting — the distinction the water-tank work had to
   /// learn the hard way.
@@ -2645,6 +2668,128 @@ model MeterSample {
 
   @@index([meterId, recordedAt])
   @@map("meter_samples")
+}
+
+/// What raised an alert against a meter.
+enum MeterAlertKind {
+  /// Two consecutive polls could not reach it, or it reported itself down.
+  offline
+  /// Its day's consumption sits outside what the circuit can physically draw.
+  out_of_range
+}
+
+/// A meter needing somebody's attention, kept open until it is resolved.
+///
+/// One OPEN alert per meter per kind — a partial unique index enforces it,
+/// not application discipline. An hourly job that files a fresh row every
+/// hour produces a notification list nobody reads, and then the one that
+/// matters goes down with the rest. The alert stays open while the condition
+/// holds, and closes with a stated reason.
+model MeterAlert {
+  id       String         @id @default(cuid())
+  meterId  String         @map("meter_id")
+  kind     MeterAlertKind
+  openedAt DateTime       @default(now()) @map("opened_at")
+  /// The line a person is chased with — it names the meter, what it
+  /// measures and how long it has been out.
+  message  String
+  /// The observation that opened it, kept so the decision can be judged
+  /// later rather than only the conclusion.
+  detail   Json?
+
+  acknowledgedAt   DateTime? @map("acknowledged_at")
+  acknowledgedById String?   @map("acknowledged_by_id")
+
+  closedAt     DateTime? @map("closed_at")
+  closedReason String?   @map("closed_reason")
+
+  meter          MeterDevice @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  acknowledgedBy AdminUser?  @relation("MeterAlertAcknowledgedBy", fields: [acknowledgedById], references: [id])
+
+  @@index([meterId, openedAt])
+  @@index([closedAt])
+  @@map("meter_alerts")
+}
+
+/// One hour of a meter's consumption, as exported from the device itself.
+///
+/// This is the hourly series, and it comes from the CSV a person downloads
+/// from the meter — NOT from the live API. The device holds a month of
+/// hourly slots internally (its `getHoursKwh` descriptor spans 744), but no
+/// public REST endpoint returns their contents, and polling the API once an
+/// hour would only ever produce a counter reading, never the hour itself.
+///
+/// The day and hour are stored exactly as the export prints them (a local
+/// calendar date at UTC midnight, plus the hour index 0-23), so nothing is
+/// converted on the way in. A half-hour timezone offset is precisely the
+/// kind of conversion that silently moves a reading into the wrong day.
+///
+/// Deliberately NOT a MeterReading: that is the store a bill is computed
+/// from, and CON-45 requires those to be reviewed row by row before they are
+/// stored. This is the monitoring series.
+model MeterHourlyReading {
+  id      String   @id @default(cuid())
+  meterId String   @map("meter_id")
+  /// The local calendar day the export printed, at UTC midnight.
+  day     DateTime
+  /// 0-23, the hour the export printed (`10:00-11:00` is hour 10).
+  hour    Int
+  kWh     Float    @map("kwh")
+
+  importId  String?  @map("import_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  meter  MeterDevice     @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  import MeterCsvImport? @relation(fields: [importId], references: [id], onDelete: SetNull)
+
+  @@unique([meterId, day, hour])
+  @@index([meterId, day])
+  @@map("meter_hourly_readings")
+}
+
+/// A meter export somebody uploaded: which file, which meter, and how the
+/// two were matched.
+///
+/// The export carries no device identity at all — only `data,time,
+/// consumption/KWh` — so which meter it belongs to is a JUDGEMENT, and one
+/// worth recording. The system proposes a meter by overlapping its existing
+/// hours against the file's, and a person confirms it. Storing the evidence
+/// means a file filed against the wrong meter can be found later rather than
+/// only suspected.
+model MeterCsvImport {
+  id       String @id @default(cuid())
+  meterId  String @map("meter_id")
+  fileName String @map("file_name")
+  /// The S3 key of the file as uploaded, kept for the same reason CON-30
+  /// keeps raw reading files: the figures have to trace to the bytes.
+  s3Key    String? @map("s3_key")
+
+  /// The range the file covers, as printed in it.
+  firstDay DateTime @map("first_day")
+  lastDay  DateTime @map("last_day")
+  hoursInFile  Int  @map("hours_in_file")
+  hoursStored  Int  @map("hours_stored")
+  /// Hours already held with a DIFFERENT value, which the import replaced.
+  hoursSuperseded Int @default(0) @map("hours_superseded")
+
+  /// How the meter was arrived at, and on what evidence.
+  matchMethod   String  @map("match_method")
+  matchedHours  Int?    @map("matched_hours")
+  matchDetail   Json?   @map("match_detail")
+  /// True when the person filed it against a meter the evidence did not
+  /// propose. A deliberate override is a fact worth keeping, not a warning
+  /// that vanishes once the dialog closes.
+  overrodeMatch Boolean @default(false) @map("overrode_match")
+
+  uploadedById String   @map("uploaded_by_id")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  meter      MeterDevice          @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  uploadedBy AdminUser            @relation("MeterCsvImportUploadedBy", fields: [uploadedById], references: [id])
+  readings   MeterHourlyReading[]
+
+  @@index([meterId, uploadedAt])
+  @@map("meter_csv_imports")
 }
 
 /// A document that belongs to a society but has no workflow of its own —

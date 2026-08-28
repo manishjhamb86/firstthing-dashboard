@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Droplets, LayoutDashboard, Lightbulb, Users } from "lucide-react";
+import { Droplets, LayoutDashboard, Lightbulb, Users, Gauge } from "lucide-react";
 import { NavShell, type NavItem } from "@/components/nav-shell";
 import type { ThemeId } from "@/lib/theme";
 
@@ -22,6 +22,7 @@ const ITEMS: NavItem[] = [
   { href: "/portal", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/portal/tanks", label: "Water tanks", icon: Droplets },
   { href: "/portal/lighting", label: "Lighting", icon: Lightbulb },
+  { href: "/portal/meters", label: "Meters", icon: Gauge },
   { href: "/portal/committee", label: "Committee", icon: Users },
 ];
 

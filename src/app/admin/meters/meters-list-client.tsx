@@ -1,117 +1,131 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Card, ErrorText, StatusChip } from "@/components/ui";
-import { formatInstant } from "@/lib/format-date";
+import { Card, CardTitle, EmptyState, ErrorText, StatusChip } from "@/components/ui";
+import { MeterStateChip } from "@/components/meter-ui";
+import type { MeterRow } from "@/lib/meter-view";
 import { assignMeter, setMeterOwner, syncMeterNow, syncMetersNow } from "./actions";
 
-type Meter = {
-  id: string;
-  name: string;
-  productModel: string;
-  uiid: number;
-  hasEnergySignal: boolean;
-  lastPowerW: number | null;
-  lastEnergyKwh: number | null;
-  lastSampleAt: string | null;
-  /** Null when nobody is watching this device yet. */
-  state: "reporting" | "silent" | "offline" | null;
-  offlineSince: string | null;
-  outage: string;
-  ownerId: string | null;
-  ownerLabel: string | null;
-  societyId: string | null;
-  societyName: string | null;
-  circuitId: string | null;
-  circuitLabel: string | null;
-};
+type Society = { id: string; name: string };
+type Circuit = { id: string; societyId: string; label: string; state: string; takenBy: string | null };
+
+type Filter = "all" | "attention" | "unassigned" | "metering";
+
+const FILTERS: { key: Filter; label: string }[] = [
+  { key: "all", label: "All devices" },
+  { key: "attention", label: "Needs attention" },
+  { key: "unassigned", label: "Not assigned" },
+  { key: "metering", label: "Metering only" },
+];
 
 export function MetersListClient({
   canAssign,
   syncedAt,
   meters,
-  needAttention,
   fieldStaff,
   societies,
   circuits,
 }: {
   canAssign: boolean;
   syncedAt: string | null;
-  meters: Meter[];
-  needAttention: { id: string; outage: string; ownerLabel: string | null }[];
+  meters: MeterRow[];
   fieldStaff: { id: string; label: string }[];
-  societies: { id: string; name: string }[];
-  circuits: { id: string; societyId: string; label: string; taken: boolean }[];
+  societies: Society[];
+  circuits: Circuit[];
 }) {
   const router = useRouter();
+  const [pending, start] = useTransition();
+  const [filter, setFilter] = useState<Filter>("all");
+  const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [society, setSociety] = useState("");
   const [circuit, setCircuit] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pending, start] = useTransition();
 
-  function open(m: Meter) {
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return meters.filter((m) => {
+      if (filter === "attention" && (m.state === null || m.state === "reporting") && m.openAlerts.length === 0)
+        return false;
+      if (filter === "unassigned" && (m.state !== null || !m.hasEnergySignal)) return false;
+      if (filter === "metering" && !m.hasEnergySignal) return false;
+      if (!q) return true;
+      return [m.name, m.societyName, m.circuitLabel, m.productModel]
+        .filter(Boolean)
+        .some((s) => s!.toLowerCase().includes(q));
+    });
+  }, [meters, filter, query]);
+
+  function openAssign(m: MeterRow) {
     setEditing(m.id);
     setSociety(m.societyId ?? "");
     setCircuit(m.circuitId ?? "");
     setError(null);
   }
 
-  return (
-    <>
-      {/* Named, and addressed. An alert that says only "a meter is offline"
-          makes the reader go and find out which one, and an alert addressed
-          to nobody is one nobody acts on. */}
-      {needAttention.length > 0 && (
-        <div
-          className="mb-4 rounded-[var(--r-md)] border p-4"
-          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
-        >
-          <p className="mb-1 text-sm font-semibold">
-            {needAttention.length === 1 ? "One meter needs attention" : `${needAttention.length} meters need attention`}
-          </p>
-          <ul className="list-disc space-y-0.5 pl-5 text-sm">
-            {needAttention.map((a) => (
-              <li key={a.id}>
-                {a.outage}{" "}
-                {a.ownerLabel ? (
-                  <span className="font-semibold">{a.ownerLabel} is on it.</span>
-                ) : (
-                  <span className="font-semibold">Nobody is named for this one yet.</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+  const editingMeter = meters.find((m) => m.id === editing) ?? null;
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          className="btn-secondary"
-          disabled={pending || !canAssign}
-          onClick={() =>
-            start(async () => {
-              setError(null);
-              setNotice(null);
-              const r = await syncMetersNow();
-              if (r.error) setError(r.error);
-              else {
-                setNotice(`Synced — ${r.devices} devices, ${r.meters} metering.`);
-                router.refresh();
-              }
-            })
-          }
-        >
-          {pending ? "Working…" : "Sync device list"}
-        </button>
-        {syncedAt && (
-          <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-            Synced <span className="num">{formatInstant(new Date(syncedAt))}</span>
-          </span>
+  return (
+    <Card>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
+        <div>
+          <CardTitle>Devices</CardTitle>
+          <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+            {syncedAt
+              ? `Mirrored from the eWeLink account ${syncedAt.slice(0, 16).replace("T", " ")}.`
+              : "Not yet mirrored from the eWeLink account."}
+          </p>
+        </div>
+        {canAssign && (
+          <button
+            type="button"
+            className="btn-secondary btn-sm"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                setError(null);
+                setNotice(null);
+                const r = await syncMetersNow();
+                if (r.error) setError(r.error);
+                else {
+                  setNotice(`${r.devices} devices in the account, ${r.meters} of them metering.`);
+                  router.refresh();
+                }
+              })
+            }
+          >
+            {pending ? "Syncing…" : "Sync account"}
+          </button>
         )}
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {FILTERS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            className="chip"
+            style={
+              filter === f.key
+                ? { background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)" }
+                : undefined
+            }
+          >
+            {f.label}
+          </button>
+        ))}
+        <input
+          type="search"
+          className="search-field ml-auto"
+          placeholder="Search meter, society or circuit"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search meters"
+        />
       </div>
 
       {error && <ErrorText>{error}</ErrorText>}
@@ -121,218 +135,277 @@ export function MetersListClient({
         </p>
       )}
 
-      <Card className="p-0">
+      {shown.length === 0 ? (
+        <EmptyState title="Nothing matches">
+          {meters.length === 0
+            ? "No devices have been mirrored from the eWeLink account yet."
+            : "No device matches this filter or search."}
+        </EmptyState>
+      ) : (
         <div className="overflow-x-auto">
           <table className="tbl">
             <thead>
               <tr>
-                <th>Device</th>
-                <th>Model</th>
+                <th>Meter</th>
+                <th>Measures</th>
                 <th>State</th>
-                <th>Last reading</th>
-                <th>Society</th>
-                <th>Circuit</th>
-                <th>Owner</th>
-                <th />
+                <th className="text-right">Power now</th>
+                <th className="text-right">Today</th>
+                <th className="text-right">History</th>
+                <th>Chased by</th>
+                {canAssign && <th />}
               </tr>
             </thead>
             <tbody>
-              {meters.map((m) => {
-                const isEditing = editing === m.id;
-                const forSociety = circuits.filter((c) => c.societyId === society);
-                return (
-                  <tr key={m.id}>
-                    <td>
-                      <span className="font-semibold">{m.name}</span>
-                      {m.lastPowerW != null && (
-                        <span className="block text-[12px]" style={{ color: "var(--text-muted)" }}>
-                          <span className="num">{m.lastPowerW}</span> W now
+              {shown.map((m) => (
+                <tr key={m.id}>
+                  <td>
+                    <Link href={`/admin/meters/${m.id}`} className="font-semibold underline">
+                      {m.name}
+                    </Link>
+                    <div className="text-xs text-[var(--text-subtle)]">{m.productModel}</div>
+                    {m.openAlerts.length > 0 && (
+                      <div className="mt-1">
+                        <StatusChip tone="bad">
+                          {m.openAlerts.length} open alert{m.openAlerts.length === 1 ? "" : "s"}
+                        </StatusChip>
+                      </div>
+                    )}
+                  </td>
+                  <td className="text-[13px]">
+                    {m.societyName ? (
+                      <>
+                        <div>{m.societyName}</div>
+                        <div className="text-xs text-[var(--text-subtle)]">
+                          {m.circuitLabel ?? "no circuit yet"}
+                        </div>
+                      </>
+                    ) : m.hasEnergySignal ? (
+                      <span className="text-[var(--text-subtle)]">Not assigned</span>
+                    ) : (
+                      <span className="text-[var(--text-subtle)]">Not a meter</span>
+                    )}
+                  </td>
+                  <td>
+                    <MeterStateChip state={m.state} />
+                    {m.state !== null && m.state !== "reporting" && m.offlineSince && (
+                      <div className="mt-1 text-xs text-[var(--text-subtle)]">
+                        since {m.offlineSince.slice(0, 16).replace("T", " ")}
+                      </div>
+                    )}
+                  </td>
+                  {/* Every figure carries its age — a last known reading shown
+                      as a current one is how a stale number becomes a decision. */}
+                  <td className="num text-right">
+                    {m.powerW === null ? (
+                      <span className="text-[var(--text-subtle)]">—</span>
+                    ) : (
+                      <>
+                        <span style={{ color: m.stale ? "var(--text-muted)" : "var(--text)" }}>
+                          {m.powerW.toFixed(0)} W
                         </span>
-                      )}
-                    </td>
-                    <td className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                      {m.productModel || "—"}
-                      {/* The device type decides which energy protocol it
-                          speaks, and only some are publicly documented — so
-                          it is shown rather than hidden. */}
-                      <span className="block text-[11px]" style={{ color: "var(--text-subtle)" }}>
-                        UIID <span className="num">{m.uiid}</span>
-                      </span>
-                    </td>
-                    <td>
-                      {!m.hasEnergySignal ? (
-                        <StatusChip tone="neu">No electricity signal</StatusChip>
-                      ) : m.state === null ? (
-                        <StatusChip tone="neu">Not watched yet</StatusChip>
-                      ) : m.state === "reporting" ? (
-                        <StatusChip tone="ok">Reporting</StatusChip>
-                      ) : m.state === "silent" ? (
-                        <StatusChip tone="warn">Not reporting</StatusChip>
-                      ) : (
-                        <StatusChip tone="bad">Unreachable</StatusChip>
-                      )}
-                    </td>
-                    <td className="text-[13px]">
-                      {m.lastSampleAt ? (
+                        <div className="text-xs text-[var(--text-subtle)]">{m.readAge}</div>
+                      </>
+                    )}
+                  </td>
+                  <td className="num text-right">
+                    {m.dayKwh === null ? (
+                      <span className="text-[var(--text-subtle)]">—</span>
+                    ) : (
+                      <>
+                        {m.dayKwh.toFixed(2)}
+                        <div className="text-xs text-[var(--text-subtle)]">
+                          {m.capacityKwh === null ? "no ceiling" : `of ${m.capacityKwh.toFixed(1)}`}
+                        </div>
+                      </>
+                    )}
+                  </td>
+                  <td className="num text-right">
+                    {m.hourlyCount === 0 ? (
+                      <span className="text-[var(--text-subtle)]">—</span>
+                    ) : (
+                      <>
+                        {m.hourlyCount.toLocaleString()} h
+                        <div className="text-xs text-[var(--text-subtle)]">to {m.hourlyTo}</div>
+                      </>
+                    )}
+                  </td>
+                  <td className="text-[13px]">
+                    {canAssign && m.hasEnergySignal ? (
+                      <select
+                        className="field field-auto"
+                        value={m.ownerId ?? ""}
+                        disabled={pending}
+                        aria-label={`Who is chased when ${m.name} stops reporting`}
+                        onChange={(e) => {
+                          const ownerId = e.target.value || null;
+                          start(async () => {
+                            setError(null);
+                            const r = await setMeterOwner({ meterId: m.id, ownerId });
+                            if (r.error) setError(r.error);
+                            else router.refresh();
+                          });
+                        }}
+                      >
+                        <option value="">Nobody</option>
+                        {fieldStaff.map((f) => (
+                          <option key={f.id} value={f.id}>
+                            {f.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      (m.ownerLabel ?? <span className="text-[var(--text-subtle)]">—</span>)
+                    )}
+                  </td>
+                  {canAssign && (
+                    <td className="text-right whitespace-nowrap">
+                      {m.hasEnergySignal ? (
                         <>
-                          {m.lastPowerW != null && (
-                            <span className="num font-semibold">{m.lastPowerW} W</span>
-                          )}
-                          {m.lastEnergyKwh != null && (
-                            <span className="num block" style={{ color: "var(--text-muted)" }}>
-                              {m.lastEnergyKwh} kWh today
-                            </span>
-                          )}
-                          <span className="block text-[11px]" style={{ color: "var(--text-subtle)" }}>
-                            read {formatInstant(new Date(m.lastSampleAt))}
-                          </span>
-                        </>
-                      ) : (
-                        <span style={{ color: "var(--text-subtle)" }}>Never read</span>
-                      )}
-                    </td>
-                    <td className="text-[13px]">
-                      {isEditing ? (
-                        <select
-                          className="field field-auto"
-                          aria-label={`Society for ${m.name}`}
-                          value={society}
-                          onChange={(e) => {
-                            setSociety(e.target.value);
-                            setCircuit("");
-                          }}
-                        >
-                          <option value="">Unassigned</option>
-                          {societies.map((s) => (
-                            <option key={s.id} value={s.id}>
-                              {s.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        m.societyName ?? <span style={{ color: "var(--text-subtle)" }}>Unassigned</span>
-                      )}
-                    </td>
-                    <td className="text-[13px]">
-                      {isEditing ? (
-                        <select
-                          className="field field-auto"
-                          aria-label={`Circuit for ${m.name}`}
-                          value={circuit}
-                          onChange={(e) => setCircuit(e.target.value)}
-                          disabled={!society}
-                        >
-                          <option value="">{society ? "Not decided yet" : "Pick a society first"}</option>
-                          {forSociety.map((c) => (
-                            <option key={c.id} value={c.id} disabled={c.taken && c.id !== m.circuitId}>
-                              {c.label}
-                              {c.taken && c.id !== m.circuitId ? " — already metered" : ""}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        m.circuitLabel ?? <span style={{ color: "var(--text-subtle)" }}>—</span>
-                      )}
-                    </td>
-                    <td className="text-[13px]">
-                      {!canAssign || !m.circuitId ? (
-                        m.ownerLabel ?? <span style={{ color: "var(--text-subtle)" }}>—</span>
-                      ) : (
-                        <select
-                          className="field field-auto"
-                          aria-label={`Owner for ${m.name}`}
-                          value={m.ownerId ?? ""}
-                          disabled={pending}
-                          onChange={(e) => {
-                            const ownerId = e.target.value || null;
-                            start(async () => {
-                              setError(null);
-                              const r = await setMeterOwner({ meterId: m.id, ownerId });
-                              if (r.error) setError(r.error);
-                              else router.refresh();
-                            });
-                          }}
-                        >
-                          <option value="">Nobody</option>
-                          {fieldStaff.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.label}
-                            </option>
-                          ))}
-                        </select>
-                      )}
-                    </td>
-                    <td className="text-right">
-                      {!canAssign ? null : isEditing ? (
-                        <span className="inline-flex gap-2">
+                          <button type="button" className="btn-ghost btn-sm" onClick={() => openAssign(m)}>
+                            {m.circuitId ? "Reassign" : "Assign"}
+                          </button>
                           <button
                             type="button"
-                            className="btn-primary"
-                            disabled={pending}
+                            className="btn-ghost btn-sm"
+                            disabled={pending || m.state === null}
+                            title={m.state === null ? "Assign it first" : "Read this meter now"}
                             onClick={() =>
                               start(async () => {
                                 setError(null);
-                                const r = await assignMeter({
-                                  meterId: m.id,
-                                  societyId: society || null,
-                                  circuitId: circuit || null,
-                                });
+                                const r = await syncMeterNow(m.id);
                                 if (r.error) setError(r.error);
-                                else {
-                                  setEditing(null);
-                                  router.refresh();
-                                }
+                                else router.refresh();
                               })
                             }
                           >
-                            Save
+                            Read
                           </button>
-                          <button type="button" className="btn-secondary" onClick={() => setEditing(null)}>
-                            Cancel
-                          </button>
-                        </span>
+                        </>
                       ) : (
-                        <span className="inline-flex gap-2">
-                          {(m.circuitId || m.societyId) && (
-                            <button
-                              type="button"
-                              className="btn-secondary"
-                              disabled={pending}
-                              onClick={() =>
-                                start(async () => {
-                                  setError(null);
-                                  setNotice(null);
-                                  const r = await syncMeterNow(m.id);
-                                  if (r.error) setError(r.error);
-                                  else {
-                                    setNotice(`${m.name}: read ${r.reporting ? "and reporting" : "— no answer"}.`);
-                                    router.refresh();
-                                  }
-                                })
-                              }
-                            >
-                              Sync readings
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            disabled={!m.hasEnergySignal}
-                            title={m.hasEnergySignal ? undefined : "This device reports no electricity datapoint."}
-                            onClick={() => open(m)}
-                          >
-                            {m.circuitId || m.societyId ? "Change" : "Assign"}
-                          </button>
+                        <span
+                          className="text-xs text-[var(--text-subtle)]"
+                          title="This device reports no energy datapoint, so there is nothing to meter."
+                        >
+                          not a meter
                         </span>
                       )}
                     </td>
-                  </tr>
-                );
-              })}
+                  )}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-      </Card>
-    </>
+      )}
+
+      {editingMeter && (
+        <AssignPanel
+          meter={editingMeter}
+          societies={societies}
+          circuits={circuits}
+          society={society}
+          circuit={circuit}
+          pending={pending}
+          onSociety={(v) => {
+            setSociety(v);
+            setCircuit("");
+          }}
+          onCircuit={setCircuit}
+          onCancel={() => setEditing(null)}
+          onSave={() =>
+            start(async () => {
+              setError(null);
+              const r = await assignMeter({
+                meterId: editingMeter.id,
+                societyId: society || null,
+                circuitId: circuit || null,
+              });
+              if (r.error) setError(r.error);
+              else {
+                setEditing(null);
+                router.refresh();
+              }
+            })
+          }
+        />
+      )}
+    </Card>
+  );
+}
+
+function AssignPanel({
+  meter,
+  societies,
+  circuits,
+  society,
+  circuit,
+  pending,
+  onSociety,
+  onCircuit,
+  onCancel,
+  onSave,
+}: {
+  meter: MeterRow;
+  societies: Society[];
+  circuits: Circuit[];
+  society: string;
+  circuit: string;
+  pending: boolean;
+  onSociety: (v: string) => void;
+  onCircuit: (v: string) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const forSociety = circuits.filter((c) => c.societyId === society);
+  return (
+    <div
+      className="mt-5 rounded-[var(--r-md)] p-4"
+      style={{ background: "var(--surface-sunken)", border: "1px solid var(--accent-line)" }}
+    >
+      <p className="mb-1 text-[15px] font-semibold">Assign {meter.name}</p>
+      <p className="mb-3 text-[13px] text-[var(--text-muted)]">
+        A meter binds to one circuit, because a circuit is what gets billed — two meters on one circuit
+        would be two sources for one figure. Leave the circuit blank while it is still undecided.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="block">
+          <span className="lbl mb-1 block">Society</span>
+          <select className="field" value={society} disabled={pending} onChange={(e) => onSociety(e.target.value)}>
+            <option value="">Not assigned</option>
+            {societies.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block">
+          <span className="lbl mb-1 block">Circuit</span>
+          <select
+            className="field"
+            value={circuit}
+            disabled={pending || !society}
+            onChange={(e) => onCircuit(e.target.value)}
+          >
+            <option value="">{society ? "Undecided" : "Choose a society first"}</option>
+            {forSociety.map((c) => (
+              <option key={c.id} value={c.id} disabled={c.takenBy !== null && c.takenBy !== meter.id}>
+                {c.label}
+                {c.takenBy !== null && c.takenBy !== meter.id ? " — already metered" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <button type="button" className="btn-primary btn-sm" disabled={pending} onClick={onSave}>
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }

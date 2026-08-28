@@ -1,4 +1,5 @@
 import { getDeviceParams, resolveEwelinkConfig, type EwelinkConfig } from "@/lib/ewelink";
+import { LIVE_PARAM_KEYS, readElectrical } from "@/lib/ewelink-scale";
 
 /**
  * One vendor-shaped read of a meter, and the interface every vendor
@@ -11,8 +12,19 @@ import { getDeviceParams, resolveEwelinkConfig, type EwelinkConfig } from "@/lib
 export type MeterRead = {
   online: boolean;
   powerW: number | null;
-  /** The device's own energy counter, when it reports one. */
-  energyKwh: number | null;
+  voltageV: number | null;
+  currentA: number | null;
+  /** The device's own counter for the calendar day so far. */
+  dayKwh: number | null;
+  /** The device's own counter for the calendar month so far. */
+  monthKwh: number | null;
+  /**
+   * False when this device type's scale has never been established, in which
+   * case every figure above is null. See `ewelink-scale.ts` — a number shown
+   * at an unknown scale reads as fact, and is the one failure this whole
+   * module is built to avoid.
+   */
+  scaleKnown: boolean;
   /**
    * When the DEVICE last reported, if the vendor says. Null means unknown —
    * not "now". eWeLink's status read returns parameters without a device
@@ -26,32 +38,21 @@ export type MeterProvider = {
   name: string;
   /** Whether this provider can date a device's own report. */
   reportsDeviceTime: boolean;
-  readNow(deviceId: string): Promise<MeterRead>;
+  /** `uiid` decides how the vendor's raw figures are scaled. */
+  readNow(deviceId: string, uiid: number): Promise<MeterRead>;
 };
-
-function num(v: unknown): number | null {
-  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
-  return Number.isFinite(n) ? n : null;
-}
 
 export function ewelinkProvider(cfg: EwelinkConfig): MeterProvider {
   return {
     name: "ewelink",
     reportsDeviceTime: false,
-    async readNow(deviceId: string): Promise<MeterRead> {
-      const params = await getDeviceParams(cfg, deviceId, [
-        "power",
-        "voltage",
-        "current",
-        "oneKwhData",
-        "online",
-      ]);
+    async readNow(deviceId: string, uiid: number): Promise<MeterRead> {
+      const params = await getDeviceParams(cfg, deviceId, LIVE_PARAM_KEYS);
       return {
         // A device that answers with parameters is reachable; the absence of
         // an explicit false is not evidence of trouble.
         online: params.online === undefined ? true : Boolean(params.online),
-        powerW: num(params.power),
-        energyKwh: num(params.oneKwhData),
+        ...readElectrical(uiid, params),
         reportedAt: null,
       };
     },
@@ -79,7 +80,16 @@ export function fakeProvider(): MeterProvider {
       // series rather than noise, and a device ending in "-down" is always
       // unreachable — that is how the offline path gets exercised.
       if (deviceId.endsWith("-down")) {
-        return { online: false, powerW: null, energyKwh: null, reportedAt: null };
+        return {
+          online: false,
+          powerW: null,
+          voltageV: null,
+          currentA: null,
+          dayKwh: null,
+          monthKwh: null,
+          scaleKnown: true,
+          reportedAt: null,
+        };
       }
       const seed = [...deviceId].reduce((n, c) => n + c.charCodeAt(0), 0);
       const hour = new Date().getUTCHours();
@@ -87,7 +97,11 @@ export function fakeProvider(): MeterProvider {
       return {
         online: true,
         powerW,
-        energyKwh: Number(((powerW * 24) / 1000).toFixed(2)),
+        voltageV: 231.2,
+        currentA: Number((powerW / 231.2 / 0.9).toFixed(2)),
+        dayKwh: Number(((powerW * hour) / 1000).toFixed(2)),
+        monthKwh: Number(((powerW * 24 * 12) / 1000).toFixed(2)),
+        scaleKnown: true,
         reportedAt: new Date(),
       };
     },

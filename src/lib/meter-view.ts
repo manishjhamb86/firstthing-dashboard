@@ -41,6 +41,10 @@ export type MeterRow = {
   circuitLabel: string | null;
   /** kWh/day if everything on the circuit ran flat out — the alert ceiling. */
   capacityKwh: number | null;
+  /** Watts if everything on the circuit ran at once — the gauge's scale. */
+  connectedLoadW: number | null;
+  /** Power readings from the last 24h of polls, oldest first. */
+  spark: number[];
 
   ownerId: string | null;
   ownerLabel: string | null;
@@ -88,6 +92,23 @@ async function loadMeters(where: object) {
   return db.meterDevice.findMany({ where, include: meterInclude, orderBy: { name: "asc" } });
 }
 
+/** The last 24 hours of polled power, per meter, oldest first. */
+async function sparkSeries(meterIds: string[]) {
+  if (meterIds.length === 0) return new Map<string, number[]>();
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const rows = await db.meterSample.findMany({
+    where: { meterId: { in: meterIds }, recordedAt: { gte: since }, powerW: { not: null } },
+    orderBy: { recordedAt: "asc" },
+    select: { meterId: true, powerW: true },
+  });
+  const out = new Map<string, number[]>();
+  for (const r of rows) {
+    if (!out.has(r.meterId)) out.set(r.meterId, []);
+    out.get(r.meterId)!.push(r.powerW!);
+  }
+  return out;
+}
+
 async function hourlySpans(meterIds: string[]) {
   if (meterIds.length === 0) return new Map<string, { count: number; from: Date; to: Date }>();
   const rows = await db.meterHourlyReading.groupBy({
@@ -105,6 +126,7 @@ async function hourlySpans(meterIds: string[]) {
 function toRow(
   m: Loaded,
   span: { count: number; from: Date; to: Date } | undefined,
+  spark: number[] | undefined,
   now: Date,
 ): MeterRow {
   const watched = m.hasEnergySignal && (m.circuitId !== null || m.societyId !== null);
@@ -150,6 +172,8 @@ function toRow(
     circuitId: m.circuitId,
     circuitLabel,
     capacityKwh: devices.length > 0 ? theoreticalDailyKwh(devices) : null,
+    connectedLoadW: devices.length > 0 ? devices.reduce((sum, d) => sum + d.count * d.wattage, 0) : null,
+    spark: spark ?? [],
     ownerId: m.ownerId,
     ownerLabel: m.owner ? (m.owner.name ?? m.owner.email) : null,
     openAlerts: m.alerts.map((a) => ({
@@ -167,9 +191,10 @@ function toRow(
 /** Every meter in the mirror — the back office's view. */
 export const allMeterRows = cache(async (): Promise<MeterRow[]> => {
   const meters = await loadMeters({});
-  const spans = await hourlySpans(meters.map((m) => m.id));
+  const ids = meters.map((m) => m.id);
+  const [spans, sparks] = await Promise.all([hourlySpans(ids), sparkSeries(ids)]);
   const now = new Date();
-  return meters.map((m) => toRow(m, spans.get(m.id), now));
+  return meters.map((m) => toRow(m, spans.get(m.id), sparks.get(m.id), now));
 });
 
 /**
@@ -179,9 +204,10 @@ export const allMeterRows = cache(async (): Promise<MeterRow[]> => {
  */
 export const societyMeterRows = cache(async (societyId: string): Promise<MeterRow[]> => {
   const meters = await loadMeters({ societyId, hasEnergySignal: true });
-  const spans = await hourlySpans(meters.map((m) => m.id));
+  const ids = meters.map((m) => m.id);
+  const [spans, sparks] = await Promise.all([hourlySpans(ids), sparkSeries(ids)]);
   const now = new Date();
-  return meters.map((m) => toRow(m, spans.get(m.id), now));
+  return meters.map((m) => toRow(m, spans.get(m.id), sparks.get(m.id), now));
 });
 
 /** One meter, scoped when a society is asking. */
@@ -191,8 +217,8 @@ export async function meterRow(id: string, societyId?: string): Promise<MeterRow
     include: meterInclude,
   });
   if (!m) return null;
-  const spans = await hourlySpans([m.id]);
-  return toRow(m, spans.get(m.id), new Date());
+  const [spans, sparks] = await Promise.all([hourlySpans([m.id]), sparkSeries([m.id])]);
+  return toRow(m, spans.get(m.id), sparks.get(m.id), new Date());
 }
 
 /** The exported hourly series for a meter, most recent day first. */

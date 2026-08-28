@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, EmptyState, ErrorText, StatusChip } from "@/components/ui";
-import { MeterStateChip } from "@/components/meter-ui";
+import { CeilingBar, MeterStateChip, Sparkline } from "@/components/meter-ui";
 import type { MeterRow } from "@/lib/meter-view";
 import { assignMeter, setMeterOwner, syncMeterNow, syncMetersNow } from "./actions";
 
@@ -151,8 +151,8 @@ export function MetersListClient({
                 <th>Meter</th>
                 <th>Measures</th>
                 <th>State</th>
-                <th className="text-right">Power now</th>
-                <th className="text-right">Today</th>
+                <th className="text-right">Power now · 24h</th>
+                <th>Today vs ceiling</th>
                 <th className="text-right">History</th>
                 <th>Chased by</th>
                 {canAssign && <th />}
@@ -198,28 +198,36 @@ export function MetersListClient({
                   </td>
                   {/* Every figure carries its age — a last known reading shown
                       as a current one is how a stale number becomes a decision. */}
-                  <td className="num text-right">
+                  <td>
                     {m.powerW === null ? (
-                      <span className="text-[var(--text-subtle)]">—</span>
+                      <div className="num text-right text-[var(--text-subtle)]">—</div>
                     ) : (
-                      <>
-                        <span style={{ color: m.stale ? "var(--text-muted)" : "var(--text)" }}>
-                          {m.powerW.toFixed(0)} W
-                        </span>
-                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">{m.readAge}</div>
-                      </>
+                      <div className="flex items-center justify-end gap-3">
+                        <div className="num text-right">
+                          <span style={{ color: m.stale ? "var(--text-muted)" : "var(--text)" }}>
+                            {m.powerW.toFixed(0)} W
+                          </span>
+                          <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">{m.readAge}</div>
+                        </div>
+                        <Sparkline values={m.spark} muted={m.state !== "reporting"} />
+                      </div>
                     )}
                   </td>
-                  <td className="num text-right">
+                  <td>
                     {m.dayKwh === null ? (
-                      <span className="text-[var(--text-subtle)]">—</span>
-                    ) : (
+                      <span className="num text-[var(--text-subtle)]">—</span>
+                    ) : m.capacityKwh === null ? (
                       <>
-                        {m.dayKwh.toFixed(2)}
-                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">
-                          {m.capacityKwh === null ? "no ceiling" : `of ${m.capacityKwh.toFixed(1)}`}
-                        </div>
+                        <span className="num">{m.dayKwh.toFixed(2)} kWh</span>
+                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">no ceiling</div>
                       </>
+                    ) : (
+                      <div className="flex w-[130px] flex-col gap-1.5">
+                        <CeilingBar value={m.dayKwh} ceiling={m.capacityKwh} />
+                        <span className="num whitespace-nowrap text-xs text-[var(--text-subtle)]">
+                          {m.dayKwh.toFixed(2)} of {m.capacityKwh.toFixed(1)} kWh
+                        </span>
+                      </div>
                     )}
                   </td>
                   <td className="num text-right">

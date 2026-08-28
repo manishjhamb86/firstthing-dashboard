@@ -59,52 +59,173 @@ export function MeterStateChip({ state }: { state: string | null }) {
   return <StatusChip tone={meta.tone}>{meta.label}</StatusChip>;
 }
 
-function fmt(n: number | null, digits = 2): string {
-  return n === null ? "—" : n.toFixed(digits);
+/**
+ * A 24h power sparkline — a value beside its trajectory, which is what makes
+ * a fleet row readable at a glance. Renders nothing under 3 points: two
+ * samples draw a line that claims a trend no data supports.
+ */
+export function Sparkline({ values, muted = false }: { values: number[]; muted?: boolean }) {
+  if (values.length < 3) return null;
+  const w = 96;
+  const h = 26;
+  const max = Math.max(...values) || 1;
+  const pts = values
+    .map((v, i) => `${((i * w) / (values.length - 1)).toFixed(1)},${(h - 2 - (v / max) * (h - 6)).toFixed(1)}`)
+    .join(" ");
+  const last = values[values.length - 1];
+  const stroke = muted ? "var(--chart-mark-inert)" : "var(--signal)";
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} style={{ width: w, height: h, display: "block" }} aria-hidden>
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx={w} cy={h - 2 - (last / max) * (h - 6)} r="2.4" fill={stroke} />
+    </svg>
+  );
 }
 
 /**
- * One live figure. `pending` renders the same tile with an em-dash and the
- * condition that would fill it, rather than a zero — a zero is a reading.
+ * Power now against everything the circuit could draw at once. The scale is
+ * the connected load in WATTS (Σ count × wattage) — the instantaneous twin
+ * of the daily kWh ceiling the alerts use.
  */
-function Reading({
-  label,
-  value,
-  unit,
-  detail,
-  emphasis = false,
-}: {
-  label: string;
-  value: string;
-  unit?: string;
-  detail?: ReactNode;
-  emphasis?: boolean;
-}) {
+function PowerGauge({ powerW, connectedLoadW }: { powerW: number; connectedLoadW: number }) {
+  const size = 190;
+  const c = size / 2;
+  const r = c - 13;
+  const a0 = 135;
+  const sweep = 270;
+  const frac = Math.min(1, Math.max(0, powerW / connectedLoadW));
+  const pt = (deg: number) => {
+    const rad = (deg * Math.PI) / 180;
+    return [c + r * Math.cos(rad), c + r * Math.sin(rad)] as const;
+  };
+  const arc = (f0: number, f1: number) => {
+    const [x0, y0] = pt(a0 + sweep * f0);
+    const [x1, y1] = pt(a0 + sweep * f1);
+    const large = sweep * (f1 - f0) > 180 ? 1 : 0;
+    return `M ${x0.toFixed(1)} ${y0.toFixed(1)} A ${r} ${r} 0 ${large} 1 ${x1.toFixed(1)} ${y1.toFixed(1)}`;
+  };
+  const ticks = Array.from({ length: 28 }, (_, i) => {
+    const f = i / 27;
+    const rad = ((a0 + sweep * f) * Math.PI) / 180;
+    return {
+      x1: c + (r - 12) * Math.cos(rad),
+      y1: c + (r - 12) * Math.sin(rad),
+      x2: c + (r - 7) * Math.cos(rad),
+      y2: c + (r - 7) * Math.sin(rad),
+      on: f <= frac,
+    };
+  });
   return (
-    <div
-      className="rounded-[var(--r-md)] p-4"
-      style={{
-        background: emphasis ? "var(--accent-subtle)" : "var(--surface-sunken)",
-        border: `1px solid ${emphasis ? "var(--accent-line)" : "var(--border)"}`,
-      }}
-    >
-      <p className="lbl mb-1.5">{label}</p>
-      <p className="flex items-baseline gap-1">
-        <span
-          className="num text-[22px] font-semibold leading-none"
-          style={{ color: emphasis ? "var(--accent)" : "var(--text)" }}
-        >
-          {value}
+    <div style={{ position: "relative", width: size, height: size }}>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ width: size, height: size, display: "block" }} aria-hidden>
+        <path d={arc(0, 1)} fill="none" stroke="var(--border)" strokeWidth="8" strokeLinecap="round" />
+        {frac > 0.005 && (
+          <path d={arc(0, frac)} fill="none" stroke="var(--signal)" strokeWidth="8" strokeLinecap="round" />
+        )}
+        {ticks.map((t, i) => (
+          <line
+            key={i}
+            x1={t.x1}
+            y1={t.y1}
+            x2={t.x2}
+            y2={t.y2}
+            stroke={t.on ? "var(--signal)" : "var(--border)"}
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+        ))}
+      </svg>
+      <div
+        style={{ position: "absolute", inset: 0 }}
+        className="flex flex-col items-center justify-center gap-0.5"
+      >
+        <span className="num text-[30px] font-semibold leading-none">{powerW.toFixed(1)}</span>
+        <span className="text-[12px]" style={{ color: "var(--text-muted)" }}>
+          watts now
         </span>
-        {unit && (
-          <span className="text-[12px] font-medium" style={{ color: "var(--text-muted)" }}>
-            {unit}
+      </div>
+    </div>
+  );
+}
+
+/** A slim progress track — today's kWh against the circuit's daily ceiling. */
+export function CeilingBar({ value, ceiling }: { value: number; ceiling: number }) {
+  const pct = Math.max(3, Math.min(100, (value / ceiling) * 100));
+  return (
+    <div className="relative h-1.5 rounded-full" style={{ background: "var(--border)" }}>
+      <div
+        className="absolute inset-y-0 left-0 rounded-full"
+        style={{ width: `${pct.toFixed(0)}%`, background: "var(--signal)" }}
+      />
+    </div>
+  );
+}
+
+/**
+ * The daily trend, one bar per day. This is where a change in the circuit's
+ * life reads at a glance — a retrofit is a cliff in this chart — while the
+ * heatmap below answers WHEN within each day. A partial day is amber, never
+ * a short blue bar: a short bar reads as a quiet day, which a partial day
+ * is not evidence of.
+ */
+export function DailyBars({
+  days,
+}: {
+  days: { day: string; total: number; intervalCount: number }[];
+}) {
+  const shown = [...days].reverse(); // oldest first
+  const peak = Math.max(0.0001, ...shown.map((d) => d.total));
+  const complete = shown.filter((d) => d.intervalCount === 24);
+  const avg = complete.length > 0 ? complete.reduce((s, d) => s + d.total, 0) / complete.length : null;
+  const H = 150;
+  return (
+    <div>
+      <div className="overflow-x-auto">
+        <div className="flex items-end gap-2" style={{ minWidth: 520, height: H + 46, paddingTop: 18 }}>
+          {shown.map((d) => {
+            const h = Math.max(3, (d.total / peak) * H);
+            const partial = d.intervalCount < 24;
+            return (
+              <div key={d.day} className="flex flex-1 flex-col items-center gap-1.5">
+                <span className="num text-[11px] tabular-nums" style={{ color: "var(--text-muted)" }}>
+                  {d.total.toFixed(1)}
+                </span>
+                <div
+                  title={
+                    partial
+                      ? `${d.day} — ${d.total.toFixed(2)} kWh over ${d.intervalCount} of 24 hours`
+                      : `${d.day} — ${d.total.toFixed(2)} kWh`
+                  }
+                  className="w-full rounded-[4px]"
+                  style={{
+                    height: h,
+                    background: partial ? "var(--warn-fg)" : "var(--chart-mark)",
+                    opacity: partial ? 0.75 : 1,
+                  }}
+                />
+                <span className="num text-[10px] tabular-nums" style={{ color: "var(--text-subtle)" }}>
+                  {d.day.slice(5)}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1 text-[11px]" style={{ color: "var(--text-subtle)" }}>
+        {avg !== null && (
+          <span>
+            average complete day <span className="num font-semibold">{avg.toFixed(2)}</span> kWh
           </span>
         )}
-      </p>
-      <p className="mt-1.5 text-xs" style={{ color: "var(--text-subtle)" }}>
-        {detail ?? " "}
-      </p>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-[2px]" style={{ background: "var(--chart-mark)" }} />
+          complete day
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-[2px]" style={{ background: "var(--warn-fg)", opacity: 0.75 }} />
+          partial day
+        </span>
+      </div>
     </div>
   );
 }
@@ -116,6 +237,7 @@ function Reading({
  */
 export function MeterReadout({ meter, action }: { meter: MeterRow; action?: ReactNode }) {
   const caption = readingCaption(meter);
+  const hasGauge = meter.powerW !== null && meter.connectedLoadW !== null && meter.connectedLoadW > 0;
   return (
     <Card>
       <div className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
@@ -131,44 +253,98 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
         {action}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Reading
-          label="Power now"
-          value={fmt(meter.powerW)}
-          unit="W"
-          emphasis
-          detail={
-            meter.voltageV !== null && meter.currentA !== null
-              ? `${fmt(meter.voltageV)} V · ${fmt(meter.currentA)} A`
-              : "no voltage or current reported"
-          }
-        />
-        <Reading
-          label="Today so far"
-          value={fmt(meter.dayKwh)}
-          unit="kWh"
-          detail={
-            meter.capacityKwh !== null
-              ? `ceiling ${meter.capacityKwh.toFixed(2)} kWh/day`
-              : "no load inventory to compare against"
-          }
-        />
-        <Reading
-          label="This month so far"
-          value={fmt(meter.monthKwh)}
-          unit="kWh"
-          detail="the meter's own month counter"
-        />
-        <Reading
-          label="Exported history"
-          value={meter.hourlyCount === 0 ? "—" : meter.hourlyCount.toLocaleString()}
-          unit={meter.hourlyCount === 0 ? undefined : "hours"}
-          detail={
-            meter.hourlyFrom
-              ? `${meter.hourlyFrom} to ${meter.hourlyTo}`
-              : "upload a meter export for the hourly series"
-          }
-        />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        {/* Power now, against everything the circuit could draw at once. */}
+        <div
+          className="flex flex-wrap items-center gap-6 rounded-[var(--r-md)] p-5"
+          style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)" }}
+        >
+          {hasGauge ? (
+            <PowerGauge powerW={meter.powerW!} connectedLoadW={meter.connectedLoadW!} />
+          ) : (
+            <div className="py-6">
+              <span className="num text-[34px] font-semibold leading-none">
+                {meter.powerW === null ? "—" : meter.powerW.toFixed(1)}
+              </span>
+              <span className="ml-1.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
+                W now
+              </span>
+            </div>
+          )}
+          <div className="flex min-w-[130px] flex-col gap-3">
+            <p className="lbl" style={{ color: "var(--ok-fg)" }}>
+              Power now
+            </p>
+            <div className="num flex flex-col gap-1.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
+              <span>{meter.voltageV === null ? "—" : meter.voltageV.toFixed(1)} <span style={{ color: "var(--text-subtle)" }}>V</span></span>
+              <span>{meter.currentA === null ? "—" : meter.currentA.toFixed(2)} <span style={{ color: "var(--text-subtle)" }}>A</span></span>
+              {meter.powerW !== null && meter.voltageV !== null && meter.currentA !== null && meter.voltageV * meter.currentA > 0 && (
+                <span>{(meter.powerW / (meter.voltageV * meter.currentA)).toFixed(2)} <span style={{ color: "var(--text-subtle)" }}>PF</span></span>
+              )}
+            </div>
+            <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+              {hasGauge
+                ? `${Math.round((meter.powerW! / meter.connectedLoadW!) * 100)}% of the ${(meter.connectedLoadW! / 1000).toFixed(2)} kW this circuit can draw`
+                : "no load inventory to give this a scale"}
+            </p>
+          </div>
+        </div>
+
+        {/* The meter's own counters, each against what would make it an alert. */}
+        <div
+          className="flex flex-col justify-between gap-4 rounded-[var(--r-md)] p-5"
+          style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)" }}
+        >
+          <div>
+            <p className="lbl mb-2.5">Energy counters</p>
+            <p className="flex flex-wrap items-baseline gap-2">
+              <span className="num text-[28px] font-semibold leading-none">
+                {meter.dayKwh === null ? "—" : meter.dayKwh.toFixed(2)}
+              </span>
+              <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                kWh today so far
+              </span>
+            </p>
+            {meter.dayKwh !== null && meter.capacityKwh !== null ? (
+              <div className="mt-3">
+                <CeilingBar value={meter.dayKwh} ceiling={meter.capacityKwh} />
+                <div className="mt-1.5 flex justify-between text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                  <span>{Math.round((meter.dayKwh / meter.capacityKwh) * 100)}% of the daily ceiling</span>
+                  <span className="num">{meter.capacityKwh.toFixed(2)} kWh</span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                {meter.dayKwh === null ? "the meter reported no day counter" : "no load inventory to compare against"}
+              </p>
+            )}
+          </div>
+          <div
+            className="flex flex-wrap items-baseline justify-between gap-x-6 gap-y-2 border-t pt-3.5"
+            style={{ borderColor: "var(--border)" }}
+          >
+            <p className="flex items-baseline gap-2">
+              <span className="num text-[19px] font-semibold leading-none">
+                {meter.monthKwh === null ? "—" : meter.monthKwh.toFixed(1)}
+              </span>
+              <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                kWh this month · the meter&rsquo;s own counter
+              </span>
+            </p>
+            <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+              {meter.hourlyCount > 0 ? (
+                <>
+                  <span className="num font-semibold" style={{ color: "var(--text-muted)" }}>
+                    {meter.hourlyCount.toLocaleString()}
+                  </span>{" "}
+                  hours of history · {meter.hourlyFrom} → {meter.hourlyTo}
+                </>
+              ) : (
+                "no exported history yet"
+              )}
+            </p>
+          </div>
+        </div>
       </div>
     </Card>
   );

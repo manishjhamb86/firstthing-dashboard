@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { isAuthorised } from "@/lib/ewelink";
 import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
 import { MetersListClient } from "./meters-list-client";
@@ -129,25 +129,59 @@ export default async function MetersPage() {
             </Card>
           )}
 
-          <StatRow>
-            <Stat label="Metering devices" value={metering.length} detail={`${rows.length} devices in the account`} />
-            <Stat
-              label="Reporting"
-              value={`${reporting.length}/${watched.length}`}
-              tone={watched.length > 0 && reporting.length === watched.length ? "accent" : "warn"}
-              detail="of the meters bound to a circuit"
-            />
-            <Stat
-              label="Not yet assigned"
-              value={unassigned.length}
-              detail={unassigned.length > 0 ? "not watched, and raise no alerts" : "every meter is bound"}
-            />
-            <Stat
-              label="Hourly history"
-              value={historyHours === 0 ? "—" : historyHours.toLocaleString()}
-              detail={historyHours === 0 ? "no exports imported yet" : "hours imported from meter exports"}
-            />
-          </StatRow>
+          {/* The fleet band answers one question before the inventory does:
+              is everything reporting? A segmented bar carries the proportions;
+              the counts carry the facts. */}
+          <Card>
+            <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <CardTitle>Fleet health</CardTitle>
+              <span className="text-[13px] text-[var(--text-subtle)]">
+                one question first: is everything reporting?
+              </span>
+            </div>
+            <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
+              {(
+                [
+                  [reporting.length, "var(--signal)"],
+                  [watched.filter((r) => r.state === "silent").length, "var(--warn-fg)"],
+                  [watched.filter((r) => r.state === "offline").length, "var(--bad-fg)"],
+                  [unassigned.length, "var(--border)"],
+                ] as const
+              )
+                .filter(([n]) => n > 0)
+                .map(([n, color], i) => (
+                  <div
+                    key={i}
+                    style={{
+                      flexGrow: n,
+                      minWidth: 8,
+                      background: color,
+                      borderRadius: 5,
+                    }}
+                  />
+                ))}
+            </div>
+            <div className="mt-3.5 flex flex-wrap items-baseline gap-x-8 gap-y-2 text-[13px] text-[var(--text-muted)]">
+              <FleetCount color="var(--signal)" n={reporting.length} label="reporting" />
+              <FleetCount
+                color="var(--warn-fg)"
+                n={watched.filter((r) => r.state === "silent").length}
+                label="silent"
+              />
+              <FleetCount
+                color="var(--bad-fg)"
+                n={watched.filter((r) => r.state === "offline").length}
+                label="offline"
+              />
+              <FleetCount color="var(--border)" n={unassigned.length} label="unassigned · not watched" />
+              <span className="ml-auto">
+                <span className="num text-[15px] font-semibold text-[var(--text)]">
+                  {historyHours === 0 ? "0" : historyHours.toLocaleString()}
+                </span>{" "}
+                hours of imported history
+              </span>
+            </div>
+          </Card>
 
           <MetersListClient
             canAssign={Boolean(actor?.permissions.includes("manage_users"))}
@@ -166,5 +200,18 @@ export default async function MetersPage() {
         </div>
       )}
     </>
+  );
+}
+
+function FleetCount({ color, n, label }: { color: string; n: number; label: string }) {
+  return (
+    <span className="flex items-baseline gap-2">
+      <span
+        className="inline-block h-2 w-2 self-center rounded-full"
+        style={{ background: color }}
+      />
+      <span className="num text-[15px] font-semibold text-[var(--text)]">{n}</span>
+      <span>{label}</span>
+    </span>
   );
 }

@@ -2499,6 +2499,42 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The meter screens rebuilt to the researched design (2026-08-28) — user-directed, canvas first
+
+**The sequence the user chose**: a fresh design on a canvas first ("do fresh design", then "do it
+for all three theme types"), researched against how energy-monitoring products present meter fleets
+and detail pages, and only then "implement the design to current pages". The canvas
+(claude.ai/code/artifact/45e24661…) holds the two screens in all three product themes plus a light
+"ledger" alternate sketch; the implementation maps the design onto the EXISTING token system rather
+than the mockup's literal hex, which is why all three themes worked on the first screenshot with
+zero per-theme code.
+
+**What the research contributed, and where it landed**: a fleet screen answers "is everything
+reporting?" before showing the inventory — so the four stat tiles became one **Fleet health band**
+(a segmented proportion bar + counts + history total); a list row pairs a value with its trajectory
+— so the Power column gained a **24h sparkline** from the poll samples (rendered only at 3+ points:
+two samples draw a trend no data supports) and Today became a **ceiling-track bar**; a detail page
+ladders hour → day → month and leads with power against capacity — so the readout is now a
+**gauge** of watts against the circuit's CONNECTED LOAD (Σ count × wattage — the instantaneous twin
+of the daily kWh ceiling, `connectedLoadW` on the view model), beside an **energy-counters panel**
+whose today figure runs on the same ceiling track. A **Daily consumption** bar card (14 days) now
+sits above the 7-day heatmap — the trend is where a retrofit reads as a cliff, the heatmap answers
+when within each day — and an **Events** card assembles the meter's recent life (alert
+opened/closed with reasons, imports with their match method) from rows of record rather than a new
+table. Partial days are amber, never a short blue bar: a short bar reads as a quiet day, which a
+partial day is not evidence of.
+
+**The lime rule carried through**: `--signal` (the brand's "lime marks a verified value") is the
+gauge arc, the sparkline stroke and the ceiling fills; `--chart-mark` blue is stored history —
+live vs stored is a colour distinction now, in every theme, without a single new token.
+
+**Verified**: 21/21 import suite, 16/16 portal suite (the shared `MeterReadout` gives the portal
+the same gauge for free; a meter with no inventory falls back to the plain figure), 694 unit
+tests, `tsc`/`lint`/`build` clean, zero console errors, screenshots in all three themes. Harness
+assertions updated where the copy deliberately changed ("this month so far" → "kWh this month";
+the stat tiles → the fleet band) — and one self-inflicted lesson: running a suite twice in one
+command makes the second run fail against the first run's own import.
+
 ## The meter module: a hundred-fold scale error, and the hours the API will not give (2026-08-28) — user-specified
 
 **The ask, settled over several rounds**: the vendor API is used ONLY for the realtime picture of a

@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, EmptyState, ErrorText, StatusChip } from "@/components/ui";
-import { CeilingBar, MeterStateChip, Sparkline } from "@/components/meter-ui";
+import { CeilingBar, MeterStateChip, Sparkline, SPARKLINE_WIDTH } from "@/components/meter-ui";
 import type { MeterRow } from "@/lib/meter-view";
 import { assignMeter, setMeterOwner, syncMeterNow, syncMetersNow } from "./actions";
 
@@ -265,20 +265,27 @@ export function MetersListClient({
                   </td>
                   {/* Every figure carries its age — a last known reading shown
                       as a current one is how a stale number becomes a decision. */}
+                  {/* Two fixed slots, always both present: the figure never
+                      shifts because its neighbour's trend is missing, and the
+                      left half renders whether or not the right half can. */}
                   <td>
-                    {m.powerW === null ? (
-                      <div className="num text-right text-[var(--text-subtle)]">—</div>
-                    ) : (
-                      <div className="flex items-center justify-end gap-3">
-                        <div className="num text-right">
-                          <span style={{ color: m.stale ? "var(--text-muted)" : "var(--text)" }}>
-                            {m.powerW.toFixed(0)} W
-                          </span>
-                          <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">{m.readAge}</div>
-                        </div>
-                        <Sparkline values={m.spark} muted={m.state !== "reporting"} />
+                    <div className="flex items-center justify-end gap-3">
+                      <div className="num text-right">
+                        {m.powerW === null ? (
+                          <span className="text-[var(--text-subtle)]">—</span>
+                        ) : (
+                          <>
+                            <span style={{ color: m.stale ? "var(--text-muted)" : "var(--text)" }}>
+                              {m.powerW.toFixed(0)} W
+                            </span>
+                            <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">{m.readAge}</div>
+                          </>
+                        )}
                       </div>
-                    )}
+                      <div className="shrink-0" style={{ width: SPARKLINE_WIDTH }}>
+                        {m.state !== null && <Sparkline values={m.spark} muted={m.state !== "reporting"} />}
+                      </div>
+                    </div>
                   </td>
                   <td>
                     {m.dayKwh === null ? (

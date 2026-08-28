@@ -64,9 +64,37 @@ export function MeterStateChip({ state }: { state: string | null }) {
  * a fleet row readable at a glance. Renders nothing under 3 points: two
  * samples draw a line that claims a trend no data supports.
  */
+export const SPARKLINE_WIDTH = 96;
+export const SPARKLINE_MIN_POINTS = 3;
+
 export function Sparkline({ values, muted = false }: { values: number[]; muted?: boolean }) {
-  if (values.length < 3) return null;
-  const w = 96;
+  const w = SPARKLINE_WIDTH;
+  const h0 = 26;
+  if (values.length < SPARKLINE_MIN_POINTS) {
+    // The slot is ALWAYS drawn, so the figure beside it never moves when a
+    // meter has too few reads to trend (user-reported 2026-08-28: one row's
+    // wattage sat right, its neighbours' sat left). Dashed, not solid — a
+    // flat solid line would read as a real reading of zero.
+    return (
+      <svg
+        viewBox={`0 0 ${w} ${h0}`}
+        style={{ width: w, height: h0, display: "block" }}
+        role="img"
+        aria-label={`Not enough reads to draw a trend — ${values.length} so far, ${SPARKLINE_MIN_POINTS} needed`}
+      >
+        <title>{`Not enough reads to draw a trend — ${values.length} of ${SPARKLINE_MIN_POINTS} hourly reads so far`}</title>
+        <line
+          x1="0"
+          y1={h0 / 2}
+          x2={w}
+          y2={h0 / 2}
+          stroke="var(--border)"
+          strokeWidth="1.5"
+          strokeDasharray="3 4"
+        />
+      </svg>
+    );
+  }
   const h = 26;
   const max = Math.max(...values) || 1;
   const pts = values

@@ -15,7 +15,7 @@ import type { StoredReadingDTO } from "@/app/admin/societies/[id]/circuits/[circ
  */
 
 type SortKey = "date" | "kWh" | "hours" | "savings" | "status";
-type StatusFilter = "all" | "included" | "excluded" | "flagged" | "superseded" | "released";
+type StatusFilter = "valid" | "all" | "excluded" | "flagged" | "superseded" | "released";
 type BandFilter = "all" | "in" | "out";
 
 const PAGE_SIZES = [10, 20, 30] as const;
@@ -74,7 +74,11 @@ export function ReadingsExplorer({
   const [onDate, setOnDate] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [status, setStatus] = useState<StatusFilter>("all");
+  // Valid days by default (the user's call): a listing that opens with
+  // excluded and flagged days mixed in reads as the record when it is not —
+  // those are days the averages already ignore. The filter itself says which
+  // view is on, and one click widens it.
+  const [status, setStatus] = useState<StatusFilter>("valid");
   const [bandFilter, setBandFilter] = useState<BandFilter>("all");
   const [pageSize, setPageSize] = useState<number>(10);
   const [page, setPage] = useState(0);
@@ -88,7 +92,7 @@ export function ReadingsExplorer({
         if (from && r.date < from) return false;
         if (to && r.date > to) return false;
       }
-      if (status === "included" && (r.excluded || r.flagged)) return false;
+      if (status === "valid" && (r.excluded || r.flagged)) return false;
       if (status === "excluded" && !r.excluded) return false;
       if (status === "flagged" && !r.flagged) return false;
       if (status === "superseded" && !r.superseded) return false;
@@ -175,8 +179,8 @@ export function ReadingsExplorer({
           <span className="mb-1 block">Status</span>
           <select className="field field-auto" value={status}
             onChange={(e) => resetPage(setStatus)(e.target.value as StatusFilter)} aria-label="Filter by status">
-            <option value="all">All</option>
-            <option value="included">Included</option>
+            <option value="valid">Valid readings only</option>
+            <option value="all">All readings</option>
             <option value="excluded">Excluded</option>
             <option value="flagged">Flagged</option>
             <option value="superseded">Superseded</option>
@@ -192,10 +196,10 @@ export function ReadingsExplorer({
             <option value="out">Out of range</option>
           </select>
         </label>
-        {(onDate || from || to || status !== "all" || bandFilter !== "all") && (
+        {(onDate || from || to || status !== "valid" || bandFilter !== "all") && (
           <button type="button" className="btn-ghost btn-sm"
-            onClick={() => { setOnDate(""); setFrom(""); setTo(""); setStatus("all"); setBandFilter("all"); setPage(0); }}>
-            Clear filters
+            onClick={() => { setOnDate(""); setFrom(""); setTo(""); setStatus("valid"); setBandFilter("all"); setPage(0); }}>
+            Reset filters
           </button>
         )}
       </div>
@@ -318,10 +322,26 @@ export function ReadingsExplorer({
 
       {/* ---- pagination ---- */}
       <div className="mt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-[13px] text-[var(--text-muted)]">
-        <span className="num">
-          {filtered.length === 0
-            ? "Nothing matches these filters"
-            : `Showing ${current * pageSize + 1}–${Math.min((current + 1) * pageSize, filtered.length)} of ${filtered.length}`}
+        <span>
+          <span className="num">
+            {filtered.length === 0
+              ? "Nothing matches these filters"
+              : `Showing ${current * pageSize + 1}–${Math.min((current + 1) * pageSize, filtered.length)} of ${filtered.length}`}
+          </span>
+          {/* Never let a default filter quietly shrink the record. */}
+          {status === "valid" && readings.length > filtered.length && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                className="underline"
+                style={{ color: "var(--accent)" }}
+                onClick={() => { setStatus("all"); setPage(0); }}
+              >
+                {readings.length - filtered.length} excluded or flagged hidden
+              </button>
+            </>
+          )}
         </span>
         <span className="flex items-center gap-2">
           <label className="flex items-center gap-2">

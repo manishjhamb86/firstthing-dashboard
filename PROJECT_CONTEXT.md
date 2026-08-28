@@ -2499,6 +2499,41 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Three buttons that were three different things, and a figure that moved when its neighbour was missing (2026-08-28) — user-caught
+
+**"None of them have any synchronisation between them"** — correct, and the cause was a category
+error of mine, not taste. The page has ONE action (Record readings — it writes) and TWO navigations
+(setup & history, monthly report — they just go somewhere), and I had dressed all three as solid
+blue buttons at three sizes in three corners: three competing primaries. Designed three options on
+a canvas; the user picked **Option 3's structure with Option 1's palette**, which is what shipped:
+each navigation is a full-bleed band forming the card's last row — tinted `--accent-subtle` on
+`--accent-line` with accent ink and a chevron — pinned flush to the card's bottom edge, with the
+one solid button left alone in the header. **The rule: one solid button per page; navigation is a
+quieter, consistent family.**
+
+**`mt-auto` needed a flex column to push against.** The bands first floated mid-card at two
+different heights because `.card` is not a flex container — `flex flex-col` on both cards pins them
+flush, verified by measuring each band's bottom against its card's (within 1px, and equal to each
+other).
+
+**A figure moved because its neighbour was missing** (user-caught on the meters list): one row's
+wattage sat right, its neighbours' sat left. The power cell was `justify-end` with the sparkline
+INSIDE the flow, so when a meter had too few reads to trend, the number slid right by the
+sparkline's width. Now both slots are always drawn at fixed width — and the empty one renders a
+DASHED baseline (never solid: a flat solid line reads as a real reading of zero) titled with how
+many reads it has of the three it needs. Proven by giving one row 5 samples and its neighbour 1:
+both wattages landed on 776px. **The general shape**: a cell whose left half is positioned by its
+right half will move whenever the right half is conditional.
+
+**Why a sparkline was missing at all** — nothing wrong: it needs 3 hourly samples and that meter
+had 2. Stage's newly-assigned meters hold 1–7 samples each; the hourly poll fills them in.
+
+**The readings listing opens on VALID readings only** (the user's earlier instruction, missed once
+and now honoured): excluded and flagged days are what the averages already ignore, so a listing
+that opens with them mixed in reads as the record when it is not. The footer states what the
+default hides — "183 excluded or flagged hidden" — as a button that widens to the full record, so
+a default filter can never quietly shrink what an operator believes they are looking at.
+
 ## The links became buttons, and "commissioning record" got a name its reader understands (2026-08-28)
 
 **Round three of a recorded lesson**: the first cut used `.btn-outline`, and the user's "they

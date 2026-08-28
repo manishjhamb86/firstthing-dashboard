@@ -294,7 +294,7 @@ export default async function LiveMonitoringCircuitPage({
               </dl>
             </Card>
 
-            <Card className="p-5">
+            <Card className="flex flex-col p-5">
               <p className="lbl mb-3">The demo behind it</p>
               <dl className="space-y-2 text-[13px]">
                 <div className="flex justify-between gap-4">
@@ -329,14 +329,26 @@ export default async function LiveMonitoringCircuitPage({
               {/* Named for what the reader gets, not for the internal phase:
                   "commissioning record" meant nothing to its own audience
                   (user, 2026-08-28). */}
-              <div className="mt-3 border-t pt-3" style={{ borderColor: "var(--border)" }}>
-                <Link href={circuitHref} className="btn-secondary btn-sm">
+              <div className="-mx-5 -mb-5 mt-auto pt-4">
+                <Link
+                  href={circuitHref}
+                  className="flex items-center justify-between gap-2 px-5 py-3 text-[13.5px] font-semibold"
+                  style={{
+                    background: "var(--accent-subtle)",
+                    borderTop: "1px solid var(--accent-line)",
+                    borderRadius: "0 0 var(--r-md) var(--r-md)",
+                    color: "var(--accent)",
+                  }}
+                >
                   Circuit setup &amp; history
+                  <svg viewBox="0 0 16 16" style={{ width: 14, height: 14, flexShrink: 0 }} aria-hidden>
+                    <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
                 </Link>
               </div>
             </Card>
 
-            <Card className="p-5">
+            <Card className="flex flex-col p-5">
               <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
                 <p className="lbl">Savings</p>
                 <span className="text-[12px] text-[var(--text-subtle)]">
@@ -375,12 +387,26 @@ export default async function LiveMonitoringCircuitPage({
                   {monitoringDays.filter((d) => d.flagged).length > 0 &&
                     ` · ${monitoringDays.filter((d) => d.flagged).length} flagged`}
                 </span>
-                {monitoringDays.length > 0 && (
-                  <Link href={`${circuitHref}/reports/monthly`} className="btn-secondary btn-sm">
-                    Monthly savings report
-                  </Link>
-                )}
               </p>
+              {monitoringDays.length > 0 && (
+                <div className="-mx-5 -mb-5 mt-auto pt-4">
+                  <Link
+                    href={`${circuitHref}/reports/monthly`}
+                    className="flex items-center justify-between gap-2 px-5 py-3 text-[13.5px] font-semibold"
+                    style={{
+                      background: "var(--accent-subtle)",
+                      borderTop: "1px solid var(--accent-line)",
+                      borderRadius: "0 0 var(--r-md) var(--r-md)",
+                      color: "var(--accent)",
+                    }}
+                  >
+                    Monthly savings report
+                    <svg viewBox="0 0 16 16" style={{ width: 14, height: 14, flexShrink: 0 }} aria-hidden>
+                      <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </Link>
+                </div>
+              )}
             </Card>
           </div>
 

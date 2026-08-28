@@ -37,6 +37,7 @@ export type DeviationCode =
   | "excluded-share-prorated-from-measured"
   | "represented-count-mixes-fixture-types"
   | "proration-on-a-30-day-month"
+  | "two-versions-of-the-demo-report"
   | "not-billing";
 
 type Meta = { label: string; what: string; standard: string };
@@ -146,6 +147,11 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
     label: "Opening month prorated on a 30-day month",
     what: "The first invoice divides the monthly charge by 30 rather than by the days the month actually has.",
     standard: "CON-22 prorates by the real remaining days of the calendar month.",
+  },
+  "two-versions-of-the-demo-report": {
+    label: "Two versions of the demo report exist",
+    what: "The same report circulates in more than one revision, stating different savings. The copy attached to the signed agreement is the one on record here.",
+    standard: "A regenerated report is a new version and the shared one still stands (FEAT-020-AC-5).",
   },
   "minimum-light-clause-not-enforced": {
     label: "Fewer lights installed than the agreement's minimum",

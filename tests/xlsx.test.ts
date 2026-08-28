@@ -155,10 +155,13 @@ describe("a sheet becomes the text the pipeline already reads", () => {
 // agrees with itself. The samples live outside the repo (they are a
 // customer's documents), so this suite is skipped wherever they are not,
 // and it looks in both layouts the folder has had.
-const SAMPLES = join(homedir(), "Downloads", "Document Samples", "Ace City");
+const SAMPLES = join(homedir(), "Downloads", "Document Samples");
 const REAL = [
-  join(SAMPLES, "Live Meter Reading", "Ace City Meter Reading.xlsx"),
-  join(SAMPLES, "Ace City Meter Reading.xlsx"),
+  // Onboarded societies get filed under Registered/ once their documents
+  // have been read, so both live and archived locations are looked in.
+  join(SAMPLES, "Registered", "Ace City", "Live Meter Reading", "Ace City Meter Reading.xlsx"),
+  join(SAMPLES, "Ace City", "Live Meter Reading", "Ace City Meter Reading.xlsx"),
+  join(SAMPLES, "Ace City", "Ace City Meter Reading.xlsx"),
 ].find(existsSync);
 
 // The factory of a skipped describe still RUNS — only its tests are skipped —

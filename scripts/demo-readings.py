@@ -85,7 +85,13 @@ def parse(text: str):
         elif re.search(r"after installation|post[- ]?installation", ln, re.I):
             phase = "post"
 
-        # A "Date" row opens a block.
+        # A "Date" row opens a block. ATS Greens Paradiso's report heads its
+        # before table "Average daily energy consumption over five days is
+        # 18.71 kWh" and names no phase at all, so a table reached before the
+        # after-installation heading is a before table — which is what every
+        # one of these reports means by putting it first.
+        if re.fullmatch(r"date", ln, re.I) and phase is None:
+            phase = "pre"
         if re.fullmatch(r"date", ln, re.I) and phase:
             i += 1
             cells: list[str] = []

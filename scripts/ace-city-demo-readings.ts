@@ -13,7 +13,12 @@ import { readingSheets, sheetToReadingCsv } from "../src/lib/xlsx-readings";
 import { matchKnownFormat } from "../src/lib/reading-formats";
 import { applyMapping } from "../src/lib/reading-normalize";
 
-const F = process.env.HOME + "/Downloads/Document Samples/Ace City/Live Meter Reading/Ace City Meter Reading.xlsx";
+import { existsSync } from "node:fs";
+const CANDIDATES = [
+  "/Downloads/Document Samples/Registered/Ace City/Live Meter Reading/Ace City Meter Reading.xlsx",
+  "/Downloads/Document Samples/Ace City/Live Meter Reading/Ace City Meter Reading.xlsx",
+].map((p) => process.env.HOME + p);
+const F = CANDIDATES.find(existsSync) ?? CANDIDATES[0];
 const SHEET = "BasementReadings";
 const BLOCKS = [
   { phase: "pre", period: "2025-08", from: "2025-08-03", to: "2025-08-10", stated: 48.6987 },

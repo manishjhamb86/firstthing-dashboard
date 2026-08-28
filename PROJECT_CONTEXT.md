@@ -2594,6 +2594,23 @@ through a path the client cannot pre-block** — the permission revoked behind t
 refused by name, writing neither readings nor an import record. 691 unit tests (was 651);
 `tsc`/`lint`/`build` clean.
 
+**The hourly chart was rebuilt after the user rejected the first version, and the rejection was
+right.** It began as 24 bars per row, and a bar 65px wide by 20px tall cannot encode a value: the
+real series holds a 60% regime change — 1-5 June at ~15.9 kWh/day, 7-13 June at ~6.0 — and it
+rendered as fourteen identical rows of blue. It is a day x hour HEATMAP now, with each day's total
+as its own bar alongside: the cell says what happened in that hour, the bar says what the day came
+to, and neither is legible from the other. Three states stay distinct — consumption, a reported
+zero, and an hour the export never carried — because a missing hour and a quiet hour are different
+facts. **The colour scale is linear, deliberately**: a square-root curve was tried first and made a
+0.29 kWh hour read at two thirds of full accent when it is a third of the peak, and on a product
+whose figures are billed, a scale that flatters the low end is one that misleads. Verified by
+measuring the painted pixels rather than by eye — the two regimes now sit at 0.80 and 0.61 oklab
+lightness where before they were identical — and screenshotted in all three themes.
+
+**15 of the 45 device names in the account carry surrounding whitespace** ("AIPL S70 A Gurgaon "),
+which is invisible on screen and silently breaks every exact match against them — it is what made
+one verification fixture appear not to apply at all. `syncMeterDevices` trims on the way in.
+
 **Two test-harness notes, both already recorded once here and both caught again**: `.lbl` uppercases
 and `innerText` returns RENDERED text, so "Power now" is "POWER NOW" — match case-insensitively.
 And a wait target has to be unique: `Covers` is the preview's label *and* the imports table's

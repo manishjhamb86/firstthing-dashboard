@@ -193,102 +193,181 @@ export function MeterAlerts({ meter }: { meter: MeterRow }) {
 }
 
 /**
- * The hourly series, one row per day, 24 bars each.
+ * The hourly series as a day x hour heatmap, with each day's total beside it.
  *
- * A day laid out as its own row is what makes a lighting circuit legible —
- * the block of consumption sits where the lights are on, and a day that
- * breaks the pattern is visible without reading a single number. The bars
- * are scaled against the busiest hour in view, and that hour is stated, so
- * the height of a bar means something.
+ * It was 24 bars per row first, and that was the wrong encoding: a bar 65px
+ * wide and 20px tall cannot show the difference between 0.29 kWh and 0.68,
+ * so a real 60% drop in the middle of the series — the retrofit itself —
+ * rendered as fourteen identical rows of blue. Colour has far more
+ * perceptual range in a small cell than height does in a wide one.
+ *
+ * So: the CELL says what happened in that hour, the BAR beside it says what
+ * the day came to. One shows the daily shape (a lighting circuit's block of
+ * consumption sits where the lights are on), the other shows the trend
+ * between days. Neither is legible from the other.
+ *
+ * Three states, never conflated: an hour with consumption, an hour the meter
+ * reported as zero, and an hour the export never carried. A missing hour and
+ * a quiet hour are different facts, and the second is not evidence of a
+ * fault while the first might be.
  */
 export function MeterHourlyChart({
   days,
 }: {
   days: { day: string; hours: { hour: number; kWh: number }[]; total: number; intervalCount: number }[];
 }) {
-  const peak = Math.max(0.0001, ...days.flatMap((d) => d.hours.map((h) => h.kWh)));
+  const values = days.flatMap((d) => d.hours.map((h) => h.kWh)).filter((v) => v > 0);
+  const peakHour = values.length > 0 ? Math.max(...values) : 0;
+  const peakDay = Math.max(0.0001, ...days.map((d) => d.total));
+  const complete = days.filter((d) => d.intervalCount === 24);
+  const avgDay = complete.length > 0 ? complete.reduce((s, d) => s + d.total, 0) / complete.length : null;
+
+  // Cell intensity, LINEAR against the busiest hour, with a floor of 14% so
+  // the smallest real reading is still visible against the ground.
+  //
+  // A square-root curve was tried first and rejected: it made a 0.29 kWh hour
+  // read at two thirds of full accent when it is a third of the peak. On a
+  // product whose figures are billed, a colour scale that flatters the low
+  // end is a scale that misleads, and the legend cannot undo it.
+  const intensity = (v: number) => (peakHour <= 0 ? 0 : 14 + (v / peakHour) * 86);
+
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-          Each row is one day, midnight to midnight. Bars are scaled against the busiest hour in view
-          ({peak.toFixed(2)} kWh).
-        </p>
+      <div className="mb-4 flex flex-wrap items-baseline gap-x-6 gap-y-1 text-[13px]">
+        <span>
+          <span className="lbl">Days shown</span>{" "}
+          <span className="num font-semibold">{days.length}</span>
+        </span>
+        {avgDay !== null && (
+          <span>
+            <span className="lbl">Average complete day</span>{" "}
+            <span className="num font-semibold">{avgDay.toFixed(2)}</span>
+            <span className="text-[var(--text-muted)]"> kWh</span>
+          </span>
+        )}
+        <span>
+          <span className="lbl">Busiest hour</span>{" "}
+          <span className="num font-semibold">{peakHour.toFixed(2)}</span>
+          <span className="text-[var(--text-muted)]"> kWh</span>
+        </span>
       </div>
+
       <div className="overflow-x-auto">
-        <div style={{ minWidth: 520 }}>
+        <div style={{ minWidth: 620 }}>
+          {/* The hour axis. Without it the reader can see a pattern but not
+              when it happens, which is the whole question. */}
+          <div className="mb-1 flex items-end gap-[3px]" style={{ paddingLeft: 84, paddingRight: 199 }}>
+            {Array.from({ length: 24 }, (_, h) => (
+              <div
+                key={h}
+                className="num flex-1 text-center text-[10px] tabular-nums"
+                style={{ color: "var(--text-subtle)" }}
+              >
+                {h % 3 === 0 ? String(h).padStart(2, "0") : ""}
+              </div>
+            ))}
+          </div>
+
           {days.map((d) => {
             const byHour = new Map(d.hours.map((h) => [h.hour, h.kWh]));
+            const partial = d.intervalCount < 24;
             return (
-              <div key={d.day} className="flex items-center gap-3 py-1">
+              <div key={d.day} className="flex items-center gap-[3px] py-[2px]">
                 <span
                   className="num shrink-0 text-[11px] tabular-nums"
-                  style={{ color: "var(--text-muted)", width: 78 }}
+                  style={{ color: "var(--text-muted)", width: 81 }}
                 >
                   {d.day}
                 </span>
-                <div className="flex h-7 flex-1 items-end gap-[2px]">
-                  {Array.from({ length: 24 }, (_, h) => {
-                    const v = byHour.get(h);
-                    const pct = v === undefined ? 0 : Math.max(3, (v / peak) * 100);
-                    return (
-                      <div
-                        key={h}
-                        title={
-                          v === undefined
-                            ? `${d.day} ${String(h).padStart(2, "0")}:00 — no reading in the export`
-                            : `${d.day} ${String(h).padStart(2, "0")}:00 — ${v.toFixed(3)} kWh`
-                        }
-                        className="flex-1 rounded-[1px]"
-                        style={{
-                          height: `${pct}%`,
-                          // An hour the export never carried is drawn as a gap,
-                          // not as a zero: a missing hour and a quiet hour are
-                          // different facts.
-                          background:
-                            v === undefined
-                              ? "var(--border)"
-                              : v === 0
-                                ? "var(--surface-sunken)"
-                                : "var(--accent)",
-                          opacity: v === undefined ? 0.5 : 1,
-                        }}
-                      />
-                    );
-                  })}
-                </div>
-                <span
-                  className="num shrink-0 text-right text-[11px] tabular-nums"
-                  style={{ color: "var(--text-muted)", width: 96 }}
-                >
-                  {d.total.toFixed(2)} kWh
-                  {d.intervalCount < 24 && (
-                    <span style={{ color: "var(--warn-fg)" }} title={`${d.intervalCount} of 24 hours`}>
-                      {" "}
-                      ·{d.intervalCount}h
-                    </span>
-                  )}
+
+                {Array.from({ length: 24 }, (_, h) => {
+                  const v = byHour.get(h);
+                  const missing = v === undefined;
+                  const zero = v === 0;
+                  return (
+                    <div
+                      key={h}
+                      title={
+                        missing
+                          ? `${d.day} ${String(h).padStart(2, "0")}:00 — not in the export`
+                          : `${d.day} ${String(h).padStart(2, "0")}:00 — ${v!.toFixed(3)} kWh`
+                      }
+                      className="h-[22px] flex-1 rounded-[2px]"
+                      style={
+                        missing
+                          ? {
+                              background: "transparent",
+                              border: "1px dashed var(--border)",
+                            }
+                          : zero
+                            ? { background: "var(--surface-sunken)", border: "1px solid var(--border)" }
+                            : {
+                                background: `color-mix(in oklab, var(--accent) ${intensity(v!).toFixed(1)}%, var(--surface-sunken))`,
+                              }
+                      }
+                    />
+                  );
+                })}
+
+                {/* The day's total, as a figure AND as a bar — the figures
+                    alone make a 60% drop between two rows easy to miss. */}
+                <span className="flex shrink-0 items-center gap-2.5" style={{ width: 196 }}>
+                  <span className="relative h-[12px] flex-1 rounded-[3px]" style={{ background: "var(--surface-sunken)" }}>
+                    <span
+                      className="absolute inset-y-0 left-0 rounded-[3px]"
+                      style={{
+                        width: `${Math.max(2, (d.total / peakDay) * 100)}%`,
+                        background: partial ? "var(--warn-fg)" : "var(--accent)",
+                      }}
+                    />
+                  </span>
+                  <span
+                    className="num shrink-0 text-right text-[11px] tabular-nums"
+                    style={{ width: 74, color: "var(--text)" }}
+                  >
+                    {d.total.toFixed(2)}
+                    {partial && (
+                      <span style={{ color: "var(--warn-fg)" }} title={`only ${d.intervalCount} of 24 hours`}>
+                        {" "}
+                        ·{d.intervalCount}h
+                      </span>
+                    )}
+                  </span>
                 </span>
               </div>
             );
           })}
         </div>
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px]" style={{ color: "var(--text-subtle)" }}>
-        <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-[1px]" style={{ background: "var(--accent)" }} />
-          consumption
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]" style={{ color: "var(--text-subtle)" }}>
+        <span className="flex items-center gap-2">
+          <span>0</span>
+          <span
+            className="inline-block h-3 w-24 rounded-[2px]"
+            style={{
+              background: `linear-gradient(to right, color-mix(in oklab, var(--accent) 12%, var(--surface-sunken)), var(--accent))`,
+            }}
+          />
+          <span className="num">{peakHour.toFixed(2)} kWh in an hour</span>
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-[1px]" style={{ background: "var(--surface-sunken)" }} />
+          <span
+            className="inline-block h-3 w-3 rounded-[2px]"
+            style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)" }}
+          />
           reported zero
         </span>
         <span className="flex items-center gap-1.5">
           <span
-            className="inline-block h-2.5 w-2.5 rounded-[1px]"
-            style={{ background: "var(--border)", opacity: 0.5 }}
+            className="inline-block h-3 w-3 rounded-[2px]"
+            style={{ border: "1px dashed var(--border)" }}
           />
           not in the export
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2 w-6 rounded-[2px]" style={{ background: "var(--warn-fg)" }} />
+          partial day
         </span>
       </div>
     </div>

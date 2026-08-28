@@ -258,7 +258,9 @@ export async function syncMeterDevices(cfg: EwelinkConfig): Promise<{ devices: n
       where: { ewelinkDeviceId: d.deviceid },
       create: {
         ewelinkDeviceId: d.deviceid,
-        name: d.name,
+        // Trimmed: several names in the account carry a trailing space, which
+        // is invisible on screen and breaks every exact match against them.
+        name: d.name.trim(),
         productModel: d.productModel,
         uiid: d.uiid,
         online: d.online,
@@ -266,7 +268,7 @@ export async function syncMeterDevices(cfg: EwelinkConfig): Promise<{ devices: n
         observedParams: Object.keys(d.params),
       },
       update: {
-        name: d.name,
+        name: d.name.trim(),
         productModel: d.productModel,
         uiid: d.uiid,
         // `online` here is the account listing's cached flag, refined by the

@@ -9,12 +9,16 @@ import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
 import { circuitLabelOf } from "@/lib/meter-view";
 
 /**
- * One pass over the assigned meters. It answers exactly two questions, which
- * are the only two the hourly job exists for:
+ * One pass over every metering device in the account. It answers exactly two
+ * questions, which are the only two the hourly job exists for:
  *
  *   1. Is this meter reachable? Two consecutive failures raise an alert.
  *   2. Is what it reports physically possible? A day's consumption above
  *      everything on the circuit running flat out raises another.
+ *
+ * Every meter is sampled; only an ASSIGNED one is alerted on. Sampling an
+ * unbound device costs one call and buys the history it will need the day
+ * somebody assigns it — alerting on one would raise work with no owner.
  *
  * It deliberately does NOT build an hourly series. The device holds its own
  * hourly buffer but no public endpoint returns it, and an hourly poll of a
@@ -39,6 +43,8 @@ export type PollResult = {
   alertsOpened: number;
   alertsClosed: number;
   alertsRearmed: number;
+  /** Of those polled, how many are bound to a circuit or society. */
+  assigned: number;
 };
 
 export async function pollMeters(opts?: { meterId?: string; provider?: MeterProvider }): Promise<PollResult> {
@@ -51,6 +57,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
     alertsOpened: 0,
     alertsClosed: 0,
     alertsRearmed: 0,
+    assigned: 0,
   };
   if (!provider) {
     logger.info("meter.poll_skipped", { reason: "no_provider" });
@@ -63,11 +70,20 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
 
   const meters = await db.meterDevice.findMany({
     where: {
+      // Every metering device in the account, assigned or not (user's call,
+      // 2026-08-29: "i want every meter to be fetched assigned or not. we can
+      // map that later when user assigns that meter to some circuit").
+      //
+      // The point is the HISTORY. A meter's samples are keyed by its own id,
+      // so a device bound to a circuit in November already has months of
+      // readings and reliability behind it rather than starting from the day
+      // somebody happened to assign it. That is not recoverable after the
+      // fact — the vendor serves the present, never the past.
+      //
+      // Non-metering devices stay out: they report no electrical parameters
+      // at all, so a sample would be a row of nulls.
       hasEnergySignal: true,
-      // Only meters somebody has bound to something are polled: an unassigned
-      // device in the account is not yet this product's problem, and polling
-      // it would raise alerts nobody owns.
-      ...(opts?.meterId ? { id: opts.meterId } : { OR: [{ circuitId: { not: null } }, { societyId: { not: null } }] }),
+      ...(opts?.meterId ? { id: opts.meterId } : {}),
     },
     include: {
       circuit: {
@@ -180,8 +196,18 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
     const circuitLabel = m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null;
     const meterName = m.name;
 
+    // Every meter is SAMPLED; only a bound one is ALERTED on. An unassigned
+    // device has no circuit, no society and no owner, so an alert for it
+    // would name nothing, reach nobody, and sit in the notification centre
+    // as work no one can do — and thirty of those would bury the ones that
+    // matter. Its history is still recorded above, which is the whole reason
+    // for polling it: the moment it is assigned, the reliability record is
+    // already there.
+    const assigned = m.circuitId !== null || m.societyId !== null;
+    if (assigned) result.assigned++;
+
     // --- 1. Reachability. Fires on the SECOND consecutive failure only. ---
-    if (health.shouldAlert) {
+    if (health.shouldAlert && assigned) {
       const message = outageMessage({
         meterName,
         circuitLabel,
@@ -208,7 +234,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
         message,
       });
     }
-    if (health.recovered) {
+    if (health.recovered && assigned) {
       const { closed } = await closeAlert({ meterId: m.id, kind: "offline", reason: "The meter is reporting again." });
       result.alertsClosed += closed;
       logger.info("meter.recovered", { meterId: m.id, ownerEmail: m.owner?.email ?? null });
@@ -223,7 +249,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       theoreticalDailyKwh: devices.length > 0 ? theoreticalDailyKwh(devices) : null,
       meterName,
     });
-    if (capacity.verdict === "over") {
+    if (capacity.verdict === "over" && assigned) {
       const { opened } = await openAlert({
         meterId: m.id,
         kind: "out_of_range",
@@ -236,7 +262,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
         },
       });
       if (opened) result.alertsOpened++;
-    } else if (capacity.verdict === "within") {
+    } else if (capacity.verdict === "within" && assigned) {
       const { closed } = await closeAlert({
         meterId: m.id,
         kind: "out_of_range",

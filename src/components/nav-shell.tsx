@@ -129,7 +129,7 @@ export function NavShell({
         </p>
       </aside>
 
-      <div className="lg:pl-[264px]">
+      <div className="app-shell-content lg:pl-[264px]">
         <header
           className="app-header sticky top-0 z-20"
           style={{
@@ -168,7 +168,7 @@ export function NavShell({
         </header>
 
         <main>
-          <div className="mx-auto max-w-[1600px] p-5 sm:p-8">{children}</div>
+          <div className="app-shell-main mx-auto max-w-[1600px] p-5 sm:p-8">{children}</div>
         </main>
       </div>
     </div>

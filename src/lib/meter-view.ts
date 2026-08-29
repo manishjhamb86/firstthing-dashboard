@@ -18,8 +18,17 @@ export type MeterRow = {
   productModel: string;
   uiid: number;
   hasEnergySignal: boolean;
+  /** Bound to a circuit or a society — so somebody owns it, and it is alerted on. */
+  assigned: boolean;
 
-  /** Null for an unassigned device — it is not being watched, so it has no state. */
+  /**
+   * Null only for a device that reports no electrical parameters at all —
+   * there is nothing to poll, so there is nothing to be a state OF. Every
+   * metering device has one, assigned or not: since 2026-08-29 the hourly
+   * pass covers the whole account, so its health is a fact we hold and
+   * "Unassigned" in this column would hide it behind something the circuit
+   * column already says.
+   */
   state: MeterState | null;
   outage: string | null;
   offlineSince: string | null;
@@ -129,7 +138,10 @@ function toRow(
   spark: number[] | undefined,
   now: Date,
 ): MeterRow {
-  const watched = m.hasEnergySignal && (m.circuitId !== null || m.societyId !== null);
+  // Polled, therefore knowable. Assignment decides who is CHASED about a
+  // meter (see meter-poll.ts) and drives the "Needs attention" triage — it
+  // does not decide whether we are willing to say what we already know.
+  const watched = m.hasEnergySignal;
   const health = evaluateMeterHealth({
     online: m.online,
     // The screen judges what the last poll stored; it does not itself poll.
@@ -148,6 +160,7 @@ function toRow(
     productModel: m.productModel,
     uiid: m.uiid,
     hasEnergySignal: m.hasEnergySignal,
+    assigned: m.circuitId !== null || m.societyId !== null,
     state: watched ? health.state : null,
     outage: watched
       ? outageMessage({

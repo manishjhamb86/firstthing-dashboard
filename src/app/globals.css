@@ -708,6 +708,85 @@ textarea.field {
     max-width: none;
     padding: 0 !important;
   }
+  /* The shell's sidebar is display:none on paper — but the 264px of padding
+     that makes ROOM for it is not, and neither is the content wrapper's own
+     32px and 1600px cap. Every printed page was therefore laid out inside a
+     column starting 296px from the left edge, squeezing the report into the
+     right half of the sheet and clipping the day columns (user-reported
+     2026-08-29, with the PDF).
+     Why no check caught it: Playwright's page.pdf() re-lays-out at the paper
+     width (~794px), which is BELOW the lg breakpoint, so `lg:pl-[264px]`
+     never applied in the test and did apply in a real browser printing from
+     a wide window. A print check has to be run at a WIDE viewport to be
+     worth anything. */
+  .app-shell-content {
+    padding-left: 0 !important;
+  }
+  .app-shell-main {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+  /* Never silently truncate a figure on paper. .report-daily-col clips so
+     its corners can be rounded; if a column is ever squeezed again, the
+     overflow must be VISIBLE — a cut-off savings figure reads as a real
+     number, which is the one failure this report cannot have. */
+  .report-daily-col {
+    overflow: visible;
+  }
+
+  /* ---- the bands, in grey ---------------------------------------------
+   * Plenty of people print this in black and white (the user's own point,
+   * 2026-08-29), and the screen tints are six HUES at nearly one lightness
+   * — exactly the palette that collapses into one indistinguishable grey.
+   * On paper they become a real lightness ramp instead, lightest for the
+   * best month and darkest for the one to go and look at, so the ordering
+   * survives a mono printer, a photocopy and colour-blind reading alike.
+   *
+   * !important because the tint arrives as an inline style from
+   * SAVINGS_BAND_META — the one place the screen colours live, deliberately
+   * left untouched so every other surface keeps its palette.
+   *
+   * The darkest step is #A0A0A0: --text on it measures 4.5:1, and this is
+   * type carrying a figure a society is billed against, not decoration. */
+  .report-band-green {
+    background: #efefef !important;
+  }
+  .report-band-cyan {
+    background: #dedede !important;
+  }
+  .report-band-yellow {
+    background: #cdcdcd !important;
+  }
+  .report-band-orange {
+    background: #bcbcbc !important;
+  }
+  .report-band-red {
+    background: #aeaeae !important;
+  }
+  .report-band-suspect {
+    background: #a0a0a0 !important;
+  }
+  /* The lightest step is nearly the paper — an outline keeps every swatch
+     and every tinted figure visibly a marked one. */
+  .report-band {
+    border: 0.5px solid #999;
+  }
+  .report-legend dt {
+    border-color: #999 !important;
+  }
+  /* The one swatch that is not a band: --surface-sunken is a BLUISH white,
+     which is a hue like any other once the ramp is meant to be read in
+     grey. Paper gets a plain white ground and a neutral strike. */
+  .report-band-excluded {
+    background-color: #fff !important;
+    background-image: linear-gradient(
+      to bottom right,
+      transparent calc(50% - 0.5px),
+      #555 calc(50% - 0.5px),
+      #555 calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    ) !important;
+  }
   .tbl th,
   .tbl td {
     border-color: #ccc !important;
@@ -741,6 +820,61 @@ textarea.field {
   color: var(--text);
   background: var(--surface-hover);
   border-color: var(--text-subtle);
+}
+
+/* Segmented control — one choice out of a short, fixed set that all fits on
+   a row (the report's month picker). It exists because a run of underlined
+   links is not a control: nothing says they are alternatives, and nothing
+   says which one you are looking at except a font weight. Deliberately NOT
+   for open-ended sets — past a handful this wraps into a paragraph of
+   buttons and a <select> is the honest answer. */
+.seg {
+  display: inline-flex;
+  align-items: center;
+  /* It WRAPS rather than scrolling. Seven months measure 475px, which is
+     137px past a 390px phone — and a horizontally scrolling strip would
+     have been worse here than the overflow: the selected month is the
+     LATEST, so it starts off-screen and the reader has to discover a drag
+     to find where they already are. Wrapped, every month is visible and
+     nothing moves. --r-md rather than a full pill for the same reason: a
+     stadium radius on a two-row container reads as a stretched control. */
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+}
+.seg > a,
+.seg > button {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  white-space: nowrap;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.seg > a:hover,
+.seg > button:hover:not(.on) {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+/* The selected one is a filled pill, not a bolder word: weight alone is not
+   a state anyone can see at a glance across seven of them. */
+.seg > a.on,
+.seg > button.on {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+.seg > a.on:hover {
+  background: var(--accent-hover);
+  color: var(--text-on-accent);
 }
 
 /* The shared search control (src/components/search-input.tsx). Its own
@@ -909,6 +1043,336 @@ textarea.field {
 @media print {
   .print-table-scroll {
     overflow-x: visible;
+  }
+}
+
+/* ---- the report sheet (2026-08-29) ------------------------------------
+ * The consumption reports render on screen AND print, and they were doing
+ * neither well: bare paragraphs on the page ground, so on screen they read
+ * as an unstyled page, and on paper as a memo somebody forgot to lay out.
+ * A report is a DOCUMENT — it gets a sheet, a masthead and a colophon.
+ *
+ * Everything here is print-aware by construction, because the print button
+ * is the whole reason these routes exist. The chrome (sheet border, shadow,
+ * radius, tinted bands) is stripped on paper by the @media print block at
+ * the end: a background tint either does not print at all (browsers strip
+ * them by default) or eats ink, and globals' own print rule already forces
+ * table ink to #000. Which is why no band is ever carried by colour ALONE —
+ * the Assessment column states it in words on both surfaces.
+ */
+.report-sheet {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  box-shadow: var(--e1);
+  overflow: hidden;
+}
+.report-masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 30px 32px 24px;
+  border-bottom: 1px solid var(--border);
+}
+/* The answer, given before the evidence. */
+.report-result {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 28px;
+  padding: 26px 32px;
+  background: var(--accent-subtle);
+  border-bottom: 1px solid var(--accent-line);
+}
+.report-facts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-bottom: 1px solid var(--border);
+}
+.report-facts > div {
+  padding: 16px 20px;
+  border-right: 1px solid var(--border-subtle);
+}
+.report-facts > div:first-child {
+  padding-left: 32px;
+}
+.report-facts > div:last-child {
+  border-right: none;
+}
+/* The period sits opposite the identity block, and is a real class rather
+   than a `text-right` utility so the phone rule below can flip it without
+   depending on unlayered-beats-utility cascade order — the subtlety that
+   already cost this codebase one bug (`.field` vs `w-auto`). */
+.report-period {
+  flex-shrink: 0;
+  text-align: right;
+}
+/* Days read DOWN each column, then across. A month is 28-31 readings, and
+   one column of them ran the printed report onto a second sheet; three
+   eleven-row columns fit A4 with room over. The column count is decided in
+   the page from the day count and arrives as --daily-cols. */
+.report-daily {
+  display: grid;
+  grid-template-columns: repeat(var(--daily-cols, 1), minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+.report-daily-col {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+}
+/* A reference table read by lookup, three of them across one sheet: the
+   app's standard 14px cell padding is right for a listing you scan and too
+   generous here — at the default the table wanted 267px inside a 244px
+   column and .report-daily-col's own overflow:hidden silently CLIPPED the
+   savings figures. Narrower cells, plus the short date, put it back inside
+   its column with room over. */
+.report-daily .tbl td {
+  padding: 8px 10px;
+}
+.report-daily .tbl thead th {
+  padding: 8px 10px;
+}
+/* `screen and` deliberately: a printed A4's CSS viewport is about 718px, so
+   an unqualified max-width rule here would collapse the print layout back to
+   the single column this whole arrangement exists to avoid. */
+@media screen and (max-width: 760px) {
+  .report-daily {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* The band tint, on the figure it describes.
+ *
+ * print-color-adjust: exact asks the browser to lay this ink down rather
+ * than optimising it away — without it the tints and the legend's swatches
+ * come out BLANK whenever "Background graphics" is off, which is the
+ * default in Chrome's print dialog (user's own PDF, 2026-08-29). The report
+ * still decodes in that state, because every legend entry states its range
+ * and every row prints its figure — but the colour coding is the point, so
+ * it should reach the paper. */
+.report-band {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: var(--r-sm);
+  font-weight: 700;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.report-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 20px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1.5px solid var(--border);
+  font-size: 13px;
+  font-weight: 600;
+}
+/* The key that replaced a word repeated on every row. Each entry states the
+   RANGE, not just the colour — see the page's own note on why.
+   It is ONE ROW (user-reported with a screenshot, 2026-08-29: a key that
+   wraps stops reading as a key). Kept on one line by the short labels in
+   BAND_KEY plus tight metrics here; flex-wrap stays as the safety valve, so
+   a month that somehow produces all six bands degrades to two lines rather
+   than pushing the sheet sideways. */
+.report-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 14px;
+  margin-top: 14px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.report-legend > div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.report-legend dt {
+  width: 20px;
+  height: 11px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.report-legend dd {
+  margin: 0;
+}
+.report-legend dd .num {
+  color: var(--text-subtle);
+}
+.report-band-excluded {
+  background: var(--surface-sunken);
+  /* Struck, so the swatch itself carries what the rows do rather than being
+     one more colour to look up. */
+  background-image: linear-gradient(
+    to bottom right,
+    transparent calc(50% - 0.5px),
+    var(--text-subtle) calc(50% - 0.5px),
+    var(--text-subtle) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
+}
+.report-exclusions {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+
+/* Four figures do not fit a phone. Two by two, and the seam rules follow. */
+@media (max-width: 640px) {
+  .report-facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  /* Side by side, the identity column collapsed to 76px — a two-line
+     society name over a fifteen-line address. Stacked, it gets the width. */
+  .report-masthead {
+    flex-direction: column;
+    gap: 12px;
+  }
+  .report-period {
+    text-align: left;
+  }
+  .report-facts > div:nth-child(2n) {
+    border-right: none;
+  }
+  .report-facts > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--border-subtle);
+  }
+  .report-facts > div:nth-child(3) {
+    padding-left: 32px;
+  }
+  .report-masthead,
+  .report-result {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+  .report-facts > div:first-child,
+  .report-facts > div:nth-child(3) {
+    padding-left: 20px;
+  }
+}
+.report-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 32px;
+  background: var(--surface-sunken);
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+/* An excluded day stays fully legible — it is evidence, and a report that
+   hides its own exclusions is the thing INV-02 exists to prevent. It is
+   only set back: a quieter ground, and the strike lives on the figures
+   (in the markup), never on the date that says which day they were. */
+.report-row-excluded td {
+  background: var(--surface-sunken);
+  color: var(--text-subtle);
+}
+/* On screen it identifies nothing the page does not already say. */
+.report-colophon {
+  display: none;
+}
+
+@media print {
+  .report-sheet {
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .report-masthead {
+    padding: 0 0 14px;
+    border-bottom: 2px solid #000;
+  }
+  .report-result {
+    margin-top: 18px;
+    padding: 14px 16px;
+    background: transparent !important;
+    border: 1.2px solid #000;
+  }
+  .report-facts {
+    margin-top: 14px;
+    border: 1px solid #ccc;
+    border-bottom: 1px solid #ccc;
+  }
+  .report-facts > div,
+  .report-facts > div:first-child {
+    padding: 10px 12px;
+    border-right: 1px solid #ccc;
+  }
+  .report-row-excluded td {
+    background: transparent !important;
+  }
+  .report-footer {
+    padding: 12px 0 0;
+    background: transparent !important;
+    border-top: 1px solid #ccc;
+  }
+  .report-colophon {
+    display: inline;
+  }
+  /* A <tfoot> is REPEATED at the foot of every printed page by default —
+     correct for a running subtotal, wrong for this: a report spilling to a
+     second page printed "13 days counted · 79.0%" after Fri 12, before the
+     two rows it is the total OF, and a reader would take the month as
+     ending there. As a row group it appears once, in document order. The
+     header keeps repeating, which is the half that helps. */
+  .report-sheet tfoot {
+    display: table-row-group;
+  }
+  .report-sheet thead {
+    display: table-header-group;
+  }
+  /* A day split across the page break is a figure separated from its date. */
+  .report-sheet tr {
+    break-inside: avoid;
+  }
+  /* Paper is the reason the columns exist — it must never fall back to one,
+     and the whole grid stays on one sheet. */
+  .report-daily {
+    gap: 12px;
+    break-inside: avoid;
+  }
+  /* A reference table is read looked-up, not read through, so it takes the
+     tighter setting on paper. This plus the columns is what brings a 31-day
+     month back onto a single A4. */
+  .report-sheet .tbl {
+    font-size: 11px;
+  }
+  .report-sheet .tbl td {
+    padding: 3.5px 7px;
+  }
+  .report-sheet .tbl thead th {
+    padding: 4px 7px;
+    font-size: 9px;
+  }
+  .report-band {
+    padding: 1px 5px;
+  }
+  .report-legend,
+  .report-exclusions {
+    break-inside: avoid;
+  }
+  /* A tinted pill goes to mud on a mono printer, and most browsers drop the
+     fill anyway — outlined, so the shape survives either way. The band is
+     stated in words beside it regardless. */
+  .chip {
+    background: transparent !important;
+    border-color: #666 !important;
   }
 }
 

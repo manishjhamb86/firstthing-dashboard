@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-28
+2026-08-29
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -2498,6 +2498,95 @@ purely additive (2 tables, 3 indexes, 4 FKs).
 Prisma — it is `--to-schema` now — and `prisma db execute` silently printed its help text and did
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
+
+## Every meter is polled, every restart says why, and the report prints on one sheet (2026-08-29) — user-specified
+
+**Three asks in one batch, each with a defect found by checking rather than by reading the diff.**
+
+**1. Every meter is fetched, assigned or not** ("we can map that later when user assigns
+that meter to some circuit"). `pollMeters` covered only bound devices; it now covers every
+device with an energy signal — 45 on the real account, up from 19. The point is the HISTORY:
+a meter bound to a circuit in November arrives with months of readings and reliability behind
+it, and that is not recoverable after the fact, because the vendor serves the present and
+never the past.
+
+**Every meter is SAMPLED; only an assigned one is ALERTED on.** An unbound device has no
+circuit, no society and no owner, so an alert for it names nothing, reaches nobody, and thirty
+of them bury the two that matter. Proven against real rows: 45 sampled, 43 unassigned, **0
+alerts** raised for them — while 14 unassigned meters were recorded offline, so their outages
+are in the history regardless. Triage ("Needs attention") stays assigned-only for the same
+reason: 2, not 43.
+
+**A deploy alone would NOT have shown the data, and that is the part worth keeping.** The State
+column was computed only for assigned meters (`watched = hasEnergySignal && (circuitId ||
+societyId)`), so it read "Unassigned" beside a circuit column already saying "Not assigned" —
+two columns repeating one fact while the health we now hold went unshown. State is health for
+every polled meter now; a null state means only "this device reports no electrical parameters",
+and the chip says **"No energy signal"**.
+
+**The regression that caused, found by probing rather than assuming**: FIVE places used
+`state === null` as a PROXY for "unassigned" — safe while state was only computed for assigned
+meters, wrong the moment it meant health. The list read **"Assigned 45 / Not assigned 0"** on a
+database with 43 unassigned. `MeterRow.assigned` is now an explicit field and every one of those
+sites reads it. **The general shape**: a field used as a stand-in for another fact will break
+silently the day the first field changes meaning, and the checks that passed before the probe
+were passing against zero rows, which proves nothing.
+
+**2. Every restart records its reason** ("we can see that in future if its restarting due to
+some fault"). pm2 showed 139 restarts on the worker and 1472 on the app with no attributable
+cause anywhere — the worker's pm2 *error* log held nothing but pnpm's own
+`$ tsx scripts/job-worker.ts` banner, one line per start. A deploy and a crash were
+indistinguishable from outside.
+
+The design is that **the pair is the answer**: a clean stop logs `..._stopping` with its signal,
+then `..._started`. A `_started` with no `_stopping` before it was not a deploy, whatever anybody
+remembers. Verified by signalling real processes, not by reading the diff — `job.worker_stopping
+signal SIGINT uptimeSec 107`, `job.worker_crashed reason mainRejected` with the stack naming the
+failing line, and `web.server_stopping signal SIGTERM` against a production `next start`.
+
+What the existing logs then settled: the app's only real error is a `ChunkLoadError` for a
+missing `.next/server/chunks/…` file — the already-documented "a build rewrote .next while the
+old process was still serving" artifact — and the worker's restart timestamps cluster inside
+working hours. **The restarts are deploys.** `unstable restarts` was 0 throughout.
+
+**One Next.js constraint worth keeping**: `register()` is compiled for the EDGE runtime too,
+where `process.on`/`process.exit` do not exist, and the build fails **statically** on them
+however unreachable a plain `if (process.env.NEXT_RUNTIME === "nodejs")` guard makes them. The
+Node code has to live in its own module, dynamically imported inside the guard — Next's own
+documented pattern (`01-app/02-guides/instrumentation.md` § "Importing runtime-specific code").
+`onRequestError` also logs server errors with their **digest**, so an opaque production digest a
+user reads off their screen can finally be traced. `GIT_COMMIT` is read but unset — worth
+exporting in the deploy so a restart storm becomes attributable to a release.
+
+**3. The monthly savings report prints on one A4** — reported with the actual PDF after a first
+round of reformatting. Two real defects, both invisible to the checks that existed:
+
+- **The shell reserved the sidebar's space on paper.** `<aside>` is `display:none` in print, but
+  the `lg:pl-[264px]` that makes ROOM for it is not, and neither is the content wrapper's 32px
+  and 1600px cap — so every printed page was laid out in a column starting 296px from the left,
+  squeezing the report into the right half and clipping the day columns. **Why no check caught
+  it**: Playwright's `page.pdf()` re-lays-out at the paper width (~794px), which is BELOW the
+  `lg` breakpoint, so the padding never applied in the test and did apply in a real browser
+  printing from a wide window. *A print check has to run at a WIDE viewport to be worth
+  anything.* `.app-shell-content` / `.app-shell-main` are stable hooks the print block zeroes.
+- **A 31-day month was one 31-row column.** The days now read DOWN each of three columns and
+  across; the per-row assessment word became a **legend**, whose entries state the numeric RANGE
+  rather than only a colour — so every row decodes from the figure printed in it, which is what
+  has to be true on a mono printer, in greyscale, and for a reader who cannot separate the tints.
+  All nine months on the test circuit now print on **one A4**, four of them 31-day.
+
+Smaller, each a real bug: `<tfoot>` REPEATS on every printed page, so a spilled report printed
+its month total before the two rows it was the total of (it is a row group in print now); the
+day columns were silently CLIPPED by `overflow:hidden` (23px, cutting savings figures); the
+masthead collapsed to a 76px column on a phone, giving a two-line society name over a
+*fifteen-line* address; and the page rendered a `<main>` inside the shell's own `<main>`.
+
+Also fixed: `.seg` (a new segmented control) WRAPS rather than scrolling — the selected month is
+the latest, so a scrolling strip would start off-screen and make the reader drag to find where
+they already are.
+
+**Verified**: 694 unit tests, monthly report 65/65, unassigned meters 7/7, smoke 6/6,
+`tsc`/`lint`/`build` clean, zero console errors. No schema change in this batch.
 
 ## A circuit below its contracted band is a notification, and it comes back (2026-08-29) — user-specified
 

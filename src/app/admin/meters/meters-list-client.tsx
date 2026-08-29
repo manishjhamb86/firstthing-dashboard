@@ -95,10 +95,10 @@ export function MetersListClient({
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const matched = meters.filter((m) => {
-      if (filter === "assigned" && m.state === null) return false;
-      if (filter === "attention" && (m.state === null || m.state === "reporting") && m.openAlerts.length === 0)
+      if (filter === "assigned" && !m.assigned) return false;
+      if (filter === "attention" && (!m.assigned || m.state === null || m.state === "reporting") && m.openAlerts.length === 0)
         return false;
-      if (filter === "unassigned" && (m.state !== null || !m.hasEnergySignal)) return false;
+      if (filter === "unassigned" && (m.assigned || !m.hasEnergySignal)) return false;
       if (!q) return true;
       return [m.name, m.societyName, m.circuitLabel, m.productModel]
         .filter(Boolean)
@@ -119,9 +119,9 @@ export function MetersListClient({
   }
 
   const counts: Record<Filter, number> = {
-    assigned: meters.filter((m) => m.state !== null).length,
-    attention: meters.filter((m) => (m.state !== null && m.state !== "reporting") || m.openAlerts.length > 0).length,
-    unassigned: meters.filter((m) => m.state === null && m.hasEnergySignal).length,
+    assigned: meters.filter((m) => m.assigned).length,
+    attention: meters.filter((m) => (m.assigned && m.state !== null && m.state !== "reporting") || m.openAlerts.length > 0).length,
+    unassigned: meters.filter((m) => !m.assigned && m.hasEnergySignal).length,
     all: meters.length,
   };
 
@@ -346,7 +346,7 @@ export function MetersListClient({
                   <td className="text-[13px]">
                     {m.ownerLabel ?? (
                       <span className="text-[var(--text-subtle)]">
-                        {m.state === null ? "—" : "Nobody"}
+                        {!m.assigned ? "—" : "Nobody"}
                       </span>
                     )}
                   </td>
@@ -360,8 +360,8 @@ export function MetersListClient({
                           <button
                             type="button"
                             className="btn-ghost btn-sm"
-                            disabled={pending || m.state === null}
-                            title={m.state === null ? "Assign it first" : "Read this meter now"}
+                            disabled={pending || !m.hasEnergySignal}
+                            title={!m.hasEnergySignal ? "This device reports no energy readings" : "Read this meter now"}
                             onClick={() =>
                               start(async () => {
                                 setError(null);

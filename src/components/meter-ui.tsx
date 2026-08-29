@@ -53,7 +53,12 @@ function readingCaption(meter: MeterRow): { text: string; warn: boolean } {
 }
 
 export function MeterStateChip({ state }: { state: string | null }) {
-  if (!state) return <StatusChip tone="neu">Unassigned</StatusChip>;
+  // A null state now means only one thing: the device reports no electrical
+  // parameters, so there is nothing to poll. It used to also mean "nobody
+  // has assigned this one", which put "Unassigned" in this column beside a
+  // circuit column already saying "Not assigned" — two columns repeating one
+  // fact while the health we actually hold went unshown.
+  if (!state) return <StatusChip tone="neu">No energy signal</StatusChip>;
   const meta = STATE_META[state];
   if (!meta) return <StatusChip tone="neu">{state}</StatusChip>;
   return <StatusChip tone={meta.tone}>{meta.label}</StatusChip>;

@@ -245,8 +245,72 @@ async function tick() {
   }
 }
 
+/**
+ * Why this process stopped — the question a restart count cannot answer.
+ *
+ * pm2 reported 139 restarts on the worker and 1472 on the app with no record
+ * anywhere of a single cause: the worker's pm2 "error log" held nothing but
+ * pnpm's own `$ tsx scripts/job-worker.ts` banner, one line per start
+ * (user-asked 2026-08-29). A deploy and a crash looked identical from the
+ * outside, which is exactly the case where a restart count stops being
+ * evidence of anything.
+ *
+ * So every exit path now writes one line before going. A clean pm2 restart
+ * logs `job.worker_stopping` with its signal and then `job.worker_started`;
+ * a fault logs `job.worker_crashed` with the stack. The PAIR is the answer —
+ * a `job.worker_started` with no `job.worker_stopping` before it was not a
+ * deploy, whatever anybody remembers.
+ */
+let stopping = false;
+
+function logExit(event: string, fields: Record<string, unknown>) {
+  // Guard: an uncaught exception during shutdown must not produce a second,
+  // contradictory reason for the same exit.
+  if (stopping) return;
+  stopping = true;
+  logger[event === "job.worker_stopping" ? "info" : "error"](event, {
+    pid: process.pid,
+    uptimeSec: Math.round(process.uptime()),
+    ...fields,
+  });
+}
+
+for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+  process.on(signal, () => {
+    // pm2 sends SIGINT on restart/stop, so this is the DEPLOY case: an
+    // orderly stop somebody asked for, not a failure.
+    logExit("job.worker_stopping", { signal, reason: "signal" });
+    process.exit(0);
+  });
+}
+
+process.on("uncaughtException", (err) => {
+  logExit("job.worker_crashed", {
+    reason: "uncaughtException",
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
+  });
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  // Not fatal on its own — Node's default is to terminate, but a rejected
+  // promise in one job must not take the whole queue down, so this records
+  // it and lets the loop carry on.
+  logger.error("job.worker_unhandled_rejection", {
+    pid: process.pid,
+    error: reason instanceof Error ? reason.stack ?? reason.message : String(reason),
+  });
+});
+
 async function main() {
-  logger.info("job.worker_started", {});
+  logger.info("job.worker_started", {
+    pid: process.pid,
+    node: process.version,
+    // So a restart storm is attributable to a release rather than guessed at.
+    commit: process.env.GIT_COMMIT ?? null,
+  });
   await reclaimStaleJobs();
   await ensureGatepassSweepScheduled();
   await ensureTankSampleScheduled();
@@ -258,6 +322,9 @@ async function main() {
 }
 
 main().catch((err) => {
-  logger.error("job.worker_crashed", { error: String(err) });
+  logExit("job.worker_crashed", {
+    reason: "mainRejected",
+    error: err instanceof Error ? err.stack ?? err.message : String(err),
+  });
   process.exit(1);
 });

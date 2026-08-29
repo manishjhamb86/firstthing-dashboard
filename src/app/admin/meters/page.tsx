@@ -50,12 +50,17 @@ export default async function MetersPage() {
 
   const authorised = isAuthorised(cfg);
   const metering = rows.filter((r) => r.hasEnergySignal);
-  const watched = rows.filter((r) => r.state !== null);
+  // "Watched" is the fleet the health band is ABOUT: the meters somebody
+  // owns and is chased over. Every metering device is polled now, so
+  // `state !== null` no longer means what it did — it means "we have a
+  // reading", which is all 45 and would dilute the band with devices nobody
+  // has taken responsibility for.
+  const watched = rows.filter((r) => r.assigned);
   const reporting = watched.filter((r) => r.state === "reporting");
   const alerts = rows.flatMap((r) =>
     r.openAlerts.map((a) => ({ ...a, meterId: r.id, meterName: r.name, ownerLabel: r.ownerLabel })),
   );
-  const unassigned = metering.filter((r) => r.state === null);
+  const unassigned = metering.filter((r) => !r.assigned);
   const historyHours = rows.reduce((s, r) => s + r.hourlyCount, 0);
 
   return (

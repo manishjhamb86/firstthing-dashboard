@@ -44,17 +44,29 @@ echo "  backup \$BACKUP (\$SIZE bytes)"
 git fetch origin "$BRANCH"
 git checkout "$BRANCH"
 git reset --hard "origin/$BRANCH"
-echo "  now at \$(git rev-parse --short HEAD) — \$(git log -1 --pretty=%s)"
+COMMIT=\$(git rev-parse --short HEAD)
+echo "  now at \$COMMIT — \$(git log -1 --pretty=%s)"
 
 pnpm install --frozen-lockfile
 pnpm prisma migrate deploy
 pnpm prisma generate
 pnpm build
 
+# Stamp the release onto both processes. instrumentation-node.ts and
+# job-worker.ts read GIT_COMMIT and put it on every startup line, so a
+# restart is attributable to a release instead of guessed at — which is the
+# whole point of having asked why they restart. --update-env is what carries
+# it in, and pm2 keeps it across a crash-restart afterwards.
+export GIT_COMMIT="\$COMMIT"
 pm2 restart firsthing-dashboard --update-env
 pm2 restart firsthing-job-worker --update-env
 sleep 4
 pm2 describe firsthing-dashboard | grep -E 'status|unstable restarts'
+# The reason each process is running what it is running — one line each,
+# from the app's and the worker's own logs rather than from pm2's counters.
+echo "  --- startup lines ---"
+tail -n 200 ~/.pm2/logs/firsthing-dashboard-out.log | grep -o '"event":"web.server_[a-z_]*"[^}]*' | tail -2 || true
+tail -n 200 ~/.pm2/logs/firsthing-job-worker-out.log | grep -o '"event":"job.worker_[a-z_]*"[^}]*' | tail -2 || true
 EOF
 
 echo "▸ deployed — https://stage.firsthing.earth"

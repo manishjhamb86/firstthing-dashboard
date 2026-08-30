@@ -175,7 +175,7 @@ export default async function TankStatusPage({
             {tank.hasLevelSignal ? (
               <>
                 <span className="lbl mb-2">{tank.society ? "Move to a different society" : "Assign to a society"}</span>
-                <AssignControl tankId={tank.id} currentSocietyId={tank.society?.id ?? null} societies={societies} />
+                <AssignControl tankId={tank.id} currentSocietyId={tank.society?.id ?? null} currentSetup={tank.setupType ?? null} societies={societies} />
                 <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
                   Portal accounts of the assigned society see this tank — nobody else does (INV-05).
                 </p>

@@ -23,7 +23,15 @@ export const resolvePortalViewer = cache(async () => {
 
   const profile = await db.profile.findUnique({
     where: { id: session.user.id },
-    select: { id: true, email: true, name: true, societyId: true, portalAuthority: true, isActive: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      societyId: true,
+      portalAuthority: true,
+      isActive: true,
+      grants: true,
+    },
   });
 
   if (!profile) {
@@ -45,5 +53,8 @@ export const resolvePortalViewer = cache(async () => {
     societyId: profile.societyId,
     // The authority in force right now, not the one minted at login.
     role: profile.portalAuthority,
+    // Same freshness rule as the authority: a grant the office-bearer just
+    // revoked must stop working on the next request, not at token expiry.
+    grants: profile.grants,
   };
 });

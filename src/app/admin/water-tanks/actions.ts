@@ -140,3 +140,31 @@ export async function syncTanksNow(): Promise<{ error?: string; devices?: number
     return { error: `Sync failed: ${err instanceof Error ? err.message : "unknown error"}` };
   }
 }
+
+/**
+ * Classify what a tank supplies — Domestic / Flush / STP — so the portal can
+ * group it the way a resident thinks about supply (customer portal,
+ * 2026-08-29). Operations-gated like assignment: it changes what a society
+ * is shown about its own water.
+ */
+export async function setTankSetup(input: {
+  tankId: string;
+  setup: "domestic" | "flush" | "stp" | null;
+}): Promise<{ error?: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!admin.permissions.includes("manage_users")) {
+    logger.warn("tank.setup_refused", { tankId: input.tankId, actorId: admin.id, reason: "permission" });
+    return { error: "Classifying tanks is a society-management action (Manage users)." };
+  }
+  if (input.setup !== null && !["domestic", "flush", "stp"].includes(input.setup)) {
+    return { error: "That is not a tank setup." };
+  }
+  await db.waterTank.update({
+    where: { id: input.tankId },
+    data: { setupType: input.setup },
+  });
+  logger.info("tank.setup_set", { tankId: input.tankId, setup: input.setup, actorId: admin.id });
+  revalidatePath("/admin/water-tanks");
+  return {};
+}

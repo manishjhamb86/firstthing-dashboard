@@ -2,9 +2,8 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
-import { resolveTheme } from "@/lib/resolve-theme";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { PortalShell } from "../portal-shell";
+import { hasGrant } from "@/lib/portal-access";
 import { TankVisual } from "@/components/tank-visual";
 import { formatInstant, timeAgo } from "@/lib/format-date";
 import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
@@ -60,17 +59,14 @@ function Spark({ points, quiet }: { points: number[]; quiet: boolean }) {
 export default async function PortalTanksPage() {
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
+  // The sidebar hiding the tab is a courtesy; this redirect is the boundary.
+  if (!hasGrant(viewer, "water_tanks")) redirect("/portal");
   const societyId = viewer.societyId;
 
-  const [theme, society, tanks] = await Promise.all([
-    resolveTheme(),
-    db.society.findUnique({ where: { id: societyId } }),
-    db.waterTank.findMany({
-      where: { societyId, hasLevelSignal: true },
-      orderBy: { name: "asc" },
-    }),
-  ]);
-  if (!society) redirect("/login");
+  const tanks = await db.waterTank.findMany({
+    where: { societyId, hasLevelSignal: true },
+    orderBy: { name: "asc" },
+  });
 
   // Live refresh, best-effort and bounded: the page renders from the mirror
   // when Tuya is slow or down — residents get the last sample, honestly
@@ -144,9 +140,27 @@ export default async function PortalTanksPage() {
       <StatusChip tone="ok">All healthy</StatusChip>
     );
 
+  // Grouped the way a resident thinks about supply — Domestic, Flush, STP
+  // (the revamp's ask). A tank the back office has not classified yet lands
+  // in its own stated group rather than being guessed into one.
+  const SETUP_META: { key: string | null; title: string; note: string }[] = [
+    { key: "domestic", title: "Domestic", note: "drinking & household supply" },
+    { key: "flush", title: "Flush", note: "recycled supply for flushing" },
+    { key: "stp", title: "STP", note: "treated water storage" },
+    { key: null, title: "Not yet classified", note: "FirsThing will assign these to a setup" },
+  ];
+  const groups = SETUP_META.map((g) => ({
+    ...g,
+    rows: rows.filter((r) => (r.tank.setupType ?? null) === g.key),
+  })).filter((g) => g.rows.length > 0);
+
   return (
-    <PortalShell theme={theme} email={viewer.email} societyName={society.name}>
-      <PageHeader title="Water tanks" subtitle="Live levels for every tank in your society." chip={headerChip} />
+    <>
+      <PageHeader
+        title="Water tanks"
+        subtitle="Live levels, grouped by what each setup supplies."
+        chip={headerChip}
+      />
 
       {tanks.length === 0 ? (
         <EmptyState title="No tanks connected yet">
@@ -160,11 +174,17 @@ export default async function PortalTanksPage() {
               cell of a four-column grid with three empty ones next to it
               (user-reported 2026-08-26); four tanks make two columns, where
               the history wraps under the facts on its own. */}
+          {groups.map((g) => (
+          <section key={g.title} className="mb-7">
+          <div className="mb-3 flex items-baseline gap-2.5">
+            <h2 className="text-[15px] font-bold">{g.title}</h2>
+            <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{g.note}</span>
+          </div>
           <div
             className="grid max-w-[1180px] gap-5"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}
           >
-            {rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, spark }) => {
+            {g.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, spark }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-6 gap-y-5 p-5 sm:p-6">
@@ -225,11 +245,13 @@ export default async function PortalTanksPage() {
               );
             })}
           </div>
-          <p className="mt-6 text-[13px]" style={{ color: "var(--text-muted)" }}>
+          </section>
+          ))}
+          <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>
             Levels refresh automatically. Only tanks assigned to your society appear here.
           </p>
         </>
       )}
-    </PortalShell>
+    </>
   );
 }

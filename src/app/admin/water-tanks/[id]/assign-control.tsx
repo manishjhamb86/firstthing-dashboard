@@ -3,22 +3,37 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorText } from "@/components/ui";
-import { assignTanks } from "../actions";
+import { assignTanks, setTankSetup } from "../actions";
 
 /** Assign or move this one tank — the single-tank half of the bulk bar. */
 export function AssignControl({
   tankId,
   currentSocietyId,
+  currentSetup,
   societies,
 }: {
   tankId: string;
   currentSocietyId: string | null;
+  /** domestic | flush | stp | null — what this tank supplies. */
+  currentSetup: string | null;
   societies: { id: string; name: string; location: string }[];
 }) {
   const router = useRouter();
   const [choice, setChoice] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  function saveSetup(setup: string) {
+    setError(null);
+    startTransition(async () => {
+      const result = await setTankSetup({
+        tankId,
+        setup: setup === "" ? null : (setup as "domestic" | "flush" | "stp"),
+      });
+      if (result.error) setError(result.error);
+      else router.refresh();
+    });
+  }
 
   function save(societyId: string | null) {
     setError(null);
@@ -65,6 +80,27 @@ export function AssignControl({
             Unassign
           </button>
         )}
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2.5">
+        <label htmlFor="tank-setup" className="lbl" style={{ display: "inline" }}>
+          Setup
+        </label>
+        <select
+          id="tank-setup"
+          className="field field-auto"
+          value={currentSetup ?? ""}
+          onChange={(e) => saveSetup(e.target.value)}
+          disabled={pending}
+          style={{ minWidth: 200 }}
+        >
+          <option value="">Not classified</option>
+          <option value="domestic">Domestic — household supply</option>
+          <option value="flush">Flush — recycled supply</option>
+          <option value="stp">STP — treated storage</option>
+        </select>
+        <span className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+          groups this tank on the society&apos;s portal
+        </span>
       </div>
       {error && <div className="mt-2"><ErrorText>{error}</ErrorText></div>}
     </div>

@@ -1,50 +1,86 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Droplets, LayoutDashboard, Lightbulb, Users, Gauge } from "lucide-react";
+import {
+  Boxes,
+  Droplets,
+  FileText,
+  LayoutDashboard,
+  LifeBuoy,
+  ShieldCheck,
+  Zap,
+} from "lucide-react";
 import { NavShell, type NavItem } from "@/components/nav-shell";
+import { NotificationBell } from "@/components/notification-bell";
 import type { ThemeId } from "@/lib/theme";
 
 /**
- * The society portal's chrome — the same shell the back office wears
- * (NavShell), with the society's own four sections in the sidebar.
+ * The society portal's chrome — the same NavShell the back office wears,
+ * with the member's own GRANTED modules in the sidebar (customer portal
+ * revamp, 2026-08-29).
  *
- * It used to be a bare header plus a row of pill tabs. That was a second
- * navigation idiom inside one product, and it had already overflowed a phone
- * once (the fourth tab sat 60px off-screen at 390px). The user asked for the
- * admin panel's look and its left-hand menu, 2026-08-26; this is that.
+ * This deliberately breaks the older "every item renders whether or not the
+ * society has anything behind it" rule, because the reason a tab is absent
+ * changed: it used to mean "no data yet" (a page problem — INV-06 empty
+ * states), and now it means "not yours to see" (an access decision the
+ * office-bearer made). A menu of modules someone may not open is not a menu
+ * they can learn, it is a list of refusals. The pages still re-check the
+ * grant server-side — the sidebar is a courtesy, never the boundary.
  *
- * Every item renders whether or not the society has anything behind it yet —
- * a menu whose entries appear and vanish as data arrives is a menu nobody can
- * learn. The pages carry the empty states instead (INV-06).
+ * Items arrive as serializable keys from the server layout (which is where
+ * the grants are resolved, DB-fresh); the icon components live here because
+ * a Server Component cannot pass component references across the boundary.
  */
-const ITEMS: NavItem[] = [
-  { href: "/portal", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/portal/tanks", label: "Water tanks", icon: Droplets },
-  { href: "/portal/lighting", label: "Lighting", icon: Lightbulb },
-  { href: "/portal/meters", label: "Meters", icon: Gauge },
-  { href: "/portal/committee", label: "Committee", icon: Users },
-];
+const ICONS = {
+  dashboard: LayoutDashboard,
+  electricity: Zap,
+  water: Droplets,
+  documents: FileText,
+  inventory: Boxes,
+  support: LifeBuoy,
+  admin: ShieldCheck,
+} as const;
+
+export type PortalNavKey = keyof typeof ICONS;
+
+export type PortalNavEntry = {
+  key: PortalNavKey;
+  href: string;
+  label: string;
+  exact?: boolean;
+};
 
 export function PortalShell({
   theme,
   email,
   societyName,
+  entries,
+  bellCount,
   children,
 }: {
   theme: ThemeId;
   email: string;
   /** Named in the sidebar, so whose data this is never has to be inferred. */
   societyName: string;
+  entries: PortalNavEntry[];
+  /** Open, society-scoped alerts — what the bell is FOR, not a message count. */
+  bellCount: number;
   children: ReactNode;
 }) {
+  const items: NavItem[] = entries.map((e) => ({
+    href: e.href,
+    label: e.label,
+    icon: ICONS[e.key],
+    exact: e.exact,
+  }));
   return (
     <NavShell
       theme={theme}
       email={email}
-      items={ITEMS}
+      items={items}
       navLabel={societyName}
       footerNote="FirsThing · your society's portal"
+      extras={<NotificationBell count={bellCount} href="/portal/notifications" surface="content" />}
     >
       {children}
     </NavShell>

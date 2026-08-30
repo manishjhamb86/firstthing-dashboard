@@ -2499,6 +2499,78 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The customer portal rebuilt around module grants (2026-08-29) — user-specified, on `customer-portal`
+
+**The ask**: a full portal revamp — dashboard with electricity and water stats, an Electricity page
+(circuit-wise kWh and ₹), tanks grouped Domestic/Flush/STP, Documents with downloads, deployed
+Inventory, tickets (complaint / device replacement / pickup) with stats, a society-admin page, a
+notifications section — and above all: **a tab is visible only to a member given that access**.
+Designed first on a canvas (8 screens, approved shape), then built on the new `customer-portal`
+branch.
+
+**The access model is a `PortalGrant[]` enum array on Profile** — the same native-array shape as
+`AdminPermission`, for the same reason. Two rules live in one pure module
+(`src/lib/portal-access.ts`, 13 unit cases) and nowhere else: **the office-bearer holds every grant
+implicitly** (computed, never stored — stored rows would strand full access on a GATE-04 transfer),
+and **tickets_manage implies tickets_view**. Authority and grants deliberately do not merge:
+authority is who you are to the society (binding acts still need office_bearer), a grant is which
+modules you may use. Editing grants is the office-bearer's act alone — `society_admin` lets a
+member SEE the access page, not change it, the same read/act split as the ticket grants.
+**The migration backfills every existing portal account with all six module grants** (not
+society_admin), because the tabs were visible to everyone yesterday and an empty default would
+have revoked access nobody decided to revoke.
+
+**Routing**: one `src/app/portal/layout.tsx` now owns the shell (pages had each carried their own
+PortalShell); the sidebar lists only granted modules, and every page re-checks its grant
+server-side — the deliberate break from the old "every item renders" rule is documented in
+portal-shell.tsx: a tab's absence used to mean "no data yet" (INV-06's problem) and now means "not
+yours to see" (an access decision). Lighting + Meters merged into **Electricity**; Committee became
+**Society admin** (members AND their access); old URLs redirect.
+
+**Figures**: `src/lib/portal-energy.ts` computes kWh exactly as the monthly report does (readings
+after the replacement date against the INV-07-replayed baseline) — the resident's screen and the
+operator's cannot disagree. **₹ comes only from released CircuitFeeLines** (INV-02); absent one,
+the tile says "appears once the month is billed". The headline month is the month of the LATEST
+stored reading, not the wall clock — readings arrive by monthly export, and a hero that zeroes on
+the 1st reads as an outage. The dashboard keeps everything the old one carried that the design
+lacked: the offer card, the batch-review gate (CON-21), the shared demo report.
+
+**Tickets** are a new model (open → in_progress → resolved), audit-light for v1; resolving
+REQUIRES a note — a closed ticket with no stated outcome is indistinguishable from one closed to
+tidy a list. **Tank setups** are a new nullable enum on WaterTank, set from the admin tank page;
+an unclassified tank lands in a stated "Not yet classified" group, never guessed. **Notifications**
+are derived from rows of record (alerts, filings, ticket updates — same no-shadow-table call as
+the admin notification centre); per-member read state needs its own table and is deferred, stated.
+**Documents** lists the resident-facing StoredDocument types only (agreement, savings/demo/
+inspection reports) — KYC and meter exports are the society's documents but were collected for
+compliance, and publishing them to the committee would be a decision nobody made.
+
+**One semantic bug caught by strengthening a weak check, not by the suite passing**: Inventory
+counted "installed lights" from `replacementCount` alone — 0 for Ace City, whose backfilled device
+line (96 × 20W, `historical`) IS the installed fitting with no before/after pair. The first e2e
+run passed showing 0. The rule now: a replacement pair counts its replacement, a historical line
+on a replaced circuit counts itself, and an `excludedFromCalculation` line is "on the circuit, not
+replaced by FirsThing" (the CON-16 amendment made resident-visible).
+
+**Verified 34/34, twice consecutively** (the suite resets its own fixtures — run 2 initially
+failed on run 1's residue: once tickets_manage was granted, the view-label's "included with
+Tickets — manage" note made a has-text selector ambiguous). Highlights: the circuit savings figure
+asserted equal to an independent SQL computation (61.4%); a limited member's sidebar shows only
+granted modules AND direct navigation to /portal/electricity and /portal/admin is refused
+server-side; resolving a ticket without a note refused with nothing written; INV-05 driven from a
+second society (no tickets, no documents leak); and **the live-demotion refusal through a path the
+client cannot pre-block** — the office-bearer designation moved away in Postgres behind the open
+access editor, the save refused by name, nothing written. Zero console errors on every pass.
+`tsc`/`lint`/`build` clean; 707 unit tests (13 new).
+
+**Dev fixtures kept deliberately** for review: `ob@ace-city.test` / `limited@ace-city.test`
+(password123, ids `pf-*`) against Ace City's real readings, and two dev tanks assigned to Ace City
+(one domestic, one unclassified). **Not done, stated**: per-member notification read state; the
+back office has no ticket surface yet (societies can raise and resolve, FirsThing staff cannot see
+them outside the DB); water "savings" figures (nothing measures water volume saved — the water
+card shows levels and sensor health); the design's Today/Month/Year period toggle (the headline is
+the latest recorded month — a wall-clock toggle over export-based data would mislead).
+
 ## Every meter is polled, every restart says why, and the report prints on one sheet (2026-08-29) — user-specified
 
 **Three asks in one batch, each with a defect found by checking rather than by reading the diff.**

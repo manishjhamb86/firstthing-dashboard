@@ -64,6 +64,32 @@ enum PortalAuthority {
   @@map("portal_authority")
 }
 
+/// What a portal member may SEE and DO, module by module (the customer-portal
+/// revamp, 2026-08-29). A sidebar tab renders only with its grant, and every
+/// page re-checks server-side — the same shape as AdminPermission, for the
+/// same reason: a native enum array, not a join table, for a small static set.
+///
+/// Authority and grants answer different questions and deliberately do not
+/// merge: PortalAuthority is WHO someone is to the society (GATE-04's binding
+/// acts still require office_bearer specifically); a grant is which modules
+/// they may use. An office-bearer implicitly holds every grant — computed in
+/// src/lib/portal-access.ts, never stored, so a transfer cannot strand stale
+/// rights on the old holder's row.
+enum PortalGrant {
+  electricity
+  water_tanks
+  documents
+  inventory
+  tickets_view
+  /// Raise and update requests. Implies tickets_view (computed, not stored).
+  tickets_manage
+  /// See the members-and-access page. Editing access itself stays the
+  /// office-bearer's act alone.
+  society_admin
+
+  @@map("portal_grant")
+}
+
 // docs/product/05a-theme-system.md §3.2b: the choice belongs to the account,
 // not the browser or the OS — stored server-side, never inferred from
 // prefers-color-scheme (the doc is explicit that the theme never changes by
@@ -325,6 +351,7 @@ model Society {
   // MS-08
   monthlyCalculations MonthlyCalculation[]
   storedDocuments     StoredDocument[]
+  tickets             Ticket[]
 
   @@map("societies")
 }
@@ -373,6 +400,10 @@ model Profile {
   passwordHash    String           @map("password_hash")
   name            String?
   portalAuthority PortalAuthority? @map("portal_authority")
+  /// Module access (see PortalGrant). Empty means no module tabs — the
+  /// migration backfills existing accounts with everything they could see
+  /// before grants existed, so nobody lost access on deploy.
+  grants          PortalGrant[]    @default([])
   societyId       String?          @map("society_id")
   isActive        Boolean          @default(true) @map("is_active")
   themePreference Theme?           @map("theme_preference")
@@ -386,6 +417,9 @@ model Profile {
   projectsWatched InstallationProject[]    @relation("ProjectOnlooker")
   daysWatched     InstallationPlannedDay[] @relation("PlannedDayOnlooker")
   batchesReviewed BatchReview[]            @relation("BatchReviewedBy")
+
+  ticketsRaised  Ticket[] @relation("TicketRaisedBy")
+  ticketsTouched Ticket[] @relation("TicketStatusBy")
 
   @@index([societyId])
   @@map("profiles")
@@ -2493,6 +2527,10 @@ model WaterTank {
   /// is what the Smart Life app shows and what we showed as 45% until this
   /// was found (2026-08-25). Every stored level is normalised through it.
   levelMax         Int       @default(100) @map("level_max")
+  /// Which supply this tank serves — Domestic / Flush / STP — so the portal
+  /// can group tanks the way a resident thinks about them. Null until the
+  /// back office classifies it; the portal states that rather than guessing.
+  setupType        TankSetup? @map("setup_type")
   /// The assignment that scopes portal visibility (INV-05): a society's
   /// portal accounts see exactly the tanks whose societyId is theirs.
   societyId        String?   @map("society_id")
@@ -2833,6 +2871,61 @@ model MeterCsvImport {
 /// for one document would drift, which is exactly why the archived app's
 /// unified "Documents" listing was built as a live query across the real
 /// tables rather than as its own table (2026-08-06).
+/// How a resident thinks about a tank: what it supplies.
+enum TankSetup {
+  domestic
+  flush
+  stp
+
+  @@map("tank_setup")
+}
+
+enum TicketType {
+  complaint
+  /// A FirsThing fitting or sensor that needs swapping out.
+  device_replacement
+  /// Removed or spare material waiting to be collected.
+  pickup
+
+  @@map("ticket_type")
+}
+
+enum TicketStatus {
+  open
+  in_progress
+  resolved
+
+  @@map("ticket_status")
+}
+
+/// A society's complaint / replacement / pickup request (customer portal,
+/// 2026-08-29). Raised and tracked by portal members holding tickets_manage;
+/// deliberately audit-light for v1 — status transitions stamp who and when on
+/// the row and log through src/lib/logger.ts, without a per-event table.
+model Ticket {
+  id             String       @id @default(cuid())
+  societyId      String       @map("society_id")
+  type           TicketType
+  status         TicketStatus @default(open)
+  subject        String
+  detail         String
+  raisedById     String       @map("raised_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  resolvedAt     DateTime?    @map("resolved_at")
+  /// Required when resolving — a closed ticket with no stated outcome is
+  /// indistinguishable from one closed to tidy a list.
+  resolutionNote String?      @map("resolution_note")
+  lastStatusById String?      @map("last_status_by_id")
+
+  society      Society  @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  raisedBy     Profile  @relation("TicketRaisedBy", fields: [raisedById], references: [id])
+  lastStatusBy Profile? @relation("TicketStatusBy", fields: [lastStatusById], references: [id])
+
+  @@index([societyId, status])
+  @@map("tickets")
+}
+
 model StoredDocument {
   id        String @id @default(cuid())
   /// The catalog id from src/lib/document-catalog.ts.

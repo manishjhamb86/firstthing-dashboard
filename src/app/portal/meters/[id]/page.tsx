@@ -1,10 +1,8 @@
 import { notFound, redirect } from "next/navigation";
-import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
-import { resolveTheme } from "@/lib/resolve-theme";
 import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
-import { PortalShell } from "../../portal-shell";
+import { hasGrant } from "@/lib/portal-access";
 import { MeterAlerts, MeterHourlyChart, MeterReadout, MeterStateChip } from "@/components/meter-ui";
 import { meterHourly, meterRow } from "@/lib/meter-view";
 
@@ -20,22 +18,18 @@ export const metadata = { title: "Meter" };
 export default async function PortalMeterPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
+  if (!hasGrant(viewer, "electricity")) redirect("/portal");
   const { id } = await params;
 
-  const [theme, society, meter] = await Promise.all([
-    resolveTheme(),
-    db.society.findUnique({ where: { id: viewer.societyId }, select: { name: true } }),
-    meterRow(id, viewer.societyId),
-  ]);
-  if (!society) redirect(STALE_SESSION_EXIT);
+  const meter = await meterRow(id, viewer.societyId);
   if (!meter) notFound();
 
   const days = await meterHourly(id, 14);
 
   return (
-    <PortalShell theme={theme} email={viewer.email} societyName={society.name}>
+    <>
       <PageHeader
-        backHref="/portal/meters"
+        backHref="/portal/electricity"
         title={meter.name}
         chip={<MeterStateChip state={meter.state} />}
         subtitle={meter.circuitLabel ?? "Not yet bound to a circuit"}
@@ -62,6 +56,6 @@ export default async function PortalMeterPage({ params }: { params: Promise<{ id
           )}
         </Card>
       </div>
-    </PortalShell>
+    </>
   );
 }

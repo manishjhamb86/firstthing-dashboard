@@ -6,14 +6,24 @@ import Link from "next/link";
  * that stays down all week keeps the badge lit forever and it stops meaning
  * anything.
  */
-export function NotificationBell({ count }: { count: number }) {
+export function NotificationBell({
+  count,
+  href = "/admin/notifications",
+  surface = "chrome",
+}: {
+  count: number;
+  /** The portal's bell points at its own notifications page. */
+  href?: string;
+  /** Which ground it sits on — AppShell's header is chrome, NavShell's is content. */
+  surface?: "chrome" | "content";
+}) {
   return (
     <Link
-      href="/admin/notifications"
+      href={href}
       aria-label={count === 0 ? "Notifications" : `Notifications — ${count} unattended`}
       title={count === 0 ? "Notifications" : `${count} unattended`}
       className="relative inline-flex items-center justify-center rounded-[var(--r-sm)]"
-      style={{ width: 36, height: 32, color: "var(--chrome-text)" }}
+      style={{ width: 36, height: 32, color: surface === "chrome" ? "var(--chrome-text)" : "var(--text-muted)" }}
     >
       <svg viewBox="0 0 20 20" style={{ width: 18, height: 18 }} aria-hidden>
         <path

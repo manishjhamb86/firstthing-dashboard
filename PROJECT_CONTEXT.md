@@ -2499,6 +2499,33 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Inventory counted the demo circuit, not the installation (2026-08-31) — user-caught
+
+**Reported**: "In inventory it is showing only the demo install lights. not the complete
+installation as per the billing." Ace City read **96 LED lights installed** while its bill is
+raised on **2,508** — the page was describing a different society from the invoice.
+
+**CON-11 is the whole reason the two differ**: a metered circuit stands in for every light of its
+type, and the fee is computed on that population. The inventory was summing `CircuitDevice` lines,
+which describe the metered circuit only. It reads `representedLightCount` now — the same field the
+demo report and the billing run read — counting only circuits whose replacement is actually
+recorded, so a circuit still commissioning cannot claim installed lights.
+
+**Both figures are shown, never merged**, because they have different evidence behind them: the
+Lighting card is grouped by circuit, each stating "2,508 installed across your society · 96 on the
+metered circuit", with the fitting lines beneath labelled as the metered circuit's own and a
+closing note saying the society-wide figure is the population the circuit stands in for. Presenting
+a counted figure and an extrapolated one identically is what INV-02 exists to stop.
+
+**Two duplicated names fixed in passing**, both the "basement · Basement" shape already recorded
+here: catalog names that already carry their wattage were being prefixed with it again ("20W Tube
+light 20W"), and a device whose product name IS its name rendered "WATER LEVEL INDICATOR — WATER
+LEVEL INDICATOR".
+
+Verified 12/12, with the headline and per-circuit figures asserted against **the database** rather
+than against the page, plus a regex sweep for either duplication shape and no overflow at 1440 or
+390px.
+
 ## Hovering a chart says what the mark is worth (2026-08-31) — user-asked
 
 **Both portal charts answer "what is that number?" now**, and neither does it with a floating

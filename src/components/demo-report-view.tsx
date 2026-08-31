@@ -1,5 +1,6 @@
 import type { DemoReportCircuit } from "@/lib/demo-report";
 import { Card, CardTitle, Stat, StatRow } from "@/components/ui";
+import { circuitLabelOf } from "@/lib/meter-view";
 
 // Shared by the back-office report screen and the society portal, so the two
 // can never drift into showing different figures for the same report — the
@@ -79,51 +80,66 @@ export function DemoReportView({
         />
       </StatRow>
 
-      <Card className="p-5 overflow-x-auto">
+      {/* The scroll box wraps the TABLE, never the card: with overflow on the
+          card itself, scrolling a wide table dragged this heading and its
+          own description out of view and ran the rows past the rounded
+          corner (user-reported 2026-08-31). Units live in the headers so the
+          seven columns fit a half-page column without one at all. */}
+      <Card className="p-5">
         <CardTitle>Per circuit</CardTitle>
         <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
           Each metered circuit carries its own benchmark and stands in for every light of its type (CON-11).
         </p>
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Light type</th>
-              <th>Metered</th>
-              <th>Represents</th>
-              <th>Before</th>
-              <th>After</th>
-              <th>Benchmark</th>
-              <th>Projected saving</th>
-            </tr>
-          </thead>
-          <tbody>
-            {circuits.map((c) => (
-              <tr key={c.circuitId}>
-                <td>
-                  {c.lightType}
-                  {c.location && <span className="text-[var(--text-muted)]"> · {c.location}</span>}
-                </td>
-                <td className="num">{c.meteredLightCount}</td>
-                <td className="num">{c.representedLightCount}</td>
-                <td className="num">{c.preInstallBaseline.toFixed(2)}</td>
-                <td className="num">{c.postInstallAverage.toFixed(2)}</td>
-                <td className="num">{c.benchmarkSavingsPct.toFixed(2)}%</td>
-                <td className="num">{c.projectedSavedKwhPerDay.toFixed(2)} kWh/day</td>
+        <div className="-mx-3 overflow-x-auto">
+          <table className="tbl tbl-compact">
+            <thead>
+              <tr>
+                <th>Light type</th>
+                <th className="text-right">Metered</th>
+                <th className="text-right">Represents</th>
+                <th className="text-right">
+                  Before
+                  <span className="block font-normal normal-case tracking-normal">kWh/day</span>
+                </th>
+                <th className="text-right">
+                  After
+                  <span className="block font-normal normal-case tracking-normal">kWh/day</span>
+                </th>
+                <th className="text-right">Benchmark</th>
+                <th className="text-right">
+                  Projected saving
+                  <span className="block font-normal normal-case tracking-normal">kWh/day</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {circuits.map((c) => (
+                <tr key={c.circuitId}>
+                  {/* circuitLabelOf, not a hand-built string: several
+                      backfilled circuits sit in the Basement AND carry the
+                      light type "basement", and "basement · Basement" reads
+                      as a rendering fault (already fixed once, on the meters
+                      list — this was the fifth place building it by hand). */}
+                  <td>{circuitLabelOf(c.location ?? null, c.lightType)}</td>
+                  <td className="num text-right">{c.meteredLightCount}</td>
+                  <td className="num text-right">{c.representedLightCount}</td>
+                  <td className="num text-right">{c.preInstallBaseline.toFixed(2)}</td>
+                  <td className="num text-right">{c.postInstallAverage.toFixed(2)}</td>
+                  <td className="num text-right">{c.benchmarkSavingsPct.toFixed(2)}%</td>
+                  <td className="num text-right">{c.projectedSavedKwhPerDay.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </Card>
 
       {/* INV-02 — the days behind every figure above, so the number can be
           audited rather than taken on trust. */}
       {showReadings &&
         circuits.map((c) => (
-          <Card key={c.circuitId} className="p-5 overflow-x-auto">
-            <CardTitle>
-              Daily readings — {c.lightType}
-              {c.location ? ` · ${c.location}` : ""}
-            </CardTitle>
+          <Card key={c.circuitId} className="p-5">
+            <CardTitle>Daily readings — {circuitLabelOf(c.location ?? null, c.lightType)}</CardTitle>
             <div className="grid gap-6 sm:grid-cols-2 mt-4">
               <div>
                 <p className="lbl mb-2">Before replacement</p>

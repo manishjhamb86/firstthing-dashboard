@@ -2499,6 +2499,42 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## A table that scrolled its own heading away, and axes that clipped (2026-08-31) — user-caught
+
+**The demo report's per-circuit table forced its card into a horizontal scroll**, and because the
+`overflow-x-auto` sat on the CARD rather than on the table, scrolling dragged the card's heading
+and description out of view and ran the rows past the rounded corner. Two fixes, one general: the
+scroll box now wraps the **table only** (the repo's own rule, applied where it had not been), and
+the table is made to fit — units moved into the headers ("Before · kWh/day"), figures right-aligned,
+and a new `.tbl-compact` modifier that tightens the gutters and lets headers wrap. Seven columns
+now fit a half-page column with no scrollbar at all, at 1440, 1180 and 1024px alike.
+
+**The page still overflowed by 260px on a phone**, and the cause was one level up: a CSS grid item
+defaults to `min-width: auto`, so the demo column measured **630px inside a 390px viewport** —
+one unshrinkable descendant widening the whole track. `min-w-0` on both dashboard columns. Worth
+remembering as the class: a card that reports no overflow of its own can still be the thing
+pushing the page sideways.
+
+**Both charts clipped their own axis labels at the box edge** — the consumption chart's top
+gridline label and the last time label on each ("23:3"). The viewBox gained headroom and the
+first/last labels anchor inward instead of centring on a mark at the edge.
+
+**The consumption axis now has round quarters, not just a round maximum**: a "nice" top of 25
+labelled 0.0 / 6.3 / 13 / 19 / 25 — four awkward numbers to make one tidy one. The step is picked
+first and multiplied, giving 0 / 6 / 12 / 18 / 24. The tank axis labels every quarter, because the
+quarters are exactly what that sensor reports.
+
+Also: the per-circuit table was the **fifth** place building `location · lightType` by hand, so it
+rendered "basement · Basement" — the rendering-fault-looking label already fixed once on the meters
+list. It uses `circuitLabelOf` now, as do the readings cards beside it.
+
+The dashboard columns swapped again at the user's request: **the demo report leads on the left**,
+circuits/activity/tanks on the right.
+
+Verified 16/16 on the table, swap and scale (including no page overflow at 1440/1180/1024/390),
+13/13 on the chart, 21/21 on the tank history, 707 unit tests, `tsc`/`lint`/`build` clean, zero
+console errors.
+
 ## Two charts with a period a reader can choose (2026-08-31) — user-specified, both reported as broken
 
 **The consumption chart was scaling to the BASELINE, not the data.** At 91% saving a 2.9 kWh day

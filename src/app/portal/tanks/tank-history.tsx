@@ -143,8 +143,9 @@ export function TankHistory({
 
   // A left gutter for the scale: without it a flat line near the top and one
   // near the bottom look the same, and the shape is the whole point of the
-  // chart. 100 and 0 are enough — the quarters are what this sensor reports,
-  // and the caption states the actual low and high.
+  // chart. Every quarter is labelled, because the quarters are exactly what
+  // this sensor reports — a line sitting on the third gridline should read
+  // as 75% without counting rules (user-asked 2026-08-31).
   // The viewBox is sized close to the card's real width on purpose: an SVG
   // scaled 1.8× scales its type with it, and 8px labels rendered at 14 —
   // bigger than the caption underneath them.
@@ -246,7 +247,7 @@ export function TankHistory({
           role="img"
           aria-label={`Tank level, ${w.label}`}
         >
-          {[100, 0].map((v) => (
+          {[0, 25, 50, 75, 100].map((v) => (
             <text
               key={`s${v}`}
               x={gutter - 4}
@@ -299,9 +300,11 @@ export function TankHistory({
           {ticks.map((t) => (
             <text
               key={t.at}
-              x={gutter + t.at * plotW}
+              // Anchored inward near the edges — a centred label on the last
+              // tick had half of itself outside the box ("23:3").
+              x={t.at > 0.94 ? width : gutter + t.at * plotW}
               y={height + 11}
-              textAnchor="middle"
+              textAnchor={t.at > 0.94 ? "end" : t.at < 0.03 ? "start" : "middle"}
               fontSize={10}
               fill="var(--text-subtle)"
             >

@@ -302,7 +302,18 @@ export default async function PortalHomePage() {
       )}
 
       <div className="mb-6 grid items-start gap-5 lg:grid-cols-12">
-        <div className="lg:col-span-5 flex flex-col gap-5">
+        <div className="lg:col-span-7 min-w-0 flex flex-col gap-5">
+          {sharedReports.length > 0 && (
+            <Card className="p-6">
+              <CardTitle>Your demo savings report</CardTitle>
+              <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
+                Measured on the metered demo circuits, with the daily readings behind every figure.
+              </p>
+              <DemoReportView report={sharedReports[0]} />
+            </Card>
+          )}
+        </div>
+        <div className="lg:col-span-5 min-w-0 flex flex-col gap-5">
           {energy && energy.circuits.length > 0 && (
             <Card className="p-6">
               <CardTitle>Your circuits</CardTitle>
@@ -421,17 +432,6 @@ export default async function PortalHomePage() {
           )}
         </div>
 
-        <div className="lg:col-span-7 flex flex-col gap-5">
-          {sharedReports.length > 0 && (
-            <Card className="p-6">
-              <CardTitle>Your demo savings report</CardTitle>
-              <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
-                Measured on the metered demo circuits, with the daily readings behind every figure.
-              </p>
-              <DemoReportView report={sharedReports[0]} />
-            </Card>
-          )}
-        </div>
       </div>
     </>
   );

@@ -614,6 +614,27 @@ textarea.field {
   white-space: nowrap;
 }
 
+/* A table that has to live inside a CARD rather than across a page: tighter
+   gutters, headers allowed to wrap, and the outer edges flush with the card's
+   own text. Seven columns then fit a half-page column instead of forcing the
+   card into a horizontal scroll (user-reported 2026-08-31, on the demo
+   report's per-circuit table). */
+.tbl-compact thead th,
+.tbl-compact tbody td,
+.tbl-compact tbody th {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.tbl-compact thead th {
+  white-space: normal;
+}
+.tbl-compact tr > *:first-child {
+  padding-left: 12px;
+}
+.tbl-compact tr > *:last-child {
+  padding-right: 12px;
+}
+
 /* A header inside tbody is a band label (the readings review uses one), not a
    column head — it keeps the old plain treatment. */
 .tbl tbody th {

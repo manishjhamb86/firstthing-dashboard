@@ -110,14 +110,22 @@ function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: str
   return { bars, note };
 }
 
-/** A round number at or above `v`, for a y-axis a person can read. */
-function niceCeil(v: number): number {
+/**
+ * A top-of-scale whose QUARTERS are round, not just its maximum: four
+ * gridlines under a nice-looking 25 read 0.0 / 6.3 / 13 / 19 / 25, which is
+ * four odd numbers to make one tidy one. Picking the step first and
+ * multiplying gives 0 / 6 / 12 / 18 / 24 instead.
+ */
+function niceStep(v: number): number {
   if (v <= 0) return 1;
   const mag = Math.pow(10, Math.floor(Math.log10(v)));
-  for (const step of [1, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10]) {
+  for (const step of [1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 10]) {
     if (step * mag >= v) return step * mag;
   }
   return 10 * mag;
+}
+function niceAxisTop(v: number): number {
+  return niceStep(v / 4) * 4;
 }
 
 export function ConsumptionChart({
@@ -145,7 +153,7 @@ export function ConsumptionChart({
   // Scale to the DATA. The baseline shares the scale only when it is close
   // enough not to flatten it; otherwise it is stated, not drawn.
   const baselineFits = avgBaseline !== null && avgBaseline <= maxKwh * 2.2;
-  const top = niceCeil(baselineFits ? Math.max(maxKwh, avgBaseline) * 1.1 : maxKwh * 1.15);
+  const top = niceAxisTop(baselineFits ? Math.max(maxKwh, avgBaseline) * 1.1 : maxKwh * 1.15);
   const y = (v: number) => height - (v / top) * height;
 
   const gridSteps = [0, 0.25, 0.5, 0.75, 1].map((f) => top * f);
@@ -175,7 +183,9 @@ export function ConsumptionChart({
       </div>
 
       <svg
-        viewBox={`0 0 ${w} ${height + 34}`}
+        // -10 of headroom: the top gridline's own label sits at y≈3 and was
+        // clipped by the viewBox edge.
+        viewBox={`0 -10 ${w} ${height + 44}`}
         style={{ width: "100%", display: "block" }}
         role="img"
         aria-label={`Consumption, ${bars.length} ${bucket} buckets`}
@@ -191,7 +201,7 @@ export function ConsumptionChart({
               strokeWidth={1}
             />
             <text x={padLeft - 8} y={y(v) + 3.5} textAnchor="end" fontSize={10} fill="var(--text-subtle)">
-              {v >= 100 ? Math.round(v) : v.toFixed(v < 10 ? 1 : 0)}
+              {v % 1 === 0 ? v : v.toFixed(1)}
             </text>
           </g>
         ))}
@@ -245,9 +255,11 @@ export function ConsumptionChart({
           i === 0 || i === bars.length - 1 || i % Math.ceil(bars.length / 6) === 0 ? (
             <text
               key={`l${b.key}`}
-              x={padLeft + i * (bw + gap) + bw / 2}
+              // The first and last labels are anchored to the plot's edges:
+              // centred on their own bar, half of each fell outside the box.
+              x={i === 0 ? padLeft : i === bars.length - 1 ? w : padLeft + i * (bw + gap) + bw / 2}
               y={height + 16}
-              textAnchor="middle"
+              textAnchor={i === 0 ? "start" : i === bars.length - 1 ? "end" : "middle"}
               fontSize={10}
               fill="var(--text-subtle)"
             >

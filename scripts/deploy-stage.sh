@@ -50,7 +50,10 @@ echo "  now at \$COMMIT — \$(git log -1 --pretty=%s)"
 pnpm install --frozen-lockfile
 pnpm prisma migrate deploy
 pnpm prisma generate
-pnpm build
+# The box has 1.9 GB of RAM total; an unbounded build heap intermittently
+# OOM-kills the build worker (twice on 2026-08-31). A bounded old-space makes
+# V8 collect harder instead of aborting.
+NODE_OPTIONS=--max-old-space-size=1200 pnpm build
 
 # Stamp the release onto both processes. instrumentation-node.ts and
 # job-worker.ts read GIT_COMMIT and put it on every startup line, so a

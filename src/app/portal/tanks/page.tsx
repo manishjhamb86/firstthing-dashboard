@@ -5,6 +5,7 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { hasGrant } from "@/lib/portal-access";
 import { TankVisual } from "@/components/tank-visual";
+import { TankHistory, type LevelPoint } from "./tank-history";
 import { formatInstant, timeAgo } from "@/lib/format-date";
 import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
 import { logger } from "@/lib/logger";
@@ -20,37 +21,11 @@ function isStale(at: Date | null): boolean {
 }
 export const metadata = { title: "Water tanks" };
 
-/** The last 24 h of half-hourly samples, as a sparkline that fills its card. */
-function Spark({ points, quiet }: { points: number[]; quiet: boolean }) {
-  if (points.length < 2) return null;
-  const w = 240;
-  const h = 44;
-  const step = w / (points.length - 1);
-  const y = (v: number) => h - (v / 100) * (h - 6) - 3;
-  const line = points.map((v, i) => `${i === 0 ? "M" : "L"}${(i * step).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
-  const stroke = quiet ? "var(--chart-mark-inert)" : "var(--chart-mark)";
-  return (
-    <svg
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-      className="block w-full"
-      style={{ height: h }}
-      aria-hidden
-    >
-      {/* The filled area is what makes a flat line read as a level rather
-          than as a stray rule across the card. */}
-      <path d={`${line} L${w} ${h} L0 ${h} Z`} fill={stroke} opacity={0.1} />
-      <path
-        d={line}
-        fill="none"
-        stroke={stroke}
-        strokeWidth={1.75}
-        strokeLinejoin="round"
-        strokeLinecap="round"
-        vectorEffect="non-scaling-stroke"
-      />
-    </svg>
-  );
+/** The moment this request rendered. Stamped once on the server and handed to
+ *  the history card so its rolling window is identical on the server render
+ *  and on hydration; a Date.now() in the client component would differ. */
+function requestNow(): number {
+  return Date.now();
 }
 
 // The society's own tanks, and nobody else's: the query is scoped to the
@@ -86,17 +61,22 @@ export default async function PortalTanksPage() {
     );
   }
 
-  const since = new Date(new Date().getTime() - 24 * 60 * 60 * 1000);
+  // 45 days: enough to answer "the whole month" and still step back past it,
+  // at half-hourly sampling (~2,160 points per tank) — small enough to send
+  // whole and let the card window it, rather than a round trip per arrow
+  // press. The back arrow stops at the oldest reading actually held.
+  const now = requestNow();
+  const since = new Date(now - 45 * 24 * 60 * 60 * 1000);
   const readings = await db.tankLevelReading.findMany({
     where: { tankId: { in: tanks.map((t) => t.id) }, recordedAt: { gte: since } },
     orderBy: { recordedAt: "asc" },
-    select: { tankId: true, levelPercent: true },
+    select: { tankId: true, levelPercent: true, recordedAt: true },
   });
-  const sparkByTank = new Map<string, number[]>();
+  const historyByTank = new Map<string, LevelPoint[]>();
   for (const r of readings) {
-    const list = sparkByTank.get(r.tankId) ?? [];
-    list.push(r.levelPercent);
-    sparkByTank.set(r.tankId, list);
+    const list = historyByTank.get(r.tankId) ?? [];
+    list.push([r.recordedAt.getTime(), r.levelPercent]);
+    historyByTank.set(r.tankId, list);
   }
 
   // One row of facts per tank, so the header chip and the cards are decided
@@ -117,7 +97,7 @@ export default async function PortalTanksPage() {
       quiet,
       unchangedFor,
       offline: !t.lastOnline,
-      spark: sparkByTank.get(t.id) ?? [],
+      history: historyByTank.get(t.id) ?? [],
     };
   });
 
@@ -184,7 +164,7 @@ export default async function PortalTanksPage() {
             className="grid max-w-[1180px] gap-5"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}
           >
-            {g.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, spark }) => {
+            {g.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, history }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-6 gap-y-5 p-5 sm:p-6">
@@ -223,22 +203,17 @@ export default async function PortalTanksPage() {
                   {/* The history sits beside the facts when the card is wide
                       and wraps beneath them when it is not — one rule, both
                       the one-tank and the many-tank case. */}
-                  <div className="flex min-w-[220px] flex-[1.4] flex-col justify-end">
-                    <p className="lbl mb-2">Last 24 hours</p>
-                    {spark.length >= 2 ? (
+                  <div className="flex min-w-[248px] flex-[1.6] flex-col justify-end">
+                    {history.length > 0 ? (
+                      <TankHistory points={history} quiet={quiet} now={now} />
+                    ) : (
                       <>
-                        <Spark points={spark} quiet={quiet} />
-                        <p className="mt-1.5 text-[11px]" style={{ color: "var(--text-subtle)" }}>
-                          Low <span className="num">{Math.min(...spark)}%</span> · high{" "}
-                          <span className="num">{Math.max(...spark)}%</span> ·{" "}
-                          <span className="num">{spark.length}</span> readings
+                        <p className="lbl mb-2">Level history</p>
+                        <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                          A history appears here once this tank has been sampled — levels are
+                          recorded every half hour.
                         </p>
                       </>
-                    ) : (
-                      <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                        A history appears here once this tank has been sampled a few times — levels
-                        are recorded every half hour.
-                      </p>
                     )}
                   </div>
                 </Card>

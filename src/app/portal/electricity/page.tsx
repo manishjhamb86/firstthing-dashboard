@@ -18,7 +18,8 @@ import {
   StatRow,
   StatusChip,
 } from "@/components/ui";
-import { BAND_TONE, ConsumptionBars, monthName } from "../portal-widgets";
+import { BAND_TONE, monthName } from "../portal-widgets";
+import { ConsumptionChart } from "../consumption-chart";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Electricity" };
@@ -114,15 +115,13 @@ export default async function PortalElectricityPage() {
 
           {energy.daily.length > 0 && (
             <Card className="mb-5 p-6">
-              <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-                <CardTitle className="mb-0">
-                  Daily consumption — last {energy.daily.length} recorded days
-                </CardTitle>
+              <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+                <CardTitle className="mb-0">Consumption</CardTitle>
                 <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                  kWh · all circuits
+                  all circuits
                 </p>
               </div>
-              <ConsumptionBars days={energy.daily} baseline={energy.baselineDailySum} height={140} />
+              <ConsumptionChart days={energy.daily} height={180} />
             </Card>
           )}
 

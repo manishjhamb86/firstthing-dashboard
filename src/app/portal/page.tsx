@@ -15,7 +15,8 @@ import { OfferCard } from "./offer-card";
 import { BatchReviewCard } from "./batch-review-card";
 import { reviewDeadlineFor } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
-import { BAND_TONE, ConsumptionBars, monthName, timeAgoShort } from "./portal-widgets";
+import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
+import { ConsumptionChart } from "./consumption-chart";
 
 export const dynamic = "force-dynamic";
 
@@ -282,22 +283,26 @@ export default async function PortalHomePage() {
 
       {energy && (
         <Card className="mb-6 p-6">
-          <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-            <CardTitle className="mb-0">Daily consumption — last {energy.daily.length || 14} recorded days</CardTitle>
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+            <CardTitle className="mb-0">Consumption</CardTitle>
             <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-              All circuits · the dashed line is what the same lights drew before FirsThing
+              all circuits
             </p>
           </div>
           {energy.daily.length === 0 ? (
-            <ChartPending title="Your consumption appears here" note="once the first readings are on record" height={150} />
+            <ChartPending
+              title="Your consumption appears here"
+              note="once the first readings are on record"
+              height={150}
+            />
           ) : (
-            <ConsumptionBars days={energy.daily} baseline={energy.baselineDailySum} height={150} />
+            <ConsumptionChart days={energy.daily} height={170} />
           )}
         </Card>
       )}
 
       <div className="mb-6 grid items-start gap-5 lg:grid-cols-12">
-        <div className="lg:col-span-7 flex flex-col gap-5">
+        <div className="lg:col-span-5 flex flex-col gap-5">
           {energy && energy.circuits.length > 0 && (
             <Card className="p-6">
               <CardTitle>Your circuits</CardTitle>
@@ -331,15 +336,6 @@ export default async function PortalHomePage() {
               </p>
             </Card>
           )}
-          {sharedReports.length > 0 && (
-            <Card className="p-6">
-              <CardTitle>Your demo savings report</CardTitle>
-              <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
-                Measured on the metered demo circuits, with the daily readings behind every figure.
-              </p>
-              <DemoReportView report={sharedReports[0]} />
-            </Card>
-          )}
           {installation && dayBatches.length === 0 && (
             <Card className="p-6">
               <CardTitle>Installation</CardTitle>
@@ -352,9 +348,6 @@ export default async function PortalHomePage() {
               </p>
             </Card>
           )}
-        </div>
-
-        <div className="lg:col-span-5 flex flex-col gap-5">
           <Card className="p-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <CardTitle className="mb-0">Recent activity</CardTitle>
@@ -424,6 +417,18 @@ export default async function PortalHomePage() {
                   </div>
                 ))}
               </div>
+            </Card>
+          )}
+        </div>
+
+        <div className="lg:col-span-7 flex flex-col gap-5">
+          {sharedReports.length > 0 && (
+            <Card className="p-6">
+              <CardTitle>Your demo savings report</CardTitle>
+              <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
+                Measured on the metered demo circuits, with the daily readings behind every figure.
+              </p>
+              <DemoReportView report={sharedReports[0]} />
             </Card>
           )}
         </div>

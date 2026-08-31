@@ -50,10 +50,17 @@ export type PortalEnergy = {
     savingsPct: number | null;
     band: SavingsBand | null;
   };
-  /** The last 14 recorded days, society-wide, oldest first. */
-  daily: { date: string; kWh: number }[];
-  /** Σ of the baselines in force today, for the chart's "before" rule. */
-  baselineDailySum: number | null;
+  /**
+   * EVERY recorded day, society-wide, oldest first — the chart buckets it
+   * (daily/weekly/monthly/yearly) client-side, so the series has to carry
+   * the whole history rather than a fixed window.
+   *
+   * `baseline` is the sum of the baselines in force ON THAT DAY (INV-07
+   * replay), counting only the circuits that actually reported it — summing
+   * every circuit's baseline on a day when one was silent would overstate
+   * what the old lights would have drawn and inflate the saving.
+   */
+  daily: { date: string; kWh: number; baseline: number | null }[];
   /** Released ₹ for the headline month — null means "not billed yet". */
   rupeesSaved: number | null;
 };
@@ -131,24 +138,32 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
 
   const totalPct = anyMonth && totalBaseline > 0 ? ((totalBaseline - totalConsumed) / totalBaseline) * 100 : null;
 
-  // Society-wide daily series: sum each recorded day across circuits, take
-  // the newest 14 recorded days.
-  const byDate = new Map<string, number>();
+  // Society-wide daily series: for each recorded day, sum the kWh AND the
+  // baselines of the circuits that reported it, so every bucket compares
+  // like with like.
+  const byDate = new Map<string, { kWh: number; baseline: number; missingBaseline: boolean }>();
   for (const p of perCircuit) {
     for (const d of p.monitoring) {
       if (d.excluded) continue;
-      byDate.set(d.date, (byDate.get(d.date) ?? 0) + d.kWh);
+      const dayBaseline = effectiveBaselineAt(
+        p.c.preInstallBaseline,
+        p.c.rescaleEvents,
+        new Date(`${d.date}T00:00:00Z`),
+      );
+      const cur = byDate.get(d.date) ?? { kWh: 0, baseline: 0, missingBaseline: false };
+      cur.kWh += d.kWh;
+      if (dayBaseline === null) cur.missingBaseline = true;
+      else cur.baseline += dayBaseline;
+      byDate.set(d.date, cur);
     }
   }
   const daily = [...byDate.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
-    .slice(-14)
-    .map(([date, kWh]) => ({ date, kWh }));
-
-  const baselines = perCircuit.map((p) => p.baselineNow).filter((b): b is number => b !== null);
-  const baselineDailySum = baselines.length === perCircuit.length && baselines.length > 0
-    ? baselines.reduce((s, b) => s + b, 0)
-    : null;
+    .map(([date, v]) => ({
+      date,
+      kWh: v.kWh,
+      baseline: v.missingBaseline ? null : v.baseline,
+    }));
 
   // ₹ — released fee lines only (INV-02). The society's share of the saving
   // is the whole commercial story, but this portal repeats a billed figure,
@@ -175,7 +190,6 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       band: totalPct !== null ? savingsBand(totalPct) : null,
     },
     daily,
-    baselineDailySum,
     rupeesSaved,
   };
 });

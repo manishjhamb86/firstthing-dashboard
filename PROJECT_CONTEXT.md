@@ -2499,6 +2499,52 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Two charts with a period a reader can choose (2026-08-31) — user-specified, both reported as broken
+
+**The consumption chart was scaling to the BASELINE, not the data.** At 91% saving a 2.9 kWh day
+against a 32.7 kWh/day baseline drew an 8% sliver, so every bar sat flat on the axis — "all the
+bars are touching the bottom", with a screenshot. A reference line an order of magnitude above the
+series destroys the thing the chart is for. The scale follows the data now; the dashed "before
+FirsThing" rule is drawn only when it can share that scale honestly (`avgBaseline <= max × 2.2`)
+and is otherwise **stated in words with an ↑ marker** — the saving is already a figure in the hero
+card and does not need the chart made unreadable to make its point.
+
+`portal-energy.ts`'s `daily` carries the whole history now, each day with the baseline in force
+**on that day** summed over only the circuits that actually reported it (INV-07 replay) — summing
+every circuit's baseline on a day one was silent would overstate what the old lights would have
+drawn and inflate the saving. `ConsumptionChart` buckets it client-side: Daily (last 30 recorded
+days, the default asked for) · Weekly · Monthly · Yearly · Overall, the last picking its own bucket
+so a 275-day history is not 275 bars.
+
+**The tank history got the same treatment**, plus stepping: 24 hours · Week · Month, with ‹ › to
+move back and forward. Two rules carry it — **windows are read in IST** (a level is a machine
+instant, and a UTC "day" would cut a resident's day at 05:30), and **the current window is rolling
+while older ones snap to the calendar**, so the live view really is the last 24 hours (keeping last
+night on screen at 09:00) and stepping back lands on days, weeks and months a person can name. The
+chart draws the **min–max envelope per bucket, never an average**: these controllers report in 25%
+steps, so an averaged line would invent levels the sensor never reported. The line breaks over a
+gap rather than bridging it. 45 days are sent whole (~2,160 points) so an arrow press is not a
+round trip, and ‹ stops at the oldest reading actually held.
+
+**The reported flicker was a card that resized on every arrow press** — a window with nothing
+recorded swapped the chart for a one-line sentence. The frame is always drawn now and says
+"Nothing recorded in this window" inside its own axes, the repo's `ChartPending` rule applied to a
+window that steps. Chasing the last pixel of it found something worth keeping: the caption still
+moved the card by 1px, because the stats line carries `.num` spans (monospace, a taller strut) and
+the empty line does not — `min-h` on the shared line, not a line-height, is what actually equalises
+them. **Both were measured, not eyed**: the check steps through eight windows and asserts the card's
+height is a single value across all of them.
+
+**One sizing lesson**: an SVG with a 300-wide viewBox rendered in a 530px column scales its type
+1.8× with it — 8px axis labels came out at 14, larger than the caption beneath them. The viewBox is
+sized near the real column width now, so nominal font sizes are the rendered ones.
+
+Verified 21/21 on the tank history (defaults, both arrows and their disabled ends, the seeded empty
+window, all three periods, no 390px overflow) and 13/13 on the dashboard chart and column swap,
+zero console errors on both; 707 unit tests, `tsc`/`lint`/`build` clean. The 40 days of synthetic
+half-hourly readings used to exercise the periods were deleted afterwards — dev is back to its own
+4 readings, confirmed by count.
+
 ## The three reports share one system, and a filter that read a corrected day as a dead one (2026-08-31)
 
 **The pre- and post-installation reports still carried every defect the monthly report had fixed**

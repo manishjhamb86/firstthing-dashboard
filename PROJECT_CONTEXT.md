@@ -2499,6 +2499,38 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The three reports share one system, and a filter that read a corrected day as a dead one (2026-08-31)
+
+**The pre- and post-installation reports still carried every defect the monthly report had fixed**
+— single 31-row (or 275-row) column, no sheet, the assessment as a repeated word. Cause: three
+copies of one formatting system. `reports/report-format.tsx` is now the single copy — the sheet
+anatomy, the columned day grid, the range-stating legend, the print grey ramp classes — and all
+three pages render through it. The monthly suite was re-run against the refactor BEFORE the
+siblings were touched and caught two regressions the extraction had introduced (2-decimal titles
+and the per-band print-grey classes dropped) — 65/65 after, so the shared module provably
+reproduces the settled behaviour. Post-install at Ace City's 265 days prints in 4 pages instead
+of ~8; pre-install fits one A4. Variance bands got their own grey steps for paper.
+
+**The near-shipped bug is the entry worth reading.** A count mismatch (SQL 264 vs page 265) read
+at first as "the report includes superseded rows", and a `supersededAt: null` filter went into
+report-data and live-monitoring — WRONG. Supersession here is an in-place UPDATE: one row per
+date, `supersededValue` keeps what was replaced, so a non-null `supersededAt` marks a CORRECTED
+day whose kWh is the value in force. Filtering it drops the corrected day entirely. Both edits
+were reverted — and the same misreading turned out to be LIVE in `portal-energy.ts` since the
+revamp commit, quietly excluding corrected days from the resident's own figures. Fixed, with the
+storage model stated at the query site. **The general shape**: a column named like tombstone
+metadata ("superseded") can mark either the dead row or the corrected survivor, and the only way
+to know is to read the write path — three e2e suites carried the same wrong filter in their SQL
+and all passed, because the one corrected day sat outside the months they asserted on.
+
+**Blueprint bookkeeping done**: the portal's module grants, ticket desk, tank setups and
+notification read state recorded as a FEAT-108 scope change in `03-features.md` and
+`docs/backlog.yaml` (validator at the documented 16/263 baseline, unchanged).
+
+**Verified**: prepost 16/16 (pre on a fixtured pb-ckt — Ace City has no pre days, its baseline
+came from demos), monthly 65/65, portal revamp 34/34, portal finish 19/19, unassigned meters 7/7
+(re-run — its previous record was a killed process, not a pass), `tsc`/`lint`/`build` clean.
+
 ## The portal finished: FirsThing's ticket desk, and a bell that knows what you have seen (2026-08-31)
 
 **The two gaps the revamp stated are closed.**

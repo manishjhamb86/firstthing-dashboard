@@ -766,6 +766,14 @@ textarea.field {
   .report-band-suspect {
     background: #a0a0a0 !important;
   }
+  /* The pre-install report's variance bands, on the same grey ramp: two
+     bands, two clearly separated steps. */
+  .report-vband-flag {
+    background: #d6d6d6 !important;
+  }
+  .report-vband-warn {
+    background: #ababab !important;
+  }
   /* The lightest step is nearly the paper — an outline keeps every swatch
      and every tinted figure visibly a marked one. */
   .report-band {

@@ -7976,6 +7976,7 @@ features:
     status: ready
     milestone: MS-02
     architecture_notes: "docs/engineering/09-architecture.md §6 -- portalAuthority is a second, orthogonal authorization model alongside AdminUser.permissions, deliberately not unified; GATE-04's binding-act check is server-side on the action per this feature's own AC-2, matching the existing manage_admins precedent."
+    scope_note: "2026-08-29/31 (customer-portal revamp, user-specified): per-member MODULE GRANTS added beside authority — a portal tab renders only with its grant, checked server-side; office-bearer implicitly holds all, tickets-manage implies tickets-view, grants editable by the office-bearer alone. Also added: the society ticket desk (complaint/replacement/pickup with a required resolution note) plus FirsThing's admin queue, tank setup classification (domestic/flush/stp), and per-member notification read state. Recorded in 03-features.md FEAT-108."
     acceptance_criteria:
       - id: FEAT-108-AC-1
         type: happy

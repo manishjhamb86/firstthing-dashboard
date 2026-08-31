@@ -71,7 +71,11 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       lightReplacementDate: true,
       rescaleEvents: true,
       meterReadings: {
-        where: { source: "csv", supersededAt: null },
+        // NO supersededAt filter: supersession updates the row IN PLACE, so
+        // a non-null supersededAt is a corrected day whose kWh is current.
+        // The filter this shipped with excluded corrected days from the
+        // resident's own figures (caught 2026-08-31).
+        where: { source: "csv" },
         orderBy: { date: "asc" },
         select: { date: true, kWh: true, excludedAt: true },
       },

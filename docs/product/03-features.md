@@ -3074,6 +3074,19 @@ binding acts reserved to office-bearers.
 | `committee` | Other committee members | Full visibility; approve a daily installation batch; upload KYC documents; raise tickets |
 | `manager` | Society manager (PER-06, existing `socmgr`) | Operational only: approve a daily batch, maintain access details and contacts, raise tickets |
 
+**Scope change (2026-08-29/31, user-specified — the customer-portal revamp).** Authority now
+answers *who you are to the society*; a separate per-member **module grant** answers *which portal
+modules you may use* (`PortalGrant[]` on the account: electricity, water tanks, documents,
+inventory, tickets-view, tickets-manage, society-admin). A sidebar tab renders only with its
+grant and every page re-checks server-side. Two computed rules, never stored: the office-bearer
+holds every grant implicitly (so a transfer cannot strand stale rights), and tickets-manage
+implies tickets-view. Editing grants is the office-bearer's act alone; society-admin only lets a
+member *see* who has what. Existing accounts were backfilled with all module grants (not
+society-admin) so the change revoked nothing. The same revamp added the society **ticket desk**
+(complaint / device replacement / pickup; open → in progress → resolved, a resolution note
+required and read by the society as the answer) with FirsThing's own queue behind it, and
+per-member notification read state.
+
 **Behavioral rules.**
 
 1. **Binding acts are office-bearer only**, enforced server-side on the action, not by hiding a

@@ -1,21 +1,12 @@
-import type { CSSProperties } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import {
-  SAVINGS_BAND_META,
-  SAVINGS_CYAN_MIN,
-  SAVINGS_GREEN_MIN,
-  SAVINGS_ORANGE_MIN,
-  SAVINGS_SUSPECT_ABOVE,
-  SAVINGS_WARN_BELOW,
-  SAVINGS_YELLOW_MIN,
-  type SavingsBand,
-} from "@/lib/circuit-load";
-import { loadCircuitReport, monthDays, monthsWithData, summarize, type ReportDay } from "../report-data";
+import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
+import { loadCircuitReport, monthDays, monthsWithData, summarize } from "../report-data";
 import { PrintButton } from "../report-shared";
 import { BackButton } from "@/components/back-button";
-import { StatusChip, type ChipTone } from "@/components/ui";
+import { StatusChip } from "@/components/ui";
+import { BAND_TONE, DaysGrid, ExclusionNotes, ReportLegend, pct } from "../report-format";
 
 // CON-45 — the monthly savings report for one explicitly-selected month
 // (INV-04: the month is a selection, never inferred). Circuit-scoped and
@@ -23,107 +14,6 @@ import { StatusChip, type ChipTone } from "@/components/ui";
 // the released monthly calculation (MS-08), which this report deliberately
 // does not duplicate — two sources for one money figure is how they end up
 // disagreeing.
-
-/**
- * The band's own tint is a wash, not an ink: #0e7fa5 on the cyan tint is
- * 3.5:1 and #1f9d55 on the green one is 3.0:1, both under 4.5 for the 14px
- * semibold this renders at. So the tint carries the signal and `--text`
- * carries the characters — and where the band is stated in WORDS it goes
- * through the app's own contrast-tuned StatusChip rather than an ink colour
- * invented here. Five tones to six bands is fine: the label is always the
- * band's own wording, so "Slightly under" and "Under target" stay distinct
- * to the reader even though both are warn-toned.
- */
-const BAND_TONE: Record<SavingsBand, ChipTone> = {
-  green: "ok",
-  cyan: "info",
-  yellow: "warn",
-  orange: "warn",
-  red: "bad",
-  suspect: "warn",
-};
-
-/**
- * A savings percentage, as a whole number (the user's call, 2026-08-29).
- *
- * Presentation ONLY. Nothing here feeds a calculation: the stored reading
- * keeps every digit, the released monthly calculation still computes on the
- * unrounded figure, and this report says so in its own closing note. The
- * exact value stays reachable on each figure's title, so a disputed day can
- * still be read to two places without re-opening the database.
- */
-function pct(n: number): string {
-  return `${Math.round(n)}%`;
-}
-
-/**
- * What each band MEANS, as the range that produces it. This is what lets the
- * per-row assessment column go away without the colour becoming the only
- * carrier: every row's band decodes from the figure printed in it, so the
- * table survives a mono printer, a greyscale photocopy and a reader who
- * cannot separate the tints. Built from the thresholds themselves, so a
- * retuned band cannot leave the legend saying something untrue.
- */
-const BAND_RANGE: Record<SavingsBand, string> = {
-  suspect: `over ${SAVINGS_SUSPECT_ABOVE}%`,
-  green: `${SAVINGS_GREEN_MIN}\u2013${SAVINGS_SUSPECT_ABOVE}%`,
-  cyan: `${SAVINGS_CYAN_MIN}\u2013${SAVINGS_GREEN_MIN}%`,
-  yellow: `${SAVINGS_YELLOW_MIN}\u2013${SAVINGS_CYAN_MIN}%`,
-  orange: `${SAVINGS_ORANGE_MIN}\u2013${SAVINGS_YELLOW_MIN}%`,
-  red: `under ${SAVINGS_ORANGE_MIN}%`,
-};
-
-/**
- * The legend's own wording. SAVINGS_BAND_META's labels are written to stand
- * alone in a sentence; here each sits beside its numeric range, which
- * already says "implausibly high", so the label only has to name the ACTION.
- * The long one wrapped the legend onto a second line (user-reported with a
- * screenshot, 2026-08-29) — and a key that wraps stops reading as one row.
- */
-const BAND_KEY: Record<SavingsBand, string> = {
-  suspect: "Check the meter",
-  green: "On target",
-  cyan: "Within band",
-  yellow: "Slightly under",
-  orange: "Under target",
-  red: "Well under",
-};
-
-/** Best month to worst, so the legend reads as a scale rather than a set. */
-const BAND_ORDER: SavingsBand[] = ["suspect", "green", "cyan", "yellow", "orange", "red"];
-
-/**
- * "Fri 20 Feb" — every row of a monthly report is the same month and year,
- * so the day is the only part that varies, and the year lives in the
- * masthead. The full ISO date rendered in the mono face wrapped onto two
- * lines in the date column; this never does. UTC, like every other date
- * reader in this codebase: these are stored at UTC midnight and a local
- * read shifts the day backwards west of Greenwich.
- */
-function dayLabel(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-}
-
-/**
- * "Wed 10" — inside the table only. Every row of a monthly report is the
- * same month and the same year, and both are stated in the masthead (and in
- * the colophon, on a page that has left the screen), so repeating "Jun" 31
- * times bought nothing and cost 34px in the narrowest column on the sheet —
- * enough that the day columns were being clipped. The prose notes below the
- * table keep the month, because a sentence is read on its own.
- */
-function dayShort(iso: string): string {
-  const d = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", timeZone: "UTC" });
-}
 
 export default async function MonthlyReportPage({
   params,
@@ -195,20 +85,6 @@ export default async function MonthlyReportPage({
   const summary = summarize(effBaselineNow, days);
   const excludedCount = days.filter((d) => d.excluded).length;
   const countedCount = days.length - excludedCount;
-  const excludedDays = days.filter((d) => d.excluded);
-  // Only the bands this month actually produced. A fixed six-entry legend
-  // under a table showing two of them is a reference card, not a key.
-  const bandsPresent = BAND_ORDER.filter((b) =>
-    days.some((d) => !d.excluded && d.savingsBand === b),
-  );
-  // Days read DOWN each column, then across. One 31-row column is what put
-  // the printed report onto a second sheet; three 11-row columns fit A4 with
-  // room to spare. Short months keep one column — two five-row slivers are
-  // not a layout, they are a table cut in half.
-  const dailyCols = days.length > 20 ? 3 : days.length > 10 ? 2 : 1;
-  const perCol = Math.ceil(days.length / dailyCols);
-  const dayColumns: ReportDay[][] = [];
-  for (let i = 0; i < days.length; i += perCol) dayColumns.push(days.slice(i, i + perCol));
   const asMonth = (m: string) =>
     new Date(`${m}-01T00:00:00Z`).toLocaleDateString("en-GB", {
       month: "long",
@@ -380,57 +256,7 @@ export default async function MonthlyReportPage({
             </p>
           </div>
 
-          <div className="report-daily" style={{ "--daily-cols": dailyCols } as CSSProperties}>
-            {dayColumns.map((col, i) => (
-              <div key={i} className="report-daily-col print-table-scroll">
-                <table className="tbl w-full">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th className="text-right">kWh</th>
-                      <th className="text-right">Savings</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {col.map((d) => (
-                      <tr key={d.date} className={d.excluded ? "report-row-excluded" : undefined}>
-                        {/* The date stays legible. The strike-through belongs
-                            on the figures that do not count, not on the label
-                            that says which day they were. */}
-                        <td className="num whitespace-nowrap">{dayShort(d.date)}</td>
-                        <td className="num text-right">
-                          <span className={d.excluded ? "line-through" : undefined}>
-                            {d.kWh.toFixed(2)}
-                          </span>
-                        </td>
-                        <td className="text-right">
-                          {d.savingsPct === null ? (
-                            <span className="num">—</span>
-                          ) : d.excluded ? (
-                            <span className="num line-through">{pct(d.savingsPct)}</span>
-                          ) : (
-                            <span
-                              className={`num report-band${d.savingsBand ? ` report-band-${d.savingsBand}` : ""}`}
-                              style={{
-                                background: d.savingsBand
-                                  ? SAVINGS_BAND_META[d.savingsBand].bg
-                                  : undefined,
-                              }}
-                              // The rounding is presentation; the exact figure
-                              // stays one hover away.
-                              title={`${d.savingsBand ? SAVINGS_BAND_META[d.savingsBand].label : "Savings"} — ${d.savingsPct.toFixed(2)}%`}
-                            >
-                              {pct(d.savingsPct)}
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
+          <DaysGrid days={days} mode="savings" />
 
           {/* The month, footed up. With the days in columns there is no one
               tfoot to carry it, and a per-column subtotal would be arithmetic
@@ -457,49 +283,9 @@ export default async function MonthlyReportPage({
             </span>
           </div>
 
-          {/* The assessment used to be a word repeated on every row — 31 times
-              for one month, in the widest column of the table, which is what
-              made the printed report run to a second sheet. It is a legend
-              now. The colour is deliberately NOT the carrier: each entry
-              states the RANGE, so any row decodes from the printed figure
-              alone — which is what has to be true on a mono printer, in
-              greyscale, and for a reader who cannot separate the tints. */}
-          {(bandsPresent.length > 0 || excludedCount > 0) && (
-            <dl className="report-legend">
-              {bandsPresent.map((b) => (
-                <div key={b}>
-                  <dt
-                    className={`report-band report-band-${b}`}
-                    style={{ background: SAVINGS_BAND_META[b].bg }}
-                    aria-hidden
-                  />
-                  <dd>
-                    {BAND_KEY[b]}
-                    <span className="num"> {BAND_RANGE[b]}</span>
-                  </dd>
-                </div>
-              ))}
-              {excludedCount > 0 && (
-                <div>
-                  <dt className="report-band report-band-excluded" aria-hidden />
-                  <dd>Excluded — not counted</dd>
-                </div>
-              )}
-            </dl>
-          )}
+          <ReportLegend days={days} mode="savings" />
 
-          {/* Excluded days are shown, never hidden — but their reasons are
-              exceptions, and exceptions belong in a note rather than in a
-              column every ordinary row has to make room for. */}
-          {excludedDays.length > 0 && (
-            <ul className="report-exclusions">
-              {excludedDays.map((d) => (
-                <li key={d.date}>
-                  <span className="num">{dayLabel(d.date)}</span> — {d.excludedReason}
-                </li>
-              ))}
-            </ul>
-          )}
+          <ExclusionNotes days={days} />
 
           <p className="mt-4 text-xs leading-relaxed text-[var(--text-subtle)]">
             Billing figures — extrapolation across the represented lights, ₹ values, the invoice —

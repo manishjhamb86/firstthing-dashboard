@@ -42,6 +42,11 @@ export async function loadCircuitReport(circuitId: string) {
         },
       },
       rescaleEvents: true,
+      // NO supersededAt filter, deliberately: supersession is an in-place
+      // UPDATE (one row per date; supersededValue keeps what was replaced),
+      // so a non-null supersededAt marks a CORRECTED day whose kWh is the
+      // value in force. Filtering it out would drop the corrected day
+      // entirely — the misreading that briefly shipped on 2026-08-31.
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
     },
   });

@@ -136,6 +136,7 @@ export function ConsumptionChart({
   height?: number;
 }) {
   const [bucket, setBucket] = useState<Bucket>("daily");
+  const [hover, setHover] = useState<number | null>(null);
   const { bars, note } = useMemo(() => bucketise(days, bucket), [days, bucket]);
 
   if (days.length === 0) return null;
@@ -160,6 +161,7 @@ export function ConsumptionChart({
   const gap = bars.length > 60 ? 1 : bars.length > 30 ? 2 : 6;
   const bw = Math.max(1.5, (plotW - gap * (bars.length - 1)) / bars.length);
   const perBucket = bucket === "daily" ? "day" : "bucket";
+  const active = hover !== null ? (bars[hover] ?? null) : null;
 
   return (
     <div>
@@ -189,6 +191,7 @@ export function ConsumptionChart({
         style={{ width: "100%", display: "block" }}
         role="img"
         aria-label={`Consumption, ${bars.length} ${bucket} buckets`}
+        onMouseLeave={() => setHover(null)}
       >
         {gridSteps.map((v) => (
           <g key={v}>
@@ -249,6 +252,28 @@ export function ConsumptionChart({
 
         <line x1={padLeft} x2={w} y1={height} y2={height} stroke="var(--border)" strokeWidth={1} />
 
+        {/* Hover targets: a full-height invisible column per bar, so a short
+            bar is as reachable as a tall one — the shape the admin tank
+            chart already established. The <title> keeps touch and screen
+            readers on equal terms with a pointer. */}
+        {bars.map((b, i) => (
+          <rect
+            key={`h${b.key}`}
+            x={padLeft + i * (bw + gap) - gap / 2}
+            y={0}
+            width={bw + gap}
+            height={height}
+            fill={hover === i ? "var(--chart-mark)" : "transparent"}
+            opacity={hover === i ? 0.08 : 1}
+            onMouseEnter={() => setHover(i)}
+            onFocus={() => setHover(i)}
+            tabIndex={0}
+            style={{ cursor: "pointer", outline: "none" }}
+          >
+            <title>{`${b.label} · ${b.kWh.toFixed(2)} kWh`}</title>
+          </rect>
+        ))}
+
         {bars.map((b, i) =>
           // Sparse x labels: first, last and an even spread, so 30 bars do
           // not smear into a grey band.
@@ -268,6 +293,46 @@ export function ConsumptionChart({
           ) : null,
         )}
       </svg>
+
+      {/* The readout is a fixed strip, not a floating tooltip: it uses real
+          type, wraps like everything else, and — because it is always drawn —
+          reading a bar cannot change the card's height (user-asked
+          2026-08-31). Same shape as the admin tank chart's readout. */}
+      <div
+        className="mt-2 flex min-h-[42px] flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--r-sm)] border px-3 py-2 text-[13px]"
+        style={{
+          borderColor: active ? "var(--accent-line)" : "var(--border-subtle)",
+          background: active ? "var(--accent-subtle)" : "var(--surface-sunken)",
+        }}
+        aria-live="polite"
+      >
+        {active ? (
+          <>
+            <span className="num text-base font-bold">{active.kWh.toFixed(2)} kWh</span>
+            <span className="num" style={{ color: "var(--text-muted)" }}>
+              {active.label}
+            </span>
+            {active.baseline !== null && (
+              <span style={{ color: "var(--text-subtle)" }}>
+                before FirsThing{" "}
+                <span className="num">{active.baseline.toFixed(2)} kWh</span> — saved{" "}
+                <span className="num">
+                  {(((active.baseline - active.kWh) / active.baseline) * 100).toFixed(1)}%
+                </span>
+              </span>
+            )}
+            {active.days > 1 && (
+              <span style={{ color: "var(--text-subtle)" }}>
+                over <span className="num">{active.days}</span> days
+              </span>
+            )}
+          </>
+        ) : (
+          <span style={{ color: "var(--text-muted)" }}>
+            {bars.length} {bucket === "daily" ? "days" : "periods"} — hover one for its figures.
+          </span>
+        )}
+      </div>
 
       {!baselineFits && avgBaseline !== null && (
         <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>

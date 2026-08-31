@@ -84,6 +84,16 @@ function windowFor(mode: Mode, offset: number, now: number): Window {
 
 type Bucket = { min: number; max: number; last: number } | null;
 
+/** When a bucket sits — the answer to "what is that reading?" alongside its level. */
+function bucketMoment(w: Window, n: number, i: number, mode: Mode): string {
+  const at = w.from + ((i + 0.5) / n) * (w.to - w.from);
+  return mode === "day"
+    ? ist(at, { hour: "2-digit", minute: "2-digit", hour12: false })
+    : mode === "week"
+      ? ist(at, { weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false })
+      : ist(at, { day: "numeric", month: "short" });
+}
+
 function bucketise(points: LevelPoint[], w: Window, n: number): Bucket[] {
   const out: Bucket[] = new Array(n).fill(null);
   const span = w.to - w.from;
@@ -130,6 +140,7 @@ export function TankHistory({
 }) {
   const [mode, setMode] = useState<Mode>("day");
   const [offset, setOffset] = useState(0);
+  const [hover, setHover] = useState<number | null>(null);
 
   const w = windowFor(mode, offset, now);
   const n = mode === "day" ? 48 : mode === "week" ? 84 : 90;
@@ -246,6 +257,7 @@ export function TankHistory({
           className="block w-full"
           role="img"
           aria-label={`Tank level, ${w.label}`}
+          onMouseLeave={() => setHover(null)}
         >
           {[0, 25, 50, 75, 100].map((v) => (
             <text
@@ -297,6 +309,43 @@ export function TankHistory({
           {/* A window holding a single reading has no line to draw — a dot is
               the only honest mark for one point. */}
           {dots.length === 1 && <circle cx={dots[0].x} cy={dots[0].y} r={3} fill={stroke} />}
+          {/* Hover targets: a 1.5px band is not hoverable, so each bucket gets
+              a full-height invisible column — the same shape the admin tank
+              chart already uses. The <title> keeps touch and screen readers
+              on equal terms with a pointer. */}
+          {hover !== null && buckets[hover] && (
+            <line
+              x1={x(hover)}
+              x2={x(hover)}
+              y1={0}
+              y2={height}
+              stroke={stroke}
+              strokeWidth={1}
+              strokeDasharray="3 3"
+              opacity={0.7}
+            />
+          )}
+          {hover !== null && buckets[hover] && (
+            <circle cx={x(hover)} cy={y(buckets[hover]!.last)} r={3} fill={stroke} />
+          )}
+          {buckets.map((bk, i) =>
+            bk === null ? null : (
+              <rect
+                key={`h${i}`}
+                x={x(i) - plotW / n / 2}
+                y={0}
+                width={Math.max(plotW / n, 6)}
+                height={height}
+                fill="transparent"
+                onMouseEnter={() => setHover(i)}
+                onFocus={() => setHover(i)}
+                tabIndex={0}
+                style={{ cursor: "pointer", outline: "none" }}
+              >
+                <title>{`${bk.min === bk.max ? `${bk.max}%` : `${bk.min}–${bk.max}%`} · ${bucketMoment(w, n, i, mode)}`}</title>
+              </rect>
+            ),
+          )}
           {ticks.map((t) => (
             <text
               key={t.at}
@@ -332,6 +381,18 @@ export function TankHistory({
           ) : (
             "Levels are recorded every half hour."
           )
+        ) : hover !== null && buckets[hover] ? (
+          // The summary line doubles as the hover readout rather than a
+          // floating tooltip: the space is already reserved and pinned, so
+          // reading a point cannot move the card (user-asked 2026-08-31).
+          <>
+            <span className="num" style={{ color: "var(--text)", fontWeight: 600 }}>
+              {buckets[hover]!.min === buckets[hover]!.max
+                ? `${buckets[hover]!.max}%`
+                : `${buckets[hover]!.min}–${buckets[hover]!.max}%`}
+            </span>{" "}
+            · <span className="num">{bucketMoment(w, n, hover, mode)}</span>
+          </>
         ) : (
           <>
             Low <span className="num">{Math.min(...levels)}%</span> · high{" "}

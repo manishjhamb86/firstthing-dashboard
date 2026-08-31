@@ -2499,6 +2499,39 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Hovering a chart says what the mark is worth (2026-08-31) — user-asked
+
+**Both portal charts answer "what is that number?" now**, and neither does it with a floating
+tooltip. `tank-history-chart.tsx` (the admin one) had already settled the pattern in this codebase
+— a **readout strip outside the SVG**, so it uses real type and wraps like everything else, plus a
+dashed crosshair and a `<title>` on every target so touch and screen readers get the same fact
+without a pointer. Both new charts follow it rather than inventing a second convention.
+
+Two details carry it:
+
+- **The space is reserved, so reading a value cannot move the card.** The tank chart's own
+  low/high/readings caption *becomes* the readout (its height was already pinned for the
+  arrow-stepping flicker), and the consumption chart's strip is always drawn with a floor above
+  its taller, active state. The first cut of that strip grew 8px on hover, because the active line
+  sets a 16px figure against a 13px resting line — the same class as the 1px caption jump, caught
+  by asserting the card's height before and during a hover rather than by looking.
+- **The target is a full-height invisible column per bucket, not the mark itself.** A 1.5px band
+  or a 6px bar is not hoverable; the columns make a short bar as reachable as a tall one.
+
+The consumption readout states the saving as well as the figure — "18.87 kWh · 10 Aug · before
+FirsThing 48.70 kWh — saved 61.3%" — since the comparison is the whole point and the baseline is
+off the top of the scale by design.
+
+**Also: the tanks grid carried its own `max-w-[1180px]`** while every other portal page runs to the
+shell's own container, so its card stopped short of the right edge and read as a different size
+from the rest of the product (user-caught). Removed; the check now asserts the card's right edge
+against the page container's own content edge rather than against a number.
+
+Verified 16/16 on hover and width, plus 21/21 tanks, 13/13 chart, 16/16 table — 707 unit tests,
+`tsc`/`lint`/`build` clean, zero console errors. One harness note: the bars now share their SVG
+with one invisible hover target each, so a check counting every `<rect>` counts them twice —
+`rect:not([tabindex])`.
+
 ## A table that scrolled its own heading away, and axes that clipped (2026-08-31) — user-caught
 
 **The demo report's per-circuit table forced its card into a horizontal scroll**, and because the

@@ -161,7 +161,7 @@ export default async function PortalTanksPage() {
             <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{g.note}</span>
           </div>
           <div
-            className="grid max-w-[1180px] gap-5"
+            className="grid gap-5"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}
           >
             {g.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, history }) => {

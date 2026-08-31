@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format-date";
+import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -14,7 +15,6 @@ import {
   BLOCKER_TYPE_LABEL,
   DAY_GATE_STATUS,
   INSTALLATION_PROJECT_STATE,
-  SERVICE_LINE_LABEL,
   statusMeta,
 } from "@/lib/status-maps";
 import {
@@ -101,8 +101,8 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
       // against, so it is the one the header quotes.
       subtitle={
         project
-          ? `${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${project.contractedLightCount.toLocaleString("en-IN")} lights contracted`
-          : `${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${surveyed.toLocaleString("en-IN")} lights surveyed`
+          ? `${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${project.contractedLightCount.toLocaleString("en-IN")} lights contracted`
+          : `${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${surveyed.toLocaleString("en-IN")} lights surveyed`
       }
       // Top right, in line with the title — raising a blocker is a thing you
       // do from anywhere on this screen, not a control belonging to the

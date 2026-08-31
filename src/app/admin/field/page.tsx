@@ -1,4 +1,5 @@
 import { formatDateTime } from "@/lib/format-date";
+import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -103,7 +104,7 @@ export default async function FieldWorkPage() {
           : `/admin/pipeline/${p.id}/survey`,
         societyName: p.society.name,
         societyLocation: p.society.location,
-        serviceLine: SERVICE_LINE_LABEL[p.serviceLine] ?? p.serviceLine,
+        serviceLine: dealLabel(p.serviceLine, p.dealScope),
         kind: p.installationProject ? "installation" : "survey",
         need: p.installationProject
           ? { label: "Installation", tone: "info" }

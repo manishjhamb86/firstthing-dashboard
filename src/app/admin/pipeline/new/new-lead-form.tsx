@@ -28,6 +28,7 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     meetingDate: formData.get("meetingDate") as string,
     notes: formData.get("notes") as string,
     salesOwnerId: formData.get("salesOwnerId") as string,
+    dealScope: (formData.get("dealScope") as string) || undefined,
     loggedOn: (formData.get("loggedOn") as string) || undefined,
   });
   return result;
@@ -55,6 +56,7 @@ export function NewLeadForm({
   const [newSocietyLocation, setNewSocietyLocation] = useState("");
   const [newSocietyFlatCount, setNewSocietyFlatCount] = useState("");
   const [serviceLine, setServiceLine] = useState("lighting");
+  const [dealScope, setDealScope] = useState("");
   const [contactName, setContactName] = useState("");
   const [contactPhone, setContactPhone] = useState("");
   const [meetingDate, setMeetingDate] = useState("");
@@ -145,6 +147,31 @@ export function NewLeadForm({
             ))}
           </select>
         </Field>
+
+        {/* CON-24 as amended: a line is delivered in parts, each part its own
+            deal. Solar and wastewater are one deal at a time, so the field
+            would only invite a name the server ignores. Required from the
+            second deal on — the server decides; this stays optional here. */}
+        {(serviceLine === "lighting" || serviceLine === "pumps") && (
+          <Field
+            label="Which part does this deal cover? (optional for a first deal)"
+            htmlFor="dealScope"
+            hint={
+              serviceLine === "lighting"
+                ? 'e.g. "Basement B1 & B2", "Stilt parking", "Lift lobby — Towers 1–4", "Street lights"'
+                : 'e.g. "Tank monitoring only", "Monitoring + valves & controllers", "Motor automation", "Full setup"'
+            }
+          >
+            <input
+              id="dealScope"
+              name="dealScope"
+              value={dealScope}
+              onChange={(e) => setDealScope(e.target.value)}
+              className="field"
+              maxLength={80}
+            />
+          </Field>
+        )}
 
         <div className="grid gap-5 sm:grid-cols-2">
           <Field label="Contact person" htmlFor="contactName">

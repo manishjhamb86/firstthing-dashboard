@@ -1,9 +1,10 @@
 import { formatDate } from "@/lib/format-date";
+import { dealLabel } from "@/lib/deal-scope";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { BENCHMARK_SOURCE_LABEL, OFFER_STATUS, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { BENCHMARK_SOURCE_LABEL, OFFER_STATUS, statusMeta } from "@/lib/status-maps";
 import type { OfferCircuitTerm } from "@/lib/offer";
 import { OfferForm } from "./offer-form";
 import { IssueOfferButton, RecordOutcomeControls } from "./offer-controls";
@@ -42,7 +43,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
         backHref={`/admin/pipeline/${pipeline.id}`}
         title="Offer"
         chip={status ? <StatusChip tone={status.tone}>{status.label}</StatusChip> : undefined}
-        subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · priced from the demo numbers (CON-11)`}
+        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · priced from the demo numbers (CON-11)`}
       />
 
       {!current ? (

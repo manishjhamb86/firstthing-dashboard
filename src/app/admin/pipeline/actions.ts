@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { checkNewDeal } from "@/lib/deal-scope";
 import { societyDedupeKey } from "@/lib/society-key";
 import { canOwn, isOperations, mayAct, teamMeta } from "@/lib/admin-teams";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -32,6 +33,9 @@ export async function createLead(input: {
   meetingDate: string;
   notes?: string;
   salesOwnerId: string;
+  /** Which part of the line this deal covers (CON-24 as amended) — required
+      from a line's second open deal onward, checked in deal-scope.ts. */
+  dealScope?: string;
   /** DEMO_MODE only — the day this lead was actually logged. */
   loggedOn?: string;
 }): Promise<{ error?: string; duplicateOf?: string } | undefined> {
@@ -103,12 +107,26 @@ export async function createLead(input: {
     logger.info("society.quick_created", { societyId, name, location, via: "lead" });
   }
 
-  // CON-24 — one Pipeline per (society, serviceLine).
-  const existing = await db.pipeline.findUnique({
-    where: { societyId_serviceLine: { societyId, serviceLine: input.serviceLine as never } },
+  // CON-24 as amended (2026-08-31): a line is delivered in parts, each part
+  // its own deal. deal-scope.ts owns every refusal — one open deal for
+  // solar/wastewater, a named scope from the second deal on, no duplicates.
+  const openDeals = await db.pipeline.findMany({
+    where: { societyId, serviceLine: input.serviceLine as never, stage: { not: "closed_lost" } },
+    select: { id: true, dealScope: true },
   });
-  if (existing) {
-    return { error: "This society already has a pipeline open for that service line." };
+  const dealCheck = checkNewDeal({
+    serviceLine: input.serviceLine,
+    dealScope: input.dealScope,
+    openDeals,
+  });
+  if (!dealCheck.ok) {
+    logger.warn("pipeline.new_deal_refused", {
+      actorId: session.user.id,
+      societyId,
+      serviceLine: input.serviceLine,
+      openDealCount: openDeals.length,
+    });
+    return { error: dealCheck.error };
   }
 
   // FEAT-039 — ensure the engagement exists for this (society, serviceLine).
@@ -167,6 +185,7 @@ export async function createLead(input: {
       societyId,
       serviceLine: input.serviceLine as never,
       stage: "lead",
+      dealScope: dealCheck.dealScope,
       contactName,
       contactPhone: input.contactPhone?.trim() || null,
       meetingDate,
@@ -301,6 +320,11 @@ export async function updateLeadDetails(
     meetingDate: string;
     salesOwnerId: string;
     notes?: string;
+    /** Which part of the line this deal covers — correctable here because
+        naming the FIRST deal is what unblocks opening a second (CON-24 as
+        amended; the create path refuses a sibling while any open deal on
+        the line is unnamed). */
+    dealScope?: string;
     /** The day the lead was logged, when that itself needs correcting. */
     loggedOn?: string;
   },
@@ -389,6 +413,30 @@ export async function updateLeadDetails(
   // but ONLY while it is still a lead. Flipping it on a deal that has already
   // advanced would freeze a live deal behind an approval nobody is waiting on
   // (FEAT-001-AC-2 is about the meeting that has not happened yet).
+  // A scope change collides the same way a new deal does: two open deals on
+  // one line must never share a name, and clearing the name is refused once
+  // a sibling exists — that is exactly the ambiguity the rule prevents.
+  const nextScope = input.dealScope?.trim().replace(/\s+/g, " ") || null;
+  if (nextScope !== pipeline.dealScope) {
+    const siblings = await db.pipeline.findMany({
+      where: {
+        societyId: pipeline.societyId,
+        serviceLine: pipeline.serviceLine,
+        stage: { not: "closed_lost" },
+        id: { not: pipeline.id },
+      },
+      select: { id: true, dealScope: true },
+    });
+    if (siblings.length > 0) {
+      const scopeCheck = checkNewDeal({
+        serviceLine: pipeline.serviceLine,
+        dealScope: nextScope,
+        openDeals: siblings,
+      });
+      if (!scopeCheck.ok) return { error: scopeCheck.error };
+    }
+  }
+
   const reassigned = owner.id !== pipeline.salesOwnerId;
   const authoritative =
     pipeline.stage !== "lead"
@@ -404,6 +452,7 @@ export async function updateLeadDetails(
       contactPhone: input.contactPhone?.trim() || null,
       meetingDate,
       notes: input.notes?.trim() || null,
+      dealScope: nextScope,
       salesOwnerId: owner.id,
       authoritative,
       ...(loggedAt ? { createdAt: loggedAt } : {}),

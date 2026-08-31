@@ -280,74 +280,113 @@ export function contractedFeeFor(input: {
   return { savedKwh, savedValue, firsthingFee };
 }
 
-export type MonthlyTotals = {
-  feeLines: FeeLine[];
-  /** Sum of the per-circuit extrapolations — never one circuit scaled up. */
-  totalExtrapolatedKwh: number;
-  totalSavedKwh: number;
-  totalSavedValue: number;
-  /** FirsThing's fee before proration. */
-  subtotal: number;
-  /** Set only on a contract's first billed month (CON-22). */
-  proration: Proration | null;
-  /** What the invoice is raised for. */
-  total: number;
-};
-
 /**
- * The society's month.
- *
- * The society total is the SUM of independent per-type extrapolations. There
- * is deliberately no path in this module that averages across light types or
- * scales a single circuit onto the society's whole light count — CON-11 was
- * rewritten specifically because that biases every bill for the term.
+ * One DEAL's share of the month (CON-24 as amended, 2026-08-31): a service
+ * line delivered in parts has several contracts running at once, each with
+ * its own commercial terms, its own billing start and its own term end. A
+ * part is the group of circuits that bill under ONE contract.
  */
-export function calculateMonth(input: {
+export type CalculationPart = {
+  contractId: string;
+  contract: CalculationTerms;
   circuits: Array<{
     terms: CircuitTerms;
     readings: CircuitMonthReadings;
     priorConsecutiveBreaches: number;
     priorBreachAttributableAndUncorrected: boolean;
   }>;
-  contract: CalculationTerms;
-  /** The completion-certificate signature date, on the first billed month only. */
+  /** The completion-certificate signature, on THIS part's first billed month (CON-22). */
   firstMonthSignedAt?: Date | null;
-  /** The last served day, on a termination month only (FEAT-051-AC-5). */
+  /**
+   * The part's last served day, when its term (or a termination,
+   * FEAT-051-AC-5) ends inside this month. Prorated to days served — the
+   * mirror of the first month, "one mechanism, both ends of the contract"
+   * (confirmed by the user, 2026-08-31).
+   */
   finalMonthEndsOn?: Date | null;
-}): MonthlyTotals {
-  const feeLines = input.circuits.map((c) =>
-    calculateFeeLine({
-      terms: c.terms,
-      readings: c.readings,
-      contract: input.contract,
-      priorConsecutiveBreaches: c.priorConsecutiveBreaches,
-      priorBreachAttributableAndUncorrected: c.priorBreachAttributableAndUncorrected,
-    }),
-  );
+};
 
-  const totalExtrapolatedKwh = feeLines.reduce((s, l) => s + l.extrapolatedConsumptionKwh, 0);
-  const totalSavedKwh = feeLines.reduce((s, l) => s + l.savedKwh, 0);
-  const totalSavedValue = feeLines.reduce((s, l) => s + l.savedValue, 0);
-  const subtotal = feeLines.reduce((s, l) => s + l.amount, 0);
+export type PartTotals = {
+  contractId: string;
+  feeLines: FeeLine[];
+  subtotal: number;
+  proration: Proration | null;
+  total: number;
+};
 
-  // CON-22's proration applies to the whole month's fee rather than to each
-  // line separately, so the prorated total can never disagree with the
-  // monthly figure the society accepted by a per-line rounding drift.
-  const proration = input.firstMonthSignedAt
-    ? prorateFirstMonth(input.firstMonthSignedAt)
-    : input.finalMonthEndsOn
-      ? prorateFinalMonth(input.finalMonthEndsOn)
-      : null;
-  const total = proration ? subtotal * proration.fraction : subtotal;
+export type MonthlyTotals = {
+  feeLines: FeeLine[];
+  /** Per-deal figures — what makes "₹5,000 combined" auditable back to parts. */
+  parts: PartTotals[];
+  /** Sum of the per-circuit extrapolations — never one circuit scaled up. */
+  totalExtrapolatedKwh: number;
+  totalSavedKwh: number;
+  totalSavedValue: number;
+  /** FirsThing's fee before proration. */
+  subtotal: number;
+  /**
+   * Kept for the single-part case (and the columns that store it); with
+   * several parts each carries its own proration in `parts` and this is null.
+   */
+  proration: Proration | null;
+  /** What the invoice is raised for — the combined total across every part. */
+  total: number;
+};
 
+/**
+ * The society's month: ONE combined figure per service line, summed across
+ * every part that is inside its own billing window. The user's own worked
+ * example is the contract this function keeps: part A bills ₹2,000/mo from
+ * Sept 2025, part B ₹3,000/mo from Dec 2025 → Dec's bill is ₹5,000 combined,
+ * until part A's term ends in Oct 2028 — after which ₹3,000/mo remains until
+ * part B's own end.
+ *
+ * The society total is the SUM of independent per-type extrapolations. There
+ * is deliberately no path in this module that averages across light types or
+ * scales a single circuit onto the society's whole light count — CON-11 was
+ * rewritten specifically because that biases every bill for the term.
+ *
+ * Proration is per PART, applied to that part's subtotal as a whole rather
+ * than per line — so a part's prorated total can never disagree with the
+ * monthly figure its society accepted by a per-line rounding drift, and one
+ * part's first month cannot scale a sibling part's fee.
+ */
+export function calculateMonth(input: { parts: CalculationPart[] }): MonthlyTotals {
+  const parts: PartTotals[] = input.parts.map((part) => {
+    const feeLines = part.circuits.map((c) =>
+      calculateFeeLine({
+        terms: c.terms,
+        readings: c.readings,
+        contract: part.contract,
+        priorConsecutiveBreaches: c.priorConsecutiveBreaches,
+        priorBreachAttributableAndUncorrected: c.priorBreachAttributableAndUncorrected,
+      }),
+    );
+    const subtotal = feeLines.reduce((s, l) => s + l.amount, 0);
+    const proration = part.firstMonthSignedAt
+      ? prorateFirstMonth(part.firstMonthSignedAt)
+      : part.finalMonthEndsOn
+        ? prorateFinalMonth(part.finalMonthEndsOn)
+        : null;
+    return {
+      contractId: part.contractId,
+      feeLines,
+      subtotal,
+      proration,
+      total: proration ? subtotal * proration.fraction : subtotal,
+    };
+  });
+
+  const feeLines = parts.flatMap((p) => p.feeLines);
   return {
     feeLines,
-    totalExtrapolatedKwh,
-    totalSavedKwh,
-    totalSavedValue,
-    subtotal,
-    proration,
-    total,
+    parts,
+    totalExtrapolatedKwh: feeLines.reduce((s, l) => s + l.extrapolatedConsumptionKwh, 0),
+    totalSavedKwh: feeLines.reduce((s, l) => s + l.savedKwh, 0),
+    totalSavedValue: feeLines.reduce((s, l) => s + l.savedValue, 0),
+    subtotal: parts.reduce((s, p) => s + p.subtotal, 0),
+    proration: parts.length === 1 ? parts[0].proration : null,
+    total: parts.reduce((s, p) => s + p.total, 0),
   };
 }
 

@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { dealLabel } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
-import { PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { PIPELINE_STAGE, statusMeta } from "@/lib/status-maps";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
 // FEAT-001-AC-3: an empty state explains how to log the first lead.
@@ -152,7 +153,7 @@ export default async function PipelinePage() {
                             )}
                           </div>
                         </td>
-                        <td className="text-[var(--text-muted)]">{SERVICE_LINE_LABEL[p.serviceLine]}</td>
+                        <td className="text-[var(--text-muted)]">{dealLabel(p.serviceLine, p.dealScope)}</td>
                         <td className="text-[var(--text-muted)]">{p.contactName}</td>
                         <td className="text-[var(--text-muted)]">
                           {p.salesOwner.name ?? p.salesOwner.email}

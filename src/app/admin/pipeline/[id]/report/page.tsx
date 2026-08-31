@@ -1,10 +1,11 @@
 import { formatDate } from "@/lib/format-date";
+import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { DEMO_REPORT_STATUS, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { DEMO_REPORT_STATUS, statusMeta } from "@/lib/status-maps";
 import { DemoReportView } from "@/components/demo-report-view";
 import { BLOCKER_MESSAGE, buildDemoReport } from "@/lib/demo-report";
 import { collectDemoReportInput } from "./actions";
@@ -70,7 +71,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
         backHref={`/admin/pipeline/${pipeline.id}`}
         title="Demo savings report"
         chip={status ? <StatusChip tone={status.tone}>{status.label}</StatusChip> : undefined}
-        subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · measured on the demo circuits, extrapolated society-wide (CON-11)`}
+        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · measured on the demo circuits, extrapolated society-wide (CON-11)`}
       />
 
       {!latest ? (

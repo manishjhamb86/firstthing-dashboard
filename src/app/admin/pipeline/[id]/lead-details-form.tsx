@@ -31,6 +31,9 @@ export function LeadDetailsForm({
     loggedOn: string;
     salesOwnerId: string;
     notes: string;
+    dealScope: string;
+    /** Hide the field for solar/wastewater — one deal at a time, no parts. */
+    serviceLine: string;
   };
 }) {
   const [error, setError] = useState<string | undefined>();
@@ -41,6 +44,7 @@ export function LeadDetailsForm({
   const [loggedOn, setLoggedOn] = useState(current.loggedOn);
   const [salesOwnerId, setSalesOwnerId] = useState(current.salesOwnerId);
   const [notes, setNotes] = useState(current.notes);
+  const [dealScope, setDealScope] = useState(current.dealScope);
 
   const router = useRouter();
   const pathname = usePathname();
@@ -64,6 +68,7 @@ export function LeadDetailsForm({
         loggedOn,
         salesOwnerId,
         notes,
+        dealScope,
       });
       if (result?.error) setError(result.error);
       else close();
@@ -167,6 +172,22 @@ export function LeadDetailsForm({
           This hands the lead to {newOwner.name}. It becomes theirs, and while it is still at the
           lead stage they confirm it after their meeting before the deal can advance.
         </p>
+      )}
+
+      {(current.serviceLine === "lighting" || current.serviceLine === "pumps") && (
+        <Field
+          label="Which part does this deal cover?"
+          htmlFor="ld-scope"
+          hint="Naming the parts is what lets two deals on one service line be told apart (CON-24)."
+        >
+          <input
+            id="ld-scope"
+            className="field"
+            value={dealScope}
+            onChange={(e) => setDealScope(e.target.value)}
+            maxLength={80}
+          />
+        </Field>
       )}
 
       <Field label="Notes" htmlFor="ld-notes">

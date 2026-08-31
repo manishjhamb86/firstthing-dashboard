@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -53,6 +54,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       select: {
         id: true,
         serviceLine: true,
+        dealScope: true,
         stage: true,
         contactName: true,
         createdAt: true,
@@ -67,7 +69,9 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       orderBy: { name: "asc" },
     }),
   ]);
-  const pipelineFor = new Map(pipelines.map((p) => [p.serviceLine as string, p]));
+  // CON-24 as amended (2026-08-31): a line is delivered in PARTS, each part
+  // its own deal — so a line maps to a LIST of deals now, never to one.
+  const dealsFor = (line: string) => pipelines.filter((p) => (p.serviceLine as string) === line);
 
   // What to actually do next, per open deal — resolved from the same
   // sequencing module every other screen uses.
@@ -83,11 +87,13 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       openDeals.map(async (p) => {
         const progress = await loadDealProgress(p.id);
         return progress?.next
-          ? { serviceLine: p.serviceLine as string, next: progress.next }
+          ? { serviceLine: p.serviceLine as string, dealScope: p.dealScope, next: progress.next }
           : null;
       }),
     )
-  ).filter((x): x is { serviceLine: string; next: NextAction } => x !== null);
+  ).filter(
+    (x): x is { serviceLine: string; dealScope: string | null; next: NextAction } => x !== null,
+  );
 
   // Nothing is running yet — the first move depends on which piece is
   // missing, and saying which beats a page of empty cards.
@@ -141,10 +147,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           not have to guess which is being described. */}
       {coldStart && <NextStepCallout next={coldStart} />}
       {nextSteps.map((s) => (
+        // Keyed and titled by the DEAL, not the line: two lighting parts can
+        // each carry a next step, and the eyebrow is what says which is which.
         <NextStepCallout
-          key={s.serviceLine}
+          key={`${s.serviceLine}:${s.dealScope ?? ""}`}
           next={s.next}
-          eyebrow={SERVICE_LINE_LABEL[s.serviceLine] ?? s.serviceLine}
+          eyebrow={dealLabel(s.serviceLine, s.dealScope)}
         />
       ))}
 
@@ -183,7 +191,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             <ul className="space-y-0">
               {ALL_SERVICE_LINES.map((line) => {
                 const engagement = engagements.find((e) => e.serviceLine === line);
-                const pipeline = pipelineFor.get(line);
+                const lineDeals = dealsFor(line);
                 const status = engagement ? statusMeta(ENGAGEMENT_STATUS, engagement.status) : null;
                 const canEnrol = pipelines.length > 0;
                 return (
@@ -204,10 +212,20 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                           ) : (
                             "Not enrolled — enrolment follows a lead"
                           )
-                        ) : pipeline ? (
-                          <Link href={`/admin/pipeline/${pipeline.id}`} className="underline">
+                        ) : lineDeals.length === 1 ? (
+                          <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="underline">
                             Open the deal →
                           </Link>
+                        ) : lineDeals.length > 1 ? (
+                          // Each part is its own deal; the scope is what
+                          // tells them apart.
+                          <span className="flex flex-wrap gap-x-3 gap-y-0.5">
+                            {lineDeals.map((d) => (
+                              <Link key={d.id} href={`/admin/pipeline/${d.id}`} className="underline">
+                                {d.dealScope ?? "Unnamed part"} →
+                              </Link>
+                            ))}
+                          </span>
                         ) : (
                           <>
                             Enrolled, but no deal running.{" "}
@@ -274,7 +292,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                     >
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                         <Link href={`/admin/pipeline/${p.id}`} className="font-medium hover:underline">
-                          {SERVICE_LINE_LABEL[p.serviceLine] ?? p.serviceLine}
+                          {dealLabel(p.serviceLine, p.dealScope)}
                         </Link>
                         <span className="flex items-center gap-2">
                           {!p.authoritative && <StatusChip tone="warn">Pending approval</StatusChip>}

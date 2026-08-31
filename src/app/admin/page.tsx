@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { dealLabel } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
-import { CIRCUIT_STATE, PIPELINE_STAGE, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { CIRCUIT_STATE, PIPELINE_STAGE, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
@@ -269,7 +270,7 @@ export default async function AdminHomePage() {
                                 {p.society.name}
                               </Link>
                             </td>
-                            <td className="text-[var(--text-muted)]">{SERVICE_LINE_LABEL[p.serviceLine]}</td>
+                            <td className="text-[var(--text-muted)]">{dealLabel(p.serviceLine, p.dealScope)}</td>
                             <td className="text-[var(--text-muted)]">
                               {p.salesOwner.name ?? p.salesOwner.email}
                             </td>

@@ -1,10 +1,11 @@
 import { formatDate } from "@/lib/format-date";
+import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { CONTRACT_STATUS, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { CONTRACT_STATUS, statusMeta } from "@/lib/status-maps";
 import { publicS3Url } from "@/lib/s3";
 import {
   ActivateContractForm,
@@ -61,7 +62,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
         backHref={`/admin/pipeline/${pipeline.id}`}
         title="Agreement & contract"
         chip={contractStatus ? <StatusChip tone={contractStatus.tone}>{contractStatus.label}</StatusChip> : undefined}
-        subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · prepared from the accepted offer`}
+        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · prepared from the accepted offer`}
         // Top right, and only once there is an agreement to print — it was
         // buried under the execution table, where a document you may need at
         // any point in the flow is the hardest thing to find.

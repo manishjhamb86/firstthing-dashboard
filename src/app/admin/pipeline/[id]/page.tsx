@@ -1,8 +1,8 @@
 import { isDemoMode } from "@/lib/demo-mode";
+import { dealLabel } from "@/lib/deal-scope";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
-import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { ProposalForm } from "./proposal-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
@@ -167,7 +167,7 @@ export default async function PipelineDetailPage({
         // The map's own current step, not Pipeline.stage — see the phase
         // field in deal-progress.ts for why the two used to disagree.
         chip={<StatusChip tone={progress.phase.tone}>{progress.phase.label}</StatusChip>}
-        subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · ${pipeline.society.location}`}
+        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${pipeline.society.location}`}
       />
 
       {/* The one thing the operator came here to learn: what to do now — or,
@@ -276,6 +276,8 @@ export default async function PipelineDetailPage({
                   loggedOn: isoDate(pipeline.createdAt),
                   salesOwnerId: pipeline.salesOwnerId,
                   notes: pipeline.notes ?? "",
+                  dealScope: pipeline.dealScope ?? "",
+                  serviceLine: pipeline.serviceLine,
                 }}
               />
             ) : (

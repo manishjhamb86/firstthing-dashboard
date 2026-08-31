@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format-date";
+import { dealLabel } from "@/lib/deal-scope";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -7,7 +8,6 @@ import {
   KYC_FILE_STATE,
   KYC_REQUIREMENT_STATUS,
   RECEIPT_CHANNEL_LABEL,
-  SERVICE_LINE_LABEL,
   statusMeta,
 } from "@/lib/status-maps";
 import { KYC_REQUIREMENTS, kycIsSettled } from "@/lib/kyc";
@@ -67,7 +67,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
             {settled} of {items.length} settled
           </StatusChip>
         }
-        subtitle={`${SERVICE_LINE_LABEL[pipeline.serviceLine]} · collected before the agreement can be executed`}
+        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · collected before the agreement can be executed`}
       />
 
       {!canEdit && (

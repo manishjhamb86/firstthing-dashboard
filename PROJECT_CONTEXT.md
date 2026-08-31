@@ -2499,6 +2499,63 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## A service line is delivered in parts: deals, demos capped, and billing that combines (2026-08-31) — user-specified
+
+**The ask, analysed against the codebase before building**: lighting is really 1–8 deals per
+society (basement levels, stilt parking, lift lobby by tower batch, street lights), water up to 3
+setup kinds, solar/wastewater one at a time for now; each deal runs its own lead → survey → 1–3
+demos → consolidated report → agreement → contract with its own term; and once several parts bill,
+the month is ONE combined figure — the user's own example: ₹2,000/mo from Sept + ₹3,000/mo from
+Dec = ₹5,000 combined until the first part's term ends in Oct 2028, then ₹3,000 until the second's.
+**What already matched and was NOT rebuilt**: the 1–3 demos with approve/reject/combine
+(`CircuitDemo`, 2026-08-27 — only the max-3 cap was new), the consolidated report, and the 1:1
+pipeline→contract chain. One question was asked (per the ask-where-needed instruction): a term
+ending mid-month **prorates to days served** — the user picked the mirror of CON-22's first month,
+which `prorateFinalMonth` ("one mechanism, both ends") already implemented for terminations.
+
+**CON-24 amended, in the blueprint and the schema.** `00-intake.md`'s CON-24 row carries a dated
+amendment; `Pipeline` gains `dealScope` and loses `@@unique([societyId, serviceLine])` (migration
+`20260831170000`, drops the index safely — no environment has two deals per line yet). The rules
+live in one pure module, `src/lib/deal-scope.ts` (12 unit cases): solar/wastewater refuse a second
+OPEN deal (closed-lost frees the slot — the old unique blocked a retry forever); a line's second
+deal must be named AND the first must already be named (two deals a screen can only label
+"Lighting" are indistinguishable everywhere); duplicate scopes are refused case/space-insensitively
+— refuse-not-flag, the same call as duplicate societies and circuits, because an override is how
+those duplicates happened. `dealLabel()` is the one place "Lighting — Basement B1" is built; the
+pipeline list, deal header + sub-pages, society page (which listed only ONE deal per line), field
+work, billing snapshot and the portal's report cards all read it. Ops can name/correct a scope from
+the lead's own Edit, with the same collision rules.
+
+**Billing: each circuit bills under its OWN deal's contract, inside that contract's own window —
+still one combined calculation per (society, line, month).** `calculateMonth` now takes
+`parts: CalculationPart[]` — per part: its own tolerance/share/rate (parts are negotiated
+separately), its own CON-22 first-month proration and its own final-month proration, applied to
+that part's subtotal only. The old shape prorated the WHOLE month's subtotal, so one part's first
+month would have scaled a sibling's fee — asserted impossible now. `runCalculation` resolves each
+circuit's contract through its own survey's pipeline (the path the band alert already walks); a
+part outside its window is a stated note, never a blocker (one part not yet billing used to be
+exactly what held the parts that were); a missing certificate, term-ended part, or scope-less
+circuit is stated in the snapshot. `contractTermVersionId` stays set for a single part and goes
+null with several — the per-part versions, prorations and totals live in `inputVersionSnapshot`.
+The billing board shows ONE row per combined bill ("2 parts combine into one bill"), not one per
+contract with two identical run buttons.
+
+**Verified to the paisa against hand-computed figures, through the browser, asserted on the
+database** (15/15): August combines ₹5,832.96 (part A, ₹8/58%/±5) + ₹3,627 × 20/31 (part B's first
+month, ₹10/60%/±10) = ₹8,172.96 exactly; September prorates part A's final month (term ends the
+20th) to ₹3,763.20 + ₹3,510 = ₹7,273.20; October bills part B alone at ₹3,627 with part A's absence
+STATED in the snapshot ("term ended") and no fee line written for it. Plus 13/13 on the deal rules
+(unnamed-sibling, duplicate, solar-second refusals all driven through the server with nothing
+written) and 2/2 on the demo cap (a fourth demo refused by name, count unchanged). 725 unit tests
+(39 in monthly-calculation including the user's own worked example; 6 new multi-part cases, one
+asserting a ±10 part in band while a ±2 part is out of band on identical readings), portal
+regressions 13/13 and 12/12, `tsc`/`lint`/`build` clean. Fixtures removed by cascade, confirmed by
+count.
+
+**Worth remembering**: the dev server struck the stale-Prisma-client trap AGAIN after this
+migration (fourth recorded time) — the first e2e run failed on a client that predated `dealScope`;
+restart `next dev` after any migration.
+
 ## Inventory counted the demo circuit, not the installation (2026-08-31) — user-caught
 
 **Reported**: "In inventory it is showing only the demo install lights. not the complete

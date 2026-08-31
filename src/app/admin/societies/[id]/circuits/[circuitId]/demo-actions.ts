@@ -8,6 +8,7 @@
 // demo moves the benchmark in the same transaction that rejects it.
 
 import { revalidatePath } from "next/cache";
+import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -76,12 +77,21 @@ export async function recordCircuitDemo(input: {
     return { error: `A demo that consumed ${post} after and ${pre} before saved nothing — check the two figures.` };
   }
 
+  let capped = false;
   await db.$transaction(async (tx) => {
     const last = await tx.circuitDemo.findFirst({
       where: { circuitId: input.circuitId },
       orderBy: { sequence: "desc" },
       select: { sequence: true },
     });
+    // "for each pipeline there can be multiple demos between 1-3 max" (the
+    // user, 2026-08-31). Counted against sequence, so a rejected demo still
+    // spends its slot — it stays on record by design, and re-running past
+    // three is a commercial conversation, not a fourth measurement.
+    if ((last?.sequence ?? 0) >= MAX_DEMOS_PER_CIRCUIT) {
+      capped = true;
+      return;
+    }
     await tx.circuitDemo.create({
       data: {
         circuitId: input.circuitId,
@@ -96,6 +106,13 @@ export async function recordCircuitDemo(input: {
     });
     await resyncBenchmark(tx, input.circuitId);
   });
+
+  if (capped) {
+    logger.warn("circuit.demo_cap_refused", { actorId: admin.id, circuitId: input.circuitId });
+    return {
+      error: `This circuit already has ${MAX_DEMOS_PER_CIRCUIT} demos on record — the maximum. Reject the one that should not count, or record an agreed benchmark override instead.`,
+    };
+  }
 
   logger.info("circuit.demo_recorded", { actorId: admin.id, circuitId: input.circuitId, metered: n });
   revalidatePath("/admin/societies", "layout");

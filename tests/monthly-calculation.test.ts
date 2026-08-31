@@ -145,24 +145,29 @@ describe("TC-048-1 — CON-11's per-circuit extrapolation and fee", () => {
     // average of the two ratios would give 300 × (100+40) = a different, wrong
     // number; CON-11 was rewritten precisely to forbid that.
     const month = calculateMonth({
-      contract: TERMS,
-      circuits: [
+      parts: [
         {
-          terms: circuit({ circuitId: "a", meteredLightCount: 40, representedLightCount: 200 }),
-          readings: { circuitId: "a", meteredKwh: 100, coverageDays: 30, daysInMonth: 30 },
-          priorConsecutiveBreaches: 0,
-          priorBreachAttributableAndUncorrected: false,
-        },
-        {
-          terms: circuit({
-            circuitId: "b",
-            lightType: "staircase",
-            meteredLightCount: 10,
-            representedLightCount: 60,
-          }),
-          readings: { circuitId: "b", meteredKwh: 40, coverageDays: 30, daysInMonth: 30 },
-          priorConsecutiveBreaches: 0,
-          priorBreachAttributableAndUncorrected: false,
+          contractId: "ct-1",
+          contract: TERMS,
+          circuits: [
+            {
+              terms: circuit({ circuitId: "a", meteredLightCount: 40, representedLightCount: 200 }),
+              readings: { circuitId: "a", meteredKwh: 100, coverageDays: 30, daysInMonth: 30 },
+              priorConsecutiveBreaches: 0,
+              priorBreachAttributableAndUncorrected: false,
+            },
+            {
+              terms: circuit({
+                circuitId: "b",
+                lightType: "staircase",
+                meteredLightCount: 10,
+                representedLightCount: 60,
+              }),
+              readings: { circuitId: "b", meteredKwh: 40, coverageDays: 30, daysInMonth: 30 },
+              priorConsecutiveBreaches: 0,
+              priorBreachAttributableAndUncorrected: false,
+            },
+          ],
         },
       ],
     });
@@ -373,16 +378,22 @@ describe("calculateMonth — the first billed month", () => {
   ];
 
   it("bills the whole fee when there is no first-month proration", () => {
-    const m = calculateMonth({ circuits: oneCircuit, contract: TERMS });
+    const m = calculateMonth({ parts: [{ contractId: "ct-1", circuits: oneCircuit, contract: TERMS }] });
     expect(m.proration).toBeNull();
     expect(m.total).toBe(1142.4);
   });
 
   it("prorates SCR-064's own worked example — signed 20 Aug, 11 of 31 days", () => {
     const m = calculateMonth({
-      circuits: oneCircuit,
-      contract: TERMS,
-      firstMonthSignedAt: new Date(Date.UTC(2026, 7, 20)),
+      parts: [
+        {
+          contractId: "ct-1",
+          circuits: oneCircuit,
+          contract: TERMS,
+          firstMonthSignedAt: new Date(Date.UTC(2026, 7, 20)),
+    
+        },
+      ],
     });
     expect(m.proration!.proratedDays).toBe(11);
     expect(m.proration!.daysInMonth).toBe(31);
@@ -394,17 +405,23 @@ describe("calculateMonth — the first billed month", () => {
     // prorated once, and the society accepted a monthly figure, not a set of
     // line figures.
     const m = calculateMonth({
-      circuits: [
-        oneCircuit[0],
+      parts: [
         {
-          terms: circuit({ circuitId: "b", contractedMonthlyFee: 333.33 }),
-          readings: { circuitId: "b", meteredKwh: 96, coverageDays: 30, daysInMonth: 31 },
-          priorConsecutiveBreaches: 0,
-          priorBreachAttributableAndUncorrected: false,
+          contractId: "ct-1",
+          circuits: [
+            oneCircuit[0],
+            {
+              terms: circuit({ circuitId: "b", contractedMonthlyFee: 333.33 }),
+              readings: { circuitId: "b", meteredKwh: 96, coverageDays: 30, daysInMonth: 31 },
+              priorConsecutiveBreaches: 0,
+              priorBreachAttributableAndUncorrected: false,
+            },
+          ],
+          contract: TERMS,
+          firstMonthSignedAt: new Date(Date.UTC(2026, 7, 20)),
+    
         },
       ],
-      contract: TERMS,
-      firstMonthSignedAt: new Date(Date.UTC(2026, 7, 20)),
     });
     expect(m.subtotal).toBeCloseTo(1475.73, 10);
     expect(m.total).toBeCloseTo(1475.73 * (11 / 31), 10);
@@ -415,9 +432,15 @@ describe("calculateMonth — the first billed month", () => {
     // bills 12 days — inclusive of the last served day, the mirror of the
     // start being inclusive of the first.
     const m = calculateMonth({
-      circuits: oneCircuit,
-      contract: TERMS,
-      finalMonthEndsOn: new Date(Date.UTC(2026, 7, 12)),
+      parts: [
+        {
+          contractId: "ct-1",
+          circuits: oneCircuit,
+          contract: TERMS,
+          finalMonthEndsOn: new Date(Date.UTC(2026, 7, 12)),
+    
+        },
+      ],
     });
     expect(m.proration!.proratedDays).toBe(12);
     expect(m.proration!.daysInMonth).toBe(31);
@@ -426,9 +449,15 @@ describe("calculateMonth — the first billed month", () => {
 
   it("prorates against February's own denominator, not a 30-day convention", () => {
     const m = calculateMonth({
-      circuits: oneCircuit,
-      contract: TERMS,
-      finalMonthEndsOn: new Date(Date.UTC(2028, 1, 14)), // leap year
+      parts: [
+        {
+          contractId: "ct-1",
+          circuits: oneCircuit,
+          contract: TERMS,
+          finalMonthEndsOn: new Date(Date.UTC(2028, 1, 14)), // leap year
+    
+        },
+      ],
     });
     expect(m.proration!.daysInMonth).toBe(29);
     expect(m.proration!.fraction).toBeCloseTo(14 / 29, 10);
@@ -436,9 +465,15 @@ describe("calculateMonth — the first billed month", () => {
 
   it("a signature on the last day of a month bills the next month in full", () => {
     const m = calculateMonth({
-      circuits: oneCircuit,
-      contract: TERMS,
-      firstMonthSignedAt: new Date(Date.UTC(2026, 7, 31)),
+      parts: [
+        {
+          contractId: "ct-1",
+          circuits: oneCircuit,
+          contract: TERMS,
+          firstMonthSignedAt: new Date(Date.UTC(2026, 7, 31)),
+    
+        },
+      ],
     });
     expect(m.proration!.proratedDays).toBe(30); // 1–30 September
     expect(m.proration!.fraction).toBe(1);
@@ -451,5 +486,116 @@ describe("toRupees", () => {
     // 1,142.40 × 11/31 = 405.3677… — rounded once, here, and nowhere earlier.
     expect(toRupees(1142.4 * (11 / 31))).toBe(405.37);
     expect(toRupees(0.005)).toBe(0.01);
+  });
+});
+
+describe("calculateMonth — a service line delivered in parts (CON-24 as amended, 2026-08-31)", () => {
+  // A helper part: one circuit whose contracted fee is exactly `fee`, with
+  // its own commercial terms — parts are negotiated separately, so nothing
+  // may assume the terms match across them.
+  const part = (
+    contractId: string,
+    fee: number,
+    overrides: Partial<{
+      firstMonthSignedAt: Date | null;
+      finalMonthEndsOn: Date | null;
+      tolerancePct: number;
+      societyRevenueSharePct: number;
+      unitElectricityRate: number;
+    }> = {},
+  ) => ({
+    contractId,
+    contract: {
+      tolerancePct: overrides.tolerancePct ?? 5,
+      societyRevenueSharePct: overrides.societyRevenueSharePct ?? 58,
+      unitElectricityRate: overrides.unitElectricityRate ?? 8,
+    },
+    circuits: [
+      {
+        terms: circuit({ circuitId: `${contractId}-ckt`, contractedMonthlyFee: fee }),
+        readings: { circuitId: `${contractId}-ckt`, meteredKwh: 96, coverageDays: 30, daysInMonth: 31 },
+        priorConsecutiveBreaches: 0,
+        priorBreachAttributableAndUncorrected: false,
+      },
+    ],
+    firstMonthSignedAt: overrides.firstMonthSignedAt ?? null,
+    finalMonthEndsOn: overrides.finalMonthEndsOn ?? null,
+  });
+
+  it("the user's own worked example: two parts combine into one month's total", () => {
+    // Part A bills ₹2,000/mo from Sept 2025; part B ₹3,000/mo from Dec 2025.
+    // December's bill is ₹5,000 combined — one figure, two parts behind it.
+    const m = calculateMonth({ parts: [part("ct-a", 2000), part("ct-b", 3000)] });
+    expect(m.total).toBe(5000);
+    expect(m.parts.map((x) => x.total)).toEqual([2000, 3000]);
+  });
+
+  it("after part A's term ends, only part B remains — ₹3,000, not ₹5,000", () => {
+    // The caller (runCalculation) excludes a part whose term ended before the
+    // month; the module sees only what still bills. Nov 2028 in the example.
+    const m = calculateMonth({ parts: [part("ct-b", 3000)] });
+    expect(m.total).toBe(3000);
+  });
+
+  it("one part's first-month proration never scales a sibling's fee", () => {
+    // Part B signs 20 Aug (11 of 31 days); part A is mid-term. Prorating the
+    // combined subtotal — the old single-contract behaviour — would bill
+    // part A at 11/31 of its fee for a month it served in full.
+    const m = calculateMonth({
+      parts: [
+        part("ct-a", 2000),
+        part("ct-b", 3000, { firstMonthSignedAt: new Date(Date.UTC(2026, 7, 20)) }),
+      ],
+    });
+    expect(m.parts[0].total).toBe(2000);
+    expect(m.parts[1].total).toBeCloseTo(3000 * (11 / 31), 10);
+    expect(m.total).toBeCloseTo(2000 + 3000 * (11 / 31), 10);
+    // The single-proration column has nothing true to say across two parts.
+    expect(m.proration).toBeNull();
+  });
+
+  it("a part whose term ends mid-month prorates to the days it served (the user's call)", () => {
+    // Term ends 20 Oct of a 31-day month: that part bills 20/31, its sibling
+    // in full — the mirror of CON-22's first month, per part.
+    const m = calculateMonth({
+      parts: [
+        part("ct-a", 2000, { finalMonthEndsOn: new Date(Date.UTC(2028, 9, 20)) }),
+        part("ct-b", 3000),
+      ],
+    });
+    expect(m.parts[0].proration!.proratedDays).toBe(20);
+    expect(m.parts[0].total).toBeCloseTo(2000 * (20 / 31), 10);
+    expect(m.parts[1].total).toBe(3000);
+    expect(m.total).toBeCloseTo(2000 * (20 / 31) + 3000, 10);
+  });
+
+  it("each part bills under its OWN commercial terms, never a sibling's", () => {
+    // Same readings, different tolerance: ±10 keeps the line in band while
+    // ±2 puts the identical shortfall out of band. If parts shared terms,
+    // these two lines could not disagree.
+    const shortfall = {
+      terms: circuit({ circuitId: "x", benchmarkSavingsPct: 72 }),
+      readings: { circuitId: "x", meteredKwh: 96, coverageDays: 30, daysInMonth: 31 },
+      priorConsecutiveBreaches: 0,
+      priorBreachAttributableAndUncorrected: false,
+    };
+    const m = calculateMonth({
+      parts: [
+        { contractId: "ct-loose", contract: { tolerancePct: 10, societyRevenueSharePct: 58, unitElectricityRate: 8 }, circuits: [{ ...shortfall, terms: circuit({ circuitId: "loose", benchmarkSavingsPct: 72 }), readings: { ...shortfall.readings, circuitId: "loose" } }] },
+        { contractId: "ct-tight", contract: { tolerancePct: 2, societyRevenueSharePct: 58, unitElectricityRate: 8 }, circuits: [{ ...shortfall, terms: circuit({ circuitId: "tight", benchmarkSavingsPct: 72 }), readings: { ...shortfall.readings, circuitId: "tight" } }] },
+      ],
+    });
+    expect(m.feeLines.find((l) => l.circuitId === "loose")!.complianceResult).toBe("in_band");
+    expect(m.feeLines.find((l) => l.circuitId === "tight")!.complianceResult).toBe("out_of_band");
+  });
+
+  it("a single part still reports its proration on the combined figure", () => {
+    // The MonthlyCalculation columns that store one proration stay truthful
+    // for the common single-deal case.
+    const m = calculateMonth({
+      parts: [part("ct-a", 2000, { firstMonthSignedAt: new Date(Date.UTC(2026, 7, 20)) })],
+    });
+    expect(m.proration!.proratedDays).toBe(11);
+    expect(m.total).toBeCloseTo(2000 * (11 / 31), 10);
   });
 });

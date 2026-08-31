@@ -56,10 +56,21 @@ export default async function BillingPage({
     if (!live.has(key)) live.set(key, c);
   }
 
-  const rows = contracts.map((c) => {
+  // CON-24 as amended: several contracts (parts) can run under one service
+  // line, but the month is ONE combined calculation — so the board shows one
+  // row per (society, line), naming its parts, not one row per contract
+  // (which rendered the same run button twice for the same combined figure).
+  const groups = new Map<string, (typeof contracts)[number][]>();
+  for (const c of contracts) {
+    const key = `${c.societyId}:${c.serviceLine}`;
+    groups.set(key, [...(groups.get(key) ?? []), c]);
+  }
+  const rows = [...groups.values()].map((group) => {
+    const c = group[0];
     const calc = live.get(`${c.societyId}:${c.serviceLine}`) ?? null;
     return {
       contract: c,
+      parts: group,
       calc,
       outOfBand: calc?.feeLines.filter((l) => l.complianceResult === "out_of_band").length ?? 0,
     };
@@ -147,7 +158,7 @@ export default async function BillingPage({
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ contract, calc, outOfBand }) => {
+              {rows.map(({ contract, parts, calc, outOfBand }) => {
                 const meta = calc ? CALC_STATUS[calc.status] : null;
                 const href = calc ? `/admin/billing/${calc.id}` : null;
                 const body = (
@@ -158,6 +169,11 @@ export default async function BillingPage({
                     </td>
                     <td className="hidden md:table-cell">
                       {SERVICE_LINE_LABEL[contract.serviceLine] ?? contract.serviceLine}
+                      {parts.length > 1 && (
+                        <p className="text-xs text-[var(--text-subtle)]">
+                          {parts.length} parts combine into one bill
+                        </p>
+                      )}
                     </td>
                     <td>
                       {meta ? (

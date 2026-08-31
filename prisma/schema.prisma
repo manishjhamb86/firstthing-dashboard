@@ -544,16 +544,30 @@ model AdminUser {
 }
 
 // ── Deal & pipeline (COMP-01), MS-03 scope only ──────────────────────────
-// CON-24: one Pipeline per (society, serviceLine) — the @@unique below is
-// the structural guarantee, not just an application check. Field list is
-// MS-03's own scope (FEAT-001/002) — offers/contracts/follow-ups arrive
-// with the milestones that build them (09-architecture.md §5.2's "field
-// lists are representative, not exhaustive").
+// CON-24 as amended 2026-08-31 (the user's own operating reality): a service
+// line is usually delivered in PARTS — lighting as 1–8 deals (Basement B1,
+// stilt parking, lift lobby by tower batch, street lights…), water as up to
+// 3 (monitoring only / monitoring + valves & controllers / motor
+// automation) — each part its own deal: lead → survey → demos → report →
+// agreement → contract, each contract with its own term. So a Pipeline is
+// one DEAL, keyed by (society, serviceLine, dealScope), not one per line.
+// The old @@unique is gone; the per-line rules (solar/wastewater one open
+// deal at a time, no duplicate scope, a second deal must be named) live in
+// src/lib/deal-scope.ts and createLead. Billing still produces ONE combined
+// calculation per (society, serviceLine, period) — each circuit bills under
+// its OWN deal's contract, inside that contract's own window.
 model Pipeline {
   id          String        @id @default(cuid())
   societyId   String        @map("society_id")
   serviceLine ServiceLine   @map("service_line")
   stage       PipelineStage @default(lead)
+
+  /// Which part of the service line this deal covers ("Basement B1 & B2",
+  /// "Lift lobby — Towers 1–4", "Tank monitoring only"). Free text, because
+  /// the real scopes ("one or more towers at a time and some later") cannot
+  /// be enumerated. Null on a line's only deal; required from the second
+  /// deal on, checked in createLead.
+  dealScope String? @map("deal_scope")
 
   // FEAT-001 lead-capture fields
   contactName  String   @map("contact_name")
@@ -618,7 +632,7 @@ model Pipeline {
   // MS-06
   installationProject InstallationProject?
 
-  @@unique([societyId, serviceLine]) // CON-24
+  @@index([societyId, serviceLine]) // CON-24 (amended): many deals per line
   @@index([salesOwnerId])
   @@map("pipelines")
 }

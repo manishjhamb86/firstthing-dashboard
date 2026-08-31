@@ -560,8 +560,12 @@ export async function createCircuitFromDocument(input: {
       create: { societyId: doc.societyId, serviceLine: "lighting" },
     });
 
+    // Backfill targets a pre-system society, which has one lighting deal;
+    // if parts exist (CON-24 as amended), the OLDEST deal is the original
+    // installation the paper describes — and the pick is deterministic.
     let pipeline = await tx.pipeline.findFirst({
       where: { societyId: doc.societyId, serviceLine: "lighting" },
+      orderBy: { createdAt: "asc" },
     });
     if (!pipeline) {
       pipeline = await tx.pipeline.create({
@@ -778,7 +782,11 @@ export async function createContractFromAgreement(input: {
       create: { societyId: doc.societyId, serviceLine: "lighting" },
     });
 
-    let pipeline = await tx.pipeline.findFirst({ where: { societyId: doc.societyId, serviceLine: "lighting" } });
+    // Same deterministic pick as the circuit backfill above.
+    let pipeline = await tx.pipeline.findFirst({
+      where: { societyId: doc.societyId, serviceLine: "lighting" },
+      orderBy: { createdAt: "asc" },
+    });
     if (!pipeline) {
       pipeline = await tx.pipeline.create({
         data: {

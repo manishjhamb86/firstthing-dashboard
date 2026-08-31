@@ -9,6 +9,7 @@ import { COVERAGE_FLOOR_DAYS } from "@/lib/reading-coverage";
 import { daysInPeriod } from "@/lib/reading-normalize";
 import { calculateMonth, type CircuitMonthReadings, type CircuitTerms } from "@/lib/monthly-calculation";
 import { requireBillingOps } from "./access";
+import { dealLabel } from "@/lib/deal-scope";
 
 const PATH = "/admin/billing";
 
@@ -55,40 +56,93 @@ export async function runCalculation(input: {
     return { error: "The billing period must be a YYYY-MM selection." };
   }
 
-  const contract = await db.contract.findFirst({
+  // CON-24 as amended (2026-08-31): a service line is delivered in PARTS,
+  // each part its own deal with its own contract, terms, billing start and
+  // term end. The month is still ONE combined calculation for the line — the
+  // user's own example: part A ₹2,000/mo from Sept, part B ₹3,000/mo from
+  // Dec → ₹5,000 combined, dropping back to ₹3,000 when part A's term ends.
+  const contracts = await db.contract.findMany({
     where: { societyId: input.societyId, serviceLine: input.serviceLine, status: "active" },
-    include: { versions: { orderBy: { effectiveFrom: "asc" } } },
+    include: {
+      versions: { orderBy: { effectiveFrom: "asc" } },
+      pipeline: { select: { id: true, dealScope: true } },
+    },
   });
-  if (!contract) return { error: "This society has no active contract for that service line." };
+  if (contracts.length === 0) {
+    return { error: "This society has no active contract for that service line." };
+  }
 
   const { from, to } = periodBounds(input.period);
 
-  // The terms in force during the month being billed — not today's terms.
-  // FEAT-062-AC-5: an amendment applies forward only, so a prior month stays
-  // computed against the version that was in force at the time.
-  const terms = [...contract.versions].filter((v) => v.effectiveFrom <= to).pop();
-  if (!terms) return { error: "This contract has no term version effective for that month." };
+  type Part = {
+    contract: (typeof contracts)[number];
+    terms: (typeof contracts)[number]["versions"][number];
+    label: string;
+    firstMonthSignedAt: Date | null;
+    finalMonthEndsOn: Date | null;
+    billingStartDate: Date;
+  };
+  const parts: Part[] = [];
+  // A part outside its window is STATED, never a blocker: one part not yet
+  // billing must not hold up the parts that are — that used to be exactly
+  // what happened when the run assumed a single contract.
+  const windowNotes: string[] = [];
 
-  // CON-22 — the completion certificate is a hard input for the first month
-  // (FEAT-051-AC-3). Without it there is no start date to prorate from, and
-  // the bill is held rather than guessed at.
-  const project = await db.installationProject.findFirst({
-    where: { pipelineId: contract.pipelineId },
-    select: { certificate: { select: { signedAt: true, billingStartDate: true } } },
-  });
-  const certificate = project?.certificate ?? null;
-  if (!certificate) {
-    return { error: "Billing hasn't started for this society — no completion certificate is recorded (CON-22)." };
+  for (const contract of contracts) {
+    const label = dealLabel(input.serviceLine, contract.pipeline.dealScope);
+    // CON-22 — this part's completion certificate is the hard input for its
+    // first month (FEAT-051-AC-3). Without it there is no start date to
+    // prorate from, so the part is out of the month rather than guessed at.
+    const project = await db.installationProject.findFirst({
+      where: { pipelineId: contract.pipelineId },
+      select: { certificate: { select: { signedAt: true, billingStartDate: true } } },
+    });
+    const certificate = project?.certificate ?? null;
+    if (!certificate) {
+      windowNotes.push(`${label}: no completion certificate — its billing has not started (CON-22).`);
+      continue;
+    }
+    // FEAT-051-AC-2 — before a part's billing starts it contributes nothing,
+    // not a zero line.
+    if (certificate.billingStartDate >= to) {
+      windowNotes.push(
+        `${label}: billing starts ${certificate.billingStartDate.toISOString().slice(0, 10)}, after ${input.period}.`,
+      );
+      continue;
+    }
+    // The part's term is its own: a month after its end bills nothing for it.
+    if (contract.termEnd < from) {
+      windowNotes.push(`${label}: its term ended ${contract.termEnd.toISOString().slice(0, 10)}.`);
+      continue;
+    }
+    // The terms in force during the month being billed — not today's terms.
+    // FEAT-062-AC-5: an amendment applies forward only, so a prior month
+    // stays computed against the version in force at the time.
+    const terms = [...contract.versions].filter((v) => v.effectiveFrom <= to).pop();
+    if (!terms) {
+      return { error: `${label}: no contract term version is effective for that month.` };
+    }
+    parts.push({
+      contract,
+      terms,
+      label,
+      billingStartDate: certificate.billingStartDate,
+      firstMonthSignedAt:
+        certificate.billingStartDate >= from && certificate.billingStartDate < to
+          ? certificate.signedAt
+          : null,
+      // A term ending inside the month prorates that part to the days it
+      // served — the mirror of CON-22's first month ("one mechanism, both
+      // ends of the contract"; the user's call, 2026-08-31).
+      finalMonthEndsOn: contract.termEnd < to ? contract.termEnd : null,
+    });
   }
-  // FEAT-051-AC-2 — before billing starts there is no invoice at all, not a
-  // zero-value one.
-  if (certificate.billingStartDate >= to) {
+
+  if (parts.length === 0) {
     return {
-      error: `Billing starts ${certificate.billingStartDate.toISOString().slice(0, 10)}, after ${input.period}.`,
+      error: `No part of this service line is inside its billing window for ${input.period}. ${windowNotes.join(" ")}`.trim(),
     };
   }
-  const isFirstBilledMonth =
-    certificate.billingStartDate >= from && certificate.billingStartDate < to;
 
   const circuits = await db.circuit.findMany({
     // A voided circuit must never reach a fee line — this is the query that
@@ -99,10 +153,30 @@ export async function runCalculation(input: {
       state: "benchmark_confirmed",
       voidedAt: null,
     },
-    include: { rescaleEvents: { orderBy: { effectiveDate: "asc" } } },
+    include: {
+      rescaleEvents: { orderBy: { effectiveDate: "asc" } },
+      // Which DEAL each circuit bills under — resolved through its own
+      // survey's pipeline, the same path the band alert already walks. A
+      // circuit must never bill under a sibling part's terms.
+      siteSurvey: { select: { pipelineId: true } },
+    },
   });
-  if (circuits.length === 0) {
-    return { error: "No commissioned circuit on this contract has a confirmed benchmark yet." };
+  const partByPipeline = new Map(parts.map((p) => [p.contract.pipelineId, p]));
+  // `siteSurveyId` is nullable in the schema; a circuit with no survey has no
+  // deal to bill under, and billing it under a sibling's terms would be worse
+  // than stating it.
+  const billable = circuits.filter(
+    (c) => c.siteSurvey !== null && partByPipeline.has(c.siteSurvey.pipelineId),
+  );
+  for (const c of circuits) {
+    if (c.siteSurvey === null || !partByPipeline.has(c.siteSurvey.pipelineId)) {
+      windowNotes.push(
+        `Circuit ${c.lightType} is commissioned but its own deal has no active billing window this month — not billed.`,
+      );
+    }
+  }
+  if (billable.length === 0) {
+    return { error: "No commissioned circuit inside a billing window has a confirmed benchmark yet." };
   }
 
   const prior = await db.monthlyCalculation.findFirst({
@@ -131,17 +205,20 @@ export async function runCalculation(input: {
 
   const version = (existing?.version ?? 0) + 1;
   const blockers: string[] = [];
-  const perCircuit: Array<{
+  type PerCircuit = {
+    part: Part;
     terms: CircuitTerms;
     readings: CircuitMonthReadings;
     priorConsecutiveBreaches: number;
     priorBreachAttributableAndUncorrected: boolean;
     provenance: Prisma.JsonObject;
-  }> = [];
+  };
+  const perCircuit: PerCircuit[] = [];
 
   const daysInMonth = daysInPeriod(input.period);
 
-  for (const circuit of circuits) {
+  for (const circuit of billable) {
+    const part = partByPipeline.get(circuit.siteSurvey!.pipelineId)!;
     // INV-09 — the gate this whole milestone sits behind. A month whose
     // readings still carry an unresolved blocking anomaly does not calculate.
     const openAnomalies = await db.readingAnomaly.count({
@@ -207,6 +284,7 @@ export async function runCalculation(input: {
     const priorReview = priorLine?.deviationReview;
 
     perCircuit.push({
+      part,
       terms: {
         circuitId: circuit.id,
         lightType: circuit.lightType,
@@ -220,8 +298,8 @@ export async function runCalculation(input: {
           baselineKwhPerDay: baseline,
           daysInMonth,
           benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-          unitElectricityRate: terms.unitElectricityRate,
-          societyRevenueSharePct: terms.revenueSharePct,
+          unitElectricityRate: part.terms.unitElectricityRate,
+          societyRevenueSharePct: part.terms.revenueSharePct,
         }),
       },
       readings: {
@@ -238,6 +316,8 @@ export async function runCalculation(input: {
       // GATE-01 — provenance for every number on this line.
       provenance: {
         circuitId: circuit.id,
+        contractId: part.contract.id,
+        deal: part.label,
         readingIds: readings.map((r) => r.id),
         rawFileIds: [...new Set(readings.map((r) => r.rawFileId).filter(Boolean))],
         baselineUsed: baseline,
@@ -268,8 +348,12 @@ export async function runCalculation(input: {
         total: 0,
         coverageDays: 0,
         coverageOfDays: daysInMonth,
-        inputVersionSnapshot: { blockers, contractTermVersion: terms.version } satisfies Prisma.JsonObject,
-        contractTermVersionId: terms.id,
+        inputVersionSnapshot: {
+          blockers,
+          notes: windowNotes,
+          parts: parts.map((pt) => ({ contractId: pt.contract.id, deal: pt.label, termVersion: pt.terms.version })),
+        } satisfies Prisma.JsonObject,
+        contractTermVersionId: parts.length === 1 ? parts[0].terms.id : null,
       },
     });
     if (existing) {
@@ -289,13 +373,28 @@ export async function runCalculation(input: {
   }
 
   const result = calculateMonth({
-    circuits: perCircuit,
-    contract: {
-      tolerancePct: terms.tolerancePct,
-      societyRevenueSharePct: terms.revenueSharePct,
-      unitElectricityRate: terms.unitElectricityRate,
-    },
-    firstMonthSignedAt: isFirstBilledMonth ? certificate.signedAt : null,
+    // One CalculationPart per deal: its own tolerance, share, rate and its
+    // own first/final-month proration, applied only to its own circuits.
+    parts: parts
+      .map((pt) => ({
+        contractId: pt.contract.id,
+        contract: {
+          tolerancePct: pt.terms.tolerancePct,
+          societyRevenueSharePct: pt.terms.revenueSharePct,
+          unitElectricityRate: pt.terms.unitElectricityRate,
+        },
+        circuits: perCircuit
+          .filter((c) => c.part.contract.id === pt.contract.id)
+          .map(({ terms, readings, priorConsecutiveBreaches, priorBreachAttributableAndUncorrected }) => ({
+            terms,
+            readings,
+            priorConsecutiveBreaches,
+            priorBreachAttributableAndUncorrected,
+          })),
+        firstMonthSignedAt: pt.firstMonthSignedAt,
+        finalMonthEndsOn: pt.finalMonthEndsOn,
+      }))
+      .filter((pt) => pt.circuits.length > 0),
   });
 
   const coverageDays = Math.min(...perCircuit.map((c) => c.readings.coverageDays));
@@ -317,19 +416,34 @@ export async function runCalculation(input: {
         daysInMonth: result.proration?.daysInMonth ?? null,
         coverageDays,
         coverageOfDays: daysInMonth,
-        contractTermVersionId: terms.id,
+        // One pointer can only name one part's terms — with several, the
+        // per-part versions live in the snapshot below and this stays null.
+        contractTermVersionId: parts.length === 1 ? parts[0].terms.id : null,
         // GATE-01 / INV-02 — the whole audit trail for this figure, frozen at
         // the moment it was computed. Re-deriving it later from tables that
         // have since moved on is exactly what this exists to avoid.
         inputVersionSnapshot: {
-          contractId: contract.id,
-          contractTermVersionId: terms.id,
-          contractTermVersion: terms.version,
-          tolerancePct: terms.tolerancePct,
-          revenueSharePct: terms.revenueSharePct,
-          unitElectricityRate: terms.unitElectricityRate,
-          billingStartDate: certificate.billingStartDate.toISOString(),
-          proratedFirstMonth: isFirstBilledMonth,
+          parts: result.parts.map((rp) => {
+            const pt = parts.find((x) => x.contract.id === rp.contractId)!;
+            return {
+              contractId: pt.contract.id,
+              pipelineId: pt.contract.pipelineId,
+              deal: pt.label,
+              contractTermVersionId: pt.terms.id,
+              contractTermVersion: pt.terms.version,
+              tolerancePct: pt.terms.tolerancePct,
+              revenueSharePct: pt.terms.revenueSharePct,
+              unitElectricityRate: pt.terms.unitElectricityRate,
+              billingStartDate: pt.billingStartDate.toISOString(),
+              termEnd: pt.contract.termEnd.toISOString(),
+              proratedFirstMonth: pt.firstMonthSignedAt !== null,
+              proratedFinalMonth: pt.finalMonthEndsOn !== null,
+              proratedDays: rp.proration?.proratedDays ?? null,
+              subtotal: rp.subtotal,
+              total: rp.total,
+            };
+          }),
+          notes: windowNotes,
           circuits: perCircuit.map((c) => c.provenance),
         } satisfies Prisma.JsonObject,
       },
@@ -377,7 +491,7 @@ export async function runCalculation(input: {
         monthlyCalculationId: calc.id,
         provenance: {
           calculationId: calc.id,
-          contractTermVersion: terms.version,
+          parts: parts.map((pt) => ({ contractId: pt.contract.id, deal: pt.label, termVersion: pt.terms.version })),
           circuits: perCircuit.map((c) => c.provenance),
         } satisfies Prisma.JsonObject,
       },

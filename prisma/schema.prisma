@@ -407,6 +407,11 @@ model Profile {
   societyId       String?          @map("society_id")
   isActive        Boolean          @default(true) @map("is_active")
   themePreference Theme?           @map("theme_preference")
+  /// When this member last opened their notifications — the bell counts
+  /// events newer than this. One timestamp, not a per-event read table:
+  /// the feed is derived from rows of record, so there is no event row to
+  /// key reads against, and "seen up to here" is what a bell means anyway.
+  notificationsSeenAt DateTime?    @map("notifications_seen_at")
   createdAt       DateTime         @default(now()) @map("created_at")
 
   society         Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
@@ -471,6 +476,7 @@ model AdminUser {
   meterAlertsAcknowledged     MeterAlert[]         @relation("MeterAlertAcknowledgedBy")
   meterCsvImports             MeterCsvImport[]     @relation("MeterCsvImportUploadedBy")
   storedDocuments             StoredDocument[]     @relation("StoredDocumentUploadedBy")
+  ticketsTouched              Ticket[]             @relation("TicketStatusByAdmin")
   storedDocumentsVoided       StoredDocument[]     @relation("StoredDocumentVoidedBy")
   documentExtractions         DocumentExtraction[] @relation("DocumentExtractionConfirmedBy")
   ewelinkConfigsUpdated       EwelinkApiConfig[]   @relation("EwelinkApiConfigUpdatedBy")
@@ -2917,10 +2923,15 @@ model Ticket {
   /// indistinguishable from one closed to tidy a list.
   resolutionNote String?      @map("resolution_note")
   lastStatusById String?      @map("last_status_by_id")
+  /// Set when FirsThing staff moved the status — a separate column from
+  /// lastStatusById because admin logins live in their own table (INV-01),
+  /// so one FK cannot point at both.
+  lastStatusByAdminId String?  @map("last_status_by_admin_id")
 
-  society      Society  @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  raisedBy     Profile  @relation("TicketRaisedBy", fields: [raisedById], references: [id])
-  lastStatusBy Profile? @relation("TicketStatusBy", fields: [lastStatusById], references: [id])
+  society           Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  raisedBy          Profile    @relation("TicketRaisedBy", fields: [raisedById], references: [id])
+  lastStatusBy      Profile?   @relation("TicketStatusBy", fields: [lastStatusById], references: [id])
+  lastStatusByAdmin AdminUser? @relation("TicketStatusByAdmin", fields: [lastStatusByAdminId], references: [id])
 
   @@index([societyId, status])
   @@map("tickets")

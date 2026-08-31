@@ -94,9 +94,17 @@ function toNotification(a: Row): Notification {
  * unattended", not "how much is wrong", or it never returns to zero and
  * stops meaning anything.
  */
-export const unreadNotificationCount = cache(async (): Promise<number> =>
-  db.meterAlert.count({ where: { closedAt: null, acknowledgedAt: null } }),
-);
+export const unreadNotificationCount = cache(async (): Promise<number> => {
+  // Unattended alerts plus OPEN society requests (customer portal,
+  // 2026-08-31): a ticket nobody has taken up is exactly as unattended as an
+  // unacknowledged alert. In-progress tickets deliberately do not count —
+  // taking one up is the attention the badge asks for.
+  const [alerts, tickets] = await Promise.all([
+    db.meterAlert.count({ where: { closedAt: null, acknowledgedAt: null } }),
+    db.ticket.count({ where: { status: "open" } }),
+  ]);
+  return alerts + tickets;
+});
 
 /** Everything still open, worst-first by age. */
 export const openNotifications = cache(async (): Promise<Notification[]> => {

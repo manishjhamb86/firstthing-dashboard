@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { openNotifications, pastNotifications } from "@/lib/notifications";
+import { db } from "@/lib/db";
 import { AcknowledgeButton } from "./acknowledge-button";
 
 const KIND_LABEL: Record<string, string> = {
@@ -25,9 +26,19 @@ export const metadata = { title: "Notifications" };
 export default async function NotificationsPage() {
   const actor = await requireAdminPage();
   if (!actor) redirect("/api/session-ended");
-  const [open, past] = await Promise.all([openNotifications(), pastNotifications()]);
+  const [open, past, openTickets] = await Promise.all([
+    openNotifications(),
+    pastNotifications(),
+    // The badge counts open society requests too — a page the badge points
+    // at must show what the badge counted.
+    db.ticket.findMany({
+      where: { status: "open" },
+      orderBy: { createdAt: "asc" },
+      include: { society: { select: { name: true } } },
+    }),
+  ]);
   const canAck = actor.user.adminPermissions.includes("manage_users");
-  const unattended = open.filter((n) => n.acknowledgedAt === null).length;
+  const unattended = open.filter((n) => n.acknowledgedAt === null).length + openTickets.length;
 
   return (
     <>
@@ -42,6 +53,31 @@ export default async function NotificationsPage() {
           )
         }
       />
+
+      {openTickets.length > 0 && (
+        <Card className="mb-6 p-6">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <CardTitle className="mb-0">Open society requests</CardTitle>
+            <Link href="/admin/tickets" className="text-[13px] font-semibold">
+              Open the desk →
+            </Link>
+          </div>
+          <div className="flex flex-col">
+            {openTickets.map((t, i) => (
+              <div
+                key={t.id}
+                className="flex flex-wrap items-center justify-between gap-3 py-2.5"
+                style={i < openTickets.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
+              >
+                <p className="text-[13.5px]">
+                  <strong>{t.society.name}</strong> — {t.subject}
+                </p>
+                <StatusChip tone="bad">Open</StatusChip>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="space-y-6">
         <Card className="p-6">

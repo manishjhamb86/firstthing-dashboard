@@ -31,6 +31,7 @@ export const resolvePortalViewer = cache(async () => {
       portalAuthority: true,
       isActive: true,
       grants: true,
+      notificationsSeenAt: true,
     },
   });
 
@@ -56,5 +57,6 @@ export const resolvePortalViewer = cache(async () => {
     // Same freshness rule as the authority: a grant the office-bearer just
     // revoked must stop working on the next request, not at token expiry.
     grants: profile.grants,
+    notificationsSeenAt: profile.notificationsSeenAt,
   };
 });

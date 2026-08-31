@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-29
+2026-08-31
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -2498,6 +2498,38 @@ purely additive (2 tables, 3 indexes, 4 FKs).
 Prisma — it is `--to-schema` now — and `prisma db execute` silently printed its help text and did
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
+
+## The portal finished: FirsThing's ticket desk, and a bell that knows what you have seen (2026-08-31)
+
+**The two gaps the revamp stated are closed.**
+
+**1. `/admin/tickets` — the desk behind the portal's Support tab.** Every society's requests in
+one queue, open first; any admin reads it, acting is `manage_users` (the society-facing
+permission family — portal accounts and tank assignment already live there), re-checked in the
+action. "Take it up" → in_progress, resolve requires a note — the SAME rule as the portal's own
+resolve, and here the note is also what the society reads as FirsThing's answer (verified: the
+member sees "Sensor recalibrated on site this morning" on their own Support page). A staff
+status-change stamps `lastStatusByAdminId` — a separate FK from `lastStatusById`, because admin
+logins live in their own table (INV-01) and one FK cannot point at both. The admin bell now
+counts open society requests alongside unacknowledged alerts (in_progress deliberately does not
+count — taking it up IS the attention the badge asks for), and the notification centre lists
+what the badge counted, so the number and the page cannot disagree.
+
+**2. Per-member notification read state** — one timestamp (`Profile.notificationsSeenAt`), not a
+read table: the feed is derived from rows of record, so there are no event rows to key reads
+against, and "seen up to here" is what a bell means. The portal bell counts events newer than
+the member's own stamp; unseen rows render tinted; "Mark all read" stamps only the member who
+clicked (verified: the office-bearer's stamp untouched by the committee member's click).
+
+**Verified 19/19** (portal-finish.mjs) plus the full revamp regression 34/34, `tsc`/`lint`/
+`build` clean, 700 unit tests (the 7 skips are the pre-existing sample-file-gated suites).
+**Both permission boundaries were driven through paths the client cannot pre-block**: the
+admin's `manage_users` revoked in Postgres behind the open desk — refused by name, nothing
+written — and the empty resolution note reaching the server and being refused there.
+
+**One harness note, the third of its kind**: the dashboard has TWO links to
+/portal/notifications (the bell and "View all"), so `a[href=...]` is ambiguous — target the
+bell by its accessible name.
 
 ## The customer portal rebuilt around module grants (2026-08-29) — user-specified, on `customer-portal`
 

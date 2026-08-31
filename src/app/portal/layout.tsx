@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { effectiveGrants } from "@/lib/portal-access";
+import { societyEvents } from "@/lib/portal-notifications";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { resolveTheme } from "@/lib/resolve-theme";
 import { PortalShell, type PortalNavEntry } from "./portal-shell";
@@ -23,24 +24,18 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
 
-  const [theme, society, openAlerts, openTickets] = await Promise.all([
+  const [theme, society, events] = await Promise.all([
     resolveTheme(),
     db.society.findUnique({ where: { id: viewer.societyId }, select: { name: true } }),
-    // The bell counts what is OPEN for this society right now — meter or
-    // circuit trouble the back office has on record (INV-05: scoped by the
-    // viewer's own societyId, nothing else).
-    db.meterAlert.count({
-      where: {
-        closedAt: null,
-        OR: [
-          { meter: { societyId: viewer.societyId } },
-          { circuit: { societyId: viewer.societyId } },
-        ],
-      },
-    }),
-    db.ticket.count({ where: { societyId: viewer.societyId, status: { not: "resolved" } } }),
+    // The bell counts what this MEMBER has not seen — feed events newer than
+    // their own notificationsSeenAt (null = everything is new). societyEvents
+    // is cache()d, so the notifications page shares this per-request.
+    societyEvents(viewer.societyId),
   ]);
   if (!society) redirect("/login");
+
+  const seenAt = viewer.notificationsSeenAt;
+  const unseen = events.filter((e) => seenAt === null || e.at > seenAt).length;
 
   const grants = effectiveGrants(viewer.role, viewer.grants);
 
@@ -72,7 +67,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
       email={viewer.email}
       societyName={society.name}
       entries={entries}
-      bellCount={openAlerts + openTickets}
+      bellCount={unseen}
     >
       {children}
     </PortalShell>

@@ -16,6 +16,7 @@ import {
   Users,
   Zap,
   FileText,
+  LifeBuoy,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -37,6 +38,7 @@ export function AppShell({
   showCatalog,
   showUsers,
   showBilling,
+  showSupport,
   demoMode = false,
   demoAvailable = false,
   unreadCount = 0,
@@ -58,6 +60,7 @@ export function AppShell({
   showCatalog: boolean;
   showUsers: boolean;
   showBilling: boolean;
+  showSupport: boolean;
   children: ReactNode;
 }) {
   const items: NavItem[] = [
@@ -87,6 +90,7 @@ export function AppShell({
     ...(showMeters ? [{ href: "/admin/meters", label: "Meters", icon: Zap }] : []),
     ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
     // One place to file any document, whatever kind it is (2026-08-26).
+    ...(showSupport ? [{ href: "/admin/tickets", label: "Support tickets", icon: LifeBuoy }] : []),
     ...(showPipeline ? [{ href: "/admin/documents", label: "Documents", icon: FileText }] : []),
     ...(showCatalog ? [{ href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb }] : []),
     ...(showBilling ? [{ href: "/admin/billing", label: "Billing", icon: Receipt }] : []),

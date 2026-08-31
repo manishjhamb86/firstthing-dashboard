@@ -56,6 +56,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       // releases it — which is exactly requireBillingReader's own rule.
       showBilling={perms.includes("manage_pipeline") || perms.includes("release_billing")}
       showUsers={perms.includes("manage_admins")}
+      showSupport={perms.includes("manage_users")}
     >
       {children}
     </AppShell>

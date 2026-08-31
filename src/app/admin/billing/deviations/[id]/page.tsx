@@ -39,6 +39,26 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
               location: true,
               preInstallBaseline: true,
               rescaleEvents: { orderBy: { effectiveDate: "asc" } },
+              // The circuit's own deal's terms (CON-24 as amended): with a
+              // line delivered in parts, the calculation's single term-version
+              // pointer is null and each circuit answers to its own contract.
+              siteSurvey: {
+                select: {
+                  pipeline: {
+                    select: {
+                      contract: {
+                        select: {
+                          versions: {
+                            orderBy: { effectiveFrom: "desc" },
+                            take: 1,
+                            select: { tolerancePct: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
             },
           },
           calculation: {
@@ -86,7 +106,14 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
     effectiveBaselineAt(line.circuit.preInstallBaseline, line.circuit.rescaleEvents, to) ??
     line.baselineKwhPerDay;
   const benchmarkKwh = baseline * (1 - line.benchmarkSavingsPct / 100);
-  const tolerancePct = calc.contractTermVersion?.tolerancePct ?? 10;
+  // Resolution order matters: the circuit's own contract first (correct in
+  // every case, including multi-part months where calc.contractTermVersion
+  // is null), then the calculation's pointer. The old `?? 10` default would
+  // have judged a multi-part deviation against a band nobody agreed to.
+  const tolerancePct =
+    line.circuit.siteSurvey?.pipeline?.contract?.versions[0]?.tolerancePct ??
+    calc.contractTermVersion?.tolerancePct ??
+    10;
   // The band is a band on the SAVINGS percentage, so its width in kWh is the
   // baseline scaled by that many points — not a percentage of the benchmark.
   const toleranceKwh = baseline * (tolerancePct / 100);

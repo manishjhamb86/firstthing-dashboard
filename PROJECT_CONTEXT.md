@@ -2499,6 +2499,34 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The parts restructure, finished off: every screen that assumed one deal (2026-08-31)
+
+**A sweep for the loose ends the restructure left, before the user's own testing.** Greps for
+`contractTermVersion` consumers and society-scoped `findFirst`s found five, each a real
+single-deal assumption:
+
+- **The deviation review judged against an invented band.** `deviations/[id]` read
+  `calc.contractTermVersion?.tolerancePct ?? 10` — null on a multi-part month, so a deviation
+  would have been drawn against a DEFAULT tolerance nobody agreed to. It now resolves through the
+  circuit's own survey → pipeline → contract (the band alert's path), with the calc pointer as
+  fallback.
+- **The calculation detail's "Contract terms in force" read "—"** on a multi-part month. It now
+  states each part's own terms from the frozen snapshot ("Basement B1: v1 · ₹8/kWh · 58% society"),
+  verified rendered on a live two-part calculation.
+- **The portal quoted one part's revenue share as the society's.** `portal/electricity` picked the
+  newest term version across ALL contracts; with parts at 58% and 60% the sentence misstated one of
+  them. All activated contracts' current shares are read now — one sentence when they agree, a
+  stated range when they differ.
+- **The portal dashboard showed one offer and one installation.** `findFirst` on issued offers hid
+  a second deal's offer — a binding decision, lost behind a sibling. Both are `findMany` now: one
+  OfferCard per open offer and one CON-21 gate/progress card per running installation, labeled by
+  deal when there are several; the pending-actions list names which installation's day needs
+  confirming.
+
+Verified 6/6 on the multi-part terms display (fixture rebuilt, run through the browser, detail page
+asserted, fixture removed) and 8/8 portal regression (single-deal societies keep their plain
+titles and single-sentence share note). 725 unit tests, `tsc`/`lint`/`build` clean.
+
 ## A service line is delivered in parts: deals, demos capped, and billing that combines (2026-08-31) — user-specified
 
 **The ask, analysed against the codebase before building**: lighting is really 1–8 deals per

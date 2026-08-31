@@ -37,18 +37,37 @@ export default async function PortalElectricityPage() {
   if (!hasGrant(viewer, "electricity")) redirect("/portal");
   const societyId = viewer.societyId;
 
-  const [energy, meters, contract] = await Promise.all([
+  const [energy, meters, contracts] = await Promise.all([
     societyEnergy(societyId),
     societyMeterRows(societyId),
-    db.contractTermVersion.findFirst({
-      where: { contract: { societyId, activatedAt: { not: null } }, effectiveFrom: { lte: new Date() } },
-      orderBy: { effectiveFrom: "desc" },
-      select: { revenueSharePct: true },
+    // Every activated contract's current share — a line delivered in parts
+    // (CON-24 as amended) can carry different shares per deal, and quoting
+    // one part's figure as the society's would misstate the sibling's.
+    db.contract.findMany({
+      where: { societyId, activatedAt: { not: null } },
+      select: {
+        versions: {
+          where: { effectiveFrom: { lte: new Date() } },
+          orderBy: { effectiveFrom: "desc" },
+          take: 1,
+          select: { revenueSharePct: true },
+        },
+      },
     }),
   ]);
 
   const metersOnline = meters.filter((m) => m.state === "reporting").length;
   const noData = energy.circuits.length === 0 && meters.length === 0;
+
+  // One sentence when every part agrees, a range when they differ — never
+  // one part's figure presented as the whole society's.
+  const shares = [...new Set(contracts.map((c) => c.versions[0]?.revenueSharePct).filter((v): v is number => v != null))].sort((a, b) => a - b);
+  const shareNote =
+    shares.length === 0
+      ? null
+      : shares.length === 1
+        ? `Your society keeps ${shares[0]}% of the verified saving, per your agreement.`
+        : `Your society keeps ${shares[0]}–${shares[shares.length - 1]}% of the verified saving, depending on the part of the installation, per your agreements.`;
 
   return (
     <>
@@ -180,10 +199,9 @@ export default async function PortalElectricityPage() {
                   </tbody>
                 </table>
               </div>
-              {contract && (
+              {shareNote && (
                 <p className="mt-3 text-xs" style={{ color: "var(--text-subtle)" }}>
-                  Your society keeps {contract.revenueSharePct}% of the verified saving, per your
-                  agreement. ₹ figures come from the released monthly calculation, never recomputed
+                  {shareNote} ₹ figures come from the released monthly calculation, never recomputed
                   here.
                 </p>
               )}

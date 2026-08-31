@@ -35,28 +35,35 @@ export default async function PortalHomePage() {
   const societyId = viewer.societyId;
   const grants = effectiveGrants(viewer.role, viewer.grants);
 
-  const [society, sharedReports, openOffer, tanks, installation] = await Promise.all([
+  const [society, sharedReports, openOffers, tanks, installations] = await Promise.all([
     db.society.findUnique({ where: { id: societyId } }),
     db.demoReport.findMany({
       where: { status: "shared", pipeline: { societyId } },
       orderBy: { version: "desc" },
       include: { pipeline: true },
     }),
-    db.offer.findFirst({
+    // Every part's open offer, not just the newest — a line delivered in
+    // parts (CON-24 as amended) can have two deals awaiting a response at
+    // once, and hiding one behind the other loses a binding decision.
+    db.offer.findMany({
       where: { status: "issued", pipeline: { societyId } },
       orderBy: { version: "desc" },
+      include: { pipeline: { select: { serviceLine: true, dealScope: true } } },
     }),
     db.waterTank.findMany({
       where: { societyId, hasLevelSignal: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, lastLevelPercent: true, lastOnline: true, setupType: true },
     }),
-    db.installationProject.findFirst({
+    // Same rule for installations: two parts can be mid-install at once,
+    // and each day's CON-21 gate belongs to its own project.
+    db.installationProject.findMany({
       where: { societyId, state: "published" },
       include: {
         onlooker: true,
         plannedDays: { orderBy: { day: "asc" } },
         batches: { orderBy: { day: "asc" } },
+        pipeline: { select: { serviceLine: true, dealScope: true } },
       },
     }),
   ]);
@@ -65,23 +72,40 @@ export default async function PortalHomePage() {
   const energy = grants.has("electricity") ? await societyEnergy(societyId) : null;
   const events = (await societyEvents(societyId)).slice(0, 4);
 
-  const awaiting = installation?.batches.filter((b) => b.state === "awaiting_review") ?? [];
-  const awaitingDay = awaiting.length > 0 ? Math.min(...awaiting.map((b) => b.day)) : null;
-  const dayBatches = awaiting.filter((b) => b.day === awaitingDay);
-  const nextPlannedDay = installation?.plannedDays.find((d) => d.day === (awaitingDay ?? 0) + 1) ?? null;
+  const gates = installations
+    .map((installation) => {
+      const awaiting = installation.batches.filter((b) => b.state === "awaiting_review");
+      const awaitingDay = awaiting.length > 0 ? Math.min(...awaiting.map((b) => b.day)) : null;
+      const dayBatches = awaiting.filter((b) => b.day === awaitingDay);
+      const nextPlannedDay =
+        installation.plannedDays.find((d) => d.day === (awaitingDay ?? 0) + 1) ?? null;
+      return { installation, awaitingDay, dayBatches, nextPlannedDay };
+    })
+    .filter((g) => g.dayBatches.length > 0);
   const isOfficeBearer = viewer.role === "office_bearer";
 
   const pendingActions: string[] = [];
-  if (installation && dayBatches.length > 0 && viewer.id === installation.onlookerId) {
+  for (const g of gates) {
+    if (viewer.id !== g.installation.onlookerId) continue;
+    const which =
+      gates.length > 1
+        ? ` (${dealLabel(g.installation.pipeline.serviceLine, g.installation.pipeline.dealScope)})`
+        : "";
     pendingActions.push(
-      `Confirm day ${awaitingDay ?? 1} of the installation${
-        nextPlannedDay
-          ? ` — before ${reviewDeadlineFor(nextPlannedDay.startAt).toISOString().slice(11, 16)} UTC tomorrow`
+      `Confirm day ${g.awaitingDay ?? 1} of the installation${which}${
+        g.nextPlannedDay
+          ? ` — before ${reviewDeadlineFor(g.nextPlannedDay.startAt).toISOString().slice(11, 16)} UTC tomorrow`
           : ""
       }`,
     );
   }
-  if (openOffer && isOfficeBearer) pendingActions.push("Respond to the offer FirsThing has issued");
+  if (openOffers.length > 0 && isOfficeBearer) {
+    pendingActions.push(
+      openOffers.length === 1
+        ? "Respond to the offer FirsThing has issued"
+        : `Respond to the ${openOffers.length} offers FirsThing has issued`,
+    );
+  }
 
   const reporting = tanks.filter((t) => t.lastOnline).length;
   const setupAvg = (setup: "domestic" | "flush" | "stp") => {
@@ -127,8 +151,8 @@ export default async function PortalHomePage() {
         </div>
       )}
 
-      {installation && dayBatches.length > 0 && (
-        <div className="mb-6">
+      {gates.map(({ installation, awaitingDay, dayBatches, nextPlannedDay }) => (
+        <div className="mb-6" key={installation.id}>
           <BatchReviewCard
             dayNumber={awaitingDay ?? 1}
             totalDays={new Set(installation.plannedDays.map((d) => d.day)).size}
@@ -150,10 +174,15 @@ export default async function PortalHomePage() {
             }))}
           />
         </div>
-      )}
+      ))}
 
-      {openOffer && (
-        <div className="mb-6">
+      {openOffers.map((openOffer) => (
+        <div className="mb-6" key={openOffer.id}>
+          {openOffers.length > 1 && (
+            <p className="lbl mb-2">
+              {dealLabel(openOffer.pipeline.serviceLine, openOffer.pipeline.dealScope)}
+            </p>
+          )}
           <OfferCard
             offer={{
               id: openOffer.id,
@@ -168,7 +197,7 @@ export default async function PortalHomePage() {
             canRespond={isOfficeBearer}
           />
         </div>
-      )}
+      ))}
 
       {/* The hero: how the society is doing, one card per granted module. */}
       <div className="mb-6 grid items-stretch gap-5 lg:grid-cols-2">
@@ -355,18 +384,27 @@ export default async function PortalHomePage() {
               </p>
             </Card>
           )}
-          {installation && dayBatches.length === 0 && (
-            <Card className="p-6">
-              <CardTitle>Installation</CardTitle>
-              <p className="text-sm">
-                Nothing to review right now —{" "}
-                {installation.batches.filter((b) => b.state === "approved").length} of{" "}
-                {new Set(installation.plannedDays.map((d) => d.day)).size} days approved,{" "}
-                <span className="num">{installation.batches.reduce((n, b) => n + b.installedCount, 0)}</span> of{" "}
-                <span className="num">{installation.contractedLightCount}</span> fittings installed.
-              </p>
-            </Card>
-          )}
+          {/* One progress card per running installation with nothing to
+              review — a gated one already has its BatchReviewCard above. */}
+          {installations
+            .filter((inst) => !gates.some((g) => g.installation.id === inst.id))
+            .map((inst) => (
+              <Card className="p-6" key={inst.id}>
+                <CardTitle>
+                  Installation
+                  {installations.length > 1
+                    ? ` — ${dealLabel(inst.pipeline.serviceLine, inst.pipeline.dealScope)}`
+                    : ""}
+                </CardTitle>
+                <p className="text-sm">
+                  Nothing to review right now —{" "}
+                  {inst.batches.filter((b) => b.state === "approved").length} of{" "}
+                  {new Set(inst.plannedDays.map((d) => d.day)).size} days approved,{" "}
+                  <span className="num">{inst.batches.reduce((n, b) => n + b.installedCount, 0)}</span> of{" "}
+                  <span className="num">{inst.contractedLightCount}</span> fittings installed.
+                </p>
+              </Card>
+            ))}
           <Card className="p-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <CardTitle className="mb-0">Recent activity</CardTitle>

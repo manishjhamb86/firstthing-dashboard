@@ -51,6 +51,18 @@ export default async function CalculationPage({
   });
   if (!calc) notFound();
 
+  // The per-part terms a multi-deal month billed under, from the frozen
+  // snapshot (GATE-01) — the single pointer above is null in that case.
+  const snapshotParts = (
+    ((calc.inputVersionSnapshot as { parts?: unknown[] } | null)?.parts ?? []) as Array<{
+      contractId: string;
+      deal: string;
+      contractTermVersion: number;
+      unitElectricityRate: number;
+      revenueSharePct: number;
+    }>
+  ).filter((pt) => pt && typeof pt.deal === "string");
+
   const meta = CALC_STATUS[calc.status];
   const outOfBand = calc.feeLines.filter((l) => l.complianceResult === "out_of_band");
   const approaching = calc.feeLines.filter((l) => l.approaching && l.complianceResult === "in_band");
@@ -287,9 +299,22 @@ export default async function CalculationPage({
           <div>
             <dt className="lbl">Contract terms in force</dt>
             <dd>
-              {calc.contractTermVersion
-                ? `v${calc.contractTermVersion.version} · ₹${calc.contractTermVersion.unitElectricityRate}/kWh · ${calc.contractTermVersion.revenueSharePct}% society`
-                : "—"}
+              {calc.contractTermVersion ? (
+                `v${calc.contractTermVersion.version} · ₹${calc.contractTermVersion.unitElectricityRate}/kWh · ${calc.contractTermVersion.revenueSharePct}% society`
+              ) : snapshotParts.length > 0 ? (
+                // A month combining several parts has no single set of terms
+                // — each deal's are stated (CON-24 as amended).
+                <span className="flex flex-col gap-0.5">
+                  {snapshotParts.map((pt) => (
+                    <span key={pt.contractId}>
+                      {pt.deal}: v{pt.contractTermVersion} · ₹{pt.unitElectricityRate}/kWh ·{" "}
+                      {pt.revenueSharePct}% society
+                    </span>
+                  ))}
+                </span>
+              ) : (
+                "—"
+              )}
             </dd>
           </div>
           <div>

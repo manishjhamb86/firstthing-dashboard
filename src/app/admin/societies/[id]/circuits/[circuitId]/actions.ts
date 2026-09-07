@@ -9,6 +9,8 @@ import { logger } from "@/lib/logger";
 import { refuseOrderedDate, refuseReplacementDate } from "@/lib/step-dates";
 import { scheduleJob } from "@/lib/jobs";
 import { nextDayUTC } from "@/lib/monitoring-window";
+import { isDemoMode } from "@/lib/demo-mode";
+import { baselineUnsettled } from "@/lib/circuit-load";
 
 const LOAD_TOLERANCE_PCT = 10; // CON-17
 
@@ -53,6 +55,112 @@ function resolveInstallDate(
   });
   if (refusal) return { error: refusal };
   return { at };
+}
+
+/**
+ * Correct a circuit's recorded meter-install date after the step is done.
+ *
+ * The gap this closes (user-caught 2026-09-07, with a screenshot): the
+ * install date is only editable while the meter step is CURRENT, and it
+ * defaults to today. Accept that default on a circuit whose meter really
+ * went in weeks ago and the circuit is stuck — the replacement date is
+ * refused for preceding the install, and there is no route back to the date
+ * that is wrong. On stage this had already happened: a circuit stamped
+ * 2026-09-07 11:43 with a replacement to record in August.
+ *
+ * DEMO_MODE only, the user's own scope. In normal operation the date is
+ * stamped by the act of validating the meter and correcting it by hand would
+ * erase real provenance — which is exactly why recordHistoricalCommissioning
+ * refuses a circuit this system commissioned.
+ *
+ * Every ORDERING rule still holds, because DEMO_MODE relaxes "must be now"
+ * and never the sequence:
+ *  - not in the future, and not before the survey that chose the circuit;
+ *  - a recorded replacement must still fall after it, with a day in between
+ *    for the pre-install window (the same refuseReplacementDate rules, read
+ *    from the other side);
+ *  - no stored pre-install reading may end up on or before the new install
+ *    day — the window opens the day after, so those readings would fall
+ *    outside their own window and become invisible everywhere, the silent
+ *    black hole already recorded here on 2026-08-15;
+ *  - and once the baseline has settled it has been COMPUTED from a window
+ *    this date defines, so the date stops being correctable at all.
+ */
+export async function correctMeterInstallDate(
+  circuitId: string,
+  installedOn: string,
+): Promise<{ error?: string; ok?: true }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!(admin.permissions as string[]).includes("manage_survey")) {
+    return { error: "Correcting a circuit's install date is a field-survey action." };
+  }
+  if (!(await isDemoMode())) {
+    return {
+      error:
+        "The install date is stamped when the meter is validated. Correcting it by hand is a demo-mode action.",
+    };
+  }
+
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    include: { siteSurvey: { select: { createdAt: true } } },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  if (!circuit.meterInstalledAt) {
+    return { error: "This circuit has no install date yet — record it on the meter step." };
+  }
+  if (!baselineUnsettled(circuit)) {
+    return {
+      error:
+        "The pre-install baseline is already settled, and it was computed from the window this date opens. Correcting it now would restate a figure the benchmark rests on.",
+    };
+  }
+
+  const resolved = resolveInstallDate(installedOn, circuit.siteSurvey?.createdAt ?? null);
+  if (resolved.at === undefined) return { error: resolved.error };
+  const at: Date = resolved.at;
+
+  // Read from the other side: the recorded replacement must still be a valid
+  // replacement against this new install date.
+  if (circuit.lightReplacementDate) {
+    const refusal = refuseReplacementDate({
+      replacementDate: circuit.lightReplacementDate,
+      meterInstalledAt: at,
+      lastPreInstallReading: null,
+      now: new Date(),
+    });
+    if (refusal) {
+      return {
+        error: `The replacement is recorded for ${circuit.lightReplacementDate.toISOString().slice(0, 10)}. ${refusal}`,
+      };
+    }
+  }
+
+  const windowStart = nextDayUTC(at);
+  const stranded = await db.meterReading.findFirst({
+    where: { circuitId, date: { lt: windowStart } },
+    orderBy: { date: "asc" },
+    select: { date: true },
+  });
+  if (stranded) {
+    return {
+      error: `A reading is stored for ${stranded.date.toISOString().slice(0, 10)}, which is on or before that install day — the pre-install window opens the day after, so it would fall outside its own window. Remove that reading first, or pick an earlier install date.`,
+    };
+  }
+
+  await db.circuit.update({
+    where: { id: circuitId },
+    data: { meterInstalledAt: at, preInstallWindowStartAt: windowStart },
+  });
+  logger.info("circuit.install_date_corrected", {
+    actorId: admin.id,
+    circuitId,
+    from: circuit.meterInstalledAt.toISOString().slice(0, 10),
+    to: installedOn,
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  return { ok: true };
 }
 
 export async function submitLoadValidation(

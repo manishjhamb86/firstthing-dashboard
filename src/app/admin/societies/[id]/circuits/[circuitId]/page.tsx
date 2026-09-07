@@ -4,6 +4,7 @@ import Link from "next/link";
 import { HistoricalCommissioning } from "./historical-commissioning";
 import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/demo-mode";
+import { InstallDateForm } from "./install-date-form";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { LoadValidationForm } from "./load-validation-form";
@@ -24,7 +25,7 @@ import { formatDate } from "@/lib/format-date";
 import { AssignReplacement } from "./assign-replacement";
 import { VisitDetails } from "@/components/visit-details";
 import { teamMeta, teamsFor } from "@/lib/admin-teams";
-import { isoDateTimeLocal } from "@/lib/format-date";
+import { isoDate, isoDateTimeLocal } from "@/lib/format-date";
 import { StepSection } from "@/components/step-section";
 import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
 import { loadDealProgress } from "@/lib/pipeline-facts";
@@ -43,6 +44,7 @@ import {
   theoreticalDailyKwh,
   varianceAgainstTheoretical,
   type SavingsBand,
+  baselineUnsettled,
 } from "@/lib/circuit-load";
 
 function GatePassCard({
@@ -161,6 +163,9 @@ export default async function CircuitDetailPage({
     : null;
 
   if (!circuit || circuit.societyId !== id) notFound();
+  // The install date defines the window the baseline is computed from, so it
+  // stops being correctable once that baseline has settled.
+  const baselineOpen = baselineUnsettled(circuit);
 
   // CON-45 — the inventory dropdown reads the catalog's active originals.
   const catalogOriginals = await db.deviceType.findMany({
@@ -772,17 +777,53 @@ export default async function CircuitDetailPage({
                     circuit&apos;s record but not edit it.
                   </p>
                 );
-              } else if (step.status === "done" && circuit.loadValidationOverrideById) {
-                // An overridden circuit stays visibly distinguishable from
-                // one that passed normally (FEAT-011-AC-5).
-                summary = "Validation overridden by ops";
-                body = (
+              } else if (step.status === "done") {
+                // The date is what a later step is measured against, and the
+                // step's own form defaults to today — so a circuit whose
+                // meter really went in weeks ago is stranded by accepting
+                // that default, with no route back to it (user-caught
+                // 2026-09-07). Demo mode gets one; the server decides.
+                const dateLine = circuit.meterInstalledAt ? (
+                  <p className="text-sm">
+                    Meter installed{" "}
+                    <span className="num">{isoDate(circuit.meterInstalledAt)}</span>
+                    {circuit.preInstallWindowStartAt && (
+                      <span className="text-[var(--text-muted)]">
+                        {" "}
+                        · the pre-install window opens{" "}
+                        <span className="num">{isoDate(circuit.preInstallWindowStartAt)}</span>
+                      </span>
+                    )}
+                  </p>
+                ) : null;
+                const overridden = circuit.loadValidationOverrideById ? (
                   <p className="text-sm text-[var(--text-muted)]">
                     Load validation was overridden by ops — {circuit.loadValidationOverrideReason}
                     {circuit.loadDiscrepancyPct != null &&
                       ` (discrepancy was ${circuit.loadDiscrepancyPct.toFixed(1)}%)`}
                   </p>
-                );
+                ) : null;
+                const fixer =
+                  demoMode && canEdit && circuit.meterInstalledAt && baselineOpen ? (
+                    <InstallDateForm
+                      circuitId={circuit.id}
+                      current={isoDate(circuit.meterInstalledAt)}
+                    />
+                  ) : null;
+                if (circuit.loadValidationOverrideById) {
+                  // An overridden circuit stays visibly distinguishable from
+                  // one that passed normally (FEAT-011-AC-5).
+                  summary = "Validation overridden by ops";
+                }
+                if (dateLine || overridden || fixer) {
+                  body = (
+                    <div className="space-y-3">
+                      {dateLine}
+                      {overridden}
+                      {fixer}
+                    </div>
+                  );
+                }
               }
               break;
             }

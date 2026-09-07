@@ -2499,6 +2499,40 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## A circuit stranded by its own install-date default (2026-09-07) — user-caught on stage
+
+**Reported with a screenshot**: "The lights cannot have been replaced before the meter was
+installed", on a replacement dated 08/02/2026. **The refusal was correct.** Indosam Arcade's circuit
+holds `meter_installed_at = 2026-09-07 11:43:23` — a real clock time, not UTC midnight, which is the
+tell that it was `now()`: the load-validation step takes an explicit install date and **defaults to
+today**, and whoever recorded it accepted that default on a circuit whose meter went in earlier.
+
+**The bug is not the refusal, it is that there was no route back to the date.** `LoadValidationForm`
+renders only while the meter step is CURRENT, and `recordHistoricalCommissioning` refuses a circuit
+this system commissioned — so once the step is done the date is unreachable, and every later date is
+measured against a wrong one. That circuit was in fact **unrecoverable**: its 7 pre-install readings
+are dated 8–14 Sept, so a replacement had to be ≥ 14 Sept to avoid reclassifying them and ≤ today to
+avoid the future rule — an empty range.
+
+**Fixed as the user scoped it — demo mode only.** `correctMeterInstallDate` re-opens the date from
+the done meter step, behind a button (an open date field on a step marked done reads as something
+still waiting to be filled in). DEMO_MODE relaxes "must be now" and never the sequence, so every
+ordering rule still holds: not future, not before the survey, a recorded replacement must still be a
+valid replacement against the new date (`refuseReplacementDate` read from the other side), and **no
+stored reading may end up on or before the new install day** — the window opens the day after, so
+those readings would fall outside their own window and go invisible everywhere, the silent black
+hole already recorded here on 2026-08-15. `preInstallWindowStartAt` moves with it. Once the baseline
+settles the control is withdrawn: the figure was computed from the window this date defines.
+
+**The step also states the dates it holds now** ("Meter installed 2026-09-02 · the pre-install
+window opens 2026-09-03"). A done step that shows nothing is how a wrong date sits unnoticed until
+the step after it refuses.
+
+Verified 15/15 against a fixture reproducing the reported shape (the control is closed by default
+and prefilled on open; a pre-survey date is refused and says why, with nothing written; a legal
+correction stores and moves the window; the baseline settling withdraws it) plus 3/3 that normal
+mode is unchanged — 725 unit tests, `tsc`/`lint`/`build` clean, zero console errors.
+
 ## The benchmark override asked for a figure before there was one to override (2026-09-07) — user-caught
 
 **Reported**: "that benchmark override on the demo benchmark section should only appear after a demo

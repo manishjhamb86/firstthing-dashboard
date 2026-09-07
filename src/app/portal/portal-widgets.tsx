@@ -1,5 +1,5 @@
 import type { SavingsBand } from "@/lib/circuit-load";
-import { formatDate } from "@/lib/format-date";
+import { dayShort as dayShortLabel, formatDate, monthLabel } from "@/lib/format-date";
 import type { ChipTone } from "@/components/ui";
 
 /**
@@ -25,14 +25,14 @@ export const BAND_TONE: Record<SavingsBand, ChipTone> = {
 export function monthName(month: string): string {
   const d = new Date(`${month}-01T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return month;
-  return d.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" });
+  return monthLabel(d);
 }
 
 /** "Wed 10" — same in-table date rule as the monthly report. */
 export function dayShort(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", timeZone: "UTC" });
+  return dayShortLabel(d);
 }
 
 export function timeAgoShort(at: Date, now: Date = new Date()): string {

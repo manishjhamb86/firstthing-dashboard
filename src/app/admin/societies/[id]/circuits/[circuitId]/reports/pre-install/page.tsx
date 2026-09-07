@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, shortDate } from "@/lib/format-date";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { PRE_WARN_PCT } from "@/lib/circuit-load";
 import { loadCircuitReport } from "../report-data";
@@ -33,12 +33,7 @@ export default async function PreInstallReportPage({
 
   const excludedCount = preDays.length - preIncludedCount;
   const warn = avgVariance !== null && avgVariance.band === "warn";
-  const generated = new Date().toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const generated = shortDate(new Date());
 
   return (
     <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">

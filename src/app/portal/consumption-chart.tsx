@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { dayAxis, monthAxis } from "@/lib/format-date";
 
 /**
  * The society's consumption over time, with a selectable period and bucket
@@ -49,10 +50,10 @@ function labelFor(key: string, bucket: Bucket): string {
   if (bucket === "yearly") return key;
   if (bucket === "monthly") {
     const d = new Date(`${key}-01T00:00:00Z`);
-    return d.toLocaleDateString("en-GB", { month: "short", year: "2-digit", timeZone: "UTC" });
+    return monthAxis(d);
   }
   const d = new Date(`${key}T00:00:00Z`);
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  return dayAxis(d);
 }
 
 type Bar = { key: string; label: string; kWh: number; baseline: number | null; days: number };

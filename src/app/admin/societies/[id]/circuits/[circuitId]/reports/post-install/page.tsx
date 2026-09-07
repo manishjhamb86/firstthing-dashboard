@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, shortDate } from "@/lib/format-date";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
 import { BENCHMARK_MIN_PCT, BENCHMARK_MAX_PCT } from "@/lib/commissioning-anomaly";
@@ -36,12 +36,7 @@ export default async function PostInstallReportPage({
   const excludedPost = postDays.filter((d) => d.excluded).length;
   const countedPost = postDays.length - excludedPost;
   const replaced = inventory.filter((l) => l.replacementName);
-  const generated = new Date().toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const generated = shortDate(new Date());
 
   const verdict =
     summary.savingsPct === null

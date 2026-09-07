@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { dayShort as dayShortLabel, dayWithMonth } from "@/lib/format-date";
 import {
   PRE_FLAG_PCT,
   PRE_WARN_PCT,
@@ -97,7 +98,7 @@ export function pct(n: number): string {
 export function dayLabel(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  return dayWithMonth(d);
 }
 
 /**
@@ -108,7 +109,7 @@ export function dayLabel(iso: string): string {
 export function dayShort(iso: string): string {
   const d = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(d.getTime())) return iso;
-  return d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", timeZone: "UTC" });
+  return dayShortLabel(d);
 }
 
 /**

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { monthLabel, monthShort, shortDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
@@ -85,24 +86,13 @@ export default async function MonthlyReportPage({
   const summary = summarize(effBaselineNow, days);
   const excludedCount = days.filter((d) => d.excluded).length;
   const countedCount = days.length - excludedCount;
-  const asMonth = (m: string) =>
-    new Date(`${m}-01T00:00:00Z`).toLocaleDateString("en-GB", {
-      month: "long",
-      year: "numeric",
-      timeZone: "UTC",
-    });
-  const monthLabel = asMonth(month);
-  const shortMonth = (m: string) =>
-    new Date(`${m}-01T00:00:00Z`).toLocaleDateString("en-GB", { month: "short", timeZone: "UTC" });
+  const asMonth = monthLabel;
+  const monthTitle = asMonth(month);
+  const shortMonth = monthShort;
   // Two Februaries in one picker have to be told apart, so the year appears
   // only when the months actually span more than one.
   const multiYear = new Set(months.map((m) => m.slice(0, 4))).size > 1;
-  const generated = new Date().toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
+  const generated = shortDate(new Date());
 
   return (
     <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
@@ -152,7 +142,7 @@ export default async function MonthlyReportPage({
             </p>
           </div>
           <div className="report-period">
-            <p className="text-[20px] font-bold tracking-[-0.01em]">{monthLabel}</p>
+            <p className="text-[20px] font-bold tracking-[-0.01em]">{monthTitle}</p>
             <p className="mt-1 text-xs text-[var(--text-subtle)]">
               Generated <span className="num">{generated}</span>
             </p>
@@ -178,7 +168,7 @@ export default async function MonthlyReportPage({
             </p>
           </div>
           <p className="min-w-0 flex-1 basis-64 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
-            {monthLabel} averaged{" "}
+            {monthTitle} averaged{" "}
             <strong className="num text-[var(--text)]">
               {summary.averageKwh?.toFixed(2) ?? "—"}
             </strong>{" "}

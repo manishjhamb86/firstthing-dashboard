@@ -125,3 +125,74 @@ export function timeAgo(d: Date | null | undefined, now: Date = new Date()): str
   const days = Math.floor(h / 24);
   return days === 1 ? "yesterday" : `${days} days ago`;
 }
+
+// ── Every other shape a date takes in this product ──────────────────────
+//
+// These exist so no screen ever reaches for `toLocaleDateString` itself —
+// eslint refuses that outside this file. A new shape is a new export HERE,
+// named for where it is used, so "what formats does this product use?" is
+// answered by reading one file.
+
+const UTC = { timeZone: "UTC" } as const;
+
+/** "Monday, 8 September" — the dashboard's own header line. */
+export function longDate(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", ...UTC });
+}
+
+/** "8 Sep 2026" — a document's "generated on" line, where space is tight. */
+export function shortDate(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", ...UTC });
+}
+
+/** "September 2026" from a Date or a "YYYY-MM" period. */
+export function monthLabel(d: Date | string | null | undefined): string {
+  const date = typeof d === "string" && /^\d{4}-\d{2}$/.test(d) ? new Date(`${d}-01T00:00:00Z`) : asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { month: "long", year: "numeric", ...UTC });
+}
+
+/** "Sep" — a month picker's chip, where the year is stated elsewhere. */
+export function monthShort(d: Date | string | null | undefined): string {
+  const date = typeof d === "string" && /^\d{4}-\d{2}$/.test(d) ? new Date(`${d}-01T00:00:00Z`) : asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { month: "short", ...UTC });
+}
+
+/** "Sep 26" — a chart axis bucketed by month. */
+export function monthAxis(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { month: "short", year: "2-digit", ...UTC });
+}
+
+/** "10 Sep" — a chart axis bucketed by day. */
+export function dayAxis(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...UTC });
+}
+
+/** "Wed 10" — inside a report's day column, where the month is in the masthead. */
+export function dayShort(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", ...UTC });
+}
+
+/** "Wed 10 Sep" — the same column when the days span more than one month. */
+export function dayWithMonth(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", ...UTC });
+}
+
+function asDate(d: Date | string | null | undefined): Date | null {
+  if (d == null) return null;
+  const date = typeof d === "string" ? new Date(d.length === 10 ? `${d}T00:00:00Z` : d) : d;
+  return Number.isNaN(date.getTime()) ? null : date;
+}

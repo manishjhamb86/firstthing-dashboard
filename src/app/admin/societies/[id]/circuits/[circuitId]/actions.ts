@@ -10,6 +10,7 @@ import { logger } from "@/lib/logger";
 import { refuseOrderedDate, refuseReplacementDate, surveyHappenedAt } from "@/lib/step-dates";
 import { scheduleJob } from "@/lib/jobs";
 import { nextDayUTC } from "@/lib/monitoring-window";
+import { recomputeCircuitFigures } from "@/lib/circuit-recompute";
 import { isDemoMode } from "@/lib/demo-mode";
 import { baselineUnsettled } from "@/lib/circuit-load";
 
@@ -173,9 +174,19 @@ export async function correctMeterInstallDate(
     };
   }
 
-  await db.circuit.update({
-    where: { id: circuitId },
-    data: { meterInstalledAt: at, preInstallWindowStartAt: windowStart },
+  // Moving the install date moves the pre/post boundary, so the baseline
+  // computed from the OLD split is a figure derived from a division that no
+  // longer exists. Left alone it produced Indosam Arcade's 0.0% savings —
+  // seven days generated as pre-install days, reclassified as post-install by
+  // this very correction, then measured against a baseline averaged from
+  // themselves. Re-derived here, in the same transaction, from whatever days
+  // are pre-install NOW; with none, it clears rather than keeping a stale one.
+  await db.$transaction(async (tx) => {
+    await tx.circuit.update({
+      where: { id: circuitId },
+      data: { meterInstalledAt: at, preInstallWindowStartAt: windowStart },
+    });
+    await recomputeCircuitFigures(tx, circuitId);
   });
   logger.info("circuit.install_date_corrected", {
     actorId: admin.id,

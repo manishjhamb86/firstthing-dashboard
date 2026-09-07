@@ -2499,6 +2499,67 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## One module owns every date shape, and eslint enforces it (2026-09-08) — user-asked, third round
+
+**"System is still showing different date formats... there should be a global function to format
+date. pass every date to that function before serving it to frontend."** Right, and the previous
+round had only done half the job: it swept the ISO renders but left `toLocaleDateString` calls
+scattered across seven files, each inventing its own shape — a long form on the dashboard, month
+labels on the reports, chart-axis labels on the portal. And one ISO date survived the page sweep
+entirely, because it is built into a STEP SUMMARY string rather than rendered as an element:
+"Replaced 2026-08-01" (the user's own screenshot).
+
+**Every shape is now a named export of `format-date.ts`** — `formatDate`, `formatInstant`,
+`longDate`, `shortDate`, `monthLabel`, `monthShort`, `monthAxis`, `dayAxis`, `dayShort`,
+`dayWithMonth` — so "what date formats does this product use?" is answered by reading one file, and
+adding a shape is adding an export there.
+
+**The enforcement is a lint rule, not a convention** (`no-restricted-syntax` on
+`toLocaleDateString`/`toLocaleTimeString`, `src/lib/format-date.ts` exempt). A screen that reaches
+for its own format now fails `pnpm lint` with a message naming the module — which is exactly the
+user's "so it never changes or if changes then it changes everywhere unless an exception is added":
+an exception has to be a written-down disable comment. The rule found all 12 remaining sites on its
+first run. The page sweep (19 surfaces, no `YYYY-MM-DD` in any rendered text) stays as the
+belt-and-braces check for strings the linter cannot see.
+
+## Readings from nowhere, a benchmark the state ignored, and a baseline derived from the wrong days (2026-09-08) — user-caught
+
+Three defects behind one report ("No readings have been uploaded yet — from where is the system
+showing these readings?... it already shows Benchmark confirmed... and still not letting me go
+through"). All three were confirmed from the rows before anything was changed.
+
+**1. The readings are demo mode's own.** `demo-readings-2026-09-08-to-2026-09-14.csv`, stored under
+`demo-generated/`, committed one minute after the meter install was recorded. The store has always
+known — `DEMO_RAW_KEY_PREFIX` exists for exactly this — but nothing on screen said so, and a
+generated series is otherwise indistinguishable from a vendor export. The readings section now
+states how many of its days were generated rather than uploaded, and that they must not stand
+behind a billed figure.
+
+**2. The 0.0% savings was MY bug, from yesterday's install-date correction.** Those seven days were
+generated as PRE-install days and the baseline (12.9545) was averaged from them; correcting the
+install date to 23 July moved the pre/post boundary, so the same seven days became POST-install and
+were measured against a baseline derived from themselves — necessarily zero. `correctMeterInstallDate`
+now re-derives the baseline in the same transaction, clearing it when no pre-install day remains.
+`recomputeCircuitFigures` was lifted out of `reading-actions.ts` into `src/lib/circuit-recompute.ts`
+to be shared — **a "use server" file cannot export a helper safely**, and this is the second time
+that constraint has bitten in two days. The general rule, now recorded twice over: *a figure derived
+from a set of rows must be re-derived when the set changes.*
+
+**3. A demo-set benchmark never moved the state.** `resyncBenchmark` wrote `benchmarkSavingsPct` and
+left `state` alone, so a circuit whose benchmark came from its demos sat at `post_install_pending`
+while every screen reading the figure said "Benchmark confirmed" — the map and the callout
+disagreeing about one question, the **third** instance recorded here. The state follows the
+benchmark now, in both directions, and the reverse is the half that matters: withdrawing the last
+demo must not leave a circuit standing at `benchmark_confirmed` with nothing behind it. Only
+post-replacement states move — a circuit whose lights are not in is not "confirmed" whatever its
+demos measured.
+
+Verified 7/7 against a fixture reproducing Indosam's exact end state (baseline averaged from the
+days that are now post-install, benchmark from a demo, state stuck at pending): the demo-generated
+days are named as such, no ISO date survives anywhere on the page including the step summaries, and
+rejecting the only demo withdraws the benchmark AND falls the state back. Plus 19/19 on the page
+sweep and 9/9 on the neighbouring suite; 725 unit tests, `tsc`/`lint`/`build` clean.
+
 ## Two dates for one survey, and one date format for the whole product (2026-09-08) — user-caught
 
 **Reported with three screenshots**: "Why it is showing 2 different dates. and even though the

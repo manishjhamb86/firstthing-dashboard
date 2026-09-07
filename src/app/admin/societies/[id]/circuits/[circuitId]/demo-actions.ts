@@ -52,11 +52,32 @@ async function resyncBenchmark(tx: Parameters<Parameters<typeof db.$transaction>
       : { pct: circuit.benchmarkOverridePct, reason: circuit.benchmarkOverrideReason ?? "" },
   );
 
+  const benchmark =
+    derived.basis.kind === "override" ? derived.pct : derived.inBand ? derived.pct : null;
+
+  // The state has to follow the benchmark, in BOTH directions (user-caught
+  // 2026-09-08). This wrote the figure and left the state alone, so a circuit
+  // whose benchmark came from its demos sat at `post_install_pending` while
+  // every screen reading benchmarkSavingsPct said "Benchmark confirmed" — the
+  // map and the callout disagreeing about one question, which this repo has
+  // now recorded three times. The reverse matters more: a benchmark withdrawn
+  // (last demo rejected, override removed) must not leave a circuit standing
+  // at `benchmark_confirmed` with nothing behind it.
+  //
+  // Only the post-replacement states move. A circuit that has not had its
+  // lights replaced is not "confirmed" whatever its demos measured, and this
+  // must never skip a step the circuit has not actually done.
+  const MOVES_FORWARD = ["post_install_pending", "post_install_monitoring", "benchmark_review"];
+  let state: string | undefined;
+  if (benchmark !== null && circuit.lightReplacementDate !== null && MOVES_FORWARD.includes(circuit.state)) {
+    state = "benchmark_confirmed";
+  } else if (benchmark === null && circuit.state === "benchmark_confirmed") {
+    state = circuit.lightReplacementDate !== null ? "post_install_pending" : "awaiting_installation";
+  }
+
   await tx.circuit.update({
     where: { id: circuitId },
-    data: {
-      benchmarkSavingsPct: derived.basis.kind === "override" ? derived.pct : derived.inBand ? derived.pct : null,
-    },
+    data: { benchmarkSavingsPct: benchmark, ...(state ? { state: state as never } : {}) },
   });
 }
 

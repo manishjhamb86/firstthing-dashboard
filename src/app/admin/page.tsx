@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, longDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -124,12 +124,7 @@ export default async function AdminHomePage() {
   const funnel = FUNNEL_STAGES.map((s) => ({ stage: s, count: stageCount.get(s) ?? 0 }));
   const funnelPeak = Math.max(1, ...funnel.map((f) => f.count));
   const closedLost = stageCount.get("closed_lost") ?? 0;
-  const today = new Date().toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  });
+  const today = longDate(new Date());
 
   const decisionCount = circuitsNeedingAttention.length;
 

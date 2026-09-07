@@ -202,6 +202,14 @@ export function DemosPanel({
         </div>
       )}
 
+      {/* An override is a decision ABOUT a measured figure, so it only exists
+          once there is one — before the first demo there is nothing to
+          override, and an open form there asked for a benchmark by hand at
+          exactly the moment FEAT-014-AC-4 says one must never be typed
+          (user-caught 2026-09-07). Closed by default afterwards too: the
+          demos are the normal answer, and a form standing open reads as a
+          field waiting to be filled in. */}
+      {(demos.length > 0 || overridePct !== null) && (
       <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--hairline)" }}>
         <p className="text-sm font-medium">Benchmark override</p>
         <p className="mb-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
@@ -225,7 +233,7 @@ export function DemosPanel({
               </>
             )}
           </p>
-        ) : canEdit && (overriding || overridePct === null) ? (
+        ) : canEdit && overriding ? (
           <div className="flex flex-wrap items-end gap-3">
             <Field label="Benchmark %" htmlFor="ov-pct">
               <input id="ov-pct" type="number" step="0.01" className="field field-auto w-28" value={pct}
@@ -241,14 +249,23 @@ export function DemosPanel({
               )}>
               Set it
             </button>
-            {overriding && (
-              <button type="button" className="btn-ghost mb-2" onClick={() => setOverriding(false)}>Cancel</button>
-            )}
+            <button type="button" className="btn-ghost mb-2" onClick={() => setOverriding(false)}>Cancel</button>
           </div>
         ) : (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>Not overridden.</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            Not overridden — the benchmark is what the demos measured.
+            {canEdit && (
+              <>
+                {" "}
+                <button type="button" className="btn-secondary btn-sm" onClick={() => setOverriding(true)}>
+                  Record an agreed benchmark
+                </button>
+              </>
+            )}
+          </p>
         )}
       </div>
+      )}
 
       {error && <ErrorText>{error}</ErrorText>}
     </Card>

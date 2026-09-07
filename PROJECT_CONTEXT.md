@@ -2499,6 +2499,30 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The benchmark override asked for a figure before there was one to override (2026-09-07) — user-caught
+
+**Reported**: "that benchmark override on the demo benchmark section should only appear after a demo
+is done not before that. and then also just as a button and on click of button the fields should
+appear to put values and submit. otherwise it confusing."
+
+**Both halves were real, and the first one is the sharper of the two.** `demos-panel.tsx` rendered
+the override branch on `canEdit && (overriding || overridePct === null)` — so with no override
+recorded the **form stood open by default**, on a circuit that had no demos at all. That put an
+empty "Benchmark %" field in front of an operator at exactly the moment FEAT-014-AC-4 says a
+benchmark must never be typed: before any demo, the figure has nothing behind it, and the only
+honest source is the measurement that has not happened yet. An override is a decision ABOUT a
+measured figure, so the whole section now exists only once a demo does (or an override is already on
+record — a historical one must never be hidden by its own circuit having no demos).
+
+**Second half**: with demos present it now reads "Not overridden — the benchmark is what the demos
+measured" beside a **Record an agreed benchmark** button, and the fields appear only on click, with
+Cancel to close. A form standing open reads as a field waiting to be filled in; that is the
+confusion the user named.
+
+Verified 3/3 (a demo-less circuit shows no section and offers no `#ov-pct` to type into; a circuit
+with demos does show it) and 9/9 on the button itself (closed by default, opens on click with both
+fields and a Cancel, closes again), zero console errors; 725 unit tests, `tsc`/`lint`/`build` clean.
+
 ## The parts restructure, finished off: every screen that assumed one deal (2026-08-31)
 
 **A sweep for the loose ends the restructure left, before the user's own testing.** Greps for

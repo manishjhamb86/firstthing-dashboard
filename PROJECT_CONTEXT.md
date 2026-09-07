@@ -2499,6 +2499,42 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Demo-generated readings can be removed and re-run (2026-09-08) — user-asked
+
+**"i should be able to delete and re insert the demo mode generated readings."** Re-inserting
+already existed (the readings step's demo fill → review → save); what was missing was the delete,
+which is what left Indosam holding seven generated days it could not clear.
+
+`discardDemoReadings` is demo-mode + `manage_survey`, behind a confirmation that states the count.
+Three properties carry it, and each is the difference between a reset button and a data-loss one:
+
+- **Only demo-generated days go.** The set is defined by the stored file's own `demo-generated/`
+  key prefix, which nothing but `previewDemoReadings` ever writes — so a real vendor export on the
+  same circuit is not reachable from here whatever else is true. That is a property of the query,
+  not of remembering to filter. Asserted by giving the fixture BOTH kinds and checking the real one
+  and its raw file survive.
+- **A day billed on a released calculation is never removed** (INV-03/GATE-02), and the whole
+  delete refuses rather than skipping those rows — a partial reset that silently leaves the billed
+  days behind is a state nobody asked for.
+- **The derived figures go with the evidence.** The baseline and any window-derived benchmark are
+  cleared and re-derived from what survives; a benchmark that came from the circuit's DEMOS is left
+  alone, since those are a different record these readings never produced. This is the same rule the
+  install-date correction had just been fixed for — *a figure derived from a set of rows must be
+  re-derived when the set changes* — applied at the second write path rather than rediscovered.
+
+**Verified 13/13 on the delete and 10/10 on the round trip.** The round trip is the part worth
+keeping: delete all five generated days → the baseline clears rather than standing without evidence
+→ the circuit falls back to `meter_installed`, which is a state with the window OPEN → the demo fill
+is offered again → fill → review → save → the circuit holds generated readings again, still marked
+as generated and still removable. Two things the driving found, neither a product bug: the fill is
+gated on an open window, so a circuit whose baseline has settled correctly offers nothing (the first
+fixture had a surviving real reading and was therefore the wrong shape to test with); and the fill
+goes through "Review these N days" before Save, which is the same review an upload gets.
+
+One more ISO leak fixed on the way — the reading window's own `2026-07-24 → 2027-09-07` line, which
+only renders while a window is open and a fill is in progress, so neither the page sweep nor the
+lint rule could see it. Found by driving the flow.
+
 ## One module owns every date shape, and eslint enforces it (2026-09-08) — user-asked, third round
 
 **"System is still showing different date formats... there should be a global function to format

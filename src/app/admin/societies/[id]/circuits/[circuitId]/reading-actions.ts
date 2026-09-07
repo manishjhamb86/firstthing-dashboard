@@ -985,6 +985,97 @@ export async function draftDemoReadings(input: {
 }
 
 /**
+ * Remove the readings demo mode generated for this circuit, so a demo can be
+ * re-run from a clean slate (user-asked 2026-09-08: "i should be able to
+ * delete and re insert the demo mode generated readings").
+ *
+ * Three properties carry it, and each is the difference between a useful
+ * reset button and a data-loss one:
+ *
+ *  · **Only demo-generated days go.** The set is defined by the stored file's
+ *    own key prefix (`demo-generated/`), which nothing but `previewDemoReadings`
+ *    ever writes — so a real vendor export sitting on the same circuit is not
+ *    reachable from here, whatever else is true. That is a property of the
+ *    query, not of remembering to filter.
+ *  · **A day consumed by a released calculation is never removed** (INV-03 /
+ *    GATE-02), demo-generated or not: deleting it would silently unmake a
+ *    line on an invoice a society already holds. The whole delete refuses
+ *    rather than skipping those rows, because a partial reset that leaves the
+ *    billed days behind is a state nobody asked for.
+ *  · **The derived figures go with the evidence.** A baseline averaged from
+ *    days that no longer exist is exactly the defect this repo just paid for
+ *    (Indosam's 0.0% savings, 2026-09-08), so the baseline and any
+ *    window-derived benchmark are cleared and re-derived from what survives.
+ *    A benchmark that came from the circuit's DEMOS is untouched — those are
+ *    a different record and these readings never produced it.
+ */
+export async function discardDemoReadings(circuitId: string): Promise<Outcome> {
+  if (!(await isDemoMode())) {
+    return { error: "Removing generated readings is only available while demo mode is on." };
+  }
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid." };
+  if (!(admin.permissions as string[]).includes("manage_survey")) {
+    return { error: "Removing circuit readings is a field-survey action." };
+  }
+
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    include: { demos: { where: { rejected: false }, select: { id: true } } },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+
+  const demoDays = await db.meterReading.findMany({
+    where: { circuitId, rawFile: { s3Key: { startsWith: DEMO_RAW_KEY_PREFIX } } },
+    select: { id: true, date: true, usedInCalculationId: true, rawFileId: true },
+  });
+  if (demoDays.length === 0) {
+    return { error: "This circuit holds no demo-generated readings." };
+  }
+  const billed = demoDays.filter((d) => d.usedInCalculationId !== null);
+  if (billed.length > 0) {
+    return {
+      error: `${billed.length} of these days ${
+        billed.length === 1 ? "is" : "are"
+      } billed on a released calculation and cannot be removed (INV-03). Issue a correction there instead.`,
+    };
+  }
+
+  // A benchmark the circuit's own demos produced is theirs, not these
+  // readings' — clearing it here would discard a record this action never
+  // touched.
+  const benchmarkFromDemos = circuit.demos.length > 0 || circuit.benchmarkOverridePct !== null;
+
+  await db.$transaction(async (tx) => {
+    await tx.meterReading.deleteMany({ where: { id: { in: demoDays.map((d) => d.id) } } });
+    await tx.rawReadingFile.deleteMany({
+      where: { id: { in: [...new Set(demoDays.map((d) => d.rawFileId).filter(Boolean))] as string[] } },
+    });
+    await tx.circuit.update({
+      where: { id: circuitId },
+      data: {
+        preInstallBaseline: null,
+        postInstallBaseline: null,
+        ...(benchmarkFromDemos ? {} : { benchmarkSavingsPct: null }),
+        // Back to the state its remaining evidence supports; recompute moves
+        // it forward again from whatever readings survive.
+        state: circuit.lightReplacementDate !== null ? "post_install_pending" : "meter_installed",
+      },
+    });
+    await recomputeCircuitFigures(tx, circuitId);
+  });
+
+  logger.warn("circuit.demo_readings_discarded", {
+    actorId: admin.id,
+    circuitId,
+    days: demoDays.length,
+    benchmarkKept: benchmarkFromDemos,
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  return { ok: true };
+}
+
+/**
  * Turns the reviewed-and-possibly-edited day values into a real SONOFF file
  * and previews it exactly as an upload. The operator supplies the numbers —
  * that is what manual entry means — but every classification (which phase,

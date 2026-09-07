@@ -146,7 +146,7 @@ function ValidPeriod({ window: w }: { window: ReadingWindowDTO }) {
         <span className="lbl">Valid period for this step</span>
       </p>
       <p className="num text-base font-semibold mt-0.5">
-        {w.from} → {w.to}
+        {formatDate(w.from)} → {formatDate(w.to)}
       </p>
       <p className="mt-1 text-xs text-[var(--text-muted)]">
         Starts {w.startBasis}; {endBasis}. Days outside this period are still listed, so you can see
@@ -702,7 +702,7 @@ export function CircuitReadingPanel({
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="font-medium text-sm">{KIND_LABEL[preview.kind]}</span>
         <StatusChip tone="info">
-          {preview.windowEmpty ? "Window not open yet" : `${preview.windowFrom} → ${preview.windowTo}`}
+          {preview.windowEmpty ? "Window not open yet" : `${formatDate(preview.windowFrom)} → ${formatDate(preview.windowTo)}`}
         </StatusChip>
         <span className="text-xs text-[var(--text-muted)]">
           {preview.vendor.toUpperCase()} format · {preview.parse.daysInFile} days in file ·{" "}

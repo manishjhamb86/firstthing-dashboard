@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
@@ -159,7 +160,7 @@ export default async function PortalDocumentsPage({
                           {d.fileName}
                         </p>
                         <p className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                          filed {d.uploadedAt.toISOString().slice(0, 10)} · {kb(d.byteSize)}
+                          filed {formatDate(d.uploadedAt)} · {kb(d.byteSize)}
                           {d.version > 1 ? ` · v${d.version}` : ""}
                         </p>
                       </div>

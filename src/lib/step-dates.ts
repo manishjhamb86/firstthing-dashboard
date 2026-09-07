@@ -13,6 +13,8 @@
  * broke the reading-window check this exists to protect.
  */
 
+import { formatDate } from "./format-date";
+
 export const STEP_DATE_ERRORS = {
   future: "That date is in the future.",
   beforeMeter: "The lights cannot have been replaced before the meter was installed.",
@@ -74,8 +76,16 @@ export function refuseReplacementDate(input: {
 /** A predecessor a date must not precede. Null dates are simply not checked. */
 export type DatePredecessor = { label: string; date: Date | null };
 
+/**
+ * Dates inside a refusal read the way every date in this product reads —
+ * DD-MM-YYYY, from the one formatter (user-asked 2026-09-08: "at different
+ * places the format of date is different... use it as a rule or centralised
+ * function"). An ISO string in a sentence beside a DD-MM-YYYY card is how
+ * "the survey is 07-07" and "the survey is 2026-09-07" ended up looking like
+ * two different facts about the same thing.
+ */
 function iso(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return formatDate(d);
 }
 
 /**
@@ -108,4 +118,23 @@ export function refuseOrderedDate(input: {
     }
   }
   return null;
+}
+
+/**
+ * When the survey that selected this circuit actually HAPPENED.
+ *
+ * Deliberately the booked visit rather than `SiteSurvey.createdAt`
+ * (user-caught 2026-09-08): the row is stamped the moment the proposal is
+ * recorded, so a deal typed up in September carries a September survey while
+ * the visit card on the very same screen says the surveyor went in July —
+ * two dates for one event, and the ordering rule was reading the bookkeeping
+ * one. The visit is the real-world fact; the row date is the fallback for a
+ * survey nobody booked a visit for.
+ */
+export function surveyHappenedAt(input: {
+  visitAt: Date | null | undefined;
+  rowCreatedAt: Date | null | undefined;
+}): { date: Date | null; label: string } {
+  if (input.visitAt) return { date: input.visitAt, label: "the site survey visit" };
+  return { date: input.rowCreatedAt ?? null, label: "the site survey" };
 }

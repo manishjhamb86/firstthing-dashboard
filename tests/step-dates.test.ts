@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { formatDate } from "@/lib/format-date";
 import { refuseReplacementDate, STEP_DATE_ERRORS, refuseOrderedDate } from "@/lib/step-dates";
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
@@ -115,7 +116,12 @@ describe("refuseOrderedDate — the deal's own dates", () => {
     // Names both ends: which date, and what it collides with.
     expect(why).toContain("The site survey");
     expect(why).toContain("the first meeting");
-    expect(why).toContain("2026-03-12");
+    // In the product's own format, asserted THROUGH the formatter rather than
+    // against a literal — a refusal that reads 2026-03-12 beside a card
+    // reading 12-03-2026 is how one date looked like two facts
+    // (user-caught 2026-09-08). Changing the format must not need this edited.
+    expect(why).toContain(formatDate(d("2026-03-12")));
+    expect(why).not.toContain("2026-03-12");
   });
 
   it("allows the same day as its predecessor", () => {

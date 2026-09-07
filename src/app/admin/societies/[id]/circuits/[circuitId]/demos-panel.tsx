@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState, useTransition } from "react";
+import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
 import { describeBasis, deriveBenchmark, type DemoInput } from "@/lib/circuit-demos";
@@ -321,7 +322,7 @@ function DemoReadings({
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.date}>
-                    <td className="num">{r.date}</td>
+                    <td className="num">{formatDate(r.date)}</td>
                     <td className="num">{r.kWh.toFixed(2)}</td>
                   </tr>
                 ))}

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
@@ -202,9 +203,7 @@ export default async function PortalInventoryPage() {
                                     : installedCount(c, d) > 0
                                       ? `on the metered circuit${
                                           c.lightReplacementDate
-                                            ? ` · installed ${c.lightReplacementDate
-                                                .toISOString()
-                                                .slice(0, 10)}`
+                                            ? ` · installed ${formatDate(c.lightReplacementDate)}`
                                             : ""
                                         }`
                                       : "original fitting, awaiting replacement"}

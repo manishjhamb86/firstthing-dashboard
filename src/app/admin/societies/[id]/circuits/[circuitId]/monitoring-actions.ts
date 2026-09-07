@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { formatDate } from "@/lib/format-date";
 import type { CommissioningWindowType } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
@@ -68,7 +69,7 @@ async function applyCommissioningReading(
       windowStartAt,
     });
     return {
-      error: `${date}: the window restarted on ${windowStartAt.toISOString().slice(0, 10)} — record a reading on or after that date instead.`,
+      error: `${date}: the window restarted on ${formatDate(windowStartAt)} — record a reading on or after that date instead.`,
     };
   }
 

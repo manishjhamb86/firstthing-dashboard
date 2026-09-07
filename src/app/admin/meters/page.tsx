@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatInstant } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
@@ -114,7 +115,7 @@ export default async function MetersPage() {
                         {a.kind === "offline" ? "Not reachable" : "Out of range"}
                       </StatusChip>
                       <span className="text-xs text-[var(--text-subtle)]">
-                        since {a.openedAt.slice(0, 16).replace("T", " ")}
+                        since {formatInstant(a.openedAt)}
                       </span>
                       {/* An alert addressed to nobody is an alert nobody acts on. */}
                       <span className="text-xs text-[var(--text-subtle)]">

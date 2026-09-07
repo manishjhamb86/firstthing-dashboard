@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { formatDate } from "@/lib/format-date";
 import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
 import { REVIEW_LEAD_HOURS } from "@/lib/installation-gate";
 import { approveBatch, disputeBatch } from "./installation-actions";
@@ -68,7 +69,7 @@ export function BatchReviewCard({
           <StatusChip tone={overdue ? "bad" : "warn"}>
             {overdue
               ? "Tomorrow's work is on hold"
-              : `Approve by ${deadline.toISOString().slice(11, 16)} UTC on ${deadline.toISOString().slice(0, 10)}`}
+              : `Approve by ${deadline.toISOString().slice(11, 16)} UTC on ${formatDate(deadline)}`}
           </StatusChip>
         )}
       </div>

@@ -2499,6 +2499,46 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## Two dates for one survey, and one date format for the whole product (2026-09-08) — user-caught
+
+**Reported with three screenshots**: "Why it is showing 2 different dates. and even though the
+survey date shows 07-july the error message shows it was done 07-sept" — and, separately, "at
+different places the format of date is different. please use the same format everywhere... so use
+it as a rule or centralised function."
+
+**Both halves were real, and the first was a genuine correctness bug, not a display one.** The
+Survey visit card said the surveyor went on **07-07-2026** while the refusal said the survey was
+**2026-09-07**. Those are two different facts about one event because the ordering rule was reading
+`SiteSurvey.createdAt` — the moment the row was typed up — rather than the booked `survey_visit`
+event, which is when the survey actually happened. `surveyHappenedAt()` (in `step-dates.ts`, pure)
+now prefers the visit and falls back to the row date only when no visit was booked, and the refusal
+names which it used ("the site survey visit"). **That makes yesterday's whole detour unnecessary
+for the reported case**: Indosam's visit is 7 July, so a July install date is simply accepted.
+
+**A `"use server"` file may only export async functions** — the pure helper was written into the
+circuit's `actions.ts` first, and `tsc` AND `lint` both passed while every page 500'd. Only running
+it caught this. It belongs in a lib module anyway, which is where it went.
+
+**The format rule is now written into the module that owns it** (`format-date.ts`), with its
+exceptions stated: `<input type="date">` values (ISO is the only thing the control parses, and the
+browser then renders the reader's locale), map/DTO/sort keys, log fields and S3 key labels, and the
+printed reports' deliberately compact in-table day labels. Everything else — ~40 render sites across
+admin and portal — goes through `formatDate`/`formatInstant`. Two of them turned out to be machine
+**instants** shown in UTC (a meter's outage start, the eWeLink sync), so they were 5½ hours wrong
+for their reader as well as the wrong shape; they read IST now, which is this file's own
+typed-by-a-person-vs-stamped-by-a-machine rule.
+
+**The check is a sweep, not a spot-check**: `date-sweep.mjs` opens 18 admin and portal pages and
+asserts no `20\d\d-\d\d-\d\d` appears in any of them — which is what caught the last four
+stragglers (live monitoring's last reading, the meters list's history and sync line, the portal
+inventory's install date) after the bulk edit looked done. A unit test asserts the refusal message
+**through the formatter** rather than against a literal, so changing the format cannot leave a test
+pinning the old one.
+
+Verified 10/10 on the survey-visit rule and format (a July install accepted where September was
+refused, the refusal naming the visit in DD-MM-YYYY, no ISO anywhere on the circuit page) and 19/19
+on the sweep; 725 unit tests, `tsc`/`lint`/`build` clean, zero page errors.
+
 ## The last uncorrectable date in the chain (2026-09-08) — user-caught, same class, third time
 
 **Reported with a screenshot**: after using yesterday's install-date correction, "Now stuck here" —

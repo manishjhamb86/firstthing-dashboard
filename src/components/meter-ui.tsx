@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { formatDate } from "@/lib/format-date";
 import { Card, CardTitle, StatusChip, type ChipTone } from "@/components/ui";
 import type { MeterRow } from "@/lib/meter-view";
 
@@ -374,7 +375,7 @@ export function MeterReadout({ meter, action }: { meter: MeterRow; action?: Reac
                   <span className="num font-semibold" style={{ color: "var(--text-muted)" }}>
                     {meter.hourlyCount.toLocaleString()}
                   </span>{" "}
-                  hours of history · {meter.hourlyFrom} → {meter.hourlyTo}
+                  hours of history · {formatDate(meter.hourlyFrom)} → {formatDate(meter.hourlyTo)}
                 </>
               ) : (
                 "no exported history yet"

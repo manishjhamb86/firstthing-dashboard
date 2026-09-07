@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { ListToolbar } from "@/components/list-toolbar";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -227,7 +228,7 @@ export default async function ReadingsPage({
                       <td className="num text-right">{u._count.readings || "—"}</td>
                       <td className="num text-right">{u._count.anomalies || "—"}</td>
                       <td className="text-[var(--text-muted)]">
-                        {u.uploadedAt.toISOString().slice(0, 10)} ·{" "}
+                        {formatDate(u.uploadedAt)} ·{" "}
                         {u.uploadedBy.name ?? u.uploadedBy.email}
                       </td>
                       <td className="text-right">

@@ -1,12 +1,13 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { canOwn, teamMeta } from "@/lib/admin-teams";
 import { eventTitle } from "@/lib/schedule";
 import { logger } from "@/lib/logger";
-import { refuseOrderedDate, refuseReplacementDate } from "@/lib/step-dates";
+import { refuseOrderedDate, refuseReplacementDate, surveyHappenedAt } from "@/lib/step-dates";
 import { scheduleJob } from "@/lib/jobs";
 import { nextDayUTC } from "@/lib/monitoring-window";
 import { isDemoMode } from "@/lib/demo-mode";
@@ -38,8 +39,9 @@ type InstallDate = { at: Date; error?: never } | { at?: never; error: string };
 
 function resolveInstallDate(
   installedOn: string | undefined,
-  /** The survey that selected this circuit — the meter cannot predate it. */
+  /** When the survey that selected this circuit happened — see surveyHappenedAt. */
   surveyedAt: Date | null = null,
+  surveyLabel = "the site survey",
 ): InstallDate {
   if (!installedOn) return { at: new Date() };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(installedOn)) return { error: "Pick a valid install date." };
@@ -51,7 +53,7 @@ function resolveInstallDate(
     subject: "The meter install",
     date: at,
     now: new Date(),
-    mustNotPrecede: [{ label: "the site survey", date: surveyedAt }],
+    mustNotPrecede: [{ label: surveyLabel, date: surveyedAt }],
   });
   if (refusal) return { error: refusal };
   return { at };
@@ -104,7 +106,25 @@ export async function correctMeterInstallDate(
 
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
-    include: { siteSurvey: { select: { createdAt: true } } },
+    include: {
+      siteSurvey: {
+        select: {
+          createdAt: true,
+          // The visit is when the survey actually happened; the row's own
+          // createdAt is only when it was typed up (surveyHappenedAt).
+          pipeline: {
+            select: {
+              scheduledEvents: {
+                where: { kind: "survey_visit" },
+                orderBy: { startAt: "asc" },
+                take: 1,
+                select: { startAt: true },
+              },
+            },
+          },
+        },
+      },
+    },
   });
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
   if (!circuit.meterInstalledAt) {
@@ -117,7 +137,11 @@ export async function correctMeterInstallDate(
     };
   }
 
-  const resolved = resolveInstallDate(installedOn, circuit.siteSurvey?.createdAt ?? null);
+  const surveyed = surveyHappenedAt({
+    visitAt: circuit.siteSurvey?.pipeline?.scheduledEvents[0]?.startAt ?? null,
+    rowCreatedAt: circuit.siteSurvey?.createdAt ?? null,
+  });
+  const resolved = resolveInstallDate(installedOn, surveyed.date, surveyed.label);
   if (resolved.at === undefined) return { error: resolved.error };
   const at: Date = resolved.at;
 
@@ -132,7 +156,7 @@ export async function correctMeterInstallDate(
     });
     if (refusal) {
       return {
-        error: `The replacement is recorded for ${circuit.lightReplacementDate.toISOString().slice(0, 10)}. ${refusal}`,
+        error: `The replacement is recorded for ${formatDate(circuit.lightReplacementDate)}. ${refusal}`,
       };
     }
   }
@@ -145,7 +169,7 @@ export async function correctMeterInstallDate(
   });
   if (stranded) {
     return {
-      error: `A reading is stored for ${stranded.date.toISOString().slice(0, 10)}, which is on or before that install day — the pre-install window opens the day after, so it would fall outside its own window. Remove that reading first, or pick an earlier install date.`,
+      error: `A reading is stored for ${formatDate(stranded.date)}, which is on or before that install day — the pre-install window opens the day after, so it would fall outside its own window. Remove that reading first, or pick an earlier install date.`,
     };
   }
 
@@ -176,7 +200,25 @@ export async function submitLoadValidation(
 
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
-    include: { siteSurvey: { select: { createdAt: true } } },
+    include: {
+      siteSurvey: {
+        select: {
+          createdAt: true,
+          // The visit is when the survey actually happened; the row's own
+          // createdAt is only when it was typed up (surveyHappenedAt).
+          pipeline: {
+            select: {
+              scheduledEvents: {
+                where: { kind: "survey_visit" },
+                orderBy: { startAt: "asc" },
+                take: 1,
+                select: { startAt: true },
+              },
+            },
+          },
+        },
+      },
+    },
   });
   if (!circuit) return { error: "Circuit not found." };
 
@@ -201,7 +243,11 @@ export async function submitLoadValidation(
     };
   }
 
-  const installed = resolveInstallDate(installedOn, circuit.siteSurvey?.createdAt ?? null);
+  const surveyed = surveyHappenedAt({
+    visitAt: circuit.siteSurvey?.pipeline?.scheduledEvents[0]?.startAt ?? null,
+    rowCreatedAt: circuit.siteSurvey?.createdAt ?? null,
+  });
+  const installed = resolveInstallDate(installedOn, surveyed.date, surveyed.label);
   if (installed.at === undefined) return { error: installed.error };
   const installedAt: Date = installed.at;
 
@@ -260,12 +306,34 @@ export async function overrideLoadValidation(circuitId: string, reason: string, 
 
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
-    include: { siteSurvey: { select: { createdAt: true } } },
+    include: {
+      siteSurvey: {
+        select: {
+          createdAt: true,
+          // The visit is when the survey actually happened; the row's own
+          // createdAt is only when it was typed up (surveyHappenedAt).
+          pipeline: {
+            select: {
+              scheduledEvents: {
+                where: { kind: "survey_visit" },
+                orderBy: { startAt: "asc" },
+                take: 1,
+                select: { startAt: true },
+              },
+            },
+          },
+        },
+      },
+    },
   });
   if (!circuit) return { error: "Circuit not found." };
   if (circuit.meterDisplayedLoad == null) return { error: "No load reading has been submitted yet." };
 
-  const installed = resolveInstallDate(installedOn, circuit.siteSurvey?.createdAt ?? null);
+  const surveyed = surveyHappenedAt({
+    visitAt: circuit.siteSurvey?.pipeline?.scheduledEvents[0]?.startAt ?? null,
+    rowCreatedAt: circuit.siteSurvey?.createdAt ?? null,
+  });
+  const installed = resolveInstallDate(installedOn, surveyed.date, surveyed.label);
   if (installed.at === undefined) return { error: installed.error };
 
   await db.circuit.update({

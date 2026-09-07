@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useTransition } from "react";
+import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { EmptyState, ErrorText } from "@/components/ui";
 import { setReadingExclusion } from "@/app/admin/societies/[id]/circuits/[circuitId]/reading-actions";
@@ -225,7 +226,7 @@ export function ReadingsExplorer({
               return (
                 <React.Fragment key={r.id}>
                 <tr style={r.excluded ? { opacity: 0.55 } : undefined}>
-                  <td className="num whitespace-nowrap">{r.date}</td>
+                  <td className="num whitespace-nowrap">{formatDate(r.date)}</td>
                   <td className="num text-right">{r.kWh.toFixed(2)}</td>
                   <td className="num text-right">
                     {r.intervalCount ?? "—"}

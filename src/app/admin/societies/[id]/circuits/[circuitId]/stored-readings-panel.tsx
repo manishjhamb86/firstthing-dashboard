@@ -7,6 +7,7 @@
 // days invites the dispute it exists to settle.
 
 import { useState, useTransition } from "react";
+import { formatDate } from "@/lib/format-date";
 import { Card, EmptyState, ErrorText, StatusChip } from "@/components/ui";
 import {
   SAVINGS_BAND_META,
@@ -275,7 +276,7 @@ export function StoredReadingsPanel({
                     {rows.map((r) => (
                       <tr key={r.id} style={rowStyle(r)}>
                         <td className="num" style={r.excluded ? { textDecoration: "line-through" } : undefined}>
-                          {r.date}
+                          {formatDate(r.date)}
                         </td>
                         <td className="num" style={r.excluded ? { textDecoration: "line-through" } : undefined}>
                           {r.kWh.toFixed(2)}

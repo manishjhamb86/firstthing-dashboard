@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -144,7 +145,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
       {review.state === "closed" && (
         <PageRibbon tone="neutral">
           Closed by {review.owner?.name ?? review.owner?.email ?? "—"} on{" "}
-          <span className="num">{review.closedAt?.toISOString().slice(0, 10)}</span>. The
+          <span className="num">{formatDate(review.closedAt)}</span>. The
           classification below is what next month&apos;s run reads.
         </PageRibbon>
       )}
@@ -228,7 +229,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
                   : rescalesThisMonth
                       .map(
                         (e) =>
-                          `${e.effectiveDate.toISOString().slice(0, 10)}: ${e.previousLightCount} → ${e.newLightCount} lights, baseline ${e.previousBaseline.toFixed(2)} → ${e.rescaledBaseline.toFixed(2)}`,
+                          `${formatDate(e.effectiveDate)}: ${e.previousLightCount} → ${e.newLightCount} lights, baseline ${e.previousBaseline.toFixed(2)} → ${e.rescaledBaseline.toFixed(2)}`,
                       )
                       .join("; ")}
               </dd>
@@ -288,7 +289,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
           )}
           <p className="text-[13px] text-[var(--text-muted)] mt-3">
             Owner: {review.owner?.name ?? review.owner?.email ?? "—"} ·{" "}
-            {review.decidedAt?.toISOString().slice(0, 10)} — INV-03 requires both an owner and a
+            {formatDate(review.decidedAt)} — INV-03 requires both an owner and a
             classification on any bill-changing decision.
           </p>
         </Card>

@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { formatDate } from "@/lib/format-date";
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
@@ -224,7 +225,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
                     <p className="break-words text-[13px] font-medium">{i.fileName}</p>
                     <p className="mt-1 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[12px] text-[var(--text-subtle)]">
                       <span className="num whitespace-nowrap">
-                        {i.firstDay.toISOString().slice(0, 10)} → {i.lastDay.toISOString().slice(0, 10)}
+                        {formatDate(i.firstDay)} → {formatDate(i.lastDay)}
                       </span>
                       <span className="num">{i.hoursInFile.toLocaleString()} hours</span>
                       {i.hoursSuperseded > 0 && (

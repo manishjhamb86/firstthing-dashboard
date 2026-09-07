@@ -1,4 +1,29 @@
 /**
+ * THE date rule for this product. Every date a person reads goes through a
+ * function in this file — no exceptions that are not stated here.
+ *
+ * The user's own instruction (2026-09-08), after finding "07-09-2026" on one
+ * card and "2026-09-07" in the refusal message about the very same day:
+ * "at different places the format of date is different. please use the same
+ * format everywhere on website. so use it as a rule or centralised function.
+ * so it never changes or if changes then it changes everywhere unless an
+ * exception is added."
+ *
+ * So: `formatDate` for a day, `formatDateTime` for a wall-clock appointment,
+ * `formatInstant` for a machine instant (rendered in IST — see below). A bare
+ * `toISOString().slice(0, 10)` in anything a person reads is a bug; changing
+ * the product's date format should mean editing this file and nothing else.
+ *
+ * THE STATED EXCEPTIONS, and only these:
+ *  · `isoDate` — the value of an `<input type="date">`, which parses ISO and
+ *    only ISO. The browser then renders it in the reader's own locale, which
+ *    is why a form control can legitimately show 08/23/2026.
+ *  · map keys, DTO fields, sort keys, log fields and S3 key labels — machine
+ *    values that happen to look like dates. Format them at the point they are
+ *    rendered, never at the point they are stored or keyed.
+ *  · the printed reports, which use their own deliberately compact in-table
+ *    day labels (`dayShort`, "Wed 10") so a month fits one sheet.
+ *
  * How a date reads in this product: DD-MM-YYYY.
  *
  * Every date in this schema is stored at UTC midnight and was being rendered

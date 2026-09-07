@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -331,7 +332,7 @@ export default async function AdminHomePage() {
                         )}
                       </div>
                       <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                        since {a.openedAt.toISOString().slice(0, 10)}
+                        since {formatDate(a.openedAt)}
                         {a.raiseCount > 1 && ` · raised ${a.raiseCount}×`}
                         {a.acknowledgedAt ? " · acknowledged" : ""}
                         {a.circuit && (

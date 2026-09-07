@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { formatDate } from "@/lib/format-date";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
 import { BENCHMARK_MIN_PCT, BENCHMARK_MAX_PCT } from "@/lib/commissioning-anomaly";
@@ -80,7 +81,7 @@ export default async function PostInstallReportPage({
             <p className="text-[20px] font-bold tracking-[-0.01em]">After installation</p>
             <p className="mt-1 text-xs text-[var(--text-subtle)]">
               Lights replaced{" "}
-              <span className="num">{circuit.lightReplacementDate.toISOString().slice(0, 10)}</span>
+              <span className="num">{formatDate(circuit.lightReplacementDate)}</span>
               <br />
               Generated <span className="num">{generated}</span>
             </p>

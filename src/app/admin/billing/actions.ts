@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { formatDate } from "@/lib/format-date";
 import type { Prisma, ServiceLine } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -106,13 +107,13 @@ export async function runCalculation(input: {
     // not a zero line.
     if (certificate.billingStartDate >= to) {
       windowNotes.push(
-        `${label}: billing starts ${certificate.billingStartDate.toISOString().slice(0, 10)}, after ${input.period}.`,
+        `${label}: billing starts ${formatDate(certificate.billingStartDate)}, after ${input.period}.`,
       );
       continue;
     }
     // The part's term is its own: a month after its end bills nothing for it.
     if (contract.termEnd < from) {
-      windowNotes.push(`${label}: its term ended ${contract.termEnd.toISOString().slice(0, 10)}.`);
+      windowNotes.push(`${label}: its term ended ${formatDate(contract.termEnd)}.`);
       continue;
     }
     // The terms in force during the month being billed — not today's terms.

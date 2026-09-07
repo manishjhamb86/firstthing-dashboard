@@ -1,4 +1,5 @@
 import type { SavingsBand } from "@/lib/circuit-load";
+import { formatDate } from "@/lib/format-date";
 import type { ChipTone } from "@/components/ui";
 
 /**
@@ -42,5 +43,5 @@ export function timeAgoShort(at: Date, now: Date = new Date()): string {
   const days = Math.floor(h / 24);
   if (days === 1) return "yesterday";
   if (days < 31) return `${days} days ago`;
-  return at.toISOString().slice(0, 10);
+  return formatDate(at);
 }

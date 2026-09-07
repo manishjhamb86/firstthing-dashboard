@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { formatDate } from "@/lib/format-date";
 import { useSearchParams } from "next/navigation";
 import { FilterChip, ListToolbar } from "@/components/list-toolbar";
 import { SearchInput } from "@/components/search-input";
@@ -222,7 +223,7 @@ export function LiveList({
                             )}
                           </td>
                           <td className="num">{c.days}</td>
-                          <td className="num text-[var(--text-muted)]">{c.lastReading ?? "none yet"}</td>
+                          <td className="num text-[var(--text-muted)]">{c.lastReading ? formatDate(c.lastReading) : "none yet"}</td>
                         </tr>
                       ))}
                     </tbody>

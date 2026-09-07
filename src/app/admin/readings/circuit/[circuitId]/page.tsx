@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { ListToolbar } from "@/components/list-toolbar";
@@ -201,7 +202,7 @@ export default async function CircuitReadingHistory({
                         {f.supersededBy && (
                           <div className="mt-1 text-xs text-[var(--text-muted)]">
                             Replaced by {f.supersededBy.fileName} on{" "}
-                            {f.supersededBy.uploadedAt.toISOString().slice(0, 10)}
+                            {formatDate(f.supersededBy.uploadedAt)}
                           </div>
                         )}
                         {f.aiError && (
@@ -264,7 +265,7 @@ export default async function CircuitReadingHistory({
                 <tbody>
                   {readings.map((r) => (
                     <tr key={r.id}>
-                      <td className="num">{r.date.toISOString().slice(0, 10)}</td>
+                      <td className="num">{formatDate(r.date)}</td>
                       <td className="num text-right">{r.kWh.toFixed(3)}</td>
                       <td className="num text-right">{r.intervalCount ?? "—"}</td>
                       <td>
@@ -313,7 +314,7 @@ export default async function CircuitReadingHistory({
                   const status = READING_ANOMALY_STATUS[a.status] ?? { label: a.status, tone: "neu" as const };
                   return (
                     <tr key={a.id}>
-                      <td className="num">{a.date ? a.date.toISOString().slice(0, 10) : "—"}</td>
+                      <td className="num">{formatDate(a.date)}</td>
                       <td>
                         <StatusChip tone={kind.tone}>{kind.label}</StatusChip>
                       </td>

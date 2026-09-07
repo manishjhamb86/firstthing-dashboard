@@ -5,6 +5,7 @@
 // phase and the window; every judgment stays with the operator.
 
 import { useMemo, useRef, useState, useTransition } from "react";
+import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip } from "@/components/ui";
 import {
@@ -514,7 +515,7 @@ export function CircuitReadingPanel({
             <tbody>
               {draft.map((row, i) => (
                 <tr key={row.date}>
-                  <td className="num">{row.date}</td>
+                  <td className="num">{formatDate(row.date)}</td>
                   <td>
                     <input
                       type="number"
@@ -785,7 +786,7 @@ export function CircuitReadingPanel({
                       "—"
                     )}
                   </td>
-                  <td className="num">{row.date}</td>
+                  <td className="num">{formatDate(row.date)}</td>
                   <td className="num">{row.kWh.toFixed(2)}</td>
                   <td className="num">
                     {row.intervalCount}

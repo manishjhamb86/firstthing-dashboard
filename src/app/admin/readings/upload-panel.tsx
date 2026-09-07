@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
 import type { ClarifyingQuestion, MappingProposal } from "@/lib/reading-ingest-ai";
@@ -516,7 +517,7 @@ export function UploadPanel({ period, circuits }: { period: string; circuits: Ci
               <tbody>
                 {preview.preview.map((r) => (
                   <tr key={r.date}>
-                    <td className="num">{r.date}</td>
+                    <td className="num">{formatDate(r.date)}</td>
                     <td className="num text-right">{r.kWh.toFixed(3)}</td>
                     <td className="num text-right">{r.intervalCount}</td>
                   </tr>

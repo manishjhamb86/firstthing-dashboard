@@ -1,4 +1,5 @@
 import type { DemoReportCircuit } from "@/lib/demo-report";
+import { formatDate } from "@/lib/format-date";
 import { Card, CardTitle, Stat, StatRow } from "@/components/ui";
 import { circuitLabelOf } from "@/lib/meter-view";
 
@@ -153,7 +154,7 @@ export function DemoReportView({
                   <tbody>
                     {(c.preInstallReadings ?? []).map((r) => (
                       <tr key={r.date}>
-                        <td className="num">{r.date}</td>
+                        <td className="num">{formatDate(r.date)}</td>
                         <td className="num">{r.consumptionKwh.toFixed(2)}</td>
                       </tr>
                     ))}
@@ -172,7 +173,7 @@ export function DemoReportView({
                   <tbody>
                     {(c.postInstallReadings ?? []).map((r) => (
                       <tr key={r.date}>
-                        <td className="num">{r.date}</td>
+                        <td className="num">{formatDate(r.date)}</td>
                         <td className="num">{r.consumptionKwh.toFixed(2)}</td>
                       </tr>
                     ))}

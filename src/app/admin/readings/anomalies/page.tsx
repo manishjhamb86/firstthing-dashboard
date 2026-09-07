@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -185,7 +186,7 @@ export default async function AnomalyReviewPage({
                         };
                         return (
                           <tr key={a.id}>
-                            <td className="num">{a.date ? a.date.toISOString().slice(0, 10) : "—"}</td>
+                            <td className="num">{formatDate(a.date)}</td>
                             <td>
                               <StatusChip tone={kind.tone}>{kind.label}</StatusChip>
                               {!a.blocksBilling && (

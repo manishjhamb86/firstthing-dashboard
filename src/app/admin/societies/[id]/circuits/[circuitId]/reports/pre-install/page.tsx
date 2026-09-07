@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { formatDate } from "@/lib/format-date";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { PRE_WARN_PCT } from "@/lib/circuit-load";
 import { loadCircuitReport } from "../report-data";
@@ -68,7 +69,7 @@ export default async function PreInstallReportPage({
             <p className="text-[20px] font-bold tracking-[-0.01em]">Before installation</p>
             <p className="mt-1 text-xs text-[var(--text-subtle)]">
               Meter installed{" "}
-              <span className="num">{circuit.meterInstalledAt?.toISOString().slice(0, 10) ?? "—"}</span>
+              <span className="num">{formatDate(circuit.meterInstalledAt)}</span>
               <br />
               Generated <span className="num">{generated}</span>
             </p>

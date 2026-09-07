@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
@@ -106,7 +107,7 @@ export default async function PortalSupportPage() {
                       {t.raisedBy.name ?? t.raisedBy.email}
                     </td>
                     <td className="num text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                      {t.createdAt.toISOString().slice(0, 10)}
+                      {formatDate(t.createdAt)}
                     </td>
                     <td>
                       {t.status === "open" ? (

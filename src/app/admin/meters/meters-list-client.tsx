@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { formatDate, formatInstant } from "@/lib/format-date";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, EmptyState, ErrorText, StatusChip } from "@/components/ui";
@@ -170,7 +171,7 @@ export function MetersListClient({
           <CardTitle>Devices</CardTitle>
           <p className="mt-1 text-[13px] text-[var(--text-muted)]">
             {syncedAt
-              ? `Mirrored from the eWeLink account ${syncedAt.slice(0, 16).replace("T", " ")}.`
+              ? `Mirrored from the eWeLink account ${formatInstant(syncedAt)}.`
               : "Not yet mirrored from the eWeLink account."}
           </p>
         </div>
@@ -288,7 +289,7 @@ export function MetersListClient({
                     <MeterStateChip state={m.state} />
                     {m.state !== null && m.state !== "reporting" && m.offlineSince && (
                       <div className="mt-1 text-xs text-[var(--text-subtle)]">
-                        since {m.offlineSince.slice(0, 16).replace("T", " ")}
+                        since {formatInstant(m.offlineSince)}
                       </div>
                     )}
                   </td>
@@ -339,7 +340,7 @@ export function MetersListClient({
                     ) : (
                       <>
                         {m.hourlyCount.toLocaleString()} h
-                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">to {m.hourlyTo}</div>
+                        <div className="whitespace-nowrap text-xs text-[var(--text-subtle)]">to {formatDate(m.hourlyTo)}</div>
                       </>
                     )}
                   </td>

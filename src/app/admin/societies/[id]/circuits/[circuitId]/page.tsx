@@ -483,7 +483,7 @@ export default async function CircuitDetailPage({
       {circuit.voidedAt && (
         <PageRibbon tone="bad">
           This circuit was removed by {circuit.voidedBy?.name ?? circuit.voidedBy?.email ?? "—"} on{" "}
-          <span className="num">{circuit.voidedAt.toISOString().slice(0, 10)}</span> — {circuit.voidReason}.
+          <span className="num">{formatDate(circuit.voidedAt)}</span> — {circuit.voidReason}.
           It is excluded from the registry, the monitoring board and every billing run. The record is kept,
           and the operations lead can restore it from the registry.
         </PageRibbon>
@@ -786,12 +786,12 @@ export default async function CircuitDetailPage({
                 const dateLine = circuit.meterInstalledAt ? (
                   <p className="text-sm">
                     Meter installed{" "}
-                    <span className="num">{isoDate(circuit.meterInstalledAt)}</span>
+                    <span className="num">{formatDate(circuit.meterInstalledAt)}</span>
                     {circuit.preInstallWindowStartAt && (
                       <span className="text-[var(--text-muted)]">
                         {" "}
                         · the pre-install window opens{" "}
-                        <span className="num">{isoDate(circuit.preInstallWindowStartAt)}</span>
+                        <span className="num">{formatDate(circuit.preInstallWindowStartAt)}</span>
                       </span>
                     )}
                   </p>
@@ -1317,7 +1317,7 @@ export default async function CircuitDetailPage({
                 <tbody>
                   {liveRescaleEvents.map((e) => (
                     <tr key={e.id}>
-                      <td className="num">{e.effectiveDate.toISOString().slice(0, 10)}</td>
+                      <td className="num">{formatDate(e.effectiveDate)}</td>
                       <td className="num">
                         {e.previousLightCount} → {e.newLightCount}
                       </td>
@@ -1338,7 +1338,7 @@ export default async function CircuitDetailPage({
                       <td className="text-[var(--text-muted)]">
                         {e.recordedBy.name ?? e.recordedBy.email}
                         <br />
-                        <span className="num text-xs">{e.recordedAt.toISOString().slice(0, 10)}</span>
+                        <span className="num text-xs">{formatDate(e.recordedAt)}</span>
                       </td>
                       {canOverride && (
                         <td>
@@ -1383,7 +1383,7 @@ export default async function CircuitDetailPage({
                   <tbody>
                     {voidedRescaleEvents.map((e) => (
                       <tr key={e.id} style={{ opacity: 0.7 }}>
-                        <td className="num">{e.effectiveDate.toISOString().slice(0, 10)}</td>
+                        <td className="num">{formatDate(e.effectiveDate)}</td>
                         <td className="num" style={{ textDecoration: "line-through" }}>
                           {e.previousLightCount} → {e.newLightCount}
                         </td>

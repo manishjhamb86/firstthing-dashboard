@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -319,7 +320,7 @@ export default async function CalculationPage({
           </div>
           <div>
             <dt className="lbl">Released</dt>
-            <dd>{calc.releasedAt ? calc.releasedAt.toISOString().slice(0, 10) : "Not released"}</dd>
+            <dd>{calc.releasedAt ? formatDate(calc.releasedAt) : "Not released"}</dd>
           </div>
           <div>
             <dt className="lbl">Version</dt>

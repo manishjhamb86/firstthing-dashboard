@@ -1140,8 +1140,16 @@ export default async function CircuitDetailPage({
                   );
                 } else {
                   chip = periodChip;
+                  // The benchmark can already be fixed by the demos while
+                  // this window has no readings at all — saying "savings are
+                  // measured against the pre-install baseline" there names a
+                  // baseline the circuit does not hold.
                   summary =
-                    "Record the meter's daily readings for the period below — savings are measured against the pre-install baseline";
+                    circuit.benchmarkSavingsPct != null
+                      ? `The benchmark is already fixed at ${circuit.benchmarkSavingsPct.toFixed(
+                          1,
+                        )}% by this circuit's demos — record the meter's daily readings for the period below`
+                      : "Record the meter's daily readings for the period below — savings are measured against the pre-install baseline";
                   body = canEdit ? (
                     <CircuitReadingPanel
                       circuitId={circuit.id}

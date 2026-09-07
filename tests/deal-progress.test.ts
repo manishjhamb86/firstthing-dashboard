@@ -743,3 +743,56 @@ describe("the deal-level label agrees with the circuit spine", () => {
     expect(label.indexOf("replacement")).toBeLessThan(label.indexOf("gate pass"));
   });
 });
+
+describe("a benchmark figure is not a finished window", () => {
+  // Reported 2026-09-08: "i removed the readings and now i am stuck here.
+  // and there is no option to add those readings." Indosam Arcade's circuit
+  // held a demo-derived benchmark of 70.105, no baseline and zero readings —
+  // and because `benchmarkSavingsPct != null` alone marked the last step
+  // done, EVERY flag was true, no step was current, and the page rendered no
+  // recording form anywhere on it.
+  const stranded = {
+    state: "post_install_pending",
+    hasInstallGatePass: true,
+    hasCompletionGatePass: true,
+    preInstallBaseline: null,
+    replacementOwnerName: "Crew",
+    replacementScheduledAt: new Date("2026-07-25T00:00:00.000Z"),
+    lightReplacementDate: new Date("2026-08-01T00:00:00.000Z"),
+    benchmarkSavingsPct: 70.10542168674698,
+    hasStoredReadings: false,
+  };
+
+  it("leaves the readings step reachable, and never leaves the map with no current step", () => {
+    const steps = circuitSteps(stranded);
+    const current = steps.filter((s) => s.status === "current");
+    expect(current).toHaveLength(1);
+    expect(current[0].key).toBe("benchmark");
+    // …and it says what is actually outstanding, rather than asking for a
+    // benchmark the demos have already fixed.
+    expect(current[0].summary).toMatch(/already fixed at 70\.1%/i);
+    expect(current[0].summary).toMatch(/still outstanding/i);
+  });
+
+  it("still reads done once the state says the window has run", () => {
+    const steps = circuitSteps({ ...stranded, state: "benchmark_confirmed" });
+    expect(steps.find((s) => s.key === "benchmark")?.status).toBe("done");
+    expect(steps.filter((s) => s.status === "current")).toHaveLength(0);
+  });
+
+  it("does not mark the benchmark done over an unfinished replacement", () => {
+    // A demo fixes the benchmark before the lights are in. The figure used to
+    // read "done" at step 8 while step 6 was current — the same incoherence
+    // the rank-OR rule exists to prevent, one step further along.
+    const steps = circuitSteps({
+      ...stranded,
+      state: "awaiting_installation",
+      preInstallBaseline: 30,
+      lightReplacementDate: null,
+      replacementScheduledAt: null,
+      replacementOwnerName: null,
+    });
+    expect(steps.find((s) => s.status === "current")?.key).toBe("assign-replacement");
+    expect(steps.find((s) => s.key === "benchmark")?.status).toBe("locked");
+  });
+});

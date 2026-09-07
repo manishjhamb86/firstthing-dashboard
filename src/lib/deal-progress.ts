@@ -635,7 +635,16 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
   // date nobody agreed.
   const replacementAssignedDone =
     (c.replacementOwnerName != null && c.replacementScheduledAt != null) || replacementDone;
-  const benchmarkDone = c.benchmarkSavingsPct != null;
+  // A benchmark FIGURE is not a finished window. A demo can fix the
+  // benchmark before a single day is recorded, so the figure alone said
+  // "done" while the circuit's own state still said the post-install window
+  // was open — and with every flag true no step was current, so the page
+  // rendered no recording form anywhere. Removing a circuit's demo-generated
+  // readings lands exactly there: a benchmark, no readings, no route to
+  // record any ("i removed the readings and now i am stuck here. and there
+  // is no option to add those readings" — the user, 2026-09-08). The state
+  // is what says whether the window has run, so this step follows it.
+  const benchmarkDone = c.benchmarkSavingsPct != null && rank >= CIRCUIT_RANK.benchmark_confirmed;
 
   // Replacement BEFORE the completion gate pass. CON-18's pass itemizes the
   // equipment that physically changed and is approved before the crew leaves
@@ -690,7 +699,11 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
       "Benchmark confirmed in CON-20's 60-80% band",
       c.state === "benchmark_review"
         ? "The measured result fell outside CON-20's band — resolve the review below"
-        : "Record one reading per day below — 5 valid days compute the savings benchmark",
+        : c.benchmarkSavingsPct != null
+          ? `The benchmark is already fixed at ${c.benchmarkSavingsPct.toFixed(
+              1,
+            )}% by this circuit's demos — the daily readings are still outstanding, record them below`
+          : "Record one reading per day below — 5 valid days compute the savings benchmark",
       "Unlocks once the completion gate pass is submitted"),
   ]);
 }

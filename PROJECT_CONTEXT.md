@@ -2499,6 +2499,39 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The last uncorrectable date in the chain (2026-09-08) — user-caught, same class, third time
+
+**Reported with a screenshot**: after using yesterday's install-date correction, "Now stuck here" —
+"The meter install cannot be dated before the site survey (2026-09-07)." on a 28 July date.
+
+**The refusal was correct again, and again the block was upstream.** Indosam Arcade's real chain:
+lead logged **20 Jul**, meeting **10 Jul** — both already backdated by the user — then proposal
+decided **7 Sep**, survey **7 Sep**, meter **7 Sep**. `SiteSurvey` carries only `createdAt`, set
+from the proposal-decision date ("one date orders both", submitProposal), and that date is settable
+**only at the moment the proposal is recorded**. So a deal typed up today stamps the survey today,
+and every real-world date after it is then ordered against a bookkeeping timestamp.
+
+**This is the third instance of one shape in this codebase** — after the lead-vs-society ordering
+and the meeting-vs-society one, both recorded above: **a real-world date ordered against a
+row-creation stamp fails in exactly the direction people correct in.** The general form, worth
+carrying: *a chain of correctable dates is only as backdatable as its earliest uncorrectable link*
+— every other date here was already correctable (lead logged-on and meeting via `updateLeadDetails`,
+the meter install since yesterday, the replacement), and this single gap froze all of them.
+
+**`correctProposalDate`** closes it: demo mode, operations only (correcting what the record SAYS is
+ops' alone — the same split as `updateLeadDetails`), behind a button on the deal's own proposal
+card, and it moves the survey's `createdAt` in the same transaction because one act set both. Every
+ordering rule holds in BOTH directions: not future, not before the meeting or the lead, and — the
+one that is easy to miss — **not forward past a meter install already recorded against a circuit
+this survey selected**, which would break the very rule this exists to unblock, from the other side.
+
+Verified 16/16 through the browser on a fixture reproducing Indosam's exact chain: the July install
+date is refused while the survey is stamped today (nothing written), the decision date is refused
+before the 10 July meeting and refused forward past the recorded install, then a legal correction
+moves BOTH the decision and the survey, after which **the July install date the user was refused
+saves**, with the pre-install window following to the day after. Plus 2/2 that normal mode offers no
+such control. 725 unit tests, `tsc`/`lint`/`build` clean, zero console errors.
+
 ## A circuit stranded by its own install-date default (2026-09-07) — user-caught on stage
 
 **Reported with a screenshot**: "The lights cannot have been replaced before the meter was

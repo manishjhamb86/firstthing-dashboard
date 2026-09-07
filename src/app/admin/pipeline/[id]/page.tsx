@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { ProposalForm } from "./proposal-form";
+import { ProposalDateForm } from "./proposal-date-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations, mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
@@ -111,6 +112,7 @@ export default async function PipelineDetailPage({
   // 2026-08-25: "make sure all these edit options are for admin only").
   const canCorrect =
     actor !== null && isOperations(actor.team) && actor.permissions.includes("manage_pipeline");
+  const demoMode = await isDemoMode();
   // The visit is the assignee's own arrangement; operations may step in.
   const visit = pipeline.scheduledEvents[0] ?? null;
   const canArrangeVisit =
@@ -202,7 +204,7 @@ export default async function PipelineDetailPage({
         <div className="mb-8">
           <ProposalForm
             pipelineId={pipeline.id}
-            demoMode={await isDemoMode()}
+            demoMode={demoMode}
             hint={progress.next.detail}
           />
         </div>
@@ -403,6 +405,7 @@ export default async function PipelineDetailPage({
               {pipeline.proposalDecidedAt && (
                 <p className="text-xs text-[var(--text-muted)] mb-2">
                   Decided {formatDate(pipeline.proposalDecidedAt)}
+                  {pipeline.siteSurvey && " · the site survey opened the same day"}
                 </p>
               )}
               {pipeline.proposalSummary && (
@@ -412,6 +415,15 @@ export default async function PipelineDetailPage({
                 <p className="text-sm mt-2" style={{ color: "var(--bad-fg)" }}>
                   {pipeline.closedLostReason}
                 </p>
+              )}
+              {/* The one date in the chain that had no correction path, which
+                  is what stranded a circuit whose meter really went in weeks
+                  before the deal was typed up (user-caught 2026-09-08). */}
+              {demoMode && canCorrect && pipeline.proposalDecidedAt && (
+                <ProposalDateForm
+                  pipelineId={pipeline.id}
+                  current={isoDate(pipeline.proposalDecidedAt)}
+                />
               )}
             </Card>
           )}

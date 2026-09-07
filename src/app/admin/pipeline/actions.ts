@@ -11,6 +11,7 @@ import { canOwn, isOperations, mayAct, teamMeta } from "@/lib/admin-teams";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { refuseOrderedDate } from "@/lib/step-dates";
 import { resolveBackdate } from "@/lib/backdate";
+import { isDemoMode } from "@/lib/demo-mode";
 import { formatDate } from "@/lib/format-date";
 import { eventTitle } from "@/lib/schedule";
 
@@ -289,6 +290,124 @@ export async function approveLead(pipelineId: string) {
   revalidatePath(`/admin/pipeline/${pipelineId}`);
   revalidatePath("/admin/pipeline");
   return {};
+}
+
+/**
+ * Correct the proposal-decision date after the fact — and with it the day the
+ * site survey opened, because one act set both ("the decision follows the
+ * meeting, and the survey opens on the same day it is agreed" — submitProposal).
+ *
+ * Why this exists (user-caught 2026-09-08, the second half of the stranded-
+ * circuit report). Demo mode's whole promise is that a whole past deal can be
+ * entered with every step carrying its real date and the ordering between
+ * those dates still enforced. Every date in that chain was already
+ * correctable — the lead's logged-on day and the meeting (updateLeadDetails),
+ * the meter install (correctMeterInstallDate), the replacement — EXCEPT this
+ * one, which is only settable at the moment the proposal is recorded. So a
+ * deal entered today at its defaults stamps the survey today, and the meter
+ * install can then never be dated before today either: "The meter install
+ * cannot be dated before the site survey (2026-09-07)."
+ *
+ * That refusal is the ordering rule doing its job against a BOOKKEEPING
+ * timestamp — `SiteSurvey` carries only `createdAt`, the moment the row was
+ * typed, not the day anyone visited the site. This codebase has now hit that
+ * exact shape three times (the lead-vs-society ordering, the meeting-vs-society
+ * one, and this): **a real-world date ordered against a row-creation stamp
+ * fails in precisely the direction people correct in.** A chain of correctable
+ * dates is only as backdatable as its earliest uncorrectable link.
+ *
+ * Demo mode only, and OPERATIONS only — the same split as updateLeadDetails:
+ * acting on a deal is the assignee's or ops' business, but correcting what the
+ * record SAYS about when something happened is ops' alone. Every ordering rule
+ * still holds, in both directions: it cannot precede the meeting or the lead,
+ * cannot be in the future, and cannot be moved forward past a meter install
+ * already recorded against a circuit this survey selected — which would break
+ * the very rule this exists to unblock, from the other side.
+ */
+export async function correctProposalDate(
+  pipelineId: string,
+  decidedOn: string,
+): Promise<{ error?: string; ok?: true }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team) || !actor.permissions.includes("manage_pipeline")) {
+    return { error: "Correcting a deal's recorded dates is an operations action." };
+  }
+  if (!(await isDemoMode())) {
+    return {
+      error:
+        "The decision date is stamped when the proposal is recorded. Correcting it by hand is a demo-mode action.",
+    };
+  }
+
+  const pipeline = await db.pipeline.findUnique({
+    where: { id: pipelineId },
+    include: {
+      siteSurvey: {
+        select: {
+          id: true,
+          circuits: {
+            where: { voidedAt: null },
+            select: { id: true, lightType: true, meterInstalledAt: true },
+          },
+        },
+      },
+    },
+  });
+  if (!pipeline) return { error: "Deal not found." };
+  if (!pipeline.proposalDecidedAt) {
+    return { error: "This deal has no recorded proposal decision to correct." };
+  }
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(decidedOn)) return { error: "Pick a valid decision date." };
+  const decided = new Date(`${decidedOn}T00:00:00.000Z`);
+  if (Number.isNaN(decided.getTime())) return { error: "Pick a valid decision date." };
+
+  const refusal = refuseOrderedDate({
+    subject: "The proposal decision",
+    date: decided,
+    now: new Date(),
+    mustNotPrecede: [
+      { label: "the first meeting", date: pipeline.meetingDate },
+      { label: "the lead", date: pipeline.createdAt },
+    ],
+  });
+  if (refusal) return { error: refusal };
+
+  // The other direction: a meter already installed against a circuit this
+  // survey selected cannot end up predating the survey that selected it.
+  const earliest = (pipeline.siteSurvey?.circuits ?? [])
+    .filter((c) => c.meterInstalledAt !== null)
+    .sort((a, b) => a.meterInstalledAt!.getTime() - b.meterInstalledAt!.getTime())[0];
+  if (earliest && earliest.meterInstalledAt!.getTime() < decided.getTime()) {
+    return {
+      error: `${earliest.lightType}'s meter is recorded as installed ${earliest.meterInstalledAt!
+        .toISOString()
+        .slice(0, 10)}, and a meter cannot predate the survey that selected its circuit. Correct that install date first, or pick an earlier decision date.`,
+    };
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.pipeline.update({
+      where: { id: pipelineId },
+      data: { proposalDecidedAt: decided },
+    });
+    if (pipeline.siteSurvey) {
+      await tx.siteSurvey.update({
+        where: { id: pipeline.siteSurvey.id },
+        data: { createdAt: decided },
+      });
+    }
+  });
+  logger.info("pipeline.proposal_date_corrected", {
+    actorId: actor.id,
+    pipelineId,
+    from: pipeline.proposalDecidedAt.toISOString().slice(0, 10),
+    to: decidedOn,
+    surveyMoved: pipeline.siteSurvey !== null,
+  });
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  return { ok: true };
 }
 
 /**

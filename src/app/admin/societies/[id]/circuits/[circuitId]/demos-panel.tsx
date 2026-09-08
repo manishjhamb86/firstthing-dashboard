@@ -59,7 +59,21 @@ export function DemosPanel({
 
   return (
     <Card className="mb-5 p-6">
-      <CardTitle>Demos &amp; benchmark</CardTitle>
+      {/* The action sits on the heading's line, not below a paragraph and a
+          figure — a control in the middle of a card reads as part of the text
+          it follows rather than as the thing the card is for (user-caught
+          2026-09-08: "This option should come on top as a button. not here in
+          middle"). It is also the repo's own layout rule for a card action. */}
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+        <div className="min-w-0 flex-1">
+          <CardTitle>Demos &amp; benchmark</CardTitle>
+        </div>
+        {canEdit && !adding && (
+          <button type="button" className="btn-secondary shrink-0" onClick={() => setAdding(true)}>
+            Record another demo
+          </button>
+        )}
+      </div>
       <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
         A circuit can be demonstrated more than once. A demo that ran badly is rejected and the one
         done in its place decides alone; a second run at the society&apos;s own request counts
@@ -167,9 +181,9 @@ export function DemosPanel({
         </div>
       )}
 
-      {canEdit && (
+      {canEdit && adding && (
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          {adding ? (
+          {(
             <div className="flex w-full flex-wrap items-end gap-3">
               <Field label="Lights in this demo" htmlFor="dm-n">
                 <input id="dm-n" type="number" className="field field-auto w-28" value={lights}
@@ -195,10 +209,6 @@ export function DemosPanel({
               </button>
               <button type="button" className="btn-ghost mb-2" onClick={() => setAdding(false)}>Cancel</button>
             </div>
-          ) : (
-            <button type="button" className="btn-secondary" onClick={() => setAdding(true)}>
-              Record another demo
-            </button>
           )}
         </div>
       )}

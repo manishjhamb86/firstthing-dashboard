@@ -796,3 +796,77 @@ describe("a benchmark figure is not a finished window", () => {
     expect(steps.find((s) => s.key === "benchmark")?.status).toBe("locked");
   });
 });
+
+describe("a deal whose every candidate was ruled out", () => {
+  // Reported 2026-09-08 (KW Srishti, stage): step 3 "Site survey · In
+  // progress · awaiting the eligibility decision" sat above step 4 "Demo
+  // commissioning · Completed · Benchmark confirmed" on a deal with one
+  // ineligible circuit, no meter, no readings and no benchmark. `unconfirmed`
+  // filters ineligible candidates out so a rejected one cannot block a deal
+  // with good ones — but with nothing else recorded the set was empty, and
+  // "none unconfirmed" read as "all confirmed".
+  const ruledOut = {
+    pipelineId: "p1",
+    societyId: "s1",
+    stage: "survey_pending",
+    authoritative: true,
+    surveyOwnerName: "Yogendra",
+    demoSkipped: false,
+    surveyExists: true,
+    areaCount: 3,
+    candidates: [{ id: "c1", state: "ineligible", location: null, lightType: "TubeLight" }],
+    reportStatus: null,
+    kyc: { total: 2, resolved: 0 },
+    offerStatus: null,
+    contractStatus: null,
+    installationState: null,
+    certificateSigned: false,
+  };
+
+  it("does not report a benchmark it never measured", () => {
+    const { steps } = dealProgress(ruledOut);
+    const commissioning = steps.find((s) => s.key === "commissioning")!;
+    expect(commissioning.status).not.toBe("done");
+    expect(commissioning.summary).not.toMatch(/benchmark confirmed/i);
+  });
+
+  it("keeps the survey the current step, with nothing done above it", () => {
+    const { steps } = dealProgress(ruledOut);
+    const survey = steps.find((s) => s.key === "survey")!;
+    expect(survey.status).toBe("current");
+    const idx = steps.findIndex((s) => s.key === "survey");
+    expect(steps.slice(idx + 1).some((s) => s.status === "done")).toBe(false);
+  });
+
+  it("asks for a different circuit rather than a decision that cannot be made", () => {
+    const { steps, next } = dealProgress(ruledOut);
+    expect(next?.label).toMatch(/record a different demo circuit/i);
+    expect(next?.detail).toMatch(/no exception path/i);
+    expect(next?.href).toBe("/admin/pipeline/p1/survey");
+    expect(steps.find((s) => s.key === "survey")!.summary).toMatch(/failed CON-16/i);
+  });
+
+  it("a live candidate alongside a ruled-out one still drives the step", () => {
+    const { steps, next } = dealProgress({
+      ...ruledOut,
+      candidates: [
+        ...ruledOut.candidates,
+        { id: "c2", state: "eligible", location: "Basement", lightType: "TubeLight" },
+      ],
+    });
+    expect(steps.find((s) => s.key === "survey")!.status).toBe("done");
+    expect(steps.find((s) => s.key === "commissioning")!.status).toBe("current");
+    expect(next?.detail).toMatch(/Basement/);
+  });
+
+  it("and a ruled-out sibling never holds back a finished demo", () => {
+    const { steps } = dealProgress({
+      ...ruledOut,
+      candidates: [
+        ...ruledOut.candidates,
+        { id: "c2", state: "benchmark_confirmed", location: "Basement", lightType: "TubeLight" },
+      ],
+    });
+    expect(steps.find((s) => s.key === "commissioning")!.status).toBe("done");
+  });
+});

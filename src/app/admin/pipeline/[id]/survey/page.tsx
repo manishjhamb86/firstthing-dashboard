@@ -8,6 +8,7 @@ import { ExceptionApprovalButton } from "./exception-approval-button";
 import { DeleteAreaButton } from "./delete-area-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { resolveCircuitRemoval } from "@/lib/circuit-removal";
+import { eligibilityVerdict, MIN_METERED_LIGHTS } from "@/lib/circuit-eligibility";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
 import { NextStepCallout, StepHeading } from "@/components/deal-stepper";
@@ -80,6 +81,10 @@ export default async function SiteSurveyPage({
       },
     },
   });
+
+  // Why each candidate stands where it does, read from the checklist the
+  // surveyor actually filled in rather than re-derived per render site.
+  const verdicts = new Map(circuits.map((c) => [c.id, eligibilityVerdict(c)]));
 
   // A candidate added twice on site is the field team's own housekeeping —
   // resolveCircuitRemoval decides per circuit whether this viewer may tidy it.
@@ -501,9 +506,35 @@ export default async function SiteSurveyPage({
                         <ExceptionApprovalButton circuitId={c.id} />
                       ) : (
                         <p className="text-xs text-[var(--text-muted)]">
-                          Below the 50-light minimum — needs an exception approval from ops.
+                          Below the {MIN_METERED_LIGHTS}-light minimum — needs an exception approval
+                          from ops.
                         </p>
                       )}
+                    </div>
+                  )}
+                  {/* An "Ineligible" chip on its own says nothing a reader can
+                      act on, and the exception control deliberately does not
+                      render here — a hard criterion has no exception path
+                      (FEAT-007-AC-5), so an operator looking for one finds
+                      nothing and the deal simply stops (user-reported
+                      2026-09-08). Name the criterion that decided it, and the
+                      two routes that exist. */}
+                  {c.state === "ineligible" && (
+                    <div className="mt-2 text-xs" style={{ color: "var(--warn-fg)" }}>
+                      <p>
+                        Ruled out by CON-16:{" "}
+                        {verdicts.get(c.id)!.failedHard.map((k) => k.label).join(" · ")}
+                        {verdicts.get(c.id)!.lightCountShort
+                          ? ` (it is also below the ${MIN_METERED_LIGHTS}-light minimum)`
+                          : ""}
+                        .
+                      </p>
+                      <p className="mt-1">
+                        There is no exception path for these — an exception can only clear the
+                        light-count minimum. If an answer was recorded wrongly, remove this
+                        candidate and record it again with the corrected answers; otherwise pick a
+                        different circuit for the demo.
+                      </p>
                     </div>
                   )}
                 </div>

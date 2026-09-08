@@ -224,11 +224,20 @@ export function dealProgress(f: DealFacts): DealProgress {
   // operator was left between them (user-reported 2026-08-26, "stuck in
   // between"). A map whose step disagrees with the thing behind it is worse
   // than no map.
-  const unconfirmed = f.candidates.filter(
-    (c) => (CIRCUIT_RANK[c.state] ?? 0) < 7 && c.state !== "ineligible",
-  );
+  // A ruled-out candidate is not a blocker — the deal carries on with its
+  // other candidates. But it is not a COMMISSIONED one either, and reading
+  // "all candidates confirmed" off an empty set made a deal whose every
+  // candidate was ineligible report "Demo commissioning · Completed ·
+  // Benchmark confirmed" over a survey step still asking for an eligibility
+  // decision, with nothing commissioned and no benchmark anywhere
+  // (user-reported 2026-09-08, KW Srishti). A done step above a current one
+  // is the incoherence this map exists to prevent.
+  const liveCandidates = f.candidates.filter((c) => c.state !== "ineligible");
+  const unconfirmed = liveCandidates.filter((c) => (CIRCUIT_RANK[c.state] ?? 0) < 7);
   const benchmarkDone =
-    f.demoSkipped || (f.candidates.length > 0 && unconfirmed.length === 0);
+    f.demoSkipped || (liveCandidates.length > 0 && unconfirmed.length === 0);
+  /** Every candidate recorded so far was ruled out — the survey needs another. */
+  const allCandidatesRuledOut = f.candidates.length > 0 && liveCandidates.length === 0;
   // The one holding it up — the least advanced, not the most. Naming the
   // best-progressed circuit while a different one is the blocker is how the
   // step read "Completed" over an unfinished demo.
@@ -328,7 +337,9 @@ export function dealProgress(f: DealFacts): DealProgress {
         : currentIdx === 2
           ? f.candidates.length === 0
             ? "Record the lighting inventory by area, then pick the demo circuit"
-            : "Candidate recorded — awaiting the eligibility decision"
+            : allCandidatesRuledOut
+              ? "Every candidate so far failed CON-16 — record a different circuit on the survey page"
+              : "Candidate recorded — awaiting the eligibility decision"
           : "Unlocks when the demo proposal is agreed",
       href: f.surveyExists ? `${base}/survey` : undefined,
     },
@@ -346,7 +357,9 @@ export function dealProgress(f: DealFacts): DealProgress {
             ? unconfirmed.length > 1
               ? `${unconfirmed.length} circuits still commissioning — ${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
               : `${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
-            : "Unlocks when the survey selects a demo circuit — meter, baseline window, light replacement and benchmark all happen on the circuit page",
+            : allCandidatesRuledOut
+              ? "Unlocks once an eligible demo circuit is recorded — every candidate so far was ruled out by CON-16"
+              : "Unlocks when the survey selects a demo circuit — meter, baseline window, light replacement and benchmark all happen on the circuit page",
       href: circuitHref,
     },
     {
@@ -464,7 +477,15 @@ export function dealProgress(f: DealFacts): DealProgress {
       next =
         f.candidates.length === 0
           ? { label: "Run the site survey", detail: "Record the lighting inventory by area, then pick the demo circuit.", href: `${base}/survey`, owner: "field" }
-          : { label: "Resolve the candidate's eligibility", detail: "The selected candidate is awaiting its eligibility decision on the survey page.", href: `${base}/survey`, owner: "field" };
+          : allCandidatesRuledOut
+            ? {
+                label: "Record a different demo circuit",
+                detail:
+                  "Every candidate recorded so far failed one of CON-16's hard criteria, which have no exception path. The survey page names which, and takes the replacement.",
+                href: `${base}/survey`,
+                owner: "field",
+              }
+            : { label: "Resolve the candidate's eligibility", detail: "The selected candidate is awaiting its eligibility decision on the survey page.", href: `${base}/survey`, owner: "field" };
     } else if (!benchmarkDone && holdout) {
       next = {
         label: circuitNextLabel(holdout),

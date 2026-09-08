@@ -771,6 +771,12 @@ model Circuit {
   // every other hard criterion (fixtures >15ft, driveway) has no override.
   lightCountExceptionApprovedBy String?      @map("light_count_exception_approved_by")
   lightCountExceptionReason     String?      @map("light_count_exception_reason")
+  /// Which CON-16 criteria the exception waived — "lightCount", or a hard
+  /// criterion's own name. An approval that records only "approved" loses the
+  /// fact that, say, WiFi reach was waived, and a meter that cannot reach the
+  /// network never reports: the commissioning team has to be able to read what
+  /// was let through (CON-16 amendment, 2026-09-08).
+  eligibilityExceptionCriteria String[]     @map("eligibility_exception_criteria")
   // FEAT-011 — CON-17 load validation: the meter's displayed load vs.
   // (light count × wattage), and the resulting delta. A persistently
   // failed validation can only be overridden by PER-01 (FEAT-011-AC-5),

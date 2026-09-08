@@ -346,7 +346,11 @@ describe("circuitSteps — the map one level down", () => {
       benchmarkSavingsPct: null,
     });
     expect(steps).toHaveLength(1);
-    expect(steps[0].summary).toMatch(/no exception path/i);
+    // CON-16 amendment 2026-09-08: a hard failure is no longer a dead end —
+    // the step names the routes rather than closing the door.
+    expect(steps[0].summary).toMatch(/hard criteria/i);
+    expect(steps[0].summary).toMatch(/approve an exception/i);
+    expect(steps[0].summary).not.toMatch(/no exception path/i);
   });
 
   it("a state past a step outranks a missing artifact — the map must stay coherent", () => {
@@ -840,8 +844,8 @@ describe("a deal whose every candidate was ruled out", () => {
 
   it("asks for a different circuit rather than a decision that cannot be made", () => {
     const { steps, next } = dealProgress(ruledOut);
-    expect(next?.label).toMatch(/record a different demo circuit/i);
-    expect(next?.detail).toMatch(/no exception path/i);
+    expect(next?.label).toMatch(/resolve the candidate's eligibility/i);
+    expect(next?.detail).toMatch(/corrects the answers, approves an exception, or records a different circuit/i);
     expect(next?.href).toBe("/admin/pipeline/p1/survey");
     expect(steps.find((s) => s.key === "survey")!.summary).toMatch(/failed CON-16/i);
   });

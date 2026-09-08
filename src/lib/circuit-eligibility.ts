@@ -55,3 +55,65 @@ export function eligibilityVerdict(c: {
     exceptionable: failedHard.length === 0 && lightCountShort,
   };
 }
+
+/** The criterion key an exception uses for CON-16's metered-light minimum. */
+export const LIGHT_COUNT_CRITERION = "lightCount";
+
+/**
+ * What waiving a criterion commits FirsThing to, where there is a known
+ * remedy. WiFi reach was the one criterion that looked like it could strand a
+ * commissioning — a meter that cannot reach the network never reports — and
+ * the user settled it directly (2026-09-08): "if no wifi available we can
+ * install our own 4d router there. so its an exception". So the waiver is a
+ * decision to bring connectivity, and the screen says so, because the crew
+ * going out has to know the site needs a router with them.
+ *
+ * Nothing is claimed for the other two: waiving them is recorded and stated,
+ * with no remedy invented on the product's behalf.
+ */
+export const CRITERION_WAIVER_NOTE: Record<string, string> = {
+  wifiReachable: "FirsThing supplies its own 4G router on site — the waiver commits to that.",
+};
+
+export function criterionLabel(name: string): string {
+  if (name === LIGHT_COUNT_CRITERION) return `At least ${MIN_METERED_LIGHTS} metered lights`;
+  return CON16_HARD_CRITERIA.find((k) => k.name === name)?.label ?? name;
+}
+
+/**
+ * The circuit state a checklist produces — the ONE derivation.
+ *
+ * Recording a candidate, correcting its answers and approving an exception all
+ * decide the same question, and three copies of it would drift the way
+ * `circuitNextLabel` drifted from `circuitSteps` twice. `waived` carries the
+ * criteria operations has already let through, so a correction cannot silently
+ * un-approve a live exception and an exception cannot be undone by a later
+ * edit that leaves the same answers in place.
+ */
+export function eligibilityState(input: {
+  eligibilityChecklist: unknown;
+  meteredLightCount: number;
+  waived?: readonly string[];
+}): "eligible" | "surveyed" | "ineligible" {
+  const waived = new Set(input.waived ?? []);
+  const v = eligibilityVerdict(input);
+  const hardOutstanding = v.failedHard.filter((k) => !waived.has(k.name));
+  if (hardOutstanding.length > 0) return "ineligible";
+  if (!v.lightCountShort || waived.has(LIGHT_COUNT_CRITERION)) return "eligible";
+  // Short on lights with every hard criterion met: the one state an exception
+  // is offered from, rather than a refusal.
+  return "surveyed";
+}
+
+/** What an exception would have to waive for this circuit to be eligible. */
+export function outstandingCriteria(input: {
+  eligibilityChecklist: unknown;
+  meteredLightCount: number;
+  waived?: readonly string[];
+}): string[] {
+  const waived = new Set(input.waived ?? []);
+  const v = eligibilityVerdict(input);
+  const out = v.failedHard.map((k) => k.name).filter((n) => !waived.has(n));
+  if (v.lightCountShort && !waived.has(LIGHT_COUNT_CRITERION)) out.push(LIGHT_COUNT_CRITERION);
+  return out;
+}

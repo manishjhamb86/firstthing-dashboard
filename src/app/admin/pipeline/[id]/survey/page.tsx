@@ -4,11 +4,11 @@ import { Card, CardTitle, EmptyState, PageHeader, PageRibbon, Stat, StatRow, Sta
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
 import { LightingInventoryForm } from "./lighting-inventory-form";
 import { CircuitEligibilityForm } from "./circuit-eligibility-form";
-import { ExceptionApprovalButton } from "./exception-approval-button";
+import { EligibilityControls } from "./eligibility-controls";
 import { DeleteAreaButton } from "./delete-area-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { resolveCircuitRemoval } from "@/lib/circuit-removal";
-import { eligibilityVerdict, MIN_METERED_LIGHTS } from "@/lib/circuit-eligibility";
+import { criterionLabel, MIN_METERED_LIGHTS, outstandingCriteria } from "@/lib/circuit-eligibility";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
 import { NextStepCallout, StepHeading } from "@/components/deal-stepper";
@@ -84,7 +84,9 @@ export default async function SiteSurveyPage({
 
   // Why each candidate stands where it does, read from the checklist the
   // surveyor actually filled in rather than re-derived per render site.
-  const verdicts = new Map(circuits.map((c) => [c.id, eligibilityVerdict(c)]));
+  const outstanding = new Map(
+    circuits.map((c) => [c.id, outstandingCriteria({ ...c, waived: c.eligibilityExceptionCriteria })]),
+  );
 
   // A candidate added twice on site is the field team's own housekeeping —
   // resolveCircuitRemoval decides per circuit whether this viewer may tidy it.
@@ -496,46 +498,45 @@ export default async function SiteSurveyPage({
                       />
                     </span>
                   </div>
-                  {c.state === "surveyed" && c.meteredLightCount < 50 && (
-                    <div className="mt-2">
-                      {c.lightCountExceptionApprovedBy ? (
-                        <p className="text-xs text-[var(--text-muted)]">
-                          Exception approved — {c.lightCountExceptionReason}
-                        </p>
-                      ) : canApproveException ? (
-                        <ExceptionApprovalButton circuitId={c.id} />
+                  {/* CON-16's eligibility decision, where operations makes
+                      it. Two separate acts, and the split is deliberate:
+                      correcting says the recorded answer was WRONG, an
+                      exception says the answer stands and ops is proceeding
+                      anyway. The chip alone named a verdict and no reason, so
+                      an operator whose candidate failed a hard criterion went
+                      looking for an approval that did not exist and the deal
+                      simply stopped (user-reported 2026-09-08, twice). */}
+                  {(c.state === "ineligible" || c.state === "surveyed") && (
+                    <div className="mt-2 text-xs">
+                      <p style={{ color: "var(--warn-fg)" }}>
+                        Not met:{" "}
+                        {outstanding.get(c.id)!.map((k) => criterionLabel(k)).join(" · ")}.
+                        {c.state === "ineligible"
+                          ? " A hard criterion decides the circuit, so it cannot be commissioned as it stands."
+                          : ` Below CON-16's ${MIN_METERED_LIGHTS}-light minimum.`}
+                      </p>
+                      {canApproveException ? (
+                        <EligibilityControls
+                          circuitId={c.id}
+                          outstanding={outstanding.get(c.id)!}
+                          checks={
+                            (c.eligibilityChecklist ?? {}) as unknown as Record<string, boolean>
+                          }
+                        />
                       ) : (
-                        <p className="text-xs text-[var(--text-muted)]">
-                          Below the {MIN_METERED_LIGHTS}-light minimum — needs an exception approval
-                          from ops.
+                        <p className="mt-1 text-[var(--text-muted)]">
+                          Operations can correct the recorded answers or approve an exception —
+                          both need pipeline and field-survey authority.
                         </p>
                       )}
                     </div>
                   )}
-                  {/* An "Ineligible" chip on its own says nothing a reader can
-                      act on, and the exception control deliberately does not
-                      render here — a hard criterion has no exception path
-                      (FEAT-007-AC-5), so an operator looking for one finds
-                      nothing and the deal simply stops (user-reported
-                      2026-09-08). Name the criterion that decided it, and the
-                      two routes that exist. */}
-                  {c.state === "ineligible" && (
-                    <div className="mt-2 text-xs" style={{ color: "var(--warn-fg)" }}>
-                      <p>
-                        Ruled out by CON-16:{" "}
-                        {verdicts.get(c.id)!.failedHard.map((k) => k.label).join(" · ")}
-                        {verdicts.get(c.id)!.lightCountShort
-                          ? ` (it is also below the ${MIN_METERED_LIGHTS}-light minimum)`
-                          : ""}
-                        .
-                      </p>
-                      <p className="mt-1">
-                        There is no exception path for these — an exception can only clear the
-                        light-count minimum. If an answer was recorded wrongly, remove this
-                        candidate and record it again with the corrected answers; otherwise pick a
-                        different circuit for the demo.
-                      </p>
-                    </div>
+                  {c.lightCountExceptionApprovedBy && c.eligibilityExceptionCriteria.length > 0 && (
+                    <p className="mt-2 text-xs text-[var(--text-muted)]">
+                      Exception approved — waived{" "}
+                      {c.eligibilityExceptionCriteria.map((k) => criterionLabel(k)).join(" · ")}:{" "}
+                      {c.lightCountExceptionReason}
+                    </p>
                   )}
                 </div>
               );

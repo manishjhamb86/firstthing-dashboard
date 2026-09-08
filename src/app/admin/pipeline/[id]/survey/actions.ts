@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { eligibilityState, outstandingCriteria } from "@/lib/circuit-eligibility";
 
 // FEAT-006: whole-society lighting inventory by area, distinct from the
 // single sample Circuit metered for the benchmark (CON-11).
@@ -52,8 +53,10 @@ export async function deleteLightingInventoryArea(id: string, siteSurveyId: stri
 }
 
 // FEAT-007: demo-circuit selection & CON-16 eligibility checklist. Four
-// hard criteria (no exception path, FEAT-007-AC-5) plus the one
-// exception-able minimum (light count >= 50, FEAT-007-AC-3).
+// hard criteria plus the light-count minimum (>=50). Every one of them is
+// exception-able by operations since the CON-16 amendment of 2026-09-08; the
+// difference is what an unwaived failure MEANS — a hard criterion leaves the
+// circuit ineligible, a short light count leaves it awaiting a decision.
 // CON-45 (2026-08-17, user's call): a candidate circuit is captured as an
 // INVENTORY — line items from the device catalog, count × wattage × hours —
 // not a single type/wattage pair. The inspector records what actually hangs
@@ -130,8 +133,6 @@ export async function submitCircuitCandidate(input: {
   // 2026-08-26 (the user's call). It disqualified circuits that are live and
   // billing today; a shared fixture is now marked on its own device line and
   // deducted from both sides of the savings calculation instead.
-  const hardCriteriaPass = input.wifiReachable && input.fixturesUnder15ft && input.notOnDrivewayOrRamp;
-
   const eligibilityChecklist = {
     wifiReachable: input.wifiReachable,
     fixturesUnder15ft: input.fixturesUnder15ft,
@@ -139,9 +140,10 @@ export async function submitCircuitCandidate(input: {
     lightCountMinMet: meteredLightCount >= 50,
   };
 
-  // FEAT-007-AC-5 — a hard-criterion failure is ineligible outright, no
-  // exception path exists for these (only the light-count minimum is).
-  const state = !hardCriteriaPass ? "ineligible" : meteredLightCount >= 50 ? "eligible" : "surveyed";
+  // One derivation, shared with the correction and the exception paths
+  // (src/lib/circuit-eligibility.ts) — a candidate recorded, corrected and
+  // waived must never disagree about what its own answers mean.
+  const state = eligibilityState({ eligibilityChecklist, meteredLightCount });
 
   const circuit = await db.$transaction(async (tx) => {
     const created = await tx.circuit.create({
@@ -178,7 +180,7 @@ export async function submitCircuitCandidate(input: {
     circuitId: circuit.id,
     siteSurveyId: input.siteSurveyId,
     state,
-    hardCriteriaPass,
+    outstanding: outstandingCriteria({ eligibilityChecklist, meteredLightCount }),
     meteredLightCount,
     lines: input.lines.length,
     connectedLoadW,
@@ -188,13 +190,20 @@ export async function submitCircuitCandidate(input: {
   return { circuitId: circuit.id, state };
 }
 
-// FEAT-007-AC-3/AC-4 — light-count exception approval. Gated on holding
+// FEAT-007-AC-3/AC-4 — CON-16 exception approval. Amended 2026-09-08 (the
+// user's call, "Allow exception. from admin side"): an exception may waive a
+// HARD criterion, not only the light-count minimum. AC-5's "no exception path"
+// held that a driveway circuit is simply not a demo circuit — true of the site,
+// but on stage it left two deals stopped dead with the only route being to
+// delete the candidate and re-record it. Ops now decides, with the criterion
+// waived and the reason recorded, and the surveyor's own answers left intact.
+// Gated on holding
 // BOTH manage_pipeline and manage_survey: our permission model doesn't
 // carry a distinct "PER-01 specifically" marker, and PER-01 (ops) is the
 // one population expected to hold every back-office permission, so holding
 // both is the technical proxy for "PER-01, not just any PER-04" — recorded
 // as a real auth-strategy decision in PROJECT_CONTEXT.md, not an accident.
-export async function approveLightCountException(circuitId: string, reason: string) {
+export async function approveEligibilityException(circuitId: string, reason: string) {
   await requireAdminPermission("manage_survey");
   const session = await requireAdminPermission("manage_pipeline");
 
@@ -202,27 +211,114 @@ export async function approveLightCountException(circuitId: string, reason: stri
 
   const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
   if (!circuit) return { error: "Circuit not found." };
-  if (circuit.meteredLightCount >= 50) return { error: "This circuit doesn't need an exception." };
 
-  const checklist = (circuit.eligibilityChecklist as Record<string, boolean>) ?? {};
-  // Reads only the criteria that still exist. A circuit recorded before
-  // 2026-08-26 carries the retired noSharedAppliances flag in its stored
-  // checklist; it is simply not consulted, rather than being rewritten —
-  // the checklist is the record of what the surveyor was asked.
-  const hardCriteriaPass =
-    checklist.wifiReachable && checklist.fixturesUnder15ft && checklist.notOnDrivewayOrRamp;
-  if (!hardCriteriaPass) return { error: "This circuit fails a hard criterion — no exception path applies." };
+  // Only from the two states an eligibility decision is still open in. A
+  // circuit already commissioning was authorised against the checklist as it
+  // stands, and waiving a criterion after the fact would rewrite what the work
+  // was approved on — the FEAT-040 shape, guarded on the path nobody is
+  // looking at while building the new one.
+  if (circuit.state !== "ineligible" && circuit.state !== "surveyed") {
+    return { error: "This circuit has already passed its eligibility decision." };
+  }
+
+  const outstanding = outstandingCriteria({
+    eligibilityChecklist: circuit.eligibilityChecklist,
+    meteredLightCount: circuit.meteredLightCount,
+    waived: circuit.eligibilityExceptionCriteria,
+  });
+  if (outstanding.length === 0) return { error: "This circuit doesn't need an exception." };
+
+  const waived = [...circuit.eligibilityExceptionCriteria, ...outstanding];
 
   await db.circuit.update({
     where: { id: circuitId },
     data: {
-      state: "eligible",
+      // The checklist is NOT rewritten: it stays the record of what the
+      // surveyor was asked and answered. The waiver sits beside it.
+      eligibilityExceptionCriteria: waived,
+      state: eligibilityState({
+        eligibilityChecklist: circuit.eligibilityChecklist,
+        meteredLightCount: circuit.meteredLightCount,
+        waived,
+      }),
       lightCountExceptionApprovedBy: session.user.id,
       lightCountExceptionReason: reason.trim(),
     },
   });
 
-  logger.info("survey.light_count_exception_approved", { circuitId, approvedBy: session.user.id, reason });
+  logger.info("survey.eligibility_exception_approved", {
+    circuitId,
+    approvedBy: session.user.id,
+    waived: outstanding,
+    reason,
+  });
+  revalidatePath("/admin/pipeline");
+  return {};
+}
+
+/**
+ * Correct the recorded checklist answers.
+ *
+ * Deliberately a DIFFERENT act from the exception above, and the distinction
+ * is the whole point: correcting says the recorded answer was wrong, an
+ * exception says the answer stands and operations is proceeding anyway. One
+ * control that did both would let a site fact be quietly rewritten to clear a
+ * gate, which is what INV-02's provenance rules exist to stop.
+ *
+ * Operations only — the same rule as correcting a lead's own record: the
+ * surveyor's answers exist so that the people they bind cannot rewrite them.
+ */
+export async function correctCircuitEligibility(
+  circuitId: string,
+  checks: { wifiReachable: boolean; fixturesUnder15ft: boolean; notOnDrivewayOrRamp: boolean },
+  note: string,
+) {
+  await requireAdminPermission("manage_survey");
+  const session = await requireAdminPermission("manage_pipeline");
+
+  if (!note.trim()) return { error: "Say what was re-checked — a correction with no stated basis is not auditable." };
+
+  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  if (!circuit) return { error: "Circuit not found." };
+  if (circuit.state !== "ineligible" && circuit.state !== "surveyed") {
+    return { error: "This circuit has already passed its eligibility decision." };
+  }
+
+  const previous = (circuit.eligibilityChecklist ?? {}) as Record<string, unknown>;
+  const eligibilityChecklist = {
+    ...previous,
+    wifiReachable: checks.wifiReachable,
+    fixturesUnder15ft: checks.fixturesUnder15ft,
+    notOnDrivewayOrRamp: checks.notOnDrivewayOrRamp,
+    lightCountMinMet: circuit.meteredLightCount >= 50,
+    correctedAt: new Date().toISOString(),
+    correctedById: session.user.id,
+    correctedNote: note.trim(),
+  };
+
+  await db.circuit.update({
+    where: { id: circuitId },
+    data: {
+      eligibilityChecklist,
+      state: eligibilityState({
+        eligibilityChecklist,
+        meteredLightCount: circuit.meteredLightCount,
+        waived: circuit.eligibilityExceptionCriteria,
+      }),
+    },
+  });
+
+  logger.info("survey.eligibility_corrected", {
+    circuitId,
+    correctedBy: session.user.id,
+    from: {
+      wifiReachable: previous.wifiReachable,
+      fixturesUnder15ft: previous.fixturesUnder15ft,
+      notOnDrivewayOrRamp: previous.notOnDrivewayOrRamp,
+    },
+    to: checks,
+    note,
+  });
   revalidatePath("/admin/pipeline");
   return {};
 }

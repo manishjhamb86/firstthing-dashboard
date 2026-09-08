@@ -4,18 +4,8 @@ import { useRef, useState, useTransition } from "react";
 import { submitCircuitCandidate, type CandidateLine } from "./actions";
 import { proposeDeviceType } from "@/app/admin/device-catalog/actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
+import { CON16_HARD_CRITERIA } from "@/lib/circuit-eligibility";
 
-// CON-16's "no non-installation appliances share this circuit" is gone
-// (the user's call, 2026-08-26). It disqualified circuits that are in fact
-// live and billing — Gaur Saundaryam's five unreplaced surface lights are
-// exactly that case, and its own report deducts them by hand. A shared
-// fixture is now marked "exclude" on its own device line and subtracted from
-// both sides of the savings calculation instead of ruling the circuit out.
-const CHECKLIST = [
-  { name: "wifiReachable", label: "WiFi/LAN reachable within 20–40m" },
-  { name: "fixturesUnder15ft", label: "Fixtures ≤15 feet high" },
-  { name: "notOnDrivewayOrRamp", label: "Not on a driveway/ramp" },
-] as const;
 
 export type CatalogOption = {
   id: string;
@@ -108,6 +98,11 @@ export function CircuitEligibilityForm({
   // savings are computed, never from the reading check above.
   const excludedKwh = complete.filter((l) => l.excluded).reduce((s, l) => s + kwhOf(l), 0);
   const retrofitCount = complete.filter((l) => !l.excluded).reduce((s, l) => s + (Number(l.count) || 0), 0);
+
+  // Which hard criteria are not confirmed right now — the same list the
+  // survey page reads back off the stored checklist, so the warning here and
+  // the verdict there cannot describe the circuit differently.
+  const failedHard = CON16_HARD_CRITERIA.filter((k) => checks[k.name] !== true);
 
   function submit() {
     startTransition(async () => {
@@ -450,7 +445,19 @@ export function CircuitEligibilityForm({
 
         <fieldset className="space-y-2.5">
           <legend className="lbl mb-2">CON-16 eligibility checklist</legend>
-          {CHECKLIST.map((item) => (
+          {/* Three unticked boxes and an enabled Submit produced a candidate
+              that is ineligible the moment it is created, with no exception
+              path and no way back but Remove — and nothing on the way in said
+              so. Both circuits recorded on stage came out this way
+              (user-reported 2026-09-08, twice). Tick-means-confirmed is what
+              the stored flag records, so an unticked box is a FAIL, not a
+              blank; the form has to say that before it is submitted, not
+              afterwards through a chip. */}
+          <p className="text-[12px] text-[var(--text-muted)] -mt-1 mb-1">
+            Tick each one you confirmed on site. An unticked box records a fail — the candidate is
+            recorded as ineligible until operations corrects it or approves an exception.
+          </p>
+          {CON16_HARD_CRITERIA.map((item) => (
             <label key={item.name} className="flex items-center gap-2.5 text-sm">
               <input
                 type="checkbox"
@@ -464,6 +471,20 @@ export function CircuitEligibilityForm({
           ))}
         </fieldset>
 
+        {failedHard.length > 0 && (
+          <div className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+            <p>
+              Not confirmed: {failedHard.map((k) => k.label).join(" · ")}. Recorded as it stands,
+              this candidate is <strong>ineligible</strong> and cannot be commissioned until
+              operations either corrects the answers or approves an exception.
+            </p>
+            <p className="mt-1">
+              If a box is simply unticked, tick it before submitting. If that is genuinely what the
+              site is, record it — operations decides on the survey page whether the circuit
+              proceeds anyway.
+            </p>
+          </div>
+        )}
         {error && <ErrorText>{error}</ErrorText>}
         <button
           type="button"
@@ -477,7 +498,11 @@ export function CircuitEligibilityForm({
           }
           className="btn-primary"
         >
-          {pending ? "Submitting…" : "Submit checklist"}
+          {pending
+            ? "Submitting…"
+            : failedHard.length > 0
+              ? "Record it as ineligible"
+              : "Submit checklist"}
         </button>
       </div>
     </Card>

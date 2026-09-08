@@ -338,7 +338,7 @@ export function dealProgress(f: DealFacts): DealProgress {
           ? f.candidates.length === 0
             ? "Record the lighting inventory by area, then pick the demo circuit"
             : allCandidatesRuledOut
-              ? "Every candidate so far failed CON-16 — record a different circuit on the survey page"
+              ? "Every candidate so far failed CON-16 — correct it, approve an exception, or record a different circuit"
               : "Candidate recorded — awaiting the eligibility decision"
           : "Unlocks when the demo proposal is agreed",
       href: f.surveyExists ? `${base}/survey` : undefined,
@@ -358,7 +358,7 @@ export function dealProgress(f: DealFacts): DealProgress {
               ? `${unconfirmed.length} circuits still commissioning — ${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
               : `${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
             : allCandidatesRuledOut
-              ? "Unlocks once an eligible demo circuit is recorded — every candidate so far was ruled out by CON-16"
+              ? "Unlocks once a candidate clears CON-16 — every one so far was ruled out by it"
               : "Unlocks when the survey selects a demo circuit — meter, baseline window, light replacement and benchmark all happen on the circuit page",
       href: circuitHref,
     },
@@ -479,9 +479,9 @@ export function dealProgress(f: DealFacts): DealProgress {
           ? { label: "Run the site survey", detail: "Record the lighting inventory by area, then pick the demo circuit.", href: `${base}/survey`, owner: "field" }
           : allCandidatesRuledOut
             ? {
-                label: "Record a different demo circuit",
+                label: "Resolve the candidate's eligibility",
                 detail:
-                  "Every candidate recorded so far failed one of CON-16's hard criteria, which have no exception path. The survey page names which, and takes the replacement.",
+                  "Every candidate recorded so far failed one of CON-16's criteria. The survey page names which, and is where operations corrects the answers, approves an exception, or records a different circuit.",
                 href: `${base}/survey`,
                 owner: "field",
               }
@@ -628,7 +628,8 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
         key: "eligibility",
         title: "Eligibility (CON-16)",
         status: "current",
-        summary: "Failed a hard criterion — no exception path. Pick a different candidate on the survey.",
+        summary:
+          "Failed one of CON-16's hard criteria. Operations can correct the recorded answers or approve an exception on the survey page — or a different candidate can be picked.",
       },
     ];
   }

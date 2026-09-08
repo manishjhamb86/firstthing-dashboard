@@ -1787,10 +1787,23 @@ features:
         tests: [TC-007-4]
       - id: FEAT-007-AC-5
         type: edge
-        given: "a circuit fails a hard criterion (fixtures >15ft, on a driveway)"
+        given: "a circuit fails a hard criterion (fixtures >15ft, on a driveway, no WiFi reach)"
         when: "PER-04 flags it"
-        then: "that circuit is marked ineligible and a different candidate must be selected — no exception path exists for these criteria, only the light-count minimum is exception-able (CON-16)"
+        then: "that circuit is marked ineligible and cannot be commissioned as it stands, with the screen naming WHICH criterion decided it"
+        scope_note: "Amended 2026-09-08 (the user's call, CON-16 amendment): the 'no exception path' half is superseded by AC-11. On stage this left two deals stopped dead — an 'Ineligible' chip with no reason, no approval control, and the only route being to delete the candidate and record it again."
         tests: [TC-007-5]
+      - id: FEAT-007-AC-11
+        type: edge
+        given: "a candidate fails any CON-16 criterion, hard or the light-count minimum"
+        when: "PER-01 approves an exception with a stated reason"
+        then: "the circuit becomes eligible, the waived criteria are recorded on it with who approved and why, and the surveyor's own checklist answers are left exactly as recorded"
+        scope_note: "Added 2026-09-08. The criteria describe things FirsThing can often solve rather than facts that disqualify a site — the user's own case is WiFi: 'if no wifi available we can install our own 4d router there. so its an exception'. Which criteria were waived is stored rather than a bare approved flag, because they are not interchangeable: a waived WiFi criterion commits the crew to bringing a router, and the screen says so."
+      - id: FEAT-007-AC-12
+        type: edge
+        given: "a checklist answer was recorded wrongly on site"
+        when: "PER-01 corrects it with a stated basis"
+        then: "eligibility is re-derived from the corrected answers and nothing is waived; neither correcting nor waiving is offered once the circuit has passed its eligibility decision"
+        scope_note: "Added 2026-09-08 ('also make it editable'). Deliberately a different act from AC-11: correcting says the answer was wrong, an exception says the answer stands and the circuit proceeds anyway. One control doing both would let a site fact be rewritten to clear a gate with no trace that anything was waived."
     stories:
       - id: STORY-007-1
         title: "As the surveyor, I want to select which circuit per light type will be metered and confirm it's typical, so that the benchmark this circuit sets is defensible."

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import type { BenchmarkSource } from "@prisma/client";
 import { db } from "@/lib/db";
+import { generateDemoReportInternal } from "../report/actions";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import {
@@ -214,6 +215,69 @@ export async function counterOffer(pipelineId: string, offerId: string, input: O
   ]);
 
   logger.info("offer.countered", { actorId: session.user.id, pipelineId, fromOfferId: offerId });
+  revalidatePath(`/admin/pipeline/${pipelineId}/offer`);
+  return {};
+}
+
+/**
+ * Re-price a draft offer after its extrapolation base changed.
+ *
+ * An offer's per-circuit table is a SNAPSHOT (INV-02) — it keeps saying what
+ * it was priced on, and correcting a circuit's represented count therefore
+ * changes nothing on the offer. That is right, and it also read as a save that
+ * had not worked ("Even after updating its not reflecting", 2026-09-08): the
+ * correction had landed on the circuit and the offer, correctly, had not moved.
+ *
+ * The re-price is two acts and both are needed, which is exactly why it is one
+ * control rather than an instruction to go and find them: the demo report
+ * holds CON-11's extrapolation (`represented / metered`), so regenerating the
+ * offer alone would re-read the OLD projection. The report is regenerated
+ * first, then a new offer version is drawn from it carrying this draft's own
+ * terms — nothing about the commercial terms is re-decided here.
+ *
+ * A new VERSION, never an edit in place: the superseded draft stays exactly as
+ * it was, the same rule as every other versioned document in this codebase.
+ */
+export async function repriceOffer(pipelineId: string) {
+  const session = await requireOfferActor();
+
+  const current = await db.offer.findFirst({
+    where: { pipelineId },
+    orderBy: { version: "desc" },
+  });
+  if (!current) return { error: "There is no offer to re-price." };
+  if (current.status !== "draft") {
+    return {
+      error:
+        "Only a draft offer can be re-priced. This one has been issued — counter it with the corrected terms instead, so the society's copy is versioned rather than changed underneath them.",
+    };
+  }
+
+  const regenerated = await generateDemoReportInternal(pipelineId, session.user.id);
+  if (regenerated && "error" in regenerated && regenerated.error) return { error: regenerated.error };
+
+  const result = await generateOffer(pipelineId, {
+    benchmarkSource: current.benchmarkSource as OfferTermInput["benchmarkSource"],
+    // A negotiated figure is carried across unchanged; it is not re-derived.
+    negotiatedBenchmarkPct:
+      current.benchmarkSource === "negotiated_fixed"
+        ? ((current.circuitTerms as { benchmarkSavingsPct: number }[])[0]?.benchmarkSavingsPct ?? null)
+        : null,
+    tolerancePct: current.tolerancePct,
+    revenueSharePct: current.revenueSharePct,
+    unitElectricityRate: current.unitElectricityRate,
+    termMonths: current.termMonths,
+    spareStockCount: current.spareStockCount,
+    exclusions: typeof current.exclusions === "string" ? current.exclusions : "",
+    amcTerms: typeof current.amcTerms === "string" ? current.amcTerms : "",
+  });
+  if (result && "error" in result && result.error) return { error: result.error };
+
+  logger.info("offer.repriced", {
+    actorId: session.user.id,
+    pipelineId,
+    fromVersion: current.version,
+  });
   revalidatePath(`/admin/pipeline/${pipelineId}/offer`);
   return {};
 }

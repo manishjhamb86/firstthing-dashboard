@@ -9,7 +9,7 @@ import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/component
 import { BENCHMARK_SOURCE_LABEL, OFFER_STATUS, statusMeta } from "@/lib/status-maps";
 import type { OfferCircuitTerm } from "@/lib/offer";
 import { OfferForm } from "./offer-form";
-import { IssueOfferButton, RecordOutcomeControls } from "./offer-controls";
+import { IssueOfferButton, RecordOutcomeControls, RegenerateOffer } from "./offer-controls";
 
 function daysSince(d: Date) {
   return Math.floor((Date.now() - d.getTime()) / 86_400_000);
@@ -69,6 +69,13 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   // what versions a change the society has already been shown — so the control
   // is offered only while this one is still a draft.
   const mayCorrect = canOverride && current?.status === "draft";
+  // Whether any circuit has moved on from what this offer was priced on.
+  const anyCorrected =
+    current != null &&
+    (current.circuitTerms as OfferCircuitTerm[]).some((c) => {
+      const live = liveCircuits.get(c.circuitId);
+      return live != null && live.representedLightCount !== c.representedLightCount;
+    });
 
   return (
     <>
@@ -217,17 +224,55 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
               {(current.circuitTerms as OfferCircuitTerm[]).map((c) => {
                 const inv = inventoryCountFor(c.lightType, inventory);
                 const live = liveCircuits.get(c.circuitId);
-                if (inv === null || inv === c.representedLightCount) return null;
+                // Three figures, and the difference between two of them is
+                // what a reader needs: what this offer was PRICED on, what the
+                // circuit represents NOW, and what the survey counted. The
+                // first version compared the snapshot against the inventory
+                // only — so a correction changed nothing on this screen and
+                // read as a save that had not worked (user-reported
+                // 2026-09-08: "Even after updating its not reflecting"). It
+                // had worked; the offer is a snapshot by design (INV-02) and
+                // has to be regenerated to re-price.
+                const corrected =
+                  live != null && live.representedLightCount !== c.representedLightCount;
+                const stale = inv !== null && inv !== c.representedLightCount;
+                if (!corrected && !stale) return null;
                 return (
                   <div key={`fix-${c.circuitId}`} className="mt-4 space-y-2">
-                    <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
-                      {c.lightType} is priced on{" "}
-                      <span className="num">{c.representedLightCount.toLocaleString("en-IN")}</span>{" "}
-                      represented lights, but the site survey counted{" "}
-                      <span className="num">{inv.toLocaleString("en-IN")}</span> of this type across
-                      the society. The fee is computed on the represented figure (CON-11).
-                    </p>
-                    {mayCorrect && live && (
+                    {corrected ? (
+                      <>
+                        <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
+                          {c.lightType} now represents{" "}
+                          <span className="num">
+                            {live!.representedLightCount.toLocaleString("en-IN")}
+                          </span>{" "}
+                          lights, but this offer was priced on{" "}
+                          <span className="num">
+                            {c.representedLightCount.toLocaleString("en-IN")}
+                          </span>
+                          . An offer keeps saying what it was priced on, so regenerate it to
+                          re-price on the corrected figure.
+                        </p>
+                        {inv !== null && inv !== live!.representedLightCount && (
+                          <p className="text-sm text-[var(--text-muted)]">
+                            The site survey counted{" "}
+                            <span className="num">{inv.toLocaleString("en-IN")}</span> of this type
+                            — the corrected figure is deliberately different.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
+                        {c.lightType} is priced on{" "}
+                        <span className="num">
+                          {c.representedLightCount.toLocaleString("en-IN")}
+                        </span>{" "}
+                        represented lights, but the site survey counted{" "}
+                        <span className="num">{inv!.toLocaleString("en-IN")}</span> of this type
+                        across the society. The fee is computed on the represented figure (CON-11).
+                      </p>
+                    )}
+                    {mayCorrect && live && !corrected && (
                       <RepresentedCountForm
                         circuitId={live.id}
                         current={live.representedLightCount}
@@ -238,6 +283,15 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                   </div>
                 );
               })}
+              {/* The act the corrected state actually needs, on the screen it
+                  is read from — otherwise the only route is back to the deal
+                  page to work out that a report and an offer both have to be
+                  regenerated. */}
+              {mayCorrect && anyCorrected && (
+                <div className="mt-3">
+                  <RegenerateOffer pipelineId={pipeline.id} />
+                </div>
+              )}
             </Card>
           )}
 

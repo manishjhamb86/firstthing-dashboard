@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ErrorText, Field } from "@/components/ui";
-import { issueOffer, recordOfferOutcome } from "./actions";
+import { issueOffer, recordOfferOutcome, repriceOffer } from "./actions";
 
 export function IssueOfferButton({ pipelineId, offerId }: { pipelineId: string; offerId: string }) {
   const [error, setError] = useState<string | undefined>();
@@ -61,6 +61,35 @@ export function RecordOutcomeControls({ pipelineId, offerId }: { pipelineId: str
           Record rejection
         </button>
       </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </div>
+  );
+}
+
+/**
+ * Re-price a draft after a circuit's represented count was corrected.
+ *
+ * The offer is a snapshot, so the correction visibly does nothing to it — this
+ * is the act that makes the two agree, on the screen where the discrepancy is
+ * read rather than two pages away.
+ */
+export function RegenerateOffer({ pipelineId }: { pipelineId: string }) {
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+  return (
+    <div>
+      <button
+        type="button"
+        className="btn-primary"
+        disabled={pending}
+        onClick={() => startTransition(async () => setError((await repriceOffer(pipelineId))?.error))}
+      >
+        {pending ? "Re-pricing…" : "Regenerate the offer on the corrected figure"}
+      </button>
+      <p className="mt-1 text-xs text-[var(--text-muted)]">
+        Draws a new version from a freshly generated demo report, carrying this draft&apos;s own
+        terms. The superseded draft stays on record as it was.
+      </p>
       {error && <ErrorText>{error}</ErrorText>}
     </div>
   );

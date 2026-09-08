@@ -3128,6 +3128,12 @@ features:
         when: "is recorded"
         then: "a new offer version is created carrying the requested terms, and the previous version remains retrievable exactly as issued"
         tests: [TC-028-5]
+      - id: FEAT-028-AC-7
+        type: edge
+        given: "a society wants a flat monthly figure rather than a share of the savings"
+        when: "PER-07 records a counter (or generates an offer) priced as a lump sum"
+        then: "the offer carries a flat monthly fee and no revenue share, states its terms as a fee on every surface that shows them, and the contract it activates bills that amount"
+        scope_note: "Added 2026-09-08 (CON-01 amendment, the user's call: 'in a counter offer. also give option for a lumpsum amount instead of percentage'). The two models are alternatives, never both. A shortfall month needed no new rule: CON-01c's actual-metered fee already equals contracted × (measured / benchmark) under a revenue share, so a lump sum scales the same way — asserted to the paisa against the revenue-share case on identical readings."
     stories:
       - id: STORY-028-1
         title: "As an office-bearer, I want to accept, counter, or reject an offer, so that the decision that commits the society is made by someone who actually holds that authority."

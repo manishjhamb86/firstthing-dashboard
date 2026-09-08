@@ -8,7 +8,12 @@ import { logger } from "@/lib/logger";
 import { effectiveBaselineAt, effectiveLightCountAt } from "@/lib/benchmark-rescale";
 import { COVERAGE_FLOOR_DAYS } from "@/lib/reading-coverage";
 import { daysInPeriod } from "@/lib/reading-normalize";
-import { calculateMonth, type CircuitMonthReadings, type CircuitTerms } from "@/lib/monthly-calculation";
+import {
+  calculateMonth,
+  splitLumpSum,
+  type CircuitMonthReadings,
+  type CircuitTerms,
+} from "@/lib/monthly-calculation";
 import { requireBillingOps } from "./access";
 import { dealLabel } from "@/lib/deal-scope";
 
@@ -293,6 +298,10 @@ export async function runCalculation(input: {
         representedLightCount: circuit.representedLightCount,
         benchmarkSavingsPct: circuit.benchmarkSavingsPct,
         baselineKwhPerDay: baseline,
+        // On a lump-sum part this is a placeholder: the agreed amount is for
+        // the DEAL and is apportioned across its circuits once they are all
+        // collected, below. Deriving it here from a share the contract does
+        // not have would put an invented figure on a fee line.
         contractedMonthlyFee: contractedFeeForCircuit({
           representedLightCount: circuit.representedLightCount,
           meteredLightCount,
@@ -300,7 +309,7 @@ export async function runCalculation(input: {
           daysInMonth,
           benchmarkSavingsPct: circuit.benchmarkSavingsPct,
           unitElectricityRate: part.terms.unitElectricityRate,
-          societyRevenueSharePct: part.terms.revenueSharePct,
+          societyRevenueSharePct: part.terms.revenueSharePct ?? 0,
         }),
       },
       readings: {
@@ -373,6 +382,24 @@ export async function runCalculation(input: {
     return { held: { reason, calculationId: held.id } };
   }
 
+  // CON-01 amendment: a lump-sum part's agreed amount is for the deal, so it
+  // is apportioned across that part's circuits by their own contracted value —
+  // the weight a revenue-share deal produces anyway — and the fee lines add
+  // back to the agreed figure exactly (ADR-004 keeps the circuit as the
+  // billing grain whichever model priced the deal).
+  for (const part of parts) {
+    if (part.terms.pricingModel !== "lump_sum") continue;
+    const mine = perCircuit.filter((c) => c.part.contract.id === part.contract.id);
+    if (mine.length === 0) continue;
+    const shares = splitLumpSum(
+      part.terms.lumpSumMonthlyFee ?? 0,
+      mine.map((c) => c.terms.contractedMonthlyFee),
+    );
+    mine.forEach((c, i) => {
+      c.terms.contractedMonthlyFee = shares[i];
+    });
+  }
+
   const result = calculateMonth({
     // One CalculationPart per deal: its own tolerance, share, rate and its
     // own first/final-month proration, applied only to its own circuits.
@@ -381,7 +408,9 @@ export async function runCalculation(input: {
         contractId: pt.contract.id,
         contract: {
           tolerancePct: pt.terms.tolerancePct,
+          pricingModel: pt.terms.pricingModel as "revenue_share" | "lump_sum",
           societyRevenueSharePct: pt.terms.revenueSharePct,
+          lumpSumMonthlyFee: pt.terms.lumpSumMonthlyFee,
           unitElectricityRate: pt.terms.unitElectricityRate,
         },
         circuits: perCircuit

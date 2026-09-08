@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format-date";
+import { describePricing } from "@/lib/offer";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -47,12 +48,12 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
         <div className="print-table-scroll"><table className="tbl">
           <tbody>
             <tr>
-              <td>Revenue share</td>
+              <td>{offer.pricingModel === "lump_sum" ? "Monthly fee" : "Revenue share"}</td>
               {/* Party-named on the printed document too — this split has
-                  been shipped inverted twice in this project's history. */}
-              <td className="num">
-                {offer.revenueSharePct}% to the society, {100 - offer.revenueSharePct}% to FirsThing
-              </td>
+                  been shipped inverted twice in this project's history — and
+                  a lump-sum deal prints as a flat fee, not as a share it does
+                  not have (CON-01 amendment, 2026-09-08). */}
+              <td className="num">{describePricing(offer)}</td>
             </tr>
             <tr>
               <td>Tolerance band</td>

@@ -7,6 +7,7 @@ import {
   extrapolate,
   measuredSavingsPct,
   resolvePricingBasis,
+  splitLumpSum,
   toRupees,
   type CalculationTerms,
   type CircuitTerms,
@@ -597,5 +598,108 @@ describe("calculateMonth — a service line delivered in parts (CON-24 as amende
     });
     expect(m.proration!.proratedDays).toBe(11);
     expect(m.total).toBeCloseTo(2000 * (11 / 31), 10);
+  });
+});
+
+describe("CON-01 amendment — billing a lump-sum deal (2026-09-08)", () => {
+  it("splits the agreed amount across the circuits it covers, adding back exactly", () => {
+    const parts = splitLumpSum(12_500, [3000, 1000, 1000]);
+    expect(parts).toEqual([7500, 2500, 2500]);
+    expect(parts.reduce((s, p) => s + p, 0)).toBe(12_500);
+  });
+
+  it("splits evenly rather than dividing by zero when nothing carries weight", () => {
+    expect(splitLumpSum(900, [0, 0, 0])).toEqual([300, 300, 300]);
+    expect(splitLumpSum(900, [])).toEqual([]);
+  });
+
+  it("does not lose paisa on a split that does not divide evenly", () => {
+    const parts = splitLumpSum(1000, [1, 1, 1]);
+    expect(parts.reduce((s, p) => s + p, 0)).toBeCloseTo(1000, 10);
+  });
+});
+
+describe("a lump-sum month bills exactly where a revenue-share month does", () => {
+  // The whole justification for not inventing a new commercial rule: under a
+  // revenue share, an actual-metered month is
+  //   savedValue × share = contractedFee × (measured ÷ benchmark)
+  // because savedValue is linear in `measured`. So a lump sum scaled by
+  // delivered-over-promised IS the same treatment, and these two cases have to
+  // agree to the paisa on identical readings.
+  const terms = {
+    circuitId: "c1",
+    lightType: "Tube Light",
+    meteredLightCount: 100,
+    representedLightCount: 400,
+    benchmarkSavingsPct: 65,
+    baselineKwhPerDay: 40,
+    contractedMonthlyFee: 10_483.2,
+  };
+  const readings = { circuitId: "c1", meteredKwh: 600, coverageDays: 30, daysInMonth: 30 };
+  const breach = { priorConsecutiveBreaches: 1, priorBreachAttributableAndUncorrected: true };
+
+  it("scales the agreed amount by delivered-over-promised, matching the share deal", () => {
+    const share = calculateFeeLine({
+      terms,
+      readings,
+      contract: { tolerancePct: 10, unitElectricityRate: 8, societyRevenueSharePct: 58 },
+      ...breach,
+    });
+    const lumpSum = calculateFeeLine({
+      // The lump sum agreed for this circuit IS its contracted fee.
+      terms,
+      readings,
+      contract: {
+        tolerancePct: 10,
+        pricingModel: "lump_sum",
+        societyRevenueSharePct: null,
+        lumpSumMonthlyFee: terms.contractedMonthlyFee,
+        unitElectricityRate: 8,
+      },
+      ...breach,
+    });
+    expect(lumpSum.pricingBasis).toBe("actual_metered");
+    expect(lumpSum.amount).toBeCloseTo(share.amount, 8);
+    // …and it is 50/65 of the agreed figure, which is the whole point.
+    expect(lumpSum.amount).toBeCloseTo(terms.contractedMonthlyFee * (50 / 65), 8);
+    expect(lumpSum.amount).toBeLessThan(terms.contractedMonthlyFee);
+  });
+
+  it("bills the agreed amount flat while the circuit holds its benchmark", () => {
+    const inBand = calculateFeeLine({
+      terms,
+      readings: { circuitId: "c1", meteredKwh: 420, coverageDays: 30, daysInMonth: 30 },
+      contract: {
+        tolerancePct: 10,
+        pricingModel: "lump_sum",
+        societyRevenueSharePct: null,
+        lumpSumMonthlyFee: terms.contractedMonthlyFee,
+        unitElectricityRate: 8,
+      },
+      priorConsecutiveBreaches: 0,
+      priorBreachAttributableAndUncorrected: false,
+    });
+    expect(inBand.pricingBasis).toBe("fixed");
+    expect(inBand.amount).toBe(terms.contractedMonthlyFee);
+  });
+
+  it("bills nothing rather than dividing by a benchmark of zero", () => {
+    // A zero benchmark can only be breached by consuming MORE than the
+    // baseline — 1,500 kWh against a 1,200 kWh baseline is a negative saving,
+    // which is the one way into the divide.
+    const line = calculateFeeLine({
+      terms: { ...terms, benchmarkSavingsPct: 0 },
+      readings: { circuitId: "c1", meteredKwh: 1500, coverageDays: 30, daysInMonth: 30 },
+      contract: {
+        tolerancePct: 10,
+        pricingModel: "lump_sum",
+        societyRevenueSharePct: null,
+        lumpSumMonthlyFee: 5000,
+        unitElectricityRate: 8,
+      },
+      ...breach,
+    });
+    expect(Number.isFinite(line.amount)).toBe(true);
+    expect(line.amount).toBe(0);
   });
 });

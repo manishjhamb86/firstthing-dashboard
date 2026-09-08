@@ -11,6 +11,7 @@ import {
   projectedMonthlyFee,
   refuseOffer,
   type OfferCircuitTerm,
+  type PricingModel,
 } from "@/lib/offer";
 import type { DemoReportCircuit } from "@/lib/demo-report";
 
@@ -25,7 +26,9 @@ export type OfferTermInput = {
   benchmarkSource: BenchmarkSource;
   negotiatedBenchmarkPct: number | null;
   tolerancePct: number;
-  revenueSharePct: number;
+  pricingModel: PricingModel;
+  revenueSharePct: number | null;
+  lumpSumMonthlyFee: number | null;
   unitElectricityRate: number;
   termMonths: number;
   spareStockCount: number;
@@ -76,6 +79,8 @@ export async function generateOffer(pipelineId: string, input: OfferTermInput) {
     projectedSavedKwhPerDay: projectedSaved,
     unitElectricityRate: input.unitElectricityRate,
     societyRevenueSharePct: input.revenueSharePct,
+    pricingModel: input.pricingModel,
+    lumpSumMonthlyFee: input.lumpSumMonthlyFee,
   });
 
   const offer = await db.offer.create({
@@ -86,7 +91,9 @@ export async function generateOffer(pipelineId: string, input: OfferTermInput) {
       benchmarkSource: input.benchmarkSource,
       circuitTerms,
       tolerancePct: input.tolerancePct,
+      pricingModel: input.pricingModel,
       revenueSharePct: input.revenueSharePct,
+      lumpSumMonthlyFee: input.lumpSumMonthlyFee,
       unitElectricityRate: input.unitElectricityRate,
       termMonths: input.termMonths,
       spareStockCount: input.spareStockCount,
@@ -196,7 +203,12 @@ export async function counterOffer(pipelineId: string, offerId: string, input: O
         benchmarkSource: previous.benchmarkSource,
         circuitTerms: snapshot,
         tolerancePct: input.tolerancePct,
+        // A counter is where a society asks for different terms, so it is the
+        // path most likely to change the pricing MODEL — the lump sum was
+        // asked for here first (2026-09-08).
+        pricingModel: input.pricingModel,
         revenueSharePct: input.revenueSharePct,
+        lumpSumMonthlyFee: input.lumpSumMonthlyFee,
         unitElectricityRate: input.unitElectricityRate,
         termMonths: input.termMonths,
         spareStockCount: input.spareStockCount,
@@ -206,6 +218,8 @@ export async function counterOffer(pipelineId: string, offerId: string, input: O
           projectedSavedKwhPerDay: projectedSaved,
           unitElectricityRate: input.unitElectricityRate,
           societyRevenueSharePct: input.revenueSharePct,
+          pricingModel: input.pricingModel,
+          lumpSumMonthlyFee: input.lumpSumMonthlyFee,
         }),
         demoReportId: previous.demoReportId,
         counteredFromId: previous.id,
@@ -264,7 +278,9 @@ export async function repriceOffer(pipelineId: string) {
         ? ((current.circuitTerms as { benchmarkSavingsPct: number }[])[0]?.benchmarkSavingsPct ?? null)
         : null,
     tolerancePct: current.tolerancePct,
+    pricingModel: current.pricingModel as PricingModel,
     revenueSharePct: current.revenueSharePct,
+    lumpSumMonthlyFee: current.lumpSumMonthlyFee,
     unitElectricityRate: current.unitElectricityRate,
     termMonths: current.termMonths,
     spareStockCount: current.spareStockCount,

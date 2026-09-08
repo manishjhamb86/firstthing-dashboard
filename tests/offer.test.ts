@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { projectedMonthlyFee, refuseOffer, type OfferTerms } from "@/lib/offer";
+import { describePricing, projectedMonthlyFee, refuseOffer, type OfferTerms } from "@/lib/offer";
 import { checkOfferResponse } from "@/lib/offer-authority";
 
 const terms: OfferTerms = {
   tolerancePct: 5,
+  pricingModel: "revenue_share",
   revenueSharePct: 58,
+  lumpSumMonthlyFee: null,
   unitElectricityRate: 8,
   termMonths: 60,
   spareStockCount: 10,
@@ -141,5 +143,60 @@ describe("TC-108-1 — checkOfferResponse (GATE-04, FEAT-108-AC-1)", () => {
   it("refuses responding to a draft the back office is still editing", () => {
     const r = checkOfferResponse(officeBearer, { ...offer, status: "draft" });
     expect(r.ok === false && r.reason).toBe("not-issued");
+  });
+});
+
+describe("CON-01 amendment — a lump sum instead of a share (2026-09-08)", () => {
+  const lump: OfferTerms = {
+    tolerancePct: 5,
+    pricingModel: "lump_sum",
+    revenueSharePct: null,
+    lumpSumMonthlyFee: 12_500,
+    unitElectricityRate: 8,
+    termMonths: 60,
+    spareStockCount: 10,
+  };
+  const base = {
+    benchmarkSource: "measured" as const,
+    demoReportId: "demo-1",
+    negotiatedBenchmarkPct: null,
+  };
+
+  it("accepts a lump-sum offer carrying no revenue share at all", () => {
+    expect(refuseOffer({ ...base, terms: lump })).toBeNull();
+  });
+
+  it("refuses one with no amount — a lump-sum deal bills on that figure", () => {
+    expect(refuseOffer({ ...base, terms: { ...lump, lumpSumMonthlyFee: null } })).toBe("invalid-lump-sum");
+    expect(refuseOffer({ ...base, terms: { ...lump, lumpSumMonthlyFee: 0 } })).toBe("invalid-lump-sum");
+  });
+
+  it("still refuses a revenue-share offer with no share", () => {
+    expect(refuseOffer({ ...base, terms: { ...terms, revenueSharePct: null } })).toBe("invalid-revenue-share");
+  });
+
+  it("prices at the agreed amount, deriving nothing from the demo numbers", () => {
+    expect(
+      projectedMonthlyFee({
+        projectedSavedKwhPerDay: 633.6,
+        unitElectricityRate: 8,
+        societyRevenueSharePct: null,
+        pricingModel: "lump_sum",
+        lumpSumMonthlyFee: 12_500,
+      }),
+    ).toBe(12_500);
+  });
+
+  it("states the terms as a fee, never as a share it does not have", () => {
+    expect(describePricing(lump)).toMatch(/12,500\.00\/month/);
+    expect(describePricing(lump)).not.toMatch(/%/);
+    // …and the share deal still names the party, which this project has
+    // shipped inverted twice.
+    expect(describePricing(terms)).toBe("58% society / 42% FirsThing");
+  });
+
+  it("says so plainly when a figure was never recorded, rather than showing a zero", () => {
+    expect(describePricing({ ...lump, lumpSumMonthlyFee: null })).toMatch(/not recorded/);
+    expect(describePricing({ ...terms, revenueSharePct: null })).toMatch(/not recorded/);
   });
 });

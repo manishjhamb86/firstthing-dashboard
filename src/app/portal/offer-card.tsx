@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import { respondToOffer } from "./offer-actions";
+import { describePricing } from "@/lib/offer";
 
 // FEAT-108-AC-2 — the screen names who can perform the act rather than
 // silently hiding it, so a committee member understands why they can't.
@@ -14,7 +15,9 @@ export function OfferCard({
     id: string;
     version: number;
     tolerancePct: number;
-    revenueSharePct: number;
+    pricingModel: string;
+    revenueSharePct: number | null;
+    lumpSumMonthlyFee: number | null;
     unitElectricityRate: number;
     termMonths: number;
     projectedMonthlyFee: number | null;
@@ -39,8 +42,14 @@ export function OfferCard({
       <CardTitle>Your offer</CardTitle>
       <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 mt-4 text-sm">
         <div>
-          <dt className="lbl">Your share of the savings</dt>
-          <dd className="num">{offer.revenueSharePct}%</dd>
+          <dt className="lbl">
+            {offer.pricingModel === "lump_sum" ? "The monthly fee" : "Your share of the savings"}
+          </dt>
+          <dd className="num">
+            {offer.pricingModel === "lump_sum"
+              ? describePricing(offer)
+              : `${offer.revenueSharePct}%`}
+          </dd>
         </div>
         <div>
           <dt className="lbl">Tolerance band</dt>
@@ -51,9 +60,19 @@ export function OfferCard({
           <dd className="num">{offer.termMonths} months</dd>
         </div>
         <div>
-          <dt className="lbl">Estimated monthly fee</dt>
+          {/* On a lump-sum offer this is not an ESTIMATE — it is the agreed
+              figure, and calling it estimated in front of the society would
+              misdescribe what they are being asked to accept. */}
+          <dt className="lbl">
+            {offer.pricingModel === "lump_sum" ? "Monthly fee" : "Estimated monthly fee"}
+          </dt>
           <dd className="num">
-            {offer.projectedMonthlyFee != null ? `₹${offer.projectedMonthlyFee.toFixed(2)}` : "—"}
+            {offer.projectedMonthlyFee != null
+              ? `₹${offer.projectedMonthlyFee.toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}`
+              : "—"}
           </dd>
         </div>
       </dl>

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import type { BenchmarkSource } from "@prisma/client";
 import { ErrorText, Field } from "@/components/ui";
-import { ALLOWED_TOLERANCE_PCT } from "@/lib/offer";
+import { ALLOWED_TOLERANCE_PCT, type PricingModel } from "@/lib/offer";
 import { counterOffer, generateOffer, type OfferTermInput } from "./actions";
 
 type Defaults = Partial<OfferTermInput>;
@@ -29,7 +29,14 @@ export function OfferForm({
   );
   const [negotiatedPct, setNegotiatedPct] = useState(defaults?.negotiatedBenchmarkPct?.toString() ?? "65");
   const [tolerancePct, setTolerancePct] = useState((defaults?.tolerancePct ?? 5).toString());
+  // CON-01 amendment (2026-09-08): a deal is priced EITHER as a share of the
+  // savings or as a flat monthly amount. Two fields, one shown at a time —
+  // showing both would invite an offer carrying two answers to one question.
+  const [pricingModel, setPricingModel] = useState<PricingModel>(
+    defaults?.pricingModel ?? "revenue_share",
+  );
   const [revenueSharePct, setRevenueSharePct] = useState((defaults?.revenueSharePct ?? 58).toString());
+  const [lumpSum, setLumpSum] = useState(defaults?.lumpSumMonthlyFee?.toString() ?? "");
   const [unitRate, setUnitRate] = useState((defaults?.unitElectricityRate ?? 8).toString());
   const [termMonths, setTermMonths] = useState((defaults?.termMonths ?? 60).toString());
   const [spareStock, setSpareStock] = useState((defaults?.spareStockCount ?? 0).toString());
@@ -44,7 +51,9 @@ export function OfferForm({
       benchmarkSource,
       negotiatedBenchmarkPct: benchmarkSource === "negotiated_fixed" ? Number(negotiatedPct) : null,
       tolerancePct: Number(tolerancePct),
-      revenueSharePct: Number(revenueSharePct),
+      pricingModel,
+      revenueSharePct: pricingModel === "revenue_share" ? Number(revenueSharePct) : null,
+      lumpSumMonthlyFee: pricingModel === "lump_sum" ? Number(lumpSum) : null,
       unitElectricityRate: Number(unitRate),
       termMonths: Number(termMonths),
       spareStockCount: Number(spareStock) || 0,
@@ -113,20 +122,56 @@ export function OfferForm({
         </Field>
 
         <Field
-          label="Society's revenue share (%)"
-          htmlFor="of-rev"
-          hint="The society's half of the split — FirsThing takes the rest."
+          label="How the fee is priced"
+          htmlFor="of-model"
+          hint="A share of what the retrofit saves (CON-11), or a flat monthly amount agreed instead."
         >
-          <input
-            id="of-rev"
-            type="number"
-            step="0.01"
-            value={revenueSharePct}
-            onChange={(e) => setRevenueSharePct(e.target.value)}
+          <select
+            id="of-model"
+            value={pricingModel}
+            onChange={(e) => setPricingModel(e.target.value as PricingModel)}
             disabled={pending}
             className="field"
-          />
+          >
+            <option value="revenue_share">Share of the savings</option>
+            <option value="lump_sum">Lump sum — a flat monthly amount</option>
+          </select>
         </Field>
+
+        {pricingModel === "revenue_share" ? (
+          <Field
+            label="Society's revenue share (%)"
+            htmlFor="of-rev"
+            hint="The society's half of the split — FirsThing takes the rest."
+          >
+            <input
+              id="of-rev"
+              type="number"
+              step="0.01"
+              value={revenueSharePct}
+              onChange={(e) => setRevenueSharePct(e.target.value)}
+              disabled={pending}
+              className="field"
+            />
+          </Field>
+        ) : (
+          <Field
+            label="Monthly fee (₹)"
+            htmlFor="of-lump"
+            hint="Billed flat each month. A month that measures short of the benchmark is billed in proportion, exactly as a revenue-share deal is (CON-01c)."
+          >
+            <input
+              id="of-lump"
+              type="number"
+              step="0.01"
+              min="0"
+              value={lumpSum}
+              onChange={(e) => setLumpSum(e.target.value)}
+              disabled={pending}
+              className="field"
+            />
+          </Field>
+        )}
 
         <Field label="Unit electricity rate (₹/kWh)" htmlFor="of-rate">
           <input

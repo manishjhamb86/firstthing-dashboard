@@ -1241,6 +1241,19 @@ enum BenchmarkSource {
   @@map("benchmark_source")
 }
 
+/// How FirsThing's monthly fee is arrived at.
+///
+/// `revenue_share` is CON-11's own model: a share of the electricity the
+/// retrofit saves. `lump_sum` is a flat monthly amount negotiated instead of a
+/// percentage (CON-01 amendment, 2026-09-08 — the user's call, for a counter
+/// where a society wants a fixed figure rather than a share).
+enum PricingModel {
+  revenue_share
+  lump_sum
+
+  @@map("pricing_model")
+}
+
 model Offer {
   id         String      @id @default(cuid())
   pipelineId String      @map("pipeline_id")
@@ -1255,7 +1268,12 @@ model Offer {
   // Commercial terms. FEAT-027-AC-3 makes tolerance/revenue-share/term hard
   // requirements to issue, since every downstream billing decision reads them.
   tolerancePct        Float @map("tolerance_pct")
-  revenueSharePct     Float @map("revenue_share_pct")
+  pricingModel        PricingModel @default(revenue_share) @map("pricing_model")
+  /// The SOCIETY's share. Null on a lump-sum offer, where there is no share —
+  /// a sentinel here would be a percentage somebody could read as agreed.
+  revenueSharePct     Float? @map("revenue_share_pct")
+  /// The flat monthly fee, on a lump-sum offer. Null otherwise.
+  lumpSumMonthlyFee   Float? @map("lump_sum_monthly_fee")
   unitElectricityRate Float @map("unit_electricity_rate")
   termMonths          Int   @map("term_months")
   exclusions          Json?
@@ -1378,7 +1396,10 @@ model ContractTermVersion {
 
   benchmarkSource     BenchmarkSource @map("benchmark_source")
   tolerancePct        Float           @map("tolerance_pct")
-  revenueSharePct     Float           @map("revenue_share_pct")
+  pricingModel        PricingModel    @default(revenue_share) @map("pricing_model")
+  /// The SOCIETY's share. Null on a lump-sum contract — see PricingModel.
+  revenueSharePct     Float?          @map("revenue_share_pct")
+  lumpSumMonthlyFee   Float?          @map("lump_sum_monthly_fee")
   unitElectricityRate Float           @map("unit_electricity_rate")
   exclusions          Json?
   amcTerms            Json?           @map("amc_terms")

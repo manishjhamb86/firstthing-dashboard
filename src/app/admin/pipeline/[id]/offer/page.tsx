@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format-date";
+import { describePricing } from "@/lib/offer";
 import { dealLabel } from "@/lib/deal-scope";
 import { inventoryCountFor } from "@/lib/light-type";
 import { RepresentedCountForm } from "@/app/admin/societies/[id]/circuits/[circuitId]/represented-count-form";
@@ -119,12 +120,10 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 <dd className="num">±{current.tolerancePct}%</dd>
               </div>
               <div>
-                <dt className="lbl">Revenue share</dt>
+                <dt className="lbl">{current.pricingModel === "lump_sum" ? "Fee" : "Revenue share"}</dt>
                 {/* Stated with the party named, deliberately: this exact
                     split has been shipped inverted twice in this project. */}
-                <dd className="num">
-                  {current.revenueSharePct}% society / {100 - current.revenueSharePct}% FirsThing
-                </dd>
+                <dd className="num">{describePricing(current)}</dd>
               </div>
               <div>
                 <dt className="lbl">Unit rate</dt>
@@ -319,7 +318,9 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                   defaults={{
                     benchmarkSource: current.benchmarkSource,
                     tolerancePct: current.tolerancePct,
+                    pricingModel: current.pricingModel,
                     revenueSharePct: current.revenueSharePct,
+                    lumpSumMonthlyFee: current.lumpSumMonthlyFee,
                     unitElectricityRate: current.unitElectricityRate,
                     termMonths: current.termMonths,
                     spareStockCount: current.spareStockCount,
@@ -341,7 +342,10 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                       <span className="num">v{o.version}</span>
                       <StatusChip tone={s.tone}>{s.label}</StatusChip>
                       <span className="text-[var(--text-muted)]">
-                        {o.revenueSharePct}% society · ±{o.tolerancePct}% · {o.termMonths} months
+                        {/* Through the shared description: a superseded
+                            lump-sum version would otherwise read
+                            "null% society" here. */}
+                        {describePricing(o)} · ±{o.tolerancePct}% · {o.termMonths} months
                       </span>
                     </li>
                   );

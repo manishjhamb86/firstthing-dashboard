@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format-date";
+import { describePricing } from "@/lib/offer";
 import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -230,10 +231,8 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
               {currentTerms && (
                 <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 text-sm">
                   <div>
-                    <dt className="lbl">Revenue share</dt>
-                    <dd className="num">
-                      {currentTerms.revenueSharePct}% society / {100 - currentTerms.revenueSharePct}% FirsThing
-                    </dd>
+                    <dt className="lbl">Fee basis</dt>
+                    <dd className="num">{describePricing(currentTerms)}</dd>
                   </div>
                   <div>
                     <dt className="lbl">Tolerance band</dt>

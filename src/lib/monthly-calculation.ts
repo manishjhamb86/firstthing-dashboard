@@ -56,8 +56,16 @@ export type CircuitMonthReadings = {
 export type CalculationTerms = {
   /** ±5 or ±10 — one value per contract, applied independently per circuit. */
   tolerancePct: number;
-  /** The SOCIETY's share. FirsThing's fee is (100 - this). */
-  societyRevenueSharePct: number;
+  /**
+   * How the fee is arrived at (CON-01 amendment, 2026-09-08). `revenue_share`
+   * is CON-11's own model; `lump_sum` is a flat monthly amount agreed instead
+   * of a share.
+   */
+  pricingModel?: "revenue_share" | "lump_sum";
+  /** The SOCIETY's share. FirsThing's fee is (100 - this). Null on a lump sum. */
+  societyRevenueSharePct: number | null;
+  /** The whole contract's flat monthly fee, on a lump-sum deal. */
+  lumpSumMonthlyFee?: number | null;
   unitElectricityRate: number;
 };
 
@@ -236,12 +244,26 @@ export function calculateFeeLine(input: {
   // `actual_metered` line it is also what derives the amount.
   const savedKwh = baselineExtrapolatedKwh * (measured / 100);
   const savedValue = savedKwh * contract.unitElectricityRate;
-  const firsthingSharePct = 100 - contract.societyRevenueSharePct;
+  const firsthingSharePct = 100 - (contract.societyRevenueSharePct ?? 0);
 
+  // CON-01c's actual-metered month, for both pricing models — and it is ONE
+  // rule, not two. Under a revenue share the fee is
+  //   savedValue × share = contractedFee × (measured ÷ benchmark)
+  // because savedValue is linear in `measured` and the contracted fee is the
+  // same expression at `benchmark`. That identity is already asserted by the
+  // tests ("at measured == benchmark, actual-metered and fixed agree to the
+  // paisa"), so a lump sum scales the agreed amount by delivered-over-promised
+  // and lands on exactly the same treatment: deliver the benchmark and the
+  // full amount is due, deliver 80% of it and 80% is. Nothing new is decided
+  // here — the existing rule is simply expressed without needing a share.
   const amount =
     pricingBasis === "fixed"
       ? terms.contractedMonthlyFee
-      : savedValue * (firsthingSharePct / 100);
+      : contract.pricingModel === "lump_sum"
+        ? terms.benchmarkSavingsPct > 0
+          ? terms.contractedMonthlyFee * (measured / terms.benchmarkSavingsPct)
+          : 0
+        : savedValue * (firsthingSharePct / 100);
 
   return {
     circuitId: terms.circuitId,
@@ -272,12 +294,32 @@ export function contractedFeeFor(input: {
   extrapolatedConsumptionKwh: number;
   benchmarkSavingsPct: number;
   unitElectricityRate: number;
-  societyRevenueSharePct: number;
+  societyRevenueSharePct: number | null;
 }): { savedKwh: number; savedValue: number; firsthingFee: number } {
   const savedKwh = input.extrapolatedConsumptionKwh * (input.benchmarkSavingsPct / 100);
   const savedValue = savedKwh * input.unitElectricityRate;
-  const firsthingFee = savedValue * ((100 - input.societyRevenueSharePct) / 100);
+  const firsthingFee = savedValue * ((100 - (input.societyRevenueSharePct ?? 0)) / 100);
   return { savedKwh, savedValue, firsthingFee };
+}
+
+/**
+ * A lump sum split across the circuits it covers.
+ *
+ * The agreed figure is for the DEAL, but CON-11 makes the circuit the billing
+ * grain (ADR-004) — an invoice is a set of per-circuit fee lines, and a
+ * deviation review, a suspension and a savings report all read them. So the
+ * amount is apportioned by each circuit's own contracted value, which is the
+ * weight a revenue-share deal would have produced anyway, and the lines add
+ * back to the lump sum exactly.
+ *
+ * Weights that sum to zero (a deal whose circuits project no saving) split it
+ * evenly rather than dividing by zero and billing NaN.
+ */
+export function splitLumpSum(lumpSum: number, weights: number[]): number[] {
+  const total = weights.reduce((s, w) => s + w, 0);
+  if (weights.length === 0) return [];
+  if (!(total > 0)) return weights.map(() => lumpSum / weights.length);
+  return weights.map((w) => (lumpSum * w) / total);
 }
 
 /**

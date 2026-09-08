@@ -137,7 +137,14 @@ export async function activateContract(pipelineId: string, termStart: string) {
   // FEAT-062-AC-3 — a contract cannot activate missing a term FEAT-048/049
   // reads. These are validated at offer time too; re-checked here because
   // this is the last point before they start producing money figures.
-  if (!offer.tolerancePct || !offer.revenueSharePct || !offer.unitElectricityRate || !offer.termMonths) {
+  // A lump-sum deal has no share and a revenue-share deal has no lump sum —
+  // each is required only on the model that actually bills from it (CON-01
+  // amendment, 2026-09-08).
+  const priceRecorded =
+    offer.pricingModel === "lump_sum"
+      ? offer.lumpSumMonthlyFee != null && offer.lumpSumMonthlyFee > 0
+      : offer.revenueSharePct != null && offer.revenueSharePct > 0;
+  if (!offer.tolerancePct || !priceRecorded || !offer.unitElectricityRate || !offer.termMonths) {
     return { error: "The accepted offer is missing a required billing term — it can't be activated." };
   }
 
@@ -171,7 +178,9 @@ export async function activateContract(pipelineId: string, termStart: string) {
         effectiveFrom: start,
         benchmarkSource: offer.benchmarkSource,
         tolerancePct: offer.tolerancePct,
+        pricingModel: offer.pricingModel,
         revenueSharePct: offer.revenueSharePct,
+        lumpSumMonthlyFee: offer.lumpSumMonthlyFee,
         unitElectricityRate: offer.unitElectricityRate,
         exclusions: offer.exclusions ?? undefined,
         amcTerms: offer.amcTerms ?? undefined,

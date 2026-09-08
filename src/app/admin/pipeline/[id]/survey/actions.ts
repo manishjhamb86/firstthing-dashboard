@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import { eligibilityState, outstandingCriteria } from "@/lib/circuit-eligibility";
+import { refuseRepresentedCount } from "@/lib/light-type";
 
 // FEAT-006: whole-society lighting inventory by area, distinct from the
 // single sample Circuit metered for the benchmark (CON-11).
@@ -125,9 +126,8 @@ export async function submitCircuitCandidate(input: {
   const connectedLoadW = input.lines.reduce((s, l) => s + l.count * l.wattage, 0);
   const wattage = connectedLoadW / meteredLightCount;
 
-  if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < meteredLightCount) {
-    return { error: "Represented light count must be at least the metered light count." };
-  }
+  const repRefusal = refuseRepresentedCount(input.representedLightCount, meteredLightCount);
+  if (repRefusal) return { error: repRefusal };
 
   // CON-16's "no non-installation appliances share this circuit" was removed
   // 2026-08-26 (the user's call). It disqualified circuits that are live and

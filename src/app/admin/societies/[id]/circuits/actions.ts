@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
+import { refuseRepresentedCount } from "@/lib/light-type";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 
@@ -33,9 +34,8 @@ export async function updateCircuitConfiguration(
   if (!Number.isFinite(input.wattage) || input.wattage <= 0) {
     return { error: "Wattage must be a positive number." };
   }
-  if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < input.meteredLightCount) {
-    return { error: "Represented light count must be at least the metered light count." };
-  }
+  const repRefusal = refuseRepresentedCount(input.representedLightCount, input.meteredLightCount);
+  if (repRefusal) return { error: repRefusal };
 
   const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
   if (!circuit) return { error: "Circuit not found." };

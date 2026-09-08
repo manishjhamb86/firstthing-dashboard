@@ -9,6 +9,7 @@ import { DeleteAreaButton } from "./delete-area-button";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { resolveCircuitRemoval } from "@/lib/circuit-removal";
 import { criterionLabel, MIN_METERED_LIGHTS, outstandingCriteria } from "@/lib/circuit-eligibility";
+import { lightTypeKey } from "@/lib/light-type";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
 import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
 import { NextStepCallout, StepHeading } from "@/components/deal-stepper";
@@ -142,6 +143,11 @@ export default async function SiteSurveyPage({
       .entries(),
   ].sort((x, y) => y[1].lights - x[1].lights);
 
+  // CON-11's extrapolation base, per light type — the candidate form offers it
+  // rather than asking the surveyor to retype a figure this page has already
+  // counted (user-caught 2026-09-08: a circuit representing 50 of 2,000).
+  const inventoryTypes = byLightType.map(([label, v]) => ({ label, lights: v.lights }));
+
   const estimatedAreas = siteSurvey.areas.filter((a) => a.method === "estimated").length;
 
   // An area's light type and a candidate circuit's light type are two
@@ -152,9 +158,8 @@ export default async function SiteSurveyPage({
   // fix is one controlled vocabulary across both (CON-11 names five
   // profiles), which is a schema change and belongs in the blueprint, not
   // in a design pass. Flagged rather than silently normalised away.
-  const typeKey = (t: string) => t.toLowerCase().replace(/[^a-z0-9]/g, "");
-  const candidateTypeKeys = new Set(circuits.map((c) => typeKey(c.lightType)));
-  const hasCandidateFor = (t: string) => candidateTypeKeys.has(typeKey(t));
+  const candidateTypeKeys = new Set(circuits.map((c) => lightTypeKey(c.lightType)));
+  const hasCandidateFor = (t: string) => candidateTypeKeys.has(lightTypeKey(t));
   const typesWithoutCandidate = byLightType.filter(([t]) => !hasCandidateFor(t)).length;
 
   // Where does this survey hand off? Once a candidate clears eligibility,
@@ -277,7 +282,7 @@ export default async function SiteSurveyPage({
           },
           {
             label: "Light types",
-            value: backfilledSurvey ? new Set(circuits.map((c) => typeKey(c.lightType))).size : byLightType.length,
+            value: backfilledSurvey ? new Set(circuits.map((c) => lightTypeKey(c.lightType))).size : byLightType.length,
             detail: backfilledSurvey ? "each has its circuit" : "each needs a circuit",
           },
           {
@@ -550,6 +555,7 @@ export default async function SiteSurveyPage({
               societyId={pipeline.society.id}
               serviceLine={pipeline.serviceLine}
               catalog={catalogOriginals}
+              inventory={inventoryTypes}
             />
           ) : (
             <details className="group">
@@ -563,6 +569,7 @@ export default async function SiteSurveyPage({
                   societyId={pipeline.society.id}
                   serviceLine={pipeline.serviceLine}
                   catalog={catalogOriginals}
+                  inventory={inventoryTypes}
                 />
               </div>
             </details>

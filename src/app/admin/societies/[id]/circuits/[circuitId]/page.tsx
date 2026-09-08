@@ -20,6 +20,8 @@ import { DemoReviewPanel } from "./demo-review-panel";
 import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
 import { describeDeviations } from "@/lib/backfill-deviations";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { inventoryCountFor } from "@/lib/light-type";
+import { RepresentedCountForm } from "./represented-count-form";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { circuitSteps } from "@/lib/deal-progress";
@@ -109,7 +111,15 @@ export default async function CircuitDetailPage({
     where: { id: circuitId },
     include: {
       society: true,
-      siteSurvey: { select: { pipelineId: true, pipeline: { select: { surveyOwnerId: true } } } },
+      siteSurvey: {
+        select: {
+          pipelineId: true,
+          pipeline: { select: { surveyOwnerId: true } },
+          // CON-11's extrapolation base, as this survey itself counted it —
+          // the figure the represented count is checked against.
+          areas: { select: { lightType: true, count: true } },
+        },
+      },
       replacementOwner: { select: { id: true, name: true, email: true, team: true } },
       replacementAssignedBy: { select: { name: true, email: true } },
       // FEAT-013 — the replacement day lives on the schedule module.
@@ -471,6 +481,19 @@ export default async function CircuitDetailPage({
     lightReplacementDate: circuit.lightReplacementDate,
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
   });
+  // The survey's own count for this light type, summed across its areas —
+  // four towers are four rows and one type (the page that records them groups
+  // the same way).
+  const surveyInventoryTotals = new Map<string, { label: string; lights: number }>();
+  for (const a of circuit.siteSurvey?.areas ?? []) {
+    const e = surveyInventoryTotals.get(a.lightType) ?? { label: a.lightType, lights: 0 };
+    e.lights += a.count;
+    surveyInventoryTotals.set(a.lightType, e);
+  }
+  const surveyInventoryCount = inventoryCountFor(circuit.lightType, [...surveyInventoryTotals.values()]);
+  const representedMismatch =
+    surveyInventoryCount !== null && surveyInventoryCount !== circuit.representedLightCount;
+
   const surveyHref = circuit.siteSurvey ? `/admin/pipeline/${circuit.siteSurvey.pipelineId}/survey` : null;
 
   // Nothing on this page needs a person any more. Say so at the top and
@@ -506,6 +529,32 @@ export default async function CircuitDetailPage({
         subtitle={`${circuit.lightType} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`}
         chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
       />
+
+      {/* CON-11: the fee is computed on the REPRESENTED count by extrapolating
+          this circuit's measured saving to every light of its type. A circuit
+          left representing only its own lights prices as though the demo were
+          the whole society — Indiabulls Centrum Park was offered at 50 of
+          2,000 (user-caught 2026-09-08). The figure is stated with its factor,
+          and checked against the survey's own inventory. */}
+      <div className="mb-6 space-y-2">
+        {representedMismatch && (
+          <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
+            This circuit represents{" "}
+            <span className="num">{circuit.representedLightCount.toLocaleString("en-IN")}</span>{" "}
+            lights, but the site survey counted{" "}
+            <span className="num">{surveyInventoryCount!.toLocaleString("en-IN")}</span> of this
+            type across the society. The monthly fee is computed on the represented figure.
+          </p>
+        )}
+        {canOverride && (
+          <RepresentedCountForm
+            circuitId={circuit.id}
+            current={circuit.representedLightCount}
+            meteredLightCount={circuit.meteredLightCount}
+            inventoryCount={surveyInventoryCount}
+          />
+        )}
+      </div>
 
       {/* The four figures someone opens a circuit to check, before the
           step-by-step detail. Each is absent-not-invented: a circuit with no

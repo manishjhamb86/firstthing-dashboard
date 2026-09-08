@@ -5,6 +5,7 @@ import { submitCircuitCandidate, type CandidateLine } from "./actions";
 import { proposeDeviceType } from "@/app/admin/device-catalog/actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import { CON16_HARD_CRITERIA } from "@/lib/circuit-eligibility";
+import { inventoryCountFor, type InventoryType } from "@/lib/light-type";
 
 
 export type CatalogOption = {
@@ -42,11 +43,14 @@ export function CircuitEligibilityForm({
   societyId,
   serviceLine,
   catalog,
+  inventory,
 }: {
   siteSurveyId: string;
   societyId: string;
   serviceLine: string;
   catalog: CatalogOption[];
+  /** Lights per type across the society, from this survey's own inventory. */
+  inventory: InventoryType[];
 }) {
   const [lightType, setLightType] = useState("");
   // Devices proposed from this form, held locally so the surveyor can carry
@@ -60,6 +64,10 @@ export function CircuitEligibilityForm({
   const nextKey = useRef(1);
   const [lines, setLines] = useState<LineDraft[]>([lineWith(0)]);
   const [representedLightCount, setRepresentedLightCount] = useState("");
+  // Whether the operator has typed over the figure the inventory supplies. An
+  // untouched field keeps tracking the chosen light type; once they change it
+  // it is theirs, and a later type change must not silently overwrite it.
+  const [representedTouched, setRepresentedTouched] = useState(false);
   const [workingHours, setWorkingHours] = useState("");
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | undefined>();
@@ -103,6 +111,20 @@ export function CircuitEligibilityForm({
   // survey page reads back off the stored checklist, so the warning here and
   // the verdict there cannot describe the circuit differently.
   const failedHard = CON16_HARD_CRITERIA.filter((k) => checks[k.name] !== true);
+
+  // CON-11 computes the fee on the REPRESENTED count, not the metered one, so
+  // a circuit left representing only the lights on it under-bills by the whole
+  // extrapolation factor — Indiabulls Centrum Park was offered at 50 of 2,000
+  // (user-caught 2026-09-08: "Why is it calculating for 50 lights, society
+  // have 200 lights"). The survey's own inventory already knows the answer;
+  // nothing had ever compared the two.
+  const inventoryCount = inventoryCountFor(lightType, inventory);
+  const representedNum = Number(representedLightCount);
+  const representedMismatch =
+    inventoryCount !== null &&
+    representedLightCount.trim() !== "" &&
+    Number.isFinite(representedNum) &&
+    representedNum !== inventoryCount;
 
   function submit() {
     startTransition(async () => {
@@ -151,18 +173,37 @@ export function CircuitEligibilityForm({
             <input
               id="cand-lightType"
               value={lightType}
-              onChange={(e) => setLightType(e.target.value)}
+              onChange={(e) => {
+                setLightType(e.target.value);
+                // CON-11's extrapolation base is a fact the survey has already
+                // recorded, so it is offered rather than asked for again.
+                if (!representedTouched) {
+                  const n = inventoryCountFor(e.target.value, inventory);
+                  setRepresentedLightCount(n === null ? "" : String(n));
+                }
+              }}
               disabled={pending}
               className="field"
             />
           </Field>
-          <Field label="Represented count (society-wide)" htmlFor="cand-represented">
+          <Field
+            label="Represented count (society-wide)"
+            htmlFor="cand-represented"
+            hint={
+              inventoryCount === null
+                ? "Every light of this type across the society — the population this circuit's benchmark is extrapolated to (CON-11)"
+                : `The inventory above counted ${inventoryCount.toLocaleString("en-IN")} of this type across the society`
+            }
+          >
             <input
               id="cand-represented"
               type="number"
               min="1"
               value={representedLightCount}
-              onChange={(e) => setRepresentedLightCount(e.target.value)}
+              onChange={(e) => {
+                setRepresentedTouched(true);
+                setRepresentedLightCount(e.target.value);
+              }}
               disabled={pending}
               className="field"
             />
@@ -471,6 +512,23 @@ export function CircuitEligibilityForm({
           ))}
         </fieldset>
 
+        {representedMismatch && (
+          <div className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+            <p>
+              This circuit would represent{" "}
+              <span className="num">{representedNum.toLocaleString("en-IN")}</span> lights while the
+              inventory counted{" "}
+              <span className="num">{inventoryCount!.toLocaleString("en-IN")}</span> of this type
+              across the society.
+            </p>
+            <p className="mt-1">
+              The monthly fee is computed on the represented count (CON-11), not on the lights
+              actually metered — so this is the figure the society is billed against. Deliberate
+              when this deal covers only part of the society&apos;s lighting; otherwise use the
+              inventory&apos;s figure.
+            </p>
+          </div>
+        )}
         {failedHard.length > 0 && (
           <div className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
             <p>

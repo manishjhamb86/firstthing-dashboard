@@ -1,5 +1,7 @@
 import { formatDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
+import { inventoryCountFor } from "@/lib/light-type";
+import { RepresentedCountForm } from "@/app/admin/societies/[id]/circuits/[circuitId]/represented-count-form";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -17,12 +19,27 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   const session = await requireAdminPage();
   const canEdit = session.user.adminPermissions?.includes("manage_pipeline") ?? false;
   if (!canEdit) redirect("/admin/pipeline");
+  // Correcting the extrapolation base is the same PER-01 act as everywhere
+  // else — the action re-checks it regardless.
+  const canOverride =
+    canEdit && (session.user.adminPermissions?.includes("manage_survey") ?? false);
 
   const { id } = await params;
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
       society: true,
+      // CON-11's extrapolation base, as this deal's own survey counted it —
+      // what the offer's represented figures are checked against.
+      siteSurvey: {
+        select: {
+          areas: { select: { lightType: true, count: true } },
+          circuits: {
+            where: { voidedAt: null },
+            select: { id: true, lightType: true, meteredLightCount: true, representedLightCount: true },
+          },
+        },
+      },
       demoReports: { orderBy: { version: "desc" }, take: 1 },
       offers: {
         orderBy: { version: "desc" },
@@ -36,6 +53,22 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   const history = pipeline.offers.slice(1);
   const demoReport = pipeline.demoReports[0] ?? null;
   const status = current ? statusMeta(OFFER_STATUS, current.status) : null;
+
+  // The offer is priced on the represented count, so a circuit representing
+  // fewer lights than the survey counted is a wrong PRICE, not just a wrong
+  // record — and this is the screen somebody reads the figure on.
+  const inventoryTotals = new Map<string, { label: string; lights: number }>();
+  for (const a of pipeline.siteSurvey?.areas ?? []) {
+    const e = inventoryTotals.get(a.lightType) ?? { label: a.lightType, lights: 0 };
+    e.lights += a.count;
+    inventoryTotals.set(a.lightType, e);
+  }
+  const inventory = [...inventoryTotals.values()];
+  const liveCircuits = new Map((pipeline.siteSurvey?.circuits ?? []).map((c) => [c.id, c]));
+  // Correcting is refused once an offer has been issued — a counter-offer is
+  // what versions a change the society has already been shown — so the control
+  // is offered only while this one is still a draft.
+  const mayCorrect = canOverride && current?.status === "draft";
 
   return (
     <>
@@ -181,6 +214,30 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                   ))}
                 </tbody>
               </table>
+              {(current.circuitTerms as OfferCircuitTerm[]).map((c) => {
+                const inv = inventoryCountFor(c.lightType, inventory);
+                const live = liveCircuits.get(c.circuitId);
+                if (inv === null || inv === c.representedLightCount) return null;
+                return (
+                  <div key={`fix-${c.circuitId}`} className="mt-4 space-y-2">
+                    <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
+                      {c.lightType} is priced on{" "}
+                      <span className="num">{c.representedLightCount.toLocaleString("en-IN")}</span>{" "}
+                      represented lights, but the site survey counted{" "}
+                      <span className="num">{inv.toLocaleString("en-IN")}</span> of this type across
+                      the society. The fee is computed on the represented figure (CON-11).
+                    </p>
+                    {mayCorrect && live && (
+                      <RepresentedCountForm
+                        circuitId={live.id}
+                        current={live.representedLightCount}
+                        meteredLightCount={live.meteredLightCount}
+                        inventoryCount={inv}
+                      />
+                    )}
+                  </div>
+                );
+              })}
             </Card>
           )}
 

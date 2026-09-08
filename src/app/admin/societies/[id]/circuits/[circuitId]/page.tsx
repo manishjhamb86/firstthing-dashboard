@@ -546,7 +546,12 @@ export default async function CircuitDetailPage({
             type across the society. The monthly fee is computed on the represented figure.
           </p>
         )}
-        {canOverride && (
+        {/* Only where the figure is actually wrong. A correction control on
+            every circuit is noise on the ones that are right — "this correct
+            the represented count option should come as button only and on the
+            offer page or where it is incorrect" (the user, 2026-09-08). The
+            circuit registry keeps the general edit for everything else. */}
+        {canOverride && representedMismatch && (
           <RepresentedCountForm
             circuitId={circuit.id}
             current={circuit.representedLightCount}

@@ -20,6 +20,12 @@ export type MeterRow = {
   hasEnergySignal: boolean;
   /** Bound to a circuit or a society — so somebody owns it, and it is alerted on. */
   assigned: boolean;
+  /**
+   * When a sync last found this device gone from the eWeLink account. Hidden
+   * from the list unless asked for, never deleted — the row can carry readings
+   * a bill was computed from (user-asked 2026-09-09).
+   */
+  removedFromAccountAt: string | null;
 
   /**
    * Null only for a device that reports no electrical parameters at all —
@@ -161,6 +167,7 @@ function toRow(
     uiid: m.uiid,
     hasEnergySignal: m.hasEnergySignal,
     assigned: m.circuitId !== null || m.societyId !== null,
+    removedFromAccountAt: m.removedFromAccountAt?.toISOString() ?? null,
     state: watched ? health.state : null,
     outage: watched
       ? outageMessage({

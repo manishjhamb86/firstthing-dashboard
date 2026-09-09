@@ -268,7 +268,9 @@ export function hasEnergySignal(params: Record<string, unknown>): boolean {
  * as the wrong kind of device — the same call made for the Tuya energy
  * meters on the water-tank list.
  */
-export async function syncMeterDevices(cfg: EwelinkConfig): Promise<{ devices: number; meters: number }> {
+export async function syncMeterDevices(
+  cfg: EwelinkConfig,
+): Promise<{ devices: number; meters: number; removed: number; restored: number }> {
   const devices = await listEwelinkDevices(cfg);
   let meters = 0;
   for (const d of devices) {
@@ -296,16 +298,48 @@ export async function syncMeterDevices(cfg: EwelinkConfig): Promise<{ devices: n
         online: d.online,
         hasEnergySignal: energy,
         observedParams: Object.keys(d.params),
+        removedFromAccountAt: null,
         syncedAt: new Date(),
       },
     });
   }
+  // What the account no longer holds. A device deleted there used to sit in
+  // this list forever, because the sync only ever upserted what it found
+  // (user-caught 2026-09-09) — and it is never hard-deleted, because the row
+  // can carry samples, hourly readings, imports, alerts and a circuit whose
+  // billed figures trace to it (INV-02). It is marked and hidden instead.
+  //
+  // An EMPTY list marks nothing. A successful read returning zero devices is
+  // indistinguishable from a bad one, and stamping all 45 on a fluke is far
+  // worse than leaving them — the same call as the connectivity map's
+  // "a failed read must not raise a fleet-wide alarm".
+  const seen = devices.map((d) => d.deviceid);
+  let removed = 0;
+  if (seen.length > 0) {
+    const gone = await db.meterDevice.updateMany({
+      where: { ewelinkDeviceId: { notIn: seen }, removedFromAccountAt: null },
+      data: { removedFromAccountAt: new Date() },
+    });
+    removed = gone.count;
+  }
+  // A device that comes back stops being removed — someone re-added it, or it
+  // was missing from one listing and is present in the next.
+  const back = await db.meterDevice.updateMany({
+    where: { ewelinkDeviceId: { in: seen }, removedFromAccountAt: { not: null } },
+    data: { removedFromAccountAt: null },
+  });
+
   await db.ewelinkApiConfig.update({
     where: { id: cfg.id },
     data: { lastOkAt: new Date(), lastError: null, lastDeviceCount: devices.length, lastSyncAt: new Date() },
   });
-  logger.info("ewelink.devices_synced", { devices: devices.length, meters });
-  return { devices: devices.length, meters };
+  logger.info("ewelink.devices_synced", {
+    devices: devices.length,
+    meters,
+    removedFromAccount: removed,
+    restoredToAccount: back.count,
+  });
+  return { devices: devices.length, meters, removed, restored: back.count };
 }
 
 /**

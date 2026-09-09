@@ -2671,6 +2671,14 @@ model MeterDevice {
   uiid            Int
 
   online          Boolean @default(false)
+  /// When a sync last found this device GONE from the eWeLink account.
+  ///
+  /// Never a delete: the row can carry samples, hourly readings, imports,
+  /// alerts and an assigned circuit whose billed figures trace to it (INV-02),
+  /// so removing it would erase the provenance of readings already used. It is
+  /// hidden from the list instead, and shown on request (user-asked
+  /// 2026-09-09). Cleared the moment the device reappears in the account.
+  removedFromAccountAt DateTime? @map("removed_from_account_at")
   /// Whether this device reports any energy datapoint at all, decided from
   /// the params it actually returned rather than from its model name.
   hasEnergySignal Boolean @default(false) @map("has_energy_signal")

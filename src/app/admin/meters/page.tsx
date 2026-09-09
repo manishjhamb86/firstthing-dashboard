@@ -50,18 +50,26 @@ export default async function MetersPage() {
   ]);
 
   const authorised = isAuthorised(cfg);
-  const metering = rows.filter((r) => r.hasEnergySignal);
+  // The fleet band describes the account as it stands, so a device deleted
+  // from eWeLink is out of every proportion in it — counting a meter that no
+  // longer exists as "unassigned · not watched" would keep it in the picture
+  // by another name (user-caught 2026-09-09). The list's own Removed chip is
+  // where it is read.
+  const live = rows.filter((r) => r.removedFromAccountAt === null);
+  const metering = live.filter((r) => r.hasEnergySignal);
   // "Watched" is the fleet the health band is ABOUT: the meters somebody
   // owns and is chased over. Every metering device is polled now, so
   // `state !== null` no longer means what it did — it means "we have a
   // reading", which is all 45 and would dilute the band with devices nobody
   // has taken responsibility for.
-  const watched = rows.filter((r) => r.assigned);
+  const watched = live.filter((r) => r.assigned);
   const reporting = watched.filter((r) => r.state === "reporting");
-  const alerts = rows.flatMap((r) =>
+  const alerts = live.flatMap((r) =>
     r.openAlerts.map((a) => ({ ...a, meterId: r.id, meterName: r.name, ownerLabel: r.ownerLabel })),
   );
   const unassigned = metering.filter((r) => !r.assigned);
+  // History is every hour ever stored, removed devices included: those hours
+  // were really recorded and some are behind billed figures (INV-02).
   const historyHours = rows.reduce((s, r) => s + r.hourlyCount, 0);
 
   return (

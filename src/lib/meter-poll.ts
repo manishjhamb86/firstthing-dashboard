@@ -83,6 +83,11 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       // Non-metering devices stay out: they report no electrical parameters
       // at all, so a sample would be a row of nulls.
       hasEnergySignal: true,
+      // A device deleted from the eWeLink account cannot be read, and every
+      // pass would count a failure against it and eventually raise an outage
+      // for a meter that no longer exists — an alarm nobody can act on. Its
+      // history stays exactly as recorded.
+      removedFromAccountAt: null,
       ...(opts?.meterId ? { id: opts.meterId } : {}),
     },
     include: {

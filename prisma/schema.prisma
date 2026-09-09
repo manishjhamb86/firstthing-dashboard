@@ -341,6 +341,7 @@ model Society {
   scheduledEvents ScheduledEvent[]
   waterTanks      WaterTank[]
   meterDevices    MeterDevice[]
+  meterInstallations MeterInstallation[]
   contracts       Contract[]
   engagements     Engagement[]
 
@@ -472,6 +473,8 @@ model AdminUser {
   circuitsReplacing           Circuit[]            @relation("CircuitReplacementOwner")
   waterTanksAssigned          WaterTank[]          @relation("WaterTankAssignedBy")
   meterDevicesAssigned        MeterDevice[]        @relation("MeterDeviceAssignedBy")
+  meterInstallationsOpened    MeterInstallation[]  @relation("MeterInstalledBy")
+  meterInstallationsClosed    MeterInstallation[]  @relation("MeterRemovedBy")
   meterDevicesOwned           MeterDevice[]        @relation("MeterDeviceOwner")
   meterAlertsAcknowledged     MeterAlert[]         @relation("MeterAlertAcknowledgedBy")
   meterCsvImports             MeterCsvImport[]     @relation("MeterCsvImportUploadedBy")
@@ -858,6 +861,7 @@ model Circuit {
   feeLines            CircuitFeeLine[]
   devices             CircuitDevice[]
   meterDevice         MeterDevice?
+  meterInstallations  MeterInstallation[]
   alerts              MeterAlert[]
 
   @@index([societyId])
@@ -1913,6 +1917,14 @@ model RawReadingFile {
 model MeterReading {
   id        String        @id @default(cuid())
   circuitId String        @map("circuit_id")
+  /// WHICH meter produced this day, kept alongside the circuit it was
+  /// attributed to. The NEM's own reading record carries both the metering
+  /// point (NMI) and the device (MeterSerialNumber) as separate fields, and
+  /// for the same reason: once a meter can move, "which circuit" and "which
+  /// device" are two different facts, and a released figure has to keep
+  /// saying which device measured it (INV-02). Null on rows written before
+  /// this table existed, and on any reading that never came from a meter.
+  meterId   String?       @map("meter_id")
   date      DateTime // the calendar day, at UTC midnight
   kWh       Float         @map("kwh")
   source    ReadingSource
@@ -1949,6 +1961,9 @@ model MeterReading {
 
   circuit Circuit        @relation(fields: [circuitId], references: [id], onDelete: Cascade)
   rawFile RawReadingFile @relation(fields: [rawFileId], references: [id], onDelete: Cascade)
+  // SetNull, never Cascade: a released figure must not vanish because the
+  // device row was removed. The provenance is a pointer, not an owner.
+  meter   MeterDevice?   @relation(fields: [meterId], references: [id], onDelete: SetNull)
 
   // §5.2 — interval-level identity. Two sources may each hold a value for
   // the same day; that is a conflict to report (FEAT-107, R1), not a
@@ -2661,6 +2676,62 @@ model EwelinkApiConfig {
 /// devices stay listed and unassignable — a device that is simply absent
 /// from the screen reads as an account problem rather than as the wrong
 /// kind of device.
+/// A meter's stay at one circuit — the effective-dated link between the
+/// movable ASSET and the permanent metering point.
+///
+/// Researched 2026-09-09 against how the industry models this, because meters
+/// get reused: pulled out of one society and installed in another, usually
+/// renamed on the way. The separation is standard — IEC CIM and Green
+/// Button/ESPI both hold a UsagePoint (the permanent point where consumption
+/// happens) distinct from the meter that measures it, and UK settlement
+/// (REC/MHHS) keeps, per metering point, a "meter history" of instances each
+/// carrying its own Meter ID, Install Date and Remove Date. That is this
+/// table: an SCD-Type-2-style interval, one row per stay.
+///
+/// `Circuit` is our UsagePoint. `MeterDevice` is the asset, identified by the
+/// vendor's own `ewelinkDeviceId` rather than by its name, which is exactly
+/// what a rename on reuse changes.
+///
+/// Half-open [installedAt, removedAt): a removal at the same instant the next
+/// installation opens leaves no gap and no overlap, which is how REC models a
+/// meter exchange (the outgoing Remove Date is set EQUAL to the incoming
+/// Install Date). `removedAt` null means still installed.
+model MeterInstallation {
+  id        String @id @default(cuid())
+  meterId   String @map("meter_id")
+  circuitId String @map("circuit_id")
+  /// Carried for scoping and for reading the history by society. Derived from
+  /// the circuit at write time and never edited on its own.
+  societyId String @map("society_id")
+
+  installedAt DateTime  @map("installed_at")
+  removedAt   DateTime? @map("removed_at")
+
+  /// True when the start is INFERRED rather than recorded — the meters that
+  /// predate this table were bound to a society long after their readings
+  /// began, so their interval opens at the earliest reading held rather than
+  /// at a date anybody stated. Says so on screen instead of presenting a
+  /// guess as a recorded fact.
+  startInferred Boolean @default(false) @map("start_inferred")
+
+  installedById String?   @map("installed_by_id")
+  removedById   String?   @map("removed_by_id")
+  /// Why it was moved — read by whoever wonders where a meter went.
+  removalNote   String?   @map("removal_note")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  meter       MeterDevice @relation(fields: [meterId], references: [id], onDelete: Cascade)
+  circuit     Circuit     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  society     Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  installedBy AdminUser?  @relation("MeterInstalledBy", fields: [installedById], references: [id])
+  removedBy   AdminUser?  @relation("MeterRemovedBy", fields: [removedById], references: [id])
+
+  @@index([meterId, installedAt])
+  @@index([circuitId, installedAt])
+  @@index([societyId])
+  @@map("meter_installations")
+}
+
 model MeterDevice {
   id              String @id @default(cuid())
   ewelinkDeviceId String @unique @map("ewelink_device_id")
@@ -2727,6 +2798,10 @@ model MeterDevice {
 
   society    Society?      @relation(fields: [societyId], references: [id], onDelete: SetNull)
   circuit    Circuit?      @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  /// Every stay this meter has had, oldest first — its lifecycle.
+  installations MeterInstallation[]
+  /// Billing-grade days this meter produced, wherever they were attributed.
+  meterReadings MeterReading[]
   assignedBy AdminUser?    @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])
   owner      AdminUser?    @relation("MeterDeviceOwner", fields: [ownerId], references: [id])
   samples    MeterSample[]

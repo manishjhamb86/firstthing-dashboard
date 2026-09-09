@@ -35,6 +35,12 @@ import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
 const PARTIAL_REASON_PREFIX = "Partial day — ";
 
 export type ProjectionSummary = {
+  /**
+   * Hours this meter recorded while it was NOT on this circuit — a reused
+   * meter's earlier life. Counted and reported rather than silently dropped,
+   * so "why are there fewer days than hours" has an answer on screen.
+   */
+  outsideStays: number;
   days: number;
   created: number;
   updated: number;
@@ -154,6 +160,13 @@ export async function projectMeterStoreToCircuit(input: {
     select: {
       id: true,
       circuitId: true,
+      // The lifecycle, oldest first. A meter that has been reused has hours
+      // from more than one society in its own store, and only these intervals
+      // say which is which.
+      installations: {
+        orderBy: { installedAt: "asc" },
+        select: { id: true, circuitId: true, societyId: true, installedAt: true, removedAt: true },
+      },
       circuit: {
         select: {
           id: true,
@@ -171,12 +184,42 @@ export async function projectMeterStoreToCircuit(input: {
   }
   const circuit = meter.circuit;
 
+  // Only the hours this meter recorded WHILE IT WAS ON THIS CIRCUIT.
+  //
+  // This query used to be `{ meterId }` with no bound, so every hour a meter
+  // had ever recorded was projected onto whatever circuit it happened to be
+  // bound to now. On a reused meter — pulled from one society and installed in
+  // another, which is ordinary — that attributed the first society's entire
+  // history to the second, feeding its baseline, its benchmark and its bill.
+  // The interval is what decides, exactly as an MDM resolves the service point
+  // at usage-calculation time rather than trusting the device's current
+  // pointer (researched 2026-09-09).
+  const stays = meter.installations.filter((i) => i.circuitId === circuit.id);
   const hours = await db.meterHourlyReading.findMany({
-    where: { meterId: meter.id },
+    where: {
+      meterId: meter.id,
+      ...(stays.length > 0
+        ? {
+            OR: stays.map((i) => ({
+              day: { gte: i.installedAt, ...(i.removedAt ? { lt: i.removedAt } : {}) },
+            })),
+          }
+        : {}),
+    },
     orderBy: [{ day: "asc" }, { hour: "asc" }],
     select: { day: true, kWh: true, importId: true },
   });
+  // A meter with no recorded stay at all is one that predates this table and
+  // has not been re-bound since. Its hours still project, unchanged — the
+  // migration opened a stay for every meter that had a circuit, so this is
+  // only reachable for a binding made outside that path, and refusing here
+  // would silently stop a projection that has always worked.
+  const outsideStays =
+    stays.length === 0
+      ? 0
+      : await db.meterHourlyReading.count({ where: { meterId: meter.id } }).then((n) => n - hours.length);
   const summary: ProjectionSummary = {
+    outsideStays: 0,
     days: 0,
     created: 0,
     updated: 0,
@@ -185,6 +228,7 @@ export async function projectMeterStoreToCircuit(input: {
     flagged: 0,
     lockedSkipped: 0,
   };
+  summary.outsideStays = outsideStays;
   if (hours.length === 0) return summary;
 
   // Day → total, hour count, and the import that carried it (for provenance).
@@ -253,6 +297,10 @@ export async function projectMeterStoreToCircuit(input: {
       await db.meterReading.create({
         data: {
           circuitId: circuit.id,
+          // Which device measured it, kept beside which circuit it was
+          // attributed to — the NEM's reading record carries both, and once a
+          // meter can move the two are different facts.
+          meterId: meter.id,
           date,
           kWh,
           source: "csv",
@@ -291,6 +339,7 @@ export async function projectMeterStoreToCircuit(input: {
       where: { id: prior.id },
       data: {
         kWh,
+        meterId: meter.id,
         intervalCount: d.count,
         anomalyFlag,
         ...(valueChanged

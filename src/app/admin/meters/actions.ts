@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
+import { refuseOverlap } from "@/lib/meter-installation";
+import { formatDate } from "@/lib/format-date";
 import { authorizeUrl, EWELINK_STATE_COOKIE } from "@/lib/ewelink-sign";
 import { resolveEwelinkConfig, syncMeterDevices, EwelinkNeedsAuthorisation } from "@/lib/ewelink";
 import { resolveMeterProvider } from "@/lib/meter-provider";
@@ -146,10 +148,26 @@ export async function syncMetersNow(): Promise<{ error?: string; devices?: numbe
  * is the assignment; the society is carried alongside it for scoping and
  * may be set on its own while the circuit is still undecided.
  */
+/**
+ * Bind a meter to a circuit — and record the STAY, not just the pointer.
+ *
+ * Meters get reused: pulled from one society, installed in another, renamed on
+ * the way. The device's own `circuitId` says where it is NOW; a
+ * `MeterInstallation` says where it was WHEN, and that is what the readings
+ * are attributed through (researched 2026-09-09 — see meter-installation.ts).
+ *
+ * A move is a removal and an installation sharing one instant, which is how UK
+ * settlement models a meter exchange: the outgoing Remove Date equals the
+ * incoming Install Date, so the series has no gap and no overlap.
+ */
 export async function assignMeter(input: {
   meterId: string;
   societyId: string | null;
   circuitId: string | null;
+  /** When it physically went in. Defaults to now. */
+  installedOn?: string;
+  /** Why it left the circuit it was on, when this is a move. */
+  removalNote?: string;
 }): Promise<{ error?: string; assigned?: true }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -187,20 +205,84 @@ export async function assignMeter(input: {
     if (!society) return { error: "That society no longer exists." };
   }
 
-  await db.meterDevice.update({
-    where: { id: meter.id },
-    data: {
-      societyId,
-      circuitId: input.circuitId,
-      assignedAt: societyId || input.circuitId ? new Date() : null,
-      assignedById: societyId || input.circuitId ? actor.id : null,
-    },
+  // The changeover instant. One value closes the old stay and opens the new,
+  // so the two intervals touch without overlapping — the exclusion constraints
+  // in the database enforce that, and this is what satisfies them.
+  const at = input.installedOn ? new Date(`${input.installedOn}T00:00:00.000Z`) : new Date();
+  if (Number.isNaN(at.getTime())) return { error: "That installation date could not be read." };
+  if (at.getTime() > Date.now() + 86_400_000) {
+    return { error: "A meter cannot be recorded as installed in the future." };
+  }
+
+  const open = await db.meterInstallation.findFirst({
+    where: { meterId: meter.id, removedAt: null },
+    select: { id: true, circuitId: true, installedAt: true },
+  });
+  if (open && at.getTime() <= open.installedAt.getTime()) {
+    return {
+      error: `This meter has been installed on its current circuit since ${formatDate(open.installedAt)} — a move has to be dated after that.`,
+    };
+  }
+
+  if (input.circuitId) {
+    const [meterStays, circuitStays] = await Promise.all([
+      db.meterInstallation.findMany({
+        where: { meterId: meter.id, ...(open ? { id: { not: open.id } } : {}) },
+        select: { id: true, circuitId: true, societyId: true, installedAt: true, removedAt: true },
+      }),
+      db.meterInstallation.findMany({
+        where: { circuitId: input.circuitId },
+        select: { id: true, circuitId: true, societyId: true, installedAt: true, removedAt: true },
+      }),
+    ]);
+    const refusal = refuseOverlap({
+      installedAt: at,
+      meterStays,
+      // The stay we are about to close does not collide with the one we are
+      // about to open — they share an instant, which is legal.
+      circuitStays: circuitStays.filter((c) => c.id !== open?.id),
+    });
+    if (refusal) {
+      logger.warn("meter.assign_refused", { actorId: actor.id, meterId: meter.id, reason: refusal.at });
+      return { error: refusal.message };
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    if (open) {
+      await tx.meterInstallation.update({
+        where: { id: open.id },
+        data: { removedAt: at, removedById: actor.id, removalNote: input.removalNote?.trim() || null },
+      });
+    }
+    if (input.circuitId && societyId) {
+      await tx.meterInstallation.create({
+        data: {
+          meterId: meter.id,
+          circuitId: input.circuitId,
+          societyId,
+          installedAt: at,
+          installedById: actor.id,
+        },
+      });
+    }
+    await tx.meterDevice.update({
+      where: { id: meter.id },
+      data: {
+        societyId,
+        circuitId: input.circuitId,
+        assignedAt: societyId || input.circuitId ? at : null,
+        assignedById: societyId || input.circuitId ? actor.id : null,
+      },
+    });
   });
   logger.info("meter.assigned", {
     actorId: actor.id,
     meterId: meter.id,
     societyId,
     circuitId: input.circuitId,
+    installedAt: at.toISOString(),
+    movedFromCircuitId: open?.circuitId ?? null,
   });
   revalidatePath("/admin/meters");
   if (societyId) revalidatePath(`/admin/societies/${societyId}`);

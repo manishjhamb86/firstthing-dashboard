@@ -2,9 +2,9 @@ import { notFound, redirect } from "next/navigation";
 import { formatDate } from "@/lib/format-date";
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { DailyBars, MeterAlerts, MeterHourlyChart, MeterReadout, MeterStateChip } from "@/components/meter-ui";
-import { meterHourly, meterRow } from "@/lib/meter-view";
+import { circuitLabelOf, meterHourly, meterRow } from "@/lib/meter-view";
 import { db } from "@/lib/db";
 import { MeterDetailActions } from "./meter-detail-client";
 
@@ -16,7 +16,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
   const meter = await meterRow(id);
   if (!meter) notFound();
 
-  const [days, imports, alertHistory] = await Promise.all([
+  const [days, imports, alertHistory, stays] = await Promise.all([
     meterHourly(id, 14),
     db.meterCsvImport.findMany({
       where: { meterId: id },
@@ -42,7 +42,39 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
       take: 5,
       select: { id: true, kind: true, message: true, openedAt: true, closedAt: true, closedReason: true },
     }),
+    // The meter's own lifecycle — where it has been and when. Newest first,
+    // because "where is it now / where was it last" is the question asked.
+    db.meterInstallation.findMany({
+      where: { meterId: id },
+      orderBy: { installedAt: "desc" },
+      select: {
+        id: true,
+        installedAt: true,
+        removedAt: true,
+        startInferred: true,
+        removalNote: true,
+        society: { select: { id: true, name: true } },
+        circuit: { select: { id: true, location: true, lightType: true, societyId: true } },
+        installedBy: { select: { name: true, email: true } },
+        removedBy: { select: { name: true, email: true } },
+      },
+    }),
   ]);
+  // How many billing-grade days each stay actually produced — the evidence
+  // that the attribution did what it says.
+  const daysPerStay = new Map<string, number>();
+  for (const st of stays) {
+    daysPerStay.set(
+      st.id,
+      await db.meterReading.count({
+        where: {
+          meterId: id,
+          circuitId: st.circuit.id,
+          date: { gte: st.installedAt, ...(st.removedAt ? { lt: st.removedAt } : {}) },
+        },
+      }),
+    );
+  }
 
   // The meter's recent life as one list: alerts opening and closing, files
   // arriving. Assembled here rather than stored — every entry already has a
@@ -173,6 +205,62 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         </Card>
 
         <div className="grid gap-6 lg:grid-cols-2">
+          <Card className="p-6">
+            <CardTitle>Where this meter has been</CardTitle>
+            <p className="mt-1 mb-3 text-[13px] text-[var(--text-muted)]">
+              Meters get reused, and a rename on the way is normal — the identity is the vendor&apos;s
+              own device id, not the name. Each stay is what its readings are attributed through: a
+              day is billed to the circuit the meter was on THAT day, not to wherever it is now.
+            </p>
+            {stays.length === 0 ? (
+              <EmptyState title="Not installed anywhere yet">
+                A stay opens when the meter is bound to a circuit, and the date it opens on is the
+                one readings are attributed from.
+              </EmptyState>
+            ) : (
+              <ol className="space-y-3 text-sm">
+                {stays.map((st) => (
+                  <li key={st.id} className="border-l-2 pl-3" style={{ borderColor: st.removedAt ? "var(--border)" : "var(--signal)" }}>
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+                      <Link href={`/admin/societies/${st.society.id}`} className="font-semibold underline">
+                        {st.society.name}
+                      </Link>
+                      <StatusChip tone={st.removedAt ? "neu" : "ok"}>
+                        {st.removedAt ? "Removed" : "Installed"}
+                      </StatusChip>
+                    </div>
+                    <div className="text-[var(--text-muted)]">
+                      {circuitLabelOf(st.circuit.location, st.circuit.lightType)}
+                    </div>
+                    <div className="num mt-1">
+                      {formatDate(st.installedAt)}
+                      {" → "}
+                      {st.removedAt ? formatDate(st.removedAt) : "now"}
+                      <span className="text-[var(--text-subtle)]">
+                        {" · "}
+                        <span className="num">{(daysPerStay.get(st.id) ?? 0).toLocaleString("en-IN")}</span> days
+                        {" billed here"}
+                      </span>
+                    </div>
+                    {/* A derived start is said to be derived. The meters that
+                        predate this table were bound long after their readings
+                        began, so their stay opens at the earliest reading held
+                        rather than at a date anybody stated. */}
+                    {st.startInferred && (
+                      <div className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                        Start taken from its earliest reading — this meter predates the installation
+                        record, so no installation date was ever stated.
+                      </div>
+                    )}
+                    {st.removalNote && (
+                      <div className="text-xs text-[var(--text-muted)]">{st.removalNote}</div>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </Card>
+
           <Card className="p-6">
             <CardTitle>Events</CardTitle>
             <p className="mt-1 text-[13px] text-[var(--text-muted)]">

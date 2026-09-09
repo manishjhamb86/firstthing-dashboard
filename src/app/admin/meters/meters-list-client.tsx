@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { formatDate, formatInstant } from "@/lib/format-date";
+import { formatDate, formatInstant, isoDate } from "@/lib/format-date";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, EmptyState, ErrorText, StatusChip } from "@/components/ui";
@@ -99,6 +99,8 @@ export function MetersListClient({
   const [society, setSociety] = useState("");
   const [circuit, setCircuit] = useState("");
   const [owner, setOwner] = useState("");
+  const [installedOn, setInstalledOn] = useState("");
+  const [removalNote, setRemovalNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -162,10 +164,19 @@ export function MetersListClient({
     setSociety(m.societyId ?? "");
     setCircuit(m.circuitId ?? "");
     setOwner(m.ownerId ?? "");
+    // Today by default — the ordinary case is a meter going in now. It is the
+    // date the STAY opens, which is what the readings are attributed through,
+    // so a meter installed last week has to be dated last week.
+    setInstalledOn(isoDate(new Date()));
+    setRemovalNote("");
     setError(null);
   }
 
   const editingMeter = meters.find((m) => m.id === editing) ?? null;
+  // Moving a meter that is already installed somewhere: the old stay closes at
+  // the same instant the new one opens, so the reader is told what will happen
+  // and asked why.
+  const isMove = editingMeter?.circuitId != null && circuit !== "" && circuit !== editingMeter.circuitId;
 
   // Assignment first, then the owner if it changed — the owner write is ours
   // and cannot fail for outside reasons, so a refusal here is always the
@@ -178,6 +189,8 @@ export function MetersListClient({
         meterId: editingMeter.id,
         societyId: society || null,
         circuitId: circuit || null,
+        installedOn: circuit ? installedOn : undefined,
+        removalNote: isMove ? removalNote : undefined,
       });
       if (r.error) {
         setError(r.error);
@@ -465,6 +478,11 @@ export function MetersListClient({
             society={society}
             circuit={circuit}
             owner={owner}
+            installedOn={installedOn}
+            onInstalledOn={setInstalledOn}
+            isMove={isMove}
+            removalNote={removalNote}
+            onRemovalNote={setRemovalNote}
             fieldStaff={fieldStaff}
             pending={pending}
             error={error}
@@ -489,6 +507,11 @@ function AssignFields({
   society,
   circuit,
   owner,
+  installedOn,
+  onInstalledOn,
+  isMove,
+  removalNote,
+  onRemovalNote,
   fieldStaff,
   pending,
   error,
@@ -502,6 +525,11 @@ function AssignFields({
   society: string;
   circuit: string;
   owner: string;
+  installedOn: string;
+  onInstalledOn: (v: string) => void;
+  isMove: boolean;
+  removalNote: string;
+  onRemovalNote: (v: string) => void;
   fieldStaff: { id: string; label: string }[];
   pending: boolean;
   error: string | null;
@@ -558,6 +586,46 @@ function AssignFields({
         An alert addressed to nobody is an alert nobody acts on — the owner is who goes and looks at
         the meter, so only accounts with field access are offered.
       </p>
+
+      {/* Meters get reused, so a binding is a STAY with a date, not just a
+          pointer. The date is what a reading is attributed through: hours the
+          meter recorded before it belong to wherever it was then, and are not
+          projected onto this circuit (researched 2026-09-09). */}
+      {circuit !== "" && (
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="block" htmlFor="mi-installed">
+            <span className="lbl mb-1 block">Installed on this circuit</span>
+            <input
+              id="mi-installed"
+              type="date"
+              className="field"
+              value={installedOn}
+              disabled={pending}
+              onChange={(e) => onInstalledOn(e.target.value)}
+            />
+            <span className="mt-1 block text-xs" style={{ color: "var(--text-subtle)" }}>
+              Readings from before this date stay with wherever the meter was then.
+            </span>
+          </label>
+          {isMove && (
+            <label className="block" htmlFor="mi-note">
+              <span className="lbl mb-1 block">Why it left its last circuit</span>
+              <input
+                id="mi-note"
+                className="field"
+                value={removalNote}
+                disabled={pending}
+                placeholder="Pulled from the basement and reinstalled here."
+                onChange={(e) => onRemovalNote(e.target.value)}
+              />
+              <span className="mt-1 block text-xs" style={{ color: "var(--warn-fg)" }}>
+                This closes its current stay on the same date, so the history has no gap and the
+                two societies&apos; readings never mix.
+              </span>
+            </label>
+          )}
+        </div>
+      )}
     </>
   );
 }

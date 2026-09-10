@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-08-31
+2026-09-10
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -2498,6 +2498,91 @@ purely additive (2 tables, 3 indexes, 4 FKs).
 Prisma — it is `--to-schema` now — and `prisma db execute` silently printed its help text and did
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
+
+## A meter is an asset with a lifecycle, not a pointer at one society (2026-09-09/10) — user-specified, researched first
+
+**The ask**: "Sometimes meters are reused. removed from one society and installed in another. when
+done so the name of the meter is changed… there will always be history of a meter a lifecycle…
+readings are linked to meter id directly and society indirectly." Researched against the industry
+before designing, and the user's proposal turned out to be the industry's own model.
+
+**What the research settled, and what each finding decided** (`src/lib/meter-installation.ts` carries
+the same list at the point it matters):
+- **The metering point and the meter asset are different entities.** IEC CIM (via Netbeheer NL) and
+  Green Button/ESPI both hold a `UsagePoint` distinct from the meter measuring it — ESPI binds the
+  revenue relationship to the ServiceDeliveryPoint rather than to the meter, and CIM's UsagePoint
+  carries `isSdp`. `Circuit` is our metering point; `MeterDevice` is the asset. The API does give a
+  stable identity — `ewelinkDeviceId`, which the sync already keys on — so a rename on reuse changes
+  the label, never the identity.
+- **The link is an EFFECTIVE-DATED interval**, not a pointer. UK settlement (REC/MHHS) keeps, per
+  metering point, a meter history of instances each carrying Meter ID, Install Date and Remove Date.
+  That is `MeterInstallation`: one row per stay, half-open `[installedAt, removedAt)`.
+- **A meter exchange sets the outgoing Remove Date EQUAL to the incoming Install Date**, so the
+  series has no gap. A move here writes exactly that — one instant closes one stay and opens the next.
+- **A reading record carries BOTH the point and the device**: the NEM's own record has `NMI` and
+  `MeterSerialNumber` as separate fields, and Oracle MDM stores measurement against the device
+  channel and resolves the service point at usage-calculation time. So `MeterHourlyReading` stays the
+  meter's own unbounded record, `MeterReading` gains `meterId` beside its `circuitId`, and the
+  projection between them is where the interval decides the circuit.
+- **Removal is a soft delete in the central registry, never a physical one** — removed meters and
+  removed asset-provider records are flagged inactive and retained. Which is what this build already
+  does everywhere else, and is why a stay is closed rather than deleted.
+
+**One meter per circuit is a deliberate NARROWING of the UK rule** (which only forbids two instances
+of one serial on a point, and lets an MPAN hold several meters): CON-11 makes the circuit the billing
+grain, so two meters on one circuit would be two sources for one billed figure INV-02 cannot resolve.
+**Both overlap rules are Postgres exclusion constraints** (`EXCLUDE USING gist` over a `tsrange`,
+`btree_gist`) rather than application checks — two concurrent assignments both find nothing and both
+insert, and an application check cannot win that race. `refuseOverlap` exists to refuse in WORDS
+before the constraint refuses in a 500.
+
+**The projection is where reuse stops being a data-loss bug.** `meter-billing-handoff.ts` now reads
+only the hours falling inside a stay on THIS circuit; everything else is counted and reported as
+`outsideStays` rather than silently attributed. Proven by simulating a reuse: **2,750 hours were
+excluded** as outside the stay, the new circuit received only days from the move date, and the old
+society's 265 days / 1563.7200 kWh were untouched.
+
+**A day with no covering stay is not an error and never an estimate.** It stays in the meter's own
+store and enters no circuit — we have the reading, we simply have no installation saying whose it was.
+
+**The backfill is lossless by construction**, per the user's own instruction for old history ("keep
+the data as it is. linked to meter but a single society which it currently attached to"): each stay
+opens at `LEAST(min(hourly day), assigned_at, created_at)`, so no existing reading can fall outside
+its own stay. It carries `startInferred`, and the screen says **"Start taken from its earliest
+reading — this meter predates the installation record"** rather than presenting a derived date as a
+stated one.
+
+**Screens**: the assign dialog asks when the meter went on the circuit (defaulting to today) and only
+once a circuit is chosen — before that there is nothing to date; a move asks why it left the last
+one; and the meter page gains "Where this meter has been", each stay with the days actually billed
+under it.
+
+**Verified 14/14 twice through the browser**, 772 unit tests (10 new), `tsc`/`lint`/`build` clean.
+
+**Deployed to `stage.firsthing.earth` (2026-09-10, `c04cb42`).** Both migrations applied; the
+backfill produced **21 stays for stage's 21 assigned meters**, every one opening exactly at its
+meter's earliest hourly reading (**0 late starts**, so nothing existing fell outside its own stay),
+all 3,278 `meter_readings` rows carrying their `meter_id`, and both exclusion constraints present.
+Verified over the public HTTPS path 14/14 with zero console errors, writing nothing — the lifecycle
+card renders on a real migrated meter with its inferred-start line, and the assign dialog behaves as
+designed. All three job chains held exactly one pending link each through both restarts.
+
+## The pages behind a list were never swept for ISO dates (2026-09-10)
+
+**Found by verifying the above on stage, not by looking for it.** The date sweep opens LIST pages,
+which need no id — so `/admin/meters/[id]` and `/admin/live-monitoring/[circuitId]` have never been
+checked in the three rounds of date-format work, and both carried ISO dates the rule forbids: the
+meter heatmap's row labels and per-cell tooltips, the daily-bar tooltips and a `09-03` axis label
+that is not a format this product uses at all, the alert and event instants (machine-stamped, so IST
+per this repo's own typed-by-a-person-vs-stamped-by-a-machine rule), and on the circuit page the
+agreement card's two dates plus the reading window's own explanatory sentence.
+
+The sweep now **resolves an id from real rows and opens the page behind each list** — which is what
+found the second page after the first was fixed. 22/22.
+
+**Deliberately untouched**: `day()` on the circuit page still returns ISO. Its output is a DTO key
+and an `<input type="date">` value, both of which ISO is the correct shape for — the exceptions
+`format-date.ts` already states.
 
 ## Demo-generated readings can be removed and re-run (2026-09-08) — user-asked
 

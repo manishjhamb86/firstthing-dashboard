@@ -2519,11 +2519,19 @@ marked deleted and dated, a device that comes back leaves the deleted list), and
 read-only: **All devices 35 + Deleted 10 = the whole 45 mirror**, every deleted row says so, and
 each chip lists exactly the number it claims.
 
-**What the change surfaced on stage, and it is a real finding rather than a display one**:
-Assigned went 28 → 31, because **three circuits are bound to meters that no longer exist in the
-eWeLink account** — Amrapali Princely Estate, Indiabulls Centrum Park, and Ace City's Tower G
-lift circuit. No further readings will arrive from any of them. They were invisible before,
-sitting only under a chip nobody opens.
+**What the change surfaced on stage**: Assigned went 28 → 31, because three deleted meters are
+still attached to a society — Amrapali Princely Estate, Indiabulls Centrum Park, and Ace City's
+Tower G lift. **None is on a circuit and all three hold zero hours of readings**, so nothing is
+billed through any of them and no history is at risk. (Stated wrongly at first as "three
+circuits are bound to meters that no longer exist", which is a materially different and more
+alarming claim; checked against the rows and corrected.)
+
+**The row's own warning was making the same mistake**, and that was a real defect: `assigned`
+means *a circuit OR a society*, but the warning read "Still bound to a circuit — no further
+readings will arrive from it" for either. It says which it is now — a circuit-bound one names
+the circuit and that it is billed on those readings; a society-only one says plainly that
+nothing is billed through it. **The shape, again**: a flag that merges two relationships will
+eventually be rendered as a sentence that is true of only one of them.
 
 ## A meter is an asset with a lifecycle, not a pointer at one society (2026-09-09/10) — user-specified, researched first
 

@@ -319,11 +319,23 @@ export function MetersListClient({
                         <StatusChip tone="warn">
                           Deleted from the account {formatDate(m.removedFromAccountAt)}
                         </StatusChip>
-                        {m.assigned && (
+                        {/* "Assigned" covers a circuit OR just a society, and
+                            the two are not the same fault: only a circuit
+                            bills through a meter. Saying "still bound to a
+                            circuit" about a society-only meter claims a
+                            relationship that does not exist — the shape this
+                            project keeps catching. */}
+                        {m.circuitId ? (
                           <div className="text-xs mt-1" style={{ color: "var(--warn-fg)" }}>
-                            Still bound to a circuit — no further readings will arrive from it.
+                            Still measuring {m.circuitLabel ?? "a circuit"} — no further readings
+                            will arrive, and that circuit is billed on them.
                           </div>
-                        )}
+                        ) : m.societyName ? (
+                          <div className="text-xs mt-1 text-[var(--text-muted)]">
+                            Still listed against {m.societyName}, but on no circuit — nothing is
+                            billed through it.
+                          </div>
+                        ) : null}
                       </div>
                     )}
                     {m.openAlerts.length > 0 && (

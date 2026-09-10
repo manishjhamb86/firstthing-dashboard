@@ -551,6 +551,7 @@ export default async function SiteSurveyPage({
         {canEdit &&
           (circuits.length === 0 ? (
             <CircuitEligibilityForm
+              canApproveException={canApproveException}
               siteSurveyId={siteSurvey.id}
               societyId={pipeline.society.id}
               serviceLine={pipeline.serviceLine}
@@ -565,6 +566,7 @@ export default async function SiteSurveyPage({
               </summary>
               <div className="mt-3">
                 <CircuitEligibilityForm
+                  canApproveException={canApproveException}
                   siteSurveyId={siteSurvey.id}
                   societyId={pipeline.society.id}
                   serviceLine={pipeline.serviceLine}

@@ -2,9 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireAdminPermission } from "@/lib/admin-permissions";
+import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { eligibilityState, outstandingCriteria } from "@/lib/circuit-eligibility";
+import {
+  CON16_HARD_CRITERIA,
+  eligibilityState,
+  LIGHT_COUNT_CRITERION,
+  MIN_METERED_LIGHTS,
+  outstandingCriteria,
+} from "@/lib/circuit-eligibility";
 import { refuseRepresentedCount } from "@/lib/light-type";
 
 // FEAT-006: whole-society lighting inventory by area, distinct from the
@@ -85,6 +91,14 @@ export async function submitCircuitCandidate(input: {
   wifiReachable: boolean;
   fixturesUnder15ft: boolean;
   notOnDrivewayOrRamp: boolean;
+  /**
+   * Operations waiving CON-16's ≥50 minimum at the moment of recording,
+   * rather than the circuit landing `surveyed` and waiting for a second act
+   * on the survey page (user-asked 2026-09-10: "allow exception for number of
+   * lights after warning the user"). Blank or absent means no exception — the
+   * old behaviour, unchanged.
+   */
+  lightCountExceptionReason?: string;
 }) {
   const session = await requireAdminPermission("manage_survey");
 
@@ -140,10 +154,57 @@ export async function submitCircuitCandidate(input: {
     lightCountMinMet: meteredLightCount >= 50,
   };
 
+  // The exception at capture. Everything about it is decided HERE, never by
+  // the form: the client sends a reason, and the server alone decides whether
+  // that reason may waive anything.
+  //
+  // Three refusals, and each is the same rule the survey page's own control
+  // already enforces — this is a second entry point to one decision, not a
+  // softer one:
+  //  · only operations may approve (FEAT-007-AC-4's PER-01 proxy: BOTH
+  //    permissions). A field surveyor recording a short circuit still gets
+  //    the warning and still lands `surveyed`, exactly as before.
+  //  · only when the light count is genuinely short — nothing to waive
+  //    otherwise, and a stored waiver that waived nothing is a false record.
+  //  · only when it is the ONLY thing in the way. A failed hard criterion is
+  //    a different decision with a different consequence (a waived WiFi
+  //    criterion commits FirsThing to bringing a router), and it stays on the
+  //    survey page where the waiver note is shown beside it.
+  const wantsException = (input.lightCountExceptionReason ?? "").trim() !== "";
+  const waived: string[] = [];
+  if (wantsException) {
+    const admin = await resolveAdmin();
+    // Typed, not thrown: a surveyor legitimately reaching this path deserves
+    // a sentence, and a thrown Server Action is an opaque digest in
+    // production — the defect class already fixed in getReadingUploadUrl.
+    if (!admin?.permissions.includes("manage_pipeline")) {
+      logger.warn("survey.capture_exception_refused", {
+        actor: session.user.id,
+        reason: "not_operations",
+      });
+      return {
+        error:
+          "Approving an exception to the 50-light minimum is an operations lead's decision. Record the circuit as it stands — it will wait for that approval on this page.",
+      };
+    }
+    if (meteredLightCount >= MIN_METERED_LIGHTS) {
+      return { error: `This circuit meets the ${MIN_METERED_LIGHTS}-light minimum — there is no exception to approve.` };
+    }
+    const hardFailed = CON16_HARD_CRITERIA.filter(
+      (k) => eligibilityChecklist[k.name as keyof typeof eligibilityChecklist] !== true,
+    );
+    if (hardFailed.length > 0) {
+      return {
+        error: `${hardFailed.map((k) => k.label).join(" and ")} ${hardFailed.length === 1 ? "is" : "are"} also unconfirmed, and those are a separate decision. Record the circuit, then approve the exception from the candidate below.`,
+      };
+    }
+    waived.push(LIGHT_COUNT_CRITERION);
+  }
+
   // One derivation, shared with the correction and the exception paths
   // (src/lib/circuit-eligibility.ts) — a candidate recorded, corrected and
   // waived must never disagree about what its own answers mean.
-  const state = eligibilityState({ eligibilityChecklist, meteredLightCount });
+  const state = eligibilityState({ eligibilityChecklist, meteredLightCount, waived });
 
   const circuit = await db.$transaction(async (tx) => {
     const created = await tx.circuit.create({
@@ -158,6 +219,16 @@ export async function submitCircuitCandidate(input: {
         workingHours: input.workingHours ?? null,
         eligibilityChecklist,
         state,
+        // The checklist is NOT rewritten to say the minimum was met — it
+        // stays the record of what the site actually is. The waiver sits
+        // beside it, exactly as the survey page's own approval records it.
+        eligibilityExceptionCriteria: waived,
+        ...(waived.length > 0
+          ? {
+              lightCountExceptionApprovedBy: session.user.id,
+              lightCountExceptionReason: (input.lightCountExceptionReason ?? "").trim(),
+            }
+          : {}),
         // Recorded so the person who added a candidate can tidy their own
         // mistake without waiting on the ops lead (src/lib/circuit-void.ts).
         createdById: session.user.id,

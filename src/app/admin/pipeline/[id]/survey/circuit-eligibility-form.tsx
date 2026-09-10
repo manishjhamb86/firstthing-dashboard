@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { submitCircuitCandidate, type CandidateLine } from "./actions";
 import { proposeDeviceType } from "@/app/admin/device-catalog/actions";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
-import { CON16_HARD_CRITERIA } from "@/lib/circuit-eligibility";
+import { CON16_HARD_CRITERIA, MIN_METERED_LIGHTS } from "@/lib/circuit-eligibility";
 import { inventoryCountFor, type InventoryType } from "@/lib/light-type";
 
 
@@ -44,6 +44,7 @@ export function CircuitEligibilityForm({
   serviceLine,
   catalog,
   inventory,
+  canApproveException,
 }: {
   siteSurveyId: string;
   societyId: string;
@@ -51,6 +52,12 @@ export function CircuitEligibilityForm({
   catalog: CatalogOption[];
   /** Lights per type across the society, from this survey's own inventory. */
   inventory: InventoryType[];
+  /**
+   * Whether THIS viewer holds the PER-01 proxy. It decides only whether the
+   * inline approval is offered — the server re-decides it on every submit, so
+   * this is a courtesy, never the gate.
+   */
+  canApproveException: boolean;
 }) {
   const [lightType, setLightType] = useState("");
   // Devices proposed from this form, held locally so the surveyor can carry
@@ -71,6 +78,10 @@ export function CircuitEligibilityForm({
   const [workingHours, setWorkingHours] = useState("");
   const [checks, setChecks] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | undefined>();
+  // The capture-time exception (2026-09-10). Closed by default: an open
+  // reason field under a warning reads as something already required.
+  const [waiveLightCount, setWaiveLightCount] = useState(false);
+  const [waiveReason, setWaiveReason] = useState("");
   const [pending, startTransition] = useTransition();
 
   function patchLine(key: number, patch: Partial<LineDraft>) {
@@ -112,6 +123,13 @@ export function CircuitEligibilityForm({
   // the verdict there cannot describe the circuit differently.
   const failedHard = CON16_HARD_CRITERIA.filter((k) => checks[k.name] !== true);
 
+  // Short on lights with every hard box ticked — the one shape CON-16 has an
+  // exception for, and the same condition `eligibilityVerdict.exceptionable`
+  // computes on the server, so the offer here and the acceptance there cannot
+  // disagree about whether an exception is available.
+  const lightCountShort = meteredCount > 0 && meteredCount < MIN_METERED_LIGHTS;
+  const exceptionable = lightCountShort && failedHard.length === 0;
+
   // CON-11 computes the fee on the REPRESENTED count, not the metered one, so
   // a circuit left representing only the lights on it under-bills by the whole
   // extrapolation factor — Indiabulls Centrum Park was offered at 50 of 2,000
@@ -146,6 +164,8 @@ export function CircuitEligibilityForm({
         wifiReachable: checks.wifiReachable ?? false,
         fixturesUnder15ft: checks.fixturesUnder15ft ?? false,
         notOnDrivewayOrRamp: checks.notOnDrivewayOrRamp ?? false,
+        lightCountExceptionReason:
+          exceptionable && canApproveException && waiveLightCount ? waiveReason : undefined,
       });
       if (result && "error" in result && result.error) {
         setError(result.error);
@@ -156,6 +176,8 @@ export function CircuitEligibilityForm({
         setRepresentedLightCount("");
         setWorkingHours("");
         setChecks({});
+        setWaiveLightCount(false);
+        setWaiveReason("");
       }
     });
   }
@@ -543,6 +565,61 @@ export function CircuitEligibilityForm({
             </p>
           </div>
         )}
+        {/* The light-count warning states its CONSEQUENCE, which it never did:
+            the derived line said "below the 50-light minimum" and stopped, so
+            a surveyor had no way to know the circuit would land short of
+            eligible and wait for somebody else (user-asked 2026-09-10). The
+            failed-hard block beside it has always worked this way. */}
+        {exceptionable && (
+          <div className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+            <p>
+              <span className="num">{meteredCount}</span> metered lights is below CON-16&apos;s
+              minimum of <span className="num">{MIN_METERED_LIGHTS}</span>. Recorded as it stands,
+              this candidate <strong>waits for an operations exception</strong> before it can be
+              commissioned — every other criterion is confirmed.
+            </p>
+            {canApproveException ? (
+              <label className="mt-2 flex items-start gap-2" htmlFor="waive-lightcount">
+                <input
+                  id="waive-lightcount"
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={waiveLightCount}
+                  disabled={pending}
+                  onChange={(e) => setWaiveLightCount(e.target.checked)}
+                />
+                <span style={{ color: "var(--text)" }}>
+                  Approve the exception now — record it as eligible with this count
+                </span>
+              </label>
+            ) : (
+              <p className="mt-1">
+                Record it — an operations lead approves the exception on this page, or the circuit
+                is recorded with a different set of lights.
+              </p>
+            )}
+            {canApproveException && waiveLightCount && (
+              <div className="mt-2 max-w-lg" style={{ color: "var(--text)" }}>
+                <label className="lbl mb-1 block" htmlFor="waive-reason">
+                  Why this circuit is worth commissioning below the minimum
+                </label>
+                <input
+                  id="waive-reason"
+                  className="field"
+                  value={waiveReason}
+                  disabled={pending}
+                  placeholder="It is the whole of this light type in the society."
+                  onChange={(e) => setWaiveReason(e.target.value)}
+                />
+                <p className="mt-1 text-[12px]" style={{ color: "var(--text-muted)" }}>
+                  Kept beside the checklist rather than replacing it: the record still says the
+                  site has <span className="num">{meteredCount}</span> lights, and the waiver says
+                  operations proceeded anyway.
+                </p>
+              </div>
+            )}
+          </div>
+        )}
         {error && <ErrorText>{error}</ErrorText>}
         <button
           type="button"
@@ -552,7 +629,8 @@ export function CircuitEligibilityForm({
             lightType.trim() === "" ||
             complete.length === 0 ||
             complete.length !== lines.length ||
-            representedLightCount.trim() === ""
+            representedLightCount.trim() === "" ||
+            (waiveLightCount && waiveReason.trim() === "")
           }
           className="btn-primary"
         >
@@ -560,7 +638,11 @@ export function CircuitEligibilityForm({
             ? "Submitting…"
             : failedHard.length > 0
               ? "Record it as ineligible"
-              : "Submit checklist"}
+              : exceptionable
+                ? waiveLightCount && canApproveException
+                  ? "Record it with the exception approved"
+                  : "Record it — awaiting an exception"
+                : "Submit checklist"}
         </button>
       </div>
     </Card>

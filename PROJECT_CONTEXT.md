@@ -2499,6 +2499,49 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## The 50-light minimum can be waived where it is read (2026-09-10) — user-asked
+
+**"allow exception for number of lights after warning the user."** Reported from the candidate
+form with 32 lights on the circuit — below CON-16's minimum of 50.
+
+**The exception already existed; it just could not be reached from where the block happens.** A
+short-count candidate lands `surveyed`, and operations approves the waiver on the survey page
+afterwards. So the capture form's warning said only *"— below the 50-light minimum (CON-16)"* and
+stopped: it never stated the CONSEQUENCE (the circuit will not be commissionable until somebody
+else acts), and offered no route. **The failed-hard-criteria block directly beside it has always
+done both** — it names what is unconfirmed, says the candidate will be recorded ineligible, and
+labels its own button "Record it as ineligible". The light-count case had half of that pattern.
+
+**Both halves now**: the warning states what recording it now means, the button says which of the
+two outcomes pressing it produces ("Record it — awaiting an exception" or "Record it with the
+exception approved"), and operations gets the waiver inline with a required reason.
+
+**Three refusals, all server-side, none of them softer than the survey page's own control** — this
+is a second entry point to one decision, not a second decision:
+- **Only operations may approve** (FEAT-007-AC-4's PER-01 proxy — BOTH permissions, re-checked from
+  the row). A field surveyor sees the same warning, is not offered the checkbox, and is told who
+  approves it. Returned as a typed error rather than thrown: a surveyor legitimately reaching that
+  path deserves a sentence, not the opaque production digest already fixed twice here.
+- **Only when the count is genuinely short** — a waiver that waived nothing is a false record.
+- **Only when it is the ONLY thing in the way.** A failed hard criterion is a different decision
+  with a different consequence (a waived WiFi criterion commits FirsThing to bringing a router),
+  and it stays on the survey page where that note is shown beside it.
+
+**The checklist is never rewritten to say the minimum was met.** The waiver sits beside it in
+`eligibilityExceptionCriteria`, exactly as the survey page's approval records it, and the state
+comes from the one `eligibilityState` derivation with `waived` passed in — so a circuit recorded,
+corrected and waived cannot disagree about what its own answers mean.
+
+**Verified 24/24 through the browser**, asserted against the rows rather than the screen: approved
+at capture the circuit is `eligible` with `{lightCount}` waived, the reason and approver stored, the
+count still 32 and `lightCountMinMet` still **false**; unapproved it is `surveyed` and waives
+nothing; a surveyor is offered nothing. **The gate was driven through a path the client cannot
+pre-block** — `manage_pipeline` revoked in Postgres behind the open form with the box already
+ticked and a reason typed, so the click genuinely reached the action: refused by name, wrote
+nothing. 772 unit tests, `tsc`/`lint`/`build` clean; no schema change — the columns
+(`eligibilityExceptionCriteria`, `lightCountExceptionApprovedBy`, `lightCountExceptionReason`)
+already existed.
+
 ## "All devices" was counting the deleted ones (2026-09-10) — user-caught, from the chips themselves
 
 **The screenshot did the diagnosis**: Assigned 28 · Needs attention 6 · Not assigned 7 · All

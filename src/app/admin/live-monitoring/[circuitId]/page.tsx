@@ -6,6 +6,7 @@ import { Card, PageHeader, StatusChip } from "@/components/ui";
 import { isDemoMode } from "@/lib/demo-mode";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { formatDate } from "@/lib/format-date";
 import {
   circuitReadingWindow,
   classifyDay,
@@ -193,7 +194,7 @@ export default async function LiveMonitoringCircuitPage({
     { label: "Overall", value: periodPct(monitoringDays) },
   ];
 
-  const fmtDate = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+  const fmtDate = (d: Date | null | undefined) => (d ? formatDate(d) : null);
   const contractSince = fmtDate(pipeline?.contract?.termStart ?? pipeline?.contract?.activatedAt);
   const billingStarted = fmtDate(pipeline?.installationProject?.certificate?.billingStartDate);
 
@@ -219,11 +220,11 @@ export default async function LiveMonitoringCircuitPage({
         demoExtended: window.demoExtended,
         startBasis:
           window.kind === "monitoring" && lastStoredDate
-            ? `one day before the last stored reading (${day(
+            ? `one day before the last stored reading (${formatDate(
                 lastStoredDate,
               )}), so a part-day at the end of the previous file is re-read in full`
             : `the day after the lights were replaced (${
-                circuit.lightReplacementDate ? day(circuit.lightReplacementDate) : "—"
+                circuit.lightReplacementDate ? formatDate(circuit.lightReplacementDate) : "—"
               })`,
       }
     : null;

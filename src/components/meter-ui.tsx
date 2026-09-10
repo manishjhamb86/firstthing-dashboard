@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { formatDate } from "@/lib/format-date";
+import { dayAxis, formatDate, formatInstant } from "@/lib/format-date";
 import { Card, CardTitle, StatusChip, type ChipTone } from "@/components/ui";
 import type { MeterRow } from "@/lib/meter-view";
 
@@ -227,8 +227,8 @@ export function DailyBars({
                 <div
                   title={
                     partial
-                      ? `${d.day} — ${d.total.toFixed(2)} kWh over ${d.intervalCount} of 24 hours`
-                      : `${d.day} — ${d.total.toFixed(2)} kWh`
+                      ? `${formatDate(d.day)} — ${d.total.toFixed(2)} kWh over ${d.intervalCount} of 24 hours`
+                      : `${formatDate(d.day)} — ${d.total.toFixed(2)} kWh`
                   }
                   className="w-full rounded-[4px]"
                   style={{
@@ -238,7 +238,7 @@ export function DailyBars({
                   }}
                 />
                 <span className="num text-[10px] tabular-nums" style={{ color: "var(--text-subtle)" }}>
-                  {d.day.slice(5)}
+                  {dayAxis(d.day)}
                 </span>
               </div>
             );
@@ -406,7 +406,7 @@ export function MeterAlerts({ meter }: { meter: MeterRow }) {
                 {a.kind === "offline" ? "Not reachable" : "Out of range"}
               </StatusChip>
               <span className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                raised {a.openedAt.slice(0, 16).replace("T", " ")}
+                raised {formatInstant(a.openedAt)}
               </span>
             </div>
             <p className="text-[13px]" style={{ color: "var(--text)" }}>
@@ -504,7 +504,7 @@ export function MeterHourlyChart({
                   className="num shrink-0 text-[11px] tabular-nums"
                   style={{ color: "var(--text-muted)", width: 81 }}
                 >
-                  {d.day}
+                  {formatDate(d.day)}
                 </span>
 
                 {Array.from({ length: 24 }, (_, h) => {
@@ -516,8 +516,8 @@ export function MeterHourlyChart({
                       key={h}
                       title={
                         missing
-                          ? `${d.day} ${String(h).padStart(2, "0")}:00 — not in the export`
-                          : `${d.day} ${String(h).padStart(2, "0")}:00 — ${v!.toFixed(3)} kWh`
+                          ? `${formatDate(d.day)} ${String(h).padStart(2, "0")}:00 — not in the export`
+                          : `${formatDate(d.day)} ${String(h).padStart(2, "0")}:00 — ${v!.toFixed(3)} kWh`
                       }
                       className="h-[22px] flex-1 rounded-[2px]"
                       style={

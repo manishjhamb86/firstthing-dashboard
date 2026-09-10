@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatInstant } from "@/lib/format-date";
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
@@ -285,7 +285,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
                     <div>
                       <p className="text-[13px]">{e.text}</p>
                       <p className="num mt-0.5 text-[11px] text-[var(--text-subtle)]">
-                        {e.at.toISOString().slice(0, 16).replace("T", " ")}
+                        {formatInstant(e.at)}
                       </p>
                     </div>
                   </li>

@@ -53,8 +53,8 @@ export default async function MetersPage() {
   // The fleet band describes the account as it stands, so a device deleted
   // from eWeLink is out of every proportion in it — counting a meter that no
   // longer exists as "unassigned · not watched" would keep it in the picture
-  // by another name (user-caught 2026-09-09). The list's own Removed chip is
-  // where it is read.
+  // by another name (user-caught 2026-09-09). The list's own Deleted meters chip
+  // is where it is read.
   const live = rows.filter((r) => r.removedFromAccountAt === null);
   const metering = live.filter((r) => r.hasEnergySignal);
   // "Watched" is the fleet the health band is ABOUT: the meters somebody

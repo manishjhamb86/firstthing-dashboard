@@ -13,25 +13,30 @@ import { assignMeter, setMeterOwner, syncMeterNow, syncMetersNow } from "./actio
 type Society = { id: string; name: string };
 type Circuit = { id: string; societyId: string; label: string; state: string; takenBy: string | null };
 
-type Filter = "assigned" | "attention" | "unassigned" | "all" | "removed";
+type Filter = "assigned" | "attention" | "unassigned" | "all" | "deleted";
 
 // Assigned first and by default: an unassigned device is mirrored but not
 // watched, so it is not yet this product's problem — and on an account where
 // 30 of 45 are unbound, they bury the ones that are.
-// "All devices" means all devices STILL IN THE ACCOUNT. One deleted there was
-// staying in every list forever, because the sync only upserted what it found
-// (user-caught 2026-09-09: "it should move those devices to deleted list. and
-// should only show when prompted"). Removed is its own chip, last, and nothing
-// else includes it — the exception is a removed device still bound to a
-// circuit, which stays in Needs attention: a circuit billing through a meter
-// that no longer exists is a fault, and hiding it would be the dead end this
-// project keeps fixing.
+// A device deleted in the eWeLink account is a DELETED METER, and no chip but
+// its own includes it — "All devices" included it until 2026-09-10, which is
+// how the chips came to read 28 + 7 against an All of 45 (user-caught, with a
+// screenshot: "all meters should exclude the deleted meters. deleted meter
+// should show only when clicked deleted meters or if its still assigned and
+// attached then under assigned").
+//
+// The one exception is the user's own: a deleted meter STILL BOUND to a
+// circuit stays under Assigned, because it is still what that circuit bills
+// through. It stays in Needs attention too — billing through a meter the
+// account no longer has is a fault somebody must see, and hiding it is the
+// dead end this project keeps fixing — but Assigned is where the inventory is
+// read, so that is where it has to appear.
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "assigned", label: "Assigned" },
   { key: "attention", label: "Needs attention" },
   { key: "unassigned", label: "Not assigned" },
   { key: "all", label: "All devices" },
-  { key: "removed", label: "Removed from account" },
+  { key: "deleted", label: "Deleted meters" },
 ];
 
 type SortKey = "name" | "society" | "state" | "power" | "today" | "history" | "owner";
@@ -115,12 +120,11 @@ export function MetersListClient({
       if (!q_ok) return false;
 
       const gone = m.removedFromAccountAt !== null;
-      if (filter === "removed") return gone;
-      // Every other chip describes the account as it stands. The exception is
-      // a removed device still bound to a circuit: that circuit bills through
-      // a meter the account no longer has, which is a fault somebody has to
-      // see, so Needs attention keeps it.
-      if (gone) return filter === "attention" && m.assigned;
+      if (filter === "deleted") return gone;
+      // Every other chip describes the account as it stands — All devices
+      // included. A deleted meter still bound to a circuit is the one thing
+      // that survives that, under both chips that describe assigned work.
+      if (gone) return (filter === "assigned" || filter === "attention") && m.assigned;
 
       if (filter === "assigned" && !m.assigned) return false;
       if (
@@ -147,7 +151,8 @@ export function MetersListClient({
   }
 
   const counts: Record<Filter, number> = {
-    assigned: meters.filter((m) => m.assigned && m.removedFromAccountAt === null).length,
+    // Deleted-but-still-bound counts here, matching what the chip shows.
+    assigned: meters.filter((m) => m.assigned).length,
     attention: meters.filter(
       (m) =>
         (m.removedFromAccountAt !== null && m.assigned) ||
@@ -155,8 +160,8 @@ export function MetersListClient({
           ((m.assigned && m.state !== null && m.state !== "reporting") || m.openAlerts.length > 0)),
     ).length,
     unassigned: meters.filter((m) => !m.assigned && m.hasEnergySignal && m.removedFromAccountAt === null).length,
-    removed: meters.filter((m) => m.removedFromAccountAt !== null).length,
-    all: meters.length,
+    deleted: meters.filter((m) => m.removedFromAccountAt !== null).length,
+    all: meters.filter((m) => m.removedFromAccountAt === null).length,
   };
 
   function openAssign(m: MeterRow) {
@@ -282,8 +287,8 @@ export function MetersListClient({
         <EmptyState title="Nothing matches">
           {meters.length === 0
             ? "No devices have been mirrored from the eWeLink account yet."
-            : filter === "removed"
-              ? "Every mirrored device is still in the eWeLink account."
+            : filter === "deleted"
+              ? "Nothing has been deleted — every mirrored device is still in the eWeLink account."
               : "No device matches this filter or search."}
         </EmptyState>
       ) : (
@@ -312,7 +317,7 @@ export function MetersListClient({
                     {m.removedFromAccountAt && (
                       <div className="mt-1">
                         <StatusChip tone="warn">
-                          Removed from the account {formatDate(m.removedFromAccountAt)}
+                          Deleted from the account {formatDate(m.removedFromAccountAt)}
                         </StatusChip>
                         {m.assigned && (
                           <div className="text-xs mt-1" style={{ color: "var(--warn-fg)" }}>

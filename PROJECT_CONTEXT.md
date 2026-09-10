@@ -2499,6 +2499,32 @@ Prisma — it is `--to-schema` now — and `prisma db execute` silently printed 
 nothing while `migrate resolve --applied` happily marked the migration applied. The tables did not
 exist. **Check the tables, not the exit code**, the same lesson as the 0-byte `pg_dump`.
 
+## "All devices" was counting the deleted ones (2026-09-10) — user-caught, from the chips themselves
+
+**The screenshot did the diagnosis**: Assigned 28 · Needs attention 6 · Not assigned 7 · All
+devices 45 · Removed from account 10. Those do not reconcile — 28 + 7 is 35, and All was still
+counting the 10 deleted devices. **"All devices" now means all devices still in the account**,
+and the chip is named for what it holds: **Deleted meters**, with the row reading "Deleted from
+the account 08-09-2026".
+
+**The one exception is the user's own, and it is the right one**: a deleted meter STILL BOUND to
+a circuit stays under **Assigned**, because it is still what that circuit bills through. It
+stays in Needs attention too — billing through a meter the account no longer has is a fault
+somebody must see, and hiding it is the dead end this project keeps fixing — but Assigned is
+where the inventory is read, so that is where it has to appear.
+
+Verified 20/20 locally on a fixture holding one deleted meter of each kind (the counts
+reconcile, neither leaks into All devices or Not assigned, the bound one appears under Assigned
+marked deleted and dated, a device that comes back leaves the deleted list), and 9/9 on stage
+read-only: **All devices 35 + Deleted 10 = the whole 45 mirror**, every deleted row says so, and
+each chip lists exactly the number it claims.
+
+**What the change surfaced on stage, and it is a real finding rather than a display one**:
+Assigned went 28 → 31, because **three circuits are bound to meters that no longer exist in the
+eWeLink account** — Amrapali Princely Estate, Indiabulls Centrum Park, and Ace City's Tower G
+lift circuit. No further readings will arrive from any of them. They were invisible before,
+sitting only under a chip nobody opens.
+
 ## A meter is an asset with a lifecycle, not a pointer at one society (2026-09-09/10) — user-specified, researched first
 
 **The ask**: "Sometimes meters are reused. removed from one society and installed in another. when

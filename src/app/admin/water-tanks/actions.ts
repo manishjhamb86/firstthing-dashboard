@@ -168,3 +168,35 @@ export async function setTankSetup(input: {
   revalidatePath("/admin/water-tanks");
   return {};
 }
+
+/**
+ * Name which tower or building a tank serves — "Tower D", "Block B" — so
+ * the portal can group tanks the way a resident actually navigates a
+ * multi-tower complex, within each setup-type group. Same gate and shape
+ * as setTankSetup; a free label rather than an enum because building names
+ * vary by society and there is no fixed set to choose from.
+ */
+export async function setTankLocation(input: {
+  tankId: string;
+  location: string;
+}): Promise<{ error?: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!admin.permissions.includes("manage_users")) {
+    logger.warn("tank.location_refused", {
+      tankId: input.tankId,
+      actorId: admin.id,
+      reason: "permission",
+    });
+    return { error: "Labelling tanks is a society-management action (Manage users)." };
+  }
+  const location = input.location.trim();
+  await db.waterTank.update({
+    where: { id: input.tankId },
+    data: { location: location === "" ? null : location },
+  });
+  logger.info("tank.location_set", { tankId: input.tankId, location, actorId: admin.id });
+  revalidatePath("/admin/water-tanks");
+  revalidatePath(`/admin/water-tanks/${input.tankId}`);
+  return {};
+}

@@ -2593,6 +2593,14 @@ model WaterTank {
   /// can group tanks the way a resident thinks about them. Null until the
   /// back office classifies it; the portal states that rather than guessing.
   setupType        TankSetup? @map("setup_type")
+  /// The tower or building this tank serves — "Tower D", "Block B" — typed
+  /// by the back office, same pattern as setupType (a free label, not an
+  /// enum, since building names vary by society). Null reads as "not yet
+  /// labelled" on the portal rather than being guessed from the device name
+  /// (researched 2026-09-11/12 for the multi-tower dashboard redesign — a
+  /// device name like "RG Residency Tower D Tank" is not a reliable parse
+  /// target, and the resident needs a real grouping key, not a substring).
+  location         String?   @map("location")
   /// The assignment that scopes portal visibility (INV-05): a society's
   /// portal accounts see exactly the tanks whose societyId is theirs.
   societyId        String?   @map("society_id")

@@ -3,23 +3,27 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorText } from "@/components/ui";
-import { assignTanks, setTankSetup } from "../actions";
+import { assignTanks, setTankLocation, setTankSetup } from "../actions";
 
 /** Assign or move this one tank — the single-tank half of the bulk bar. */
 export function AssignControl({
   tankId,
   currentSocietyId,
   currentSetup,
+  currentLocation,
   societies,
 }: {
   tankId: string;
   currentSocietyId: string | null;
   /** domestic | flush | stp | null — what this tank supplies. */
   currentSetup: string | null;
+  /** "Tower D", "Block B" — which building it serves, or null if unlabelled. */
+  currentLocation: string | null;
   societies: { id: string; name: string; location: string }[];
 }) {
   const router = useRouter();
   const [choice, setChoice] = useState("");
+  const [locationDraft, setLocationDraft] = useState(currentLocation ?? "");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -30,6 +34,15 @@ export function AssignControl({
         tankId,
         setup: setup === "" ? null : (setup as "domestic" | "flush" | "stp"),
       });
+      if (result.error) setError(result.error);
+      else router.refresh();
+    });
+  }
+
+  function saveLocation() {
+    setError(null);
+    startTransition(async () => {
+      const result = await setTankLocation({ tankId, location: locationDraft });
       if (result.error) setError(result.error);
       else router.refresh();
     });
@@ -100,6 +113,27 @@ export function AssignControl({
         </select>
         <span className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
           groups this tank on the society&apos;s portal
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-2.5">
+        <label htmlFor="tank-location" className="lbl" style={{ display: "inline" }}>
+          Tower / building
+        </label>
+        <input
+          id="tank-location"
+          type="text"
+          className="field field-auto"
+          value={locationDraft}
+          onChange={(e) => setLocationDraft(e.target.value)}
+          onBlur={() => {
+            if (locationDraft.trim() !== (currentLocation ?? "")) saveLocation();
+          }}
+          placeholder="e.g. Tower D"
+          disabled={pending}
+          style={{ minWidth: 200 }}
+        />
+        <span className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+          sub-groups this tank within its setup on the portal
         </span>
       </div>
       {error && <div className="mt-2"><ErrorText>{error}</ErrorText></div>}

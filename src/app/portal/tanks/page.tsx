@@ -134,6 +134,23 @@ export default async function PortalTanksPage() {
     rows: rows.filter((r) => (r.tank.setupType ?? null) === g.key),
   })).filter((g) => g.rows.length > 0);
 
+  // Within a setup, sub-group by tower/building — a multi-tower complex has
+  // several Domestic tanks, one per tower, and "Domestic" alone does not say
+  // which is which (user-specified, 2026-09-12). A single-location group
+  // (one tower, or nobody has labelled any tank yet) renders without a
+  // sub-heading — the extra layer only earns its place once it distinguishes
+  // something.
+  function byLocation(groupRows: typeof rows) {
+    const keys = [...new Set(groupRows.map((r) => r.tank.location?.trim() || null))];
+    if (keys.length <= 1) return [{ location: null, rows: groupRows }];
+    return keys
+      .sort((a, b) => (a ?? "￿").localeCompare(b ?? "￿"))
+      .map((location) => ({
+        location,
+        rows: groupRows.filter((r) => (r.tank.location?.trim() || null) === location),
+      }));
+  }
+
   return (
     <>
       <PageHeader
@@ -160,11 +177,18 @@ export default async function PortalTanksPage() {
             <h2 className="text-[15px] font-bold">{g.title}</h2>
             <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{g.note}</span>
           </div>
+          {byLocation(g.rows).map((sub) => (
+          <div key={sub.location ?? "__single"}>
+          {sub.location && (
+            <h3 className="mb-2.5 text-[13px] font-semibold" style={{ color: "var(--text-muted)" }}>
+              {sub.location}
+            </h3>
+          )}
           <div
-            className="grid gap-5"
+            className="mb-5 grid gap-5 last:mb-0"
             style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}
           >
-            {g.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, history }) => {
+            {sub.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, history }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-6 gap-y-5 p-5 sm:p-6">
@@ -220,6 +244,8 @@ export default async function PortalTanksPage() {
               );
             })}
           </div>
+          </div>
+          ))}
           </section>
           ))}
           <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>

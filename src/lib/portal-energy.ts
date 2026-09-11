@@ -30,6 +30,17 @@ export type PortalCircuit = {
   id: string;
   label: string;
   lightCount: number;
+  /**
+   * The population this circuit's saving is EXTRAPOLATED to for billing
+   * (CON-11) — every light of this type across the society, not just the
+   * `lightCount` actually metered. Disclosed here because the ₹ figure on
+   * this page is computed against this number, not against `lightCount`
+   * (researched 2026-09-11/12: IPMVP's Transparent principle requires the
+   * extrapolation basis be stated to the party being billed, and showing
+   * only the metered count would leave that basis unstated). Equal to
+   * `lightCount` when the circuit represents only itself.
+   */
+  representedLightCount: number;
   /** Days recorded in the headline month (excluded days not counted). */
   monthDays: number;
   monthKwh: number | null;
@@ -73,6 +84,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       location: true,
       lightType: true,
       meteredLightCount: true,
+      representedLightCount: true,
       benchmarkSavingsPct: true,
       preInstallBaseline: true,
       lightReplacementDate: true,
@@ -126,6 +138,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       id: c.id,
       label: circuitLabelOf(c.location, c.lightType),
       lightCount: c.meteredLightCount,
+      representedLightCount: c.representedLightCount,
       monthDays: counted,
       monthKwh: s.averageKwh !== null ? s.averageKwh * counted : null,
       monthDailyAvg: s.averageKwh,

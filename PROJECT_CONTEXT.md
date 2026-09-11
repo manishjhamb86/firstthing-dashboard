@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-10
+2026-09-12
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -2541,6 +2541,56 @@ ticked and a reason typed, so the click genuinely reached the action: refused by
 nothing. 772 unit tests, `tsc`/`lint`/`build` clean; no schema change — the columns
 (`eligibilityExceptionCriteria`, `lightCountExceptionApprovedBy`, `lightCountExceptionReason`)
 already existed.
+
+## Portal disclosure: what a circuit represents, and which tower a tank is in (2026-09-11/12) — researched, branch `portal-redesign`
+
+**The ask combined two things**: a deep-research pass on how to present verified savings and live
+tank levels to a lay RWA committee, then "/design... improve/rebuild our customer portal, keep the
+same colour combination." Done as: a research doc
+([docs/engineering/16-portal-disclosure-research.md](docs/engineering/16-portal-disclosure-research.md)),
+honest about which findings are adversarially verified (angle 1, M&V disclosure — IPMVP/ASHRAE/
+FEMP, 13 confirmed claims) and which are sourced domain judgment (angles 2-5 — two research runs
+each hit a session or weekly limit before verification reached them). Everything from here on is on
+its own branch, per the user's explicit instruction.
+
+**Two real, well-evidenced gaps found and closed, both disclosure/information-architecture fixes on
+already-approved screens rather than a visual redesign** (stated to the user as the reason a canvas
+pass was not attempted — see the doc's own closing section):
+
+1. **The portal's Electricity page showed only the metered light count, never what it stands in
+   for.** IPMVP's own worked example is a lighting retrofit, and its Transparent principle requires
+   the extrapolation basis be disclosed to the party being billed — this portal computes ₹ against
+   `representedLightCount` (CON-11) but only ever showed `meteredLightCount`, so a resident reading
+   "50 lights, ₹X saved" had no way to know X was computed as though the whole society's 2,000
+   lights behaved like those 50. `PortalCircuit.representedLightCount` now surfaces alongside the
+   metered count; the circuit table states both ("50 metered — standing in for 2,000 across your
+   society"), and one sentence — shown only when a circuit's populations actually differ — separates
+   what the kWh cards describe (the metered circuit only) from what the ₹ card describes (the whole
+   society). Verified against RG Residency's own real circuit as well as a fixture: the real row
+   read "69 metered — standing in for 1,444" without any code path having been written for that
+   specific circuit, confirming the fix generalizes.
+2. **A tank's tower/building was only readable by parsing its free-text device name.** The user
+   asked explicitly for setup-type-then-location grouping; SCADA/HMI practice (ISA-101) agrees a
+   multi-asset display groups by what an asset does and then by where it is. `WaterTank.location`
+   is new (migration `20260912010000_add_water_tank_location`, nullable, same pattern as the
+   existing `setupType`), with a matching back-office control (`setTankLocation`, mirroring
+   `setTankSetup` exactly) and a portal sub-grouping: each setup group now reads its own location
+   sub-headings when more than one location exists, and none at all when it doesn't — a single
+   Domestic tank is not told it is in a group of one.
+
+**What was deliberately not claimed or built, stated rather than silently skipped**: no water-
+savings figure was added — the platform is monitor-only (INV-08), and the research confirmed the
+existing conservative position (levels and sensor health, never a "saved" figure) is the correct
+one absent flow metering; a full canvas-based visual redesign, since the concrete findings were
+disclosure fixes on existing, already-approved layouts, not new screens needing a visual-direction
+decision.
+
+**Verified 9/9 in a browser** against a fixture built for both changes plus RG Residency's own real
+circuit and tank: the admin tower/building field renders and round-trips; the portal sub-groups
+Domestic into Tower A / Tower B while a lone unlabelled STP tank renders no spurious sub-heading;
+the electricity page states both light counts and the kWh/₹ population-mismatch sentence. 765 unit
+tests (7 pre-existing skips), `tsc`/`lint`/`build` clean, zero console/page errors. Not yet deployed
+to stage — this branch is not merged.
 
 ## "All devices" was counting the deleted ones (2026-09-10) — user-caught, from the chips themselves
 

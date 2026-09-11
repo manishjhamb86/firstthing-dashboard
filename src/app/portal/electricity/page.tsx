@@ -132,6 +132,25 @@ export default async function PortalElectricityPage() {
             />
           </StatRow>
 
+          {/* The kWh figures above describe only the metered circuits; the ₹
+              figure describes the whole society, because a metered circuit
+              stands in for every light of its type (CON-11). Stated once,
+              here, rather than left for the circuit table to imply — two
+              adjacent numbers from different populations look like the same
+              population unless something says otherwise (researched
+              2026-09-11/12, applying IPMVP's disclosure principle to a
+              billed-savings dashboard). Shown only when it actually differs;
+              a society whose circuits represent only themselves has nothing
+              to disclose here. */}
+          {energy.circuits.some((c) => c.representedLightCount > c.lightCount) && (
+            <p className="-mt-1 mb-5 text-[12.5px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+              The kWh figures above are what your metered circuits actually recorded. The ₹ figure is
+              for your whole society — each metered circuit stands in for every light of its type, so
+              its saving is scaled up to that full count before it is billed (see the circuit table
+              below for each circuit&apos;s count).
+            </p>
+          )}
+
           {energy.daily.length > 0 && (
             <Card className="mb-5 p-6">
               <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
@@ -164,7 +183,14 @@ export default async function PortalElectricityPage() {
                         <td>
                           <strong>{c.label}</strong>{" "}
                           <span style={{ color: "var(--text-subtle)" }}>
-                            · {c.lightCount.toLocaleString("en-IN")} lights
+                            · {c.lightCount.toLocaleString("en-IN")} metered
+                            {c.representedLightCount > c.lightCount && (
+                              <>
+                                {" "}
+                                — standing in for {c.representedLightCount.toLocaleString("en-IN")}{" "}
+                                across your society
+                              </>
+                            )}
                           </span>
                         </td>
                         <td className="num text-right">

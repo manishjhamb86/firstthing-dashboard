@@ -57,3 +57,23 @@ export function buildCircuitFlowReadingKey(params: {
  * object that was never meant to exist.
  */
 export const DEMO_RAW_KEY_PREFIX = "demo-generated/";
+
+/**
+ * The uploaded commercial invoice (BillingInvoice) — real bank account
+ * details and GST numbers are printed on these, so private by the same
+ * mechanism as `Ingest/`: the bucket's public-read statement is scoped to
+ * `Documents/*`, and this prefix sits outside it (2026-09-12). Read only
+ * through a short-lived presigned GET, same as a raw reading file.
+ */
+export function buildInvoiceKey(params: {
+  society: string;
+  period: string; // YYYY-MM — the calculation's own period
+  calculationId: string;
+  fileName: string;
+  uploadedAt: Date;
+}): string {
+  const stamp = params.uploadedAt.toISOString().replace(/[:.]/g, "-");
+  const name = slug(params.fileName.replace(/\.[^.]+$/, ""));
+  const ext = (params.fileName.split(".").pop() ?? "pdf").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return `Invoices/${slug(params.society)}/${params.period}/${params.calculationId}/${stamp}_${name}.${ext}`;
+}

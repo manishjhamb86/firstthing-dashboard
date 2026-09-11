@@ -5,6 +5,7 @@ import {
   FileText,
   LayoutDashboard,
   LifeBuoy,
+  Receipt,
   ShieldCheck,
   Zap,
 } from "lucide-react";
@@ -34,6 +35,7 @@ export const PORTAL_NAV_ICONS = {
   inventory: Boxes,
   support: LifeBuoy,
   admin: ShieldCheck,
+  billing: Receipt,
 } as const;
 
 /**
@@ -55,6 +57,9 @@ export function portalNavEntries(grants: Set<PortalGrant>): PortalNavEntry[] {
       : []),
     ...(grants.has("water_tanks")
       ? [{ key: "water" as const, href: "/portal/tanks", label: "Water tanks" }]
+      : []),
+    ...(grants.has("billing")
+      ? [{ key: "billing" as const, href: "/portal/billing", label: "Billing" }]
       : []),
     ...(grants.has("documents")
       ? [{ key: "documents" as const, href: "/portal/documents", label: "Documents" }]

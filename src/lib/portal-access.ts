@@ -24,17 +24,19 @@ export const ALL_PORTAL_GRANTS: PortalGrant[] = [
   "tickets_view",
   "tickets_manage",
   "society_admin",
+  "billing",
 ];
 
 /** The grants the office-bearer's access editor offers per member. */
 export const GRANT_META: { id: PortalGrant; label: string; note: string }[] = [
   { id: "electricity", label: "Electricity", note: "meters, consumption and savings" },
   { id: "water_tanks", label: "Water tanks", note: "levels and sensor health" },
-  { id: "documents", label: "Documents", note: "reports, invoices, agreement" },
+  { id: "documents", label: "Documents", note: "reports and the agreement" },
   { id: "inventory", label: "Inventory", note: "what is deployed on site" },
   { id: "tickets_view", label: "Tickets — view", note: "see requests and their status" },
   { id: "tickets_manage", label: "Tickets — manage", note: "raise and update requests" },
   { id: "society_admin", label: "Society admin", note: "see members and their access" },
+  { id: "billing", label: "Billing", note: "invoice amount, due date and status" },
 ];
 
 /** The grants in force for a member, with both implication rules applied. */

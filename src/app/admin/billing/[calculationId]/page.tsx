@@ -4,7 +4,9 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
-import { requireBillingReader } from "../access";
+import { canRelease, isOps, requireBillingReader } from "../access";
+import { refuseRelease } from "@/lib/invoice-reconciliation";
+import { InvoicePanel } from "./invoice-panel";
 
 // MS-08 / FEAT-048 — one month's run, line by line.
 //
@@ -48,6 +50,7 @@ export default async function CalculationPage({
           deviationReview: { include: { owner: { select: { name: true, email: true } } } },
         },
       },
+      invoice: { include: { payments: true } },
     },
   });
   if (!calc) notFound();
@@ -72,6 +75,15 @@ export default async function CalculationPage({
   // assertion of that, and it is shown rather than assumed.
   const lineSum = calc.feeLines.reduce((n, l) => n + l.amount, 0);
   const sumMatches = Math.abs(lineSum - calc.subtotal) < 0.005;
+
+  const unresolvedDeviationCount = calc.feeLines.filter(
+    (l) => l.deviationReview && !["decided", "closed"].includes(l.deviationReview.state),
+  ).length;
+  const releaseBlockedReason = refuseRelease({
+    calculation: { status: calc.status },
+    invoice: calc.invoice ? { reconciliationStatus: calc.invoice.reconciliationStatus } : null,
+    unresolvedDeviationCount,
+  });
 
   return (
     <>
@@ -151,6 +163,31 @@ export default async function CalculationPage({
             ; the figure is computed, never entered.
           </p>
         </Card>
+      )}
+
+      {calc.status !== "held" && (
+        <InvoicePanel
+          calculationId={calc.id}
+          canRelease={canRelease(gate.actor)}
+          isOps={isOps(gate.actor)}
+          releaseBlockedReason={releaseBlockedReason}
+          invoice={
+            calc.invoice
+              ? {
+                  id: calc.invoice.id,
+                  number: calc.invoice.number,
+                  issueDate: calc.invoice.issueDate.toISOString(),
+                  dueDate: calc.invoice.dueDate.toISOString(),
+                  amount: calc.invoice.amount,
+                  computedAmount: calc.invoice.computedAmount,
+                  reconciliationStatus: calc.invoice.reconciliationStatus,
+                  status: calc.invoice.status,
+                  fileName: calc.invoice.fileName,
+                  paidTotal: calc.invoice.payments.reduce((n, p) => n + p.amount, 0),
+                }
+              : null
+          }
+        />
       )}
 
       {calc.status === "held" ? (

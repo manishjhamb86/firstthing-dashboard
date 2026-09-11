@@ -86,6 +86,13 @@ enum PortalGrant {
   /// See the members-and-access page. Editing access itself stays the
   /// office-bearer's act alone.
   society_admin
+  /// The uploaded commercial invoice (BillingInvoice) — amount, due date,
+  /// paid/pending — not the same thing as `documents`' filed reports and
+  /// agreement, which is why it is its own grant rather than folded in
+  /// (2026-09-12): a due date and a payment status are read as an action
+  /// item, and a member who should never see money owed should not have to
+  /// be denied documents entirely to keep it from them.
+  billing
 
   @@map("portal_grant")
 }

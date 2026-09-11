@@ -4,6 +4,45 @@ import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
 
+export type MonthTotal = {
+  month: string;
+  kWh: number;
+  avoidedKwh: number;
+  savingsPct: number | null;
+};
+
+/**
+ * A month's totals, read out of the society-wide `daily` series — pure, so
+ * the dashboard's month-over-month comparison is a real computation over
+ * stored readings, never an invented delta. Only days carrying a baseline
+ * count toward the percentage (the same rule `totalPct` above already
+ * applies to "this month"): a day with no baseline in force says nothing
+ * about whether the month improved.
+ *
+ * Returns EVERY month present, oldest first, so a caller can pick "this"
+ * and "last" without re-deriving which months exist.
+ */
+export function monthlyTotals(
+  daily: { date: string; kWh: number; baseline: number | null }[],
+): MonthTotal[] {
+  const byMonth = new Map<string, { kWh: number; baseline: number }>();
+  for (const d of daily) {
+    const m = d.date.slice(0, 7);
+    const cur = byMonth.get(m) ?? { kWh: 0, baseline: 0 };
+    cur.kWh += d.kWh;
+    if (d.baseline !== null) cur.baseline += d.baseline;
+    byMonth.set(m, cur);
+  }
+  return [...byMonth.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .map(([month, v]) => ({
+      month,
+      kWh: v.kWh,
+      avoidedKwh: v.baseline - v.kWh,
+      savingsPct: v.baseline > 0 ? ((v.baseline - v.kWh) / v.baseline) * 100 : null,
+    }));
+}
+
 /**
  * The society's own electricity figures, assembled once per request for the
  * portal's dashboard and Electricity page (customer portal, 2026-08-29).

@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { effectiveGrants } from "@/lib/portal-access";
-import { societyEnergy } from "@/lib/portal-energy";
+import { monthlyTotals, societyEnergy } from "@/lib/portal-energy";
+import { societyMeterRows } from "@/lib/meter-view";
 import { societyEvents } from "@/lib/portal-notifications";
 import { Card, CardTitle, ChartPending, PageHeader, StatusChip } from "@/components/ui";
 import { SAVINGS_BAND_META } from "@/lib/circuit-load";
@@ -72,6 +73,8 @@ export default async function PortalHomePage() {
   if (!society) redirect("/login");
 
   const energy = grants.has("electricity") ? await societyEnergy(societyId) : null;
+  const meters = grants.has("electricity") ? await societyMeterRows(societyId) : [];
+  const metersOnline = meters.filter((m) => m.state === "reporting").length;
   const events = (await societyEvents(societyId)).slice(0, 4);
 
   const gates = installations
@@ -229,117 +232,168 @@ export default async function PortalHomePage() {
         </div>
       ))}
 
-      {/* The hero: how the society is doing, one card per granted module. */}
-      <div className="mb-6 grid items-stretch gap-5 lg:grid-cols-2">
-        {energy && (
-          <Card className="p-6">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="lbl">
-                Electricity savings{energy.month ? ` · ${monthName(energy.month)}` : ""}
-              </p>
+      {/*
+        The hero, rebuilt (2026-09-12, user-asked for a genuinely bolder
+        read rather than the same two cards restyled): ONE headline figure
+        with its real trend against last month, not two medium cards
+        repeating the same numbers at a smaller size. The month-over-month
+        delta is a real computation over stored daily readings
+        (monthlyTotals, src/lib/portal-energy.ts) — never a decorative
+        arrow with nothing behind it.
+
+        Deliberately still no icon bubbles and still tinting only what
+        needs attention — that is a considered, documented rule
+        (Stat's own comment, `src/components/ui.tsx`: "a green number
+        carries no information the absence of amber does not already
+        carry"), not something this pass silently undid. What is different
+        is prominence and the trend, not the vocabulary.
+      */}
+      {energy && energy.totals.savingsPct !== null && (() => {
+        const months = monthlyTotals(energy.daily);
+        const idx = months.findIndex((m) => m.month === energy.month);
+        const thisMonth = idx >= 0 ? months[idx] : null;
+        const lastMonth = idx > 0 ? months[idx - 1] : null;
+        const pctDelta =
+          thisMonth && lastMonth && thisMonth.savingsPct !== null && lastMonth.savingsPct !== null
+            ? thisMonth.savingsPct - lastMonth.savingsPct
+            : null;
+        const kwhDelta = thisMonth && lastMonth ? thisMonth.avoidedKwh - lastMonth.avoidedKwh : null;
+        const deltaColor = (v: number) => (v >= 0 ? "var(--ok-fg)" : "var(--warn-fg)");
+        return (
+          <Card className="mb-5 p-6 sm:p-8">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="lbl">This month{energy.month ? ` · ${monthName(energy.month)}` : ""}</p>
               {energy.totals.band && (
                 <StatusChip tone={BAND_TONE[energy.totals.band]}>
                   {SAVINGS_BAND_META[energy.totals.band].label}
                 </StatusChip>
               )}
             </div>
-            {energy.totals.savingsPct === null ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                Your savings appear here once the first month of readings is on record.
-              </p>
-            ) : (
-              <>
+            <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
+              <div>
                 <p className="flex flex-wrap items-baseline gap-2.5">
-                  <span className="num text-[38px] font-bold leading-none tracking-[-0.02em]">
-                    {energy.totals.savingsPct.toFixed(1)}%
+                  <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
+                    {energy.rupeesSaved !== null
+                      ? `₹${Math.round(energy.rupeesSaved).toLocaleString("en-IN")}`
+                      : `${energy.totals.savingsPct.toFixed(1)}%`}
                   </span>
                   <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                    vs what the same lights drew before FirsThing
+                    {energy.rupeesSaved !== null ? "saved this month, billed" : "saved vs before FirsThing"}
                   </span>
                 </p>
-                <div
-                  className="mt-4 flex flex-wrap gap-x-7 gap-y-2 border-t pt-3.5 text-[13px]"
-                  style={{ borderColor: "var(--border-subtle)" }}
-                >
-                  <span>
-                    <strong className="num text-[16px]">
-                      {Math.round(energy.totals.avoidedKwh ?? 0).toLocaleString("en-IN")}
-                    </strong>{" "}
-                    <span style={{ color: "var(--text-subtle)" }}>kWh avoided</span>
-                  </span>
-                  <span>
-                    <strong className="num text-[16px]">
-                      {Math.round(energy.totals.consumedKwh ?? 0).toLocaleString("en-IN")}
-                    </strong>{" "}
-                    <span style={{ color: "var(--text-subtle)" }}>kWh consumed</span>
-                  </span>
-                  <span>
-                    {energy.rupeesSaved !== null ? (
-                      <>
-                        <strong className="num text-[16px]">
-                          ₹{Math.round(energy.rupeesSaved).toLocaleString("en-IN")}
-                        </strong>{" "}
-                        <span style={{ color: "var(--text-subtle)" }}>saved (billed)</span>
-                      </>
-                    ) : (
-                      <span style={{ color: "var(--text-subtle)" }}>₹ appears once the month is billed</span>
-                    )}
-                  </span>
-                </div>
-              </>
-            )}
-          </Card>
-        )}
-        {grants.has("water_tanks") && (
-          <Card className="p-6">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-              <p className="lbl">Water monitoring</p>
-              {tanks.length > 0 &&
-                (reporting === tanks.length ? (
-                  <StatusChip tone="ok">All tanks reporting</StatusChip>
+                {pctDelta !== null ? (
+                  <p className="mt-1.5 text-[13px] font-semibold" style={{ color: deltaColor(pctDelta) }}>
+                    {pctDelta >= 0 ? "↑" : "↓"} {Math.abs(pctDelta).toFixed(1)} pts vs last month
+                  </p>
                 ) : (
-                  <StatusChip tone="warn">
-                    {tanks.length - reporting} not reporting
-                  </StatusChip>
-                ))}
-            </div>
-            {tanks.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                Levels appear here once level sensors are installed on your tanks.
-              </p>
-            ) : (
-              <>
-                <p className="flex flex-wrap items-baseline gap-2.5">
-                  <span className="num text-[38px] font-bold leading-none tracking-[-0.02em]">
-                    {reporting}
-                    <span style={{ color: "var(--text-subtle)", fontWeight: 500 }}>/{tanks.length}</span>
+                  <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                    A trend appears once a second month is on record
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-8 gap-y-3">
+                <span>
+                  <strong className="num text-[20px]">
+                    {Math.round(energy.totals.avoidedKwh ?? 0).toLocaleString("en-IN")}
+                  </strong>{" "}
+                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                    kWh avoided
                   </span>
-                  <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                    tanks reporting right now
-                  </span>
-                </p>
-                <div
-                  className="mt-4 flex flex-wrap gap-x-7 gap-y-2 border-t pt-3.5 text-[13px]"
-                  style={{ borderColor: "var(--border-subtle)" }}
-                >
-                  {setupCells.length > 0 ? (
-                    setupCells.map((c) => (
-                      <span key={c.label}>
-                        <strong className="num text-[16px]">{c.avg}%</strong>{" "}
-                        <span style={{ color: "var(--text-subtle)" }}>avg · {c.label}</span>
-                      </span>
-                    ))
-                  ) : (
-                    <span style={{ color: "var(--text-subtle)" }}>
-                      Group averages appear once tanks are classified by setup
+                  {kwhDelta !== null && (
+                    <span className="block text-[11px]" style={{ color: deltaColor(kwhDelta) }}>
+                      {kwhDelta >= 0 ? "↑" : "↓"} {Math.abs(Math.round(kwhDelta)).toLocaleString("en-IN")} vs last
+                      month
                     </span>
                   )}
-                </div>
-              </>
+                </span>
+                <span>
+                  <strong className="num text-[20px]">{energy.totals.savingsPct.toFixed(1)}%</strong>{" "}
+                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                    vs before FirsThing
+                  </span>
+                </span>
+                <span>
+                  <strong className="num text-[20px]">
+                    {Math.round(energy.totals.consumedKwh ?? 0).toLocaleString("en-IN")}
+                  </strong>{" "}
+                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                    kWh consumed
+                  </span>
+                </span>
+              </div>
+            </div>
+            {energy.rupeesSaved === null && (
+              <p
+                className="mt-5 border-t pt-3 text-[12.5px]"
+                style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}
+              >
+                ₹ appears once the month is billed.
+              </p>
             )}
           </Card>
-        )}
-      </div>
+        );
+      })()}
+
+      {energy && energy.totals.savingsPct === null && (
+        <Card className="mb-5 p-6">
+          <p className="lbl mb-2">This month</p>
+          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+            Your savings appear here once the first month of readings is on record.
+          </p>
+        </Card>
+      )}
+
+      {/* System status: meters and tanks together, one line each — merged
+          from two separate cards that repeated "reporting" language twice.
+          Tinted only when something needs looking at; each half states its
+          own "nothing yet" independently, the same as the two cards it
+          replaces did, rather than one combined fallback trying to cover
+          every combination of the two. */}
+      {(energy || grants.has("water_tanks")) && (
+        <Card className="mb-6 p-5">
+          <p className="lbl mb-3">System status</p>
+          <div className="flex flex-wrap items-baseline gap-x-9 gap-y-3">
+            {energy &&
+              (meters.length > 0 ? (
+                <span className="text-[13.5px]">
+                  <strong
+                    className="num text-[16px]"
+                    style={metersOnline < meters.length ? { color: "var(--warn-fg)" } : undefined}
+                  >
+                    {metersOnline}/{meters.length}
+                  </strong>{" "}
+                  <span style={{ color: "var(--text-subtle)" }}>meters online</span>
+                </span>
+              ) : (
+                <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                  Meters appear here once one is assigned to your circuits.
+                </span>
+              ))}
+            {grants.has("water_tanks") &&
+              (tanks.length > 0 ? (
+                <span className="text-[13.5px]">
+                  <strong
+                    className="num text-[16px]"
+                    style={reporting < tanks.length ? { color: "var(--warn-fg)" } : undefined}
+                  >
+                    {reporting}/{tanks.length}
+                  </strong>{" "}
+                  <span style={{ color: "var(--text-subtle)" }}>tanks reporting</span>
+                </span>
+              ) : (
+                <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                  Levels appear here once level sensors are installed on your tanks.
+                </span>
+              ))}
+            {setupCells.map((c) => (
+              <span key={c.label} className="text-[13.5px]">
+                <strong className="num text-[16px]">{c.avg}%</strong>{" "}
+                <span style={{ color: "var(--text-subtle)" }}>avg · {c.label}</span>
+              </span>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {energy && (
         <Card className="mb-6 p-6">

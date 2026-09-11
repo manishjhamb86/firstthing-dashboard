@@ -2542,6 +2542,40 @@ nothing. 772 unit tests, `tsc`/`lint`/`build` clean; no schema change — the co
 (`eligibilityExceptionCriteria`, `lightCountExceptionApprovedBy`, `lightCountExceptionReason`)
 already existed.
 
+## Mobile sign-out fixed, and the dashboard rebuilt around one bold trend (2026-09-12) — user-caught, then user-asked for more
+
+**"profile click is not working in mobile"** — real, and worse than it sounded: below `sm`, the
+avatar was `aria-hidden` with no handler at all, and the email + Sign out block was `hidden
+sm:block` — genuinely unreachable, not just cramped. A mobile viewer had **no way to sign out or
+see who they were signed in as**. Fixed by making the avatar a real toggle button below `sm` that
+opens a small dropdown carrying both; `sm` and up keep the original always-visible layout, since
+nothing was broken there. Verified by actually signing out and re-requesting `/portal` afterward —
+the session was genuinely ended, not just navigated away from.
+
+**"i wanted to see some major changes... i dont see any difference even on mobile"** — fair: the
+prior session's additions (a fixture-verification line, a mobile quick-actions row) were real but
+subtle. This is the substantial pass: the dashboard's two medium "Electricity savings" / "Water
+monitoring" cards, which repeated the same numbers at roughly the same size, are now ONE bold
+"This month" hero (46px headline, up from 38px in a half-width card) carrying a **real
+month-over-month trend** — "↑ 20.0 pts vs last month", computed from stored daily readings
+(`monthlyTotals()`, a new pure function in `portal-energy.ts`, 5 unit cases), never a decorative
+arrow with nothing behind it. Below it, a merged "System status" card replaces the separate meter-
+and tank-reporting lines that used to live in each of the two old cards.
+
+**What this deliberately did NOT do, stated rather than silently applied**: no icon bubbles, and
+tone still tints only figures that need attention. Both are a considered, already-documented rule
+(`Stat`'s own comment in `src/components/ui.tsx`, from a 2026-08-21 audit: "a green number carries
+no information the absence of amber does not already carry") — this pass changed prominence and
+added a real trend, not the underlying vocabulary, and says so rather than quietly overriding
+settled work.
+
+**Verified 13/14 in a browser** (the one failure was my own check's strict-mode ambiguity — two
+elements matched "the email text", one of them the hidden desktop block — not a product bug,
+confirmed by a follow-up check reading each match's own visibility): the hero shows the fixture's
+real 70.0% with the correct real delta; the merged status card replaces both old headings; the
+mobile dropdown opens, shows the email, and its Sign out control actually ends the session. 776
+unit tests (11 new across two files), `tsc`/`lint`/`build` clean, zero console/page errors.
+
 ## The two pending disclosures built, and a real Server/Client boundary bug found doing it (2026-09-12)
 
 **Both items from the research's own "still open" list, built on request**: the fixture-count

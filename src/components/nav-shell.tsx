@@ -50,6 +50,15 @@ export function NavShell({
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const [identityOpen, setIdentityOpen] = useState(false);
+  // A navigation should always close whatever popover is open — otherwise
+  // the identity dropdown from one page is still open, invisibly, on the
+  // next, and the next tap on the avatar looks like it does nothing.
+  const [lastPathname, setLastPathname] = useState(pathname);
+  if (pathname !== lastPathname) {
+    setLastPathname(pathname);
+    setIdentityOpen(false);
+  }
 
   // Sidebar/menu panel sit on chrome; the header sits on content surface.
   const sidebarBrandVariant = theme === "light" ? "light" : "dark";
@@ -87,20 +96,50 @@ export function NavShell({
       {extras}
       <ThemeSwitcher current={theme} surface="content" />
       <div aria-hidden className="h-6 w-px hidden sm:block" style={{ background: "var(--border)" }} />
-      <div className="flex items-center gap-2.5">
-        <span
-          aria-hidden
-          className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold"
+      <div className="relative flex items-center gap-2.5">
+        {/*
+          Below `sm` the email + Sign out block used to be `hidden sm:block`
+          — genuinely unreachable, not just visually tight: the avatar next
+          to it was `aria-hidden` and carried no handler, so a mobile viewer
+          had NO way to sign out or see who they were signed in as at all
+          (user-caught, 2026-09-12). It is a real toggle button below `sm`
+          now, opening a small dropdown carrying the same two facts; `sm`
+          and up keep the original always-visible layout untouched, since
+          nothing was broken there.
+        */}
+        <button
+          type="button"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-sm font-bold sm:pointer-events-none"
           style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
+          onClick={() => setIdentityOpen((v) => !v)}
+          aria-expanded={identityOpen}
+          aria-haspopup="true"
+          aria-label={`Account menu — signed in as ${email}`}
         >
           {initial}
-        </span>
+        </button>
         <div className="hidden sm:block leading-tight">
           <p className="text-[13px] font-semibold truncate max-w-[180px]" title={email}>
             {email}
           </p>
           <SignOutButton className="text-xs font-medium hover:opacity-80" style={{ color: "var(--text-muted)" }} />
         </div>
+        {identityOpen && (
+          <div
+            className="sm:hidden absolute right-0 top-full z-30 mt-2 w-56 rounded-[var(--r-md)] border p-3"
+            style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--e2)" }}
+          >
+            <p className="text-[13px] font-semibold truncate" title={email}>
+              {email}
+            </p>
+            <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
+              <SignOutButton
+                className="text-[13px] font-medium hover:opacity-80"
+                style={{ color: "var(--text-muted)" }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

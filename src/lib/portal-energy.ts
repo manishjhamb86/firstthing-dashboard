@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
-import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
 
@@ -41,6 +41,15 @@ export type PortalCircuit = {
    * `lightCount` when the circuit represents only itself.
    */
   representedLightCount: number;
+  /**
+   * When the fixture count behind this circuit's saving was last physically
+   * confirmed — a rescale event's date, or the commissioning date if the
+   * count has never changed (IPMVP's re-inspection rule, disclosed —
+   * researched 2026-09-11/12). Null only for a circuit with neither, which
+   * should not occur for one with a replacement date recorded, but is read
+   * that way rather than assumed.
+   */
+  lastVerifiedAt: string | null;
   /** Days recorded in the headline month (excluded days not counted). */
   monthDays: number;
   monthKwh: number | null;
@@ -146,6 +155,9 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       band: s.band,
       benchmarkPct: c.benchmarkSavingsPct,
       baselineNow,
+      lastVerifiedAt: (lastVerifiedAt(c.rescaleEvents, c.lightReplacementDate, today) ?? null)
+        ?.toISOString()
+        .slice(0, 10) ?? null,
     };
   });
 

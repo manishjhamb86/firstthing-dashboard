@@ -134,6 +134,29 @@ export function effectiveLightCountAt(
 }
 
 /**
+ * When the light count behind a circuit's saving was last physically
+ * confirmed — IPMVP's own re-inspection rule for a sampled/extrapolated
+ * figure: "the continued existence of the fixtures... is critical to the
+ * savings determination" (researched 2026-09-11/12,
+ * docs/engineering/16-portal-disclosure-research.md). A rescale event IS
+ * that confirmation, already required to carry a `verificationNote`
+ * (FEAT-041-AC-3) — this just replays the same live-events rule to surface
+ * ITS date rather than its arithmetic. With no rescale ever recorded, the
+ * count was last confirmed at commissioning — the day the fixtures were
+ * actually installed and counted (CON-19's pivot day), not the day the
+ * meter went in, which can precede the physical fixture count by weeks.
+ */
+export function lastVerifiedAt(
+  events: RescaleEvent[],
+  commissionedAt: Date | null,
+  at: Date,
+): Date | null {
+  const applicable = liveEventsUpTo(events, at);
+  if (applicable.length > 0) return applicable[applicable.length - 1].effectiveDate;
+  return commissionedAt;
+}
+
+/**
  * A void is itself a billing-affecting act — it changes which baseline was in
  * force — so it needs an owner and a stated reason, exactly like the rescale
  * it strikes out (INV-03's reasoning, applied to the correction path).

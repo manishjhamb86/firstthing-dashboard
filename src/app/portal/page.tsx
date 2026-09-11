@@ -18,6 +18,7 @@ import { reviewDeadlineFor } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
 import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
+import { PORTAL_NAV_ICONS, portalNavEntries } from "./portal-nav-entries";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +35,7 @@ export default async function PortalHomePage() {
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
   const societyId = viewer.societyId;
   const grants = effectiveGrants(viewer.role, viewer.grants);
+  const quickActions = portalNavEntries(grants);
 
   const [society, sharedReports, openOffers, tanks, installations] = await Promise.all([
     db.society.findUnique({ where: { id: societyId } }),
@@ -134,6 +136,32 @@ export default async function PortalHomePage() {
           )
         }
       />
+
+      {/* Mobile-only jump row: on desktop the sidebar already puts every
+          granted module one click away, so a second copy here would be pure
+          duplication (weighed against a reference mockup's "Quick Actions"
+          idea and deliberately not built there for that reason, 2026-09-12).
+          It earns its place only where the sidebar collapses behind a Menu
+          toggle — `lg:hidden` matches that exact breakpoint (nav-shell.tsx),
+          so this row is never visible alongside a fully open sidebar. */}
+      {quickActions.length > 0 && (
+        <div className="mb-6 flex flex-wrap gap-2.5 lg:hidden">
+          {quickActions.map((e) => {
+            const Icon = PORTAL_NAV_ICONS[e.key];
+            return (
+              <Link
+                key={e.href}
+                href={e.href}
+                className="flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 py-1.5 text-[12.5px] font-semibold"
+                style={{ borderColor: "var(--border-subtle)", background: "var(--surface)" }}
+              >
+                <Icon size={14} strokeWidth={2} style={{ color: "var(--accent)" }} aria-hidden />
+                {e.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
 
       {pendingActions.length > 0 && (
         <div

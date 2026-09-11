@@ -7,6 +7,7 @@ import { societyEvents } from "@/lib/portal-notifications";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { resolveTheme } from "@/lib/resolve-theme";
 import { PortalShell, type PortalNavEntry } from "./portal-shell";
+import { portalNavEntries } from "./portal-nav-entries";
 
 export const dynamic = "force-dynamic";
 
@@ -41,24 +42,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
 
   const entries: PortalNavEntry[] = [
     { key: "dashboard" as const, href: "/portal", label: "Dashboard", exact: true },
-    ...(grants.has("electricity")
-      ? [{ key: "electricity" as const, href: "/portal/electricity", label: "Electricity" }]
-      : []),
-    ...(grants.has("water_tanks")
-      ? [{ key: "water" as const, href: "/portal/tanks", label: "Water tanks" }]
-      : []),
-    ...(grants.has("documents")
-      ? [{ key: "documents" as const, href: "/portal/documents", label: "Documents" }]
-      : []),
-    ...(grants.has("inventory")
-      ? [{ key: "inventory" as const, href: "/portal/inventory", label: "Inventory" }]
-      : []),
-    ...(grants.has("tickets_view")
-      ? [{ key: "support" as const, href: "/portal/support", label: "Support" }]
-      : []),
-    ...(grants.has("society_admin")
-      ? [{ key: "admin" as const, href: "/portal/admin", label: "Society admin" }]
-      : []),
+    ...portalNavEntries(grants),
   ];
 
   return (

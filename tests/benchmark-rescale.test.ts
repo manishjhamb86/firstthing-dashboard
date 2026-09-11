@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   effectiveBaselineAt,
   effectiveLightCountAt,
+  lastVerifiedAt,
   refuseRescale,
   refuseVoid,
   rescaleBaseline,
@@ -185,6 +186,39 @@ describe("voided entries — soft delete, and what it does to the replay", () =>
   it("treats an absent voidedAt as live, so existing rows are unaffected", () => {
     const events = [{ ...ev(50, 54, 100, "2026-09-01"), voidedAt: undefined }];
     expect(effectiveBaselineAt(commissioned, events, new Date("2026-09-30"))).toBe(108);
+  });
+});
+
+describe("lastVerifiedAt — IPMVP's re-inspection date, disclosed to the portal", () => {
+  it("falls back to commissioning when no rescale has ever fired", () => {
+    expect(lastVerifiedAt([], d("2026-06-01"), d("2026-09-01"))).toEqual(d("2026-06-01"));
+  });
+
+  it("is null when neither exists — a circuit not yet commissioned", () => {
+    expect(lastVerifiedAt([], null, d("2026-09-01"))).toBeNull();
+  });
+
+  it("moves to the live event's own date once one fires", () => {
+    const rescale = ev({ effectiveDate: d("2026-09-01"), rescaledBaseline: 108 });
+    expect(lastVerifiedAt([rescale], d("2026-06-01"), d("2026-10-01"))).toEqual(d("2026-09-01"));
+  });
+
+  it("is the LATEST live event, not the first, with several on record", () => {
+    const events = [
+      ev({ effectiveDate: d("2026-09-01"), rescaledBaseline: 108 }),
+      ev({ effectiveDate: d("2027-01-01"), rescaledBaseline: 120 }),
+    ];
+    expect(lastVerifiedAt(events, d("2026-06-01"), d("2027-06-01"))).toEqual(d("2027-01-01"));
+  });
+
+  it("is not moved by a date the replay has not reached yet", () => {
+    const rescale = ev({ effectiveDate: d("2026-09-01"), rescaledBaseline: 108 });
+    expect(lastVerifiedAt([rescale], d("2026-06-01"), d("2026-08-01"))).toEqual(d("2026-06-01"));
+  });
+
+  it("skips a voided entry — a struck-out event confirmed nothing", () => {
+    const voided = ev({ effectiveDate: d("2026-09-01"), rescaledBaseline: 108, voidedAt: d("2026-09-05") });
+    expect(lastVerifiedAt([voided], d("2026-06-01"), d("2027-01-01"))).toEqual(d("2026-06-01"));
   });
 });
 

@@ -1,18 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import {
-  Boxes,
-  Droplets,
-  FileText,
-  LayoutDashboard,
-  LifeBuoy,
-  ShieldCheck,
-  Zap,
-} from "lucide-react";
 import { NavShell, type NavItem } from "@/components/nav-shell";
 import { NotificationBell } from "@/components/notification-bell";
 import type { ThemeId } from "@/lib/theme";
+import { PORTAL_NAV_ICONS } from "./portal-nav-entries";
 
 /**
  * The society portal's chrome — the same NavShell the back office wears,
@@ -28,20 +20,11 @@ import type { ThemeId } from "@/lib/theme";
  * grant server-side — the sidebar is a courtesy, never the boundary.
  *
  * Items arrive as serializable keys from the server layout (which is where
- * the grants are resolved, DB-fresh); the icon components live here because
- * a Server Component cannot pass component references across the boundary.
+ * the grants are resolved, DB-fresh); the icon LOOKUP happens here, from
+ * the plain `portal-nav-entries.ts` module — never define the icon map in
+ * this file again, see that module's own comment for why.
  */
-const ICONS = {
-  dashboard: LayoutDashboard,
-  electricity: Zap,
-  water: Droplets,
-  documents: FileText,
-  inventory: Boxes,
-  support: LifeBuoy,
-  admin: ShieldCheck,
-} as const;
-
-export type PortalNavKey = keyof typeof ICONS;
+export type PortalNavKey = keyof typeof PORTAL_NAV_ICONS;
 
 export type PortalNavEntry = {
   key: PortalNavKey;
@@ -70,7 +53,7 @@ export function PortalShell({
   const items: NavItem[] = entries.map((e) => ({
     href: e.href,
     label: e.label,
-    icon: ICONS[e.key],
+    icon: PORTAL_NAV_ICONS[e.key],
     exact: e.exact,
   }));
   return (

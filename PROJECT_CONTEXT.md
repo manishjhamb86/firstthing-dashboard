@@ -2542,6 +2542,53 @@ nothing. 772 unit tests, `tsc`/`lint`/`build` clean; no schema change — the co
 (`eligibilityExceptionCriteria`, `lightCountExceptionApprovedBy`, `lightCountExceptionReason`)
 already existed.
 
+## The two pending disclosures built, and a real Server/Client boundary bug found doing it (2026-09-12)
+
+**Both items from the research's own "still open" list, built on request**: the fixture-count
+re-inspection date on Electricity (IPMVP's own rule — a sampled/extrapolated figure needs periodic
+confirmation the fixtures still exist), and a mobile-only quick-actions row on the dashboard (the
+one idea from the reference mockup not already met by the existing build, scoped to mobile since
+the sidebar already covers desktop).
+
+**Fixture verification date**: `lastVerifiedAt()` in `benchmark-rescale.ts` replays the same
+live-events rule `effectiveBaselineAt`/`effectiveLightCountAt` already use, but surfaces the DATE
+rather than the arithmetic — the latest live rescale event's `effectiveDate`, or the circuit's own
+`lightReplacementDate` (commissioning — CON-19's pivot day, when fixtures were actually installed
+and counted) if none has ever fired. `PortalCircuit.lastVerifiedAt` and one line on the circuit
+table: "Fixture count last verified 04-10-2025." 6 new unit cases.
+
+**Mobile quick-actions row**: `src/app/portal/portal-nav-entries.ts` is a new, deliberately PLAIN
+module (no `"use client"`) holding both the module→icon map and `portalNavEntries(grants)` — the
+same list the sidebar has always built, now factored out so the sidebar (`layout.tsx`) and the
+dashboard's new row (`page.tsx`) read one list instead of two hand-written copies that can drift,
+the exact class of bug this codebase has hit before. The row itself is `lg:hidden`, matching
+`nav-shell.tsx`'s own collapse breakpoint exactly, so it is never visible alongside a fully open
+sidebar — deliberately not built for desktop, where it would only duplicate the sidebar.
+
+**A real bug, not HMR staleness, found building this**: importing `PORTAL_NAV_ICONS` into
+`page.tsx` (a Server Component) from `portal-shell.tsx` (`"use client"`) crashed every portal
+dashboard load with `Element type is invalid... got undefined` — confirmed by a full `.next` wipe
+and dev-server restart, which did NOT fix it, ruling out staleness. Next treats every export of a
+`"use client"` file as an opaque client reference, even an inert value like an icon component —
+`portal-shell.tsx`'s own pre-existing comment already stated the REVERSE of this exact rule
+("the icon components live here because a Server Component cannot pass component references across
+the boundary"), which is what made the direction of the mistake easy to place once found. Fixed by
+moving the icon map into the new plain module, imported by both the client sidebar and the server
+dashboard — the general fix for this class: a value two Server/Client-mixed callers both need
+belongs in a plain module, never in whichever one happened to need it first.
+
+**Verified 13/13 in a browser**: the commissioning-date fallback and the rescale-event date both
+render correctly (a fixture with a real rescale event confirmed via direct query, not just the
+screen); the mobile row offers exactly the granted modules with no self-link back to the dashboard,
+sits inside a 390px viewport; the same row is provably absent at 1440px while the sidebar still
+carries the identical link. 771 unit tests (6 new), `tsc`/`lint`/`build` clean, zero console/page
+errors. Not deployed — this branch is not merged.
+
+**Noted, not built**: the user said flow-meter data is coming soon, which would make specific
+energy (kWh/m³) a legitimate, disclosable claim per the research's finding #4 — nothing built
+against it yet, deliberately, since there is no schema, vendor shape or sample file to build from.
+Same rule this codebase has followed every other time a new data source arrived.
+
 ## Portal disclosure: what a circuit represents, and which tower a tank is in (2026-09-11/12) — researched, branch `portal-redesign`
 
 **The ask combined two things**: a deep-research pass on how to present verified savings and live

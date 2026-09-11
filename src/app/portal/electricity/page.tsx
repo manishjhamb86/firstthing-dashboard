@@ -7,6 +7,7 @@ import { hasGrant } from "@/lib/portal-access";
 import { societyEnergy } from "@/lib/portal-energy";
 import { societyMeterRows } from "@/lib/meter-view";
 import { SAVINGS_BAND_META } from "@/lib/circuit-load";
+import { formatDate } from "@/lib/format-date";
 import {
   Card,
   CardTitle,
@@ -192,6 +193,11 @@ export default async function PortalElectricityPage() {
                               </>
                             )}
                           </span>
+                          {c.lastVerifiedAt && (
+                            <span className="block text-[11px]" style={{ color: "var(--text-subtle)" }}>
+                              Fixture count last verified {formatDate(c.lastVerifiedAt)}
+                            </span>
+                          )}
                         </td>
                         <td className="num text-right">
                           {c.monthDailyAvg !== null ? c.monthDailyAvg.toFixed(1) : "—"}

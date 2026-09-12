@@ -2702,6 +2702,41 @@ props — the client never independently calls `new Date()` for its starting val
 
 Re-verified 20/20, 8/8, 2/2, all clean including zero console errors this time.
 
+## The finalize screen made mobile-first, not a shrunk desktop table (2026-09-12) — user-caught, real screenshots
+
+**Reported with two phone screenshots**: the fixture table's columns ran off the right edge
+("REPLA[CE]" cut off, the sensor `<select>` reduced to an arrow with no visible value), and
+separately, "things that wont take more then a line are taking almost 1/3rd of the space" — a whole
+`Card` spent on a single "Inspector: X" line, three full-width stacked tiles for three short
+numbers. Both real: an inspector does this walk on their phone, so a layout that only works on a
+wide screen is not a secondary concern here — it is the primary one.
+
+**The fixture table became a stack of small cards, not a narrower table.** A six-column table has
+no honest way to fit a phone width; the fix is not "make the columns thinner," it's "stop using
+columns." Each fixture is now its own bordered block — Location, then Sensor paired with the two
+checkboxes (their own words, "Physical damage"/"To be replaced", never bare boxes with a header
+naming them three inches away), then Remarks — every field still carrying a real `<label>` (this
+codebase's own standing rule: a placeholder alone disappears the moment a field has a value).
+Read-only display (a finalized inspection's own fixture list) got the matching treatment: each
+fixture as one compact block — a title line with its sensor chip, a second line naming damage/
+replace/remarks only when any is actually true — instead of the same six-column table repeated
+read-only.
+
+**The "Visit" card is gone — folded into the page header's own subtitle line.** Inspector, and for
+a finalized visit the society representative too, are now one clause each in the subtitle Next.js
+already renders beside the title, rather than a whole elevated `Card` (title + padding + border)
+built to hold a single sentence. The three summary tiles (checked/faulty/faulty %) now use this
+codebase's own `StatRow`/`Stat` primitives (a container-query grid already used elsewhere, e.g. the
+billing board) instead of a bespoke `sm:grid-cols-3` — the shared component already collapses to
+two columns rather than three stacked full-width cards, which was the actual complaint.
+
+**Verified 11/11 at a real 390px viewport**: no horizontal page overflow at any point — before
+adding a fixture, with an open fixture card, and with real text typed into every field; no separate
+"Visit" heading exists anywhere on the page; Location/Sensor/Remarks each carry their own visible
+label; both checkbox captions render in full, nothing truncated. `tsc`/`lint`/`build` clean, 816
+unit tests (unaffected — this was presentation only, no action or validation logic changed). Not
+yet deployed.
+
 ## Invoices can be voided and reattached (2026-09-12) — user-asked, "anything more to implement?"
 
 **The correction path Billing's own launch entry named as deliberately unbuilt** — "no correction

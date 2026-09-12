@@ -2920,6 +2920,89 @@ overdue-inspection notification (the other half of the same user instruction) �
 a materially separate piece of work from a photo field, and is being sequenced after the Billing
 CON-13 automation the same message asked for, not silently dropped.
 
+## CON-13's suspension progression, finally wired to a job (2026-09-12) — user-asked, the last item of the same bundled instruction
+
+**The gap named honestly at MS-08 and again when the Billing verbs were built earlier the same day**:
+`recordPayment` only ever set `paid` — nothing anywhere moved a released invoice through
+overdue → warning → suspended, so a real defaulting society never actually got suspended by this
+system alone. The pure clock (`arrearsStateOf`, `shouldFireSuspension`) and the safety rule had
+existed since MS-08 with zero callers anywhere in `src/` (confirmed by grep before writing a line).
+The user's own instruction: "build it. bill will be uploaded using invoice pdf. every month at the
+start. and as per the invoice due date system should start notifying and following up."
+
+**The clock now keys off the invoice's own due date, not a fixed offset after release** — the
+user's explicit words. `ArrearsInput` gained `dueDate: Date`; `arrearsStateOf` pivots off the LATER
+of `dueDate` and `releasedAt`: an invoice released well before its own due date (the ordinary case
+— a 15/30-day term) tracks from the due date, while an invoice released only after its due date had
+already passed (a late upload) floors on release instead, so a society is never retroactively
+overdue for a delay that was ops', not theirs. `not_released` is still absolute — the clock never
+starts before release, whatever the due date says. 3 new unit cases in `tests/arrears.test.ts`
+(now 34), including the floor case; the existing 31 kept passing unchanged by giving the default
+test fixture a `dueDate` equal to its `releasedAt` (an "immediately payable" invoice), which walks
+the identical arithmetic the pre-pivot tests asserted.
+
+**The other human touchpoint CON-13 needed and didn't have**: `confirmPaymentStatus` (ops,
+`src/app/admin/billing/[calculationId]/invoice-actions.ts`) stamps
+`paymentStatusConfirmedAt`/`paymentStatusConfirmedById` with no payment recorded — without it, an
+invoice from a society that has never paid anything would never accumulate a fresh confirmation and
+could never legally be suspended, since the safety rule requires same-day-confirmed data.
+`recordPayment` now stamps the same two columns in the same transaction as recording the payment
+itself, on the reasoning that recording a payment against Zoho IS confirming what is true today —
+so the common case needs no separate click.
+
+**`arrears_sweep`, a new job type in `scripts/job-worker.ts`**, following the exact `run*`/
+`schedule*`/`ensure*Scheduled` triplet every other recurring job here uses, with the same
+`claimJob` compare-and-set and `finally`-block self-reschedule (a bad invoice must not stop the
+clock for every other society). Every released, un-voided, unpaid `BillingInvoice` is re-evaluated
+each pass through the same two pure functions — nothing here decides the clock, it only applies
+what they already compute. `overdueTrackingAt`/`warningStartedAt`/`suspendDueAt` (present in the
+schema since MS-08, "currently never written to by any code path") are written for visibility;
+`status` only ever advances forward through released → overdue → warning → suspended, and never
+overwrites `paid` — that transition belongs to `recordPayment` alone. Cadence: every 6 hours, since
+CON-13's clock resolves by the day, not the minute.
+
+**Visibility, wired into what already existed rather than a new screen**: the notification centre
+(`src/lib/notifications.ts`) now folds overdue/warning/suspended invoices into the same feed as
+meter alerts and open tickets — "derived from rows of record, no shadow table," the same call this
+file already made for alerts. Unlike an alert, there's no acknowledge act for an invoice; following
+up on it IS `confirmPaymentStatus`/`recordPayment`, so these stay in the feed and the badge count
+until paid. The invoice detail page gained a "Following up (CON-13)" section (days until suspension,
+last-confirmed date, the Confirm button); the billing board gained a small follow-up chip beside the
+calculation's own Released status, read from the same `BillingInvoice.status` the sweep writes.
+The portal's own invoice status chip (`STATUS_META` in `src/app/portal/billing/page.tsx`) already
+mapped overdue/warning/suspended to a resident-facing "Overdue" chip and needed no change at all —
+it had been sitting there since the Billing verbs were built earlier the same day, simply waiting
+for something to ever write those statuses.
+
+**Deliberately not built, stated rather than silently narrowed**: no "grant an extension" UI —
+`InvoiceExtension` and `refuseExtension` exist and the sweep already sums real extension rows into
+`extensionDaysGranted`, so a future action can be added with zero change to the clock, but nothing
+asked for it in this pass and it's a separate act (delaying a suspension) from the progression the
+user actually asked to build (triggering one). No real email/SMS delivery — ADR-008 is still
+Proposed, so "following up" is the in-app notification feed plus the portal's own chip, the same
+constraint every other alerting feature in this codebase has stated honestly.
+
+**Verified against the real Postgres database, not asserted** — a disposable `MonthlyCalculation`/
+`BillingInvoice` fixture (this codebase's own established convention for testing a billing pipeline
+that doesn't yet have exercisable real data) with a due date 25 days in the past and no confirmed
+payment status: the running `pnpm worker` process picked up the seeded sweep job and correctly
+computed phase `warning` while REFUSING suspension with `stale_payment_data` — the exact safety
+rule working end to end, not just unit-tested. Confirming payment status and re-running the sweep
+then correctly fired the suspension (`status: suspended`, `suspendedAt` stamped). A stress test —
+manually resetting 4 job rows to `pending` at once — produced zero forked chains (three
+`job.arrears_sweep_duplicate_suppressed` lines, one real run), the same guarantee ADR-006's
+compare-and-set already proved for the gate-pass sweep. Recording a partial payment through the
+real browser form left the invoice `suspended` (correctly not paid) while stamping the confirmation;
+recording the remainder flipped it to `paid`, and a further sweep pass correctly excluded it
+entirely (the query's own `status: { not: "paid" }` filter, not a special case). The board's
+follow-up chip and the invoice page's "Following up" section were both driven live in a browser
+(11/11 across two scripts, zero console errors) against a fixture re-pointed at a real active
+contract (Gaur Saundaryam's) so the board's own contract-driven row logic — unrelated to this
+change — would actually render it. All fixture rows removed by cascading delete afterward,
+confirmed by count query. 819 unit tests, `tsc`/`lint`/`build` clean. Migration
+`20260912070000_add_arrears_sweep_job_type` is a single additive enum value. Not yet deployed —
+this branch is not merged.
+
 ## Mobile sign-out fixed, and the dashboard rebuilt around one bold trend (2026-09-12) — user-caught, then user-asked for more
 
 **"profile click is not working in mobile"** — real, and worse than it sounded: below `sm`, the

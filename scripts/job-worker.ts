@@ -3,6 +3,7 @@ import { db } from "../src/lib/db";
 import { logger } from "../src/lib/logger";
 import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";
 import { pollMeters } from "../src/lib/meter-poll";
+import { arrearsStateOf, shouldFireSuspension } from "../src/lib/arrears";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -27,6 +28,13 @@ const GATEPASS_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 const TANK_SAMPLE_INTERVAL_MS = 30 * 60 * 1000;
 /** Hourly, per the user's own cadence for meter readings (2026-08-26). */
 const METER_POLL_INTERVAL_MS = 60 * 60 * 1000;
+
+/**
+ * CON-13's clock advances by the day, not the minute — a sweep every few
+ * hours is enough to catch a phase crossing the same day it happens without
+ * hammering the database over a fleet of invoices (2026-09-12).
+ */
+const ARREARS_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 // A job left `running` by a process that died mid-run would otherwise sit
 // there forever: it is not `done`, so it never schedules a successor, and it
@@ -97,6 +105,9 @@ async function processJob(job: { id: string; type: string }) {
     case "tank_level_sample":
       await runTankLevelSample();
       break;
+    case "arrears_sweep":
+      await runArrearsSweep();
+      break;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
   }
@@ -158,6 +169,142 @@ async function runMeterPoll() {
     // Reschedule even after a failed pass: a vendor outage must skip a
     // sample, never kill the chain that would notice the outage ending.
     await scheduleMeterPoll(new Date(Date.now() + METER_POLL_INTERVAL_MS));
+  }
+}
+
+/**
+ * CON-13's suspension progression, wired to a job for the first time
+ * (2026-09-12) — until now `recordPayment` was the only thing that ever
+ * touched `BillingInvoice.status`, and it only ever set `paid`. A real
+ * defaulting society never moved through overdue → warning → suspended.
+ *
+ * Every released, unpaid, un-voided invoice is re-evaluated on each pass
+ * through the same two pure functions the schema's own comments have named
+ * since MS-08 (`arrearsStateOf`, `shouldFireSuspension`) — nothing here
+ * decides the clock itself, this only applies what they already compute.
+ * `overdueTrackingAt`/`warningStartedAt`/`suspendDueAt` are written for
+ * visibility (so ops can see the computed dates without recomputing them),
+ * and `status` only ever advances forward through
+ * released → overdue → warning → suspended — recordPayment's own `paid`
+ * transition is left alone; this sweep never overwrites it, and never
+ * un-suspends on its own (paid wins, but only recordPayment says paid).
+ */
+async function runArrearsSweep() {
+  try {
+    const now = new Date();
+    const invoices = await db.billingInvoice.findMany({
+      where: { voidedAt: null, releasedAt: { not: null }, status: { not: "paid" } },
+      include: {
+        payments: { select: { amount: true, confirmedAsOf: true } },
+        extensions: { select: { days: true } },
+      },
+    });
+
+    let transitions = 0;
+    let suspensions = 0;
+
+    for (const inv of invoices) {
+      const amountPaid = inv.payments.reduce((n, p) => n + p.amount, 0);
+      const extensionDaysGranted = inv.extensions.reduce((n, e) => n + e.days, 0);
+      const paymentConfirmedAsOf = inv.payments.reduce<Date | null>(
+        (latest, p) => (!latest || p.confirmedAsOf > latest ? p.confirmedAsOf : latest),
+        null,
+      );
+
+      const state = arrearsStateOf({
+        releasedAt: inv.releasedAt,
+        dueDate: inv.dueDate,
+        amountPaid,
+        invoiceAmount: inv.amount,
+        paymentConfirmedAsOf,
+        extensionDaysGranted,
+        alreadySuspendedAt: inv.suspendedAt,
+        now,
+      });
+
+      // "paid" is recordPayment's own transition, decided the moment a
+      // payment completes it — the sweep never fires that transition itself,
+      // and "not_released" cannot occur here (the query already requires
+      // releasedAt).
+      if (state.phase === "paid") continue;
+
+      const verdict = shouldFireSuspension({
+        state,
+        amountPaid,
+        invoiceAmount: inv.amount,
+        paymentStatusConfirmedAt: inv.paymentStatusConfirmedAt,
+        alreadySuspendedAt: inv.suspendedAt,
+        now,
+      });
+
+      const data: {
+        overdueTrackingAt?: Date;
+        warningStartedAt?: Date;
+        suspendDueAt?: Date;
+        status?: "overdue" | "warning" | "suspended";
+        suspendedAt?: Date;
+      } = {};
+
+      if (state.overdueTrackingFrom && inv.overdueTrackingAt?.getTime() !== state.overdueTrackingFrom.getTime()) {
+        data.overdueTrackingAt = state.overdueTrackingFrom;
+      }
+      if (state.warningFrom && inv.warningStartedAt?.getTime() !== state.warningFrom.getTime()) {
+        data.warningStartedAt = state.warningFrom;
+      }
+      if (state.suspendDueAt && inv.suspendDueAt?.getTime() !== state.suspendDueAt.getTime()) {
+        data.suspendDueAt = state.suspendDueAt;
+      }
+
+      if (verdict.fire) {
+        data.status = "suspended";
+        data.suspendedAt = now;
+        suspensions++;
+      } else if (
+        (state.phase === "overdue" || state.phase === "warning") &&
+        inv.status !== state.phase
+      ) {
+        data.status = state.phase;
+      }
+
+      if (Object.keys(data).length > 0) {
+        await db.billingInvoice.update({ where: { id: inv.id }, data });
+        transitions++;
+        logger.info("job.arrears_sweep_transition", {
+          invoiceId: inv.id,
+          calculationId: inv.monthlyCalculationId,
+          phase: state.phase,
+          suspended: verdict.fire,
+          suspensionRefusalReason: verdict.fire ? null : verdict.reason,
+        });
+      }
+    }
+
+    if (transitions > 0 || invoices.length > 0) {
+      logger.info("job.arrears_sweep_done", { invoicesChecked: invoices.length, transitions, suspensions });
+    }
+  } finally {
+    // Reschedule even after a failed pass — a bug in one invoice's data must
+    // not silently stop CON-13's clock for every other society.
+    await scheduleArrearsSweep(new Date(Date.now() + ARREARS_SWEEP_INTERVAL_MS));
+  }
+}
+
+async function scheduleArrearsSweep(runAt: Date) {
+  const existing = await db.job.findFirst({ where: { type: "arrears_sweep", status: "pending" } });
+  if (existing) {
+    logger.warn("job.arrears_sweep_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "arrears_sweep", runAt } });
+}
+
+async function ensureArrearsSweepScheduled() {
+  const existing = await db.job.findFirst({
+    where: { type: "arrears_sweep", status: { in: ["pending", "running"] } },
+  });
+  if (!existing) {
+    await db.job.create({ data: { type: "arrears_sweep", runAt: new Date() } });
+    logger.info("job.arrears_sweep_seeded", {});
   }
 }
 
@@ -315,6 +462,7 @@ async function main() {
   await ensureGatepassSweepScheduled();
   await ensureTankSampleScheduled();
   await ensureMeterPollScheduled();
+  await ensureArrearsSweepScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

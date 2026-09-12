@@ -7,12 +7,14 @@ import { formatDate } from "@/lib/format-date";
 import {
   acknowledgeMismatch,
   attachInvoice,
+  confirmPaymentStatus,
   getInvoiceDownloadUrl,
   getInvoiceUploadUrl,
   recordPayment,
   releaseCalculation,
   voidInvoiceAttachment,
 } from "./invoice-actions";
+import { formatDateTime } from "@/lib/format-date";
 
 export type InvoiceState = {
   id: string;
@@ -25,6 +27,19 @@ export type InvoiceState = {
   status: "attached" | "released" | "overdue" | "warning" | "suspended" | "paid";
   fileName: string;
   paidTotal: number;
+  /** CON-13's safety rule: when ops last confirmed against Zoho that this is
+   *  what the invoice's payment status genuinely is, right now. Stale data
+   *  stops the arrears_sweep job's suspension clock rather than firing on it. */
+  paymentStatusConfirmedAt: string | null;
+} | null;
+
+/** What the arrears_sweep job (scripts/job-worker.ts) already computed —
+ *  this screen only ever displays CON-13's clock, never recomputes it with
+ *  different logic. */
+export type ArrearsView = {
+  phase: "not_released" | "current" | "overdue" | "warning" | "suspended" | "paid";
+  daysUntilSuspension: number | null;
+  suspendDueAt: string | null;
 } | null;
 
 const rupees = (n: number) =>
@@ -68,6 +83,7 @@ export function InvoicePanel({
   releaseBlockedReason,
   isOps,
   voidedInvoices,
+  arrears,
 }: {
   calculationId: string;
   invoice: InvoiceState;
@@ -83,6 +99,7 @@ export function InvoicePanel({
    *  month, the same "struck through, not erased" rule every other soft
    *  delete in this codebase follows. */
   voidedInvoices: VoidedInvoice[];
+  arrears: ArrearsView;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -187,6 +204,16 @@ export function InvoicePanel({
       if (result.error) return setError(result.error);
       setNotice("Payment recorded.");
       setPayRef("");
+      router.refresh();
+    });
+  }
+
+  function submitConfirmStatus() {
+    setError(null);
+    startTransition(async () => {
+      const result = await confirmPaymentStatus(calculationId);
+      if (result.error) return setError(result.error);
+      setNotice("Confirmed — still unpaid as of today.");
       router.refresh();
     });
   }
@@ -402,6 +429,31 @@ export function InvoicePanel({
                     </button>
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {invoice.status !== "attached" && invoice.status !== "paid" && arrears && (
+            <div className="border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
+              <p className="lbl mb-1">Following up (CON-13)</p>
+              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                {arrears.phase === "suspended"
+                  ? "Suspended — field servicing is paused until this is paid."
+                  : arrears.daysUntilSuspension !== null && arrears.daysUntilSuspension > 0
+                    ? `${arrears.daysUntilSuspension} day${arrears.daysUntilSuspension === 1 ? "" : "s"} until suspension, if it stays unpaid.`
+                    : "Suspension is due — the next automated pass decides it."}
+              </p>
+              <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                {invoice.paymentStatusConfirmedAt
+                  ? `Payment status last confirmed against Zoho ${formatDateTime(new Date(invoice.paymentStatusConfirmedAt))}.`
+                  : "Payment status has never been confirmed against Zoho."}{" "}
+                A suspension only ever fires against a same-day confirmation (the safety rule) —
+                recording a payment confirms it too.
+              </p>
+              {isOps && (
+                <button type="button" className="btn-outline mt-2" disabled={pending} onClick={submitConfirmStatus}>
+                  {pending ? "Saving…" : "Confirm — still unpaid as of today"}
+                </button>
               )}
             </div>
           )}

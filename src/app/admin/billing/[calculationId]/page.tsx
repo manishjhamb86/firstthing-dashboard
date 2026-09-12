@@ -6,6 +6,7 @@ import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } fr
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { canRelease, isOps, requireBillingReader } from "../access";
 import { refuseRelease } from "@/lib/invoice-reconciliation";
+import { arrearsStateOf } from "@/lib/arrears";
 import { InvoicePanel } from "./invoice-panel";
 
 // MS-08 / FEAT-048 — one month's run, line by line.
@@ -51,7 +52,11 @@ export default async function CalculationPage({
         },
       },
       invoices: {
-        include: { payments: true, voidedBy: { select: { name: true, email: true } } },
+        include: {
+          payments: true,
+          extensions: { select: { days: true } },
+          voidedBy: { select: { name: true, email: true } },
+        },
         orderBy: { uploadedAt: "desc" },
       },
     },
@@ -62,6 +67,23 @@ export default async function CalculationPage({
   // rest are void, kept as history rather than hidden (2026-09-12).
   const liveInvoice = calc.invoices.find((i) => !i.voidedAt) ?? null;
   const voidedInvoices = calc.invoices.filter((i) => i.voidedAt);
+
+  // CON-13's clock, read the same way the arrears_sweep job reads it — this
+  // screen never recomputes the rule differently, only displays what the
+  // job already decided (and what it will decide on its next pass).
+  const arrears =
+    liveInvoice && liveInvoice.releasedAt
+      ? arrearsStateOf({
+          releasedAt: liveInvoice.releasedAt,
+          dueDate: liveInvoice.dueDate,
+          amountPaid: liveInvoice.payments.reduce((n, p) => n + p.amount, 0),
+          invoiceAmount: liveInvoice.amount,
+          paymentConfirmedAsOf: null,
+          extensionDaysGranted: liveInvoice.extensions.reduce((n, e) => n + e.days, 0),
+          alreadySuspendedAt: liveInvoice.suspendedAt,
+          now: new Date(),
+        })
+      : null;
 
   // The per-part terms a multi-deal month billed under, from the frozen
   // snapshot (GATE-01) — the single pointer above is null in that case.
@@ -200,6 +222,16 @@ export default async function CalculationPage({
                   status: liveInvoice.status,
                   fileName: liveInvoice.fileName,
                   paidTotal: liveInvoice.payments.reduce((n, p) => n + p.amount, 0),
+                  paymentStatusConfirmedAt: liveInvoice.paymentStatusConfirmedAt?.toISOString() ?? null,
+                }
+              : null
+          }
+          arrears={
+            arrears
+              ? {
+                  phase: arrears.phase,
+                  daysUntilSuspension: arrears.daysUntilSuspension,
+                  suspendDueAt: arrears.suspendDueAt?.toISOString() ?? null,
                 }
               : null
           }

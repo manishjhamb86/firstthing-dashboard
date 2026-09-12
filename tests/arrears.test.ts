@@ -9,10 +9,16 @@ import {
 } from "../src/lib/arrears";
 
 const RELEASED = new Date("2026-09-01T00:00:00.000Z");
+// The default fixture's due date equals its release date — an "immediately
+// payable" invoice — so every pre-existing test below still walks the exact
+// same arithmetic as before the due-date pivot was introduced. The pivot
+// itself gets its own describe block further down.
+const DUE = RELEASED;
 
 function stateAt(now: Date, over: Partial<Parameters<typeof arrearsStateOf>[0]> = {}) {
   return arrearsStateOf({
     releasedAt: RELEASED,
+    dueDate: DUE,
     amountPaid: 0,
     invoiceAmount: 10_000,
     paymentConfirmedAsOf: null,
@@ -67,6 +73,38 @@ describe("CON-13 — the arrears clock", () => {
 
   it("treats a part payment as not paid", () => {
     expect(stateAt(new Date("2026-09-14T00:00:00.000Z"), { amountPaid: 9_999 }).phase).toBe("warning");
+  });
+});
+
+describe("CON-13 — the clock keys off the invoice's own due date (2026-09-12)", () => {
+  it("tracks from the due date, not a fixed offset after release, when the term runs past release", () => {
+    // Released 1 Sep, a real 15-day payment term due 16 Sep — tracking
+    // should start 2 days after the 16th (18 Sep), not 2 days after the 1st
+    // (3 Sep, which the old release-only arithmetic would have produced).
+    const s = stateAt(new Date("2026-09-17T23:59:59.000Z"), {
+      dueDate: new Date("2026-09-16T00:00:00.000Z"),
+    });
+    expect(s.overdueTrackingFrom).toEqual(new Date("2026-09-18T00:00:00.000Z"));
+    expect(s.phase).toBe("current");
+  });
+
+  it("floors on release, not the due date, when the due date had already passed before release", () => {
+    // A late upload: the invoice's own due date is 20 Aug, but it was only
+    // released on 1 Sep. The society was never shown it before release, so
+    // it must not be retroactively overdue for ops' own delay.
+    const s = stateAt(new Date("2026-09-02T00:00:00.000Z"), {
+      dueDate: new Date("2026-08-20T00:00:00.000Z"),
+    });
+    expect(s.overdueTrackingFrom).toEqual(new Date("2026-09-03T00:00:00.000Z"));
+    expect(s.phase).toBe("current");
+  });
+
+  it("stays not_released regardless of how far in the past the due date reads", () => {
+    const s = stateAt(new Date("2026-10-01T00:00:00.000Z"), {
+      releasedAt: null,
+      dueDate: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    expect(s.phase).toBe("not_released");
   });
 });
 

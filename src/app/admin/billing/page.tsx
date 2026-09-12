@@ -26,6 +26,17 @@ const CALC_STATUS: Record<string, { label: string; tone: "ok" | "warn" | "bad" |
   superseded: { label: "Superseded", tone: "neu" },
 };
 
+// CON-13's follow-up state, alongside the calculation's own release status —
+// the arrears_sweep job (scripts/job-worker.ts) writes these, this board
+// only reads them (2026-09-12). Deliberately not shown for "attached" or
+// "paid": neither is a following-up state — release and payment already say
+// those plainly enough on their own.
+const PAYMENT_FOLLOWUP: Record<string, { label: string; tone: "warn" | "bad" }> = {
+  overdue: { label: "Overdue", tone: "warn" },
+  warning: { label: "Warning stage", tone: "bad" },
+  suspended: { label: "Suspended", tone: "bad" },
+};
+
 export default async function BillingPage({
   searchParams,
 }: {
@@ -47,7 +58,7 @@ export default async function BillingPage({
     orderBy: { version: "desc" },
     include: {
       feeLines: { select: { complianceResult: true } },
-      invoices: { where: { voidedAt: null }, select: { id: true } },
+      invoices: { where: { voidedAt: null }, select: { id: true, status: true } },
     },
   });
 
@@ -180,10 +191,20 @@ export default async function BillingPage({
                     </td>
                     <td>
                       {meta ? (
-                        <StatusChip tone={meta.tone}>
-                          {meta.label}
-                          {calc && calc.version > 1 ? ` · v${calc.version}` : ""}
-                        </StatusChip>
+                        <span className="inline-flex flex-wrap items-center gap-1.5">
+                          <StatusChip tone={meta.tone}>
+                            {meta.label}
+                            {calc && calc.version > 1 ? ` · v${calc.version}` : ""}
+                          </StatusChip>
+                          {(() => {
+                            // At most one live invoice per calculation (a
+                            // partial unique index guarantees it).
+                            const followUp = calc?.invoices[0] ? PAYMENT_FOLLOWUP[calc.invoices[0].status] : undefined;
+                            return followUp ? (
+                              <StatusChip tone={followUp.tone}>{followUp.label}</StatusChip>
+                            ) : null;
+                          })()}
+                        </span>
                       ) : (
                         <span className="text-[13px] text-[var(--text-subtle)]">Not run</span>
                       )}

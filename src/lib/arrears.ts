@@ -13,7 +13,10 @@
 // the committee can still see what is owed next to the savings evidence,
 // which is precisely when that evidence is most useful.
 
-/** Overdue tracking starts this many days after RELEASE, not generation. */
+/** Overdue tracking starts this many days after the invoice is actually
+ *  payable — see `arrearsStateOf`'s own comment for which date that is. A
+ *  short grace period for a bank transfer to clear, not a re-litigation of
+ *  the due date itself. */
 export const OVERDUE_TRACKING_AFTER_DAYS = 2;
 
 /** The contract payment term. Warning starts once payment is this overdue. */
@@ -42,6 +45,11 @@ export function isSameUtcDay(a: Date, b: Date): boolean {
 
 export type ArrearsInput = {
   releasedAt: Date | null;
+  /** The invoice's own due date, read off the real Zoho invoice at attach
+   *  time (2026-09-12: "as per the invoice due date system should start
+   *  notifying and following up" — the user's own words). This is what the
+   *  clock actually keys off now, not a fixed offset after release. */
+  dueDate: Date;
   /** Sum of payments recorded against the invoice. */
   amountPaid: number;
   invoiceAmount: number;
@@ -68,8 +76,17 @@ export type ArrearsState = {
 /**
  * Where an invoice sits on CON-13's clock right now.
  *
- * Release, not generation, is the event this keys off (FLOW-10 step 10) —
- * a society cannot be late paying an invoice it has not been shown.
+ * A society cannot be late paying an invoice it has not been shown, so the
+ * clock never starts before RELEASE (FLOW-10 step 10) — `phase` stays
+ * `not_released` until then, whatever the invoice's own due date says.
+ *
+ * Once released, the clock keys off the invoice's own `dueDate` — the real
+ * payment term Zoho printed on it — not a fixed offset after release. The
+ * pivot is the LATER of the two: an invoice released well before its due
+ * date starts tracking from that due date (the common case — a 15/30-day
+ * term), but an invoice released only after its own due date had already
+ * passed (a late upload) starts tracking from release instead, so a society
+ * is never retroactively overdue for a delay that was ops', not theirs.
  */
 export function arrearsStateOf(input: ArrearsInput): ArrearsState {
   const none: ArrearsState = {
@@ -81,7 +98,8 @@ export function arrearsStateOf(input: ArrearsInput): ArrearsState {
   };
   if (!input.releasedAt) return none;
 
-  const overdueTrackingFrom = addDays(input.releasedAt, OVERDUE_TRACKING_AFTER_DAYS);
+  const pivot = input.dueDate > input.releasedAt ? input.dueDate : input.releasedAt;
+  const overdueTrackingFrom = addDays(pivot, OVERDUE_TRACKING_AFTER_DAYS);
   const warningFrom = addDays(overdueTrackingFrom, WARNING_AFTER_OVERDUE_DAYS);
   const suspendDueAt = addDays(warningFrom, WARNING_WINDOW_DAYS + input.extensionDaysGranted);
 

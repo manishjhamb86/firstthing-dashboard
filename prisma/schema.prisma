@@ -229,6 +229,7 @@ enum JobType {
   gatepass_sweep
   tank_level_sample
   meter_poll
+  arrears_sweep
 
   @@map("job_type")
 }

@@ -252,6 +252,7 @@ export async function recordPayment(input: {
   const invoice = await liveInvoice(input.calculationId);
   if (!invoice) return { error: "No invoice is attached to this month yet." };
 
+  const now = new Date();
   await db.$transaction(async (tx) => {
     await tx.payment.create({
       data: {
@@ -263,12 +264,49 @@ export async function recordPayment(input: {
       },
     });
     const paid = await tx.payment.aggregate({ where: { invoiceId: invoice.id }, _sum: { amount: true } });
-    if ((paid._sum.amount ?? 0) >= invoice.amount) {
-      await tx.billingInvoice.update({ where: { id: invoice.id }, data: { status: "paid" } });
-    }
+    // Recording a payment IS checking Zoho and confirming what is true
+    // today (2026-09-12) — stamped in the same transaction so the
+    // arrears_sweep job's same-day-confirmed safety rule (CON-13) never
+    // has to be freshened by a separate click for the common case where
+    // ops already just looked.
+    await tx.billingInvoice.update({
+      where: { id: invoice.id },
+      data: {
+        paymentStatusConfirmedAt: now,
+        paymentStatusConfirmedById: ops.actor.id,
+        ...((paid._sum.amount ?? 0) >= invoice.amount ? { status: "paid" as const } : {}),
+      },
+    });
   });
   logger.info("billing.payment_recorded", { actorId: ops.actor.id, calculationId: input.calculationId, amount: input.amount });
   revalidatePath(`/admin/billing/${input.calculationId}`);
+  return {};
+}
+
+/**
+ * CON-13's other human touchpoint (2026-09-12): confirming against Zoho that
+ * an invoice is STILL unpaid is what lets the arrears_sweep job's same-day
+ * safety rule ever admit a suspension for a society that has never made a
+ * payment at all — `recordPayment` only stamps the confirmation when there
+ * IS a payment to record, so without this, an invoice nobody has ever paid
+ * would never accumulate a fresh confirmation and could never be suspended.
+ */
+export async function confirmPaymentStatus(calculationId: string): Promise<{ error?: string }> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+
+  const invoice = await liveInvoice(calculationId);
+  if (!invoice) return { error: "No invoice is attached to this month." };
+  if (invoice.status === "paid") {
+    return { error: "This invoice is already paid — there is nothing to confirm." };
+  }
+
+  await db.billingInvoice.update({
+    where: { id: invoice.id },
+    data: { paymentStatusConfirmedAt: new Date(), paymentStatusConfirmedById: ops.actor.id },
+  });
+  logger.info("billing.payment_status_confirmed", { actorId: ops.actor.id, calculationId, invoiceId: invoice.id });
+  revalidatePath(`/admin/billing/${calculationId}`);
   return {};
 }
 

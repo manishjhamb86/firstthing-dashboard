@@ -26,7 +26,6 @@ export default async function InspectionDetailPage({
     include: {
       society: { select: { name: true, location: true } },
       circuit: { select: { representedLightCount: true } },
-      createdBy: { select: { name: true, email: true } },
       voidedBy: { select: { name: true, email: true } },
       findings: { orderBy: { srNo: "asc" } },
     },
@@ -78,10 +77,6 @@ export default async function InspectionDetailPage({
                   {inspection.inspectorName} — {inspection.inspectorContact}
                 </dd>
               </div>
-              <div>
-                <dt className="lbl">Filed by</dt>
-                <dd>{inspection.createdBy.name ?? inspection.createdBy.email}</dd>
-              </div>
             </dl>
           </Card>
           <FinalizeInspectionForm
@@ -118,10 +113,6 @@ export default async function InspectionDetailPage({
               <div>
                 <dt className="lbl">Society representative</dt>
                 <dd>{inspection.societyRepName ?? "Not available at the time of the visit"}</dd>
-              </div>
-              <div>
-                <dt className="lbl">Filed by</dt>
-                <dd>{inspection.createdBy.name ?? inspection.createdBy.email}</dd>
               </div>
               {inspection.notes && (
                 <div className="sm:col-span-2">

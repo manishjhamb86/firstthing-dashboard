@@ -7,7 +7,7 @@ import { SearchSelect } from "@/components/search-select";
 import { ClickToEdit } from "@/components/click-to-edit";
 import { startInspection } from "../actions";
 import { circuitLabelOf } from "@/lib/circuit-label";
-import { formatDateTime, isoDateTimeLocal, monthLabel } from "@/lib/format-date";
+import { formatDateTime, monthLabel } from "@/lib/format-date";
 
 type Society = { id: string; name: string; location: string };
 type Circuit = {
@@ -19,19 +19,27 @@ type Circuit = {
   representedLightCount: number;
 };
 
-function defaultPeriod(): string {
-  const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
 export function NewInspectionForm({
   societies,
   circuits,
   initialSocietyId,
+  actorLabel,
+  initialPeriod,
+  initialInspectedAt,
 }: {
   societies: Society[];
   circuits: Circuit[];
   initialSocietyId?: string;
+  /** Who this visit is recorded against — the signed-in account, never
+   *  retyped (2026-09-12, user-specified: "its the user who has logged in"). */
+  actorLabel: string;
+  /** Both computed ONCE on the server and passed down rather than this
+   *  Client Component calling `new Date()` for its own initial state — the
+   *  two independently-computed "now"s disagreed the moment a request
+   *  straddled a minute boundary, which React reports as a real hydration
+   *  mismatch (found by the e2e, not by eye). */
+  initialPeriod: string;
+  initialInspectedAt: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -39,11 +47,8 @@ export function NewInspectionForm({
 
   const [societyId, setSocietyId] = useState(initialSocietyId ?? "");
   const [circuitId, setCircuitId] = useState<string>("");
-  const [area, setArea] = useState("");
-  const [period, setPeriod] = useState(defaultPeriod());
-  const [inspectedAt, setInspectedAt] = useState(isoDateTimeLocal(new Date()));
-  const [inspectorName, setInspectorName] = useState("");
-  const [inspectorContact, setInspectorContact] = useState("");
+  const [period, setPeriod] = useState(initialPeriod);
+  const [inspectedAt, setInspectedAt] = useState(initialInspectedAt);
 
   const circuitSelectRef = useRef<HTMLSelectElement>(null);
 
@@ -58,11 +63,12 @@ export function NewInspectionForm({
       const result = await startInspection({
         societyId,
         circuitId: circuitId || null,
-        area: selectedCircuit ? circuitLabelOf(selectedCircuit.location, selectedCircuit.lightType) : area,
+        // No specific circuit → a whole-society check, area left empty; the
+        // circuit already states its own location, so there is nothing left
+        // to type either way (2026-09-12).
+        area: selectedCircuit ? circuitLabelOf(selectedCircuit.location, selectedCircuit.lightType) : "",
         period,
         inspectedAt,
-        inspectorName,
-        inspectorContact,
       });
       if ("error" in result) return setError(result.error);
       router.push(`/admin/inspections/${result.id}`);
@@ -113,18 +119,6 @@ export function NewInspectionForm({
         </select>
       </Field>
 
-      {!circuitId && (
-        <Field label="Area" htmlFor="area" hint="Leave blank for a whole-society visit.">
-          <input
-            id="area"
-            className="field"
-            placeholder="e.g. Basement, Tower B"
-            value={area}
-            onChange={(e) => setArea(e.target.value)}
-          />
-        </Field>
-      )}
-
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Month">
           <ClickToEdit display={monthLabel(period)}>
@@ -152,26 +146,9 @@ export function NewInspectionForm({
         </Field>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Inspector name" htmlFor="inspectorName">
-          <input
-            id="inspectorName"
-            className="field"
-            value={inspectorName}
-            onChange={(e) => setInspectorName(e.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Inspector contact" htmlFor="inspectorContact">
-          <input
-            id="inspectorContact"
-            className="field"
-            value={inspectorContact}
-            onChange={(e) => setInspectorContact(e.target.value)}
-            required
-          />
-        </Field>
-      </div>
+      <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+        Recorded as the inspector — <span className="font-medium">{actorLabel}</span>.
+      </p>
 
       <div>
         <button type="submit" className="btn-primary" disabled={pending || !societyId}>

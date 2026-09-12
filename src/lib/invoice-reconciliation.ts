@@ -70,11 +70,12 @@ export function refuseRelease(input: {
   return null;
 }
 
-/** FEAT-053-AC-4: no correction path for an attached invoice yet — refuse a
- *  second one outright rather than silently replacing evidence, matching
- *  this codebase's own "no edit-in-place" rule elsewhere (rescale events,
- *  documents). A genuinely wrong upload needs a person to notice this
- *  refusal and ask for the void-and-reattach path to be built. */
+/** FEAT-053-AC-4: no editing an attached invoice in place — refuse a second
+ *  one outright while a live one already holds the slot, matching this
+ *  codebase's own "no edit-in-place" rule elsewhere (rescale events,
+ *  documents). The correction path (2026-09-12) is void-then-reattach, the
+ *  same shape as a rescale correction: the wrong upload is struck through,
+ *  never overwritten, and a fresh attach is then a genuinely new act. */
 export function refuseInvoiceAttach(input: {
   calculation: CalculationForRelease;
   alreadyAttached: boolean;
@@ -84,8 +85,29 @@ export function refuseInvoiceAttach(input: {
   if (input.calculation.status === "superseded") return "A newer version of this month exists — attach the invoice there.";
   if (input.calculation.status === "held") return "This month is held and has no computed total to reconcile against yet.";
   if (input.alreadyAttached) {
-    return "An invoice is already attached to this month. There is no correction path yet — ask for one to be built rather than uploading a second file.";
+    return "An invoice is already attached to this month — void it first if it was filed in error.";
   }
   if (!Number.isFinite(input.amount) || input.amount <= 0) return "The invoice amount must be a positive number.";
+  return null;
+}
+
+/**
+ * Voiding an attached invoice (2026-09-12) — GATE-02's append-only rule
+ * extended to this artefact: once the calculation is RELEASED, the invoice
+ * is what the society was billed on, and voiding it would silently unmake
+ * that record. Void only ever strikes through an unreleased attach mistake;
+ * a released invoice needs an extension or a correction on the calculation
+ * itself, not this path.
+ */
+export function refuseVoidInvoice(input: {
+  calculation: CalculationForRelease;
+  alreadyVoided: boolean;
+  reason: string;
+}): string | null {
+  if (input.calculation.status === "released") {
+    return "This month is released — the invoice it was billed on cannot be voided here.";
+  }
+  if (input.alreadyVoided) return "This invoice is already voided.";
+  if (input.reason.trim() === "") return "Say why this invoice is being voided — a blank reason is not a reason.";
   return null;
 }

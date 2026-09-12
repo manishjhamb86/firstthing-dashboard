@@ -527,6 +527,7 @@ model AdminUser {
   invoicesUploaded         BillingInvoice[]      @relation("InvoiceUploadedBy")
   invoicePaymentsConfirmed BillingInvoice[]      @relation("InvoicePaymentConfirmedBy")
   invoiceMismatchesAcked   BillingInvoice[]      @relation("InvoiceMismatchAckBy")
+  invoicesVoided           BillingInvoice[]      @relation("InvoiceVoidedBy")
   paymentsRecorded         Payment[]             @relation("PaymentRecordedBy")
   extensionsGranted        InvoiceExtension[]    @relation("ExtensionGrantedBy")
   contractTermsRecorded    ContractTermVersion[] @relation("ContractTermRecordedBy")
@@ -2198,7 +2199,11 @@ model MonthlyCalculation {
 
   feeLines      CircuitFeeLine[]
   savingsReport SavingsReport?
-  invoice       BillingInvoice?
+  // Plural (2026-09-12): voiding a wrongly attached invoice keeps the old
+  // row (struck through) and lets a fresh one be attached — see
+  // BillingInvoice's own note. At most one is ever LIVE at a time, enforced
+  // by a partial unique index the schema below cannot express directly.
+  invoices      BillingInvoice[]
 
   @@unique([societyId, serviceLine, period, version])
   @@index([status, period])
@@ -2316,7 +2321,13 @@ model SavingsReport {
 // table, which was a different thing entirely.
 model BillingInvoice {
   id                   String @id @default(cuid())
-  monthlyCalculationId String @unique @map("monthly_calculation_id")
+  // Deliberately not @unique (2026-09-12) — voiding a wrongly attached
+  // invoice keeps the row (struck through) rather than deleting it, so a
+  // second, live attach for the same month is a second ROW, not an edit.
+  // "At most one LIVE row per month" is enforced by a partial unique index
+  // (`WHERE voided_at IS NULL`) this schema attribute cannot express — see
+  // the migration. The same shape as `meter_alerts_open_unique`.
+  monthlyCalculationId String @map("monthly_calculation_id")
 
   number    String
   issueDate DateTime @map("issue_date")
@@ -2355,15 +2366,26 @@ model BillingInvoice {
 
   uploadedAt DateTime @default(now()) @map("uploaded_at")
 
+  // Soft delete only (2026-09-12) — a wrongly attached invoice is struck
+  // through, never edited or deleted, matching this codebase's own
+  // "no edit-in-place" rule (rescale events, StoredDocument versions).
+  // Refused outright once the calculation is RELEASED (GATE-02): the
+  // invoice is then what the society was actually billed on.
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
   calculation              MonthlyCalculation @relation(fields: [monthlyCalculationId], references: [id], onDelete: Cascade)
   uploadedBy               AdminUser          @relation("InvoiceUploadedBy", fields: [uploadedById], references: [id])
   mismatchAcknowledgedBy   AdminUser?         @relation("InvoiceMismatchAckBy", fields: [mismatchAcknowledgedById], references: [id])
   paymentStatusConfirmedBy AdminUser?         @relation("InvoicePaymentConfirmedBy", fields: [paymentStatusConfirmedById], references: [id])
+  voidedBy                 AdminUser?         @relation("InvoiceVoidedBy", fields: [voidedById], references: [id])
 
   payments   Payment[]
   extensions InvoiceExtension[]
 
   @@index([status, suspendDueAt])
+  @@index([monthlyCalculationId])
   @@map("billing_invoices")
 }
 

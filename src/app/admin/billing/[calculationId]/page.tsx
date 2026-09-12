@@ -50,10 +50,18 @@ export default async function CalculationPage({
           deviationReview: { include: { owner: { select: { name: true, email: true } } } },
         },
       },
-      invoice: { include: { payments: true } },
+      invoices: {
+        include: { payments: true, voidedBy: { select: { name: true, email: true } } },
+        orderBy: { uploadedAt: "desc" },
+      },
     },
   });
   if (!calc) notFound();
+
+  // At most one is ever live (a partial unique index guarantees it) — the
+  // rest are void, kept as history rather than hidden (2026-09-12).
+  const liveInvoice = calc.invoices.find((i) => !i.voidedAt) ?? null;
+  const voidedInvoices = calc.invoices.filter((i) => i.voidedAt);
 
   // The per-part terms a multi-deal month billed under, from the frozen
   // snapshot (GATE-01) — the single pointer above is null in that case.
@@ -81,7 +89,7 @@ export default async function CalculationPage({
   ).length;
   const releaseBlockedReason = refuseRelease({
     calculation: { status: calc.status },
-    invoice: calc.invoice ? { reconciliationStatus: calc.invoice.reconciliationStatus } : null,
+    invoice: liveInvoice ? { reconciliationStatus: liveInvoice.reconciliationStatus } : null,
     unresolvedDeviationCount,
   });
 
@@ -171,19 +179,27 @@ export default async function CalculationPage({
           canRelease={canRelease(gate.actor)}
           isOps={isOps(gate.actor)}
           releaseBlockedReason={releaseBlockedReason}
+          voidedInvoices={voidedInvoices.map((i) => ({
+            id: i.id,
+            number: i.number,
+            amount: i.amount,
+            voidedAt: i.voidedAt!.toISOString(),
+            voidedBy: i.voidedBy?.name ?? i.voidedBy?.email ?? "—",
+            voidReason: i.voidReason ?? "",
+          }))}
           invoice={
-            calc.invoice
+            liveInvoice
               ? {
-                  id: calc.invoice.id,
-                  number: calc.invoice.number,
-                  issueDate: calc.invoice.issueDate.toISOString(),
-                  dueDate: calc.invoice.dueDate.toISOString(),
-                  amount: calc.invoice.amount,
-                  computedAmount: calc.invoice.computedAmount,
-                  reconciliationStatus: calc.invoice.reconciliationStatus,
-                  status: calc.invoice.status,
-                  fileName: calc.invoice.fileName,
-                  paidTotal: calc.invoice.payments.reduce((n, p) => n + p.amount, 0),
+                  id: liveInvoice.id,
+                  number: liveInvoice.number,
+                  issueDate: liveInvoice.issueDate.toISOString(),
+                  dueDate: liveInvoice.dueDate.toISOString(),
+                  amount: liveInvoice.amount,
+                  computedAmount: liveInvoice.computedAmount,
+                  reconciliationStatus: liveInvoice.reconciliationStatus,
+                  status: liveInvoice.status,
+                  fileName: liveInvoice.fileName,
+                  paidTotal: liveInvoice.payments.reduce((n, p) => n + p.amount, 0),
                 }
               : null
           }

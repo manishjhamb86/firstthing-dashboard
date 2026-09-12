@@ -25,7 +25,7 @@ export async function getPortalInvoiceUrl(invoiceId: string): Promise<{ url: str
     where: { id: invoiceId },
     include: { calculation: { select: { societyId: true } } },
   });
-  if (!invoice || invoice.calculation.societyId !== viewer.societyId) {
+  if (!invoice || invoice.calculation.societyId !== viewer.societyId || invoice.voidedAt) {
     return { error: "That invoice isn't available to you." };
   }
   if (invoice.status === "attached") {

@@ -33,8 +33,6 @@ export type StartInspectionInput = {
   area: string;
   period: string;
   inspectedAt: string; // "YYYY-MM-DDTHH:mm", a datetime-local value
-  inspectorName: string;
-  inspectorContact: string;
 };
 
 export async function startInspection(
@@ -75,14 +73,16 @@ export async function startInspection(
     select: { voidedAt: true },
   });
 
+  // The inspector is the signed-in account, never retyped (2026-09-12,
+  // user-specified: "its the user who has logged in"). No phone number is
+  // stored on an AdminUser, so the account's own email stands in for
+  // "contact" — the same field every other screen in this codebase already
+  // shows for who did what.
+  const inspectorName = admin.name ?? admin.email;
+  const inspectorContact = admin.email;
+
   const refusal = refuseInspectionStart(
-    {
-      area,
-      period: input.period,
-      inspectedAt,
-      inspectorName: input.inspectorName,
-      inspectorContact: input.inspectorContact,
-    },
+    { area, period: input.period, inspectedAt, inspectorName, inspectorContact },
     { now: new Date(), existingActiveForSlot: existing !== null && existing.voidedAt === null },
   );
   if (refusal) {
@@ -97,8 +97,8 @@ export async function startInspection(
       area,
       period: input.period,
       inspectedAt,
-      inspectorName: input.inspectorName.trim(),
-      inspectorContact: input.inspectorContact.trim(),
+      inspectorName,
+      inspectorContact,
       createdById: admin.id,
     },
   });

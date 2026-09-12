@@ -11,6 +11,7 @@ import {
   getInvoiceUploadUrl,
   recordPayment,
   releaseCalculation,
+  voidInvoiceAttachment,
 } from "./invoice-actions";
 
 export type InvoiceState = {
@@ -51,12 +52,22 @@ const STATUS_META: Record<string, { label: string; tone: "ok" | "warn" | "bad" |
  * panel because these are sequential facts about one artefact, not four
  * independent screens.
  */
+export type VoidedInvoice = {
+  id: string;
+  number: string;
+  amount: number;
+  voidedAt: string;
+  voidedBy: string;
+  voidReason: string;
+};
+
 export function InvoicePanel({
   calculationId,
   invoice,
   canRelease,
   releaseBlockedReason,
   isOps,
+  voidedInvoices,
 }: {
   calculationId: string;
   invoice: InvoiceState;
@@ -68,6 +79,10 @@ export function InvoicePanel({
    *  silently does nothing. Null means release is genuinely available. */
   releaseBlockedReason: string | null;
   isOps: boolean;
+  /** Never hidden (2026-09-12) — a voided attach is a real fact about this
+   *  month, the same "struck through, not erased" rule every other soft
+   *  delete in this codebase follows. */
+  voidedInvoices: VoidedInvoice[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -80,6 +95,10 @@ export function InvoicePanel({
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
   const [file, setFile] = useState<File | null>(null);
+
+  // Void
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState("");
 
   // Mismatch acknowledgement
   const [ackNote, setAckNote] = useState("");
@@ -118,6 +137,18 @@ export function InvoicePanel({
           ? "Attached — but the amount doesn't match our own figure. Acknowledge the difference below before releasing."
           : "Invoice attached and matches our computed total.",
       );
+      router.refresh();
+    });
+  }
+
+  function submitVoid() {
+    setError(null);
+    startTransition(async () => {
+      const result = await voidInvoiceAttachment({ calculationId, reason: voidReason });
+      if (result.error) return setError(result.error);
+      setVoidOpen(false);
+      setVoidReason("");
+      setNotice("Voided — attach the corrected invoice below.");
       router.refresh();
     });
   }
@@ -343,6 +374,38 @@ export function InvoicePanel({
             </div>
           )}
 
+          {invoice.status === "attached" && isOps && (
+            <div className="border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
+              {!voidOpen ? (
+                <button type="button" className="btn-ghost" onClick={() => setVoidOpen(true)}>
+                  Void this invoice — it was filed in error
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block" htmlFor="void-reason">
+                    <span className="lbl">Why is this being voided</span>
+                    <input
+                      id="void-reason"
+                      className="field mt-1"
+                      value={voidReason}
+                      onChange={(e) => setVoidReason(e.target.value)}
+                      placeholder="Wrong month attached by mistake."
+                      disabled={pending}
+                    />
+                  </label>
+                  <div className="flex gap-2">
+                    <button type="button" className="btn-secondary" disabled={pending} onClick={submitVoid}>
+                      {pending ? "Voiding…" : "Confirm void"}
+                    </button>
+                    <button type="button" className="btn-outline" disabled={pending} onClick={() => setVoidOpen(false)}>
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {invoice.status !== "attached" && invoice.status !== "paid" && isOps && (
             <div className="border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
               <p className="lbl mb-2">Record a payment</p>
@@ -387,6 +450,22 @@ export function InvoicePanel({
             </div>
           )}
         </>
+      )}
+
+      {voidedInvoices.length > 0 && (
+        <details className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
+          <summary className="cursor-pointer text-[12.5px] font-semibold" style={{ color: "var(--text-muted)" }}>
+            {voidedInvoices.length} voided attach{voidedInvoices.length === 1 ? "" : "es"} — kept as history
+          </summary>
+          <ul className="mt-2 space-y-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+            {voidedInvoices.map((v) => (
+              <li key={v.id}>
+                {v.number} · {rupees(v.amount)} — voided by {v.voidedBy} on {formatDate(v.voidedAt)}:{" "}
+                {v.voidReason}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
     </Card>
   );

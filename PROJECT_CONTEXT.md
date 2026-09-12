@@ -2679,6 +2679,78 @@ the two split validation functions (`refuseInspectionStart`/`refuseInspectionFin
 additive (one nullable column, one now-nullable column, one FK, one index) — safe as a straight
 ALTER since the feature had only been live for hours with nothing filed on stage. Not yet deployed.
 
+**Two further simplifications, same day, both user-caught from real screenshots.** First: "why you
+display the location field at all? the user have to select the circuit anyways" — the free-text
+Area field (kept, at that point, for the no-circuit case) is gone entirely. A circuit still derives
+its own label server-side; "no specific circuit" now means area is simply `""` ("whole society"),
+nothing left to type either way — removing the field that only sometimes existed, which was the
+actual "form changes shape" oddity being reported, not a missing feature. Second: "inspector name
+and contact doesnt need to asked for, its the user who has logged in" — both are now derived from
+the signed-in account (`admin.name ?? admin.email` / `admin.email`, no phone number exists on
+`AdminUser` to use instead) inside `startInspection` itself; the form states who it will be
+recorded against rather than asking. The detail page's separate "Filed by" line was dropped too —
+once the inspector IS the filing account by construction, showing both was pure redundancy, not two
+facts that could ever disagree.
+
+**A real hydration bug found by the e2e while testing this**: the form's Month/date-time defaults
+were computed by `new Date()` inside the Client Component's own `useState` initializer, which runs
+once during the server render and again during client hydration — on any request that straddles a
+minute boundary the two disagree, and React reports it as a genuine hydration mismatch (surfaced as
+a console error, which the suite's own "zero console errors" check caught). Fixed by computing `now`
+ONCE in the Server Component page and threading it down as `initialPeriod`/`initialInspectedAt`
+props — the client never independently calls `new Date()` for its starting value at all.
+
+Re-verified 20/20, 8/8, 2/2, all clean including zero console errors this time.
+
+## Invoices can be voided and reattached (2026-09-12) — user-asked, "anything more to implement?"
+
+**The correction path Billing's own launch entry named as deliberately unbuilt** — "no correction
+path for a wrongly attached invoice... a real mistake needs its own void-and-reattach path built,
+not invented on the spot" — built the same shape as every other soft-delete correction in this
+codebase (a rescale entry, a StoredDocument version): void, never edit in place.
+
+**`BillingInvoice.monthlyCalculationId` is no longer `@unique`** — a plain unique constraint cannot
+hold a voided row's history AND admit a fresh live one for the same month, so it is replaced by a
+partial unique index (`WHERE voided_at IS NULL`), the identical shape `meter_alerts_open_unique`
+already uses in this schema: at most one LIVE invoice per calculation, enforced by Postgres, not by
+an application check a race could beat. `MonthlyCalculation.invoice` became `.invoices` (plural)
+everywhere it's read; every action that used to `findUnique` by the calculation id now resolves
+"the live one" through a single shared `liveInvoice()` helper, so there is exactly one place that
+decides what "the" invoice for a month means.
+
+**Void is refused once the month is RELEASED (GATE-02)** — extended from circuits and documents to
+this artefact: past release, the invoice is what the society was actually billed on, and voiding it
+would silently unmake that record. Checked against `calc.status`, not the invoice's own `status`
+field, since the two are set in the same transaction and the calculation's is the one every other
+gate in this codebase already reads. Refused with a stated reason requirement, matching every other
+void in this schema — a blank reason is indistinguishable from an accident nobody explained.
+
+**Voided invoices are never hidden** — a collapsed "N voided attaches — kept as history" disclosure
+on the invoice panel names who voided each one, when, and why, the same "struck through, never
+erased" rule as a removed circuit's own registry disclosure.
+
+**Verified 15/15 and 4/4 in a browser, against a real fixture (not the sample invoice's own real
+GST arithmetic figures) rather than a mock**: an invoice attaches and reconciles as matched; voiding
+without a reason is refused; voiding without the ops permission is refused server-side (the
+permission stripped in Postgres behind the open form — the refusal proven by the log line and the
+row staying untouched, not by a hidden button); voiding with a reason frees the slot, and a
+corrected invoice attaches into it — two rows exist afterward, exactly one live. **GATE-02 checked
+through a path the client cannot pre-block**: a released calculation's invoice row was forced back
+to `attached` status directly in Postgres so the Void control would render at all, then clicked —
+the server still refused, naming the release, with nothing written. 4 new unit cases
+(`refuseVoidInvoice`), suite at 816, `tsc`/`lint`/`build` clean. Migration
+`20260912050000_invoice_void_and_reattach` drops one plain unique constraint and adds a partial one
+plus three columns — safe, since Billing had not been live long enough for any real invoice to
+exist yet. Not yet deployed.
+
+**A note on this verification pass**: the local Docker Postgres and its data had been lost entirely
+between turns (the daemon was not running and held no containers, volumes or images at all) — a
+fresh container was created and rebuilt via `prisma migrate deploy` alone, which is exactly the
+"data ships with the migrations" design decided on 2026-08-27: all 19 real societies, their
+circuits, demos and contracts came back byte-for-byte from tracked migrations with no manual
+restore step. Portal accounts and passwords (deliberately never migrated, per that same decision)
+were absent, which only affected one already-skippable portal-display check.
+
 ## Monthly inspections: the paper checklist, digitised (2026-09-12) — user-asked, real paper form supplied
 
 **The other half of "both in parallel."** Asked alongside Billing, from a photo of FirsThing's own

@@ -45,7 +45,10 @@ export default async function BillingPage({
   const calculations = await db.monthlyCalculation.findMany({
     where: { period, societyId: { in: contracts.map((c) => c.societyId) } },
     orderBy: { version: "desc" },
-    include: { feeLines: { select: { complianceResult: true } }, invoice: { select: { id: true } } },
+    include: {
+      feeLines: { select: { complianceResult: true } },
+      invoices: { where: { voidedAt: null }, select: { id: true } },
+    },
   });
 
   // Only the newest version of each society+line is the live one; the rest

@@ -32,7 +32,7 @@ export default async function PortalBillingPage() {
   if (!hasGrant(viewer, "billing")) redirect("/portal");
 
   const invoices = await db.billingInvoice.findMany({
-    where: { calculation: { societyId: viewer.societyId }, status: { not: "attached" } },
+    where: { calculation: { societyId: viewer.societyId }, status: { not: "attached" }, voidedAt: null },
     include: { calculation: { select: { period: true } }, payments: { select: { amount: true } } },
     orderBy: { issueDate: "desc" },
   });

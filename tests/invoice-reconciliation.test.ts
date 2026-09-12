@@ -4,6 +4,7 @@ import {
   reconcileInvoiceAmount,
   refuseInvoiceAttach,
   refuseRelease,
+  refuseVoidInvoice,
 } from "@/lib/invoice-reconciliation";
 
 // FEAT-053/CON-33 — the real sample invoice this was built against
@@ -94,8 +95,8 @@ describe("refuseInvoiceAttach", () => {
     expect(refuseInvoiceAttach({ ...base, calculation: { status: "released" } })).toMatch(/already released/i);
   });
 
-  it("refuses a second attach — no correction path yet", () => {
-    expect(refuseInvoiceAttach({ ...base, alreadyAttached: true })).toMatch(/no correction path/i);
+  it("refuses a second attach while a live one already holds the slot", () => {
+    expect(refuseInvoiceAttach({ ...base, alreadyAttached: true })).toMatch(/void it first/i);
   });
 
   it("refuses a non-positive amount", () => {
@@ -106,5 +107,25 @@ describe("refuseInvoiceAttach", () => {
 
   it("allows a first attach to a calculated month", () => {
     expect(refuseInvoiceAttach(base)).toBeNull();
+  });
+});
+
+describe("refuseVoidInvoice", () => {
+  const base = { calculation: { status: "calculated" as const }, alreadyVoided: false, reason: "Wrong month attached." };
+
+  it("refuses once the calculation is released — GATE-02", () => {
+    expect(refuseVoidInvoice({ ...base, calculation: { status: "released" } })).toMatch(/is released/i);
+  });
+
+  it("refuses an already-voided invoice", () => {
+    expect(refuseVoidInvoice({ ...base, alreadyVoided: true })).toMatch(/already voided/i);
+  });
+
+  it("refuses a blank reason", () => {
+    expect(refuseVoidInvoice({ ...base, reason: "  " })).toMatch(/blank reason/i);
+  });
+
+  it("allows voiding an unreleased attach with a stated reason", () => {
+    expect(refuseVoidInvoice(base)).toBeNull();
   });
 });

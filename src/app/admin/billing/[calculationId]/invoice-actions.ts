@@ -12,7 +12,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildInvoiceKey } from "@/lib/ingest-keys";
-import { reconcileInvoiceAmount, refuseInvoiceAttach, refuseRelease } from "@/lib/invoice-reconciliation";
+import { reconcileInvoiceAmount, refuseInvoiceAttach, refuseRelease, refuseVoidInvoice } from "@/lib/invoice-reconciliation";
 import { requireAccountant, requireBillingOps } from "../access";
 import { logger } from "@/lib/logger";
 
@@ -24,6 +24,13 @@ async function unresolvedDeviationCount(calculationId: string): Promise<number> 
   return lines.filter(
     (l) => l.deviationReview && !["decided", "closed"].includes(l.deviationReview.state),
   ).length;
+}
+
+/** The one LIVE (non-voided) invoice for a month, if any — the only row any
+ *  of these actions should ever act on. A voided one is history, kept for
+ *  the record, never a target. */
+function liveInvoice(calculationId: string) {
+  return db.billingInvoice.findFirst({ where: { monthlyCalculationId: calculationId, voidedAt: null } });
 }
 
 /** A presigned PUT under the private `Invoices/` prefix — never the public
@@ -70,15 +77,13 @@ export async function attachInvoice(input: {
   const ops = await requireBillingOps();
   if (!ops.ok) return { error: ops.error };
 
-  const calc = await db.monthlyCalculation.findUnique({
-    where: { id: input.calculationId },
-    include: { invoice: { select: { id: true } } },
-  });
+  const calc = await db.monthlyCalculation.findUnique({ where: { id: input.calculationId } });
   if (!calc) return { error: "That month no longer exists." };
+  const existing = await liveInvoice(calc.id);
 
   const refusal = refuseInvoiceAttach({
     calculation: { status: calc.status },
-    alreadyAttached: calc.invoice !== null,
+    alreadyAttached: existing !== null,
     amount: input.amount,
   });
   if (refusal) {
@@ -119,6 +124,44 @@ export async function attachInvoice(input: {
   return { reconciliation: status };
 }
 
+/**
+ * The correction path (2026-09-12): a wrongly attached invoice is voided,
+ * not edited or replaced in place. The row stays, struck through, and the
+ * (society, period) slot is free for a genuine re-attach — the same shape
+ * as a rescale correction. Refused once the month is RELEASED (GATE-02):
+ * past that point the invoice is what the society was actually billed on.
+ */
+export async function voidInvoiceAttachment(input: {
+  calculationId: string;
+  reason: string;
+}): Promise<{ error?: string }> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+
+  const calc = await db.monthlyCalculation.findUnique({ where: { id: input.calculationId }, select: { status: true } });
+  if (!calc) return { error: "That month no longer exists." };
+  const invoice = await liveInvoice(input.calculationId);
+  if (!invoice) return { error: "No invoice is attached to this month." };
+
+  const refusal = refuseVoidInvoice({
+    calculation: { status: calc.status },
+    alreadyVoided: false,
+    reason: input.reason,
+  });
+  if (refusal) {
+    logger.warn("billing.invoice_void_refused", { actorId: ops.actor.id, calculationId: input.calculationId, refusal });
+    return { error: refusal };
+  }
+
+  await db.billingInvoice.update({
+    where: { id: invoice.id },
+    data: { voidedAt: new Date(), voidedById: ops.actor.id, voidReason: input.reason.trim() },
+  });
+  logger.info("billing.invoice_voided", { actorId: ops.actor.id, calculationId: input.calculationId, invoiceId: invoice.id });
+  revalidatePath(`/admin/billing/${input.calculationId}`);
+  return {};
+}
+
 export async function acknowledgeMismatch(input: {
   calculationId: string;
   note: string;
@@ -129,7 +172,7 @@ export async function acknowledgeMismatch(input: {
     return { error: "Say why the amounts differ before acknowledging it — a blank reason is not a reason." };
   }
 
-  const invoice = await db.billingInvoice.findUnique({ where: { monthlyCalculationId: input.calculationId } });
+  const invoice = await liveInvoice(input.calculationId);
   if (!invoice) return { error: "No invoice is attached to this month." };
   if (invoice.reconciliationStatus !== "mismatched") {
     return { error: "This invoice is not flagged as mismatched — there is nothing to acknowledge." };
@@ -152,15 +195,13 @@ export async function releaseCalculation(calculationId: string): Promise<{ error
   const acc = await requireAccountant();
   if (!acc.ok) return { error: acc.error };
 
-  const calc = await db.monthlyCalculation.findUnique({
-    where: { id: calculationId },
-    include: { invoice: { select: { reconciliationStatus: true } } },
-  });
+  const calc = await db.monthlyCalculation.findUnique({ where: { id: calculationId } });
   if (!calc) return { error: "That month no longer exists." };
+  const invoice = await liveInvoice(calculationId);
 
   const refusal = refuseRelease({
     calculation: { status: calc.status },
-    invoice: calc.invoice ? { reconciliationStatus: calc.invoice.reconciliationStatus } : null,
+    invoice: invoice ? { reconciliationStatus: invoice.reconciliationStatus } : null,
     unresolvedDeviationCount: await unresolvedDeviationCount(calculationId),
   });
   if (refusal) {
@@ -181,8 +222,11 @@ export async function releaseCalculation(calculationId: string): Promise<{ error
       where: { id: calculationId },
       data: { status: "released", releasedAt: now, releasedById: acc.actor.id },
     }),
+    // invoice is guaranteed non-null here — refuseRelease refuses when it's
+    // null, so this update targets the one live row the refusal check itself
+    // already confirmed exists.
     db.billingInvoice.update({
-      where: { monthlyCalculationId: calculationId },
+      where: { id: invoice!.id },
       data: { status: "released", releasedAt: now },
     }),
   ]);
@@ -205,7 +249,7 @@ export async function recordPayment(input: {
   const confirmedAsOf = new Date(`${input.confirmedAsOf}T00:00:00Z`);
   if (Number.isNaN(confirmedAsOf.getTime())) return { error: "Confirmed-as-of must be a valid date." };
 
-  const invoice = await db.billingInvoice.findUnique({ where: { monthlyCalculationId: input.calculationId } });
+  const invoice = await liveInvoice(input.calculationId);
   if (!invoice) return { error: "No invoice is attached to this month yet." };
 
   await db.$transaction(async (tx) => {
@@ -235,7 +279,7 @@ export async function getInvoiceDownloadUrl(calculationId: string): Promise<{ ur
   const reader = await requireBillingOps();
   if (!reader.ok) return { error: reader.error };
 
-  const invoice = await db.billingInvoice.findUnique({ where: { monthlyCalculationId: calculationId } });
+  const invoice = await liveInvoice(calculationId);
   if (!invoice) return { error: "No invoice is attached to this month." };
 
   try {

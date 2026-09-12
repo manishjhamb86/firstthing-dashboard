@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { theoreticalDailyKwh } from "@/lib/circuit-load";
 import { evaluateMeterHealth, outageMessage, outageMinutes, type MeterState } from "@/lib/meter-health";
 import { freshnessLabel, isStale } from "@/lib/meter-live";
+import { circuitLabelOf } from "@/lib/circuit-label";
 
 /**
  * One meter, as every surface shows it.
@@ -71,17 +72,11 @@ export type MeterRow = {
   hourlyTo: string | null;
 };
 
-/**
- * A circuit reads as "location · light type", except when those are the same
- * word — several backfilled circuits are located in the Basement and carry
- * the light type "basement", and "Basement · basement" reads as a rendering
- * fault rather than as data.
- */
-export function circuitLabelOf(location: string | null, lightType: string): string {
-  const place = location?.trim() || "Unnamed";
-  if (place.toLowerCase() === lightType.trim().toLowerCase()) return place;
-  return `${place} · ${lightType}`;
-}
+// Moved to circuit-label.ts (2026-09-12) — this module imports `db`, so a
+// Client Component importing this pure formatter from here pulled the whole
+// Prisma/pg client into the browser bundle. Re-exported so every existing
+// call site (`from "@/lib/meter-view"`) keeps working unchanged.
+export { circuitLabelOf };
 
 const meterInclude = {
   circuit: {

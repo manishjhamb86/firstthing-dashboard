@@ -2,55 +2,53 @@ import { describe, expect, it } from "vitest";
 import {
   faultyLightsCount,
   inspectionSummary,
-  refuseInspectionSave,
+  refuseInspectionFinalize,
+  refuseInspectionStart,
   refuseVoidInspection,
   SENSOR_STATUS_META,
-  type InspectionSaveInput,
+  type InspectionFinalizeInput,
+  type InspectionStartInput,
 } from "@/lib/inspection";
 
-function baseInput(overrides: Partial<InspectionSaveInput> = {}): InspectionSaveInput {
+function startInput(overrides: Partial<InspectionStartInput> = {}): InspectionStartInput {
   return {
     area: "Basement",
     period: "2026-09",
     inspectedAt: new Date("2026-09-10T10:00:00Z"),
     inspectorName: "Ramesh Kumar",
     inspectorContact: "9876543210",
-    totalLightsChecked: 42,
-    societyRepName: "Asha Rao",
-    notes: "",
-    findings: [],
     ...overrides,
   };
 }
 
 const NOW = new Date("2026-09-12T00:00:00Z");
 
-describe("refuseInspectionSave", () => {
-  it("accepts a well-formed inspection with no findings", () => {
-    expect(refuseInspectionSave(baseInput(), { now: NOW, existingActiveForSlot: false })).toBeNull();
+describe("refuseInspectionStart", () => {
+  it("accepts a well-formed header", () => {
+    expect(refuseInspectionStart(startInput(), { now: NOW, existingActiveForSlot: false })).toBeNull();
   });
 
   it("refuses a blank inspector name", () => {
     expect(
-      refuseInspectionSave(baseInput({ inspectorName: "  " }), { now: NOW, existingActiveForSlot: false }),
+      refuseInspectionStart(startInput({ inspectorName: "  " }), { now: NOW, existingActiveForSlot: false }),
     ).toMatch(/inspector's name/i);
   });
 
   it("refuses a blank inspector contact", () => {
     expect(
-      refuseInspectionSave(baseInput({ inspectorContact: "" }), { now: NOW, existingActiveForSlot: false }),
+      refuseInspectionStart(startInput({ inspectorContact: "" }), { now: NOW, existingActiveForSlot: false }),
     ).toMatch(/contact/i);
   });
 
   it("refuses a malformed period", () => {
     expect(
-      refuseInspectionSave(baseInput({ period: "September 2026" }), { now: NOW, existingActiveForSlot: false }),
+      refuseInspectionStart(startInput({ period: "September 2026" }), { now: NOW, existingActiveForSlot: false }),
     ).toMatch(/real month/i);
   });
 
   it("refuses a future inspection date", () => {
     expect(
-      refuseInspectionSave(baseInput({ inspectedAt: new Date("2026-09-13T00:00:00Z") }), {
+      refuseInspectionStart(startInput({ inspectedAt: new Date("2026-09-13T00:00:00Z") }), {
         now: NOW,
         existingActiveForSlot: false,
       }),
@@ -58,47 +56,55 @@ describe("refuseInspectionSave", () => {
   });
 
   it("accepts an inspection dated exactly now", () => {
-    expect(refuseInspectionSave(baseInput({ inspectedAt: NOW }), { now: NOW, existingActiveForSlot: false })).toBeNull();
+    expect(refuseInspectionStart(startInput({ inspectedAt: NOW }), { now: NOW, existingActiveForSlot: false })).toBeNull();
+  });
+
+  it("refuses a duplicate slot (society, area, period already active)", () => {
+    expect(refuseInspectionStart(startInput(), { now: NOW, existingActiveForSlot: true })).toMatch(/already exists/i);
+  });
+});
+
+function finalizeInput(overrides: Partial<InspectionFinalizeInput> = {}): InspectionFinalizeInput {
+  return { totalLightsChecked: 42, findings: [], ...overrides };
+}
+
+describe("refuseInspectionFinalize", () => {
+  it("accepts a well-formed finalize with no findings", () => {
+    expect(refuseInspectionFinalize(finalizeInput())).toBeNull();
   });
 
   it("refuses a negative total-checked figure", () => {
-    expect(
-      refuseInspectionSave(baseInput({ totalLightsChecked: -1 }), { now: NOW, existingActiveForSlot: false }),
-    ).toMatch(/non-negative/i);
+    expect(refuseInspectionFinalize(finalizeInput({ totalLightsChecked: -1 }))).toMatch(/non-negative/i);
   });
 
   it("refuses fewer lights checked than findings listed", () => {
-    const input = baseInput({
+    const input = finalizeInput({
       totalLightsChecked: 1,
       findings: [
         { srNo: 1, location: "Lift lobby A", sensorStatus: "off", physicalDamage: false, actionReplace: true, remarks: "" },
         { srNo: 2, location: "Lift lobby B", sensorStatus: "dim", physicalDamage: false, actionReplace: false, remarks: "" },
       ],
     });
-    expect(refuseInspectionSave(input, { now: NOW, existingActiveForSlot: false })).toMatch(/cannot be less/i);
+    expect(refuseInspectionFinalize(input)).toMatch(/cannot be less/i);
   });
 
   it("accepts when total checked equals the finding count", () => {
-    const input = baseInput({
+    const input = finalizeInput({
       totalLightsChecked: 2,
       findings: [
         { srNo: 1, location: "Lift lobby A", sensorStatus: "off", physicalDamage: false, actionReplace: true, remarks: "" },
         { srNo: 2, location: "Lift lobby B", sensorStatus: "dim", physicalDamage: false, actionReplace: false, remarks: "" },
       ],
     });
-    expect(refuseInspectionSave(input, { now: NOW, existingActiveForSlot: false })).toBeNull();
-  });
-
-  it("refuses a duplicate slot (society, area, period already filed)", () => {
-    expect(refuseInspectionSave(baseInput(), { now: NOW, existingActiveForSlot: true })).toMatch(/already exists/i);
+    expect(refuseInspectionFinalize(input)).toBeNull();
   });
 
   it("refuses a finding row with a blank location", () => {
-    const input = baseInput({
+    const input = finalizeInput({
       totalLightsChecked: 1,
       findings: [{ srNo: 1, location: "  ", sensorStatus: "off", physicalDamage: false, actionReplace: true, remarks: "" }],
     });
-    expect(refuseInspectionSave(input, { now: NOW, existingActiveForSlot: false })).toMatch(/Row 1/);
+    expect(refuseInspectionFinalize(input)).toMatch(/Row 1/);
   });
 });
 

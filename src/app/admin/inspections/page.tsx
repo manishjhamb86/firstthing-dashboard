@@ -72,11 +72,13 @@ export default async function InspectionsPage() {
                   <td>{monthLabel(`${i.period}-01`)}</td>
                   <td>{formatDate(i.inspectedAt)}</td>
                   <td>{i.inspectorName}</td>
-                  <td className="num text-right">{i.totalLightsChecked}</td>
-                  <td className="num text-right">{i._count.findings}</td>
+                  <td className="num text-right">{i.totalLightsChecked ?? "—"}</td>
+                  <td className="num text-right">{i.totalLightsChecked === null ? "—" : i._count.findings}</td>
                   <td>
                     {i.voidedAt ? (
                       <StatusChip tone="neu">Voided</StatusChip>
+                    ) : i.totalLightsChecked === null ? (
+                      <StatusChip tone="info">In progress</StatusChip>
                     ) : i._count.findings === 0 ? (
                       <StatusChip tone="ok">Clean</StatusChip>
                     ) : (

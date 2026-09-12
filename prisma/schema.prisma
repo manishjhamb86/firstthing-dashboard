@@ -875,6 +875,7 @@ model Circuit {
   meterDevice         MeterDevice?
   meterInstallations  MeterInstallation[]
   alerts              MeterAlert[]
+  inspections         Inspection[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -3221,6 +3222,11 @@ enum InspectionSensorStatus {
 model Inspection {
   id        String  @id @default(cuid())
   societyId String  @map("society_id")
+  /// Which circuit this visit is about, when it is about one — most real
+  /// visits are (2026-09-12, user-specified). Optional because a general
+  /// common-area check is not always tied to a billed circuit; when it is,
+  /// `area` is derived from the circuit's own label rather than retyped.
+  circuitId String? @map("circuit_id")
   area      String  @default("")
   /// INV-04 — an explicit YYYY-MM selection, never inferred from the visit
   /// date (a visit on the 1st or the 31st should not silently decide it).
@@ -3230,7 +3236,12 @@ model Inspection {
   inspectorName    String   @map("inspector_name")
   inspectorContact String   @map("inspector_contact")
 
-  totalLightsChecked Int @map("total_lights_checked")
+  /// Null until the visit is finalised (2026-09-12) — the header (who/where/
+  /// when) is captured first, on arrival; the checklist, the total and the
+  /// signature are only known once the walk-through is done, so they are a
+  /// second act on the same record rather than fields the form opens with.
+  /// A row with this still null is a draft, in progress.
+  totalLightsChecked Int? @map("total_lights_checked")
 
   /// The paper form's own signature block. Nullable — a representative is
   /// not always available to sign, and that absence is itself worth keeping
@@ -3249,12 +3260,14 @@ model Inspection {
   voidReason String?   @map("void_reason")
 
   society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  circuit    Circuit?    @relation(fields: [circuitId], references: [id], onDelete: SetNull)
   createdBy  AdminUser   @relation("InspectionFiledBy", fields: [createdById], references: [id])
   voidedBy   AdminUser?  @relation("InspectionVoidedBy", fields: [voidedById], references: [id])
   findings   InspectionFinding[]
 
   @@unique([societyId, area, period])
   @@index([societyId])
+  @@index([circuitId])
   @@map("inspections")
 }
 

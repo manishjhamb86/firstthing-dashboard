@@ -2612,6 +2612,73 @@ recording a payment flips it to Paid on both the admin and portal screens. 810 u
 `tsc`/`lint`/`build` clean, zero console/page errors. Migration `20260912020000_add_billing_
 portal_grant` is purely additive (one enum value). Not yet deployed — this branch is not merged.
 
+## The inspection form redesigned around what a visit actually knows, and when (2026-09-12) — user-caught, real screenshot
+
+**The report, verbatim in parts**: "too big a form for fields that are mostly decided already,"
+society should be "a typable dropdown," selecting it should move focus to a "circuit drop down not
+Area," month and date/time are "already displayed and fixed unless purposely clicked on... edit,"
+and "Society representative and number of lights checked should be part of the final submission
+not the start of process... should itself fetch from the representative light count of that
+circuit... once this form is saved the next two fields should appear with a submit button." All
+correct, and the fix is a real two-act redesign, not a cosmetic pass — matching how a visit
+genuinely unfolds: who/where/when is known on arrival, the checklist and the tally are only known
+once the walk-through is done.
+
+**Filing is now `startInspection` then `finalizeInspection`, not one action.** `Inspection.
+totalLightsChecked` became nullable — a row with it still null is a draft, in progress, the same
+"absence of a value is the state" rule this codebase already uses for `voidedAt`. `startInspection`
+claims the (society, area, period) slot and captures the header; `finalizeInspection` writes the
+checklist and the two summary figures once the visit is actually over. The detail page reads which
+act is due: a draft renders the finalize form directly (so refreshing mid-visit resumes exactly
+where the inspector left off, never a blank retry); a finalized one renders the read-only summary,
+unchanged from before. Voiding works at either stage — a draft abandoned mid-visit is struck through
+exactly like a finished one, same reason recorded either way.
+
+**`Inspection` gained a `circuitId`** (nullable, `onDelete: SetNull` — a later-voided circuit must
+not take the visit's own record down with it), because most real visits are about one. Picking a
+circuit **derives `area` from it server-side** (`circuitLabelOf`, the same label the meters and
+demo-report screens already use) rather than asking the operator to retype what the circuit already
+states, and prefills **Total lights checked from the circuit's own `representedLightCount`** —
+CON-11's already-computed extrapolated population, not a second hand-typed guess at the same
+number. A "No specific circuit (whole society)" option keeps the old free-text Area path for a
+general common-area check that isn't tied to any billed circuit.
+
+**Society is a real typeahead, not a 22-row `<select>`** — `src/components/search-select.tsx`, a
+small combobox (own component, not the archived app's `FilterCombobox`, which filters a list of
+plain strings rather than committing an id — this one had to resolve to a real society id so the
+circuit list can be filtered by it) with `role="combobox"`/`listbox` and arrow-key navigation.
+Choosing a society **auto-focuses the circuit select** — the one autofocus chain actually asked
+for, not extended further into fields that are usually left at their default.
+
+**Month and inspection time are closed, prefilled facts, not open inputs** — `src/components/
+click-to-edit.tsx`, the same shape this codebase already uses for a benchmark override or a
+meter-install-date correction (closed by default, an explicit "Edit" reopens it prefilled): an open
+editable field defaulting to "now" reads as a blank waiting to be filled in, not a sensible default
+already chosen, which is exactly the user's complaint.
+
+**A real Server/Client boundary bug found building this, the fourth time this shape has bitten**:
+importing `circuitLabelOf` from `@/lib/meter-view` into the new Client Component form pulled the
+whole Prisma/pg client into the browser bundle and failed the build outright — `meter-view.ts`
+imports `db` for its OTHER exports, and importing anything from a module drags its whole import
+graph regardless of which export is actually used. Split into `src/lib/circuit-label.ts` (zero
+imports, safe from either side of the boundary), with `meter-view.ts` re-exporting it so all dozen
+existing call sites keep working unchanged.
+
+**Verified 18/18, 8/8 and 2/2 in a browser**: the typeahead surfaces Ace City on a partial query and
+commits a real id; focus lands on the circuit select afterward; picking the real "Basement" circuit
+states its 96-metered/2,508-represented figures and removes the free-text Area field; Month and the
+inspection time render as fixed text until Edit is clicked, each opening the right input prefilled;
+starting the visit lands on a draft showing "In progress" with Total lights checked already reading
+2508; finalizing with one faulty fixture produces the same finalized summary as before, confirmed
+against the row (`circuit_id` and the finalized total both stored correctly). A duplicate slot and
+a stripped `manage_survey` permission are both still refused at start, exactly as before; a **draft**
+inspection can be voided (blank reason refused, a stated one accepted) and never surfaces on the
+portal's Documents page, which now filters to finalised (non-null) visits only. 19 unit cases across
+the two split validation functions (`refuseInspectionStart`/`refuseInspectionFinalize`), suite at
+812, `tsc`/`lint`/`build` clean. Migration `20260912040000_inspection_circuit_and_draft` is purely
+additive (one nullable column, one now-nullable column, one FK, one index) — safe as a straight
+ALTER since the feature had only been live for hours with nothing filed on stage. Not yet deployed.
+
 ## Monthly inspections: the paper checklist, digitised (2026-09-12) — user-asked, real paper form supplied
 
 **The other half of "both in parallel."** Asked alongside Billing, from a photo of FirsThing's own

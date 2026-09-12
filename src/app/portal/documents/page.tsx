@@ -46,7 +46,10 @@ export default async function PortalDocumentsPage({
   const activeType = type && VISIBLE[type] ? type : null;
 
   const latestInspection = await db.inspection.findFirst({
-    where: { societyId, voidedAt: null },
+    // Draft (not yet finalised) visits are the field team's own working
+    // state — a resident should never see a visit as "current" before the
+    // walk-through and its tally are actually done.
+    where: { societyId, voidedAt: null, totalLightsChecked: { not: null } },
     orderBy: { inspectedAt: "desc" },
     include: { findings: { orderBy: { srNo: "asc" } } },
   });
@@ -106,7 +109,8 @@ export default async function PortalDocumentsPage({
             </div>
             {(() => {
               const summary = inspectionSummary({
-                totalLightsChecked: latestInspection.totalLightsChecked,
+                // The query already filters to finalised (non-null) visits.
+                totalLightsChecked: latestInspection.totalLightsChecked ?? 0,
                 findingsCount: latestInspection.findings.length,
               });
               return summary.faultyLightsCount === 0 ? (

@@ -17,19 +17,30 @@ export default async function NewInspectionPage({
   if (!actor?.permissions.includes("manage_survey")) redirect("/admin");
 
   const { societyId } = await searchParams;
-  const societies = await db.society.findMany({
-    orderBy: { name: "asc" },
-    select: { id: true, name: true, location: true },
-  });
+  const [societies, circuits] = await Promise.all([
+    db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
+    db.circuit.findMany({
+      where: { voidedAt: null },
+      orderBy: { location: "asc" },
+      select: {
+        id: true,
+        societyId: true,
+        location: true,
+        lightType: true,
+        meteredLightCount: true,
+        representedLightCount: true,
+      },
+    }),
+  ]);
 
   return (
     <>
       <PageHeader
         backHref="/admin/inspections"
         title="New inspection"
-        subtitle="One row per faulty or notable fixture — a healthy light is never listed."
+        subtitle="Start with who, where and when — the checklist and the tally come once the walk-through is done."
       />
-      <NewInspectionForm societies={societies} initialSocietyId={societyId} />
+      <NewInspectionForm societies={societies} circuits={circuits} initialSocietyId={societyId} />
     </>
   );
 }

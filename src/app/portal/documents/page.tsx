@@ -8,6 +8,7 @@ import { hasGrant } from "@/lib/portal-access";
 import { Card, EmptyState, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { publicS3Url } from "@/lib/s3";
 import { monthName } from "../portal-widgets";
+import { inspectionSummary, SENSOR_STATUS_META } from "@/lib/inspection";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents" };
@@ -43,6 +44,12 @@ export default async function PortalDocumentsPage({
   const societyId = viewer.societyId;
   const { type } = await searchParams;
   const activeType = type && VISIBLE[type] ? type : null;
+
+  const latestInspection = await db.inspection.findFirst({
+    where: { societyId, voidedAt: null },
+    orderBy: { inspectedAt: "desc" },
+    include: { findings: { orderBy: { srNo: "asc" } } },
+  });
 
   const docs = await db.storedDocument.findMany({
     where: { societyId, voidedAt: null, docType: { in: Object.keys(VISIBLE) } },
@@ -86,6 +93,64 @@ export default async function PortalDocumentsPage({
         title="Documents"
         subtitle="Everything on record for your society, ready to download."
       />
+
+      {latestInspection && (
+        <Card className="mb-6 p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-bold">Latest inspection</p>
+              <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                {latestInspection.area || "Whole society"} · {monthName(latestInspection.period)} ·{" "}
+                inspected {formatDate(latestInspection.inspectedAt)} by {latestInspection.inspectorName}
+              </p>
+            </div>
+            {(() => {
+              const summary = inspectionSummary({
+                totalLightsChecked: latestInspection.totalLightsChecked,
+                findingsCount: latestInspection.findings.length,
+              });
+              return summary.faultyLightsCount === 0 ? (
+                <StatusChip tone="ok">
+                  All {summary.totalLightsChecked} checked, none faulty
+                </StatusChip>
+              ) : (
+                <StatusChip tone="warn">
+                  {summary.faultyLightsCount} of {summary.totalLightsChecked} faulty
+                </StatusChip>
+              );
+            })()}
+          </div>
+          {latestInspection.findings.length > 0 && (
+            <div className="mt-4 overflow-x-auto">
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Location</th>
+                    <th>Sensor</th>
+                    <th>Action</th>
+                    <th>Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {latestInspection.findings.map((f) => {
+                    const meta = SENSOR_STATUS_META[f.sensorStatus];
+                    return (
+                      <tr key={f.id}>
+                        <td>{f.location}</td>
+                        <td>
+                          <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                        </td>
+                        <td>{f.actionReplace ? "To be replaced" : "—"}</td>
+                        <td>{f.remarks ?? "—"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      )}
 
       {all.length === 0 ? (
         <EmptyState title="No documents filed yet">

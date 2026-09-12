@@ -2612,6 +2612,84 @@ recording a payment flips it to Paid on both the admin and portal screens. 810 u
 `tsc`/`lint`/`build` clean, zero console/page errors. Migration `20260912020000_add_billing_
 portal_grant` is purely additive (one enum value). Not yet deployed — this branch is not merged.
 
+## Monthly inspections: the paper checklist, digitised (2026-09-12) — user-asked, real paper form supplied
+
+**The other half of "both in parallel."** Asked alongside Billing, from a photo of FirsThing's own
+paper form — "MOTION SENSOR LIGHT – QUICK INSPECTION CHECKLIST" — with Society/Area/Inspection
+Date-Time/Inspector fields, a checklist recording only faulty or notable fixtures (Sr, Location,
+Sensor OK/Full/Dim/OFF/Flicker, Physical damage, Action-Replace, Remarks), a Total-Checked/Faulty
+summary, and two signature blocks. Built as `Inspection` + `InspectionFinding` (migration
+`20260912030000_add_inspections`, purely additive, no existing table touched).
+
+**The checklist's own scope is the schema's scope, not a simplification of it**: `Inspection`
+records the header fields and the summary's `totalLightsChecked` (the one figure that has to be
+typed — nothing else on the row can derive it); `InspectionFinding` rows are the checklist table
+itself, one per Sr line, and there is deliberately no row for a healthy fixture, matching the paper
+form exactly. The faulty count is **never stored a second time** — `src/lib/inspection.ts`'s
+`inspectionSummary()` derives it as `findings.length` everywhere it's shown, so it can't drift from
+the paper form's own two independently hand-filled numbers the way a duplicated figure eventually
+does in this codebase.
+
+**One slot per (society, area, period)**, `area` defaulting to `""` (whole-society) rather than
+nullable — a nullable column would let Postgres admit unlimited NULL "duplicates" past the unique
+index, the same reasoning this codebase already applies to normalised dedupe keys elsewhere. A
+second inspection for a slot already filed is **refused, not silently duplicated** — this repo's
+standing rule for exactly this shape (duplicate societies, duplicate circuits) — naming the
+existing filing and pointing at voiding it first if it was filed in error.
+
+**Filing is field work (`manage_survey`), voiding is operations-only** — the same asymmetry as
+`circuit-void.ts`: recording a visit is the inspector's or engineer's own job (the account team
+already covers this via `AdminTeam.inspection`/`engineering`), but striking a filed record is a
+bigger act than filing one. Void is soft — `voidedAt`/`voidedById`/`voidReason`, required — the
+row and its findings survive struck through rather than erased, matching every other "a society
+could dispute this" record in this schema. `src/lib/inspection.ts` (`refuseInspectionSave`,
+`refuseVoidInspection`) is the pure decision module, the Server Actions
+(`src/app/admin/inspections/actions.ts`) a thin `resolveAdmin()` + typed-error shell around it —
+this codebase's standing convention, and deliberately not `requireAdminPermission()`, which throws
+and would hand a legitimately-blocked inspector an opaque production digest instead of a sentence.
+
+**A real timezone bug found by the e2e, not by inspection of the code**: the capture form's
+`<input type="datetime-local">` produces a bare `"YYYY-MM-DDTHH:mm"` string with no timezone
+designator, and parsing that directly with `new Date(...)` is locale-dependent — Node read it as
+the server's own local time rather than the neutral UTC storage this codebase's own rule uses for
+"typed by a person" fields (every date-only input already appends `T00:00:00Z` for exactly this
+reason; the datetime-local field simply hadn't been swept the same way). A typed 10:30 visit was
+silently stored and re-rendered as 05:00 — the exact 5.5-hour IST/UTC gap this file's own
+"stamped by a machine → IST, typed by a person → UTC read" rule exists to prevent, just on the
+write side rather than the display side for once. Fixed by appending `:00Z` before parsing, the
+same shape as every other person-typed date in this codebase.
+
+**The portal surfaces the latest live inspection on the existing Documents page** (reusing the
+`documents` grant rather than adding a new one — this is a filed report in the same sense as a
+savings or demo report), showing the visit date, inspector, the checked/faulty tally, and the
+faulty-fixture table itself — a voided inspection is excluded by the same query filter the admin
+list uses, so a struck-through record never resurfaces as the "current" one on a resident's screen.
+
+**Deliberately not built, stated rather than silently narrowed**: no photo/signature capture (the
+paper form's two signature blocks and stamp are not digitised — there is no file-storage field on
+either model yet, and adding one without a real upload flow would be a stub); no monthly-reminder
+or scheduling automation (the existing `ScheduledEvent` module could carry this, the same way a
+survey visit or light replacement does, but nothing asked for it yet and it's a materially bigger
+piece of work than digitising the form); no back-office notification when a month's inspection is
+overdue for a society.
+
+**Verified 24/24 in a browser, against a real society (Ace City)**: the list and new-inspection
+form render; two faulty fixtures are recorded with sensor status, damage/replace flags and remarks,
+and the detail page's total/faulty/percentage figures and the fixture table match exactly;
+`totalLightsChecked` and the finding rows are confirmed by direct database query, not just the
+screen. **Both refusals were driven through paths the client cannot pre-block**: a duplicate slot
+for the same society/area/period is refused server-side with nothing written; `manage_survey`
+revoked in Postgres behind the open form is refused by name (rather than a thrown 500), with
+nothing written, then restored. Voiding without a reason is refused with the row left live; voiding
+with one stores `voidedAt`/`voidedById`/`voidReason`, the findings survive, and the list's own
+Voided chip and the detail page's ribbon both reflect it. The portal's Documents page shows the
+latest live inspection's own fixture, correctly stating "1 of 30 faulty." One test-harness note,
+the same class already recorded repeatedly in this file: the first pass on the void-with-a-reason
+check failed on an 800ms wait under the full suite's load and passed cleanly at 2.5s — a database
+query confirmed the write had in fact already landed, so the fix was the wait, not the app.
+18 new unit cases (`tests/inspection.test.ts`), suite now 811 passing across 48 files,
+`tsc`/`lint`/`build` clean. Not yet deployed — this branch is not merged.
+
 ## Mobile sign-out fixed, and the dashboard rebuilt around one bold trend (2026-09-12) — user-caught, then user-asked for more
 
 **"profile click is not working in mobile"** — real, and worse than it sounded: below `sm`, the

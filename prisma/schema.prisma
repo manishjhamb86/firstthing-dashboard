@@ -360,6 +360,7 @@ model Society {
   monthlyCalculations MonthlyCalculation[]
   storedDocuments     StoredDocument[]
   tickets             Ticket[]
+  inspections         Inspection[]
 
   @@map("societies")
 }
@@ -549,6 +550,10 @@ model AdminUser {
   deviceTypesDeleted  DeviceType[]         @relation("DeviceTypeDeletedBy")
   deviceTypesProposed DeviceType[]         @relation("DeviceTypeProposedBy")
   deviceTypesApproved DeviceType[]         @relation("DeviceTypeApprovedBy")
+
+  // Monthly inspection checklist (2026-09-12)
+  inspectionsFiled  Inspection[] @relation("InspectionFiledBy")
+  inspectionsVoided Inspection[] @relation("InspectionVoidedBy")
 
   @@map("admin_users")
 }
@@ -3184,4 +3189,90 @@ enum DeviceTypeStatus {
   rejected
 
   @@map("device_type_status")
+}
+
+/// The paper checklist's own column (2026-09-12, digitising FirsThing's
+/// "MOTION SENSOR LIGHT – QUICK INSPECTION CHECKLIST"): what the inspector
+/// found the fixture doing, not a pass/fail flag — "dim" and "flicker" are
+/// real, distinct symptoms the paper form itself names.
+enum InspectionSensorStatus {
+  ok
+  full
+  dim
+  off
+  flicker
+
+  @@map("inspection_sensor_status")
+}
+
+/// A monthly, per-society inspection visit — the digitised form of the real
+/// paper checklist the user shared (2026-09-12). One row per (society, area,
+/// period): `area` is the paper form's own field, defaulted to "" to mean
+/// the whole society so the uniqueness constraint stays well-defined (a
+/// nullable column would let Postgres admit unlimited NULL "duplicates").
+///
+/// The checklist itself (InspectionFinding) records ONLY faulty or notable
+/// fixtures, exactly as the paper form does — it is not a per-fixture
+/// census. `totalLightsChecked` is the one figure that has to be entered by
+/// hand, since nothing else on this row can derive it; the faulty count is
+/// deliberately NOT stored a second time — src/lib/inspection.ts derives it
+/// from `findings.length` so the two can never drift apart the way the
+/// paper form's own two hand-filled numbers can.
+model Inspection {
+  id        String  @id @default(cuid())
+  societyId String  @map("society_id")
+  area      String  @default("")
+  /// INV-04 — an explicit YYYY-MM selection, never inferred from the visit
+  /// date (a visit on the 1st or the 31st should not silently decide it).
+  period    String
+
+  inspectedAt      DateTime @map("inspected_at")
+  inspectorName    String   @map("inspector_name")
+  inspectorContact String   @map("inspector_contact")
+
+  totalLightsChecked Int @map("total_lights_checked")
+
+  /// The paper form's own signature block. Nullable — a representative is
+  /// not always available to sign, and that absence is itself worth keeping
+  /// on record rather than forcing a placeholder name.
+  societyRepName String? @map("society_rep_name")
+  notes          String?
+
+  createdById String    @map("created_by_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  /// Soft delete only, same rule as every other billing-adjacent record in
+  /// this schema — a filed inspection is what a society may dispute, so a
+  /// wrong one is struck through, never erased.
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
+  society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  createdBy  AdminUser   @relation("InspectionFiledBy", fields: [createdById], references: [id])
+  voidedBy   AdminUser?  @relation("InspectionVoidedBy", fields: [voidedById], references: [id])
+  findings   InspectionFinding[]
+
+  @@unique([societyId, area, period])
+  @@index([societyId])
+  @@map("inspections")
+}
+
+/// One faulty or notable fixture from a visit's checklist table — the paper
+/// form's Sr / Location / Sensor / Physical damage / Action-replace /
+/// Remarks row, verbatim.
+model InspectionFinding {
+  id             String                 @id @default(cuid())
+  inspectionId   String                 @map("inspection_id")
+  srNo           Int                    @map("sr_no")
+  location       String
+  sensorStatus   InspectionSensorStatus @map("sensor_status")
+  physicalDamage Boolean                @default(false) @map("physical_damage")
+  actionReplace  Boolean                @default(false) @map("action_replace")
+  remarks        String?
+
+  inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+
+  @@index([inspectionId])
+  @@map("inspection_findings")
 }

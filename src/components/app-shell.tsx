@@ -17,6 +17,7 @@ import {
   Zap,
   FileText,
   LifeBuoy,
+  ClipboardCheck,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -75,6 +76,9 @@ export function AppShell({
     // one are different questions with different cadences (2026-08-21).
     // The field team's own list — they do not get the deal (2026-08-24).
     ...(showField ? [{ href: "/admin/field", label: "Field work", icon: HardHat }] : []),
+    // The monthly per-society motion-sensor checklist (2026-09-12) — field
+    // work, same gate as gate passes and benchmark rescale entry.
+    ...(showField ? [{ href: "/admin/inspections", label: "Inspections", icon: ClipboardCheck }] : []),
     ...(showMonitoring
       ? [{ href: "/admin/demo-monitoring", label: "Demo monitoring", icon: Activity }]
       : []),

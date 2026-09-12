@@ -20,7 +20,10 @@ export type DocType =
   | "postDemoReport"
   | "savingsReport"
   | "gatePass"
-  | "inspectionReport";
+  | "inspectionReport"
+  // The monthly inspection's own evidence photo (2026-09-12) — the signed,
+  // stamped paper form, photographed once it's finalized.
+  | "inspectionEvidence";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
@@ -33,6 +36,7 @@ const DOC_TYPE_FOLDER: Record<DocType, string> = {
   savingsReport: "Reports",
   gatePass: "GatePasses",
   inspectionReport: "Reports",
+  inspectionEvidence: "Inspections",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -46,6 +50,7 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
   savingsReport: "SavingsReport",
   gatePass: "GatePass",
   inspectionReport: "InspectionReport",
+  inspectionEvidence: "SignedChecklist",
 };
 
 function slugifySociety(name: string): string {

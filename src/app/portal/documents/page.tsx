@@ -125,33 +125,40 @@ export default async function PortalDocumentsPage({
             })()}
           </div>
           {latestInspection.findings.length > 0 && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Location</th>
-                    <th>Sensor</th>
-                    <th>Action</th>
-                    <th>Remarks</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {latestInspection.findings.map((f) => {
-                    const meta = SENSOR_STATUS_META[f.sensorStatus];
-                    return (
-                      <tr key={f.id}>
-                        <td>{f.location}</td>
-                        <td>
-                          <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
-                        </td>
-                        <td>{f.actionReplace ? "To be replaced" : "—"}</td>
-                        <td>{f.remarks ?? "—"}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            // A stacked card per fixture, not a table — the same mobile fix
+            // already made on the admin side (2026-09-12): a multi-column
+            // table has no honest way to fit a phone.
+            <div className="mt-4 space-y-2">
+              {latestInspection.findings.map((f) => {
+                const meta = SENSOR_STATUS_META[f.sensorStatus];
+                return (
+                  <div key={f.id} className="rounded-[var(--r-md)] border p-3" style={{ borderColor: "var(--border-subtle)" }}>
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <span className="min-w-0 truncate font-medium">{f.location}</span>
+                      <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                    </div>
+                    {(f.actionReplace || f.remarks) && (
+                      <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {[f.actionReplace ? "To be replaced" : null, f.remarks].filter(Boolean).join(" · ")}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+          )}
+          {latestInspection.evidencePhotoKey && (
+            <p className="mt-4 text-[12.5px]">
+              <a
+                href={publicS3Url(latestInspection.evidencePhotoKey)}
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold underline"
+                style={{ color: "var(--accent)" }}
+              >
+                View the signed checklist
+              </a>
+            </p>
           )}
         </Card>
       )}

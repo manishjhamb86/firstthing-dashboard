@@ -32,6 +32,11 @@ const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline" | "manage_survey"> 
   savingsReport: "manage_pipeline",
   gatePass: "manage_pipeline",
   inspectionReport: "manage_pipeline",
+  // Inspection evidence photos are presigned by
+  // src/app/admin/inspections/actions.ts's own action (resolveAdmin + a
+  // typed error, not this file's throwing requireAdminPermission) — listed
+  // here only so DocType stays exhaustive.
+  inspectionEvidence: "manage_survey",
 };
 
 export async function getUploadUrl(input: {

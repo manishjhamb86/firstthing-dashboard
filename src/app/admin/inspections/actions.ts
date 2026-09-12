@@ -14,7 +14,11 @@
 // its two summary figures once the visit is actually done.
 
 import { revalidatePath } from "next/cache";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
+import { s3, S3_BUCKET } from "@/lib/s3";
+import { buildDocumentKey } from "@/lib/document-keys";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
@@ -109,11 +113,60 @@ export async function startInspection(
   return { id: created.id };
 }
 
+/**
+ * A photo of the signed, stamped paper form (2026-09-12) — a presigned PUT
+ * under the same public `Documents/` tree every other filed document uses
+ * (StoredDocument, KYC, agreements), so the resident portal can link to it
+ * with no separate signed-GET plumbing. Refuses once the inspection is
+ * already finalized or voided — same guard as `finalizeInspection` itself,
+ * since this photo is only ever taken at the close of one specific visit.
+ */
+export async function getInspectionEvidenceUploadUrl(input: {
+  inspectionId: string;
+  fileName: string;
+  contentType: string;
+}): Promise<{ uploadUrl: string; key: string } | { error: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!admin.permissions.includes("manage_survey")) {
+    return { error: "Filing an inspection is field work (Manage survey)." };
+  }
+  if (!input.contentType.startsWith("image/")) {
+    return { error: "Only an image — a photo of the signed form — can be uploaded here." };
+  }
+
+  const inspection = await db.inspection.findUnique({
+    where: { id: input.inspectionId },
+    include: { society: { select: { name: true } } },
+  });
+  if (!inspection) return { error: "That inspection no longer exists." };
+  if (inspection.voidedAt) return { error: "This inspection has been voided." };
+  if (inspection.totalLightsChecked !== null) return { error: "This inspection is already finalised." };
+
+  const extension = (input.fileName.split(".").pop() ?? "jpg").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  const key = buildDocumentKey({
+    society: inspection.society.name,
+    month: inspection.period,
+    docType: "inspectionEvidence",
+    dateLabel: inspection.period,
+    identifier: input.inspectionId,
+    extension,
+  });
+  const uploadUrl = await getSignedUrl(
+    s3,
+    new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: input.contentType }),
+    { expiresIn: 300 },
+  );
+  logger.info("inspection.evidence_presigned", { actorId: admin.id, inspectionId: input.inspectionId, key });
+  return { uploadUrl, key };
+}
+
 export type FinalizeInspectionInput = {
   id: string;
   totalLightsChecked: number;
   societyRepName: string;
   notes: string;
+  evidencePhotoKey: string | null;
   findings: {
     location: string;
     sensorStatus: InspectionSensorStatus;
@@ -162,6 +215,7 @@ export async function finalizeInspection(
       totalLightsChecked: input.totalLightsChecked,
       societyRepName: input.societyRepName.trim() || null,
       notes: input.notes.trim() || null,
+      evidencePhotoKey: input.evidencePhotoKey,
       findings: {
         create: findings.map((f) => ({
           srNo: f.srNo,

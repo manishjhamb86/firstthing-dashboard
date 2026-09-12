@@ -5,6 +5,7 @@ import { isOperations } from "@/lib/admin-teams";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { formatDateTime, monthLabel } from "@/lib/format-date";
 import { inspectionSummary, SENSOR_STATUS_META } from "@/lib/inspection";
+import { publicS3Url } from "@/lib/s3";
 import { VoidInspectionButton } from "./void-button";
 import { FinalizeInspectionForm } from "./finalize-inspection-form";
 
@@ -95,11 +96,29 @@ export default async function InspectionDetailPage({
             <Stat label="Faulty %" value={`${summary.faultyPct.toFixed(1)}%`} />
           </StatRow>
 
-          {inspection.notes && (
-            <p className="mb-6 text-[13.5px]">
-              <span className="lbl mr-1.5">Notes</span>
-              {inspection.notes}
-            </p>
+          {(inspection.notes || inspection.evidencePhotoKey) && (
+            <div className="mb-6 space-y-1.5">
+              {inspection.notes && (
+                <p className="text-[13.5px]">
+                  <span className="lbl mr-1.5">Notes</span>
+                  {inspection.notes}
+                </p>
+              )}
+              {inspection.evidencePhotoKey && (
+                <p className="text-[13.5px]">
+                  <span className="lbl mr-1.5">Signed checklist</span>
+                  <a
+                    href={publicS3Url(inspection.evidencePhotoKey)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold underline"
+                    style={{ color: "var(--accent)" }}
+                  >
+                    View the photo
+                  </a>
+                </p>
+              )}
+            </div>
           )}
 
           <Card className="p-4 sm:p-6">

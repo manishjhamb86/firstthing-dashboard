@@ -2864,6 +2864,62 @@ query confirmed the write had in fact already landed, so the fix was the wait, n
 18 new unit cases (`tests/inspection.test.ts`), suite now 811 passing across 48 files,
 `tsc`/`lint`/`build` clean. Not yet deployed — this branch is not merged.
 
+## Inspection photo capture: the signed checklist's own evidence (2026-09-12) — user-asked, closing a gap the inspection build named honestly
+
+**One of four items from a single bundled instruction** ("Inspection: no photo/signature
+capture... would need a new upload flow, no infra for it yet... build it"), the other three being
+AUTH_SECRET rotation (done, see Current Blockers), the SPIKE-02 DPDP question (answered, no code),
+and the bucket-policy narrowing (explicitly deferred by the user — "its fine for now").
+
+**The gap was named honestly the same day it was created** (the "Deliberately not built" line in
+the section above, written a few hours earlier): the paper form's two signature blocks and stamp
+were never digitised, and there was no file-storage field on `Inspection` at all. This closes
+exactly that, reusing the presigned-PUT infrastructure this codebase has had since 2026-08-05
+rather than inventing a second upload pattern.
+
+**`Inspection.evidencePhotoKey`** (migration `20260912060000_add_inspection_evidence_photo`,
+purely additive) — one field, one photo, covering both signature blocks and the stamp in a single
+frame, per the paper form's own layout. A new `DocType` member, `inspectionEvidence`
+(`document-keys.ts`), files it under the same public `Documents/{Society}/{YYYY-MM}/Inspections/`
+tree every other filed document uses — `SignedChecklist` as its label — so the resident portal can
+link to it directly with no separate signed-GET plumbing, matching this project's existing
+public-read call for the `Documents/` tree (not the private `Ingest/` prefix, which is a different
+sensitivity class).
+
+**`getInspectionEvidenceUploadUrl`** is its own action (`src/app/admin/inspections/actions.ts`),
+not routed through the generic `admin/uploads.ts` — that file's permission map still lists
+`inspectionEvidence` for exhaustiveness, but the actual presign refuses on the inspection's own
+state (`resolveAdmin()` + typed errors, this codebase's standing convention over
+`requireAdminPermission()`'s throw): only an image content-type, only before the inspection is
+finalised, never against a voided one. `finalizeInspection` stores whatever key the client
+presigned, or `null` if the inspector chose not to attach one — the photo is optional, since not
+every visit has a representative present to sign.
+
+**Both read surfaces show it**: the admin detail page's "Signed checklist" line and the portal
+Documents page's "Latest inspection" card each render a "View the photo" / "View the signed
+checklist" link when the key is present, and neither otherwise — a visit with no photo shows
+nothing rather than a broken or placeholder link.
+
+**Verified end to end in a browser (11/11), against the real S3 bucket, not a mock**: an inspector
+account filed a fresh visit, chose a photo, and the client presigned → PUT'd → finalised in
+sequence; the admin detail page's link resolved to the exact
+`Documents/{Society}/{YYYY-MM}/Inspections/..._SignedChecklist_..._{inspectionId}.jpg` key shape;
+an unauthenticated `fetch` of that URL returned **200** (the public-read policy, proven live, not
+assumed); the same key appeared on the portal Documents page's "Latest inspection" card logged in
+as the society's own office-bearer. Zero console errors, zero page errors, on both the admin and
+portal passes. 816 unit tests (unchanged — no new pure logic to test; the action is a thin
+presign+validate shell), `tsc`/`lint`/`pnpm test`/`pnpm build` all clean. Test fixtures (3 inspection
+rows created during verification) deleted via `psql` afterward; the uploaded S3 objects themselves
+cannot be removed by this app's `PutObject`-only IAM credentials, the same standing limitation as
+every other verification pass in this file — not added to Current Blockers separately since it is
+the same already-documented class. Not yet deployed — this branch is not merged.
+
+**Deliberately not built in this pass, stated rather than silently narrowed**: monthly-reminder or
+overdue-inspection notification (the other half of the same user instruction) — this needs a new
+`arrears_sweep`-style recurring job or a extension of the existing notification-derivation pattern,
+a materially separate piece of work from a photo field, and is being sequenced after the Billing
+CON-13 automation the same message asked for, not silently dropped.
+
 ## Mobile sign-out fixed, and the dashboard rebuilt around one bold trend (2026-09-12) — user-caught, then user-asked for more
 
 **"profile click is not working in mobile"** — real, and worse than it sounded: below `sm`, the

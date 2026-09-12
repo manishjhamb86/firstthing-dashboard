@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field } from "@/components/ui";
-import { finalizeInspection } from "../actions";
+import { finalizeInspection, getInspectionEvidenceUploadUrl } from "../actions";
 import type { InspectionSensorStatus } from "@prisma/client";
 
 const SENSOR_OPTIONS: { value: InspectionSensorStatus; label: string }[] = [
@@ -47,6 +47,7 @@ export function FinalizeInspectionForm({
   const [totalLightsChecked, setTotalLightsChecked] = useState(defaultTotal != null ? String(defaultTotal) : "");
   const [societyRepName, setSocietyRepName] = useState("");
   const [notes, setNotes] = useState("");
+  const [evidencePhoto, setEvidencePhoto] = useState<File | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [nextKey, setNextKey] = useState(1);
 
@@ -65,11 +66,25 @@ export function FinalizeInspectionForm({
     e.preventDefault();
     setError(null);
     startTransition(async () => {
+      let evidencePhotoKey: string | null = null;
+      if (evidencePhoto) {
+        const presign = await getInspectionEvidenceUploadUrl({
+          inspectionId,
+          fileName: evidencePhoto.name,
+          contentType: evidencePhoto.type || "image/jpeg",
+        });
+        if ("error" in presign) return setError(presign.error);
+        const put = await fetch(presign.uploadUrl, { method: "PUT", body: evidencePhoto });
+        if (!put.ok) return setError("The photo upload failed — try again.");
+        evidencePhotoKey = presign.key;
+      }
+
       const result = await finalizeInspection({
         id: inspectionId,
         totalLightsChecked: Number(totalLightsChecked),
         societyRepName,
         notes,
+        evidencePhotoKey,
         findings: rows.map((r) => ({
           location: r.location,
           sensorStatus: r.sensorStatus,
@@ -210,6 +225,22 @@ export function FinalizeInspectionForm({
         <div className="mt-3">
           <Field label="Notes" htmlFor="notes">
             <textarea id="notes" className="field" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
+          </Field>
+        </div>
+        <div className="mt-3">
+          <Field
+            label="Photo of the signed checklist"
+            htmlFor="evidencePhoto"
+            hint="One photo covering both signature blocks and the stamp — optional, but the only proof kept that the visit was signed off."
+          >
+            <input
+              id="evidencePhoto"
+              type="file"
+              accept="image/*"
+              className="field"
+              onChange={(e) => setEvidencePhoto(e.target.files?.[0] ?? null)}
+              disabled={pending}
+            />
           </Field>
         </div>
         <div className="mt-3">

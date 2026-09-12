@@ -3271,6 +3271,13 @@ model Inspection {
   societyRepName String? @map("society_rep_name")
   notes          String?
 
+  /// A photo of the paper form itself, signed and stamped (2026-09-12,
+  /// user-asked) — the S3 key of one image covering both signature blocks
+  /// and the stamp at once, since that is what the paper form physically
+  /// is. Nullable: not every visit has the paper form photographed, and a
+  /// missing photo should read as "not captured," never a blocking error.
+  evidencePhotoKey String? @map("evidence_photo_key")
+
   createdById String    @map("created_by_id")
   createdAt   DateTime  @default(now()) @map("created_at")
 

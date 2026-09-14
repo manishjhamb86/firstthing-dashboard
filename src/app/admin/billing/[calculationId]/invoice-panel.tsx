@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, StatusChip } from "@/components/ui";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatDateTime } from "@/lib/format-date";
 import {
   acknowledgeMismatch,
   attachInvoice,
@@ -14,7 +14,6 @@ import {
   releaseCalculation,
   voidInvoiceAttachment,
 } from "./invoice-actions";
-import { formatDateTime } from "@/lib/format-date";
 
 export type InvoiceState = {
   id: string;

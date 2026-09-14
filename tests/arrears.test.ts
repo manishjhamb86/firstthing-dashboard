@@ -21,7 +21,6 @@ function stateAt(now: Date, over: Partial<Parameters<typeof arrearsStateOf>[0]> 
     dueDate: DUE,
     amountPaid: 0,
     invoiceAmount: 10_000,
-    paymentConfirmedAsOf: null,
     extensionDaysGranted: 0,
     alreadySuspendedAt: null,
     now,

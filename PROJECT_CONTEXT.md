@@ -3064,6 +3064,44 @@ remembering alongside this file's own "restart the dev server after any migratio
 container can also come back *behind* the schema the code expects, and `migrate deploy` is the fix
 either way.
 
+## Code-review pass on the three-commit session batch, and a real DEV/DB routing surprise (2026-09-14)
+
+**A `/code-review high` over the inspection-photo / CON-13-sweep / inspection-reminder commits
+surfaced five findings; all five fixed in one pass.** The load-bearing one was a correctness bug:
+the overdue-inspection reminder counted a **draft** (unfinalized) inspection as "filed" — its query
+filtered only `voidedAt: null`, so the moment anyone clicked "Start inspection" the society dropped
+off the reminder even if the walk-through was never completed. Now requires
+`totalLightsChecked: { not: null }` (finalized), the exact rule the portal's own "latest inspection"
+query already used — so a started-and-abandoned draft no longer silences the monthly reminder.
+The other four: a dead `ArrearsInput.paymentConfirmedAsOf` field (declared, computed via a reduce in
+the sweep, passed by two callers, read by nothing — removed field, reduce and the now-unused
+`confirmedAsOf` select); `previousPeriod` computing the "just-closed" month in UTC (a ~5.5h window
+after each IST month start flagged a month too early — now shifts into IST first via a shared
+`istMonth` helper, matching this file's "a machine instant is read in IST" rule); the two derived
+notification feeds not being `cache()`-memoized (they ran twice per notifications-page request, once
+for the badge and once for the list — now wrapped in `cache()`, and the badge counts them by list
+length so badge and page can never disagree and the separate invoice `count` query is gone); and a
+duplicate `@/lib/format-date` import.
+
+**Verified both directions in a browser (12/12 across three scripts, zero console errors)**: with a
+draft present the reminder still lists the society (14); finalizing that same draft drops it to 13;
+the badge count equals the list length. `tsc`/`lint`/`build`/`pnpm test` (826) all clean.
+
+**The surprise, and it matters for every future "local" verification**: `docker exec psql` and the
+running app disagreed about how many inspections existed (0 vs 1), which turned out to be because an
+**SSH tunnel `ssh -L 5433:localhost:5432 zenovaa` is bound to `127.0.0.1:5433` ahead of Docker's own
+`5433→5432` mapping**. `DATABASE_URL` points at `localhost:5433`, so the app — and every
+`prisma migrate deploy`/`db seed` run from this machine — connects through the tunnel to a
+`firsthing_dev` database **on the `zenovaa` box**, NOT the local `firsthing-postgres` container.
+The container is shadowed. So this turn's earlier `prisma migrate deploy` applied the two branch
+migrations to that remote `firsthing_dev` (a dev database, distinct from stage's live
+`firsthing_blueprint`), and the one test inspection created during verification lived there — it was
+removed afterward (`psql -h localhost -p 5433`, confirmed back to 0). **The rule going forward: when
+`docker exec psql` and the app disagree, check `lsof -nP -iTCP:5433 -sTCP:LISTEN` for a tunnel before
+concluding "stale client" — on this machine `localhost:5433` is a remote dev DB, and `docker exec`
+reaches a different, shadowed one.** No code change; flagged for the user because it means "local"
+migrations and seeds have a remote blast radius.
+
 ## Mobile sign-out fixed, and the dashboard rebuilt around one bold trend (2026-09-12) — user-caught, then user-asked for more
 
 **"profile click is not working in mobile"** — real, and worse than it sounded: below `sm`, the

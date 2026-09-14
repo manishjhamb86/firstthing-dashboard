@@ -78,7 +78,6 @@ export default async function CalculationPage({
           dueDate: liveInvoice.dueDate,
           amountPaid: liveInvoice.payments.reduce((n, p) => n + p.amount, 0),
           invoiceAmount: liveInvoice.amount,
-          paymentConfirmedAsOf: null,
           extensionDaysGranted: liveInvoice.extensions.reduce((n, e) => n + e.days, 0),
           alreadySuspendedAt: liveInvoice.suspendedAt,
           now: new Date(),

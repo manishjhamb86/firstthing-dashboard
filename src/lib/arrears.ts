@@ -53,8 +53,6 @@ export type ArrearsInput = {
   /** Sum of payments recorded against the invoice. */
   amountPaid: number;
   invoiceAmount: number;
-  /** The most recent `confirmedAsOf` across the invoice's payments. */
-  paymentConfirmedAsOf: Date | null;
   /** Total days granted across every extension (CON-13). */
   extensionDaysGranted: number;
   alreadySuspendedAt: Date | null;

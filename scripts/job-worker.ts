@@ -195,7 +195,7 @@ async function runArrearsSweep() {
     const invoices = await db.billingInvoice.findMany({
       where: { voidedAt: null, releasedAt: { not: null }, status: { not: "paid" } },
       include: {
-        payments: { select: { amount: true, confirmedAsOf: true } },
+        payments: { select: { amount: true } },
         extensions: { select: { days: true } },
       },
     });
@@ -206,17 +206,12 @@ async function runArrearsSweep() {
     for (const inv of invoices) {
       const amountPaid = inv.payments.reduce((n, p) => n + p.amount, 0);
       const extensionDaysGranted = inv.extensions.reduce((n, e) => n + e.days, 0);
-      const paymentConfirmedAsOf = inv.payments.reduce<Date | null>(
-        (latest, p) => (!latest || p.confirmedAsOf > latest ? p.confirmedAsOf : latest),
-        null,
-      );
 
       const state = arrearsStateOf({
         releasedAt: inv.releasedAt,
         dueDate: inv.dueDate,
         amountPaid,
         invoiceAmount: inv.amount,
-        paymentConfirmedAsOf,
         extensionDaysGranted,
         alreadySuspendedAt: inv.suspendedAt,
         now,

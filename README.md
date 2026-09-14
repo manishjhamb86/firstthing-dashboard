@@ -45,15 +45,25 @@ AUTH_TRUST_HOST=true
 ```
 The two `NEXT_PUBLIC_SUPABASE_*` vars are still required — most pages won't render without them. `AUTH_SECRET` is required by NextAuth for signing session JWTs.
 
-### 2. Local Postgres
+### 2. The dev database
+
+Dev runs against the `firsthing_dev` database **on the `zenovaa` server**, reached over an
+SSH tunnel on `localhost:5433` — there is no local Postgres container. `DATABASE_URL` in `.env`
+points at `localhost:5433`, and `pnpm dev` opens the tunnel automatically (see
+`scripts/run-next.mjs` / `scripts/db-tunnel.mjs`). To open it by hand, or to run Prisma commands:
 
 ```bash
-docker compose up -d
-pnpm prisma migrate deploy
-pnpm prisma db seed
+pnpm db:tunnel        # opens the SSH forward (idempotent — no-op if already up)
 ```
 
-The seed creates 4 local accounts, all password `password123`: `admin@firsthing.local`, `customer@firsthing.local`, `inspector@firsthing.local`, `socmgr@firsthing.local`.
+Requires key-based SSH access to `zenovaa`. Once the tunnel is up, `pnpm prisma migrate deploy`,
+`pnpm prisma db seed`, `pnpm prisma studio` and the app all talk to that one database — so a
+migration or seed run from your machine writes to the shared dev DB, not a private copy.
+
+> There is deliberately **no** local Docker Postgres. A container bound to `localhost:5433` shadows
+> the tunnel (the tunnel script sees the port already up and never opens the real forward), silently
+> routing the app to the container instead of `zenovaa`. That collision is why the local container
+> was removed — see PROJECT_CONTEXT.md, "The local dev database was removed (2026-09-14)".
 
 ### 3. Install and run
 
@@ -102,7 +112,7 @@ src/types/next-auth.d.ts        NextAuth Session/User/JWT type augmentation
 
 prisma/                         schema.prisma, migrations/, seed.ts (new Postgres stack)
 supabase/functions/             two Deno Edge Functions + their own README (still Supabase)
-docker-compose.yml              local Postgres for development
+scripts/db-tunnel.mjs           opens the SSH forward to zenovaa's firsthing_dev (see setup step 2)
 
 docs/                           DB_MIGRATION_INSPECTION.md, SCHEMA_REDESIGN_MIGRATION.md,
                                  team onboarding guide, design handoff bundle

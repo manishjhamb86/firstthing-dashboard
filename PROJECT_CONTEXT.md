@@ -3096,11 +3096,46 @@ running app disagreed about how many inspections existed (0 vs 1), which turned 
 The container is shadowed. So this turn's earlier `prisma migrate deploy` applied the two branch
 migrations to that remote `firsthing_dev` (a dev database, distinct from stage's live
 `firsthing_blueprint`), and the one test inspection created during verification lived there — it was
-removed afterward (`psql -h localhost -p 5433`, confirmed back to 0). **The rule going forward: when
-`docker exec psql` and the app disagree, check `lsof -nP -iTCP:5433 -sTCP:LISTEN` for a tunnel before
-concluding "stale client" — on this machine `localhost:5433` is a remote dev DB, and `docker exec`
-reaches a different, shadowed one.** No code change; flagged for the user because it means "local"
-migrations and seeds have a remote blast radius.
+removed afterward (`psql -h localhost -p 5433`, confirmed back to 0). No code change; flagged for the
+user, who then had the local container removed entirely (next entry).
+
+## The local dev database was removed (2026-09-14) — user-asked, "remove the local db completely to avoid confusion"
+
+**There is now exactly one dev database, and it is the intended one.** Reading
+`scripts/db-tunnel.mjs` and `scripts/run-next.mjs` settled what the setup was always *meant* to be:
+dev runs against `firsthing_dev` **on the `zenovaa` server**, reached over an SSH forward on
+`localhost:5433` that `pnpm dev` opens automatically (`pnpm db:tunnel` opens it by hand). The
+db-tunnel script's own comment says it outright — *"another project's Postgres already holds 5432
+here… 5433, not 5432"*. The local `firsthing-postgres` **Docker container was never part of that
+design** — it had been hand-created mapping `5433→5432`, so it sat on the exact port the tunnel
+owns.
+
+**The container did not merely duplicate the dev DB — it actively broke the tunnel.**
+`db-tunnel.mjs`'s `isUp(5433)` guard treats "something is listening on 5433" as "tunnel already up"
+and returns without opening the SSH forward. So whenever the container was running, `pnpm dev`
+silently skipped the tunnel and the app talked to the **local container** (21 societies, its own
+divergent data); whenever the container was down, the tunnel opened and the app talked to
+**zenovaa** (22 societies). Same `localhost:5433`, two different databases, swapped by whether a
+stray container happened to be up — which is precisely the "why does this table have different data
+each run" confusion this removal eliminates. It is also what made this session's earlier
+verification land partly on each side.
+
+**Removed**: `docker stop/rm firsthing-postgres` + `docker volume rm firsthing_pgdata` (a stale,
+migration-reproducible copy — nothing unique lost), and the tracked `docker-compose.yml` (it
+described the abandoned local-Postgres approach and would recreate the shadow on `docker compose
+up`). README §2 rewritten from "`docker compose up -d`" to the tunnel workflow; the `AGENTS.md`
+root-files example no longer names `docker-compose.yml`. Verified after removal: port 5433 free,
+`pnpm db:tunnel` opens the forward, and `select inet_server_addr()` over it returns the remote
+loopback (not a `172.17.x` Docker IP) against `firsthing_dev` with 22 societies and both branch
+migrations present.
+
+**The consequence, now the documented normal rather than a surprise**: a `prisma migrate deploy`
+or `db seed` run from this machine writes to the **shared remote `firsthing_dev` on zenovaa** — a
+dev database, distinct from stage's live `firsthing_blueprint`, but shared, so it is not a private
+throwaway. That is the intended design (the tunnel scripts are first-class, in `package.json` as
+`db:tunnel`), not a hazard — it only *read* as one while the rogue container was shadowing it.
+**Rule going forward: if `pnpm dev`/Prisma can't reach the DB, the tunnel is down — run
+`pnpm db:tunnel` (needs key-based SSH to zenovaa); never recreate a local Postgres on 5433.**
 
 ## Mobile sign-out fixed, and the dashboard rebuilt around one bold trend (2026-09-12) — user-caught, then user-asked for more
 

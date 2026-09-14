@@ -10,7 +10,41 @@ const KIND_LABEL: Record<string, string> = {
   offline: "Not reachable",
   out_of_range: "Out of range",
   savings_out_of_band: "Below the agreed band",
+  billing_overdue: "Invoice overdue",
+  billing_warning: "Overdue — warning stage",
+  billing_suspended: "Suspended",
+  inspection_overdue: "Inspection not filed",
 };
+
+// "offline"/"billing_suspended"/an unrecognised future kind default to the
+// more alarming tone; every other named kind here is deliberately opted
+// into the calmer one — a wrongly-alarming default is the safer failure
+// mode for a kind this map hasn't seen yet.
+const CALM_KINDS = new Set(["out_of_range", "savings_out_of_band", "billing_overdue", "inspection_overdue"]);
+function notificationTone(kind: string): "bad" | "warn" {
+  return CALM_KINDS.has(kind) ? "warn" : "bad";
+}
+
+// What the link actually opens — "Open meter →" was correct for every kind
+// this centre carried until billing/inspection notifications joined it; a
+// meter-flavoured label pointing at an invoice or a blank inspection form
+// reads as a broken link even though the href itself is right.
+function notificationActionLabel(kind: string): string {
+  if (kind.startsWith("billing_")) return "Open bill →";
+  if (kind === "inspection_overdue") return "File it →";
+  if (kind === "savings_out_of_band") return "Open circuit →";
+  return "Open meter →";
+}
+
+// Only a real MeterAlert row can be acknowledged — `n.id` for a billing or
+// inspection notification is an invoice id or a synthetic key, and
+// `acknowledgeAlert` would correctly (but confusingly) refuse it as "no
+// longer exists." Following up on those is the act itself (pay the invoice,
+// file the inspection), not a separate acknowledgement.
+const METER_ALERT_KINDS = new Set(["offline", "out_of_range", "savings_out_of_band"]);
+function isAcknowledgeable(kind: string): boolean {
+  return METER_ALERT_KINDS.has(kind);
+}
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Notifications" };
@@ -99,14 +133,14 @@ export default async function NotificationsPage() {
                   key={n.id}
                   className="rounded-[var(--r-sm)] p-3"
                   style={{
-                    background: n.kind === "offline" ? "var(--bad-bg)" : "var(--warn-bg)",
-                    border: `1px solid ${n.kind === "offline" ? "var(--bad-line)" : "var(--warn-line)"}`,
+                    background: notificationTone(n.kind) === "bad" ? "var(--bad-bg)" : "var(--warn-bg)",
+                    border: `1px solid ${notificationTone(n.kind) === "bad" ? "var(--bad-line)" : "var(--warn-line)"}`,
                   }}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
                     <div className="min-w-0 flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <StatusChip tone={n.kind === "offline" ? "bad" : "warn"}>
+                        <StatusChip tone={notificationTone(n.kind)}>
                           {KIND_LABEL[n.kind] ?? n.kind}
                         </StatusChip>
                         <span className="num text-xs text-[var(--text-subtle)]">
@@ -130,9 +164,11 @@ export default async function NotificationsPage() {
                       </p>
                     </div>
                     <div className="flex shrink-0 items-center gap-3">
-                      {canAck && !n.acknowledgedAt && <AcknowledgeButton alertId={n.id} />}
+                      {canAck && !n.acknowledgedAt && isAcknowledgeable(n.kind) && (
+                        <AcknowledgeButton alertId={n.id} />
+                      )}
                       <Link href={n.href} className="text-[13px] font-semibold underline">
-                        Open meter →
+                        {notificationActionLabel(n.kind)}
                       </Link>
                     </div>
                   </div>
@@ -169,7 +205,7 @@ export default async function NotificationsPage() {
                   {past.map((n) => (
                     <tr key={n.id}>
                       <td>
-                        <StatusChip tone={n.kind === "offline" ? "bad" : "warn"}>
+                        <StatusChip tone={notificationTone(n.kind)}>
                           {KIND_LABEL[n.kind] ?? n.kind}
                         </StatusChip>
                       </td>

@@ -107,6 +107,70 @@ async function openInvoiceNotifications(): Promise<Notification[]> {
   return rows.map(invoiceToNotification);
 }
 
+/** `"YYYY-MM"` for the calendar month before `now`'s — the last period that
+ *  has actually fully elapsed. */
+function previousPeriod(now: Date): string {
+  const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * The monthly-inspection reminder (2026-09-14) — the other half of the same
+ * bundled instruction the photo-capture build closed the first half of.
+ *
+ * Deliberately a pure read, not a job: unlike CON-13's arrears clock there is
+ * no state to advance here, only a question — "has this society's inspection
+ * for the period that just closed been filed?" — that a live query answers
+ * for free, so no `Job` row, no written column, nothing that can drift from
+ * the `Inspection` rows it reads. The check fires once a period has FULLY
+ * elapsed (the previous calendar month), not partway through the current
+ * one — a society isn't "overdue" for a month that still has days left in
+ * it, and picking an arbitrary day-of-month threshold to flag it early would
+ * be an invented rule nobody asked for.
+ *
+ * Scoped to every society with an ACTIVE contract — the set already used to
+ * decide who is billable (`admin/billing/page.tsx`'s own contract query) —
+ * since a society with no live engagement has nothing for a field visit to
+ * check. One inspection anywhere in the society for the period counts,
+ * whichever area or circuit it was filed against; this is a "did anyone
+ * visit," not a per-circuit requirement.
+ */
+async function openInspectionOverdueNotifications(now: Date): Promise<Notification[]> {
+  const period = previousPeriod(now);
+  const closedAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  const societies = await db.contract.findMany({
+    where: { status: "active" },
+    select: { societyId: true, society: { select: { name: true } } },
+    distinct: ["societyId"],
+  });
+  if (societies.length === 0) return [];
+
+  const filed = await db.inspection.findMany({
+    where: { societyId: { in: societies.map((s) => s.societyId) }, period, voidedAt: null },
+    select: { societyId: true },
+  });
+  const filedIds = new Set(filed.map((f) => f.societyId));
+
+  return societies
+    .filter((s) => !filedIds.has(s.societyId))
+    .map((s) => ({
+      id: `inspection-overdue-${s.societyId}-${period}`,
+      kind: "inspection_overdue",
+      message: `${s.society.name}'s ${period} inspection was never filed.`,
+      openedAt: closedAt.toISOString(),
+      closedAt: null,
+      closedReason: null,
+      acknowledgedAt: null,
+      raiseCount: 1,
+      subject: `${period} inspection`,
+      societyName: s.society.name,
+      circuitLabel: null,
+      ownerLabel: null,
+      href: `/admin/inspections/new?societyId=${s.societyId}`,
+    }));
+}
+
 function toNotification(a: Row): Notification {
   const circuit = a.circuit ?? a.meter?.circuit ?? null;
   const owner = a.meter?.owner ?? a.circuit?.meterDevice?.owner ?? null;
@@ -146,27 +210,32 @@ function toNotification(a: Row): Notification {
  */
 export const unreadNotificationCount = cache(async (): Promise<number> => {
   // Unattended alerts plus OPEN society requests (customer portal,
-  // 2026-08-31) plus overdue/warning/suspended invoices (2026-09-12): none
-  // of these three has a "somebody looked at it" state the way an
-  // acknowledged meter alert does — following up IS the act, via
-  // confirmPaymentStatus/recordPayment — so every one of them counts until
-  // paid. In-progress tickets deliberately do not count — taking one up is
-  // the attention the badge asks for.
-  const [alerts, tickets, invoices] = await Promise.all([
+  // 2026-08-31) plus overdue/warning/suspended invoices (2026-09-12) plus a
+  // society's never-filed monthly inspection (2026-09-14): none of these
+  // four has a "somebody looked at it" state the way an acknowledged meter
+  // alert does — following up IS the act (confirmPaymentStatus/recordPayment,
+  // or simply filing the inspection) — so every one of them counts until
+  // resolved. In-progress tickets deliberately do not count — taking one up
+  // is the attention the badge asks for.
+  const now = new Date();
+  const [alerts, tickets, invoices, overdueInspections] = await Promise.all([
     db.meterAlert.count({ where: { closedAt: null, acknowledgedAt: null } }),
     db.ticket.count({ where: { status: "open" } }),
     db.billingInvoice.count({ where: { voidedAt: null, status: { in: ["overdue", "warning", "suspended"] } } }),
+    openInspectionOverdueNotifications(now).then((rows) => rows.length),
   ]);
-  return alerts + tickets + invoices;
+  return alerts + tickets + invoices + overdueInspections;
 });
 
 /** Everything still open, worst-first by age. */
 export const openNotifications = cache(async (): Promise<Notification[]> => {
-  const [alertRows, invoiceNotifications] = await Promise.all([
+  const now = new Date();
+  const [alertRows, invoiceNotifications, inspectionNotifications] = await Promise.all([
     db.meterAlert.findMany({ where: { closedAt: null }, orderBy: { openedAt: "asc" }, include }),
     openInvoiceNotifications(),
+    openInspectionOverdueNotifications(now),
   ]);
-  return [...alertRows.map(toNotification), ...invoiceNotifications].sort(
+  return [...alertRows.map(toNotification), ...invoiceNotifications, ...inspectionNotifications].sort(
     (a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime(),
   );
 });

@@ -3003,6 +3003,67 @@ confirmed by count query. 819 unit tests, `tsc`/`lint`/`build` clean. Migration
 `20260912070000_add_arrears_sweep_job_type` is a single additive enum value. Not yet deployed —
 this branch is not merged.
 
+## The monthly-inspection reminder, the piece deliberately deferred (2026-09-14) — closing the other half of the photo-capture instruction
+
+**The last open item from the 2026-09-12 bundled instruction.** The photo-capture entry stated it
+plainly at the time: "No monthly-reminder or overdue-inspection notification... sequenced after the
+Billing CON-13 automation... not silently dropped." With CON-13's sweep committed the same day, this
+closes the remaining piece.
+
+**Deliberately a pure read, not a job.** Unlike CON-13's clock there is no state to advance here —
+"has this society's inspection for the period that just closed been filed?" is a question a live
+query answers for free, so there is no new `Job` type, no written column, nothing that can drift
+from the `Inspection` rows it reads. `openInspectionOverdueNotifications()` (`src/lib/
+notifications.ts`) checks the calendar month that has FULLY ELAPSED (not the current, in-progress
+one) against every society holding an active contract — the same set `admin/billing/page.tsx`'s own
+board already uses to decide who is billable. A society with one live inspection filed anywhere in
+it for that period, whichever area or circuit, is not overdue; this is "did anyone visit," not a
+per-circuit requirement. Picking an arbitrary day-of-month to flag the CURRENT month early was
+deliberately not done — a month with days still left in it isn't overdue, and inventing a threshold
+nobody asked for would be exactly the kind of undocumented drift `AGENTS.md` warns against.
+
+**Folded into the existing notification centre, not a new screen** — the same "derived from rows of
+record, no shadow table" call this file already made for meter alerts, then again for CON-13's
+invoices two days ago. `unreadNotificationCount()` and `openNotifications()` both gained this third
+source, summed alongside alerts/tickets/invoices; there is no acknowledge act, matching invoices —
+following up on an overdue inspection IS filing it, so it stays in the feed until it is.
+
+**A real, if small, pre-existing gap surfaced by adding a third non-meter kind to a
+meter-alert-shaped screen, and fixed in the same change**: `/admin/notifications` had hardcoded
+"Open meter →" on every row and a `n.kind === "offline" ? "bad" : "warn"` tone check — both
+correct for every kind that existed when the billing notifications were added two days ago, both
+silently wrong for them (a billing row said "Open meter →"). Generalised to `notificationTone()`/
+`notificationActionLabel()` keyed off `kind`, and the `Acknowledge` button — which calls an action
+that does a real `db.meterAlert.findUnique` and would correctly-but-confusingly refuse "That alert
+no longer exists" against an invoice id or a synthetic inspection key — is now offered only for the
+three kinds that are genuinely `MeterAlert` rows.
+
+**Verified in a browser against the real dataset (11/11 across two scripts, zero console errors)**:
+with zero `2026-08` inspections on record, exactly the 14 societies holding an active contract each
+render one "…'s 2026-08 inspection was never filed." row, correctly chipped "Inspection not filed"
+in the calmer tone, offering "File it →" and no Acknowledge control; clicking through lands on
+`/admin/inspections/new?societyId=…` with the society field genuinely prefilled (not merely a
+correct href); filing a real inspection for one of the 14 through that exact link **immediately**
+drops it from 14 to 13 rows on a fresh load — the read-time design proven, not assumed. One
+harness note, the same class this file has recorded repeatedly: `body.textContent()` counted every
+message **twice** (Next dev's inline RSC hydration payload duplicates rendered strings into a
+`<script>` tag, which `textContent` walks) — fixed by asserting the `<li>` element count instead,
+and by `waitForURL` rather than `networkidle` before reading `page.url()` after a client-side
+navigation, the same RSC-timing trap recorded several times earlier in this file. All fixtures
+(the one filed inspection) removed by direct query afterward, confirmed by count — back to zero
+`inspections` rows, matching the branch's dormant state. 826 unit tests (unchanged — no new pure
+logic; the function is a straightforward query, same class as the invoice-notification read side
+it sits beside), `tsc`/`lint`/`build` clean. No schema change. Not yet deployed — this branch is
+not merged.
+
+**One environment note, not a product defect**: the local Docker Postgres container had stopped
+between sessions and, once restarted, was two migrations behind (`add_inspection_evidence_photo`,
+`add_arrears_sweep_job_type`) — a `prisma migrate deploy` against the already-running container
+applied both cleanly with no data loss (21 pre-existing societies untouched throughout). Worth
+remembering alongside this file's own "restart the dev server after any migration" rule: a stopped
+container can also come back *behind* the schema the code expects, and `migrate deploy` is the fix
+either way.
+
 ## Mobile sign-out fixed, and the dashboard rebuilt around one bold trend (2026-09-12) — user-caught, then user-asked for more
 
 **"profile click is not working in mobile"** — real, and worse than it sounded: below `sm`, the

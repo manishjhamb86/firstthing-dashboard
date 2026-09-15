@@ -6079,6 +6079,19 @@ the circuit moved 1,773 → 1,786 with its audit row effective this month; the t
 the editor opened — the candidate form has one too — so the editor's labels are now
 "Corrected light count" etc.
 
+## The invoice intake accepts a zip (2026-09-16) — user-asked
+
+A month's invoices arrive from Zoho as one archive. `src/lib/zip-browser.ts` is a minimal ZIP
+reader for the browser — central directory, local headers, stored or deflated entries inflated
+through the platform's own `DecompressionStream("deflate-raw")`, no dependency (the server-side twin
+in `xlsx.ts` inflates through node:zlib and cannot be shared). A dropped zip is opened in the
+browser and its PDFs join the drop exactly as if dropped loose — fingerprinted, deduplicated,
+uploaded one row each; directories, `__MACOSX/` entries and non-PDFs are left out and named in a
+note ("intake-batch.zip — 2 PDFs taken out; left out: notes.txt"), shown as information rather
+than in the refusal style. Encrypted or oddly-compressed entries are reported by name, never
+silently dropped. Verified 5/5 with a zip holding a deflated PDF, a stored PDF, a text file and a
+macOS resource fork: two rows, both fingerprinted, the note stating what was left out.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

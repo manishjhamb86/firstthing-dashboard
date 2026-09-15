@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip, type ChipTone } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { sniffKind } from "@/lib/file-signature";
+import { isZip, readZip } from "@/lib/zip-browser";
 import { formatInstant } from "@/lib/format-date";
 import { checkIntakeDuplicates, createIntakeUpload, extractIntake, retryIntake, type IntakeDuplicate } from "./actions";
 
@@ -47,6 +48,8 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
   const inputRef = useRef<HTMLInputElement>(null);
   const [view, setView] = useState<View>("review");
   const [refusals, setRefusals] = useState<string[]>([]);
+  // What a dropped archive yielded — information, not a refusal.
+  const [archiveNotes, setArchiveNotes] = useState<string[]>([]);
   const [inFlight, setInFlight] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [, startTransition] = useTransition();
@@ -64,17 +67,51 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
    * upload only the new ones now; the rest wait for the reprocess-or-skip
    * choice (user-asked 2026-09-15: "do not give duplicate rows").
    */
+  /**
+   * A zip is opened here and its PDFs join the drop as if dropped loose
+   * (user-asked 2026-09-16) — a month's invoices arrive from Zoho as one
+   * archive. Anything in it that is not a PDF is named and left out.
+   */
+  async function expandArchives(list: File[]): Promise<{ files: File[]; notes: string[] }> {
+    const files: File[] = [];
+    const notes: string[] = [];
+    for (const f of list) {
+      const head = new Uint8Array(await f.slice(0, 4).arrayBuffer());
+      if (!isZip(head)) {
+        files.push(f);
+        continue;
+      }
+      try {
+        const zip = await readZip(new Uint8Array(await f.arrayBuffer()), (name) => /\.pdf$/i.test(name));
+        for (const z of zip.files) files.push(new File([z.bytes as BlobPart], z.name, { type: "application/pdf" }));
+        notes.push(
+          `${f.name} — ${zip.files.length} PDF${zip.files.length === 1 ? "" : "s"} taken out${
+            zip.skipped.length > 0 ? `; left out: ${zip.skipped.join(", ")}` : ""
+          }`,
+        );
+        if (zip.files.length === 0) notes.push(`${f.name} — no PDFs inside`);
+      } catch (err) {
+        notes.push(`${f.name} — ${err instanceof Error ? err.message : "could not be opened"}`);
+      }
+    }
+    return { files, notes };
+  }
+
   async function handleFiles(files: FileList | File[]) {
-    const list = Array.from(files);
-    if (list.length === 0) return;
+    const dropped = Array.from(files);
+    if (dropped.length === 0) return;
     setRefusals([]);
+    const expanded = await expandArchives(dropped);
+    setArchiveNotes(expanded.notes);
+    const list = expanded.files;
+    if (list.length === 0) return;
     const hashed = await Promise.all(list.map(async (file) => ({ file, hash: await sha256Hex(file) })));
     // The same file twice in one drop is one file.
     const unique = new Map<string, File>();
     for (const h of hashed) if (!unique.has(h.hash)) unique.set(h.hash, h.file);
     const check = await checkIntakeDuplicates([...unique.keys()]);
     if (check.error) {
-      setRefusals([check.error]);
+      setRefusals((cur) => [...cur, check.error!]);
       return;
     }
     const dupeByHash = new Map(check.duplicates!.map((d) => [d.hash, d]));
@@ -221,7 +258,7 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
           <input
             ref={inputRef}
             type="file"
-            accept="application/pdf"
+            accept="application/pdf,application/zip,.zip"
             multiple
             className="hidden"
             onChange={(e) => {
@@ -229,14 +266,21 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
               e.target.value = "";
             }}
           />
-          <p className="font-semibold">Drop invoice PDFs — one or many</p>
+          <p className="font-semibold">Drop invoice PDFs — one, many, or a zip of them</p>
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Each file starts its own row as soon as it lands. PDF only, up to 20 MB each.
+            Each PDF starts its own row as soon as it lands; a zip is opened here and its PDFs join the drop. Up to 20 MB each.
           </p>
           {inFlight.length > 0 && (
             <p className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
               Uploading and reading {inFlight.length} file{inFlight.length === 1 ? "" : "s"}…
             </p>
+          )}
+          {archiveNotes.length > 0 && (
+            <div className="mt-1 w-full max-w-xl text-left text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+              {archiveNotes.map((n) => (
+                <p key={n}>{n}</p>
+              ))}
+            </div>
           )}
           {refusals.length > 0 && (
             <div className="mt-1 w-full max-w-xl text-left">

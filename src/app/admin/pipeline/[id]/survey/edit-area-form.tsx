@@ -22,7 +22,7 @@ export function EditAreaForm({
   count: number;
   method: "walked" | "estimated";
   note: string | null;
-  /** What the candidate circuit for this light type represents today, if one exists. */
+  /** What the candidate circuit for this light type represents today, if one exists (shown before any edit). */
   circuitRepresented: number | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -30,18 +30,29 @@ export function EditAreaForm({
   const [m, setM] = useState<"walked" | "estimated">(method);
   const [n, setN] = useState(note ?? "");
   const [error, setError] = useState<string | undefined>();
-  const [saved, setSaved] = useState<number | null>(null);
+  const [saved, setSaved] = useState<{ count: number; circuit: { from: number; to: number } | null; note?: string } | null>(null);
   const [pending, start] = useTransition();
 
   if (!open) {
     return (
       <span className="inline-flex flex-wrap items-center justify-end gap-2">
-        {saved != null && circuitRepresented != null && circuitRepresented !== saved && (
-          <span className="text-xs" style={{ color: "var(--warn-fg)" }}>
-            The circuit still represents {circuitRepresented.toLocaleString("en-IN")} — correct it on the circuit page.
+        {saved?.circuit && (
+          <span className="text-xs" style={{ color: "var(--ok-fg)" }}>
+            Circuit now represents {saved.circuit.to.toLocaleString("en-IN")} (was {saved.circuit.from.toLocaleString("en-IN")}) — regenerate the demo report to re-price on it.
           </span>
         )}
-        <button type="button" className="text-xs font-semibold" style={{ color: "var(--accent)" }} onClick={() => setOpen(true)}>
+        {saved?.note && (
+          <span className="text-xs" style={{ color: "var(--warn-fg)" }}>
+            {saved.note}
+          </span>
+        )}
+        <button
+          type="button"
+          className="text-xs font-semibold"
+          style={{ color: "var(--accent)" }}
+          title={circuitRepresented != null ? `The circuit represents ${circuitRepresented.toLocaleString("en-IN")} today; it follows the corrected total.` : undefined}
+          onClick={() => setOpen(true)}
+        >
           Edit count
         </button>
       </span>
@@ -78,7 +89,7 @@ export function EditAreaForm({
             const r = await updateLightingInventoryArea(id, siteSurveyId, { count: Number(value), method: m, note: n });
             setError(r.error);
             if (!r.error) {
-              setSaved(Number(value));
+              setSaved({ count: Number(value), circuit: r.circuit ?? null, note: r.circuitNote });
               setOpen(false);
             }
           })

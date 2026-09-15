@@ -6055,13 +6055,19 @@ beneath it at a 700px-tall viewport. Not a data change.
 "Should be able to change the light count, as on installation light count can change." The
 inventory row had Remove and nothing else. `updateLightingInventoryArea` (field permission, typed
 errors, old and new in the log line) with an inline Edit count on the row — count, walked/estimated,
-and the note an estimate still requires. The candidate circuit that represents the light type is
-deliberately NOT moved: its represented count is what the offer and the bill read, and it has its
-own correction path (the circuit page / the offer's "priced on X, survey counted Y" prompt), so the
-row says "the circuit still represents 1,773 — correct it on the circuit page" rather than
-silently rewriting a figure a society may be billed on. FEAT-006-AC-7. Verified 6/6: an estimate
-with no note refused by the server with the count unchanged; the correction stored; the warning
-shown; the totals re-read. One harness note: `getByLabel("Light count")` matched TWO controls once
+and the note an estimate still requires. **The first cut left the circuit alone** ("the circuit still represents 1,773 — correct it on
+the circuit page"), and the user's next message was the answer to that: "Demo savings report still
+shows 1773 even after regenerating, and on invoice upload it still shows old count." The inventory
+IS the population. So the candidate circuit for the light type now follows the corrected total —
+forward only, as a `RepresentedCountChange` effective the current month naming the inventory row
+(the same audit row an invoice's count correction writes, CON-47 (d)): earlier months, and an
+issued offer's own snapshot, keep saying what they were computed on, while the demo report
+regenerated next and the intake's circuit picker read the new figure. The two guards on the circuit
+page's own correction (billed on a released month; an offer issued) do not apply here because this
+is forward-only, not a restatement. Where the total cannot be applied — two circuits carry the
+type, or the total is not above the metered count — the row says so. FEAT-006-AC-7. Verified 7/7:
+an estimate with no note refused by the server with the count unchanged; the correction stored;
+the circuit moved 1,773 → 1,786 with its audit row effective this month; the totals re-read. One harness note: `getByLabel("Light count")` matched TWO controls once
 the editor opened — the candidate form has one too — so the editor's labels are now
 "Corrected light count" etc.
 

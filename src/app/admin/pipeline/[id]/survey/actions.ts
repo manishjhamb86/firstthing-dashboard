@@ -63,7 +63,7 @@ export async function updateLightingInventoryArea(
   id: string,
   siteSurveyId: string,
   input: { count: number; method: "walked" | "estimated"; note?: string },
-): Promise<{ error?: string }> {
+): Promise<{ error?: string; circuit?: { from: number; to: number } | null; circuitNote?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
   if (!actor.permissions.includes("manage_survey")) {
@@ -78,9 +78,57 @@ export async function updateLightingInventoryArea(
   if (input.method === "estimated" && !input.note?.trim()) {
     return { error: "A note is required when the count is estimated, not walked." };
   }
-  await db.lightingInventoryArea.update({
-    where: { id },
-    data: { count: input.count, method: input.method, note: input.note?.trim() || null },
+  // The inventory IS the population (user-caught 2026-09-16: "demo savings
+  // report still shows 1773 even after regenerating"). The candidate circuit
+  // for this light type follows the corrected total — forward only, as a
+  // RepresentedCountChange effective this month (the same audit row an
+  // invoice's count correction writes; CON-47 (d)): earlier months, and an
+  // issued offer's own snapshot, keep saying what they were computed on.
+  let applied: { from: number; to: number } | null = null;
+  let circuitNote: string | undefined;
+  await db.$transaction(async (tx) => {
+    await tx.lightingInventoryArea.update({
+      where: { id },
+      data: { count: input.count, method: input.method, note: input.note?.trim() || null },
+    });
+    const total = (
+      await tx.lightingInventoryArea.aggregate({ where: { siteSurveyId, lightType: row.lightType }, _sum: { count: true } })
+    )._sum.count ?? 0;
+    const circuits = await tx.circuit.findMany({
+      where: { siteSurveyId, lightType: row.lightType, voidedAt: null },
+      select: { id: true, meteredLightCount: true, representedLightCount: true },
+    });
+    if (circuits.length !== 1) {
+      if (circuits.length > 1) circuitNote = "More than one circuit carries this light type — correct each one's represented count on its own page.";
+      return;
+    }
+    const c = circuits[0];
+    if (c.representedLightCount === total) return;
+    if (refuseRepresentedCount(total, c.meteredLightCount)) {
+      circuitNote = `The circuit still represents ${c.representedLightCount.toLocaleString("en-IN")} — ${refuseRepresentedCount(total, c.meteredLightCount)}`;
+      return;
+    }
+    const d = new Date();
+    const effectiveFrom = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+    await tx.circuit.update({ where: { id: c.id }, data: { representedLightCount: total } });
+    await tx.representedCountChange.create({
+      data: {
+        circuitId: c.id,
+        previousCount: c.representedLightCount,
+        nextCount: total,
+        effectiveFrom,
+        reason: `Lighting inventory corrected on the site survey (${row.area}: ${row.count} → ${input.count}).`,
+        recordedById: actor.id,
+      },
+    });
+    applied = { from: c.representedLightCount, to: total };
+    logger.info("circuit.represented_count_applied_from_inventory", {
+      actorId: actor.id,
+      circuitId: c.id,
+      previous: c.representedLightCount,
+      next: total,
+      effectiveFrom,
+    });
   });
   logger.info("survey.lighting_inventory_area_updated", {
     actorId: actor.id,
@@ -88,9 +136,11 @@ export async function updateLightingInventoryArea(
     rowId: id,
     from: { count: row.count, method: row.method },
     to: { count: input.count, method: input.method },
+    circuitApplied: applied,
   });
   revalidatePath(`/admin/pipeline`);
-  return {};
+  revalidatePath(`/admin/societies`);
+  return { circuit: applied, circuitNote };
 }
 
 export async function deleteLightingInventoryArea(id: string, siteSurveyId: string) {

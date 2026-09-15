@@ -1761,7 +1761,7 @@ features:
         type: happy
         given: "a recorded inventory area"
         when: "field staff correct its count, method or note"
-        then: "the row is updated with old and new logged; an estimated count still needs a note; the screen says when the candidate circuit still represents the old figure, which is corrected on its own page rather than moved silently"
+        then: "the row is updated with old and new logged; an estimated count still needs a note; the candidate circuit for the light type follows the corrected total forward-only as a RepresentedCountChange effective this month"
         scope_note: "Amended 2026-09-16: the count changes at installation, and the inventory is CON-11's extrapolation base."
         tests: [TC-006-7]
     stories:

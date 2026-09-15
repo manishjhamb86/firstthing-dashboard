@@ -342,16 +342,16 @@ model Society {
   nextElectionDate DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
   createdAt        DateTime      @default(now()) @map("created_at")
 
-  contacts        SocietyContact[]
-  profiles        Profile[]
-  circuits        Circuit[]
-  pipelines       Pipeline[]
-  scheduledEvents ScheduledEvent[]
-  waterTanks      WaterTank[]
-  meterDevices    MeterDevice[]
+  contacts           SocietyContact[]
+  profiles           Profile[]
+  circuits           Circuit[]
+  pipelines          Pipeline[]
+  scheduledEvents    ScheduledEvent[]
+  waterTanks         WaterTank[]
+  meterDevices       MeterDevice[]
   meterInstallations MeterInstallation[]
-  contracts       Contract[]
-  engagements     Engagement[]
+  contracts          Contract[]
+  engagements        Engagement[]
 
   // MS-06
   fieldVisits          FieldVisit[]
@@ -405,24 +405,24 @@ model SocietyContact {
 // a separate table from AdminUser — see PROJECT_CONTEXT.md and INV-01: an
 // admin session can only ever be minted from AdminUser, never from here.
 model Profile {
-  id              String           @id @default(cuid())
-  email           String           @unique
-  passwordHash    String           @map("password_hash")
-  name            String?
-  portalAuthority PortalAuthority? @map("portal_authority")
+  id                  String           @id @default(cuid())
+  email               String           @unique
+  passwordHash        String           @map("password_hash")
+  name                String?
+  portalAuthority     PortalAuthority? @map("portal_authority")
   /// Module access (see PortalGrant). Empty means no module tabs — the
   /// migration backfills existing accounts with everything they could see
   /// before grants existed, so nobody lost access on deploy.
-  grants          PortalGrant[]    @default([])
-  societyId       String?          @map("society_id")
-  isActive        Boolean          @default(true) @map("is_active")
-  themePreference Theme?           @map("theme_preference")
+  grants              PortalGrant[]    @default([])
+  societyId           String?          @map("society_id")
+  isActive            Boolean          @default(true) @map("is_active")
+  themePreference     Theme?           @map("theme_preference")
   /// When this member last opened their notifications — the bell counts
   /// events newer than this. One timestamp, not a per-event read table:
   /// the feed is derived from rows of record, so there is no event row to
   /// key reads against, and "seen up to here" is what a bell means anyway.
-  notificationsSeenAt DateTime?    @map("notifications_seen_at")
-  createdAt       DateTime         @default(now()) @map("created_at")
+  notificationsSeenAt DateTime?        @map("notifications_seen_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
 
   society         Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
   offersResponded Offer[]  @relation("OfferRespondedBy")
@@ -521,17 +521,18 @@ model AdminUser {
   contractsActivated Contract[]        @relation("ContractActivatedBy")
 
   // MS-08
-  calculationsReleased     MonthlyCalculation[]  @relation("CalculationReleasedBy")
-  calculationsSentBack     MonthlyCalculation[]  @relation("CalculationSentBackBy")
-  deviationsAssigned       DeviationReview[]     @relation("DeviationAssignedTo")
-  deviationsOwned          DeviationReview[]     @relation("DeviationOwner")
-  invoicesUploaded         BillingInvoice[]      @relation("InvoiceUploadedBy")
-  invoicePaymentsConfirmed BillingInvoice[]      @relation("InvoicePaymentConfirmedBy")
-  invoiceMismatchesAcked   BillingInvoice[]      @relation("InvoiceMismatchAckBy")
-  invoicesVoided           BillingInvoice[]      @relation("InvoiceVoidedBy")
-  paymentsRecorded         Payment[]             @relation("PaymentRecordedBy")
-  extensionsGranted        InvoiceExtension[]    @relation("ExtensionGrantedBy")
-  contractTermsRecorded    ContractTermVersion[] @relation("ContractTermRecordedBy")
+  calculationsReleased     MonthlyCalculation[]     @relation("CalculationReleasedBy")
+  calculationsSentBack     MonthlyCalculation[]     @relation("CalculationSentBackBy")
+  deviationsAssigned       DeviationReview[]        @relation("DeviationAssignedTo")
+  deviationsOwned          DeviationReview[]        @relation("DeviationOwner")
+  invoicesUploaded         BillingInvoice[]         @relation("InvoiceUploadedBy")
+  invoicePaymentsConfirmed BillingInvoice[]         @relation("InvoicePaymentConfirmedBy")
+  invoiceMismatchesAcked   BillingInvoice[]         @relation("InvoiceMismatchAckBy")
+  invoicesVoided           BillingInvoice[]         @relation("InvoiceVoidedBy")
+  representedCountChanges  RepresentedCountChange[] @relation("RepresentedCountChangeBy")
+  paymentsRecorded         Payment[]                @relation("PaymentRecordedBy")
+  extensionsGranted        InvoiceExtension[]       @relation("ExtensionGrantedBy")
+  contractTermsRecorded    ContractTermVersion[]    @relation("ContractTermRecordedBy")
 
   // MS-06
   fieldVisitsJoined    FieldVisitParticipant[]  @relation("FieldVisitParticipant")
@@ -769,79 +770,79 @@ model LightingInventoryArea {
 // the table to exist and migrate cleanly per its own exit criteria.
 
 model Circuit {
-  id                            String       @id @default(cuid())
-  societyId                     String       @map("society_id")
-  siteSurveyId                  String?      @map("site_survey_id") // FEAT-007 — which survey this candidate was selected during
-  serviceLine                   ServiceLine  @map("service_line")
+  id                            String      @id @default(cuid())
+  societyId                     String      @map("society_id")
+  siteSurveyId                  String?     @map("site_survey_id") // FEAT-007 — which survey this candidate was selected during
+  serviceLine                   ServiceLine @map("service_line")
   location                      String? // FEAT-040 — physical area/location, set during registry configuration
-  lightType                     String       @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
-  meteredLightCount             Int          @map("metered_light_count")
-  representedLightCount         Int          @map("represented_light_count") // scoped to this lightType only — CON-11
+  lightType                     String      @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
+  meteredLightCount             Int         @map("metered_light_count")
+  representedLightCount         Int         @map("represented_light_count") // scoped to this lightType only — CON-11
   wattage                       Float
-  workingHours                  Float?       @map("working_hours") // metadata only, never triggers a rescale — CON-10
+  workingHours                  Float?      @map("working_hours") // metadata only, never triggers a rescale — CON-10
   // FEAT-040-AC-5 — when workingHours last changed; recorded so a later
   // off-band month can be traced to a metadata change vs. a real anomaly,
   // without that change itself ever triggering a benchmark rescale (CON-10).
-  workingHoursEffectiveAt       DateTime?    @map("working_hours_effective_at")
-  eligibilityChecklist          Json?        @map("eligibility_checklist") // CON-16 — per-criterion pass/fail, FEAT-007
+  workingHoursEffectiveAt       DateTime?   @map("working_hours_effective_at")
+  eligibilityChecklist          Json?       @map("eligibility_checklist") // CON-16 — per-criterion pass/fail, FEAT-007
   // FEAT-007-AC-3 — the one exception-able criterion (light count < 50);
   // every other hard criterion (fixtures >15ft, driveway) has no override.
-  lightCountExceptionApprovedBy String?      @map("light_count_exception_approved_by")
-  lightCountExceptionReason     String?      @map("light_count_exception_reason")
+  lightCountExceptionApprovedBy String?     @map("light_count_exception_approved_by")
+  lightCountExceptionReason     String?     @map("light_count_exception_reason")
   /// Which CON-16 criteria the exception waived — "lightCount", or a hard
   /// criterion's own name. An approval that records only "approved" loses the
   /// fact that, say, WiFi reach was waived, and a meter that cannot reach the
   /// network never reports: the commissioning team has to be able to read what
   /// was let through (CON-16 amendment, 2026-09-08).
-  eligibilityExceptionCriteria String[]     @map("eligibility_exception_criteria")
+  eligibilityExceptionCriteria  String[]    @default([]) @map("eligibility_exception_criteria")
   // FEAT-011 — CON-17 load validation: the meter's displayed load vs.
   // (light count × wattage), and the resulting delta. A persistently
   // failed validation can only be overridden by PER-01 (FEAT-011-AC-5),
   // recorded here rather than silently accepted as a normal pass.
-  meterDisplayedLoad            Float?       @map("meter_displayed_load")
-  meterInstalledAt              DateTime?    @map("meter_installed_at")
-  loadDiscrepancyPct            Float?       @map("load_discrepancy_pct")
-  loadValidationOverrideById    String?      @map("load_validation_override_by_id")
-  loadValidationOverrideReason  String?      @map("load_validation_override_reason")
+  meterDisplayedLoad            Float?      @map("meter_displayed_load")
+  meterInstalledAt              DateTime?   @map("meter_installed_at")
+  loadDiscrepancyPct            Float?      @map("load_discrepancy_pct")
+  loadValidationOverrideById    String?     @map("load_validation_override_by_id")
+  loadValidationOverrideReason  String?     @map("load_validation_override_reason")
   // FEAT-012/014 — pre/post monitoring windows. windowStartAt is the
   // calendar day valid-day counting begins from; an anomaly fix (AC-3)
   // bumps it forward to the midnight after the fix rather than mutating
   // past readings, so evaluation is always just "valid readings on/after
   // windowStartAt". Baselines are the resulting averages once each window
   // completes (FEAT-012-AC-1/FEAT-014-AC-1).
-  preInstallWindowStartAt       DateTime?    @map("pre_install_window_start_at")
-  preInstallBaseline            Float?       @map("pre_install_baseline")
+  preInstallWindowStartAt       DateTime?   @map("pre_install_window_start_at")
+  preInstallBaseline            Float?      @map("pre_install_baseline")
   /// FEAT-013 — who is doing the replacement, and when it was handed to
   /// them. The visit itself is a ScheduledEvent (installation_day), not a
   /// column: an owning record never stores its own time.
-  replacementOwnerId            String?      @map("replacement_owner_id")
-  replacementAssignedAt         DateTime?    @map("replacement_assigned_at")
-  replacementAssignedById       String?      @map("replacement_assigned_by_id")
-  lightReplacementDate          DateTime?    @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
-  postInstallWindowStartAt      DateTime?    @map("post_install_window_start_at")
-  postInstallBaseline           Float?       @map("post_install_baseline")
+  replacementOwnerId            String?     @map("replacement_owner_id")
+  replacementAssignedAt         DateTime?   @map("replacement_assigned_at")
+  replacementAssignedById       String?     @map("replacement_assigned_by_id")
+  lightReplacementDate          DateTime?   @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
+  postInstallWindowStartAt      DateTime?   @map("post_install_window_start_at")
+  postInstallBaseline           Float?      @map("post_install_baseline")
   // FEAT-014 — the number the contract prices against (CON-20's 60-80%
   // band). System-computed only; FEAT-014-AC-4 requires no manual entry
   // path exists for it. FEAT-014 AC-8 (2026-08-27) adds ONE: a recorded
   // override, below — because the agreed figure a society is billed against
   // does not always equal what the readings give. Nothing else writes it.
-  benchmarkSavingsPct           Float?       @map("benchmark_savings_pct")
+  benchmarkSavingsPct           Float?      @map("benchmark_savings_pct")
 
   // The benchmark set by hand rather than derived from the demos. Aditya Mega
   // City's tables give 58.48%; its agreement says 64%. Rounding counts as an
   // override too, so a stored benchmark is always either measured or chosen.
   // An override never moves a circuit into CON-20's band — that is judged on
   // what the demos measured.
-  benchmarkOverridePct          Float?       @map("benchmark_override_pct")
-  benchmarkOverrideReason       String?      @map("benchmark_override_reason")
-  benchmarkOverrideById         String?      @map("benchmark_override_by_id")
-  benchmarkOverrideAt           DateTime?    @map("benchmark_override_at")
-  state                         CircuitState @default(surveyed)
-  createdAt                     DateTime     @default(now()) @map("created_at")
+  benchmarkOverridePct    Float?       @map("benchmark_override_pct")
+  benchmarkOverrideReason String?      @map("benchmark_override_reason")
+  benchmarkOverrideById   String?      @map("benchmark_override_by_id")
+  benchmarkOverrideAt     DateTime?    @map("benchmark_override_at")
+  state                   CircuitState @default(surveyed)
+  createdAt               DateTime     @default(now()) @map("created_at")
   // Who selected this candidate. Null for every circuit predating the column,
   // which `decideVoidCircuit` reads as "creator unknown" and falls through to
   // ops-only — the safe direction.
-  createdById                   String?      @map("created_by_id")
+  createdById             String?      @map("created_by_id")
 
   // Soft delete. A circuit is the grain CON-11 bills on, so it is never hard
   // deleted: the row survives, struck out, and stops being counted anywhere.
@@ -868,16 +869,18 @@ model Circuit {
   demos                    CircuitDemo[]
 
   // MS-07
-  rawReadingFiles     RawReadingFile[]
-  meterReadings       MeterReading[]
-  readingAnomalies    ReadingAnomaly[]
-  coverageAcceptances CoverageAcceptance[]
-  feeLines            CircuitFeeLine[]
-  devices             CircuitDevice[]
-  meterDevice         MeterDevice?
-  meterInstallations  MeterInstallation[]
-  alerts              MeterAlert[]
-  inspections         Inspection[]
+  rawReadingFiles         RawReadingFile[]
+  meterReadings           MeterReading[]
+  readingAnomalies        ReadingAnomaly[]
+  coverageAcceptances     CoverageAcceptance[]
+  feeLines                CircuitFeeLine[]
+  invoiceLines            BillingInvoiceLine[]
+  representedCountChanges RepresentedCountChange[]
+  devices                 CircuitDevice[]
+  meterDevice             MeterDevice?
+  meterInstallations      MeterInstallation[]
+  alerts                  MeterAlert[]
+  inspections             Inspection[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -917,11 +920,11 @@ model CircuitDemo {
   /// 1, 2, 3 — the order they were run in, and how the screen orders them.
   sequence  Int
 
-  meteredLightCount  Int    @map("metered_light_count")
-  preInstallBaseline Float  @map("pre_install_baseline")
-  postInstallAverage Float  @map("post_install_average")
+  meteredLightCount  Int   @map("metered_light_count")
+  preInstallBaseline Float @map("pre_install_baseline")
+  postInstallAverage Float @map("post_install_average")
   /// Verbatim, never rounded (AC-8).
-  savingsPct         Float  @map("savings_pct")
+  savingsPct         Float @map("savings_pct")
 
   /// A rejected demo stays on record and takes no part in the figure.
   rejected        Boolean   @default(false)
@@ -932,7 +935,7 @@ model CircuitDemo {
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
 
-  circuit  Circuit             @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  circuit  Circuit              @relation(fields: [circuitId], references: [id], onDelete: Cascade)
   readings CircuitDemoReading[]
 
   @@unique([circuitId, sequence])
@@ -1286,18 +1289,18 @@ model Offer {
 
   // Commercial terms. FEAT-027-AC-3 makes tolerance/revenue-share/term hard
   // requirements to issue, since every downstream billing decision reads them.
-  tolerancePct        Float @map("tolerance_pct")
+  tolerancePct        Float        @map("tolerance_pct")
   pricingModel        PricingModel @default(revenue_share) @map("pricing_model")
   /// The SOCIETY's share. Null on a lump-sum offer, where there is no share —
   /// a sentinel here would be a percentage somebody could read as agreed.
-  revenueSharePct     Float? @map("revenue_share_pct")
+  revenueSharePct     Float?       @map("revenue_share_pct")
   /// The flat monthly fee, on a lump-sum offer. Null otherwise.
-  lumpSumMonthlyFee   Float? @map("lump_sum_monthly_fee")
-  unitElectricityRate Float @map("unit_electricity_rate")
-  termMonths          Int   @map("term_months")
+  lumpSumMonthlyFee   Float?       @map("lump_sum_monthly_fee")
+  unitElectricityRate Float        @map("unit_electricity_rate")
+  termMonths          Int          @map("term_months")
   exclusions          Json?
-  amcTerms            Json? @map("amc_terms")
-  spareStockCount     Int   @default(0) @map("spare_stock_count")
+  amcTerms            Json?        @map("amc_terms")
+  spareStockCount     Int          @default(0) @map("spare_stock_count")
 
   // Derived at generation from the demo numbers, shown on the offer.
   projectedMonthlyFee Float? @map("projected_monthly_fee")
@@ -2059,6 +2062,9 @@ model CoverageAcceptance {
 enum CalculationStatus {
   held
   calculated
+  // CON-47 / ADR-011 — ops has submitted an invoice-first month; the
+  // accountant has not yet published it.
+  submitted
   released
   sent_back
   superseded
@@ -2081,6 +2087,38 @@ enum PricingBasis {
   actual_metered
 
   @@map("pricing_basis")
+}
+
+// CON-47 / ADR-011 — where a month of record came from. `readings` is
+// runCalculation's output (FEAT-048); `invoice` is a month created from the
+// Zoho invoice (FEAT-109). Phase two's bill generation is a value here, not a
+// new model.
+enum CalculationSource {
+  readings
+  invoice
+
+  @@map("calculation_source")
+}
+
+// What a fee line's SAVING rests on (FEAT-110). `measured` — the circuit's
+// own readings for the month, above CON-12's floor. `agreed` — the benchmark
+// agreed on the demo, the fallback while no readings exist. The bill is the
+// benchmark either way (CON-47 b); this only labels the stat.
+enum SavingsBasis {
+  measured
+  agreed
+
+  @@map("savings_basis")
+}
+
+// A Zoho invoice line: `service` bills a light count at a per-light rate and
+// maps to a circuit; `other` (a smart meter, hardware) counts toward the
+// total the society pays and never toward a saving (FEAT-109-AC-5).
+enum InvoiceLineKind {
+  service
+  other
+
+  @@map("invoice_line_kind")
 }
 
 // CON-01b's named exclusion list, plus the one cause that is FirsThing's own.
@@ -2137,6 +2175,9 @@ enum ReconciliationStatus {
   matched
   mismatched
   acknowledged
+  // CON-47 — an invoice-first month has no computed total to compare
+  // against; the only check is the invoice's own arithmetic (FEAT-109-AC-3).
+  not_applicable
 
   @@map("reconciliation_status")
 }
@@ -2158,6 +2199,16 @@ model MonthlyCalculation {
 
   status     CalculationStatus @default(held)
   heldReason String?           @map("held_reason")
+
+  // CON-47 / ADR-011. Default `readings` so every existing row keeps its
+  // meaning; an invoice-first month is created `invoice` by FEAT-109.
+  source CalculationSource @default(readings)
+
+  // FEAT-110-AC-5 — a published agreed-basis month re-derived from readings
+  // is a NEW version (supersededById on the old) that inherits release and
+  // records what it re-derived from. Set only on that new version.
+  rederivedAt     DateTime? @map("rederived_at")
+  rederivedFromId String?   @map("rederived_from_id")
 
   // Totals. Unrounded on purpose; rounding happens once, at presentation.
   totalExtrapolatedKwh Float @map("total_extrapolated_kwh")
@@ -2226,8 +2277,18 @@ model CircuitFeeLine {
 
   baselineKwhPerDay   Float @map("baseline_kwh_per_day")
   benchmarkSavingsPct Float @map("benchmark_savings_pct")
+  // On an `agreed` line (CON-47) this holds the % the saving was computed
+  // at — the benchmark — so one column answers "what % does this line rest
+  // on" whichever the basis; `basis` says which it was.
   measuredSavingsPct  Float @map("measured_savings_pct")
   deviationPct        Float @map("deviation_pct")
+
+  // FEAT-110. Existing rows are `measured`, which is what they are.
+  basis             SavingsBasis @default(measured)
+  // The count the INVOICE billed (CON-47 d) — on an invoice-first line this
+  // is what `representedLightCount` on the row is set from; kept separately
+  // so "invoice said 1,155 / circuit said 1,153" is readable without the PDF.
+  invoiceLightCount Int?         @map("invoice_light_count")
 
   complianceResult ComplianceResult @map("compliance_result")
   // CON-01d — in band but within 20% of its edge. GOAL-08's early warning.
@@ -2335,6 +2396,16 @@ model BillingInvoice {
   dueDate   DateTime @map("due_date")
   amount    Float
 
+  // CON-47 / ADR-011 — the invoice's own printed totals and the month it
+  // names, verbatim. `period` on the calculation is the OPERATOR's selection
+  // (INV-04); this is what the paper said, kept so a disagreement is readable.
+  subtotal        Float?  @map("subtotal")
+  taxAmount       Float?  @map("tax_amount")
+  invoiceForMonth String? @map("invoice_for_month")
+  // The extraction as returned (figures with their verbatim words, and the
+  // clarifications raised), for audit — never read back into a figure.
+  extractionRaw   Json?   @map("extraction_raw")
+
   s3Key        String @map("s3_key")
   fileName     String @map("file_name")
   uploadedById String @map("uploaded_by_id")
@@ -2382,12 +2453,74 @@ model BillingInvoice {
   paymentStatusConfirmedBy AdminUser?         @relation("InvoicePaymentConfirmedBy", fields: [paymentStatusConfirmedById], references: [id])
   voidedBy                 AdminUser?         @relation("InvoiceVoidedBy", fields: [voidedById], references: [id])
 
-  payments   Payment[]
-  extensions InvoiceExtension[]
+  payments     Payment[]
+  extensions   InvoiceExtension[]
+  lines        BillingInvoiceLine[]
+  countChanges RepresentedCountChange[]
 
   @@index([status, suspendDueAt])
   @@index([monthlyCalculationId])
   @@map("billing_invoices")
+}
+
+// CON-47 / ADR-011 — one row per printed line of the Zoho invoice, verbatim.
+// A service line maps to the circuit whose lights it bills; the arithmetic
+// check (Qty × Rate − Discount vs Amount, FEAT-109-AC-3) is recorded, not
+// re-run, so a later reader sees what the operator saw.
+model BillingInvoiceLine {
+  id               String @id @default(cuid())
+  billingInvoiceId String @map("billing_invoice_id")
+  lineNo           Int    @map("line_no")
+
+  description String
+  hsn         String?
+  qty         Float
+  rate        Float
+  discount    Float   @default(0)
+  taxPct      Float?  @map("tax_pct")
+  taxAmount   Float?  @map("tax_amount")
+  amount      Float
+
+  kind      InvoiceLineKind
+  circuitId String?         @map("circuit_id")
+
+  arithmeticOk      Boolean @default(true) @map("arithmetic_ok")
+  arithmeticNote    String? @map("arithmetic_note")
+  // The circuit's represented count at review time, when it differed from
+  // qty (FEAT-109-AC-6). Null when they agreed.
+  countDisagreement Int?    @map("count_disagreement")
+
+  invoice BillingInvoice @relation(fields: [billingInvoiceId], references: [id], onDelete: Cascade)
+  circuit Circuit?       @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+
+  @@unique([billingInvoiceId, lineNo])
+  @@index([circuitId])
+  @@map("billing_invoice_lines")
+}
+
+// CON-47 d / FEAT-109-AC-6 — a forward-only correction of a circuit's
+// represented (extrapolation) population, recorded with the invoice that
+// prompted it. Deliberately NOT a BenchmarkRescaleEvent: that table is about
+// the METERED count and the baseline (INV-07). This never restates an
+// earlier month; `effectiveFrom` is the first period it applies to.
+model RepresentedCountChange {
+  id            String @id @default(cuid())
+  circuitId     String @map("circuit_id")
+  previousCount Int    @map("previous_count")
+  nextCount     Int    @map("next_count")
+  effectiveFrom String @map("effective_from") // YYYY-MM
+  reason        String
+
+  billingInvoiceId String?  @map("billing_invoice_id")
+  recordedById     String   @map("recorded_by_id")
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+
+  circuit    Circuit         @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  invoice    BillingInvoice? @relation(fields: [billingInvoiceId], references: [id], onDelete: SetNull)
+  recordedBy AdminUser       @relation("RepresentedCountChangeBy", fields: [recordedById], references: [id])
+
+  @@index([circuitId, effectiveFrom])
+  @@map("represented_count_changes")
 }
 
 // CON-13 — payments are recorded manually by ops from Zoho, and
@@ -2613,18 +2746,18 @@ model TankApiConfig {
 /// including ones with no water-level signal — so nothing in the account is
 /// invisible from the product; only level-bearing devices can be assigned.
 model WaterTank {
-  id               String    @id @default(cuid())
-  tuyaDeviceId     String    @unique @map("tuya_device_id")
+  id               String     @id @default(cuid())
+  tuyaDeviceId     String     @unique @map("tuya_device_id")
   name             String
-  productName      String    @map("product_name")
+  productName      String     @map("product_name")
   category         String
-  hasLevelSignal   Boolean   @default(false) @map("has_level_signal")
+  hasLevelSignal   Boolean    @default(false) @map("has_level_signal")
   /// The declared MAXIMUM of this device's level datapoint, from its thing
   /// model. It is not always 100: the IT56WLCW controllers on this account
   /// declare `liquid_level_percent` as 0-60, so a raw 45 is 75% full — which
   /// is what the Smart Life app shows and what we showed as 45% until this
   /// was found (2026-08-25). Every stored level is normalised through it.
-  levelMax         Int       @default(100) @map("level_max")
+  levelMax         Int        @default(100) @map("level_max")
   /// Which supply this tank serves — Domestic / Flush / STP — so the portal
   /// can group tanks the way a resident thinks about them. Null until the
   /// back office classifies it; the portal states that rather than guessing.
@@ -2636,19 +2769,19 @@ model WaterTank {
   /// (researched 2026-09-11/12 for the multi-tower dashboard redesign — a
   /// device name like "RG Residency Tower D Tank" is not a reliable parse
   /// target, and the resident needs a real grouping key, not a substring).
-  location         String?   @map("location")
+  location         String?    @map("location")
   /// The assignment that scopes portal visibility (INV-05): a society's
   /// portal accounts see exactly the tanks whose societyId is theirs.
-  societyId        String?   @map("society_id")
-  assignedAt       DateTime? @map("assigned_at")
-  assignedById     String?   @map("assigned_by_id")
+  societyId        String?    @map("society_id")
+  assignedAt       DateTime?  @map("assigned_at")
+  assignedById     String?    @map("assigned_by_id")
   /// Cache of the sensor's last known state, refreshed by the sampling job
   /// and opportunistically by live page loads.
-  lastLevelPercent Int?      @map("last_level_percent")
-  lastOnline       Boolean   @default(false) @map("last_online")
-  lastReportedAt   DateTime? @map("last_reported_at")
-  syncedAt         DateTime  @default(now()) @map("synced_at")
-  createdAt        DateTime  @default(now()) @map("created_at")
+  lastLevelPercent Int?       @map("last_level_percent")
+  lastOnline       Boolean    @default(false) @map("last_online")
+  lastReportedAt   DateTime?  @map("last_reported_at")
+  syncedAt         DateTime   @default(now()) @map("synced_at")
+  createdAt        DateTime   @default(now()) @map("created_at")
 
   society    Society?           @relation(fields: [societyId], references: [id], onDelete: SetNull)
   assignedBy AdminUser?         @relation("WaterTankAssignedBy", fields: [assignedById], references: [id])
@@ -2758,11 +2891,11 @@ model MeterInstallation {
   /// guess as a recorded fact.
   startInferred Boolean @default(false) @map("start_inferred")
 
-  installedById String?   @map("installed_by_id")
-  removedById   String?   @map("removed_by_id")
+  installedById String?  @map("installed_by_id")
+  removedById   String?  @map("removed_by_id")
   /// Why it was moved — read by whoever wonders where a meter went.
-  removalNote   String?   @map("removal_note")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  removalNote   String?  @map("removal_note")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   meter       MeterDevice @relation(fields: [meterId], references: [id], onDelete: Cascade)
   circuit     Circuit     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
@@ -2785,7 +2918,7 @@ model MeterDevice {
   /// speaks, and the public protocol document only covers 5 and 32.
   uiid            Int
 
-  online          Boolean @default(false)
+  online               Boolean   @default(false)
   /// When a sync last found this device GONE from the eWeLink account.
   ///
   /// Never a delete: the row can carry samples, hourly readings, imports,
@@ -2796,10 +2929,10 @@ model MeterDevice {
   removedFromAccountAt DateTime? @map("removed_from_account_at")
   /// Whether this device reports any energy datapoint at all, decided from
   /// the params it actually returned rather than from its model name.
-  hasEnergySignal Boolean @default(false) @map("has_energy_signal")
+  hasEnergySignal      Boolean   @default(false) @map("has_energy_signal")
   /// The param keys the device really returned, so the model's protocol is
   /// a recorded observation rather than an assumption (see the design doc).
-  observedParams  Json?   @map("observed_params")
+  observedParams       Json?     @map("observed_params")
 
   /// The assignment. CON-11 makes the circuit the billing grain, so that is
   /// what a meter is bound to; societyId is carried alongside for scoping
@@ -2812,46 +2945,46 @@ model MeterDevice {
   /// The last known live reading, at its true scale (see ewelink-scale.ts).
   /// Only the LAST value is kept: the hourly series comes from the device's
   /// own exported CSV, not from sampling the API once an hour.
-  lastPowerW     Float?    @map("last_power_w")
-  lastVoltageV   Float?    @map("last_voltage_v")
-  lastCurrentA   Float?    @map("last_current_a")
+  lastPowerW          Float?    @map("last_power_w")
+  lastVoltageV        Float?    @map("last_voltage_v")
+  lastCurrentA        Float?    @map("last_current_a")
   /// The device's own counter for the calendar day, at the last read.
-  lastDayKwh     Float?    @map("last_day_kwh")
+  lastDayKwh          Float?    @map("last_day_kwh")
   /// The device's own counter for the calendar month, at the last read.
-  lastMonthKwh   Float?    @map("last_month_kwh")
+  lastMonthKwh        Float?    @map("last_month_kwh")
   /// When the last successful read happened, so a screen showing the values
   /// above can say how old they are instead of implying they are live.
-  lastReadAt     DateTime? @map("last_read_at")
-  lastReportedAt DateTime? @map("last_reported_at")
+  lastReadAt          DateTime? @map("last_read_at")
+  lastReportedAt      DateTime? @map("last_reported_at")
   /// When the hourly poll last actually reached this device.
-  lastSampleAt   DateTime? @map("last_sample_at")
+  lastSampleAt        DateTime? @map("last_sample_at")
   /// Set the moment a poll finds the meter unreachable, cleared the moment
   /// it reports again — so "how long has this been down" is a stored fact
   /// rather than something inferred from a gap in the samples.
-  offlineSince   DateTime? @map("offline_since")
+  offlineSince        DateTime? @map("offline_since")
   /// Consecutive failed or unreachable polls. An alert is raised on the
   /// second, not the first: one missed hour is a flaky connection, two in a
   /// row is a meter somebody has to go and look at.
-  consecutiveFailures Int   @default(0) @map("consecutive_failures")
+  consecutiveFailures Int       @default(0) @map("consecutive_failures")
   /// Who gets chased when this meter stops reporting. Work in this codebase
   /// has a named owner (the survey assignee, the installation onlooker);
   /// an alert addressed to nobody is an alert nobody acts on.
-  ownerId        String?   @map("owner_id")
-  syncedAt       DateTime  @default(now()) @map("synced_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  ownerId             String?   @map("owner_id")
+  syncedAt            DateTime  @default(now()) @map("synced_at")
+  createdAt           DateTime  @default(now()) @map("created_at")
 
-  society    Society?      @relation(fields: [societyId], references: [id], onDelete: SetNull)
-  circuit    Circuit?      @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  society       Society?             @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  circuit       Circuit?             @relation(fields: [circuitId], references: [id], onDelete: SetNull)
   /// Every stay this meter has had, oldest first — its lifecycle.
   installations MeterInstallation[]
   /// Billing-grade days this meter produced, wherever they were attributed.
   meterReadings MeterReading[]
-  assignedBy AdminUser?    @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])
-  owner      AdminUser?    @relation("MeterDeviceOwner", fields: [ownerId], references: [id])
-  samples    MeterSample[]
-  alerts     MeterAlert[]
-  hourly     MeterHourlyReading[]
-  csvImports MeterCsvImport[]
+  assignedBy    AdminUser?           @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])
+  owner         AdminUser?           @relation("MeterDeviceOwner", fields: [ownerId], references: [id])
+  samples       MeterSample[]
+  alerts        MeterAlert[]
+  hourly        MeterHourlyReading[]
+  csvImports    MeterCsvImport[]
 
   @@index([societyId])
   @@map("meter_devices")
@@ -2938,7 +3071,7 @@ model MeterAlert {
 
   meter          MeterDevice? @relation(fields: [meterId], references: [id], onDelete: Cascade)
   circuit        Circuit?     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  acknowledgedBy AdminUser?  @relation("MeterAlertAcknowledgedBy", fields: [acknowledgedById], references: [id])
+  acknowledgedBy AdminUser?   @relation("MeterAlertAcknowledgedBy", fields: [acknowledgedById], references: [id])
 
   @@index([meterId, openedAt])
   @@index([circuitId, openedAt])
@@ -2992,12 +3125,12 @@ model MeterHourlyReading {
 /// means a file filed against the wrong meter can be found later rather than
 /// only suspected.
 model MeterCsvImport {
-  id       String @id @default(cuid())
-  meterId  String @map("meter_id")
-  fileName String @map("file_name")
+  id               String  @id @default(cuid())
+  meterId          String  @map("meter_id")
+  fileName         String  @map("file_name")
   /// The S3 key of the file as uploaded, kept for the same reason CON-30
   /// keeps raw reading files: the figures have to trace to the bytes.
-  s3Key    String? @map("s3_key")
+  s3Key            String? @map("s3_key")
   /// The billing-review hand-off: when the meter was bound to a circuit at
   /// import time, the same file was filed into CON-45's review queue, and
   /// this is that record. Null means there was no circuit to hand off to.
@@ -3007,12 +3140,12 @@ model MeterCsvImport {
   rawReadingFileId String? @map("raw_reading_file_id")
 
   /// The range the file covers, as printed in it.
-  firstDay DateTime @map("first_day")
-  lastDay  DateTime @map("last_day")
-  hoursInFile  Int  @map("hours_in_file")
-  hoursStored  Int  @map("hours_stored")
+  firstDay        DateTime @map("first_day")
+  lastDay         DateTime @map("last_day")
+  hoursInFile     Int      @map("hours_in_file")
+  hoursStored     Int      @map("hours_stored")
   /// Hours already held with a DIFFERENT value, which the import replaced.
-  hoursSuperseded Int @default(0) @map("hours_superseded")
+  hoursSuperseded Int      @default(0) @map("hours_superseded")
 
   /// How the meter was arrived at, and on what evidence.
   matchMethod   String  @map("match_method")
@@ -3077,24 +3210,24 @@ enum TicketStatus {
 /// deliberately audit-light for v1 — status transitions stamp who and when on
 /// the row and log through src/lib/logger.ts, without a per-event table.
 model Ticket {
-  id             String       @id @default(cuid())
-  societyId      String       @map("society_id")
-  type           TicketType
-  status         TicketStatus @default(open)
-  subject        String
-  detail         String
-  raisedById     String       @map("raised_by_id")
-  createdAt      DateTime     @default(now()) @map("created_at")
-  updatedAt      DateTime     @updatedAt @map("updated_at")
-  resolvedAt     DateTime?    @map("resolved_at")
+  id                  String       @id @default(cuid())
+  societyId           String       @map("society_id")
+  type                TicketType
+  status              TicketStatus @default(open)
+  subject             String
+  detail              String
+  raisedById          String       @map("raised_by_id")
+  createdAt           DateTime     @default(now()) @map("created_at")
+  updatedAt           DateTime     @updatedAt @map("updated_at")
+  resolvedAt          DateTime?    @map("resolved_at")
   /// Required when resolving — a closed ticket with no stated outcome is
   /// indistinguishable from one closed to tidy a list.
-  resolutionNote String?      @map("resolution_note")
-  lastStatusById String?      @map("last_status_by_id")
+  resolutionNote      String?      @map("resolution_note")
+  lastStatusById      String?      @map("last_status_by_id")
   /// Set when FirsThing staff moved the status — a separate column from
   /// lastStatusById because admin logins live in their own table (INV-01),
   /// so one FK cannot point at both.
-  lastStatusByAdminId String?  @map("last_status_by_admin_id")
+  lastStatusByAdminId String?      @map("last_status_by_admin_id")
 
   society           Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
   raisedBy          Profile    @relation("TicketRaisedBy", fields: [raisedById], references: [id])
@@ -3279,8 +3412,8 @@ model Inspection {
   /// missing photo should read as "not captured," never a blocking error.
   evidencePhotoKey String? @map("evidence_photo_key")
 
-  createdById String    @map("created_by_id")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
 
   /// Soft delete only, same rule as every other billing-adjacent record in
   /// this schema — a filed inspection is what a society may dispute, so a
@@ -3289,11 +3422,11 @@ model Inspection {
   voidedById String?   @map("voided_by_id")
   voidReason String?   @map("void_reason")
 
-  society    Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  circuit    Circuit?    @relation(fields: [circuitId], references: [id], onDelete: SetNull)
-  createdBy  AdminUser   @relation("InspectionFiledBy", fields: [createdById], references: [id])
-  voidedBy   AdminUser?  @relation("InspectionVoidedBy", fields: [voidedById], references: [id])
-  findings   InspectionFinding[]
+  society   Society             @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  circuit   Circuit?            @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  createdBy AdminUser           @relation("InspectionFiledBy", fields: [createdById], references: [id])
+  voidedBy  AdminUser?          @relation("InspectionVoidedBy", fields: [voidedById], references: [id])
+  findings  InspectionFinding[]
 
   @@unique([societyId, area, period])
   @@index([societyId])

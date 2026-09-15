@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-12
+2026-09-15
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -5590,6 +5590,79 @@ header *and* a completion marker rather than just a size; app and worker stopped
 write during the freeze; then drop, create, migrate, restore. Every count came back identical, a
 real society account signed in (so the bcrypt hashes survived), INV-05 scoping held, and all three
 job chains re-seeded with exactly one pending link each — no forks.
+
+## Invoice-first monthly billing: the blueprint, and MS-09 step 1 (2026-09-15) — user-asked, full Feature-mode pass
+
+**The ask**: upload previous months' Zoho invoices; each becomes visible on the society's portal
+and feeds that society's stats — extrapolated from the lights billed and the demo's savings %, or
+the actual savings measured on the demo circuit for that month where available; AI reads the
+numbers and shows them before submit and publish. Run as a Feature-mode blueprint pass rather than
+built straight from the sentence: six one-at-a-time questions, two real Zoho invoices read before
+specifying, then phases 3–9 scoped to the feature and committed as `1c62e1d`.
+
+**The decision of record is CON-47** (`00-intake.md`), seven sub-clauses, each the user's answer
+rather than an inference: (a) **invoice-first is the primary monthly path for every society, past
+and future** — the platform reads the bill back, it does not compute it; dashboard-generated bills
+are a named phase two. (b) **The measured savings % is for stats, never the bill** — measured where
+readings cover CON-12's floor, the agreed benchmark otherwise, every figure labelled, and a
+published month **re-derives itself as a new version when readings arrive** (ADR-005: old version
+retained, invoice untouched, no retroactive deviation or adjustment ever). (c) Ops submits, the
+accountant publishes. (d) The invoice's light count governs the month's stats; a disagreement with
+the circuit record is stated and may be applied forward — as a population correction, deliberately
+not an INV-07 rescale. (e) Paid status is captured at upload so CON-13 never fires on a bill settled
+before the system existed. (f) One invoice per society-month, one service line per deal; hardware
+lines count toward the total and never toward a saving. (g) Multi-file upload, society and month
+always operator-confirmed (INV-04), duplicates refused.
+
+**What the real invoices taught, that the sample had not**: a Discount column Zoho uses to round a
+line to whole rupees (736 × 31.66 − 2.76 = 23,299.00 — extraction must read all four and check
+they reconcile); a non-service line (a ₹3,000 smart meter) on a savings invoice; and a live count
+disagreement — line 2 bills **1,155** lights where the Lift Lobby circuit records **1,153**. Every
+one of those is now an acceptance criterion because a document showed it.
+
+**Why the existing billing path could not do this**: the dev DB holds 14 active contracts, 17 live
+circuits, **0 calculations, 0 invoices, and readings on only two circuits** — `runCalculation`
+needs readings to create a month, so for most societies no month could ever exist. That is the
+gap, stated in FEAT-109's problem line rather than inferred.
+
+**Blueprint artefacts**: FEAT-109/110/111 (27 ACs) with scope notes on FEAT-048/053/054/101;
+FLOW-18 (11 steps, every failure branch); SCR-094 new, SCR-093/092/100/260 revised, SCR-102
+assigned to the built Electricity page — all six drawn on one canvas in the app's own tokens
+(https://claude.ai/artifact/J6n1noW235CPHT3kcbkjMQ), the portal screens **phone-first** at the
+user's explicit instruction; **ADR-011** (accepted): reuse `MonthlyCalculation` / `CircuitFeeLine`
+/ `BillingInvoice` with `source`, `basis`, invoice lines and a represented-count audit table, so
+the release gate, arrears sweep, portal ₹ read and void-and-reattach all work unchanged; MS-09 (14
+sessions); 27 test rows with TC-109-1-E2E as the anchor. **ASSUM-30 resolved to the shorter
+society-facing wording** ("Based on your agreement." / "From meter readings.") — the specific basis
+stays on the ops screens and in provenance, so INV-02 holds behind the short label. The user's
+reference concept for the dashboard was adopted for its structure (greeting + month selector, four
+KPI tiles, baseline-vs-actual trend, quick actions, inspection/tanks/billing row) and not for its
+decoration, per rules this codebase already holds (no icon bubbles or green "good" numbers, no
+Pay Now gateway, no "All Systems OK" headline, the app's palette not the concept's green).
+
+**MS-09 step 1 built**: migration `20260915090506_add_invoice_first_month` — purely additive (3
+enum types, 2 enum values, 6 columns, 2 tables, 3 indexes, 5 FKs), applied to the shared dev DB.
+`src/lib/invoice-month.ts` is the pure derive: `deriveInvoiceMonth()` (per service line → circuit,
+baseline ÷ metered × billed × billed-days, measured-or-agreed %, saved kWh/₹, the line's own amount
+carried untouched, `belowBand` informational only, `notDerivable` for a circuit with no baseline)
+plus `checkLineArithmetic` / `checkTotalsArithmetic` (FEAT-109-AC-3, the only reconciliation
+available until phase two). 17 unit cases, TC-110-1 computing the Aditya Mega City July-2026 figure
+independently in the test (9,769.09 kWh baseline → 6,252.22 saved → ₹43,765.51) and asserting the
+fee-vs-saving inversion guard; the real Urban Casa lines reconcile through the discount column.
+`invoice-reconciliation.ts`'s unions widened for `submitted` / `not_applicable` (a submitted month
+releases; attaching a second invoice to one is refused toward the intake). Suite at **845**.
+
+**Two things worth keeping from the migration**: `prisma migrate dev` cannot run against the
+remote dev DB (the user cannot create a shadow database) — generate with `prisma migrate diff
+--from-config-datasource --to-schema prisma/schema.prisma --script` into a hand-named migration
+folder and apply with `migrate deploy` (`--from-url` is gone in this Prisma). And the diff surfaced
+**pre-existing drift**: `circuits.eligibility_exception_criteria` carries a DB default the schema
+never declared (from `20260908120000`) — reconciled schema-side with `@default([])`, no migration,
+and the stray `DROP DEFAULT` was cut from this migration so it is exactly the ADR-011 delta.
+`migrate diff --exit-code` now reports the dev DB and the schema identical.
+
+**Not yet built** (MS-09 steps 2–5): the invoice extraction schema and SCR-094, the batch intake
+and batch publish, the three portal screens, the re-derivation hook. Not deployed.
 
 ## Current Phase (archived application — history)
 

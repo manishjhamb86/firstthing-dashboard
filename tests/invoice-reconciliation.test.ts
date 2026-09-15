@@ -129,3 +129,21 @@ describe("refuseVoidInvoice", () => {
     expect(refuseVoidInvoice(base)).toBeNull();
   });
 });
+
+describe("invoice-first months (CON-47, ADR-011)", () => {
+  it("releases a submitted month whose reconciliation is not applicable", () => {
+    expect(
+      refuseRelease({
+        calculation: { status: "submitted" },
+        invoice: { reconciliationStatus: "not_applicable" },
+        unresolvedDeviationCount: 0,
+      }),
+    ).toBeNull();
+  });
+
+  it("refuses attaching a second invoice to a month that came from its invoice", () => {
+    expect(
+      refuseInvoiceAttach({ calculation: { status: "submitted" }, alreadyAttached: true, amount: 100 }),
+    ).toMatch(/Invoice intake/);
+  });
+});

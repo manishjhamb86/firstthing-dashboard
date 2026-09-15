@@ -22,7 +22,7 @@ export type InvoiceState = {
   dueDate: string;
   amount: number;
   computedAmount: number;
-  reconciliationStatus: "unchecked" | "matched" | "mismatched" | "acknowledged";
+  reconciliationStatus: "unchecked" | "matched" | "mismatched" | "acknowledged" | "not_applicable";
   status: "attached" | "released" | "overdue" | "warning" | "suspended" | "paid";
   fileName: string;
   paidTotal: number;

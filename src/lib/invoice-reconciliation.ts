@@ -38,11 +38,15 @@ export function reconcileInvoiceAmount(computedTotal: number, invoicedAmount: nu
 }
 
 export type CalculationForRelease = {
-  status: "held" | "calculated" | "released" | "sent_back" | "superseded";
+  /** `submitted` — an invoice-first month awaiting the accountant (CON-47, ADR-011). */
+  status: "held" | "calculated" | "submitted" | "released" | "sent_back" | "superseded";
 };
 
 export type InvoiceForRelease = {
-  reconciliationStatus: "unchecked" | "matched" | "mismatched" | "acknowledged";
+  /** `not_applicable` — an invoice-first month has no computed total to compare
+   *  against; its only check is the invoice's own arithmetic (FEAT-109-AC-3),
+   *  which the intake enforces before the month can be submitted at all. */
+  reconciliationStatus: "unchecked" | "matched" | "mismatched" | "acknowledged" | "not_applicable";
 } | null;
 
 /**
@@ -84,6 +88,9 @@ export function refuseInvoiceAttach(input: {
   if (input.calculation.status === "released") return "This month is already released — its invoice cannot be replaced here.";
   if (input.calculation.status === "superseded") return "A newer version of this month exists — attach the invoice there.";
   if (input.calculation.status === "held") return "This month is held and has no computed total to reconcile against yet.";
+  if (input.calculation.status === "submitted") {
+    return "This month was created from its invoice — correct it from Invoice intake (void and re-upload), not by attaching a second one here.";
+  }
   if (input.alreadyAttached) {
     return "An invoice is already attached to this month — void it first if it was filed in error.";
   }

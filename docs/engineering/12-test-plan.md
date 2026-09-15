@@ -393,8 +393,8 @@ untouched, and SCR-260's row reads "From meter readings · updated <today>".
 
 ### TC-110-1 — Agreed-basis derivation, party and basis named
 `deriveInvoiceMonth` on Aditya Mega City July 2026: baseline 47.4 kWh/day ÷ 91 metered × 605
-billed × 31 days = 9,769.4505… kWh baseline consumption; × 64% = 6,252.4483… kWh saved; × ₹7 =
-₹43,767.14 saved (unrounded, asserted to 10 places, rounding at presentation only); fee = the line
+billed × 31 days = 9,769.0879… kWh baseline consumption; × 64% = 6,252.2163… kWh saved; × ₹7 =
+₹43,765.51 saved (unrounded, asserted to 10 places, rounding at presentation only); fee = the line
 amount ₹14,050.00 exactly, never recomputed; `basis === "agreed"`; and — the inversion guard this
 project has needed twice — `expect(line.savedValue).not.toBeCloseTo(line.amount)`: the saving and
 the fee are different figures with different owners. A second case with 28 days of readings totalling

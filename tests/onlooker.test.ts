@@ -62,3 +62,25 @@ describe("TC-035-3b — disputing carries evidence, approving does not", () => {
     expect(refuseDispute({ ...good, note: "" })).toContain("what is wrong");
   });
 });
+
+describe("a day already past may be confirmed by the office-bearer (recorded after the fact)", () => {
+  const base = { id: "b-1", state: "awaiting_review", societyId: "soc-1", onlookerId: "p-onlooker" };
+  const now = new Date("2026-09-16T10:00:00Z");
+  const ob = { id: "p-ob", societyId: "soc-1", role: "office_bearer" };
+  it("the office-bearer confirms a past day, flagged as an old record", () => {
+    const r = checkBatchReview(ob, { ...base, plannedDate: new Date("2026-05-31T00:00:00Z") }, now);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.asOldRecord).toBe(true);
+  });
+  it("…but not today's or a future day — that is the onlooker's alone", () => {
+    expect(checkBatchReview(ob, { ...base, plannedDate: new Date("2026-09-16T00:00:00Z") }, now).ok).toBe(false);
+    expect(checkBatchReview(ob, { ...base, plannedDate: new Date("2026-09-20T00:00:00Z") }, now).ok).toBe(false);
+  });
+  it("a committee member is never the fallback, however old the day", () => {
+    expect(checkBatchReview({ id: "p-c", societyId: "soc-1", role: "committee" }, { ...base, plannedDate: new Date("2026-05-31T00:00:00Z") }, now).ok).toBe(false);
+  });
+  it("the named onlooker is never an old-record reviewer", () => {
+    const r = checkBatchReview({ id: "p-onlooker", societyId: "soc-1", role: "manager" }, { ...base, plannedDate: new Date("2026-05-31T00:00:00Z") }, now);
+    expect(r.ok && !r.asOldRecord).toBe(true);
+  });
+});

@@ -1118,6 +1118,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
   a hard daily deadline to the person least likely to be on site, and accepting any
   society account would mean the gate is satisfied by someone who never agreed to watch
   the work.
+  - AC-7 (old records — amended 2026-09-16, the user's call): Given a batch whose planned day is already past — a day recorded after the fact — when the society's office-bearer opens the portal, then they may confirm it even though they are not the named onlooker, and the review is noted as "confirmed by the office-bearer for a day recorded after the fact". A day not yet past keeps AC-4's named-onlooker rule exactly; a committee member or manager is never the fallback.
 - **Permissions:** Designated society onlooker (approve/dispute/reopen-triggering dispute), PER-04 (reopen for rework), PER-01 (grant the once-per-project skip).
 - **Data touched:** Updates `InstallationBatch` (review state, dispute evidence); records gate skips.
 - **Triggers:** `BatchSubmitted`.

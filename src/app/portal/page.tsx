@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { dealLabel } from "@/lib/deal-scope";
+import { oldRecordReviewer } from "@/lib/onlooker";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
@@ -190,7 +191,13 @@ export default async function PortalHomePage() {
             totalPlanned={installation.contractedLightCount}
             totalInstalledToDate={installation.batches.reduce((n, b) => n + b.installedCount, 0)}
             deadlineIso={nextPlannedDay ? reviewDeadlineFor(nextPlannedDay.startAt).toISOString() : null}
-            canReview={viewer.id === installation.onlookerId}
+            canReview={
+              viewer.id === installation.onlookerId ||
+              // A day already past may be confirmed by the office-bearer (onlooker.ts).
+              dayBatches.every((b) =>
+                oldRecordReviewer(viewer, { plannedDate: installation.plannedDays.find((d) => d.id === b.plannedDayId)?.plannedDate ?? null }, new Date()),
+              )
+            }
             onlookerName={installation.onlooker.name ?? installation.onlooker.email}
             batches={dayBatches.map((b) => ({
               id: b.id,

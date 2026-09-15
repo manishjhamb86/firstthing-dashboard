@@ -11,13 +11,14 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 async function loadBatchForReview(batchId: string) {
   const batch = await db.installationBatch.findUnique({
     where: { id: batchId },
-    include: { project: true },
+    include: { project: true, plannedDay: { select: { plannedDate: true } } },
   });
   if (!batch) return null;
   return {
     id: batch.id,
     state: batch.state as string,
     societyId: batch.project.societyId,
+    plannedDate: batch.plannedDay?.plannedDate ?? null,
     // A per-day override falls back to the project's named onlooker; the
     // planned day carries its own only when ops assigned one for that date.
     onlookerId: batch.project.onlookerId,
@@ -44,13 +45,21 @@ export async function approveBatch(batchId: string): Promise<{ error?: string; o
 
   await db.$transaction([
     db.batchReview.create({
-      data: { batchId, decision: "approved", reviewedById: viewer!.id },
+      data: {
+        batchId,
+        decision: "approved",
+        reviewedById: viewer!.id,
+        // Says on the record that this was the office-bearer confirming a
+        // day already past, not the onlooker on the evening.
+        note: check.asOldRecord ? "Confirmed by the office-bearer for a day recorded after the fact." : undefined,
+      },
     }),
     db.installationBatch.update({ where: { id: batchId }, data: { state: "approved" } }),
   ]);
 
   logger.info("installation.batch_approved", {
     actorId: viewer!.id,
+    asOldRecord: check.asOldRecord,
     batchId,
     day: batch!.day,
     pipelineId: batch!.pipelineId,

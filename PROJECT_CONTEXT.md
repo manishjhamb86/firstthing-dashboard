@@ -6019,6 +6019,26 @@ FEAT-034-AC-6. Verified 7/7: a past day without the waiver is still refused with
 ticked waiver with no reason is refused by the server, a stated reason submits and shows on the
 list, and a batch for today offers no waiver at all. 891 unit tests, `tsc`/`lint`/`build` clean.
 
+## A past installation day can be confirmed by the office-bearer (2026-09-16) — user-caught
+
+"Says awaiting the society, but on the society portal it doesn't show any option to approve." It
+did show the day — to everyone in the society — but FEAT-035-AC-4 offers Approve only to the named
+onlooker, and the account the user was signed in as was not that person. For a day recorded after
+the fact there is no evening for the onlooker to look at photos on, so `checkBatchReview`
+(`onlooker.ts`) gained one exception: when the planned day is already past, the **office-bearer**
+may confirm as well, and the `BatchReview` note says so ("Confirmed by the office-bearer for a day
+recorded after the fact"). A day not yet past keeps the named-onlooker rule exactly; committee and
+manager accounts are never the fallback. The society still confirms its own record — CON-21's
+design — through the one account every society has. FEAT-035-AC-7, 4 unit cases.
+
+**One defect found by the harness, not by reading**: the first cut keyed the rule on
+`viewer.portalAuthority`, but `resolvePortalViewer()` returns the authority as `role` — so the
+office-bearer was never recognised and the rule silently never fired. Verified 7/7 afterwards: a
+committee member sees the day and is told the onlooker approves; the office-bearer is offered
+Approve for the past day and the review lands with the note; for a batch dated today the
+office-bearer is offered nothing and the batch stays awaiting review. 895 unit tests,
+`tsc`/`lint`/`build` clean. No schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

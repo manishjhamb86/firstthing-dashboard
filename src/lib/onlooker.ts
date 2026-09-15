@@ -17,7 +17,8 @@
 // least likely to be on site, and accepting any society account would mean
 // the gate is satisfied by someone who never agreed to watch the work.
 
-export type OnlookerViewer = { id: string; societyId: string | null };
+/** `role` is the authority in force now (portal-viewer.ts resolves it from the row, never the token). */
+export type OnlookerViewer = { id: string; societyId: string | null; role?: string };
 
 export type BatchReviewRefusal =
   | "not-signed-in"
@@ -35,10 +36,26 @@ export const BATCH_REVIEW_REFUSAL_MESSAGE: Record<BatchReviewRefusal, string> = 
   "not-awaiting-review": "That day has already been reviewed.",
 };
 
+/**
+ * A day already past — an installation recorded after the fact (the user's
+ * call, 2026-09-15/16) — has no evening for the onlooker to look at photos
+ * on. For such a day the OFFICE-BEARER may confirm it as well as the
+ * onlooker: the society still confirms its own record (CON-21's design), and
+ * the office-bearer is the one account every society has. A day not yet past
+ * keeps the named-onlooker rule exactly.
+ */
+export function oldRecordReviewer(viewer: OnlookerViewer, batch: { plannedDate?: Date | null }, now: Date): boolean {
+  if (viewer.role !== "office_bearer" || !batch.plannedDate) return false;
+  const day = Date.UTC(batch.plannedDate.getUTCFullYear(), batch.plannedDate.getUTCMonth(), batch.plannedDate.getUTCDate());
+  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return day < today;
+}
+
 export function checkBatchReview(
   viewer: OnlookerViewer | null,
-  batch: { id: string; state: string; societyId: string; onlookerId: string } | null,
-): { ok: true } | { ok: false; reason: BatchReviewRefusal; error: string } {
+  batch: { id: string; state: string; societyId: string; onlookerId: string; plannedDate?: Date | null } | null,
+  now: Date = new Date(),
+): { ok: true; asOldRecord: boolean } | { ok: false; reason: BatchReviewRefusal; error: string } {
   const refuse = (reason: BatchReviewRefusal) =>
     ({ ok: false as const, reason, error: BATCH_REVIEW_REFUSAL_MESSAGE[reason] });
 
@@ -47,9 +64,10 @@ export function checkBatchReview(
   // INV-05 — checked before the onlooker test, so a foreign society's user is
   // told the work isn't theirs rather than being told who may approve it.
   if (!viewer.societyId || viewer.societyId !== batch.societyId) return refuse("wrong-society");
-  if (viewer.id !== batch.onlookerId) return refuse("not-onlooker");
+  const asOldRecord = viewer.id !== batch.onlookerId && oldRecordReviewer(viewer, batch, now);
+  if (viewer.id !== batch.onlookerId && !asOldRecord) return refuse("not-onlooker");
   if (batch.state !== "awaiting_review") return refuse("not-awaiting-review");
-  return { ok: true };
+  return { ok: true, asOldRecord };
 }
 
 /**

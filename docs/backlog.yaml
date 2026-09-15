@@ -3697,6 +3697,14 @@ features:
           uncompletable, which is not what "tomorrow blocked pending resolution" means. The
           fix is deliberately a reopen for rework, not an ops override marking it approved:
           the society's approval is the only thing CON-21's gate accepts.
+      - id: FEAT-035-AC-7
+        title: "A past day may be confirmed by the office-bearer"
+        type: edge
+        given: "a batch awaiting review whose planned day is already past"
+        when: "the society's office-bearer, not the named onlooker, approves it in the portal"
+        then: "it is approved, the review noted as an after-the-fact confirmation; a day not yet past still needs the named onlooker, and a committee member or manager is never the fallback"
+        scope_note: "Amended 2026-09-16: an installation recorded months later has no evening for the onlooker to look at photos on — the society still confirms its own record, through the one account every society has."
+        tests: [TC-035-7]
     stories:
       - id: STORY-035-1
         title: "As an office-bearer or manager, I want to review and approve each day's installation batch, so that the society has confirmed, in the moment, what was actually installed."

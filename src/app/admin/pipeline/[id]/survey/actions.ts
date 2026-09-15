@@ -11,7 +11,7 @@ import {
   MIN_METERED_LIGHTS,
   outstandingCriteria,
 } from "@/lib/circuit-eligibility";
-import { refuseRepresentedCount } from "@/lib/light-type";
+import { lightTypeKey, refuseRepresentedCount } from "@/lib/light-type";
 
 // FEAT-006: whole-society lighting inventory by area, distinct from the
 // single sample Circuit metered for the benchmark (CON-11).
@@ -94,12 +94,25 @@ export async function updateLightingInventoryArea(
     const total = (
       await tx.lightingInventoryArea.aggregate({ where: { siteSurveyId, lightType: row.lightType }, _sum: { count: true } })
     )._sum.count ?? 0;
-    const circuits = await tx.circuit.findMany({
-      where: { siteSurveyId, lightType: row.lightType, voidedAt: null },
-      select: { id: true, meteredLightCount: true, representedLightCount: true },
+    // The inventory's light type and the candidate's are two free-text
+    // fields ("Surface Light 12W" on one, "Lift Lobby and Staircase" on the
+    // other — the user's own deal, 2026-09-16, where an exact match found
+    // nothing and applied nothing, silently). Match on the normalised key;
+    // failing that, a deal with ONE live circuit has only one population the
+    // inventory can be describing.
+    const live = await tx.circuit.findMany({
+      where: { siteSurveyId, voidedAt: null },
+      select: { id: true, lightType: true, location: true, meteredLightCount: true, representedLightCount: true },
     });
+    const byType = live.filter((c) => lightTypeKey(c.lightType) === lightTypeKey(row.lightType));
+    const circuits = byType.length > 0 ? byType : live.length === 1 ? live : [];
     if (circuits.length !== 1) {
-      if (circuits.length > 1) circuitNote = "More than one circuit carries this light type — correct each one's represented count on its own page.";
+      circuitNote =
+        circuits.length > 1
+          ? "More than one circuit carries this light type — correct each one's represented count on its own page."
+          : live.length === 0
+            ? undefined
+            : `No candidate circuit matches the light type "${row.lightType}" (${live.map((c) => c.lightType).join(", ")}) — correct the represented count on the circuit's own page.`;
       return;
     }
     const c = circuits[0];

@@ -6065,7 +6065,15 @@ issued offer's own snapshot, keep saying what they were computed on, while the d
 regenerated next and the intake's circuit picker read the new figure. The two guards on the circuit
 page's own correction (billed on a released month; an offer issued) do not apply here because this
 is forward-only, not a restatement. Where the total cannot be applied — two circuits carry the
-type, or the total is not above the metered count — the row says so. FEAT-006-AC-7. Verified 7/7:
+type, or the total is not above the metered count — the row says so.
+
+**And a second miss, same report an hour later ("still not reflecting")**: the inventory's light
+type and the candidate's are two free-text fields, and on the user's own deal they read "Surface
+Light 12W" and "Lift Lobby and Staircase" — an exact match found no circuit and applied nothing,
+silently. The match is on `lightTypeKey` now and, failing that, a deal with ONE live circuit has
+only one population the inventory can describe, so that circuit follows; a genuine mismatch on a
+multi-circuit deal is now said on the row rather than swallowed. Re-verified 7/7 on a fixture
+whose circuit type differs from its inventory's. FEAT-006-AC-7. Verified 7/7:
 an estimate with no note refused by the server with the count unchanged; the correction stored;
 the circuit moved 1,773 → 1,786 with its audit row effective this month; the totals re-read. One harness note: `getByLabel("Light count")` matched TWO controls once
 the editor opened — the candidate form has one too — so the editor's labels are now

@@ -215,6 +215,10 @@ export default async function TankStatusPage({
                 <Link
                   key={r}
                   href={`/admin/water-tanks/${tank.id}?range=${r}`}
+                  // The chart is the last thing on the page; a range change
+                  // must not scroll the reader back to the top (user-caught
+                  // 2026-09-15).
+                  scroll={false}
                   className="rounded-full border px-3.5 py-1.5 text-xs font-semibold"
                   style={
                     r === range

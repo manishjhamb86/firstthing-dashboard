@@ -129,10 +129,31 @@ export default async function PortalTanksPage() {
     { key: "stp", title: "STP", note: "treated water storage" },
     { key: null, title: "Not yet classified", note: "FirsThing will assign these to a setup" },
   ];
-  const groups = SETUP_META.map((g) => ({
+  const groupsRaw = SETUP_META.map((g) => ({
     ...g,
     rows: rows.filter((r) => (r.tank.setupType ?? null) === g.key),
   })).filter((g) => g.rows.length > 0);
+
+  // With a handful of tanks (user's call, 2026-09-15), headed sections are
+  // more structure than there is data — a "Tower D" sub-group holding one
+  // tank left a card alone beside an empty half-row. Up to FLAT_MAX tanks
+  // render in ONE grid, ordered by setup then tower, with the group named on
+  // each card instead of above it. Larger societies keep the sections.
+  const FLAT_MAX = 6;
+  const flat = rows.length <= FLAT_MAX;
+  const setupTitle = (key: string | null) => SETUP_META.find((m) => m.key === key)?.title ?? "Not yet classified";
+  const groups = flat
+    ? [
+        {
+          key: "__flat",
+          title: null as string | null,
+          note: "",
+          rows: groupsRaw.flatMap((g) =>
+            [...g.rows].sort((a, b) => (a.tank.location?.trim() || "￿").localeCompare(b.tank.location?.trim() || "￿")),
+          ),
+        },
+      ]
+    : groupsRaw.map((g) => ({ ...g, title: g.title as string | null }));
 
   // Within a setup, sub-group by tower/building — a multi-tower complex has
   // several Domestic tanks, one per tower, and "Domestic" alone does not say
@@ -141,6 +162,7 @@ export default async function PortalTanksPage() {
   // sub-heading — the extra layer only earns its place once it distinguishes
   // something.
   function byLocation(groupRows: typeof rows) {
+    if (flat) return [{ location: null, rows: groupRows }];
     const keys = [...new Set(groupRows.map((r) => r.tank.location?.trim() || null))];
     if (keys.length <= 1) return [{ location: null, rows: groupRows }];
     return keys
@@ -155,7 +177,7 @@ export default async function PortalTanksPage() {
     <>
       <PageHeader
         title="Water tanks"
-        subtitle="Live levels, grouped by what each setup supplies."
+        subtitle={flat ? "Live levels — each tank says which supply and tower it serves." : "Live levels, grouped by what each setup supplies."}
         chip={headerChip}
       />
 
@@ -176,11 +198,13 @@ export default async function PortalTanksPage() {
               — never the four-column grid with three empties that the
               2026-08-26 fix was about. */}
           {groups.map((g) => (
-          <section key={g.title} className="mb-7">
-          <div className="mb-3 flex items-baseline gap-2.5">
-            <h2 className="text-[15px] font-bold">{g.title}</h2>
-            <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{g.note}</span>
-          </div>
+          <section key={g.title ?? g.key} className="mb-7">
+          {g.title && (
+            <div className="mb-3 flex items-baseline gap-2.5">
+              <h2 className="text-[15px] font-bold">{g.title}</h2>
+              <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{g.note}</span>
+            </div>
+          )}
           {byLocation(g.rows).map((sub) => (
           <div key={sub.location ?? "__single"}>
           {sub.location && (
@@ -198,6 +222,12 @@ export default async function PortalTanksPage() {
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-6 gap-y-5 p-5 sm:p-6">
                   <TankVisual pct={level ?? 0} offline={offline} width={132} height={184} pctSize={26} />
                   <div className="flex min-w-[170px] flex-1 flex-col">
+                    {flat && (
+                      <p className="lbl mb-1">
+                        {setupTitle(t.setupType ?? null)}
+                        {t.location?.trim() ? ` · ${t.location.trim()}` : ""}
+                      </p>
+                    )}
                     <p className="text-[15px] font-bold" title={t.name}>
                       {t.name}
                     </p>

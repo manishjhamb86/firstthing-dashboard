@@ -16,7 +16,12 @@ export type HistoryPoint = { at: string; level: number };
  * Hover is not the only way in: every point carries a <title>, so a
  * screen reader and a touch device get the same fact without a pointer.
  */
-export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
+/**
+ * `aspect` — "wide" (960×190, a full-width card) or "tall" (960×420, a
+ * narrower column beside other cards, where the wide box left the card half
+ * empty; user-caught 2026-09-15).
+ */
+export function TankHistoryChart({ points, aspect = "wide" }: { points: HistoryPoint[]; aspect?: "wide" | "tall" }) {
   const [hover, setHover] = useState<number | null>(null);
 
   if (points.length < 2) {
@@ -28,8 +33,10 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
     );
   }
 
-  const w = 960;
-  const h = 190;
+  // The viewBox is sized near the rendered width so nominal type is
+  // rendered type — a 960 box in a ~500px column shrinks 10px labels to 5.
+  const w = aspect === "tall" ? 520 : 960;
+  const h = aspect === "tall" ? 300 : 190;
   const padL = 34;
   const padR = 12;
   const padB = 22;
@@ -58,7 +65,7 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
         <svg
           viewBox={`0 0 ${w} ${h}`}
           className="block w-full"
-          style={{ minWidth: 520 }}
+          style={{ minWidth: 400 }}
           onMouseLeave={() => setHover(null)}
         >
           {[0, 25, 50, 75, 100].map((g) => (

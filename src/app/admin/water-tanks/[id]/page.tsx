@@ -127,51 +127,12 @@ export default async function TankStatusPage({
           beside a compact summary of the assignment. */}
       {tank.society ? (
         <>
-      {tank.hasLevelSignal && (
-        <Card className="p-6">
-          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-3">
-            <CardTitle className="mb-0">Level history</CardTitle>
-            <div className="flex gap-2">
-              {(Object.keys(RANGES) as RangeKey[]).map((r) => (
-                <Link
-                  key={r}
-                  href={`/admin/water-tanks/${tank.id}?range=${r}`}
-                  // The chart is the last thing on the page; a range change
-                  // must not scroll the reader back to the top (user-caught
-                  // 2026-09-15).
-                  scroll={false}
-                  className="rounded-full border px-3.5 py-1.5 text-xs font-semibold"
-                  style={
-                    r === range
-                      ? { background: "var(--accent-subtle)", borderColor: "var(--accent-line)", color: "var(--accent)" }
-                      : { background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-muted)" }
-                  }
-                >
-                  {r === "24h" ? "24 h" : r === "7d" ? "7 days" : "30 days"}
-                </Link>
-              ))}
-            </div>
-          </div>
-          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Sampled every 30 minutes into FirsThing&apos;s own store — the chart reads history, not the
-            live device.
-            {lo !== null && (
-              <>
-                {" "}
-                <span className="num" style={{ color: "var(--text)" }}>
-                  Low {lo}% · high {hi}%
-                </span>{" "}
-                over this range.
-              </>
-            )}
-          </p>
-          <TankHistoryChart
-            points={readings.map((r) => ({ at: r.recordedAt.toISOString(), level: r.levelPercent }))}
-          />
-        </Card>
-      )}
-          <div className="mt-5 grid items-stretch gap-5 lg:grid-cols-12">
-        <Card className="flex h-full flex-col items-center gap-4 p-6 lg:col-span-5">
+      {/* One row, three cards, one height (user-caught 2026-09-15: the
+          history alone filled the row and pushed the rest below the fold, and
+          the device list wrapped badly in two columns). Level · history ·
+          device — everything above the fold on a laptop. */}
+      <div className="grid items-stretch gap-5 lg:grid-cols-12">
+        <Card className="flex h-full flex-col items-center gap-4 p-6 lg:col-span-3">
           <span className="lbl">Water level</span>
           {tank.hasLevelSignal ? (
             <>
@@ -212,14 +173,56 @@ export default async function TankStatusPage({
             </p>
           )}
         </Card>
-          <Card className="flex h-full flex-col p-5 sm:p-6 lg:col-span-7">
+                <Card className="flex h-full flex-col p-5 sm:p-6 lg:col-span-6">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="mb-0">Level history</CardTitle>
+            <div className="flex gap-2">
+              {(Object.keys(RANGES) as RangeKey[]).map((r) => (
+                <Link
+                  key={r}
+                  href={`/admin/water-tanks/${tank.id}?range=${r}`}
+                  // The chart is the last thing on the page; a range change
+                  // must not scroll the reader back to the top (user-caught
+                  // 2026-09-15).
+                  scroll={false}
+                  className="rounded-full border px-3.5 py-1.5 text-xs font-semibold"
+                  style={
+                    r === range
+                      ? { background: "var(--accent-subtle)", borderColor: "var(--accent-line)", color: "var(--accent)" }
+                      : { background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-muted)" }
+                  }
+                >
+                  {r === "24h" ? "24 h" : r === "7d" ? "7 days" : "30 days"}
+                </Link>
+              ))}
+            </div>
+          </div>
+          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            Sampled every 30 minutes into FirsThing&apos;s own store — the chart reads history, not the
+            live device.
+            {lo !== null && (
+              <>
+                {" "}
+                <span className="num" style={{ color: "var(--text)" }}>
+                  Low {lo}% · high {hi}%
+                </span>{" "}
+                over this range.
+              </>
+            )}
+          </p>
+          <TankHistoryChart
+            aspect="tall"
+            points={readings.map((r) => ({ at: r.recordedAt.toISOString(), level: r.levelPercent }))}
+          />
+        </Card>
+          <Card className="flex h-full flex-col p-5 sm:p-6 lg:col-span-3">
             <CardTitle>Device</CardTitle>
-            {/* The assignment's two facts live here (user's call, 2026-09-15 —
-                a card holding only them was "useless"); Reassign is top right. */}
-            <dl className="grid gap-x-8 gap-y-2.5 text-sm sm:grid-cols-2">
-              <div className="flex justify-between gap-4">
-                <dt style={{ color: "var(--text-muted)" }}>Assigned to</dt>
-                <dd className="text-right">
+            {/* One stacked column — label over value — so a long product name
+                or a device id never has to wrap against a label. */}
+            <dl className="space-y-3 text-sm">
+              <div>
+                <dt className="lbl">Assigned to</dt>
+                <dd>
                   <Link href={`/admin/societies/${tank.society.id}`} className="font-semibold hover:underline">
                     {tank.society.name}
                   </Link>
@@ -228,11 +231,11 @@ export default async function TankStatusPage({
                   </span>
                 </dd>
               </div>
-              <div className="flex justify-between gap-4">
-                <dt style={{ color: "var(--text-muted)" }}>Assigned</dt>
-                <dd className="text-right">
+              <div>
+                <dt className="lbl">Assigned</dt>
+                <dd>
                   {tank.assignedAt ? <span className="num">{formatDate(tank.assignedAt)}</span> : "—"}
-                  {tank.assignedBy && ` · by ${tank.assignedBy.name ?? tank.assignedBy.email}`}
+                  {tank.assignedBy && <span className="block text-xs" style={{ color: "var(--text-muted)" }}>by {tank.assignedBy.name ?? tank.assignedBy.email}</span>}
                 </dd>
               </div>
               {[
@@ -242,17 +245,17 @@ export default async function TankStatusPage({
                 ["First seen here", <span key="v" className="num">{formatDate(tank.createdAt)}</span>],
                 ["Device list synced", <span key="v" className="num">{formatInstant(tank.syncedAt)}</span>],
               ].map(([k, v]) => (
-                <div key={String(k)} className="flex justify-between gap-4">
-                  <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
-                  <dd className="text-right">{v}</dd>
+                <div key={String(k)}>
+                  <dt className="lbl">{k}</dt>
+                  <dd className="break-all">{v}</dd>
                 </div>
               ))}
             </dl>
             <p className="mt-auto pt-3 text-xs" style={{ color: "var(--text-muted)" }}>
-              Portal accounts of the assigned society see this tank — nobody else does (INV-05).
+              Only the assigned society&apos;s portal shows this tank (INV-05).
             </p>
           </Card>
-          </div>
+      </div>
         </>
       ) : (
         <>

@@ -5834,6 +5834,45 @@ store covers the day. The note is shown on SCR-094's card 5, stored in the month
 rendered on the month's own page beside the basis. CON-47 (b), FEAT-110-AC-3 and the backlog
 carry the rule.
 
+## An invoice uploaded twice is a question, not a second row (2026-09-15) — user-caught on stage
+
+**"Do not give duplicate rows. Instead give a retry option for already failed but uploaded
+invoices. And if already successfully imported and the user uploads again, warn them — reprocess
+or skip — and let them tick the ones to reprocess."** Stage's intake list had the same PDF three
+times over after a run of Gemini 429s, each row carrying the raw Google quota paragraph.
+
+**The identity of a file is its bytes.** `InvoiceIntake.fileHash` (migration
+`20260915115750_add_invoice_intake_file_hash`) holds the SHA-256 the browser computes with
+`crypto.subtle` before anything is uploaded — the same "different from what is already there is a
+fact, not a guess" rule `StoredDocument` versioning already uses, and for the same reason: this
+app's S3 credentials cannot delete an object, so a duplicate accepted and then discarded would sit
+in the bucket forever. `checkIntakeDuplicates(hashes)` runs first; `createIntakeUpload` refuses a
+live duplicate by hash as the server-side line behind it. A drop that contains files already in
+the system holds EVERYTHING until the operator decides: the modal lists each one with its status,
+society and month, a checkbox unchecked by default (skip), and one button whose label states the
+outcome ("Skip these", "Reprocess 2 and continue", "Skip these and upload the rest"). A
+**submitted** row is listed but not tickable — it is a month of record now, and voiding that month
+is the route, not re-reading the PDF. Reprocessing and retrying both go through `retryIntake`,
+which resets the SAME row to `reading` and extracts again; a `could_not_read` row in the list
+carries a Retry button beside Enter by hand.
+
+**The 429 is a sentence now, and it retries itself once.** `readWithOneRetry` waits the delay
+Google asks for (capped at 20 s) before giving up; `friendlyExtractionError` turns whatever is left
+into "The document reader is rate-limited right now — try again in about N seconds, or enter the
+lines by hand." The raw message goes to the log line, never to the row.
+
+**Verified 22/22 in a browser against the dev DB**, with Gemini's quota genuinely exhausted — so
+the friendly message was tested live rather than simulated: one row per distinct file, hashed; a
+second drop opens the modal and writes nothing on skip; ticking reprocesses on the existing row
+(count stays 1, status passes through `reading`); Retry on the list does the same; a submitted
+duplicate is disabled and named; a mixed drop uploads the fresh file and skips the duplicate.
+Zero console/page errors; 868 unit tests, `tsc`/`lint`/`build` clean.
+
+**Two limits stated**: rows uploaded before this change carry no hash, so only the review-level
+"this society-month is already submitted" check catches them; and the dev server struck the
+stale-Prisma-client trap a sixth time (`Unknown argument fileHash`) — and `pkill -f "next dev"`
+also kills the DB tunnel `pnpm dev` opened, so both had to come back.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -4,8 +4,10 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip, type ChipTone } from "@/components/ui";
+import { Modal } from "@/components/modal";
 import { sniffKind } from "@/lib/file-signature";
-import { createIntakeUpload, extractIntake } from "./actions";
+import { formatInstant } from "@/lib/format-date";
+import { checkIntakeDuplicates, createIntakeUpload, extractIntake, retryIntake, type IntakeDuplicate } from "./actions";
 
 export type IntakeRow = {
   id: string;
@@ -48,11 +50,52 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
   const [inFlight, setInFlight] = useState<string[]>([]);
   const [dragging, setDragging] = useState(false);
   const [, startTransition] = useTransition();
+  // Files already in the system, waiting for a reprocess-or-skip decision.
+  const [pendingDupes, setPendingDupes] = useState<{ dupes: IntakeDuplicate[]; fresh: File[]; chosen: Set<string> } | null>(null);
+  const [retrying, setRetrying] = useState<Set<string>>(new Set());
 
+  async function sha256Hex(file: File): Promise<string> {
+    const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  /**
+   * Drop → fingerprint every file → ask the server which are already here →
+   * upload only the new ones now; the rest wait for the reprocess-or-skip
+   * choice (user-asked 2026-09-15: "do not give duplicate rows").
+   */
   async function handleFiles(files: FileList | File[]) {
     const list = Array.from(files);
     if (list.length === 0) return;
     setRefusals([]);
+    const hashed = await Promise.all(list.map(async (file) => ({ file, hash: await sha256Hex(file) })));
+    // The same file twice in one drop is one file.
+    const unique = new Map<string, File>();
+    for (const h of hashed) if (!unique.has(h.hash)) unique.set(h.hash, h.file);
+    const check = await checkIntakeDuplicates([...unique.keys()]);
+    if (check.error) {
+      setRefusals([check.error]);
+      return;
+    }
+    const dupeByHash = new Map(check.duplicates!.map((d) => [d.hash, d]));
+    const fresh: File[] = [];
+    const dupes: IntakeDuplicate[] = [];
+    for (const [hash, file] of unique) {
+      const d = dupeByHash.get(hash);
+      if (d) dupes.push({ ...d, fileName: file.name });
+      else fresh.push(file);
+    }
+    if (dupes.length > 0) {
+      // Hold everything until the operator decides — the fresh files go up
+      // with that decision, so the batch stays one act.
+      setPendingDupes({ dupes, fresh, chosen: new Set() });
+      return;
+    }
+    await uploadFresh(fresh, new Map([...unique].map(([h, f]) => [f, h])));
+  }
+
+  async function uploadFresh(list: File[], hashes: Map<File, string>) {
+    if (list.length === 0) return;
     setInFlight((cur) => [...cur, ...list.map((f) => f.name)]);
     await Promise.all(
       list.map(async (file) => {
@@ -68,6 +111,7 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
             fileSize: file.size,
             contentType: "application/pdf",
             headBase64,
+            fileHash: hashes.get(file) ?? (await sha256Hex(file)),
           });
           if (created.error) {
             setRefusals((cur) => [...cur, `${file.name} — ${created.error}`]);
@@ -93,6 +137,32 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
         }
       }),
     );
+  }
+
+  async function retry(intakeId: string) {
+    setRetrying((cur) => new Set(cur).add(intakeId));
+    startTransition(() => router.refresh());
+    try {
+      const r = await retryIntake(intakeId);
+      if (r.error) setRefusals((cur) => [...cur, r.error!]);
+    } finally {
+      setRetrying((cur) => {
+        const next = new Set(cur);
+        next.delete(intakeId);
+        return next;
+      });
+      startTransition(() => router.refresh());
+    }
+  }
+
+  async function resolveDupes() {
+    const decision = pendingDupes;
+    if (!decision) return;
+    setPendingDupes(null);
+    const toReprocess = decision.dupes.filter((d) => decision.chosen.has(d.intakeId) && d.reprocessable);
+    const hashes = new Map<File, string>();
+    for (const f of decision.fresh) hashes.set(f, await sha256Hex(f));
+    await Promise.all([uploadFresh(decision.fresh, hashes), ...toReprocess.map((d) => retry(d.intakeId))]);
   }
 
   const visible = rows.filter((r) => {
@@ -220,9 +290,18 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
                     <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
                       Reading…
                     </span>
+                  ) : r.status === "could_not_read" ? (
+                    <div className="flex flex-col items-end gap-1.5">
+                      <button type="button" className="btn-secondary btn-sm" disabled={retrying.has(r.id)} onClick={() => void retry(r.id)}>
+                        {retrying.has(r.id) ? "Reading…" : "Retry"}
+                      </button>
+                      <Link href={`/admin/billing/intake/${r.id}`} className="btn-ghost btn-sm">
+                        Enter by hand
+                      </Link>
+                    </div>
                   ) : (
                     <Link href={`/admin/billing/intake/${r.id}`} className="btn-secondary btn-sm">
-                      {r.status === "could_not_read" ? "Enter by hand" : r.status === "ready" ? "Review" : "Review"}
+                      Review
                     </Link>
                   )}
                 </div>
@@ -231,6 +310,71 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
           </ul>
         )}
       </Card>
+
+      <Modal
+        open={pendingDupes !== null}
+        onClose={() => setPendingDupes(null)}
+        title="Some of these are already here"
+        description="Tick the ones to read again on their existing row. Unticked files are skipped. Nothing is uploaded twice."
+        size="wide"
+      >
+        {pendingDupes && (
+          <>
+            <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
+              {pendingDupes.dupes.map((d) => (
+                <li key={d.intakeId} className="flex items-start gap-3 py-2.5">
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    disabled={!d.reprocessable}
+                    checked={pendingDupes.chosen.has(d.intakeId)}
+                    onChange={(e) =>
+                      setPendingDupes((cur) => {
+                        if (!cur) return cur;
+                        const chosen = new Set(cur.chosen);
+                        if (e.target.checked) chosen.add(d.intakeId);
+                        else chosen.delete(d.intakeId);
+                        return { ...cur, chosen };
+                      })
+                    }
+                    aria-label={`Reprocess ${d.fileName}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-medium">{d.fileName}</p>
+                    <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                      Uploaded {formatInstant(d.uploadedAt)} · {d.status.replace("_", " ")}
+                      {d.society ? ` · ${d.society}` : ""}
+                      {d.period ? ` · ${d.period}` : ""}
+                    </p>
+                    {!d.reprocessable && (
+                      <p className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+                        Already submitted as a month of record — void that month to change it; it cannot be reprocessed from here.
+                      </p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            {pendingDupes.fresh.length > 0 && (
+              <p className="mt-3 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                {pendingDupes.fresh.length} new file{pendingDupes.fresh.length === 1 ? "" : "s"} in this drop will be uploaded either way.
+              </p>
+            )}
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button type="button" className="btn-ghost" onClick={() => setPendingDupes(null)}>
+                Cancel the drop
+              </button>
+              <button type="button" className="btn-primary" onClick={() => void resolveDupes()}>
+                {pendingDupes.chosen.size > 0
+                  ? `Reprocess ${pendingDupes.chosen.size} and continue`
+                  : pendingDupes.fresh.length > 0
+                    ? "Skip these and upload the rest"
+                    : "Skip these"}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
     </>
   );
 }

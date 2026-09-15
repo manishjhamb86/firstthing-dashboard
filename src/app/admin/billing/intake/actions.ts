@@ -55,15 +55,75 @@ function slug(s: string): string {
 // 1. Upload — the bytes reach S3 before anything interprets them (CON-30).
 // ---------------------------------------------------------------------------
 
+/**
+ * FEAT-109 (2026-09-15, user-caught duplicate rows): before anything is
+ * uploaded, the browser sends each file's SHA-256 and learns which are
+ * already here — so a file dropped twice becomes "reprocess or skip" on the
+ * existing row, never a second row. A submitted one cannot be reprocessed
+ * from here at all: that is a month of record, and the route is void-and-
+ * reattach on the month.
+ */
+export type IntakeDuplicate = {
+  hash: string;
+  intakeId: string;
+  fileName: string;
+  status: string;
+  society: string | null;
+  period: string | null;
+  uploadedAt: string;
+  /** Whether "reprocess" is offered — never for a submitted month. */
+  reprocessable: boolean;
+};
+
+export async function checkIntakeDuplicates(hashes: string[]): Promise<Result<{ duplicates: IntakeDuplicate[] }>> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  const rows = await db.invoiceIntake.findMany({
+    where: { fileHash: { in: hashes }, status: { not: "discarded" } },
+    include: { society: { select: { name: true } } },
+    orderBy: { uploadedAt: "desc" },
+  });
+  const seen = new Set<string>();
+  const duplicates: IntakeDuplicate[] = [];
+  for (const r of rows) {
+    if (!r.fileHash || seen.has(r.fileHash)) continue; // the newest row per file
+    seen.add(r.fileHash);
+    duplicates.push({
+      hash: r.fileHash,
+      intakeId: r.id,
+      fileName: r.fileName,
+      status: r.status,
+      society: r.society?.name ?? null,
+      period: r.period,
+      uploadedAt: r.uploadedAt.toISOString(),
+      reprocessable: r.status !== "submitted",
+    });
+  }
+  return { duplicates };
+}
+
 export async function createIntakeUpload(input: {
   fileName: string;
   fileSize: number;
   contentType: string;
   /** The file's first bytes, base64 — what the file IS, not what it is named. */
   headBase64: string;
+  /** SHA-256 of the whole file, hex — computed in the browser. */
+  fileHash: string;
 }): Promise<Result<{ intakeId: string; uploadUrl: string; key: string }>> {
   const ops = await requireBillingOps();
   if (!ops.ok) return { error: ops.error };
+
+  // Belt and braces behind the client's own check: the same bytes never
+  // become a second live row.
+  const existing = await db.invoiceIntake.findFirst({
+    where: { fileHash: input.fileHash, status: { not: "discarded" } },
+    select: { id: true, status: true },
+  });
+  if (existing) {
+    logger.warn("intake.upload_refused", { actorId: ops.actor.id, fileName: input.fileName, reason: "duplicate", existing: existing.id });
+    return { error: `${input.fileName} is already here (${existing.status.replace("_", " ")}) — reprocess it from its row instead of uploading it again.` };
+  }
 
   const kind = sniffKind(new Uint8Array(Buffer.from(input.headBase64, "base64")));
   if (kind !== "pdf") {
@@ -78,6 +138,7 @@ export async function createIntakeUpload(input: {
     data: {
       fileName: input.fileName,
       fileSize: input.fileSize,
+      fileHash: input.fileHash,
       s3Key: "pending",
       uploadedById: ops.actor.id,
       status: "reading",
@@ -146,6 +207,50 @@ function proposeReview(x: ExtractedInvoice, societyId: string | null, circuits: 
   };
 }
 
+
+/** Google's rate-limit reply is a paragraph with a URL in it; the row needs a sentence. */
+function friendlyExtractionError(raw: string): string {
+  if (/429|quota|rate.?limit/i.test(raw)) {
+    const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
+    const secs = m ? Math.ceil(m[2].toLowerCase() === "ms" ? Number(m[1]) / 1000 : Number(m[1])) : null;
+    return `The document reader is rate-limited right now${secs ? ` — try again in about ${Math.max(secs, 5)} seconds` : " — try again in a minute"}, or enter the lines by hand.`;
+  }
+  if (/GEMINI_API_KEY/.test(raw)) return "The document reader is not configured on this server.";
+  return "The invoice could not be read automatically — retry, or enter its lines by hand.";
+}
+
+/** One automatic retry on a rate limit, after the delay the service asks for (capped so the action returns). */
+async function readWithOneRetry(bytes: Uint8Array): Promise<ExtractedInvoice> {
+  const base64 = Buffer.from(bytes).toString("base64");
+  try {
+    return await extractInvoice({ base64, mimeType: "application/pdf" });
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
+    if (!/429/.test(raw) || !m) throw err;
+    const waitMs = Math.min(m[2].toLowerCase() === "ms" ? Number(m[1]) : Number(m[1]) * 1000, 20_000);
+    await new Promise((r) => setTimeout(r, waitMs + 500));
+    return await extractInvoice({ base64, mimeType: "application/pdf" });
+  }
+}
+
+/**
+ * Retry a failed read on the SAME row (user-asked 2026-09-15: "give retry
+ * option for already failed but uploaded invoices") — the bytes are already
+ * in storage; nothing is uploaded again.
+ */
+export async function retryIntake(intakeId: string): Promise<Result<{ status: string }>> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  const intake = await db.invoiceIntake.findUnique({ where: { id: intakeId }, select: { status: true } });
+  if (!intake) return { error: "That upload no longer exists." };
+  if (intake.status === "submitted") return { error: "This invoice has already been submitted — void the month to change it." };
+  await db.invoiceIntake.update({ where: { id: intakeId }, data: { status: "reading", extractionError: null } });
+  logger.info("intake.retry", { actorId: ops.actor.id, intakeId, from: intake.status });
+  revalidatePath(INTAKE_PATH);
+  return extractIntake(intakeId);
+}
+
 export async function extractIntake(intakeId: string): Promise<Result<{ status: string }>> {
   const ops = await requireBillingOps();
   if (!ops.ok) return { error: ops.error };
@@ -164,12 +269,14 @@ export async function extractIntake(intakeId: string): Promise<Result<{ status: 
 
   let extraction: ExtractedInvoice;
   try {
-    extraction = await extractInvoice({ base64: Buffer.from(bytes).toString("base64"), mimeType: "application/pdf" });
+    extraction = await readWithOneRetry(bytes);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.warn("intake.extraction_failed", { actorId: ops.actor.id, intakeId, message });
-    await db.invoiceIntake.update({ where: { id: intakeId }, data: { status: "could_not_read", extractionError: message } });
-    return { error: "The invoice could not be read. Enter its lines by hand." };
+    const raw = err instanceof Error ? err.message : String(err);
+    const friendly = friendlyExtractionError(raw);
+    logger.warn("intake.extraction_failed", { actorId: ops.actor.id, intakeId, message: raw.slice(0, 300) });
+    await db.invoiceIntake.update({ where: { id: intakeId }, data: { status: "could_not_read", extractionError: friendly } });
+    revalidatePath(INTAKE_PATH);
+    return { error: friendly };
   }
 
   const society = proposeSociety(extraction.billToName.value, await societyOptions());

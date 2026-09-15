@@ -2524,6 +2524,11 @@ model InvoiceIntake {
   id           String   @id @default(cuid())
   fileName     String   @map("file_name")
   fileSize     Int      @map("file_size")
+  // SHA-256 of the bytes (2026-09-15, user-caught duplicate rows): the same
+  // PDF dropped again is recognised BEFORE it is uploaded and offered as
+  // "reprocess or skip", never a second row. Hashed in the browser, and
+  // re-checked here from the stored object on retry.
+  fileHash     String?  @map("file_hash")
   s3Key        String   @map("s3_key")
   uploadedById String   @map("uploaded_by_id")
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
@@ -2550,6 +2555,7 @@ model InvoiceIntake {
 
   @@index([status, uploadedAt])
   @@index([societyId, period])
+  @@index([fileHash])
   @@map("invoice_intakes")
 }
 

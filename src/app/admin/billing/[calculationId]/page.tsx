@@ -88,6 +88,17 @@ export default async function CalculationPage({
 
   // The per-part terms a multi-deal month billed under, from the frozen
   // snapshot (GATE-01) — the single pointer above is null in that case.
+  // CON-47 — an invoice-first month's per-line notes: how its readings
+  // classified (complete / partial / offline) and which basis it rests on.
+  const snapshotLines = (
+    ((calc.inputVersionSnapshot as { lines?: unknown[] } | null)?.lines ?? []) as Array<{
+      circuitId: string;
+      basis?: string;
+      readingsNote?: string | null;
+      societyNet?: number;
+    }>
+  );
+  const noteFor = (circuitId: string) => snapshotLines.find((x) => x.circuitId === circuitId) ?? null;
   const snapshotParts = (
     ((calc.inputVersionSnapshot as { parts?: unknown[] } | null)?.parts ?? []) as Array<{
       contractId: string;
@@ -283,8 +294,21 @@ export default async function CalculationPage({
                       </Link>
                       <p className="text-[13px] text-[var(--text-muted)]">
                         {l.meteredLightCount} metered of {l.representedLightCount} represented ·{" "}
-                        {l.coverageDays} day{l.coverageDays === 1 ? "" : "s"}
+                        {l.coverageDays} complete day{l.coverageDays === 1 ? "" : "s"}
+                        {calc.source === "invoice" && (
+                          <>
+                            {" · "}
+                            <span style={{ color: l.basis === "measured" ? "var(--ok-fg)" : "var(--info-fg)" }}>
+                              {l.basis === "measured" ? "measured" : "agreed basis"}
+                            </span>
+                          </>
+                        )}
                       </p>
+                      {noteFor(l.circuitId)?.readingsNote && (
+                        <p className="mt-1 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
+                          {noteFor(l.circuitId)!.readingsNote}
+                        </p>
+                      )}
                     </td>
                     <td className="num text-right">{l.meteredKwh.toFixed(2)}</td>
                     <td className="num text-right">{l.extrapolatedConsumption.toFixed(2)}</td>

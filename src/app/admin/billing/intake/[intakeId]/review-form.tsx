@@ -448,7 +448,10 @@ export function ReviewForm({
                               ? `fee ÷ FirsThing's ${num(d.firsthingSharePct, 0)}% share · agreed benchmark ${num(d.benchmarkSavingsPct, 2)}% · ₹${num(d.savedKwh > 0 ? d.savedValue / d.savedKwh : 0, 2)}/kWh`
                               : `agreed ${num(d.benchmarkSavingsPct, 2)}% · baseline ${num(d.baselineKwhPerDay, 2)} kWh/day · ${d.billedDays} days (lump sum)`}
                         </span>
-                        {d.provenance.fallbackReason && (
+                        {d.readingsNote && (
+                          <span className="block text-[11.5px]" style={{ color: "var(--warn-fg)" }}>{d.readingsNote}</span>
+                        )}
+                        {d.provenance.fallbackReason && d.provenance.fallbackReason !== "No readings for this month." && (
                           <span className="block text-[11.5px]" style={{ color: "var(--warn-fg)" }}>{d.provenance.fallbackReason}</span>
                         )}
                       </td>

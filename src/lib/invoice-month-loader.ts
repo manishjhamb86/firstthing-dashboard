@@ -60,6 +60,7 @@ export async function loadInvoiceMonthContext(input: {
     include: {
       rescaleEvents: { orderBy: { effectiveDate: "asc" } },
       siteSurvey: { select: { pipelineId: true } },
+      meterDevice: { select: { id: true } },
     },
     orderBy: [{ location: "asc" }, { lightType: "asc" }],
   });
@@ -147,12 +148,44 @@ export async function loadInvoiceMonthContext(input: {
   const readingsByCircuit: Record<string, CircuitMonthReadings> = {};
   const readings = await db.meterReading.findMany({
     where: { circuitId: { in: circuits.map((c) => c.id) }, date: { gte: from, lt: to }, excludedAt: null },
-    select: { id: true, circuitId: true, kWh: true, rawFileId: true },
+    select: { id: true, circuitId: true, date: true, kWh: true, intervalCount: true, rawFileId: true },
+    orderBy: { date: "asc" },
   });
+
+  // Hours per day that actually carried a reading, from each bound meter's
+  // own hourly store — the export writes 0 for an hour the meter was offline,
+  // so a 24-row day can be a whole day of silence (the live-monitoring page's
+  // own rule). A day the store does not cover gets null: no claim about
+  // silence where there is no hour-level truth.
+  const dataHoursByCircuitDay = new Map<string, number>();
+  const bound = circuits.filter((c) => c.meterDevice);
+  for (const c of bound) {
+    const groups = await db.meterHourlyReading.groupBy({
+      by: ["day"],
+      where: { meterId: c.meterDevice!.id, day: { gte: from, lt: to }, kWh: { gt: 0 } },
+      _count: { _all: true },
+    });
+    const covered = await db.meterHourlyReading.groupBy({
+      by: ["day"],
+      where: { meterId: c.meterDevice!.id, day: { gte: from, lt: to } },
+      _count: { _all: true },
+    });
+    const nz = new Map(groups.map((g) => [g.day.toISOString().slice(0, 10), g._count._all]));
+    for (const g of covered) {
+      const key = g.day.toISOString().slice(0, 10);
+      dataHoursByCircuitDay.set(`${c.id}|${key}`, nz.get(key) ?? 0);
+    }
+  }
+
   for (const r of readings) {
-    const bucket = (readingsByCircuit[r.circuitId] ??= { meteredKwh: 0, coverageDays: 0, readingIds: [], rawFileIds: [] });
-    bucket.meteredKwh += r.kWh;
-    bucket.coverageDays += 1;
+    const bucket = (readingsByCircuit[r.circuitId] ??= { days: [], readingIds: [], rawFileIds: [] });
+    const date = r.date.toISOString().slice(0, 10);
+    bucket.days.push({
+      date,
+      kWh: r.kWh,
+      intervalCount: r.intervalCount,
+      dataHours: dataHoursByCircuitDay.get(`${r.circuitId}|${date}`) ?? null,
+    });
     bucket.readingIds.push(r.id);
     if (!bucket.rawFileIds.includes(r.rawFileId)) bucket.rawFileIds.push(r.rawFileId);
   }

@@ -5815,6 +5815,25 @@ degraded state, and the run's other 31 checks (the new figures included) passed.
 are metered; a verification suite that re-reads the same PDF a dozen times a day will find the
 ceiling.
 
+## Day validity: a month measures from its complete days only (2026-09-15) — user-specified
+
+**The rule, in the user's words**: out of 30 days, 4 with complete 24-hour readings, 7 with partial
+hours, the rest at 0 — treat only the 4 as valid, mark the others invalid for partial or offline
+readings, extrapolate the 4 days' savings to the month, and warn that 26 days were not used.
+
+**Built in `invoice-month.ts`, pure and tested (22 cases)**: `classifyDay` — `complete` (24 hours
+with data, kWh > 0, implied saving ≤ CON-45's 80% bound), `partial` (some hours), `offline` (a
+zero day — the vendor writes 0 for a silent hour, so stage's July had 29 "24-row" days that were
+whole days of silence), `suspect` (a full day whose saving no working meter produces); `tallyDays`;
+`readingsNote` (the warning sentence). The measured % is the average over complete days alone,
+needs `MIN_COMPLETE_DAYS_FOR_MEASURED = 4` of them (the user's own example), and is extrapolated
+to the billed population for the whole month; fewer complete days → the agreed basis, with the
+reason. The loader feeds each day's `dataHours` from the bound meter's hourly store (the same
+`groupBy` the live-monitoring page uses) and falls back to the vendor's row count only where no
+store covers the day. The note is shown on SCR-094's card 5, stored in the month's snapshot, and
+rendered on the month's own page beside the basis. CON-47 (b), FEAT-110-AC-3 and the backlog
+carry the rule.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

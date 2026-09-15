@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   checkLineArithmetic,
   checkTotalsArithmetic,
+  classifyDay,
   deriveInvoiceMonth,
   type InvoiceMonthPart,
 } from "@/lib/invoice-month";
@@ -78,80 +79,100 @@ describe("TC-110-1 — agreed-basis derivation: the fee is FirsThing's share of 
   });
 });
 
-describe("measured basis (FEAT-110-AC-2 / AC-3 / AC-7)", () => {
-  const readings = {
-    meteredKwh: 3_010, // 28 days on the 91-light metered circuit
-    coverageDays: 28,
-    readingIds: ["r1", "r2"],
-    rawFileIds: ["f1"],
-  };
+// Day builders: a July on the 91-light metered circuit (baseline 47.4/day).
+const day = (n: number, kWh: number, hours: number | null = 24, intervals: number | null = 24) => ({
+  date: `2026-07-${String(n).padStart(2, "0")}`,
+  kWh,
+  intervalCount: intervals,
+  dataHours: hours,
+});
+const withDays = (days: ReturnType<typeof day>[]) => ({ days, readingIds: days.map((d) => `r-${d.date}`), rawFileIds: ["f1"] });
 
-  it("uses the measured % when readings cover the floor, and the fee still equals the line", () => {
-    const month = deriveInvoiceMonth({
-      period: "2026-07",
-      parts: [AMC],
-      lines: [AMC_LINE],
-      readingsByCircuit: { "ckt-amc-basement": readings },
-    });
+describe("day validity — the user's rule (2026-09-15)", () => {
+  it("classifies a day as complete, partial, offline or suspect", () => {
+    expect(classifyDay(day(1, 17.0), 47.4)).toBe("complete");
+    expect(classifyDay(day(2, 6.1, 9), 47.4)).toBe("partial"); // 9 hours with data
+    expect(classifyDay(day(3, 0, 0), 47.4)).toBe("offline"); // a 24-row day of zeros
+    expect(classifyDay(day(4, 1.2), 47.4)).toBe("suspect"); // 97% "saving" on a full day
+    // No hourly store behind the day: the vendor's row count is the best evidence.
+    expect(classifyDay(day(5, 16.0, null, 13), 47.4)).toBe("partial");
+    expect(classifyDay(day(6, 16.0, null, 24), 47.4)).toBe("complete");
+  });
+
+  it("the user's own example: 4 complete, 7 partial, the rest offline — measures from the 4 and says so", () => {
+    const days = [
+      ...[1, 2, 3, 4].map((n) => day(n, 18.96)), // 60% saving on each complete day
+      ...[5, 6, 7, 8, 9, 10, 11].map((n) => day(n, 5, 2 + n)), // partial: 7–13 hours with data
+      ...Array.from({ length: 20 }, (_, k) => day(12 + k, 0, 0)), // offline
+    ];
+    const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: { "ckt-amc-basement": withDays(days) } });
+    const line = month.lines[0];
+    expect(line.basis).toBe("measured");
+    expect(line.savingsPct).toBeCloseTo(60, 10);
+    expect(line.coverageDays).toBe(4);
+    expect(line.dayTally).toEqual({ complete: 4, partial: 7, offline: 20, suspect: 0, missing: 0, daysInMonth: 31, completeKwh: 18.96 * 4 });
+    expect(line.readingsNote).toBe("Only 4 of 31 days had complete readings — 7 partial, 20 with the meter offline — those days were not used.");
+    // The 60% measured on the valid days is extrapolated to the whole month's billed lights.
+    expect(line.savedKwh).toBeCloseTo((47.4 / 91) * 605 * 31 * 0.6, 10);
+    expect(line.amount).toBe(14_050);
+  });
+
+  it("stage's July: 29 offline days and 2 real ones is not a measured month", () => {
+    const days = [...Array.from({ length: 29 }, (_, k) => day(1 + k, 0, 0)), day(30, 23.5), day(31, 23.5)];
+    const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: { "ckt-amc-basement": withDays(days) } });
+    const line = month.lines[0];
+    expect(line.basis).toBe("agreed");
+    expect(line.provenance.fallbackReason).toBe("2 complete days of 31 — fewer than the 4 needed to measure the month; the agreed figure is used.");
+    expect(line.readingsNote).toBe("Only 2 of 31 days had complete readings — 29 with the meter offline — those days were not used.");
+    expect(Math.round(line.savedValue * 100) / 100).toBe(39_027.78); // fee ÷ 36%
+  });
+
+  it("a month of days the store never covered still counts rows with 24 intervals as complete", () => {
+    const days = Array.from({ length: 28 }, (_, k) => day(1 + k, 17.0, null, 24));
+    const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: { "ckt-amc-basement": withDays(days) } });
+    expect(month.lines[0].basis).toBe("measured");
+    expect(month.lines[0].readingsNote).toBe("Only 28 of 31 days had complete readings — 3 not recorded — those days were not used.");
+  });
+
+  it("a full month of complete days carries no warning", () => {
+    const days = Array.from({ length: 31 }, (_, k) => day(1 + k, 17.0));
+    const line = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: { "ckt-amc-basement": withDays(days) } }).lines[0];
+    expect(line.readingsNote).toBeNull();
+    expect(line.coverageDays).toBe(31);
+  });
+});
+
+describe("measured basis (FEAT-110-AC-2 / AC-3 / AC-7)", () => {
+  const complete28 = withDays(Array.from({ length: 28 }, (_, k) => day(1 + k, 3_010 / 28)));
+
+  it("uses the measured % when enough complete days exist, keeps the benchmark beside it, and the fee equals the line", () => {
+    const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: { "ckt-amc-basement": complete28 } });
     const line = month.lines[0];
     expect(line.basis).toBe("measured");
     const expectedPct = (1 - 3_010 / 28 / 47.4) * 100;
     expect(line.savingsPct).toBeCloseTo(expectedPct, 10);
-    expect(line.benchmarkSavingsPct).toBe(64); // the agreed figure stays beside it
+    expect(line.benchmarkSavingsPct).toBe(64);
     expect(line.coverageDays).toBe(28);
-    expect(line.provenance.readingIds).toEqual(["r1", "r2"]);
+    expect(line.provenance.readingIds).toHaveLength(28);
     expect(line.provenance.rawFileIds).toEqual(["f1"]);
     expect(line.provenance.fallbackReason).toBeNull();
     expect(line.amount).toBe(14_050);
   });
 
-  it("falls back to agreed below the coverage floor and states the coverage", () => {
-    const month = deriveInvoiceMonth({
-      period: "2026-07",
-      parts: [AMC],
-      lines: [AMC_LINE],
-      readingsByCircuit: { "ckt-amc-basement": { ...readings, coverageDays: 9, meteredKwh: 960 } },
-    });
-    const line = month.lines[0];
-    expect(line.basis).toBe("agreed");
-    expect(line.savingsPct).toBe(64);
-    expect(line.coverageDays).toBe(0);
-    expect(line.provenance.fallbackReason).toBe("Readings cover 9 of 31 days — below the 20-day floor.");
-    expect(line.provenance.readingIds).toEqual([]);
-  });
-
   it("reports a measured line below the band and nothing more", () => {
-    // 47.4 × 28 = 1,327.2 kWh baseline; 800 kWh used → 39.7% saved, short of 64 − 10.
-    const month = deriveInvoiceMonth({
-      period: "2026-07",
-      parts: [AMC],
-      lines: [AMC_LINE],
-      readingsByCircuit: { "ckt-amc-basement": { ...readings, meteredKwh: 800 } },
-    });
+    // 800 kWh over 28 complete days → 39.7% saved, short of 64 − 10.
+    const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: { "ckt-amc-basement": withDays(Array.from({ length: 28 }, (_, k) => day(1 + k, 800 / 28))) } });
     const line = month.lines[0];
     expect(line.basis).toBe("measured");
     expect(line.belowBand).toBe(true);
     expect(line.amount).toBe(14_050); // the bill does not move
   });
 
-  it("a dead meter is not a 97% saving — above the suspect bound it falls back to agreed and says why", () => {
-    // 29 zero days in a real July export: 47 kWh over 31 days against 47.4/day.
-    const month = deriveInvoiceMonth({
-      period: "2026-07",
-      parts: [AMC],
-      lines: [AMC_LINE],
-      readingsByCircuit: { "ckt-amc-basement": { ...readings, coverageDays: 31, meteredKwh: 47 } },
-    });
-    const line = month.lines[0];
-    expect(line.basis).toBe("agreed");
-    expect(line.provenance.fallbackReason).toMatch(/96\.8% saving — above the 80% bound/);
-    expect(line.provenance.fallbackReason).toMatch(/Check the meter/);
-    expect(Math.round(line.savedValue * 100) / 100).toBe(39_027.78);
-  });
-
   it("belowBand is null on an agreed line — there is nothing measured to be below", () => {
     const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: {} });
     expect(month.lines[0].belowBand).toBeNull();
+    expect(month.lines[0].readingsNote).toBeNull();
+    expect(month.lines[0].provenance.fallbackReason).toBe("No readings for this month.");
   });
 });
 

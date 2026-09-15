@@ -39,7 +39,6 @@
 
 import { prorateFinalMonth, prorateFirstMonth, type Proration } from "./billing-start";
 import { measuredSavingsPct } from "./monthly-calculation";
-import { COVERAGE_FLOOR_DAYS } from "./reading-coverage";
 import { SAVINGS_SUSPECT_ABOVE } from "./circuit-load";
 import { daysInPeriod } from "./reading-normalize";
 
@@ -85,12 +84,80 @@ export type InvoiceMonthPart = {
   finalMonthEndsOn?: Date | null;
 };
 
+/** One stored day of readings for a circuit, with what is known about its completeness. */
+export type DayReading = {
+  /** YYYY-MM-DD */
+  date: string;
+  kWh: number;
+  /** Rows the vendor wrote for the day (24 on an hourly export) — a row of zeros still counts here. */
+  intervalCount: number | null;
+  /** Hours that carried a non-zero reading, from the meter's own hourly store; null when no store covers the day. */
+  dataHours: number | null;
+};
+
 export type CircuitMonthReadings = {
-  meteredKwh: number;
-  coverageDays: number;
+  days: DayReading[];
   readingIds: string[];
   rawFileIds: string[];
 };
+
+/**
+ * Day validity (the user's rule, 2026-09-15): a day counts only when it is
+ * COMPLETE — every hour carried a reading, the day used some energy, and the
+ * saving it implies is one a working meter can produce. Everything else is
+ * named for why it was left out, and the month says how many days it rests
+ * on. The vendor writes a 0 for an hour the meter was offline, so "24 rows"
+ * is not "24 hours of data" — a whole month of 24-row zero days (stage's
+ * July 2026, 29 of them) is a meter that said nothing.
+ */
+export type DayClass = "complete" | "partial" | "offline" | "suspect";
+export const FULL_DAY_HOURS = 24;
+/** Complete days needed before a month's saving is called measured — the user's own example uses 4. */
+export const MIN_COMPLETE_DAYS_FOR_MEASURED = 4;
+
+export function classifyDay(day: DayReading, baselineKwhPerDay: number): DayClass {
+  if (!(day.kWh > 0)) return "offline";
+  const hours = day.dataHours ?? day.intervalCount;
+  if (hours !== null && hours < FULL_DAY_HOURS) return "partial";
+  const savings = baselineKwhPerDay > 0 ? (1 - day.kWh / baselineKwhPerDay) * 100 : 0;
+  if (savings > SAVINGS_SUSPECT_ABOVE) return "suspect";
+  return "complete";
+}
+
+export type DayTally = {
+  complete: number;
+  partial: number;
+  offline: number;
+  suspect: number;
+  /** Days of the month with no row at all. */
+  missing: number;
+  daysInMonth: number;
+  /** Σ kWh over the complete days only. */
+  completeKwh: number;
+};
+
+export function tallyDays(days: DayReading[], baselineKwhPerDay: number, daysInMonth: number): DayTally {
+  const t: DayTally = { complete: 0, partial: 0, offline: 0, suspect: 0, missing: 0, daysInMonth, completeKwh: 0 };
+  for (const d of days) {
+    const c = classifyDay(d, baselineKwhPerDay);
+    t[c] += 1;
+    if (c === "complete") t.completeKwh += d.kWh;
+  }
+  t.missing = Math.max(0, daysInMonth - days.length);
+  return t;
+}
+
+/** The sentence the month carries about its readings — a warning when days were left out. */
+export function readingsNote(t: DayTally): string | null {
+  if (t.complete === t.daysInMonth) return null;
+  const left: string[] = [];
+  if (t.partial) left.push(`${t.partial} partial`);
+  if (t.offline) left.push(`${t.offline} with the meter offline`);
+  if (t.suspect) left.push(`${t.suspect} implausibly low`);
+  if (t.missing) left.push(`${t.missing} not recorded`);
+  const head = t.complete === 0 ? `No day of ${t.daysInMonth} had a complete reading` : `Only ${t.complete} of ${t.daysInMonth} days had complete readings`;
+  return `${head}${left.length ? ` — ${left.join(", ")} — those days were not used` : ""}.`;
+}
 
 export type DerivedLine = {
   lineNo: number;
@@ -119,8 +186,12 @@ export type DerivedLine = {
   firsthingSharePct: number | null;
   /** What the society kept: saved ₹ − fee. */
   societyNet: number;
-  /** Days of readings behind a measured line; 0 on an agreed one. */
+  /** COMPLETE days behind a measured line; 0 on an agreed one. */
   coverageDays: number;
+  /** How the month's days classified, when any readings exist. */
+  dayTally: DayTally | null;
+  /** The warning the month carries about its readings, when days were left out. */
+  readingsNote: string | null;
   /** Measured only: short of the benchmark by more than the tolerance. Informational. */
   belowBand: boolean | null;
   provenance: {
@@ -158,10 +229,10 @@ export function deriveInvoiceMonth(input: {
   parts: InvoiceMonthPart[];
   lines: InvoiceServiceLine[];
   readingsByCircuit: Record<string, CircuitMonthReadings | undefined>;
-  coverageFloorDays?: number;
+  minCompleteDays?: number;
 }): DerivedMonth {
   const daysInMonth = daysInPeriod(input.period);
-  const floor = input.coverageFloorDays ?? COVERAGE_FLOOR_DAYS;
+  const minComplete = input.minCompleteDays ?? MIN_COMPLETE_DAYS_FOR_MEASURED;
 
   const lookup = new Map<string, { circuit: InvoiceMonthCircuit; part: InvoiceMonthPart }>();
   for (const part of input.parts) {
@@ -202,23 +273,30 @@ export function deriveInvoiceMonth(input: {
     const benchmark = circuit.benchmarkSavingsPct;
     const firsthingShare = part.societyRevenueSharePct === null ? null : 100 - part.societyRevenueSharePct;
 
-    // Is the measured figure credible? Enough days, and a saving a working
-    // meter could produce.
+    // Is the measured figure credible? Enough COMPLETE days, and a saving a
+    // working meter can produce. Partial and offline days are named, never
+    // averaged in — a zero day averaged in reads as a saving.
     let measuredPct: number | null = null;
     let fallbackReason: string | null = null;
-    if (readings && readings.coverageDays > 0 && readings.coverageDays >= floor) {
-      const pct = measuredSavingsPct({
-        meteredKwh: readings.meteredKwh,
-        coverageDays: readings.coverageDays,
-        baselineKwhPerDay: circuit.baselineKwhPerDay,
-      });
-      if (pct > SAVINGS_SUSPECT_ABOVE) {
-        fallbackReason = `Readings show a ${pct.toFixed(1)}% saving — above the ${SAVINGS_SUSPECT_ABOVE}% bound a working meter can produce. Check the meter; the agreed figure is used.`;
+    let dayTally: DayTally | null = null;
+    let note: string | null = null;
+    if (readings && readings.days.length > 0) {
+      dayTally = tallyDays(readings.days, circuit.baselineKwhPerDay, daysInMonth);
+      note = readingsNote(dayTally);
+      if (dayTally.complete >= minComplete) {
+        const pct = measuredSavingsPct({
+          meteredKwh: dayTally.completeKwh,
+          coverageDays: dayTally.complete,
+          baselineKwhPerDay: circuit.baselineKwhPerDay,
+        });
+        if (pct > SAVINGS_SUSPECT_ABOVE) {
+          fallbackReason = `Even the complete days show a ${pct.toFixed(1)}% saving — above the ${SAVINGS_SUSPECT_ABOVE}% bound a working meter can produce. Check the meter; the agreed figure is used.`;
+        } else {
+          measuredPct = pct;
+        }
       } else {
-        measuredPct = pct;
+        fallbackReason = `${dayTally.complete} complete day${dayTally.complete === 1 ? "" : "s"} of ${daysInMonth} — fewer than the ${minComplete} needed to measure the month; the agreed figure is used.`;
       }
-    } else if (readings && readings.coverageDays > 0) {
-      fallbackReason = `Readings cover ${readings.coverageDays} of ${daysInMonth} days — below the ${floor}-day floor.`;
     } else {
       fallbackReason = "No readings for this month.";
     }
@@ -280,7 +358,9 @@ export function deriveInvoiceMonth(input: {
       amount: line.amount,
       firsthingSharePct: firsthingShare,
       societyNet: savedValue - line.amount,
-      coverageDays: basis === "measured" ? readings!.coverageDays : 0,
+      coverageDays: basis === "measured" ? dayTally!.complete : 0,
+      dayTally,
+      readingsNote: note,
       belowBand,
       provenance: {
         benchmarkSource: circuit.benchmarkSource,

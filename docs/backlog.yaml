@@ -8256,9 +8256,9 @@ features:
         tests: [TC-110-2]
       - id: FEAT-110-AC-3
         type: failure
-        given: "readings exist but cover fewer days than the floor, or read as a saving above the 80% suspect bound (a dead meter)"
+        given: "readings exist for the month (rewritten 2026-09-15, the user's rule)"
         when: "stats derive"
-        then: "the basis is `agreed` and the reason — the coverage, or '96.8% — check the meter' — is stated on the record"
+        then: "each day is classified complete / partial / offline / suspect; only complete days feed the measured %, extrapolated to the month; the record carries a warning stating the split; fewer than 4 complete days → `agreed` with the reason. The user's example — 4 complete days at 60% among 7 partial and 20 offline — measures 60%"
         tests: [TC-110-3]
       - id: FEAT-110-AC-4
         type: permission

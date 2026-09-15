@@ -5904,7 +5904,7 @@ visible as one.
 rule, same day): the demo's measured baseline extrapolated per light; the theoretical draw of the
 agreed lights — lights × watts × hours ÷ 1000, watts and hours prefilled from the circuit's load
 inventory (count-weighted over the retrofitted lines, else the circuit's own wattage and working
-hours) and editable; or a custom typed figure. `defaultPreInstallBasis` picks the higher of the
+hours) and editable; or a custom figure typed per month, the daily figure derived. `defaultPreInstallBasis` picks the higher of the
 first two; the chosen basis and its inputs are stored on the circuit term and shown on the
 per-circuit table, so an offer says which figure it was priced on. 14 unit cases.
 
@@ -5922,7 +5922,7 @@ invoice's count correction writes, a population correction and deliberately NOT 
 on the portal path the row is owned by the admin who issued the offer, since a society account
 cannot own one (INV-01). Recorded as FEAT-027-AC-6/7/8 in `03-features.md` and the backlog.
 
-**Verified 30/30 in a browser against a disposable deal** (18 metered lift-lobby lights standing in
+**Verified 32/32 in a browser against a disposable deal** (18 metered lift-lobby lights standing in
 for 1,773, 77.12%, the screenshot's own figures), asserted on rows: defaults from the demo; rate
 7.24 → ₹44,547.86; typing ₹50,000 → rate 8.13; fee typed → society keeps and both shares derived;
 stored kWh/₹/share match an independent computation; the basis defaults to theoretical (851 > 266 kWh/day), halving the hours halves it, a custom 300 prices on 300, and a theoretical save stores 864 = 1,800 × 20 W × 24 h with its inputs; the draft reopens editable and saves in place

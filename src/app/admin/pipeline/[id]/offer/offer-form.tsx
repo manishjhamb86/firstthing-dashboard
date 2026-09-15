@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { ErrorText, Field } from "@/components/ui";
 import { ALLOWED_TOLERANCE_PCT, type PricingModel } from "@/lib/offer";
 import {
+  DAYS_IN_MONTH,
   defaultPreInstallBasis,
   deriveWorksheet,
   unitRateForSavedValue,
@@ -92,7 +93,8 @@ export function OfferForm({
           defaultPreInstallBasis({ preInstallBaseline: r.preInstallBaseline, meteredLightCount: r.meteredLightCount, agreedLightCount: lights, wattagePerLight: watts, hoursPerDay: hours }),
         watts: watts != null ? (Math.round(watts * 100) / 100).toString() : "",
         hours: hours != null ? (Math.round(hours * 100) / 100).toString() : "",
-        pre: d?.preInstallKwhPerDay != null ? d.preInstallKwhPerDay.toString() : "",
+        // Typed per MONTH (user-asked 2026-09-15); the module works per day.
+        pre: d?.preInstallKwhPerDay != null ? (Math.round(d.preInstallKwhPerDay * DAYS_IN_MONTH * 100) / 100).toString() : "",
       };
     }
     return out;
@@ -128,7 +130,7 @@ export function OfferForm({
           preInstallBasis: s?.basis ?? "demo",
           wattagePerLight: s?.watts === "" || s?.watts == null ? null : Number(s.watts),
           hoursPerDay: s?.hours === "" || s?.hours == null ? null : Number(s.hours),
-          preInstallKwhPerDayOverride: s?.pre === "" || s?.pre == null ? null : Number(s.pre),
+          preInstallKwhPerDayOverride: s?.pre === "" || s?.pre == null ? null : Number(s.pre) / DAYS_IN_MONTH,
         };
       }),
     [baseRows, rows],
@@ -166,7 +168,8 @@ export function OfferForm({
         preInstallBasis: rows[r.circuitId]?.basis ?? "demo",
         wattagePerLight: rows[r.circuitId]?.watts ? Number(rows[r.circuitId].watts) : null,
         hoursPerDay: rows[r.circuitId]?.hours ? Number(rows[r.circuitId].hours) : null,
-        preInstallKwhPerDay: rows[r.circuitId]?.basis === "custom" && rows[r.circuitId]?.pre !== "" ? Number(rows[r.circuitId].pre) : null,
+        preInstallKwhPerDay:
+          rows[r.circuitId]?.basis === "custom" && rows[r.circuitId]?.pre !== "" ? Number(rows[r.circuitId].pre) / DAYS_IN_MONTH : null,
       })),
       unitElectricityRate: effectiveRate,
       monthlyFee: effectiveFee,
@@ -321,8 +324,12 @@ export function OfferForm({
                   )}
                   {r?.basis === "custom" && (
                     <div className="grid gap-3 sm:grid-cols-3">
-                      <Field label="Pre-installation consumption (kWh/day)" htmlFor={`of-p-${c.circuitId}`} hint="For the agreed number of lights.">
-                        <input id={`of-p-${c.circuitId}`} type="number" inputMode="decimal" min="0" step="0.01" value={r?.pre ?? ""} onChange={(e) => setRow(c.circuitId, { pre: e.target.value })} disabled={pending} className="field" />
+                      <Field
+                        label="Pre-installation consumption (kWh/month)"
+                        htmlFor={`of-p-${c.circuitId}`}
+                        hint={`For the agreed number of lights — ${r?.pre ? `${kwh(Number(r.pre) / DAYS_IN_MONTH)} a day` : "the daily figure follows"}.`}
+                      >
+                        <input id={`of-p-${c.circuitId}`} type="number" inputMode="decimal" min="0" step="1" value={r?.pre ?? ""} onChange={(e) => setRow(c.circuitId, { pre: e.target.value })} disabled={pending} className="field" />
                       </Field>
                     </div>
                   )}

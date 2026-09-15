@@ -25,8 +25,11 @@ export function AssignControl({
   currentSetup,
   currentLocation,
   societies,
+  onSaved,
 }: {
   tankId: string;
+  /** Called after a successful save — the modal closes on it. */
+  onSaved?: () => void;
   currentSocietyId: string | null;
   currentSetup: string | null;
   currentLocation: string | null;
@@ -59,6 +62,7 @@ export function AssignControl({
           setSaved(true);
           if (nextSocietyId === null) setSocietyId(null);
           router.refresh();
+          onSaved?.();
         }
       } catch {
         setError("Could not save — the page may be out of date. Reload and try again.");

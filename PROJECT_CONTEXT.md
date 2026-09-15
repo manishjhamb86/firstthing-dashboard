@@ -5784,6 +5784,37 @@ bare `-tA` as `t` — both already recorded here and both caught again.
 re-derivation hook (steps 3 and 5) are unbuilt; the portal step of the E2E skipped for want of an
 Aditya Mega City office-bearer on dev.
 
+## "How is the savings 96.80%?" — a dead meter, and the money story rewritten (2026-09-15) — user-caught on stage
+
+**The 96.8%**: Aditya Mega City's July 2026 on stage derived as *measured 96.80% from 31 of 31
+days*. The readings behind it — a real meter export — hold **29 days of exactly 0 kWh, 47 kWh for
+the month** against a 47.4 kWh/day baseline. A meter that reported nothing, read as a saving. CON-45
+already says >80% is "check the meter", but the derive had only applied the coverage floor.
+`deriveInvoiceMonth` now treats a measured figure above `SAVINGS_SUSPECT_ABOVE` as not credible,
+falls back to the agreed basis, and states why on the line ("96.8% — above the 80% bound a working
+meter can produce. Check the meter."). Unit-tested against those exact numbers.
+
+**The user's rule for the agreed basis, replacing my baseline arithmetic**: "we are charging 14,050
+for 605 lights — find out what their percentage is as per agreement and show the customer: saved
+this much, paid FirsThing this much, profit this much." The fee IS FirsThing's share of the saving
+under CON-11, so the saving is what the fee is a share OF: **saved ₹ = fee ÷ FirsThing's share**
+(₹14,050 ÷ 36% = ₹39,027.78), **kept = saved − fee** (₹24,977.78), kWh = saved ₹ ÷ unit rate. Three
+figures a committee can check against its own bill, every one tracing to the invoice line and the
+contract's term version (INV-02). The baseline × benchmark form survives only for lump-sum deals,
+which have no share to divide by. My earlier figure (₹43,765.51, from baseline × 64% × ₹7) was
+consistent with the circuit record but not with the invoice the society actually holds —
+the invoice's ₹23.23/light embeds whatever rate and baseline were agreed at signing, and the
+society's bill is the thing they will compare against. Recorded as an amendment to CON-47 (b),
+FEAT-110-AC-1/AC-3 rewritten, ADR-011 amended; TC-110-1 now asserts 39,027.78 / 24,977.78 and the
+dead-meter fallback. SCR-094's card 5 reads Saved ₹ · Paid to FirsThing · Society keeps · kWh ·
+basis, with the method stated under each circuit and the fallback reason in warn when there is one.
+
+**Worth remembering**: the second E2E pass hit Gemini's 429 quota on the duplicate-check upload —
+the app stored `could_not_read` with the message and offered manual entry, which is the designed
+degraded state, and the run's other 31 checks (the new figures included) passed. Extraction calls
+are metered; a verification suite that re-reads the same PDF a dozen times a day will find the
+ceiling.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

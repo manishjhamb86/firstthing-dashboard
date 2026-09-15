@@ -118,3 +118,14 @@ read and the voided-invoice correction path all built against it. What it cannot
   a different HSN — that is the classifier's first signal, with the description as the second.
 - ASSUM-31's spike: run the extraction over all 19 societies' current invoices before build and
   count ambiguous line→circuit proposals.
+
+## Amendment 2026-09-15 — the agreed-basis saving is fee ÷ share
+
+Found on stage the same day: a real July export with 29 zero days derived as a "96.8% measured
+saving". Two changes to `invoice-month.ts`, both the user's call: (1) a measured figure above
+CON-45's 80% suspect bound is not credible and falls back to the agreed basis with the reason
+stated; (2) on the agreed basis the saving is **what the fee is a share of** — `amount ÷ FirsThing's
+share %` from the contract's term version — with `societyNet = saved − fee`, so the society reads
+three figures: saved, paid to FirsThing, kept. `CircuitFeeLine.savedValue` on an agreed line now
+carries that figure; the baseline-arithmetic form survives only for lump-sum deals, which have no
+share to divide by. The snapshot records `agreedMethod`, `firsthingSharePct` and `societyNet`.

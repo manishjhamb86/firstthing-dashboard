@@ -4,21 +4,32 @@
  * The bill is the benchmark: Zoho raised it from the light count and the
  * per-light rate the agreement fixed, and nothing in this module recomputes
  * it — `amount` on every derived line is the invoice line's own figure,
- * carried through untouched. What this module derives is what the society
- * SAVED that month, which the invoice does not carry:
+ * carried through untouched. What this module derives is the money story the
+ * society is owed (the user's own framing, 2026-09-15: "saved this much,
+ * paid to FirsThing this much, and kept this much"):
  *
- *   baseline consumption of the billed lights
- *     = (baseline kWh/day ÷ metered lights) × lights billed × billed days
- *   savings %  = the circuit's MEASURED savings for the month, where its
- *                readings cover CON-12's floor — else the AGREED benchmark
- *   saved kWh  = baseline consumption × savings %
- *   saved ₹    = saved kWh × the contract's unit electricity rate
+ *   AGREED basis — the fee IS FirsThing's share of the saving under the
+ *   agreement (CON-11), so the saving is what the fee is a share OF:
+ *     saved ₹   = fee ÷ FirsThing's share %      (₹14,050 ÷ 36% = ₹39,027.78)
+ *     kept ₹    = saved ₹ − fee                   (₹24,977.78)
+ *     saved kWh = saved ₹ ÷ the contract's unit electricity rate
+ *   Every figure traces to the invoice line and the contract's term version
+ *   (INV-02), and a society can check it against its own bill. A lump-sum
+ *   deal has no share to divide by, so it falls back to the baseline
+ *   arithmetic: (baseline ÷ metered) × billed × days × benchmark %.
  *
- * Measured is preferred whenever it exists; agreed is the fallback, and every
- * line says which it was (`basis`) so a projected figure can never be shown
- * as a measured one (INV-02). A measured line below the contract's band is
- * reported (`belowBand`) and nothing more — no deviation review, no
- * adjustment: the month was billed on the benchmark and settled (CON-47 b).
+ *   MEASURED basis — where the circuit's readings for the month cover
+ *   CON-12's floor AND read as a plausible saving (at or below CON-45's 80%
+ *   suspect bound — a dead meter reads as a 97% saving, and 29 zero days in
+ *   a real July export is exactly what that bound exists for):
+ *     saved kWh = (baseline ÷ metered) × billed × days × measured %
+ *     saved ₹   = saved kWh × rate;  kept ₹ = saved ₹ − fee
+ *
+ * Measured is preferred whenever it is credible; agreed is the fallback, and
+ * every line says which it was (`basis`) and why it fell back, so a projected
+ * figure can never be shown as a measured one (INV-02). A measured line below
+ * the contract's band is reported (`belowBand`) and nothing more — no
+ * deviation review, no adjustment: the month was billed and settled (CON-47).
  *
  * Pure, and the only writer of these figures: the SCR-094 preview and the
  * submit both call it, so preview and record cannot disagree, and there is
@@ -29,6 +40,7 @@
 import { prorateFinalMonth, prorateFirstMonth, type Proration } from "./billing-start";
 import { measuredSavingsPct } from "./monthly-calculation";
 import { COVERAGE_FLOOR_DAYS } from "./reading-coverage";
+import { SAVINGS_SUSPECT_ABOVE } from "./circuit-load";
 import { daysInPeriod } from "./reading-normalize";
 
 export type SavingsBasis = "measured" | "agreed";
@@ -62,6 +74,8 @@ export type InvoiceMonthPart = {
   /** The term version in force — recorded on the month for provenance; not used by the arithmetic. */
   termVersionId?: string;
   unitElectricityRate: number;
+  /** The SOCIETY's share of the saving; FirsThing's fee is (100 − this). Null on a lump-sum deal. */
+  societyRevenueSharePct: number | null;
   /** ±5 / ±10 — informational here (`belowBand`), never a billing consequence. */
   tolerancePct: number | null;
   circuits: InvoiceMonthCircuit[];
@@ -99,8 +113,12 @@ export type DerivedLine = {
   extrapolatedConsumptionKwh: number;
   savedKwh: number;
   savedValue: number;
-  /** The invoice line's own amount, untouched. */
+  /** The invoice line's own amount, untouched — what the society paid FirsThing. */
   amount: number;
+  /** FirsThing's share of the saving under the agreement (100 − society share); null on a lump sum. */
+  firsthingSharePct: number | null;
+  /** What the society kept: saved ₹ − fee. */
+  societyNet: number;
   /** Days of readings behind a measured line; 0 on an agreed one. */
   coverageDays: number;
   /** Measured only: short of the benchmark by more than the tolerance. Informational. */
@@ -111,6 +129,8 @@ export type DerivedLine = {
     rawFileIds: string[];
     /** Why the basis fell back, when it did. */
     fallbackReason: string | null;
+    /** How the agreed-basis saving was arrived at. */
+    agreedMethod: "fee_over_share" | "baseline_arithmetic" | null;
   };
 };
 
@@ -128,6 +148,8 @@ export type DerivedMonth = {
     extrapolatedConsumptionKwh: number;
     /** Σ of the service lines' own amounts — the fee the society was billed, pre-tax. */
     amount: number;
+    /** Σ saved − Σ fee: what the society kept. */
+    societyNet: number;
   };
 };
 
@@ -177,34 +199,60 @@ export function deriveInvoiceMonth(input: {
     const billedDays = proration ? proration.proratedDays : daysInMonth;
 
     const readings = input.readingsByCircuit[circuit.circuitId];
-    const hasMeasured = !!readings && readings.coverageDays >= floor && readings.coverageDays > 0;
     const benchmark = circuit.benchmarkSavingsPct;
+    const firsthingShare = part.societyRevenueSharePct === null ? null : 100 - part.societyRevenueSharePct;
 
-    let basis: SavingsBasis;
-    let savingsPct: number;
+    // Is the measured figure credible? Enough days, and a saving a working
+    // meter could produce.
+    let measuredPct: number | null = null;
     let fallbackReason: string | null = null;
-    if (hasMeasured) {
-      basis = "measured";
-      savingsPct = measuredSavingsPct({
+    if (readings && readings.coverageDays > 0 && readings.coverageDays >= floor) {
+      const pct = measuredSavingsPct({
         meteredKwh: readings.meteredKwh,
         coverageDays: readings.coverageDays,
         baselineKwhPerDay: circuit.baselineKwhPerDay,
       });
-    } else {
-      if (benchmark === null) {
-        notDerivable.push({ lineNo: line.lineNo, circuitId: line.circuitId, reason: "Not derivable — no readings for the month and no agreed benchmark." });
-        continue;
+      if (pct > SAVINGS_SUSPECT_ABOVE) {
+        fallbackReason = `Readings show a ${pct.toFixed(1)}% saving — above the ${SAVINGS_SUSPECT_ABOVE}% bound a working meter can produce. Check the meter; the agreed figure is used.`;
+      } else {
+        measuredPct = pct;
       }
-      basis = "agreed";
-      savingsPct = benchmark;
-      fallbackReason = readings && readings.coverageDays > 0
-        ? `Readings cover ${readings.coverageDays} of ${daysInMonth} days — below the ${floor}-day floor.`
-        : "No readings for this month.";
+    } else if (readings && readings.coverageDays > 0) {
+      fallbackReason = `Readings cover ${readings.coverageDays} of ${daysInMonth} days — below the ${floor}-day floor.`;
+    } else {
+      fallbackReason = "No readings for this month.";
     }
 
     const baselineConsumptionKwh = (circuit.baselineKwhPerDay / circuit.meteredLightCount) * line.lightsBilled * billedDays;
-    const savedKwh = baselineConsumptionKwh * (savingsPct / 100);
-    const savedValue = savedKwh * part.unitElectricityRate;
+
+    let basis: SavingsBasis;
+    let savingsPct: number;
+    let savedKwh: number;
+    let savedValue: number;
+    let agreedMethod: "fee_over_share" | "baseline_arithmetic" | null = null;
+    if (measuredPct !== null) {
+      basis = "measured";
+      savingsPct = measuredPct;
+      savedKwh = baselineConsumptionKwh * (savingsPct / 100);
+      savedValue = savedKwh * part.unitElectricityRate;
+    } else if (firsthingShare !== null && firsthingShare > 0 && line.amount > 0) {
+      // The agreement's own arithmetic: the fee is FirsThing's share of the saving.
+      basis = "agreed";
+      agreedMethod = "fee_over_share";
+      savingsPct = benchmark ?? 0;
+      savedValue = line.amount / (firsthingShare / 100);
+      savedKwh = part.unitElectricityRate > 0 ? savedValue / part.unitElectricityRate : 0;
+    } else {
+      if (benchmark === null) {
+        notDerivable.push({ lineNo: line.lineNo, circuitId: line.circuitId, reason: "Not derivable — no credible readings, no revenue share to divide by, and no agreed benchmark." });
+        continue;
+      }
+      basis = "agreed";
+      agreedMethod = "baseline_arithmetic";
+      savingsPct = benchmark;
+      savedKwh = baselineConsumptionKwh * (savingsPct / 100);
+      savedValue = savedKwh * part.unitElectricityRate;
+    }
 
     const belowBand =
       basis === "measured" && benchmark !== null && part.tolerancePct !== null
@@ -230,13 +278,16 @@ export function deriveInvoiceMonth(input: {
       savedKwh,
       savedValue,
       amount: line.amount,
+      firsthingSharePct: firsthingShare,
+      societyNet: savedValue - line.amount,
       coverageDays: basis === "measured" ? readings!.coverageDays : 0,
       belowBand,
       provenance: {
         benchmarkSource: circuit.benchmarkSource,
         readingIds: basis === "measured" ? readings!.readingIds : [],
         rawFileIds: basis === "measured" ? readings!.rawFileIds : [],
-        fallbackReason,
+        fallbackReason: basis === "measured" ? null : fallbackReason,
+        agreedMethod,
       },
     });
   }
@@ -251,6 +302,7 @@ export function deriveInvoiceMonth(input: {
       savedValue: lines.reduce((s, l) => s + l.savedValue, 0),
       extrapolatedConsumptionKwh: lines.reduce((s, l) => s + l.extrapolatedConsumptionKwh, 0),
       amount: lines.reduce((s, l) => s + l.amount, 0),
+      societyNet: lines.reduce((s, l) => s + l.societyNet, 0),
     },
   };
 }

@@ -8246,7 +8246,7 @@ features:
         type: happy
         given: "a submitted month whose circuit has no readings for it"
         when: "stats derive"
-        then: "saved kWh, saved ₹ and savings % are produced on the `agreed` basis from the invoice's light count, the in-force baseline, the benchmark % and the contract rate, each with provenance — Aditya Mega City July 2026: 605 × (47.4 ÷ 91) × 31 × 64% × ₹7, asserted to the paisa with party and basis named"
+        then: "the agreed saving is what the fee is a share of under the agreement — saved ₹ = amount ÷ FirsThing's share %, kept = saved − fee, kWh = saved ₹ ÷ unit rate — shown as saved / paid to FirsThing / kept; Aditya Mega City July 2026: ₹14,050 ÷ 36% = ₹39,027.78 saved, ₹24,977.78 kept, asserted to the paisa (rewritten 2026-09-15, user's rule; lump-sum deals fall back to baseline × benchmark arithmetic)"
         tests: [TC-110-1]
       - id: FEAT-110-AC-2
         type: happy
@@ -8256,9 +8256,9 @@ features:
         tests: [TC-110-2]
       - id: FEAT-110-AC-3
         type: failure
-        given: "readings exist but cover fewer days than the floor"
+        given: "readings exist but cover fewer days than the floor, or read as a saving above the 80% suspect bound (a dead meter)"
         when: "stats derive"
-        then: "the basis is `agreed` and the coverage (e.g. 9 of 31 days) is stated on the record"
+        then: "the basis is `agreed` and the reason — the coverage, or '96.8% — check the meter' — is stated on the record"
         tests: [TC-110-3]
       - id: FEAT-110-AC-4
         type: permission

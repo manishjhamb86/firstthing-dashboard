@@ -107,6 +107,8 @@ export async function loadInvoiceMonthContext(input: {
       contractId: contract.id,
       termVersionId: terms.id,
       unitElectricityRate: terms.unitElectricityRate,
+      // The society's share; FirsThing's fee is the rest. Null on a lump-sum deal.
+      societyRevenueSharePct: terms.pricingModel === "lump_sum" ? null : (terms.revenueSharePct ?? null),
       tolerancePct: terms.tolerancePct ?? null,
       firstMonthSignedAt: signedAt,
       finalMonthEndsOn: contract.termEnd < to ? contract.termEnd : null,

@@ -8,10 +8,12 @@ import {
 
 // Aditya Mega City, July 2026 — the real FT/2026-27/055: 605 lights at
 // ₹23.23, discount 4.15, line ₹14,050.00. The circuit's own rows: baseline
-// 47.4 kWh/day over 91 metered lights, benchmark 64% (override), ₹7/kWh.
+// 47.4 kWh/day over 91 metered lights, benchmark 64% (override), ₹7/kWh,
+// and the agreement's split: 64% society / 36% FirsThing.
 const AMC: InvoiceMonthPart = {
   contractId: "ct-amc",
   unitElectricityRate: 7,
+  societyRevenueSharePct: 64,
   tolerancePct: 10,
   circuits: [
     {
@@ -27,36 +29,35 @@ const AMC: InvoiceMonthPart = {
 };
 const AMC_LINE = { lineNo: 1, circuitId: "ckt-amc-basement", lightsBilled: 605, amount: 14_050 };
 
-describe("TC-110-1 — agreed-basis derivation, party and basis named", () => {
+describe("TC-110-1 — agreed-basis derivation: the fee is FirsThing's share of the saving", () => {
   const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: {} });
   const line = month.lines[0];
 
   it("derives on the agreed basis when the month has no readings", () => {
     expect(month.notDerivable).toEqual([]);
     expect(line.basis).toBe("agreed");
+    expect(line.provenance.agreedMethod).toBe("fee_over_share");
     expect(line.savingsPct).toBe(64);
     expect(line.coverageDays).toBe(0);
     expect(line.provenance.fallbackReason).toBe("No readings for this month.");
     expect(line.provenance.benchmarkSource).toBe("override");
   });
 
-  it("computes the worked example to ten places, unrounded", () => {
-    // Computed here from the formula, not copied from the module.
-    const baseline = (47.4 / 91) * 605 * 31;
-    const savedKwh = baseline * 0.64;
-    const savedValue = savedKwh * 7;
-    expect(line.billedDays).toBe(31);
-    expect(line.baselineConsumptionKwh).toBeCloseTo(baseline, 10);
-    expect(line.savedKwh).toBeCloseTo(savedKwh, 10);
-    expect(line.savedValue).toBeCloseTo(savedValue, 10);
-    expect(line.extrapolatedConsumptionKwh).toBeCloseTo(baseline - savedKwh, 10);
-    // Sanity on the magnitude: ~9,769 kWh baseline, ~6,252 saved, ~₹43,766.
-    expect(Math.round(line.savedValue)).toBe(43_766);
+  it("saved ₹ is the fee divided by FirsThing's 36% — the user's own rule, to ten places", () => {
+    // Computed here from the rule, not copied from the module.
+    const saved = 14_050 / 0.36; // 39,027.777…
+    expect(line.firsthingSharePct).toBe(36);
+    expect(line.savedValue).toBeCloseTo(saved, 10);
+    expect(line.savedKwh).toBeCloseTo(saved / 7, 10);
+    expect(Math.round(line.savedValue * 100) / 100).toBe(39_027.78);
   });
 
-  it("carries the invoice line's amount through untouched — the fee is never recomputed", () => {
+  it("tells the society the three figures: saved, paid to FirsThing, kept", () => {
     expect(line.amount).toBe(14_050);
+    expect(line.societyNet).toBeCloseTo(14_050 / 0.36 - 14_050, 10);
+    expect(Math.round(line.societyNet * 100) / 100).toBe(24_977.78);
     expect(month.totals.amount).toBe(14_050);
+    expect(month.totals.societyNet).toBeCloseTo(line.societyNet, 10);
     // The saving and the fee are different figures with different owners —
     // the inversion guard this project has needed twice.
     expect(line.savedValue).not.toBeCloseTo(line.amount, 0);
@@ -64,6 +65,16 @@ describe("TC-110-1 — agreed-basis derivation, party and basis named", () => {
 
   it("records no count disagreement when the invoice matches the circuit", () => {
     expect(line.countDisagreement).toBeNull();
+  });
+
+  it("falls back to baseline arithmetic on a lump-sum deal, which has no share to divide by", () => {
+    const lump = deriveInvoiceMonth({ period: "2026-07", parts: [{ ...AMC, societyRevenueSharePct: null }], lines: [AMC_LINE], readingsByCircuit: {} });
+    const l = lump.lines[0];
+    expect(l.provenance.agreedMethod).toBe("baseline_arithmetic");
+    const baseline = (47.4 / 91) * 605 * 31;
+    expect(l.savedKwh).toBeCloseTo(baseline * 0.64, 10);
+    expect(l.savedValue).toBeCloseTo(baseline * 0.64 * 7, 10);
+    expect(l.firsthingSharePct).toBeNull();
   });
 });
 
@@ -123,6 +134,21 @@ describe("measured basis (FEAT-110-AC-2 / AC-3 / AC-7)", () => {
     expect(line.amount).toBe(14_050); // the bill does not move
   });
 
+  it("a dead meter is not a 97% saving — above the suspect bound it falls back to agreed and says why", () => {
+    // 29 zero days in a real July export: 47 kWh over 31 days against 47.4/day.
+    const month = deriveInvoiceMonth({
+      period: "2026-07",
+      parts: [AMC],
+      lines: [AMC_LINE],
+      readingsByCircuit: { "ckt-amc-basement": { ...readings, coverageDays: 31, meteredKwh: 47 } },
+    });
+    const line = month.lines[0];
+    expect(line.basis).toBe("agreed");
+    expect(line.provenance.fallbackReason).toMatch(/96\.8% saving — above the 80% bound/);
+    expect(line.provenance.fallbackReason).toMatch(/Check the meter/);
+    expect(Math.round(line.savedValue * 100) / 100).toBe(39_027.78);
+  });
+
   it("belowBand is null on an agreed line — there is nothing measured to be below", () => {
     const month = deriveInvoiceMonth({ period: "2026-07", parts: [AMC], lines: [AMC_LINE], readingsByCircuit: {} });
     expect(month.lines[0].belowBand).toBeNull();
@@ -134,6 +160,7 @@ describe("multi-line months and the count disagreement (FEAT-110-AC-8, FEAT-109-
   const basement: InvoiceMonthPart = {
     contractId: "ct-auc-basement",
     unitElectricityRate: 7,
+    societyRevenueSharePct: 54,
     tolerancePct: 5,
     circuits: [
       { circuitId: "ckt-b", lightType: "basement", meteredLightCount: 122, representedLightCount: 736, baselineKwhPerDay: 59.92, benchmarkSavingsPct: 66.72, benchmarkSource: "demo" },
@@ -142,6 +169,7 @@ describe("multi-line months and the count disagreement (FEAT-110-AC-8, FEAT-109-
   const lobby: InvoiceMonthPart = {
     contractId: "ct-auc-lobby",
     unitElectricityRate: 7,
+    societyRevenueSharePct: 54,
     tolerancePct: 5,
     circuits: [
       { circuitId: "ckt-l", lightType: "lift-lobby", meteredLightCount: 16, representedLightCount: 1_153, baselineKwhPerDay: 1.81, benchmarkSavingsPct: 78, benchmarkSource: "demo" },
@@ -158,9 +186,11 @@ describe("multi-line months and the count disagreement (FEAT-110-AC-8, FEAT-109-
     const [b, l] = month.lines;
     expect(b.contractId).toBe("ct-auc-basement");
     expect(l.contractId).toBe("ct-auc-lobby");
-    expect(b.savedKwh).toBeCloseTo((59.92 / 122) * 736 * 31 * 0.6672, 10);
-    expect(l.savedKwh).toBeCloseTo((1.81 / 16) * 1_155 * 31 * 0.78, 10);
-    expect(month.totals.savedKwh).toBeCloseTo(b.savedKwh + l.savedKwh, 10);
+    // 54% society / 46% FirsThing: each line's saving is its own fee ÷ 46%.
+    expect(b.savedValue).toBeCloseTo(23_299 / 0.46, 10);
+    expect(l.savedValue).toBeCloseTo(14_071.36 / 0.46, 10);
+    expect(month.totals.savedValue).toBeCloseTo(b.savedValue + l.savedValue, 10);
+    expect(month.totals.societyNet).toBeCloseTo(month.totals.savedValue - month.totals.amount, 10);
     expect(month.totals.amount).toBeCloseTo(23_299 + 14_071.36, 10);
   });
 
@@ -185,6 +215,8 @@ describe("first-month proration (FEAT-110-AC-6, CON-22)", () => {
     expect(line.billedDays).toBe(16);
     expect(line.proration?.proratedDays).toBe(16);
     expect(line.baselineConsumptionKwh).toBeCloseTo((47.4 / 91) * 605 * 16, 10);
+    // On the agreed basis the saving follows the fee actually charged for those 16 days.
+    expect(line.savedValue).toBeCloseTo(7_493.33 / 0.36, 10);
   });
 });
 

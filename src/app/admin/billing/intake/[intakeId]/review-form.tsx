@@ -429,9 +429,10 @@ export function ReviewForm({
                   <tr>
                     <th>Circuit</th>
                     <th className="text-right">Lights billed</th>
-                    <th className="text-right">Saved kWh</th>
                     <th className="text-right">Saved ₹</th>
-                    <th className="text-right">Savings %</th>
+                    <th className="text-right">Paid to FirsThing</th>
+                    <th className="text-right">Society keeps</th>
+                    <th className="text-right">Saved kWh</th>
                     <th>Basis</th>
                   </tr>
                 </thead>
@@ -441,13 +442,21 @@ export function ReviewForm({
                       <td>
                         {circuitOptions.find((c) => c.circuitId === d.circuitId)?.label ?? d.lightType}
                         <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                          {d.basis === "agreed" ? `agreed ${num(d.benchmarkSavingsPct, 2)}%` : `measured from ${d.coverageDays} of ${d.daysInMonth} days`} · baseline {num(d.baselineKwhPerDay, 2)} kWh/day · {d.billedDays} days
+                          {d.basis === "measured"
+                            ? `measured ${num(d.savingsPct, 2)}% from ${d.coverageDays} of ${d.daysInMonth} days · baseline ${num(d.baselineKwhPerDay, 2)} kWh/day`
+                            : d.provenance.agreedMethod === "fee_over_share"
+                              ? `fee ÷ FirsThing's ${num(d.firsthingSharePct, 0)}% share · agreed benchmark ${num(d.benchmarkSavingsPct, 2)}% · ₹${num(d.savedKwh > 0 ? d.savedValue / d.savedKwh : 0, 2)}/kWh`
+                              : `agreed ${num(d.benchmarkSavingsPct, 2)}% · baseline ${num(d.baselineKwhPerDay, 2)} kWh/day · ${d.billedDays} days (lump sum)`}
                         </span>
+                        {d.provenance.fallbackReason && (
+                          <span className="block text-[11.5px]" style={{ color: "var(--warn-fg)" }}>{d.provenance.fallbackReason}</span>
+                        )}
                       </td>
                       <td className="num text-right">{num(d.lightsBilled)}</td>
+                      <td className="num text-right font-semibold">{inr(d.savedValue, 0)}</td>
+                      <td className="num text-right">{inr(d.amount, 0)}</td>
+                      <td className="num text-right font-semibold" style={{ color: "var(--ok-fg)" }}>{inr(d.societyNet, 0)}</td>
                       <td className="num text-right">{num(d.savedKwh, 1)}</td>
-                      <td className="num text-right">{inr(d.savedValue, 0)}</td>
-                      <td className="num text-right">{num(d.savingsPct, 2)}</td>
                       <td>
                         <StatusChip tone={d.basis === "measured" ? "ok" : "info"}>{d.basis === "measured" ? "Measured" : "Agreed"}</StatusChip>
                         {d.belowBand && <span className="block text-[11.5px]" style={{ color: "var(--warn-fg)" }}>below the band — stats only, no billing consequence</span>}
@@ -456,17 +465,18 @@ export function ReviewForm({
                   ))}
                   {derived.notDerivable.map((n) => (
                     <tr key={`nd-${n.lineNo}`}>
-                      <td colSpan={6} className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>Line {n.lineNo}: {n.reason}</td>
+                      <td colSpan={7} className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>Line {n.lineNo}: {n.reason}</td>
                     </tr>
                   ))}
                   <tr style={{ background: "var(--surface-sunken)" }}>
                     <td className="font-semibold">Society total</td>
                     <td />
-                    <td className="num text-right font-semibold">{num(derived.totals.savedKwh, 1)}</td>
                     <td className="num text-right font-semibold">{inr(derived.totals.savedValue, 0)}</td>
-                    <td />
+                    <td className="num text-right font-semibold">{inr(derived.totals.amount, 0)}</td>
+                    <td className="num text-right font-semibold" style={{ color: "var(--ok-fg)" }}>{inr(derived.totals.societyNet, 0)}</td>
+                    <td className="num text-right font-semibold">{num(derived.totals.savedKwh, 1)}</td>
                     <td className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                      {derived.lines.every((d) => d.basis === "agreed") ? "No readings this month — figures at the agreed benchmark. They re-derive from readings automatically once uploaded." : "Fee = the invoice's own lines, never recomputed."}
+                      {derived.lines.every((d) => d.basis === "agreed") ? "Saved = what the fee is a share of under the agreement. Re-derives from readings once credible readings exist." : "Fee = the invoice's own lines, never recomputed."}
                     </td>
                   </tr>
                 </tbody>

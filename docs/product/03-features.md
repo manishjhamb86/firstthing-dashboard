@@ -1,6 +1,6 @@
 # Feature Definition
 **Product:** FirsThing Platform · **Phase:** 3 — Feature Definition · **Status:** Approved
-**Last updated:** 2026-08-12 (gate review: 12 open items resolved; FEAT-032/FEAT-052 rewritten after CON-24/CON-25 were corrected. **Post-gate audit sweep, same day:** CON-11's per-light-type metering and per-circuit tolerance bands applied across CAP-01/02/04/05; CAP-22 notifications added (FEAT-090..093); CAP-02's no-demo variant given its own brief (FEAT-094). **Phase 4 feedback, 2026-08-12:** the flow mapping in `04-flows-system-map.md` exposed 9 missing features, added here as FEAT-095..103) · **Mode:** Ecosystem
+**Last updated:** 2026-09-15 (Feature-mode pass, CON-47: FEAT-109..111 added — invoice-first monthly billing and published-month portal stats; scope notes on FEAT-048/053/054/101). Previously 2026-08-12 (gate review: 12 open items resolved; FEAT-032/FEAT-052 rewritten after CON-24/CON-25 were corrected. **Post-gate audit sweep, same day:** CON-11's per-light-type metering and per-circuit tolerance bands applied across CAP-01/02/04/05; CAP-22 notifications added (FEAT-090..093); CAP-02's no-demo variant given its own brief (FEAT-094). **Phase 4 feedback, 2026-08-12:** the flow mapping in `04-flows-system-map.md` exposed 9 missing features, added here as FEAT-095..103) · **Mode:** Ecosystem
 
 ---
 
@@ -160,6 +160,9 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 | FEAT-106 | Ingest health monitoring & alerting | CAP-03 | PER-01 | GOAL-01, INV-09 | SUR-01 | M | proposed |
 | FEAT-107 | Upload reconciliation & overwrite control | CAP-03 | PER-01 | JTBD-01, INV-02 | SUR-01 | M | proposed |
 | FEAT-108 | Society portal accounts & authority | CAP-13 | PER-05, PER-01 | GOAL-02, INV-05 | SUR-01 | M | proposed |
+| FEAT-109 | Invoice-first month intake (upload, extraction, review, submit) | CAP-04 | PER-01 | JTBD-01, GOAL-01, GOAL-06 | SUR-01 | L | proposed |
+| FEAT-110 | Invoice-month stats: measured first, agreed fallback, self-revising | CAP-04 | PER-01, PER-05 | GOAL-01, GOAL-06, INV-02 | SUR-01 | M | proposed |
+| FEAT-111 | Published months on the society portal | CAP-14 | PER-05, PER-06 | JTBD-06, GOAL-02, GOAL-06 | SUR-01 | M | proposed |
 
 ## 3. Feature briefs
 
@@ -1462,6 +1465,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Complete version:** Adds re-run/versioning of calculations themselves with visible diffs when inputs are corrected.
 - **Open questions / assumptions:** none blocking.
 - **Risks:** Highest-consequence computation in the product alongside FEAT-014's benchmark. Both belong at the top of Phase 9's test plan.
+- **Scope note (2026-09-15, CON-47):** this run no longer *creates* the month of record. For now the month is created by FEAT-109 from the Zoho invoice; where readings for that month exist, this run's output is what FEAT-110 uses to give the month a *measured* stats basis. Generating the bill from the dashboard — this feature as originally written — is **phase two**, explicitly. Nothing here is deleted; its trigger changes.
 
 ### FEAT-049 — Tolerance-band compliance check
 - **Capability:** CAP-04 · **Persona:** PER-01 · **Serves:** GOAL-01, JTBD-02
@@ -1593,6 +1597,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Complete version:** Adds the Zoho API integration as an optional accelerator.
 - **Open questions / assumptions:** Zoho integration feasibility is explicitly a Phase 7/8 architecture question (CON-33), not decided here.
 - **Risks:** Building toward the integration first would be building on an undecided dependency.
+- **Scope note (2026-09-15, CON-47):** the manual path (b) is now the **primary** monthly path, not the fallback, and the invoice no longer requires a completed `MonthlyCalculation` to attach to — it *is* what creates the month (FEAT-109). AC-1's "matched to that society+month's calculation" and AC-3's amount reconciliation therefore move to phase two with FEAT-048's bill generation; in this phase the only reconciliation is the invoice's own internal arithmetic (FEAT-109-AC-3). AC-2 (invoice pending), AC-4 (permission) and AC-5 stand unchanged. Path (a), the Zoho API, is untouched and still aspirational.
 
 ### FEAT-054 — Accountant review & release gate
 - **Capability:** CAP-04 · **Persona:** PER-08 (Accountant — a distinct role with its own login, confirmed at the Phase 3 gate 2026-08-12) · **Serves:** GOAL-01, GOAL-06
@@ -1619,6 +1624,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Complete version:** Batch review/release for clean months, with only flagged months requiring individual attention.
 - **Open questions / assumptions:** Resolved at the Phase 3 gate — the accountant is a distinct role (PER-08), not a permission on PER-01. PER-08's own working preferences remain un-researched (RG-08).
 - **Risks:** At 200 societies, a one-at-a-time release flow becomes its own month-end bottleneck — the exact toil GOAL-01 set out to remove. Sharper now that the gate belongs to a single dedicated person rather than being spread across ops.
+- **Scope note (2026-09-15, CON-47):** the queue now receives months **submitted by FEAT-109** (invoice-first) rather than finalized calculations. Each row shows the invoice's lines beside the derived stats and their basis (FEAT-110); AC-3's blocking flags become: an unacknowledged internal-arithmetic mismatch, an unmapped service line, or an unconfirmed month. The **complete version's batch release for clean months is pulled into this build** — the backfill is ~19 societies × their months, and one-at-a-time release is exactly the bottleneck this feature's own risk line names. Paid/unpaid state travels from upload (FEAT-109-AC-9), so release never starts CON-13's clock on a settled bill.
 
 ### FEAT-055 — Deviation chart & initial findings
 - **Capability:** CAP-05 · **Persona:** PER-01 · **Serves:** JTBD-02
@@ -2841,6 +2847,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Complete version:** Adds per-line comparison and the accepted-reason audit path.
 - **Open questions / assumptions:** the tolerance value is undecided; rupee-level equality may be achievable given both figures derive from the same inputs.
 - **Risks:** This is the only automated check between the platform's computed reality and the document the customer actually receives — its absence was the most consequential single gap the flows exposed.
+- **Scope note (2026-09-15, CON-47):** an invoice-to-*calculation* comparison presupposes a platform-computed month, which is phase two. Until then FEAT-109-AC-3 performs the check that *is* available — each line's Qty × Rate − Discount against its Amount, the lines against the sub-total, tax and total — which catches the transcription error this feature exists for at the one place it can occur today. Unchanged otherwise; R1.
 
 ### FEAT-102 — Billing dispute record & arrears visibility
 - **Capability:** CAP-13 · **Persona:** PER-05, PER-01 · **Serves:** CON-41
@@ -3278,6 +3285,97 @@ Carried from `00-intake.md` §2 and confirmed or added during this phase:
 - **The tax invoice is not generated in this product** (CON-33). Zoho generates it; this product hands off billing data and takes back the finished document. The savings report *is* native (FEAT-059).
 - **No in-portal contractual acceptance** (FEAT-028 complete version). Offers are accepted out-of-band and recorded; whether an in-app acceptance would be legally sufficient is unresolved and deliberately not assumed.
 - **No CSV meter-reading benchmark-variance pipeline beyond what CAP-03/CAP-05 specify.** The richer review workflow described in earlier project notes is superseded by the CON-30/CON-31 design captured here.
+
+### FEAT-109 — Invoice-first month intake (upload, extraction, review, submit)
+- **Capability:** CAP-04 · **Persona:** PER-01 · **Serves:** JTBD-01, GOAL-01, GOAL-06
+- **Surface(s):** SUR-01
+- **Problem:** The fee is fixed by the agreement and authored in Zoho (CON-33, CON-47), and for most societies no readings exist — so the readings-driven month (FEAT-048) can never be created, no invoice can attach, nothing reaches the portal, and 19 societies' months of real billing sit in a folder of PDFs. Found 2026-09-15 with 14 active contracts, 0 calculations and 0 invoices in the system.
+- **Description:** PER-01 drops **one or many** Zoho invoice PDFs. For each, the AI reads the invoice's own printed facts — number, invoice date, due date, *Invoice For The Month*, Bill To, every line (description, HSN, Qty, Rate, Discount, tax, Amount), sub-total, tax, total — and returns them **with the verbatim words each was read from and a clarification wherever the document does not settle something**, the same shape as the demo-report extraction (`extractDocument`). Each line is classified **service** (an energy-saving fee line — HSN 998599, a light count at a per-light rate) or **other** (hardware such as a smart meter). Each service line is **proposed** against one of the society's circuits by Qty ≈ represented light count, description as tiebreaker (ASSUM-31). The review row shows society, month, paid status, every line with its proposed circuit, the internal arithmetic check, and any count disagreement — the operator confirms society and month explicitly (INV-04), fixes or accepts each proposal, answers paid/unpaid, and submits. Submit creates the society-month of record in `submitted` for the accountant (FEAT-054).
+- **Behavioral rules:** Society and month are **never bulk-accepted from the AI** — each row is confirmed. A proposal that disagrees with what the operator selected is stated, not overwritten. Non-service lines count toward the total the society pays and never toward a savings figure. The invoice's light count governs the month's stats (CON-47 d); a disagreement with the circuit's represented count is stated with both figures, and the operator may additionally apply a **forward-only** update to the circuit record — logged with this invoice as the reason, effective from this month, never restating earlier months, and never an INV-07 rescale. A society-month that already holds a live invoice is **refused**, naming it; correction is the existing void-and-reattach. Paid status is captured here so CON-13's clock (FEAT-087) never fires on a settled bill. The bytes reach S3 before anything interprets them (CON-30's rule, reused).
+- **Acceptance criteria:**
+  - AC-1 (happy): Given PER-01 drops several Zoho invoice PDFs, when extraction completes, then one review row per invoice shows the proposed society, month, dates, amounts and each line with its proposed circuit and classification, each figure with the words it was read from; confirming a row and submitting creates that society-month in `submitted`, attributed and timestamped, with the PDF stored.
+  - AC-2 (empty/unreadable): Given a PDF from which no line items can be read, the row states that, offers manual entry of the lines against the stored PDF, and never produces a month with no lines.
+  - AC-3 (failure/arithmetic): Given any line where Qty × Rate − Discount ≠ Amount, or the lines do not sum to the sub-total, tax or total, the row is flagged with both figures and cannot be submitted until corrected or acknowledged with a reason.
+  - AC-4 (permission): Given an actor who is not PER-01 (billing ops), upload and submit are refused server-side.
+  - AC-5 (edge/non-service line): Given a line classified `other`, it appears on the row, counts toward the invoice total, and is excluded from every savings figure — visibly.
+  - AC-6 (edge/count disagreement): Given a service line whose Qty differs from its circuit's represented count, both figures are shown; the month's stats use the invoice's count; and the operator may apply the invoice's count to the circuit effective from this month forward, recorded with who, when and the invoice as reason.
+  - AC-7 (edge/duplicate): Given the society-month already holds a live invoice, submission is refused naming it and pointing at void-and-reattach; nothing is written.
+  - AC-8 (INV-04): Given the AI proposes a month, the operator's own selection is what is stored; where the two differ the difference is stated before submit.
+  - AC-9 (paid status): Given the operator marks the invoice paid (with a date), the month is stored `paid` and CON-13's clock never starts; given unpaid, the clock keys off the invoice's due date as FEAT-087 already does.
+  - AC-10 (edge/unmapped line): Given a service line that maps to no circuit of that society (a deal with no circuit on record), submit is blocked with the named gap and a link to create the circuit — a stat is never derived against no circuit.
+- **Permissions:** PER-01 (upload, review, submit). PER-08 sees the result in the release queue (FEAT-054).
+- **Data touched:** Creates the month of record (`MonthlyCalculation` with source `invoice`) and its `BillingInvoice` with **line items** (new — description, HSN, qty, rate, discount, tax, amount, classification, circuit); stores the PDF under `Documents/{Society}/{YYYY-MM}/Invoices/`; optionally writes a circuit represented-count change with provenance.
+- **Triggers:** Manual, PER-01, at month start (going forward) and in bulk for the backfill.
+- **Emits:** `InvoiceMonthSubmitted`, `InvoiceLineUnmapped`, `InvoiceCountDisagreement`.
+- **Consumes:** `Circuit` (represented counts), `Contract` (which deals exist), the AI extraction service.
+- **Depends on:** FEAT-062 (a contract to bill under), FEAT-040 (circuits to map lines to), FEAT-053 (the storage and permission it reuses).
+- **Depended on by:** FEAT-110 (derives the stats on submit), FEAT-054 (publishes), FEAT-087 (the clock), FEAT-111.
+- **Failure modes:** A line mapped to the wrong circuit puts one deal's saving under another — wrong stats, right bill; ASSUM-31 is the guard. Bulk-accepting AI proposals would make the month an inferred fact, which INV-04 forbids for exactly this reason.
+- **Limits & scale:** Backfill ≈ 19 societies × ~12 months ≈ 100–250 PDFs once; then ≤ 200/month. Extraction is one model call per PDF.
+- **Minimum viable version:** Multi-file upload, extraction with clarifications, per-row confirm, arithmetic check, paid status, duplicate refusal.
+- **Complete version:** Adds the forward-only represented-count update from review (AC-6's second half), and manual line entry for unreadable PDFs (AC-2).
+- **Open questions / assumptions:** ASSUM-31 (mapping by Qty). Whether Zoho's PDF ever carries a credit note or a negative line — none seen in the two real invoices read.
+- **Risks:** This becomes the only monthly path for now, so its failure is a month that reaches nobody — the empty state (FEAT-053-AC-2) is what makes that visible.
+
+### FEAT-110 — Invoice-month stats: measured first, agreed fallback, self-revising
+- **Capability:** CAP-04 · **Persona:** PER-01, PER-05 · **Serves:** GOAL-01, GOAL-06, INV-02
+- **Surface(s):** SUR-01
+- **Problem:** The bill is the benchmark (CON-47); what the society actually *saved* that month is a different number, and the goal is to drive it from readings — yet readings exist for two circuits out of seventeen. Without a stated fallback the portal stays empty for most societies; with an unlabelled fallback a projected figure masquerades as a measured one, which is the credibility claim GOAL-06 rests on.
+- **Description:** On submit (FEAT-109), per service line → circuit: **baseline consumption of the billed population** = (circuit's in-force baseline kWh/day ÷ metered light count) × invoice light count × days in the month (prorated on the first month per CON-22 / FEAT-051); **savings %** = the circuit's *measured* savings for that month where readings cover at least CON-12's floor, else the *agreed* benchmark %; **saved kWh** = baseline consumption × savings %; **saved ₹** = saved kWh × the contract's unit electricity rate in force; **fee** = the invoice line's own amount, never recomputed. Every figure carries `basis: measured | agreed`, the provenance behind it (reading ids and raw files, or the benchmark and contract-term version) and a version. **When readings for an already-published month later commit, the stats re-derive automatically as a new version** — basis flips to measured, the previous version is retained and visible to ops, the invoice is untouched, and the portal shows the latest with the date it was updated. This reuses `monthly-calculation.ts`'s existing arithmetic (`contractedFeeForCircuit`, `calculateMonth`'s per-part proration) — one formula, not a second copy.
+- **Behavioral rules:** Measured is preferred whenever it exists; agreed is a fallback, and each fallback says so (INV-02). A measured figure never produces a billing consequence on an invoice-first month — no tolerance check, no deviation review, no adjustment (CON-47 b) — the record states this. No figure accepts user input (FEAT-048-AC-4's structural rule, kept). Re-derivation is versioned, never in place (ADR-005). Coverage below the floor falls back to agreed with the coverage stated, rather than extrapolating from a few days.
+- **Acceptance criteria:**
+  - AC-1 (happy/agreed): Given a submitted month whose circuit has no readings for it, when stats derive, then saved kWh, saved ₹ and savings % are produced on the `agreed` basis from the invoice's light count, the in-force baseline, the benchmark % and the contract rate, each with its provenance — e.g. Aditya Mega City July 2026: 605 lights × (47.4 ÷ 91) kWh/light/day × 31 days × 64% × ₹7, asserted to the paisa in a unit test, party and basis named.
+  - AC-2 (happy/measured): Given the month's circuit readings cover at least the floor, the same figures derive on the `measured` basis from that month's readings, the agreed benchmark is recorded beside them as the reference, and the fee equals the invoice line's amount unchanged.
+  - AC-3 (failure/coverage): Given readings exist but cover fewer days than the floor, the basis is `agreed`, and the coverage (e.g. 9 of 31 days) is stated on the record.
+  - AC-4 (permission/structural): Given any actor, no derived figure can be entered or edited; a correction is a change to an input (invoice line, circuit record, readings) followed by re-derivation, itself recorded.
+  - AC-5 (edge/self-revising): Given a published month on the `agreed` basis, when readings for that month commit later, then a new stats version derives on the `measured` basis, the previous version is retained and readable, the invoice and its amounts are unchanged, and the portal shows the new figures with the date they were re-derived.
+  - AC-6 (edge/first month): Given the month is the contract's billing-start month, the baseline consumption is prorated to the days actually served (CON-22), matching FEAT-051.
+  - AC-7 (edge/out of band): Given the measured % falls below the contract's tolerance band, the stats still show the measured figure and the record states that no billing consequence follows from an invoice-first month.
+  - AC-8 (multi-line): Given an invoice with several service lines, each derives against its own circuit's baseline and benchmark, and the society's month total is the sum of the lines — never a society-wide average.
+  - AC-9 (edge/no baseline — found in FLOW-18 step 7): Given a service line's circuit has no baseline in force, the month still submits, that line's stat reads "not derivable — no commissioned baseline" rather than a number, and the society total states which lines it excludes.
+- **Permissions:** system (derive), PER-01 (view versions), PER-05/06 (see the latest published version — FEAT-111).
+- **Data touched:** Writes per-line stat rows (`CircuitFeeLine` reused: kWh, saved kWh/₹, basis, provenance, version) under the month; a new version on re-derivation with supersession links.
+- **Triggers:** `InvoiceMonthSubmitted` (FEAT-109); a reading commit for a circuit-month that has a published invoice-first month.
+- **Emits:** `MonthStatsDerived`, `MonthStatsRederived`.
+- **Consumes:** `Circuit` baseline (INV-07 replay), benchmark, `ContractTermVersion` rate, `MeterReading`s, CON-12's floor.
+- **Depends on:** FEAT-109, FEAT-041 (in-force baseline), FEAT-062 (rate), FEAT-046 (readings), FEAT-051 (proration).
+- **Depended on by:** FEAT-111, FEAT-054 (shows the basis in the queue), FEAT-069 (portfolio stats).
+- **Failure modes:** A measured basis silently used against a bill would suggest the bill should change — CON-47 b is explicit that it never does. A fallback without a label is a projection presented as a measurement.
+- **Limits & scale:** Trivial arithmetic; re-derivation is one query per reading commit.
+- **Minimum viable version:** Agreed and measured bases with provenance, versioned re-derivation on reading commit.
+- **Complete version:** Adds the ops-facing version diff (what changed between versions and why).
+- **Open questions / assumptions:** ASSUM-30 (society-facing wording of the basis). Whether the floor for "measured" should be CON-12's coverage floor or a lower one for a stats-only figure — assumed CON-12's, since it is already the product's definition of a month with enough data.
+- **Risks:** This is the first place a benchmark-derived figure is shown to a society as its saving; the label is the whole defence.
+
+### FEAT-111 — Published months on the society portal
+- **Capability:** CAP-14 · **Persona:** PER-05, PER-06 · **Serves:** JTBD-06, GOAL-02, GOAL-06
+- **Surface(s):** SUR-01 (portal)
+- **Problem:** The portal's dashboard hero, ₹ tile and Electricity page are driven from readings and released fee lines, so a society with no readings sees "appears once the month is billed" indefinitely — even once its invoices are in the system.
+- **Description:** A **published** invoice-first month (FEAT-054) becomes visible to its society: the invoice with its paid state on Billing (the existing screen); on the dashboard, "This month" becomes the latest published month — saved kWh, saved ₹, savings % — plus a "since we started" tile (total ₹ saved, total kWh saved, months billed); on Electricity, a month-by-month series of the published months. Every figure states its basis in plain words (ASSUM-30), and a month re-derived from readings shows the date it was updated.
+- **Behavioral rules:** Only published months are visible — a submitted month is never shown (CON-33). INV-05 scoping in every query. The basis wording distinguishes measured from agreed and is never omitted (INV-02). Where a month has both an invoice-first record and readings-driven live figures, the published month's stats are what the tiles show; the live reading views remain as they are.
+- **Acceptance criteria:**
+  - AC-1 (happy): Given a society's month is published, when a member opens Billing, then the invoice appears with its amount, due date, paid state and a download of the PDF.
+  - AC-2 (happy/dashboard): Given at least one published month, "This month" shows the latest published month's saved kWh, saved ₹ and savings % with its basis stated, and "since we started" shows the totals and the number of months.
+  - AC-3 (happy/series): Given several published months, Electricity shows them month by month with basis per month.
+  - AC-4 (empty): Given no published month, the dashboard states that and names what will fill it; no zero is shown as a figure.
+  - AC-5 (permission/INV-05): Given a member of one society, no other society's months are readable by any route.
+  - AC-6 (edge/not yet published): Given a submitted, unpublished month, nothing about it is visible on the portal.
+  - AC-7 (edge/re-derived): Given a month's stats were re-derived from readings after publication, the portal shows the latest version, labelled measured, with the date it changed.
+  - AC-8 (failure/degraded, INV-06): Given the invoice's PDF cannot be fetched from storage, the Billing row still shows the amount, dates and paid state and states that the document is unavailable — never a broken download link.
+- **Permissions:** PER-05, PER-06 (view; `billing` grant for the invoice, `electricity` for the stats — the existing grants).
+- **Data touched:** Reads published months and their latest stats version.
+- **Triggers:** `MonthReleased` (FEAT-054), `MonthStatsRederived` (FEAT-110).
+- **Emits:** none.
+- **Consumes:** FEAT-054's release state, FEAT-110's stats.
+- **Depends on:** FEAT-110, FEAT-054, FEAT-108 (grants).
+- **Depended on by:** FEAT-088/089 (the portal dashboards this extends).
+- **Failure modes:** A published figure without its basis. An unpublished month leaking through a dashboard aggregate.
+- **Limits & scale:** Trivial.
+- **Minimum viable version:** Billing list, dashboard latest month + since-start tile, Electricity series, basis wording.
+- **Complete version:** Adds a per-month detail with the invoice's lines and the stat's provenance for a member who wants to see how the number was made.
+- **Open questions / assumptions:** ASSUM-30.
+- **Risks:** Same as FEAT-110's — the label.
+
 
 ## 7. Traceability check
 

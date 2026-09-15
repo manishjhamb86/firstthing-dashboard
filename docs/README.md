@@ -31,7 +31,7 @@ MS-01 in the development plan is a genuine from-scratch scaffold.
 | — | [Brand assets](product/brand/README.md) | Approved | FT monogram logomark, wordmark lockups |
 | 6 | [Prioritization](product/08-prioritization.md) | Approved | RICE scores, dependency graph, MVP definition, 4 release slices, cut list, R0 stories |
 | 7 | [Architecture](engineering/09-architecture.md) | Approved | 12 components, 15 NFRs, 12 cross-surface contracts, ~40-model schema design |
-| — | [ADRs](engineering/adr/) | Accepted (9/10) | 10 architecture decision records, ADR-001 through ADR-010 — ADR-008 (email provider) stays Proposed by design: low-stakes, doesn't block anything, confirm before COMP-10 (R2, notifications) is built |
+| — | [ADRs](engineering/adr/) | Accepted (10/11) | 11 architecture decision records, ADR-001 through ADR-011 — ADR-011 (invoice-first month storage) accepted 2026-09-15; — ADR-008 (email provider) stays Proposed by design: low-stakes, doesn't block anything, confirm before COMP-10 (R2, notifications) is built |
 | 8 | [Development Plan](engineering/11-development-plan.md) | Approved | 8 R0 milestones (MS-01..08), sequence, DoD, risk register |
 | 9 | [Test & Quality Plan](engineering/12-test-plan.md) | Approved | Test levels, full R0 traceability matrix, contract tests, release gates |
 

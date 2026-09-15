@@ -279,6 +279,33 @@ column), proving the milestone's story through the real UI on top of its own bas
 | FEAT-108 | AC-7 | TC-108-7 | integration | yes | MS-02 | planned |
 | FEAT-108 | AC-8 | TC-108-8 | integration | yes | MS-02 | planned |
 | FEAT-108 | AC-9 | TC-108-9 | integration | yes | MS-02 | planned |
+| FEAT-109 | AC-1 | TC-109-1 + E2E | integration | yes | MS-09 | planned |
+| FEAT-109 | AC-2 | TC-109-2 | integration | yes | MS-09 | planned |
+| FEAT-109 | AC-3 | TC-109-3 | unit | yes | MS-09 | planned |
+| FEAT-109 | AC-4 | TC-109-4 | integration | yes | MS-09 | planned |
+| FEAT-109 | AC-5 | TC-109-5 | unit | yes | MS-09 | planned |
+| FEAT-109 | AC-6 | TC-109-6 | integration | yes | MS-09 | planned |
+| FEAT-109 | AC-7 | TC-109-7 | integration | yes | MS-09 | planned |
+| FEAT-109 | AC-8 | TC-109-8 | integration | yes | MS-09 | planned |
+| FEAT-109 | AC-9 | TC-109-9 | integration | yes | MS-09 | planned |
+| FEAT-109 | AC-10 | TC-109-10 | integration | yes | MS-09 | planned |
+| FEAT-110 | AC-1 | TC-110-1 | unit | yes | MS-09 | planned |
+| FEAT-110 | AC-2 | TC-110-2 | unit | yes | MS-09 | planned |
+| FEAT-110 | AC-3 | TC-110-3 | unit | yes | MS-09 | planned |
+| FEAT-110 | AC-4 | TC-110-4 | integration | yes | MS-09 | planned |
+| FEAT-110 | AC-5 | TC-110-5 | integration | yes | MS-09 | planned |
+| FEAT-110 | AC-6 | TC-110-6 | unit | yes | MS-09 | planned |
+| FEAT-110 | AC-7 | TC-110-7 | unit | yes | MS-09 | planned |
+| FEAT-110 | AC-8 | TC-110-8 | unit | yes | MS-09 | planned |
+| FEAT-110 | AC-9 | TC-110-9 | unit | yes | MS-09 | planned |
+| FEAT-111 | AC-1 | TC-111-1 | integration | yes | MS-09 | planned |
+| FEAT-111 | AC-2 | TC-111-2 | integration | yes | MS-09 | planned |
+| FEAT-111 | AC-3 | TC-111-3 | integration | yes | MS-09 | planned |
+| FEAT-111 | AC-4 | TC-111-4 | integration | yes | MS-09 | planned |
+| FEAT-111 | AC-5 | TC-111-5 | integration | yes | MS-09 | planned |
+| FEAT-111 | AC-6 | TC-111-6 | integration | yes | MS-09 | planned |
+| FEAT-111 | AC-7 | TC-111-7 | integration | yes | MS-09 | planned |
+| FEAT-111 | AC-8 | TC-111-8 | integration | yes | MS-09 | planned |
 
 **Uncovered acceptance criteria: 343, all in R1–R3, all by explicit plan, not oversight.** Consistent
 with this whole blueprint's discipline of scoping rigor to the near-term release (Phase 5 specified
@@ -346,6 +373,33 @@ specified at the matrix level (§3) — writing step-by-step detail for all 210 
 - **Steps:** log in as a society portal account, open the portal home
 - **Expected result:** that month's savings report and invoice are both present, every figure in the report links back to its provenance (INV-02), and the overdue clock (FEAT-087) has started
 - **Test data:** the full MS-01–MS-08 walk's end state — this test case is, deliberately, R0's exit condition itself made executable
+
+### TC-109-1-E2E — A Zoho invoice becomes a published month on the portal (MS-09 anchor)
+**Preconditions:** a society with an active contract, one commissioned circuit with a baseline and
+benchmark and no readings; the accountant account holding `release_billing` only; the real
+FT/2026-27/055 PDF (Aditya Mega City, July 2026).
+**Steps:** ops drops the PDF on SCR-093 → the row reaches `Needs review` → SCR-094 shows society
+"ADITYA MEGA CITY" proposed with the Bill To text quoted, month "July-2026" proposed, one service
+line Qty 605 mapped to the Basement circuit, arithmetic ✓ (605 × 23.23 − 4.15 = 14,050.00; +18% =
+16,579.00) → ops marks Paid 06-08-2026 → Submit → the month is `submitted`, `source: invoice`, one
+`CircuitFeeLine` with `basis: agreed` and `invoiceLightCount: 605` → the accountant sees it in
+SCR-092 as routine and publishes → the society's office-bearer opens SCR-260 and sees the invoice
+with "Paid 06-08-2026"; SCR-100 shows the month's saved ₹ with the B basis line.
+**Expected:** every assertion is against the database row, not the screen: `releasedAt` set on the
+month and the invoice; `Payment` row present; `paymentStatusConfirmedAt` set; the `arrears_sweep`
+excludes it; TC-110-1's exact figures on the fee line. **Then** commit 28 days of readings for that
+circuit-month → a new version exists with `basis: measured`, the old one `superseded`, the invoice
+untouched, and SCR-260's row reads "From meter readings · updated <today>".
+
+### TC-110-1 — Agreed-basis derivation, party and basis named
+`deriveInvoiceMonth` on Aditya Mega City July 2026: baseline 47.4 kWh/day ÷ 91 metered × 605
+billed × 31 days = 9,769.4505… kWh baseline consumption; × 64% = 6,252.4483… kWh saved; × ₹7 =
+₹43,767.14 saved (unrounded, asserted to 10 places, rounding at presentation only); fee = the line
+amount ₹14,050.00 exactly, never recomputed; `basis === "agreed"`; and — the inversion guard this
+project has needed twice — `expect(line.savedValue).not.toBeCloseTo(line.amount)`: the saving and
+the fee are different figures with different owners. A second case with 28 days of readings totalling
+3,010 kWh on the metered circuit asserts `basis === "measured"`, savings % = 1 − (3,010 ÷ (47.4 × 28)),
+and the fee still ₹14,050.00.
 
 ### TC-048-1 — Per-circuit extrapolation and fee formula (CON-11)
 - **Verifies:** FEAT-048 AC-1 · **Level:** unit · **Automated:** yes

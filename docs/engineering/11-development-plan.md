@@ -214,6 +214,29 @@ milestone's precondition by construction, not by scheduling choice.
 
 ---
 
+### MS-09 — Invoice-first billing & published-month portal stats (added 2026-09-15, CON-47)
+- **Goal:** every society's month enters as its Zoho invoice and reaches the portal with a stated
+  saving — the backfill of 19 societies' history and the routine month-start upload on one path.
+  Delivers MS-08's third exit criterion (the society sees its invoice in its portal, the clock
+  starts) by a different route; MS-08's own bill generation from readings becomes phase two.
+- **Entry criteria:** MS-07 done (readings exist for the circuits that have meters; the derive
+  function needs the reading store to decide measured vs agreed). ADR-011 approved.
+- **Scope:** FEAT-109, FEAT-110, FEAT-111; the FEAT-053/054 scope notes (batch release, paid state
+  at upload); SCR-093 (revised), SCR-094 (new), SCR-092 (revised), SCR-100/260/102 (revised,
+  phone-first).
+- **Sequence inside the milestone:** (1) schema + `invoice-month.ts` pure derive with TC-110-1's
+  worked example green first; (2) extraction schema + SCR-094 single-invoice path against the two
+  real invoices; (3) SCR-093 batch + SCR-092 batch publish; (4) portal screens; (5) re-derivation
+  hook, driven by committing readings for an already-published month.
+- **Exit criteria:** see `backlog.yaml` MS-09.
+- **Risks:** ASSUM-31 (line→circuit mapping by count) — run the extraction over all 19 current
+  invoices before step (2) and count ambiguous proposals; a re-derived version publishes without
+  a human (ADR-011) — reversible by not inheriting `releasedAt`.
+- **Estimate:** 14 sessions raw (6 + 4 + 4) · **Assumes:** the Zoho PDF's shape is stable across the
+  backfill (two real invoices read; the older ones may differ).
+
+---
+
 ## 4. Sequence
 
 ```mermaid

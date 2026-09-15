@@ -1,6 +1,6 @@
 # Flows & System Map
 **Product:** FirsThing Platform · **Phase:** 4 — Flows & System Map · **Status:** Approved
-**Last updated:** 2026-08-12 · **Mode:** Ecosystem
+**Last updated:** 2026-09-15 (FLOW-18 added — invoice-first month, CON-47; FLOW-10 re-scoped to phase two) · **Mode:** Ecosystem
 
 > **Numbering:** this document is *this blueprint's* Phase 4. It follows the skill's
 > `references/phase-05-flows-system-map.md` template — the on-disk reference filenames are offset
@@ -16,7 +16,7 @@ line), a **monthly loop** that repeats forever once a deal is live, and a **serv
 runs continuously alongside it. Two further flows are cross-cutting — invoked from inside other
 flows rather than standing alone.
 
-**Coverage ledger: 19 of 19 flows detailed** (17 numbered + 2 cross-cutting). Every flow has a
+**Coverage ledger: 20 of 20 flows detailed** (18 numbered + 2 cross-cutting). Every flow has a
 step table with failure branches, first-run/offline/abandonment/handoff/timing/alternate-path
 notes, and — where the shape is non-obvious — a diagram.
 
@@ -51,6 +51,7 @@ notes, and — where the shape is non-obvious — a diagram.
 | FLOW-15 | Support thread & escalation | PER-02 | Society calls or messages | FEAT-081–084 | core |
 | FLOW-16 | Committee's monthly portal check | PER-05 | Savings report released | FEAT-088–089, 060 | core |
 | FLOW-17 | Contract lifecycle: amendment, renewal, term end | PER-01, management | Amendment needed, or term approaching end | FEAT-062–065 | core |
+| FLOW-18 | Invoice-first month: upload, review, publish, portal, re-derive | PER-01, PER-08, PER-05 | A month's Zoho invoice exists (every month for now; the backfill in bulk) | FEAT-109–111, 054, 087 | **critical** — the only monthly path until FLOW-10's bill generation ships (phase two) |
 
 ### Cross-cutting — invoked from inside other flows, never standalone
 
@@ -498,6 +499,10 @@ product entirely and comes back, which is why step 8's reconciliation gap matter
 **Timing:** Monthly peak. Step 6 is the human bottleneck; steps 1–5 are automatic.
 **Alternate paths:** `negotiated-fixed` contracts bill flat against a first-month reference
 (FLOW-08 step 7, FEAT-052); a month with an unresolvable circuit (FLOW-09 alternate).
+**Status (2026-09-15, CON-47):** steps 1–5 and 7–8 as written describe **phase two** — bill
+generation from the dashboard. Until then a month enters by **FLOW-18**: the Zoho invoice is the
+month of record, step 6's release gate is reused unchanged, and step 1's calculation runs only to
+give a month a *measured* stats basis where readings exist (FEAT-110). Nothing here is deleted.
 
 ```mermaid
 sequenceDiagram
@@ -715,6 +720,71 @@ an expired agreement — worth a hard stop rather than a reminder.
 **Handoffs:** management → PER-01 → society (signature).
 **Timing:** Term-end dates are known years in advance; nothing else here is time-critical.
 **Alternate paths:** Amendment triggered from FLOW-11 step 6 is the most common real entry point.
+
+---
+
+### FLOW-18 — Invoice-first month: upload, review, publish, portal, re-derive
+**Persona:** PER-01, PER-08, PER-05/06 · **Trigger:** a month's Zoho invoice exists — at month
+start going forward, and in bulk for the 19 societies' backfill · **Success:** the society sees its
+invoice and that month's saved kWh/₹ on its portal, with the basis stated, and the month's stats
+re-derive themselves from readings whenever those arrive. **Added 2026-09-15 (CON-47).**
+
+| # | Step | Actor | Surface | Screen | System response | Decision point | Failure branch | Feature |
+|---|------|-------|---------|--------|----------------|----------------|----------------|---------|
+| 1 | Drop one or many invoice PDFs | PER-01 | SUR-01 | SCR-093 invoice intake | Each file's bytes reach S3 first (CON-30's rule), then one extraction call per PDF; a review row appears per file as it completes — the batch never waits for its slowest file | — | A file that is not a PDF, or exceeds the size cap, is refused by name before upload (the document-catalog validator); a Gemini failure leaves the row in "could not read — enter the lines by hand", never silently empty (FEAT-109-AC-2) | FEAT-109 |
+| 2 | Confirm the society and the month | PER-01 | SUR-01 | SCR-094 invoice review | The AI's proposal is shown *beside* the selection controls, never pre-committed; "Invoice For The Month: July-2026" and "Bill To" are quoted verbatim so the operator can check them against the PDF | Is this the society and month the invoice says? | The operator's selection differs from the proposal → the difference is stated above the submit control (INV-04, FEAT-109-AC-8); the society-month already holds a live invoice → refused, naming it, with the void-and-reattach route (AC-7) | FEAT-109 |
+| 3 | Confirm each line's classification and circuit | PER-01 | SUR-01 | SCR-094 | Service lines carry a proposed circuit (Qty ≈ represented count, ASSUM-31); `other` lines (a smart meter) are shown greyed with "counts toward the total, not toward savings" | Right circuit? Right class? | A service line maps to no circuit → submit blocked with "create the circuit for this deal first" and a link (AC-10); Qty ≠ the circuit's represented count → both figures shown, and a checkbox "apply 1,155 to this circuit from Aug-2026 onward" (AC-6) — unticked by default | FEAT-109 |
+| 4 | Arithmetic check | system | SUR-01 | SCR-094 | Per line Qty × Rate − Discount vs Amount; lines vs sub-total; tax; total. A match is a quiet ✓ per figure | — | Any mismatch → the row is flagged with both figures and submit requires a correction or an acknowledged reason (AC-3). This is the only reconciliation available until phase two (FEAT-101 scope note) | FEAT-109 |
+| 5 | Record paid status | PER-01 | SUR-01 | SCR-094 | Paid (with date) / unpaid — a required choice, no default | Was this settled? | Left unanswered → submit blocked; "unpaid" on a months-old invoice shows the consequence in words: "the overdue clock will start from 10-08-2026 on release" | FEAT-109, FEAT-087 |
+| 6 | Submit the month | PER-01 | SUR-01 | SCR-094 → SCR-093 | Creates the month of record (`submitted`), its invoice with line items, stores the PDF under `Documents/{Society}/{YYYY-MM}/Invoices/`; logged with actor and time | — | Permission revoked behind the open form → refused server-side by name, nothing written (AC-4) | FEAT-109 |
+| 7 | Stats derive | system | — | — | Per service line → circuit: billed-population baseline × savings % × rate; basis `measured` where that month's readings cover CON-12's floor, else `agreed`; fee = the line's amount; every figure with provenance and a version | — | Readings exist but below the floor → `agreed` with "9 of 31 days" stated (FEAT-110-AC-3); a circuit with no baseline in force → the month submits, but the stat for that line is "not derivable — no commissioned baseline" rather than a number | FEAT-110 |
+| 8 | Accountant reviews the queue | PER-08 | SUR-01 | SCR-092 release queue | Rows now show invoice lines beside derived stats and basis; a clean month is batch-selectable; a flagged month (unacknowledged mismatch, unmapped line, unconfirmed month) is not | Publish these? | Sent back → returns to `submitted` with the note, ops corrects and resubmits; **the accountant cannot edit a figure** (CON-33) | FEAT-054 |
+| 9 | Publish (batch or single) | PER-08 | SUR-01 | SCR-092 | `releasedAt` on the month and the invoice; a paid invoice starts no clock; an unpaid one keys CON-13 off its due date (FEAT-087's existing rule); society notified via FLOW-X2 | — | Ops holding `release_billing` by mistake would be able to publish their own month → the permission is the gate, and holding every ops permission does not confer it (already built) | FEAT-054, FEAT-087 |
+| 10 | Society sees the month | PER-05/06 | SUR-01 (portal) | SCR-260 billing, SCR-100 home, SCR-102 electricity | Invoice with paid state; "This month" = latest published month with basis wording; since-we-started totals; month series | — | PDF unfetchable → the row still shows amounts and states the document is unavailable (FEAT-111-AC-8); a submitted-not-published month is invisible (AC-6) | FEAT-111 |
+| 11 | Readings arrive later for a published month | system | — | — | On reading commit for a circuit-month with a published `agreed` month: a new stats version derives on the `measured` basis; previous retained; invoice untouched; portal shows the latest with "updated from readings on …" | — | Measured out of band → shown, with "no billing consequence — this month was billed on the agreed benchmark" (FEAT-110-AC-7); never a deviation review | FEAT-110 |
+
+**First-run vs returning:** The first run is the **backfill** — ~100–250 PDFs across 19 societies
+in one sitting, which is why step 1 is multi-file and step 9 is batch. Steady state is one invoice
+per society per month at month start; the review row should take under a minute for a clean
+invoice, since everything on it is a confirmation, not an entry.
+**Offline behavior:** N/A (back office).
+**Abandonment:** A row uploaded but never confirmed stays on SCR-093 as "awaiting review" with its
+PDF already in S3 — nothing is derived, nothing reaches the accountant, and the society-month reads
+"invoice pending" on the billing board (FEAT-053-AC-2). A submitted month the accountant never
+publishes sits in the queue, and its clock never starts — safe, silent, and visible in the queue
+count.
+**Handoffs:** PER-01 → system (derive) → PER-08 (publish) → society. The Zoho hop still happens
+before step 1, outside the product; the difference from FLOW-10 is that the platform no longer
+computes anything the invoice is checked *against* — it computes what the society *saved*, which
+the invoice does not carry.
+**Timing:** Month start (going forward). Step 11 is asynchronous and can land months after step
+9 — the portal's "updated on" date is what makes that honest.
+**Alternate paths:** (a) A society with **no circuit on record** for a deal cannot submit that
+line — the route is the deal's own circuit creation (survey, or the document-backfill path), not a
+stat derived against nothing. (b) A **credit note or negative line** has not been seen on any real
+invoice; if one appears, extraction surfaces it as a clarification rather than classifying it.
+(c) **Phase two:** once FLOW-10's bill generation ships, step 4 gains the invoice-to-calculation
+comparison (FEAT-101) and the Zoho invoice becomes the *check* rather than the *source*; steps
+2–3, 5–11 are unchanged by that.
+
+```mermaid
+sequenceDiagram
+    participant Ops as PER-01
+    participant Sys as System
+    participant Acc as PER-08 accountant
+    participant Soc as Society portal
+    Ops->>Sys: Drop N invoice PDFs
+    Sys->>Sys: Store bytes, extract each (AI, with clarifications)
+    Sys-->>Ops: One review row per invoice
+    Ops->>Sys: Confirm society, month, lines→circuits, paid status; submit
+    Sys->>Sys: Derive stats (measured if readings ≥ floor, else agreed) — versioned
+    Sys->>Acc: Release queue (lines + stats + basis)
+    Acc->>Sys: Publish (batch for clean months) / send back
+    Sys->>Soc: Invoice + month figures, basis stated
+    Note over Sys: Later: readings commit for this month
+    Sys->>Sys: Re-derive as new version (measured); old retained
+    Sys->>Soc: Latest figures, "updated from readings on …"
+```
 
 ---
 
@@ -985,3 +1055,10 @@ existing extension mechanism, with the residual risk accepted as ASSUM-23).
 inconvenience — respectively stranding a person on site, letting a wrong invoice reach a customer,
 and auto-suspending a society that is disputing rather than defaulting. DF-01, DF-05 and DF-06 are
 scale problems that are cheap now and expensive at 200 societies.
+
+**2026-09-15 (FLOW-18):** walking the invoice-first path exposed no missing feature beyond the three
+added in Phase 3 (FEAT-109/110/111), but it did expose one **screen** with no ID: the portal's
+Electricity page, built in the 2026-08-29 revamp, is assigned **SCR-102** so FEAT-111's month series
+has a screen to trace to. It also settled that step 7's "no commissioned baseline" case (one circuit,
+Settlement Nexus, is `surveyed` with no baseline) is a stated non-figure, not a blocker on the
+whole month.

@@ -120,6 +120,8 @@ Handlers/Server Actions, Prisma 7 against Postgres, deployed as one process.
 | COMP-11 | Background Job Runner | Cross-cutting infrastructure, not a capability itself: scheduled vendor fetch, SLA/escalation sweeps, suspension countdown, gate-pass provisional-release timeout, notification retry/backoff | — (infrastructure) | `Job` (queue table) | Postgres-backed queue (ADR-003) | system |
 | COMP-12 | SUR-02 Field Client | The offline-tolerant browser client: local capture, an IndexedDB outbox, sync-on-reconnect | — (client of COMP-01/02/06/08) | (client-local only: IndexedDB outbox, purged per NFR-13) | Service worker + IndexedDB, no native build | PER-03/PER-04 |
 
+> **2026-09-15 (CON-47, ADR-011):** COMP-04's month of record is created from the Zoho invoice for now — `MonthlyCalculation.source = invoice`, the invoice's lines as `BillingInvoiceLine` rows, fee lines carrying a `basis` (measured | agreed) — and re-derives itself as a new version when readings arrive. Bill generation from readings (FEAT-048 as designed here) is phase two; nothing in this document's COMP-04 design is removed by it.
+
 **Failure characteristics worth naming explicitly, per component:**
 - COMP-04 (Billing Engine) is the one component where a bug has *financial* blast radius against
   INV-02/INV-03 — it is the only component whose writes are also gated by NFR-04's completeness

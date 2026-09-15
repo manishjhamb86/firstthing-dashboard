@@ -381,26 +381,58 @@ screens:
     name: "Accountant release queue"
     surface: "SUR-01"
     type: page
-    features: [FEAT-054]
+    features: [FEAT-054, FEAT-110]
     priority: 1
     status: specified
     design_status: mockup
-    mockup: "https://claude.ai/code/artifact/cec984c8-6007-4411-996f-3dcd3280e604"
+    mockup: "https://claude.ai/artifact/J6n1noW235CPHT3kcbkjMQ"
     entry_from: [SCR-082, SCR-091]
     exits_to: [SCR-082, SCR-090, SCR-091, SCR-093]
     states: [empty_filtered, empty_first_run, error_network, error_permission, loading, success]
   - id: SCR-093
-    name: "Invoice upload & reconciliation"
+    name: "Invoice intake (batch upload & review list)"
     surface: "SUR-01"
     type: page
-    features: [FEAT-053, FEAT-101]
+    features: [FEAT-109, FEAT-053, FEAT-101]
     priority: 1
     status: specified
     design_status: mockup
-    mockup: "https://claude.ai/code/artifact/cec984c8-6007-4411-996f-3dcd3280e604"
-    entry_from: [SCR-082, SCR-092, SCR-280]
-    exits_to: [SCR-090, SCR-120, SCR-260, SCR-280]
-    states: [empty_filtered, empty_first_run, error_network, error_permission, loading, success]
+    mockup: "https://claude.ai/artifact/J6n1noW235CPHT3kcbkjMQ"
+    entry_from: [SCR-082, SCR-280]
+    exits_to: [SCR-094, SCR-092, SCR-082]
+    references: ["Document inboxes — Dext inbox, Hubdoc needs-review, bank-statement importers: dropzone above a status-partitioned list; bulk actions only over rows a person already confirmed"]
+    states_rendered: [empty_filtered, error_extraction, error_network, partial, success]
+    states: [empty_filtered, empty_first_run, error_extraction, error_network, error_permission, loading, partial, success]
+  - id: SCR-094
+    name: "Invoice review (one invoice → one society-month)"
+    surface: "SUR-01"
+    type: page
+    features: [FEAT-109, FEAT-110]
+    priority: 1
+    status: specified
+    design_status: mockup
+    mockup: "https://claude.ai/artifact/J6n1noW235CPHT3kcbkjMQ"
+    entry_from: [SCR-093, SCR-092]
+    exits_to: [SCR-093, SCR-092, SCR-260]
+    references: ["AP-automation review screens — Dext, Hubdoc, Rossum, Ramp, Zoho Books auto-scan: document beside fields, every value shows what it was read from, flags resolved not auto-accepted, primary action disabled until clear"]
+    states_rendered: [degraded_no_baseline, empty_unreadable, error_duplicate, partial, success]
+    states_rendered_note: "Shown on the board: success (the whole review), partial (line 2 unresolved), degraded (no-baseline row described in card 5), duplicate and unreadable as the spec's replacement rows for cards 1/2. error_extraction, error_permission and loading are the app's standard banner / SCR-221 / skeleton, not redrawn per screen."
+    states: [degraded_no_baseline, empty_unreadable, error_duplicate, error_extraction, error_network, error_permission, loading, partial, success]
+  - id: SCR-102
+    name: "Electricity (society view)"
+    surface: "SUR-01"
+    type: page
+    features: [FEAT-111, FEAT-088]
+    priority: 1
+    status: specified
+    design_status: mockup
+    mockup: "https://claude.ai/artifact/J6n1noW235CPHT3kcbkjMQ"
+    entry_from: [SCR-100]
+    exits_to: [SCR-100, SCR-260, SCR-261]
+    references: ["Utility bill-history and savings-tracking apps (Octopus Energy, Bulb, Tata Power app): a month list with a per-month status, totals since start, and a chart that explains its own absence rather than drawing empty axes"]
+    states_rendered: [empty_first_run, partial, rederived, success]
+    states_rendered_note: "Phone board shows success with the agreed-basis partial state (no readings, chart replaced by its explanation) and two re-derived months; empty_first_run is the tiles' dash-and-sentence per the spec; error/loading are the app's standard states."
+    states: [empty_first_run, error_network, error_permission, loading, partial, rederived, success]
   - id: SCR-110
     name: "Deviation chart & initial findings"
     surface: "SUR-01"
@@ -763,11 +795,11 @@ screens:
     name: "Portal home (maximal visibility)"
     surface: "SUR-01 (customer)"
     type: page
-    features: [FEAT-088]
+    features: [FEAT-088, FEAT-111]
     priority: 1
     status: specified
     design_status: mockup
-    mockup: "https://claude.ai/code/artifact/881a2e1e-e4c9-4ec0-96a9-a55916074e8e"
+    mockup: "https://claude.ai/artifact/J6n1noW235CPHT3kcbkjMQ"
     entry_from: []
     exits_to: [SCR-101, SCR-120, SCR-130, SCR-260, SCR-261]
     states: [empty_filtered, empty_first_run, error_network, error_permission, loading, success]
@@ -825,11 +857,11 @@ screens:
     name: "Invoice list & detail"
     surface: "SUR-01 (customer)"
     type: page
-    features: [FEAT-060]
+    features: [FEAT-060, FEAT-111]
     priority: 1
     status: specified
     design_status: mockup
-    mockup: "https://claude.ai/code/artifact/881a2e1e-e4c9-4ec0-96a9-a55916074e8e"
+    mockup: "https://claude.ai/artifact/J6n1noW235CPHT3kcbkjMQ"
     entry_from: []
     exits_to: [SCR-100, SCR-121, SCR-130, SCR-261]
     states: [empty_filtered, empty_first_run, error_network, error_permission, loading, success]
@@ -4494,6 +4526,7 @@ features:
     milestone: MS-08
     backend_only: true
     architecture_notes: "docs/engineering/09-architecture.md §5.2 COMP-04, ADR-004 -- computes per-CircuitFeeLine, fanning in at MonthlyCalculation. Contract.tolerancePct's scope confirmed 2026-08-13 (one value per contract, applied independently per circuit) -- 00-intake.md CON-01a, RISK-02 closed."
+    scope_note: "2026-09-15 (CON-47): no longer creates the month of record — FEAT-109 does, from the Zoho invoice. Where readings exist this run's output gives FEAT-110 a measured basis. Bill generation from the dashboard is phase two, explicitly."
     acceptance_criteria:
       - id: FEAT-048-AC-1
         type: happy
@@ -4840,6 +4873,7 @@ features:
     depends_on: [FEAT-048]
     status: ready
     milestone: MS-08
+    scope_note: "2026-09-15 (CON-47): the manual path is now PRIMARY and attaches without a completed calculation — it is what creates the month (FEAT-109). AC-1's matching and AC-3's amount reconciliation move to phase two with FEAT-048; AC-2/AC-4/AC-5 stand."
     acceptance_criteria:
       - id: FEAT-053-AC-1
         type: happy
@@ -4913,6 +4947,7 @@ features:
     depends_on: [FEAT-053]
     status: ready
     milestone: MS-08
+    scope_note: "2026-09-15 (CON-47): the queue receives months submitted by FEAT-109; rows show invoice lines beside derived stats and basis; blocking flags become an unacknowledged arithmetic mismatch, an unmapped line or an unconfirmed month. Batch release of clean months is pulled into this build. Paid state travels from upload so release never starts CON-13 on a settled bill."
     acceptance_criteria:
       - id: FEAT-054-AC-1
         type: happy
@@ -7576,6 +7611,7 @@ features:
     release: R1
     depends_on: [FEAT-048, FEAT-053, FEAT-054]
     status: proposed
+    scope_note: "2026-09-15 (CON-47): invoice-to-calculation comparison presupposes a computed month (phase two); until then FEAT-109-AC-3's internal-arithmetic check is the available guard. R1, unchanged."
     acceptance_criteria:
       - id: FEAT-101-AC-1
         type: happy
@@ -8077,6 +8113,289 @@ features:
         status: proposed
         depends_on: []
 
+  - id: FEAT-109
+    title: "Invoice-first month intake (upload, extraction, review, submit)"
+    capability: CAP-04
+    personas: [PER-01]
+    surfaces: [SUR-01]
+    size: L
+    serves: [JTBD-01, GOAL-01, GOAL-06]
+    description: "PER-01 drops one or many Zoho invoice PDFs; the AI reads each invoice's own printed facts (number, dates, Invoice For The Month, Bill To, every line with Qty/Rate/Discount/Amount, totals) with the verbatim words and a clarification wherever the document does not settle something; each service line is proposed against a circuit by light count; the operator confirms society and month explicitly (INV-04), fixes or accepts each proposal, records paid/unpaid, and submits the society-month for the accountant. CON-47."
+    priority:
+      method: RICE
+      reach: 50
+      impact: 3
+      confidence: 0.9
+      effort_sessions: 6
+      score: 22.5
+      estimate_confidence: medium
+      rank: 15
+      note: "CON-47 — the only monthly path for now; unblocks every society's portal at once. Ranked beside FEAT-053, which it supersedes as the primary path"
+      override_reason: null
+    release: R0
+    depends_on: [FEAT-062, FEAT-040, FEAT-053]
+    status: ready
+    milestone: MS-09
+    scope_note: "Added 2026-09-15 (Feature-mode pass, CON-47). Read two real Zoho invoices before specifying: one line (Qty 605 = the circuit's represented count) and one with two deal lines plus a hardware line, a Discount column used to round to whole rupees, and a 1,155-vs-1,153 count disagreement — AC-5/AC-6 exist because of that document."
+    acceptance_criteria:
+      - id: FEAT-109-AC-1
+        type: happy
+        given: "PER-01 drops several Zoho invoice PDFs"
+        when: "extraction completes"
+        then: "one review row per invoice shows the proposed society, month, dates, amounts and each line with its proposed circuit and classification, each figure with the words it was read from; confirming a row and submitting creates that society-month in `submitted`, attributed, with the PDF stored"
+        tests: [TC-109-1, TC-109-1-E2E]
+      - id: FEAT-109-AC-2
+        type: empty
+        given: "a PDF from which no line items can be read"
+        when: "the row renders"
+        then: "it states that, offers manual entry of the lines against the stored PDF, and never produces a month with no lines"
+        tests: [TC-109-2]
+      - id: FEAT-109-AC-3
+        type: failure
+        given: "any line where Qty × Rate − Discount ≠ Amount, or the lines do not sum to the sub-total, tax or total"
+        when: "the operator tries to submit"
+        then: "the row is flagged with both figures and cannot be submitted until corrected or acknowledged with a reason"
+        tests: [TC-109-3]
+      - id: FEAT-109-AC-4
+        type: permission
+        given: "an actor who is not billing ops (PER-01)"
+        when: "they upload or submit"
+        then: "it is refused server-side"
+        tests: [TC-109-4]
+      - id: FEAT-109-AC-5
+        type: edge
+        given: "a line classified `other` (hardware such as a smart meter)"
+        when: "the row and the month are stored"
+        then: "it counts toward the invoice total and is excluded from every savings figure, visibly"
+        tests: [TC-109-5]
+      - id: FEAT-109-AC-6
+        type: edge
+        given: "a service line whose Qty differs from its circuit's represented count"
+        when: "the row renders and is submitted"
+        then: "both figures are shown; the month's stats use the invoice's count; and the operator may apply the invoice's count to the circuit effective from this month forward, recorded with who, when and the invoice as reason"
+        tests: [TC-109-6]
+      - id: FEAT-109-AC-7
+        type: edge
+        given: "the society-month already holds a live invoice"
+        when: "a second is submitted"
+        then: "it is refused naming the existing one and pointing at void-and-reattach; nothing is written"
+        tests: [TC-109-7]
+      - id: FEAT-109-AC-8
+        type: edge
+        given: "the AI proposes a month (INV-04)"
+        when: "the operator submits"
+        then: "the operator's own selection is what is stored, and where the two differ the difference is stated before submit"
+        tests: [TC-109-8]
+      - id: FEAT-109-AC-9
+        type: happy
+        given: "the operator marks the invoice paid with a date"
+        when: "the month is stored"
+        then: "it is `paid` and CON-13's clock never starts; an unpaid invoice keys the clock off its own due date"
+        tests: [TC-109-9]
+      - id: FEAT-109-AC-10
+        type: edge
+        given: "a service line that maps to no circuit of that society"
+        when: "the operator tries to submit"
+        then: "submit is blocked with the named gap and a link to create the circuit — a stat is never derived against no circuit"
+        tests: [TC-109-10]
+    stories:
+      - id: STORY-109-1
+        title: "As billing ops, I want to drop a month's Zoho invoices and have each one read into a review row, so that the month of record comes from the invoice we actually raised rather than a spreadsheet."
+        estimate_days: 3
+        satisfies: [FEAT-109-AC-1, FEAT-109-AC-8, FEAT-109-AC-9]
+        status: proposed
+        depends_on: []
+      - id: STORY-109-2
+        title: "Harden invoice intake: arithmetic, classification, mapping and duplicates (FEAT-109-AC-3, AC-5, AC-6, AC-7, AC-10)"
+        estimate_days: 2
+        satisfies: [FEAT-109-AC-3, FEAT-109-AC-5, FEAT-109-AC-6, FEAT-109-AC-7, FEAT-109-AC-10]
+        status: proposed
+        depends_on: [STORY-109-1]
+      - id: STORY-109-3
+        title: "Harden invoice intake: permission and unreadable-PDF handling (FEAT-109-AC-2, AC-4)"
+        estimate_days: 1
+        satisfies: [FEAT-109-AC-2, FEAT-109-AC-4]
+        status: proposed
+        depends_on: [STORY-109-1]
+  - id: FEAT-110
+    title: "Invoice-month stats: measured first, agreed fallback, self-revising"
+    capability: CAP-04
+    personas: [PER-01, PER-05]
+    surfaces: [SUR-01]
+    size: M
+    serves: [GOAL-01, GOAL-06, INV-02]
+    description: "On submit, per service line → circuit: baseline consumption of the billed population = (in-force baseline ÷ metered count) × invoice light count × days (prorated on the first month); savings % = the circuit's measured savings for the month where readings cover CON-12's floor, else the agreed benchmark; saved kWh and saved ₹ follow; the fee is the invoice line's own amount, never recomputed. Every figure carries basis (measured | agreed), provenance and a version; when readings for a published month later commit, the stats re-derive as a new version, the previous retained, the invoice untouched. Reuses monthly-calculation.ts. CON-47."
+    priority:
+      method: RICE
+      reach: 50
+      impact: 3
+      confidence: 0.9
+      effort_sessions: 4
+      score: 33.75
+      estimate_confidence: medium
+      rank: 9
+      note: "The figure the portal shows for every society; INV-02's label is the whole defence"
+      override_reason: null
+    release: R0
+    depends_on: [FEAT-109, FEAT-041, FEAT-062, FEAT-046, FEAT-051]
+    status: ready
+    milestone: MS-09
+    scope_note: "Added 2026-09-15 (CON-47 b, user's explicit rule: 'everything should drive from readings... where readings are not available use the benchmark... once readings are uploaded, override the old stats and repopulate'). The override is a versioned re-derivation, never an edit in place."
+    acceptance_criteria:
+      - id: FEAT-110-AC-1
+        type: happy
+        given: "a submitted month whose circuit has no readings for it"
+        when: "stats derive"
+        then: "saved kWh, saved ₹ and savings % are produced on the `agreed` basis from the invoice's light count, the in-force baseline, the benchmark % and the contract rate, each with provenance — Aditya Mega City July 2026: 605 × (47.4 ÷ 91) × 31 × 64% × ₹7, asserted to the paisa with party and basis named"
+        tests: [TC-110-1]
+      - id: FEAT-110-AC-2
+        type: happy
+        given: "the month's circuit readings cover at least CON-12's floor"
+        when: "stats derive"
+        then: "the figures derive on the `measured` basis from that month's readings, the agreed benchmark is recorded beside them as the reference, and the fee equals the invoice line's amount unchanged"
+        tests: [TC-110-2]
+      - id: FEAT-110-AC-3
+        type: failure
+        given: "readings exist but cover fewer days than the floor"
+        when: "stats derive"
+        then: "the basis is `agreed` and the coverage (e.g. 9 of 31 days) is stated on the record"
+        tests: [TC-110-3]
+      - id: FEAT-110-AC-4
+        type: permission
+        given: "any actor"
+        when: "they attempt to enter or edit a derived figure"
+        then: "no such write path exists; a correction is a change to an input followed by a recorded re-derivation"
+        tests: [TC-110-4]
+      - id: FEAT-110-AC-5
+        type: edge
+        given: "a published month on the `agreed` basis"
+        when: "readings for that month commit later"
+        then: "a new stats version derives on the `measured` basis, the previous version is retained and readable, the invoice and its amounts are unchanged, and the portal shows the new figures with the date they were re-derived"
+        tests: [TC-110-5]
+      - id: FEAT-110-AC-6
+        type: edge
+        given: "the month is the contract's billing-start month"
+        when: "stats derive"
+        then: "baseline consumption is prorated to the days actually served (CON-22), matching FEAT-051"
+        tests: [TC-110-6]
+      - id: FEAT-110-AC-7
+        type: edge
+        given: "the measured % falls below the contract's tolerance band"
+        when: "stats derive"
+        then: "the measured figure is shown and the record states that no billing consequence follows from an invoice-first month"
+        tests: [TC-110-7]
+      - id: FEAT-110-AC-8
+        type: happy
+        given: "an invoice with several service lines"
+        when: "stats derive"
+        then: "each line derives against its own circuit's baseline and benchmark, and the society's month total is the sum of the lines, never a society-wide average"
+        tests: [TC-110-8]
+      - id: FEAT-110-AC-9
+        type: edge
+        given: "a service line's circuit has no baseline in force (found in FLOW-18 step 7)"
+        when: "stats derive"
+        then: "the month still submits, that line's stat reads 'not derivable — no commissioned baseline' rather than a number, and the society total states which lines it excludes"
+        tests: [TC-110-9]
+    stories:
+      - id: STORY-110-1
+        title: "As ops, I want a submitted month's saved kWh and ₹ derived from the invoice's light count and the demo's benchmark, labelled as agreed, so that every society has a stated figure even before readings exist."
+        estimate_days: 2
+        satisfies: [FEAT-110-AC-1, FEAT-110-AC-4, FEAT-110-AC-6, FEAT-110-AC-8]
+        status: proposed
+        depends_on: [STORY-109-1]
+      - id: STORY-110-2
+        title: "As ops, I want a month with readings to use the measured savings instead, and a month to re-derive itself as a new version when readings arrive later (FEAT-110-AC-2, AC-3, AC-5, AC-7)"
+        estimate_days: 2
+        satisfies: [FEAT-110-AC-2, FEAT-110-AC-3, FEAT-110-AC-5, FEAT-110-AC-7, FEAT-110-AC-9]
+        status: proposed
+        depends_on: [STORY-110-1]
+  - id: FEAT-111
+    title: "Published months on the society portal"
+    capability: CAP-14
+    personas: [PER-05, PER-06]
+    surfaces: [SUR-01]
+    size: M
+    serves: [JTBD-06, GOAL-02, GOAL-06]
+    description: "A published invoice-first month becomes visible to its society: the invoice with paid state on Billing; on the dashboard the latest published month's saved kWh, ₹ and savings % plus a since-we-started tile; on Electricity a month-by-month series. Every figure states its basis in plain words; a re-derived month shows the date it changed. Only published months, INV-05 scoped. CON-47."
+    priority:
+      method: RICE
+      reach: 50
+      impact: 3
+      confidence: 0.8
+      effort_sessions: 4
+      score: 30.0
+      estimate_confidence: medium
+      rank: 11
+      note: "What the whole feature is for — the society sees its own months"
+      override_reason: null
+    release: R0
+    depends_on: [FEAT-110, FEAT-054, FEAT-108]
+    status: ready
+    milestone: MS-09
+    scope_note: "Added 2026-09-15 (CON-47). ASSUM-30 carries the society-facing wording of measured vs agreed; the mockup in Phase 5 settles it."
+    acceptance_criteria:
+      - id: FEAT-111-AC-1
+        type: happy
+        given: "a society's month is published"
+        when: "a member opens Billing"
+        then: "the invoice appears with its amount, due date, paid state and a download of the PDF"
+        tests: [TC-111-1]
+      - id: FEAT-111-AC-2
+        type: happy
+        given: "at least one published month"
+        when: "a member opens the dashboard"
+        then: "This month shows the latest published month's saved kWh, saved ₹ and savings % with its basis stated, and since-we-started shows the totals and the number of months"
+        tests: [TC-111-2]
+      - id: FEAT-111-AC-3
+        type: happy
+        given: "several published months"
+        when: "a member opens Electricity"
+        then: "the months are shown month by month with the basis per month"
+        tests: [TC-111-3]
+      - id: FEAT-111-AC-4
+        type: empty
+        given: "no published month"
+        when: "a member opens the dashboard"
+        then: "it states that and names what will fill it; no zero is shown as a figure"
+        tests: [TC-111-4]
+      - id: FEAT-111-AC-5
+        type: permission
+        given: "a member of one society"
+        when: "they request another society's months by any route"
+        then: "it is refused server-side (INV-05)"
+        tests: [TC-111-5]
+      - id: FEAT-111-AC-6
+        type: edge
+        given: "a submitted, unpublished month"
+        when: "any portal screen renders"
+        then: "nothing about it is visible"
+        tests: [TC-111-6]
+      - id: FEAT-111-AC-7
+        type: edge
+        given: "a month's stats were re-derived from readings after publication"
+        when: "a member views it"
+        then: "the latest version is shown, labelled measured, with the date it changed"
+        tests: [TC-111-7]
+      - id: FEAT-111-AC-8
+        type: failure
+        given: "the invoice's PDF cannot be fetched from storage"
+        when: "a member opens Billing"
+        then: "the row still shows the amount, dates and paid state and states that the document is unavailable — never a broken download link (INV-06)"
+        tests: [TC-111-8]
+    stories:
+      - id: STORY-111-1
+        title: "As a committee member, I want to see my society's invoices and what we saved each month, labelled by how it was measured, so that the number on the portal is one I can trust and check."
+        estimate_days: 3
+        satisfies: [FEAT-111-AC-1, FEAT-111-AC-2, FEAT-111-AC-3, FEAT-111-AC-7]
+        status: proposed
+        depends_on: [STORY-110-1]
+      - id: STORY-111-2
+        title: "Harden the portal months: empty, unpublished and cross-society handling (FEAT-111-AC-4, AC-5, AC-6)"
+        estimate_days: 1
+        satisfies: [FEAT-111-AC-4, FEAT-111-AC-5, FEAT-111-AC-6, FEAT-111-AC-8]
+        status: proposed
+        depends_on: [STORY-111-1]
+
 # FEAT-104/105/106 are spike-gated (blocked on SPIKE-01, see below), not cut in the
 # "abandoned" sense -- they carry full specs (RICE, ACs, depends_on, blocked_by_spike)
 # under features: with release: null, which is where their real detail lives. An ID
@@ -8189,6 +8508,19 @@ milestones:
       - "The accountant release gate (CON-33) blocks the report/invoice from reaching the society until approved"
       - "The society sees its invoice and savings report in its own portal, and the overdue clock starts -- this is R0's own exit condition (08-prioritization.md §6), reached for real"
     status: proposed
+
+  - id: MS-09
+    name: "Invoice-first billing & published-month portal stats"
+    release: R0
+    features: [FEAT-109, FEAT-110, FEAT-111]
+    depends_on: [MS-07]
+    estimate_sessions_raw: 14
+    exit_criteria:
+      - "A past month's Zoho invoice is uploaded in a batch, read by the AI, confirmed row by row, submitted by ops and published by the accountant — and appears on the society's portal with its paid state"
+      - "A society with no readings shows that month's saved kWh/₹ on the agreed basis, labelled; Ace City's month shows the measured basis from its real readings, with the fee unchanged"
+      - "Committing readings for an already-published agreed-basis month re-derives its stats as a new version, the old retained, the invoice untouched, and the portal shows the change dated"
+    status: proposed
+    note: "Added 2026-09-15 (CON-47). Delivers MS-08's third exit criterion ('the society sees its invoice... in its own portal, and the overdue clock starts') by the invoice-first path; MS-08's own calculation-driven bill generation becomes phase two."
 
 invariants:
   - id: INV-02

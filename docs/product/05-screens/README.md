@@ -91,8 +91,9 @@ Legend — **Src:** `F` derived from a Phase 4 flow · `M` method's standard-scr
 | SCR-084 | **Ingest health & meter status** | X | 09 | FEAT-104, 105, 106 | 1 | ✅ | ✅ |
 | SCR-090 | Per-circuit compliance view | F | 10 | FEAT-049 | 1 | ✅ | ✅ |
 | SCR-091 | Savings report (ops view / editor) | F | 10 | FEAT-059 | 1 | ✅ | ✅ |
-| SCR-092 | Accountant release queue | F | 10 | FEAT-054 | 1 | ✅ | ✅ |
-| SCR-093 | Invoice upload & reconciliation | F | 10 | FEAT-053, 101 | 1 | ✅ | ✅ |
+| SCR-092 | Accountant release queue — revised 2026-09-15 | F | 10, 18 | FEAT-054, 110 | 1 | ✅ | ✅ |
+| SCR-093 | Invoice intake (batch upload & review list) — revised 2026-09-15, CON-47 | F | 10, 18 | FEAT-109, 053 | 1 | ✅ | ✅ |
+| SCR-094 | Invoice review (one invoice → one society-month) — added 2026-09-15 | F | 18 | FEAT-109, 110 | 1 | ✅ | ✅ |
 | SCR-110 | Deviation chart & initial findings | F | 11 | FEAT-055 | 1 | ✅ | ✅ |
 | SCR-112 | Root-cause & decision record | F | 11 | FEAT-057, 050 | 1 | ✅ | ✅ |
 | SCR-113 | Management escalation & benchmark adjustment | F | 11 | FEAT-058 | 1 | ✅ | ✅ |
@@ -144,13 +145,14 @@ It is still six real screens, and the ops home is arguably the most-used screen 
 | SCR-041 | Document upload (KYC) | F | 05 | FEAT-025 | 1 | ✅ | ✅ |
 | SCR-051 | Offer view & response | F | 06 | FEAT-028 | 1 | ✅ | ✅ |
 | SCR-062 | Daily installation batch review | F | 07 | FEAT-035 | 1 | ✅ | ✅ |
-| SCR-100 | Portal home (maximal visibility) | F | 16 | FEAT-088 | 1 | ✅ | ✅ |
+| SCR-100 | Portal home (maximal visibility) — revised 2026-09-15, phone-first | F | 16, 18 | FEAT-088, 111 | 1 | ✅ | ✅ |
+| SCR-102 | Electricity (society view) — assigned 2026-09-15, phone-first | F | 16, 18 | FEAT-111, 088 | 1 | ✅ | ✅ |
 | SCR-101 | Contract view (read-only) | F | 16 | FEAT-065 | 2 | — | — |
 | SCR-121 | Extension request | F | 12 | FEAT-087 | 2 | — | — |
 | SCR-123 | Raise a billing dispute | X | 12 | FEAT-102 | 2 | — | — |
 | SCR-130 | Raise a ticket | F | 13 | FEAT-089 | 2 | — | — |
 | SCR-134 | My tickets & resolution timeliness | F | 13 | FEAT-089 | 2 | — | — |
-| SCR-260 | Invoice list & detail | X | 16 | FEAT-060 | 1 | ✅ | ✅ |
+| SCR-260 | Invoice list & detail — revised 2026-09-15, phone-first | X | 16, 18 | FEAT-060, 111 | 1 | ✅ | ✅ |
 | SCR-261 | Savings report list & detail (customer) | X | 16 | FEAT-060 | 1 | ✅ | ✅ |
 | SCR-262 | Society profile & contacts (self-service) | X | — | FEAT-092, 096 | 3 | — | — |
 | SCR-263 | **Portal account list & authority (society self-service)** | X | — | FEAT-108, CON-45 | 2 | — | — |

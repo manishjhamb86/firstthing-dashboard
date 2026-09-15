@@ -520,7 +520,7 @@ needs its own treatment before this screen is done.
 ## SCR-092 — Accountant release queue
 
 **Surface:** SUR-01 · **Type:** page · **Personas:** PER-08
-**Features:** FEAT-054 · **Flows:** FLOW-10 (step 6)
+**Features:** FEAT-054, FEAT-110 (basis shown) · **Flows:** FLOW-10 (step 6), FLOW-18 (steps 8–9)
 
 **Purpose:** the blocking gate before any figure reaches a society (CON-33) — one accountant
 confirming a month's numbers are right.
@@ -573,6 +573,27 @@ them, which is the structural guarantee that the gate stays real.
 **Deliberately absent:** the accountant cannot edit a figure. They release or they query. Editing
 belongs to ops, upstream, and would break INV-02's provenance chain.
 
+### Revision 2026-09-15 (CON-47) — invoice-first months in this queue
+
+The queue's job and its triage shape are unchanged. What a row carries, and what "routine" means,
+follow the month now being created from the Zoho invoice (FEAT-109) rather than from a calculation:
+
+| What changes | Before | Now |
+|---|---|---|
+| What arrives | a finalized `MonthlyCalculation` | a month **submitted** from SCR-094: the invoice, its lines, the derived stats and their basis |
+| Triage rule — routine when all of | every circuit in band · no basis change · total within 10% of trailing mean · no open dispute · coverage ≥ 28 days | society and month **confirmed** · every service line **mapped** to a circuit · internal arithmetic **reconciles** (or the mismatch is acknowledged with a reason) · paid status **chosen** · any count disagreement **acknowledged** · invoice total within 10% of the society's trailing 3-month **invoiced** mean · **basis unchanged** from last month (agreed → measured is not a flag, measured → agreed is) |
+| Row columns | society · why flagged · total · delta vs mean | society · month · **invoice total** · **derived saving (kWh / ₹ / %)** · **basis chips** per line · why flagged · delta vs mean |
+| Detail drawer | per-circuit figures + provenance | the invoice's lines (Qty · Rate · Discount · Amount · circuit) on the left, the derived stat per line on the right with its provenance sentence — and the PDF one click away |
+| "Query" | sends back with a note | renamed **Send back** to match SCR-093's `Sent back` row; the note is what ops reads there |
+| Release effect | overdue clock starts 2 days after release | `releasedAt` on the month and the invoice; a **paid** invoice starts no clock; an unpaid one keys CON-13 off **its own due date** (FEAT-087's existing rule) — the row says which will happen |
+| Bulk release | routine rows | unchanged — and pulled into this build (FEAT-054 scope note); a paid/unpaid split is shown in the confirmation ("14 routine · 9 already paid · 5 will start their clock") |
+| Empty — first use | "Months appear here once ops closes them" | "Months appear here once ops submits an invoice — Invoice intake →" |
+
+Two things the accountant still cannot do: edit a figure, and see anything ops has not submitted.
+A `Needs review` row whose reason is "1 line unmapped" is a row ops should never have been able to
+submit — it exists in the triage rule as a belt-and-braces check on the server's own refusal, not
+as an expected state.
+
 ### States
 
 | State | Trigger | What the user sees | Actions |
@@ -598,7 +619,85 @@ ceremony and should be reconsidered rather than built.
 
 ---
 
-## SCR-093 — Invoice upload & reconciliation
+## SCR-093 — Invoice intake (batch upload & review list)
+
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
+**Features:** FEAT-109, FEAT-053 (AC-2 invoice-pending) · **Flows:** FLOW-18 (step 1), FLOW-10 (step 8, phase two)
+**Revised 2026-09-15 (CON-47).** The original spec (below the rule) attached one invoice to one
+already-computed month and reconciled the totals. Under CON-47 the invoice *is* what creates the
+month, so this screen becomes the **intake**: a multi-file dropzone and the list of every invoice
+in flight, each row saying whether the machine or a person is next. The per-invoice review moved
+to SCR-094. Pattern research: document inboxes (Dext, Hubdoc, bank-statement importers) — a
+dropzone above a list partitioned by status; bulk actions apply only to rows a person has already
+confirmed, never to machine proposals.
+
+**Purpose:** get a month's invoices — or the whole backfill — into review rows, and see at a glance
+which are waiting on you, which are with the accountant, and which societies still have no invoice.
+**Primary action:** drop invoice PDFs.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| Sidebar → Billing → "Invoices" | — | none |
+| SCR-082 billing board | "Invoice pending" chip on a society-month | society + period, prefilled as a filter |
+| SCR-280 documents | "Invoice" type | routes here rather than to the generic filing |
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | Title "Invoice intake", subtitle "This month's Zoho invoices, and the backfill" | — | `PageHeader` | Action: none — the dropzone is the action |
+| Dropzone | "Drop invoice PDFs — one or many" | `FileDropzone` (existing) | PDF only, size cap from the document catalog | Each file starts its own row the moment it lands; the batch never waits for its slowest file |
+| Dropzone | Refusals | client sniff + server validator | inline list under the zone | "IMG_2231.jpg — not a PDF" / "…exceeds 20 MB" — refused before upload (FEAT-109 step 1) |
+| Filters | Status chips with counts | live | `Needs review · 4` · `Ready to submit · 2` · `With accountant · 7` · `Published this month · 12` · `All` | Default: Needs review. Society typeahead + month picker beside them |
+| List | One row per invoice | `BillingInvoice` + review draft | table | Columns: File · Society (proposal or confirmed) · Month · Total · Status · Uploaded · Action |
+| Row · status | `Reading…` | extraction in flight | chip-neu + spinner | Auto-refreshes; no action |
+| Row · status | `Needs review` | extraction done, not confirmed | chip-warn | Sub-line names what: "society unmatched" · "1 line has no circuit" · "count disagrees" · "payment not chosen" |
+| Row · status | `Could not read` | extraction failed / no lines | chip-bad | Action: "Enter by hand" → SCR-094 with empty line table |
+| Row · status | `Ready to submit` | review saved with zero open items, not yet submitted | chip-info | Bulk-selectable |
+| Row · status | `Submitted` | with accountant | chip-neu | Link to SCR-092 |
+| Row · status | `Sent back` | accountant returned it | chip-warn | Sub-line: the accountant's note. Action: "Fix" |
+| Row · status | `Published` | released | chip-ok | Link to the month |
+| Row · status | `Refused — duplicate` | live invoice exists for the society-month | chip-bad | Sub-line names the existing invoice; action: "Open existing" |
+| Bulk bar | "Submit N ready" | selection of `Ready to submit` rows | primary, appears on selection | Only confirmed rows are selectable — a `Needs review` row has no checkbox |
+| Missing panel | "Societies with no invoice for {month}" | active contracts − live invoices for the period | collapsed list, count in header | FEAT-053-AC-2's invoice-pending state, made a list rather than a per-row chip: at month start this IS the to-do |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Drop files | dropzone | billing ops | Presign → PUT each file to S3 under `Documents/{Society}/…` once the society is known; until then under a `Documents/_intake/` holding key, moved on submit | none | Rows appear, each `Reading…` | Non-PDF / oversize refused by name; presign refused (permission) → stated, nothing uploaded |
+| Review | row action | billing ops | Opens SCR-094 | none | — | — |
+| Submit N ready | bulk bar | billing ops (server re-check per row) | Runs each row's submit; a row that fails (duplicate landed meanwhile, permission) is reported by name, the rest proceed | inline count, no modal | Rows → `Submitted`; toast "5 submitted, 1 refused: …" | Partial success is reported, never rolled back silently |
+| Discard | row menu | billing ops | Removes the draft row; PDF remains in S3 | modal | Row gone | — |
+| Open month / existing | row link | any billing reader | Navigates | — | — | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Dropzone immediately; list skeleton | Drop |
+| Empty — first use | no invoices ever | Dropzone + "Nothing in flight. Drop this month's invoices, or the whole backfill — one file per invoice." + the missing panel expanded | Drop |
+| Empty — filtered | a status chip with 0 | "Nothing needs review." (or the chip's own wording) | Switch chip |
+| Partial | some rows still `Reading…` | Live rows; the bulk bar counts only `Ready` | — |
+| Error — network | an upload fails | That row reads "Upload failed — retry"; others unaffected | Retry |
+| Error — permission | not billing ops | SCR-221 | — |
+| Error — extraction | Gemini unavailable | Rows land as `Could not read` with "Enter by hand"; a banner says extraction is down, nothing is lost | Enter by hand |
+| Success | after bulk submit | Toast with counts; rows re-chipped | View queue |
+
+**Exits:** SCR-094, SCR-092, SCR-082, the circuit registry.
+**Live update:** the `Reading…` rows poll until extraction lands.
+**Responsive:** the table collapses to stacked rows below 768px (file · society/month · status · action); the dropzone stays first.
+**Offline:** blocked.
+**Copy:** missing panel header — "9 societies have no invoice for September 2026" · bulk toast —
+"6 submitted for release. 1 refused: Ace City — a live invoice already exists for Sep 2026."
+
+---
+
+<details>
+<summary>Original SCR-093 spec (pre-CON-47) — kept for phase two, when the invoice attaches to a computed month again</summary>
+
 
 **Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
 **Features:** FEAT-053, FEAT-101 · **Flows:** FLOW-10 (step 8)
@@ -673,6 +772,109 @@ immutable once accepted.
 **Offline:** blocked.
 **Copy:** mismatch — "This invoice says ₹52,400. The calculation says ₹48,210, a difference of
 ₹4,190. Fix the invoice in Zoho, or record why the difference is correct."
+
+</details>
+
+---
+
+## SCR-094 — Invoice review (one invoice → one society-month)
+
+**Surface:** SUR-01 · **Type:** page · **Personas:** PER-01
+**Features:** FEAT-109, FEAT-110 (derived preview) · **Flows:** FLOW-18 (steps 2–6)
+**Added 2026-09-15 (CON-47).** Pattern research: AP-automation review screens (Dext, Hubdoc,
+Rossum, Ramp, Zoho Books auto-scan) — document and fields side by side, every value shows what it
+was read from, flags are resolved rather than auto-accepted, the primary action is disabled until
+they are. Anti-patterns avoided: AI values pre-committed into the editable controls (you can no
+longer tell read from typed), and a confidence column nobody can act on.
+
+**Purpose:** turn one Zoho invoice into one society-month of record, with every AI proposal
+confirmed by a person and every disagreement stated before submit.
+**Primary action:** Submit for release.
+
+### Entry points
+
+| From | Trigger | State carried in |
+|---|---|---|
+| SCR-093 intake list | row "Review" (or auto-open when a single file was dropped) | The stored PDF, the extraction result |
+| SCR-092 release queue | "Sent back" row → "Fix" | The submitted month, the accountant's note |
+
+### Layout & content
+
+Two columns at ≥1024px: the **document** (left, 5/12, sticky) and the **review** (right, 7/12).
+Stacked below. The review column is a sequence of five cards in the order a person checks an
+invoice, each with its own ✓ / ⚠ state in its header; the submit bar at the bottom lists what is
+still open.
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Document | PDF preview | S3 (`Documents/…/Invoices/`, public-read tree) | embedded PDF, page controls | Sticky so the reader never loses it while scrolling the review |
+| Document | File name · size · uploaded by/at | `BillingInvoice` | text | |
+| Card 1 — Who and when | **Society** | proposal from `Bill To` | `SearchSelect` (existing combobox) **beside** a read-only "Invoice says: ADITYA MEGA CITY" line | Preselected to the proposal only when the match is exact and unique; otherwise empty with the proposal shown |
+| | **Month** | proposal from `Invoice For The Month` | `<input type="month">` beside "Invoice says: July-2026" | Same rule — INV-04, the stored value is the operator's |
+| | Invoice number, invoice date, due date | extraction | text / date / date, each with its verbatim words in muted type beneath | Editable; a changed value keeps the read words visible |
+| | Duplicate check | `BillingInvoice` live for (society, month) | inline refusal line | "A live invoice already exists for this month (FT/2026-27/041) — void it first →" replaces the submit control |
+| Card 2 — Lines | Line table | extraction lines | one row per line | Columns: # · Description (verbatim) · HSN · Qty · Rate · Discount · Amount · **Class** · **Circuit** |
+| | Class | proposal | segmented `Service` / `Other` | Proposed from HSN + description; `Other` rows render dimmed with "counts toward the total, not toward savings" |
+| | Circuit | proposal by Qty ≈ represented count | `<select>` of the society's live circuits, each option "Basement · 605 lights" | Empty + ⚠ when no circuit matches (FEAT-109-AC-10), with "Create the circuit for this deal →" |
+| | Count disagreement | Qty vs `Circuit.representedLightCount` | inline under the row | "Invoice bills **1,155**; the circuit records **1,153**. This month's stats use 1,155." + checkbox **"Also apply 1,155 to this circuit from Aug-2026 onward"** — unticked by default |
+| | Arithmetic ✓/⚠ per line | Qty × Rate − Discount vs Amount | ✓ quiet, ⚠ with both figures | FEAT-109-AC-3 |
+| Card 3 — Totals | Sub-total, tax (rate and amount), total, balance due | extraction | ₹ with verbatim words | Lines Σ vs sub-total, tax recomputed, total — each ✓/⚠ |
+| | Acknowledge mismatch | on any ⚠ in cards 2–3 | reason field + "Acknowledge" | Required before submit; recorded with actor |
+| Card 4 — Payment | Paid / Unpaid | operator | two radio options, **no default** | Paid reveals "Paid on" (date, required). Unpaid shows the consequence in words: "The overdue clock will start from 10-08-2026 on release." |
+| Card 5 — What the society will see (preview) | Derived stats per service line | FEAT-110 preview, computed from the confirmed lines | read-only | Per line: circuit · lights billed · saved kWh · saved ₹ · savings % · **basis chip** (`measured` / `agreed`) · provenance line ("agreed 64% benchmark · baseline 47.4 kWh/day ÷ 91 · ₹7/kWh · 31 days" or "measured from 28 of 31 days") |
+| | Not-derivable line | circuit with no baseline | stated row | "Not derivable — no commissioned baseline" (FEAT-110-AC-9) |
+| | Society total | Σ lines | ₹ / kWh | Names any excluded line |
+| Submit bar | Open items list | cards 1–4 state | bullet list | "2 things to resolve: line 2 has no circuit · payment status not chosen" |
+| | **Submit for release** | | primary button | Enabled only with zero open items |
+| | Save & come back later | | secondary | Keeps the row on SCR-093 as "awaiting review" |
+
+### Derivation preview rule
+
+Card 5 recomputes on every change to cards 1–4 (server action, debounced) and is **never
+editable** — it exists so the operator sees the society-facing consequence of a mapping before
+committing it, which is where a wrong circuit gets caught. It is the same pure function the submit
+will run (FEAT-110), so preview and record cannot disagree.
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Confirm society / month | select | billing ops | Stored selection; proposal stays visible | none | Card 1 ✓ | Differs from proposal → stated line, not blocking |
+| Set class / circuit | per line | billing ops | Line mapping | none | Card 2 ✓ when every service line has a circuit | No circuit → ⚠, blocks submit |
+| Apply count forward | checkbox | billing ops | On submit, writes the circuit's represented count effective from this month, logged with the invoice as reason | inline sentence, no modal | Recorded | — |
+| Acknowledge mismatch | ⚠ figure | billing ops | Records reason + actor; unblocks | reason required | Card ⚠ → "acknowledged" | Blank reason refused |
+| Set paid status | radio | billing ops | Stored on submit | none | Card 4 ✓ | Paid without a date → blocked |
+| **Submit for release** | button | billing ops (server re-check) | Creates the month (`submitted`), invoice with lines, stats v1; logs `billing.invoice_month_submitted` | none (everything above was the confirmation) | Returns to SCR-093 with the row now "Submitted" | Duplicate live invoice → refused by name; permission revoked → refused by name, nothing written |
+| Save for later | button | billing ops | Persists the draft review state | none | Row "awaiting review" | — |
+| Discard | link | billing ops | Removes the draft row; the PDF stays in S3 (cannot be deleted by this app's credentials) | modal | Row gone | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Document loads first; review cards skeleton | — |
+| Empty — unreadable | extraction found no lines | Card 2 says so, offers "Enter the lines by hand" (an empty editable line table); cards 1/3 with whatever was read | Enter lines |
+| Partial | some fields unread | The unread field is empty with "not found on the invoice" beneath, never a guess | Type it |
+| Error — extraction | Gemini unavailable | Banner; every card editable and empty; the PDF is still there to read from | Retry / enter by hand |
+| Error — network | a save or the derivation preview fails | Inline retry on the card that failed; nothing typed is lost | Retry |
+| Error — permission | not billing ops | SCR-221 | — |
+| Error — duplicate | live invoice exists for the society-month | Card 1 refusal line; submit replaced by the void route | Void & reattach → |
+| Degraded — no baseline | a line's circuit has no baseline | Card 5 states "not derivable" for that line; submit still allowed | — |
+| Success | submitted | Redirect to SCR-093, row "Submitted · awaiting release", toast | View queue |
+
+**Exits:** SCR-093, SCR-092, the circuit registry (create-the-circuit route), SCR-260 (what the
+society will see, opens in a new tab once published).
+**Live update:** card 5 only (derived preview).
+**Responsive:** ≥1024 side by side, sticky document; below that the document collapses to a
+"Show invoice" toggle above the cards — a phone is not this screen's home, but the backfill may be
+done from a laptop at 1024.
+**Offline:** blocked.
+**Copy:** count disagreement — "Invoice bills 1,155 lights; the circuit records 1,153. This month's
+stats use 1,155." · arithmetic — "Line 2: 1,155 × ₹12.19 − ₹8.09 = ₹14,071.36, but the invoice
+prints ₹14,071.00." · unpaid consequence — "Unpaid: the overdue clock starts from 10-08-2026 the
+moment the accountant publishes." · basis chip tooltip (agreed) — "No readings for this month —
+this is the saving at the benchmark agreed on the demo." · basis chip tooltip (measured) —
+"Measured on the demo circuit from 28 of 31 days of readings."
 
 ---
 

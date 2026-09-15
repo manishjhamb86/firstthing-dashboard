@@ -69,7 +69,7 @@ sense without training. This is not a nice-to-have on a savings report — it is
 
 ## SCR-100 — Portal home
 
-**Features:** FEAT-088 · **Flows:** FLOW-16 (step 2) · **Personas:** PER-05, PER-06
+**Features:** FEAT-088, FEAT-111 · **Flows:** FLOW-16 (step 2), FLOW-18 (step 10) · **Personas:** PER-05, PER-06
 
 **Purpose:** answer, in one screen, the four questions a committee actually has.
 **Primary action:** none — this is a status screen. Its success is that nobody has to ask.
@@ -117,6 +117,52 @@ anything wrong right now? What did we actually agree to?*
 | Error — permission | no society link | SCR-221 | — |
 | Success | steady state | The four answers, above the fold | — |
 
+### Revision 2026-09-15 (CON-47, FEAT-111) — published invoice-months drive the figures
+
+The four questions and the layout stand. What changes is **where the numbers come from and what
+each one says about itself**. Today's build derives the hero from readings alone, so a society with
+no readings sees "appears once the month is billed" indefinitely; under CON-47 every society has a
+published month, and readings improve it when they exist.
+
+| Region | Before (built 2026-09-12) | Now |
+|---|---|---|
+| Hero | "This month" — savings % from readings, ₹ only from a released fee line | **"You've saved ₹8,42,100 in 18 months"** — the approved spec's own cumulative figure, summed over **published** months (FEAT-111-AC-2's since-we-started), with kWh beneath. `--signal` lime on the figure, as the spec already spends it |
+| This month | readings-driven % + MoM trend | **the latest published month**: saved ₹ · saved kWh · savings % · a **basis line** (ASSUM-30 wording, settled on the mockup) · the bill (amount, paid / due date) in the same card. The MoM trend stays, computed over published months |
+| Trend | 12 months from readings | 12 published months; a bar's tint says its basis (measured = accent, agreed = accent-line outline) with the legend naming both; "show as table" adds the basis column |
+| Re-derived month | — | the month's card and its bar carry "updated from readings on 14-09-2026" the first time it is re-derived (FEAT-111-AC-7), then read as measured thereafter |
+| Empty — first use | "first savings report lands in early October" | unchanged wording, plus: nothing on this screen shows a zero as a figure while no month is published (FEAT-111-AC-4) |
+| Submitted, unpublished | — | invisible — the screen behaves exactly as if the month did not exist (AC-6) |
+
+**The basis wording is the only open design decision on this screen** (ASSUM-30). Two candidates
+are drawn beside the mockup; INV-02 requires one of them, the choice is tone:
+
+- **A — plain and specific:** "Measured on your demo circuit, 28 of 30 days" / "At the 64% saving
+  agreed on your demo — no meter readings for this month yet."
+- **B — shorter, softer:** "From meter readings" / "Based on your agreement."
+
+**Decided 2026-09-15: B.** The society-facing line reads "Based on your agreement. Updates when
+readings come in." or "From meter readings." — the specific basis (circuit, days, agreed %) is not
+dropped, it lives on the ops screens and in the month's provenance, so a question about the short
+label has the long answer behind it. A was the recommendation; the user preferred the shorter read.
+
+**Desktop composition (2026-09-15, from the user's reference concept — "take this as inspiration").**
+The reference's structure is adopted where it answers the four questions; its decoration is not.
+Adopted: a **greeting with a month selector** (any published month, defaulting to the latest — the
+first time the dashboard can show a past month without leaving it); a **four-tile KPI row** — saved
+₹ (with the cumulative "since we started" figure as its second line, so the AGM number keeps its
+place), saved kWh, savings % against the agreed benchmark, and system health (meters and tanks
+reporting, the existing merged status card's content) — each with a delta line; the **trend drawn
+as baseline-vs-actual consumption** over the published months with the two series named; a
+**quick-actions list** (download the month's savings report · latest inspection · tank status ·
+view the invoice) — the desktop counterpart of the mobile row; and a **bottom row** of three
+cards: latest inspection (date, faulty count, link), water tanks (per-tank level bars), billing
+(latest invoice, paid/due, link). Not adopted, each for a rule this codebase already holds: icon
+bubbles on tiles and green-tinted healthy numbers (`Stat`: tint only what needs attention), a "Pay
+Now" gateway (none exists — the billing page states bank transfer and that FirsThing confirms
+payment), a "System Health: All OK" badge as a headline claim (health is stated per device, never
+summarised into a reassurance), and the green palette (the portal keeps the app's tokens; lime is
+spent once, on the cumulative figure).
+
 **Exits:** SCR-260, SCR-261, SCR-101, SCR-130, SCR-120 (their arrears view).
 **Live update:** none. Monthly data does not need polling.
 **Responsive:** `.roomy`, **mobile-first here** — unlike every other SUR-01 screen. A committee
@@ -126,6 +172,59 @@ member opens this on a phone from an email.
 **Open questions:** ASSUM-11's split — whether PER-06 should see an operations-weighted variant of
 this same screen or a different one. Specified here as the same screen with the attention panel
 ordered differently; unvalidated.
+
+---
+
+## SCR-102 — Electricity (society view)
+
+**Surface:** SUR-01 (portal) · **Type:** page · **Personas:** PER-05, PER-06
+**Features:** FEAT-111, FEAT-088 · **Flows:** FLOW-16, FLOW-18 (step 10)
+**Assigned 2026-09-15** — the page was built in the 2026-08-29 portal revamp (`/portal/electricity`:
+savings tiles, consumption chart, circuit-wise table with the CON-11 metered/represented
+disclosure, meters) without a screen id. This spec records what exists and what FEAT-111 adds.
+**Mobile-first** (user's instruction 2026-09-15): the phone board is the primary artefact.
+
+**Purpose:** month by month, what the society saved and what that rests on.
+**Primary action:** none — read; tap a month to see it.
+
+### Layout & content
+
+| Region | Element | Data source | Format | Notes |
+|---|---|---|---|---|
+| Header | "Electricity" + month selector | published months | `<select>` defaulting to the latest | Same selector as SCR-100; the two stay in step |
+| Tiles | Saved ₹ · saved kWh · savings % | the selected published month (FEAT-110's latest version) | `Stat` row, 2-up on a phone | The basis line (B wording) under the % tile |
+| **Month series (new)** | One row per published month | FEAT-111-AC-3 | list on a phone, table ≥ 768px | Month · saved ₹ · saved kWh · % · basis chip (`From meter readings` / `Based on your agreement`) · "updated 14-09-2026" where re-derived |
+| Series footer | Totals since start | Σ published | ₹ · kWh · months | The AGM line again, in the place a reader adds it up |
+| Consumption chart | existing | readings where they exist | `ConsumptionChart` | Unchanged; hidden when the society has no readings at all, replaced by "Your meter readings will appear here" — never an empty axis with no explanation |
+| Circuit-wise | existing | circuits | table → cards | Unchanged, including the metered/represented sentence |
+| Meters | existing | | | Unchanged |
+
+### Actions
+
+| Action | Trigger | Permission | Effect | Confirmation | Result | Failure |
+|---|---|---|---|---|---|---|
+| Pick a month | selector / series row | any authority | Tiles and detail switch to it | — | — | — |
+| Open the invoice | series row | any authority (`billing` grant) | → SCR-260 detail | — | — | Without the grant: the row shows the saving, not the bill |
+| Show as table | series header, ≥ 768px only | any authority | Table with the basis column | — | — | — |
+
+### States
+
+| State | Trigger | What the user sees | Actions |
+|---|---|---|---|
+| Loading | on open | Skeleton | — |
+| Empty — first use | no published month | "Your first month appears here once it is published." Tiles show `—` with that sentence, never 0 | — |
+| Partial | published months, no readings | Series and tiles on the `agreed` basis; the consumption chart replaced by its explanation | — |
+| Re-derived | a month updated from readings | The row's chip flips to `From meter readings` and carries the date | — |
+| Error — network | load fails | Retry | Retry |
+| Error — permission | no `electricity` grant | SCR-221 | — |
+| Success | loaded | Tiles + series + chart | — |
+
+**Exits:** SCR-100, SCR-260, SCR-261.
+**Live update:** none.
+**Responsive:** mobile-first — 2-up tiles, the series as stacked cards (month + chip on line one,
+figures on line two), the circuit table as cards; the desktop layout is the same content in columns.
+**Offline:** not supported.
+**Copy:** series chip — the B wording; footer — "₹4,66,010 saved over 11 months".
 
 ---
 
@@ -198,7 +297,7 @@ range for a second month. That's why the total is different."
 
 ## SCR-260 — Invoices (society view)
 
-**Features:** FEAT-060 · **Flows:** FLOW-16 · **Personas:** PER-05, PER-06
+**Features:** FEAT-060, FEAT-111 · **Flows:** FLOW-16, FLOW-18 (step 10) · **Personas:** PER-05, PER-06
 
 **Purpose:** what we owe, what we've paid, and what each charge was for.
 **Primary action:** find and download an invoice.
@@ -240,6 +339,24 @@ history cannot be quietly rewritten.
 | Error — network | load fails | Retry | Retry |
 | Error — permission | wrong society | SCR-221 | — |
 | Success | loaded | List with the outstanding total | — |
+
+### Revision 2026-09-15 (CON-47, FEAT-111) — what a published invoice-month adds
+
+The screen is built (`/portal/billing`) and its shape stands. Changes, all small:
+
+| Region | Now |
+|---|---|
+| Row | paid state as the chip: `Paid 06-08-2026` (ok) · `Due 10-10-2026` (neutral) · `Overdue` (warn) — the date is part of the chip, never a status word alone (the spec's own rule) |
+| Row | "Saved that month: ₹42,357 · 6,051 kWh" beneath the amount, with the basis line in the chosen B wording — the invoice and the saving are one record to a society, and this is the link between the two the spec's detail already asked for |
+| Detail | the invoice's service lines as printed (Qty · Rate · Amount per deal), so a two-deal society sees why the total is what it is; `Other` lines listed as "one-time" |
+| Detail | "This invoice was uploaded from Zoho on 15-09-2026" — the document's provenance, since the PDF is the record |
+| Degraded | PDF unfetchable → the row keeps amount, dates and paid state and says "Document temporarily unavailable — ask us for a copy" with a link to Support (FEAT-111-AC-8) |
+| Empty | "Your first invoice appears here once it is published." (the first-use copy no longer promises "after your first full month" — a backfilled society may have twelve on day one) |
+
+**Mobile-first, explicitly (user's instruction 2026-09-15: customers will most likely use a phone
+for the dashboard):** rows are cards at every width below 600px, the chip and the amount share the
+first line, the saving line wraps beneath, and Download is a full-width control in the detail —
+the phone board is the primary artefact for this screen, the desktop layout is derived from it.
 
 **Exits:** SCR-261, SCR-100, SCR-130, SCR-121.
 **Live update:** none.

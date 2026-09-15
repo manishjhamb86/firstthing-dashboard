@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, X, type LucideIcon } from "lucide-react";
+import { ChevronDown, Menu, X, type LucideIcon } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -15,6 +15,44 @@ export type NavItem = {
   icon: LucideIcon;
   exact?: boolean;
 };
+
+/**
+ * CMP-19 (2026-09-15) — a named group of items, two levels only. The group
+ * holding the current page opens; the rest start collapsed; a click toggles
+ * and the choice is remembered per viewer. `id` is the storage key and must
+ * be stable across renames.
+ */
+export type NavGroup = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  items: NavItem[];
+};
+
+export type NavEntry = NavItem | NavGroup;
+
+function isGroup(entry: NavEntry): entry is NavGroup {
+  return "items" in entry;
+}
+
+const OPEN_GROUPS_KEY = "ft.nav.openGroups";
+
+function readOpenGroups(): Record<string, boolean> {
+  try {
+    const raw = window.localStorage.getItem(OPEN_GROUPS_KEY);
+    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeOpenGroups(next: Record<string, boolean>) {
+  try {
+    window.localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify(next));
+  } catch {
+    /* a private window or blocked storage — the toggle still works for this page */
+  }
+}
 
 /**
  * The application chrome — a sectioned sidebar on a chrome surface and a
@@ -40,7 +78,7 @@ export function NavShell({
 }: {
   theme: ThemeId;
   email: string;
-  items: NavItem[];
+  items: NavEntry[];
   /** The sidebar's section heading — the society's name, on the portal. */
   navLabel?: string;
   footerNote: string;
@@ -65,29 +103,92 @@ export function NavShell({
   const headerBrandVariant = theme === "dark" ? "dark" : "light";
   const initial = (email[0] ?? "?").toUpperCase();
 
-  function isActive(item: NavItem) {
+  const allItems = items.flatMap((e) => (isGroup(e) ? e.items : [e]));
+
+  function matches(item: NavItem) {
     return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
   }
 
+  // The most specific matching item is the active one — /admin/billing and
+  // /admin/billing/deviations both prefix-match a deviation page, and only
+  // the deeper one should light.
+  function isActive(item: NavItem) {
+    if (!matches(item)) return false;
+    return !allItems.some((other) => other !== item && matches(other) && other.href.length > item.href.length);
+  }
+
+  // Which groups the viewer has opened or closed by hand. Read after mount
+  // so the server render and the first client render agree (a localStorage
+  // read in a useState initializer is the hydration mismatch this codebase
+  // has already hit once). Until then, only the active group is open.
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- a one-time read of browser storage after mount; there is no render-time source for it
+    setOpenGroups(readOpenGroups());
+  }, []);
+
+  function groupOpen(group: NavGroup): boolean {
+    const active = group.items.some(isActive);
+    if (active) return true;
+    return openGroups[group.id] ?? false;
+  }
+
+  function toggleGroup(group: NavGroup) {
+    setOpenGroups((prev) => {
+      const next = { ...prev, [group.id]: !groupOpen(group) };
+      writeOpenGroups(next);
+      return next;
+    });
+  }
+
+  const linkFor = (item: NavItem, onNavigate?: () => void, nested = false) => {
+    const active = isActive(item);
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={onNavigate}
+        aria-current={active ? "page" : undefined}
+        className={`flex items-center gap-3 rounded-[var(--r-md)] py-2.5 text-sm font-medium transition-colors ${nested ? "pl-9 pr-3.5" : "px-3.5"}`}
+        style={{
+          background: active ? "var(--chrome-active)" : "transparent",
+          color: active ? "var(--chrome-accent)" : "var(--chrome-muted)",
+        }}
+      >
+        {!nested && <Icon size={18} strokeWidth={1.75} aria-hidden />}
+        {item.label}
+      </Link>
+    );
+  };
+
   const navLinks = (onNavigate?: () => void) =>
-    items.map((item) => {
-      const active = isActive(item);
-      const Icon = item.icon;
+    items.map((entry) => {
+      if (!isGroup(entry)) return linkFor(entry, onNavigate);
+      const open = groupOpen(entry);
+      const withinActive = entry.items.some(isActive);
+      const Icon = entry.icon;
       return (
-        <Link
-          key={item.href}
-          href={item.href}
-          onClick={onNavigate}
-          aria-current={active ? "page" : undefined}
-          className="flex items-center gap-3 rounded-[var(--r-md)] px-3.5 py-2.5 text-sm font-medium transition-colors"
-          style={{
-            background: active ? "var(--chrome-active)" : "transparent",
-            color: active ? "var(--chrome-accent)" : "var(--chrome-muted)",
-          }}
-        >
-          <Icon size={18} strokeWidth={1.75} aria-hidden />
-          {item.label}
-        </Link>
+        <div key={entry.id}>
+          <button
+            type="button"
+            onClick={() => toggleGroup(entry)}
+            aria-expanded={open}
+            className="flex w-full items-center gap-3 rounded-[var(--r-md)] px-3.5 py-2.5 text-sm font-medium transition-colors"
+            style={{ color: withinActive ? "var(--chrome-text)" : "var(--chrome-muted)" }}
+          >
+            <Icon size={18} strokeWidth={1.75} aria-hidden />
+            <span className="flex-1 text-left">{entry.label}</span>
+            <ChevronDown
+              size={16}
+              strokeWidth={1.75}
+              aria-hidden
+              className="transition-transform"
+              style={{ transform: open ? "rotate(180deg)" : "none", color: "var(--chrome-subtle)" }}
+            />
+          </button>
+          {open && <div className="mt-0.5 space-y-0.5">{entry.items.map((item) => linkFor(item, onNavigate, true))}</div>}
+        </div>
       );
     });
 

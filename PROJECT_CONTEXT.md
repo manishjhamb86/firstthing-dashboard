@@ -5664,6 +5664,39 @@ and the stray `DROP DEFAULT` was cut from this migration so it is exactly the AD
 **Not yet built** (MS-09 steps 2–5): the invoice extraction schema and SCR-094, the batch intake
 and batch publish, the three portal screens, the re-derivation hook. Not deployed.
 
+## The admin sidebar grouped into domains (2026-09-15) — user-caught: "too many menu tabs"
+
+**Sixteen flat items had accreted one milestone at a time**, each added beside the last, so the
+sidebar read as a changelog rather than a map. Researched against how mature consoles handle this
+scale (Shopify's domains with sub-items under the active one, Stripe's collapsible sections,
+Atlassian/Linear's 5–8 groups with home first and settings last) and applied to this product's own
+structure — the blueprint's loops and service lines — rather than the order features shipped in:
+Portfolio · Schedule · **Deals** (pipeline, field work, documents) · **Societies** (societies,
+inspections, support) · **Lighting** (demo monitoring, live monitoring, meters, readings) · **Water**
+(tanks) · **Billing** (board, deviations) · **Settings** (device catalog, admin users). Recorded as
+CMP-19 in `05-screens/00-global-patterns.md`.
+
+**Three rules carry it** (`nav-shell.tsx`, `NavGroup`): two levels only; the group holding the
+current page is open, the others start collapsed, and a click is remembered per viewer in
+`localStorage` (a convenience, read after mount so the server and first client render agree — a
+`useState` initializer reading storage is the hydration mismatch this codebase already hit once);
+and a group renders only when the viewer may see at least one of its items, so a field account gets
+no empty headers. **The active item is the most specific match**, not the first prefix match —
+`/admin/billing/deviations` lit both "Billing" and "Deviations" under the old `startsWith` rule.
+The portal's flat seven-item list is untouched: `NavShell` accepts both shapes.
+
+Verified in a browser, 18/18: six groups collapsed on the Portfolio page, the last item ending at
+~560px on a 900px viewport; opening Lighting and navigating to Meters lights exactly one link and
+keeps that group open; Deviations lights only Deviations; a group opened by hand survives
+navigating away; the mobile drawer carries the same groups with no horizontal overflow at 390px and
+navigates from a nested item; an inspector account sees Deals, Societies, Lighting and Settings —
+every one holding at least one item — and neither Billing nor Water. Zero console/page errors.
+
+**Deployed to stage the same day** (`685c804` first, carrying everything since `a60eeac` — the
+invoice void/reattach, CON-13's sweep, the inspection reminder and photo, MS-09's schema — then
+this). Both new migrations applied there; all four job chains held one pending link through the
+restart; `arrears_sweep` seeded on stage for the first time.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

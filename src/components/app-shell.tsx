@@ -18,10 +18,11 @@ import {
   FileText,
   LifeBuoy,
   ClipboardCheck,
+  Settings,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
-import { NavShell, type NavItem } from "@/components/nav-shell";
+import { NavShell, type NavEntry, type NavGroup, type NavItem } from "@/components/nav-shell";
 import type { ThemeId } from "@/lib/theme";
 
 // The admin surface's nav. The chrome itself lives in NavShell, which the
@@ -64,41 +65,58 @@ export function AppShell({
   showSupport: boolean;
   children: ReactNode;
 }) {
-  const items: NavItem[] = [
+  // CMP-19 (2026-09-15, user-asked: "too many menu tabs… few main sections
+  // and sub sections"): two levels, grouped by the operator's domain. A group
+  // renders only when the viewer can see at least one of its items — a field
+  // account sees Portfolio, Schedule, Deals, Societies and no empty headers.
+  const group = (id: string, label: string, icon: NavGroup["icon"], entries: Array<NavItem | false>): NavEntry[] => {
+    const visible = entries.filter((e): e is NavItem => e !== false);
+    return visible.length > 0 ? [{ id, label, icon, items: visible }] : [];
+  };
+
+  const items: NavEntry[] = [
     { href: "/admin", label: "Portfolio", icon: LayoutDashboard, exact: true },
     // Everyone has appointments — meetings for sales, visits for the field —
     // so this is not permission-gated (the user's call, 2026-08-25: one
     // schedule module, visible to everyone as their own calendar).
     { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
-    { href: "/admin/societies", label: "Societies", icon: Building2 },
-    ...(showPipeline ? [{ href: "/admin/pipeline", label: "Leads & pipeline", icon: Target }] : []),
+    ...group("deals", "Deals", Target, [
+      showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
+      // The field team's own list — they do not get the deal (2026-08-24).
+      showField && { href: "/admin/field", label: "Field work", icon: HardHat },
+      // One place to file any document, whatever kind it is (2026-08-26).
+      showPipeline && { href: "/admin/documents", label: "Documents", icon: FileText },
+    ]),
+    ...group("societies", "Societies", Building2, [
+      { href: "/admin/societies", label: "Societies", icon: Building2 },
+      // The monthly per-society motion-sensor checklist (2026-09-12) — field
+      // work, same gate as gate passes and benchmark rescale entry.
+      showField && { href: "/admin/inspections", label: "Inspections", icon: ClipboardCheck },
+      showSupport && { href: "/admin/tickets", label: "Support tickets", icon: LifeBuoy },
+    ]),
     // Two tabs, not one: a circuit chasing a benchmark and a society holding
     // one are different questions with different cadences (2026-08-21).
-    // The field team's own list — they do not get the deal (2026-08-24).
-    ...(showField ? [{ href: "/admin/field", label: "Field work", icon: HardHat }] : []),
-    // The monthly per-society motion-sensor checklist (2026-09-12) — field
-    // work, same gate as gate passes and benchmark rescale entry.
-    ...(showField ? [{ href: "/admin/inspections", label: "Inspections", icon: ClipboardCheck }] : []),
-    ...(showMonitoring
-      ? [{ href: "/admin/demo-monitoring", label: "Demo monitoring", icon: Activity }]
-      : []),
-    ...(showMonitoring
-      ? [{ href: "/admin/live-monitoring", label: "Live monitoring", icon: SignalHigh }]
-      : []),
+    ...group("lighting", "Lighting", Zap, [
+      showMonitoring && { href: "/admin/demo-monitoring", label: "Demo monitoring", icon: Activity },
+      showMonitoring && { href: "/admin/live-monitoring", label: "Live monitoring", icon: SignalHigh },
+      // The eWeLink meter mirror: an account's devices, assigned to what they
+      // serve — a circuit.
+      showMeters && { href: "/admin/meters", label: "Meters", icon: Zap },
+      showReadings && { href: "/admin/readings", label: "Readings", icon: Gauge },
+    ]),
     // Water tank monitoring (2026-08-25) — mirrors the Smart Life account,
-    // society-management's to run, so it follows the monitoring cluster.
-    ...(showTanks ? [{ href: "/admin/water-tanks", label: "Water tanks", icon: Droplets }] : []),
-    // The eWeLink meter mirror sits beside the tank mirror: same shape of
-    // job (an account's devices, assigned to what they serve), different
-    // vendor and a different assignment target — a circuit, not a society.
-    ...(showMeters ? [{ href: "/admin/meters", label: "Meters", icon: Zap }] : []),
-    ...(showReadings ? [{ href: "/admin/readings", label: "Readings", icon: Gauge }] : []),
-    // One place to file any document, whatever kind it is (2026-08-26).
-    ...(showSupport ? [{ href: "/admin/tickets", label: "Support tickets", icon: LifeBuoy }] : []),
-    ...(showPipeline ? [{ href: "/admin/documents", label: "Documents", icon: FileText }] : []),
-    ...(showCatalog ? [{ href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb }] : []),
-    ...(showBilling ? [{ href: "/admin/billing", label: "Billing", icon: Receipt }] : []),
-    ...(showUsers ? [{ href: "/admin/users", label: "Admin users", icon: Users }] : []),
+    // society-management's to run. Its own service line, its own group.
+    ...group("water", "Water", Droplets, [
+      showTanks && { href: "/admin/water-tanks", label: "Water tanks", icon: Droplets },
+    ]),
+    ...group("billing", "Billing", Receipt, [
+      showBilling && { href: "/admin/billing", label: "Billing", icon: Receipt },
+      showBilling && { href: "/admin/billing/deviations", label: "Deviations", icon: Receipt },
+    ]),
+    ...group("settings", "Settings", Settings, [
+      showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb },
+      showUsers && { href: "/admin/users", label: "Admin users", icon: Users },
+    ]),
   ];
 
   return (

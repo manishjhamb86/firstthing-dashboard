@@ -6039,6 +6039,17 @@ Approve for the past day and the review lands with the note; for a batch dated t
 office-bearer is offered nothing and the batch stays awaiting review. 895 unit tests,
 `tsc`/`lint`/`build` clean. No schema change.
 
+## A date picker on the last field of a page was unreachable (2026-09-16) — user-caught
+
+The completion certificate's signature date sits in the last card on the installation page. Its
+native picker opens downward, and in the browser the user runs stage in it is clipped by the
+window rather than flipped above the field — and with nothing below the card there was nothing to
+scroll, so the month's last rows could not be clicked. The shell's content wrapper now carries
+`max(50vh, 340px)` of bottom padding (print already zeroes it), so the last control on any page —
+admin or portal, both wear `NavShell` — can be scrolled far enough up for a picker to open clear.
+Verified by scrolling the last control of a form page into view and measuring ≥340px of room
+beneath it at a 700px-tall viewport. Not a data change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

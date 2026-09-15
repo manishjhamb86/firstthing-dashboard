@@ -326,7 +326,12 @@ export function NavShell({
         </header>
 
         <main>
-          <div className="app-shell-main mx-auto max-w-[1600px] p-5 sm:p-8">{children}</div>
+          {/* Extra room at the foot: a native date picker anchored to the LAST
+              field on a page opens downward and, in an embedded browser, is
+              clipped by the window rather than flipped — with nothing below
+              to scroll to, the bottom rows were unreachable (user-caught
+              2026-09-16). The padding lets the field be scrolled up clear. */}
+          <div className="app-shell-main mx-auto max-w-[1600px] p-5 pb-[max(50vh,340px)] sm:p-8 sm:pb-[max(50vh,340px)]">{children}</div>
         </main>
       </div>
     </div>

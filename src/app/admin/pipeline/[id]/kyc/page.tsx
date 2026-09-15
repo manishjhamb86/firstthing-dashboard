@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { formatDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
 import { notFound, redirect } from "next/navigation";
@@ -11,6 +12,7 @@ import {
   statusMeta,
 } from "@/lib/status-maps";
 import { KYC_REQUIREMENTS, kycIsSettled } from "@/lib/kyc";
+import { bestKycAcross } from "@/lib/kyc-society";
 import { publicS3Url } from "@/lib/s3";
 import { KycItem } from "./kyc-item";
 import { loadDealProgress } from "@/lib/pipeline-facts";
@@ -27,17 +29,18 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
     session.user.adminPermissions.includes("manage_pipeline");
 
   const { id } = await params;
+  const kycInclude = {
+    files: { orderBy: { uploadedAt: "desc" as const }, include: { uploadedBy: true, verifiedBy: true } },
+    followUps: { orderBy: { recordedAt: "desc" as const }, include: { recordedBy: true } },
+    markedNaBy: true,
+    pipeline: { select: { id: true, serviceLine: true, dealScope: true } },
+  };
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
-      society: true,
-      kycRequirements: {
-        include: {
-          files: { orderBy: { uploadedAt: "desc" }, include: { uploadedBy: true, verifiedBy: true } },
-          followUps: { orderBy: { recordedAt: "desc" }, include: { recordedBy: true } },
-          markedNaBy: true,
-        },
-      },
+      // KYC is a society fact (kyc-society.ts): a document verified on a
+      // sibling deal is shown here as on file, not asked for again.
+      society: { include: { pipelines: { select: { kycRequirements: { include: kycInclude } } } } },
     },
   });
   if (!pipeline) notFound();
@@ -46,10 +49,16 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
   // to exist — FEAT-024-AC-2's "all items show as outstanding with a clear
   // request action, not an empty panel" is then true for free on a pipeline
   // nobody has touched yet.
-  const items = KYC_REQUIREMENTS.map((req) => ({
-    ...req,
-    record: pipeline.kycRequirements.find((r) => r.type === req.type) ?? null,
-  }));
+  const best = bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id);
+  const items = KYC_REQUIREMENTS.map((req) => {
+    const b = best.get(req.type);
+    return {
+      ...req,
+      record: b?.record ?? null,
+      // Recorded on another of the society's deals — shown, never re-collected.
+      onFileFrom: b && !b.own ? b.record.pipeline : null,
+    };
+  });
   const settled = items.filter((i) => i.record && kycIsSettled(i.record.status)).length;
   const allSettled = settled === items.length;
   // What comes next on the deal once this step is closed out. Resolved from
@@ -107,6 +116,19 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
                 <StatusChip tone={status.tone}>{status.label}</StatusChip>
               </div>
               <p className="text-sm text-[var(--text-muted)] mb-4">{item.hint}</p>
+
+              {item.onFileFrom && (
+                <p
+                  className="mb-4 rounded-[var(--r-md)] border p-3 text-sm"
+                  style={{ borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" }}
+                >
+                  Already on file for this society — recorded on{" "}
+                  <Link href={`/admin/pipeline/${item.onFileFrom.id}/kyc`} className="font-medium underline">
+                    {dealLabel(item.onFileFrom.serviceLine, item.onFileFrom.dealScope)}
+                  </Link>
+                  . One document covers every deal; it is not collected again here.
+                </p>
+              )}
 
               {record?.status === "not_applicable" && (
                 <p className="mb-4 text-sm">
@@ -183,7 +205,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
                 </div>
               )}
 
-              {canEdit && (
+              {canEdit && !item.onFileFrom && (
                 <KycItem
                   pipelineId={pipeline.id}
                   societyName={pipeline.society.name}

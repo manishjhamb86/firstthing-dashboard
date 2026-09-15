@@ -1,3 +1,4 @@
+import { bestKycAcross, kycCounts } from "@/lib/kyc-society";
 import { formatDate } from "@/lib/format-date";
 import { describePricing } from "@/lib/offer";
 import { dealLabel } from "@/lib/deal-scope";
@@ -34,13 +35,12 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
-      society: true,
       agreement: { include: { offer: true, preparedBy: true, uploadedBy: true } },
       contract: { include: { versions: { orderBy: { version: "desc" } }, activatedBy: true } },
       // GATE-01's two preconditions, so the empty state can say which one is
       // missing instead of describing both as prose.
       offers: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
-      kycRequirements: { select: { status: true } },
+      society: { include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } } },
     },
   });
   if (!pipeline) notFound();
@@ -50,10 +50,10 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
   const contractStatus = contract ? statusMeta(CONTRACT_STATUS, contract.status) : null;
   const currentTerms = contract?.versions[0] ?? null;
   const offerAccepted = pipeline.offers[0]?.status === "accepted";
-  const kycTotal = pipeline.kycRequirements.length;
-  const kycSettled = pipeline.kycRequirements.filter(
-    (k) => k.status === "verified" || k.status === "not_applicable",
-  ).length;
+  // Across every deal of the society — KYC is a society fact (kyc-society.ts).
+  const { total: kycTotal, resolved: kycSettled } = kycCounts(
+    bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id),
+  );
   const kycDone = kycTotal > 0 && kycSettled >= kycTotal;
   const canPrepare = offerAccepted && kycDone;
 

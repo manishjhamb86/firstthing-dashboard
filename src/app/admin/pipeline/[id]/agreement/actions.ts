@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { KYC_REQUIREMENTS, KYC_TYPE_LABEL, kycIsSettled } from "@/lib/kyc";
+import { KYC_TYPE_LABEL } from "@/lib/kyc";
+import { bestKycAcross, kycMissing } from "@/lib/kyc-society";
 import type { OfferCircuitTerm } from "@/lib/offer";
 
 // FEAT-029-AC-4 / FEAT-062-AC-4 — agreement preparation and contract term
@@ -26,7 +27,9 @@ export async function prepareAgreement(pipelineId: string) {
     include: {
       offers: { where: { status: "accepted" }, orderBy: { version: "desc" }, take: 1 },
       agreement: true,
-      kycRequirements: true,
+      // KYC is a society fact (kyc-society.ts): a certificate verified on a
+      // sibling deal satisfies GATE-01 here too.
+society: { include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } } },
     },
   });
   if (!pipeline) return { error: "Deal not found." };
@@ -35,13 +38,10 @@ export async function prepareAgreement(pipelineId: string) {
   const accepted = pipeline.offers[0];
   if (!accepted) return { error: "No accepted offer — an agreement is prepared from the terms the society accepted." };
 
-  const missing = KYC_REQUIREMENTS.filter((req) => {
-    const record = pipeline.kycRequirements.find((r) => r.type === req.type);
-    return !record || !kycIsSettled(record.status);
-  });
+  const missing = kycMissing(bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipelineId));
   if (missing.length > 0) {
     return {
-      error: `KYC is incomplete — ${missing.map((m) => KYC_TYPE_LABEL[m.type]).join(" and ")} still outstanding.`,
+      error: `KYC is incomplete — ${missing.map((m) => KYC_TYPE_LABEL[m]).join(" and ")} still outstanding.`,
     };
   }
 

@@ -5939,6 +5939,28 @@ one is not what the operator wanted), a batch populates a proper table (invoice 
 month, total, status with the note clamped to two lines, action) worked through row by row.
 25/25 on the intake harness.
 
+## KYC is a society fact, read across its deals (2026-09-15) — user-caught: "it's common for all the circuits"
+
+**Reported from a second deal's KYC page** asking for the GST certificate and electricity bill the
+society had already supplied on its first. FEAT-024 was built when a society had one deal (CON-24
+before its amendment), so `KycRequirement` is keyed per pipeline, and every gate read only that
+pipeline's rows. A society registers for GST once.
+
+**The rows stay per pipeline; the answer is read across the society.** `src/lib/kyc-society.ts`
+(pure, 5 cases): `bestKycAcross` takes every KYC row of every deal the society has and keeps the
+best per document type — verified > not applicable > received > outstanding, the deal's own row
+winning a tie — and `kycCounts` / `kycMissing` are what the deal spine (`pipeline-facts.ts`), the
+agreement page and `prepareAgreement`'s GATE-01 check now read. The KYC page shows a document
+recorded on a sibling deal as **already on file**, naming and linking the deal, with its files
+visible and no upload / follow-up / not-applicable controls — collected once per society, never
+once per deal. A received-but-unverified sibling does not settle the gate. Recorded as
+FEAT-024-AC-6.
+
+Verified 9/9 in a browser on a two-deal fixture: the second deal reads 2 of 2 settled from the
+first, both cards say where the document came from and show its files, no controls are offered,
+the spine's KYC step reads done, the agreement page ticks GATE-01, and the first deal is unchanged.
+887 unit tests, `tsc`/`lint`/`build` clean. No schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

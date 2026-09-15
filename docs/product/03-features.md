@@ -804,6 +804,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
   - AC-3 (failure): Given PER-01 records a follow-up, the follow-up count for this pipeline step increments and is visible in the lead-health view (CON-23) — a follow-up that isn't counted is a silent failure of the signal.
   - AC-4 (permission): Given a non-PER-01 internal actor, the checklist is read-only.
   - AC-5 (edge): Given a document type is genuinely not applicable to a given society (e.g. no GST registration), PER-01 can mark it not-applicable with a reason rather than leaving it permanently outstanding and skewing the stall signal.
+  - AC-6 (society-level — amended 2026-09-15, the user's call: "it's common for all the circuits"): Given a society with more than one deal (CON-24 as amended), when a KYC document has been verified or marked not applicable on any of its deals, then every other deal's checklist shows it as already on file — naming the deal it was recorded on, showing the files, offering no collection controls — and GATE-01 and the deal spine count it as settled. The best record per document type across the society's deals governs (verified > not applicable > received > outstanding). A document is collected once per society, never once per deal.
 - **Permissions:** PER-01 (manage, follow up, mark not-applicable).
 - **Data touched:** Reads/creates `RequiredDocument` checklist items against the `Pipeline`; writes follow-up records (shared with CON-23's counter).
 - **Triggers:** Pipeline reaching the KYC stage.

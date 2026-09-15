@@ -10,13 +10,16 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { dealProgress, type DealProgress } from "./deal-progress";
+import { bestKycAcross, kycCounts } from "./kyc-society";
 
 export const DEAL_PROGRESS_INCLUDE = {
   // team as well: the deal page names which team is holding the survey.
   surveyOwner: { select: { id: true, name: true, email: true, team: true } },
   siteSurvey: { include: { areas: { select: { id: true } } } },
   demoReports: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
-  kycRequirements: { select: { status: true } },
+  // KYC is a society fact (kyc-society.ts): every deal's rows, not just this one's.
+  // `include`, not `select`: pages spread this alongside their own use of the society row.
+  society: { include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } } },
   offers: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
   contract: { select: { status: true } },
   installationProject: { select: { state: true, certificate: { select: { id: true } } } },
@@ -52,12 +55,7 @@ export function toDealProgress(
       replacementScheduled: c.replacementOwnerId != null && (c.scheduledEvents?.length ?? 0) > 0,
     })),
     reportStatus: pipeline.demoReports[0]?.status ?? null,
-    kyc: {
-      total: pipeline.kycRequirements.length,
-      resolved: pipeline.kycRequirements.filter(
-        (k) => k.status === "verified" || k.status === "not_applicable",
-      ).length,
-    },
+    kyc: kycCounts(bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id)),
     offerStatus: pipeline.offers[0]?.status ?? null,
     contractStatus: pipeline.contract?.status ?? null,
     installationState: pipeline.installationProject?.state ?? null,

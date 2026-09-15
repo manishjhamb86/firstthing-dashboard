@@ -2900,6 +2900,14 @@ features:
         when: "the condition is evaluated"
         then: "PER-01 can mark it not-applicable with a reason rather than leaving it permanently outstanding and skewing the stall signal"
         tests: [TC-024-5]
+      - id: FEAT-024-AC-6
+        title: "KYC is one set of documents per society, shared across its deals"
+        type: edge
+        given: "a society with more than one deal, one of which has a KYC document verified or marked not applicable"
+        when: "another of its deals is opened"
+        then: "that deal's checklist shows the document as already on file from the deal it was recorded on, offers no collection controls, and GATE-01 and the deal spine count it as settled"
+        scope_note: "Amended 2026-09-15 (the user's call): a society registers for GST once; the rows stay per pipeline, the answer is read across the society (kyc-society.ts)."
+        tests: [TC-024-6]
     stories:
       - id: STORY-024-1
         title: "As ops, I want to request and track the KYC documents a society still owes, so that nothing stalls silently waiting on a document nobody's chasing."

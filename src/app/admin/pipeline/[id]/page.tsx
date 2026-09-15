@@ -51,7 +51,6 @@ export default async function PipelineDetailPage({
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
-      society: true,
       salesOwner: true,
       loggedBy: true,
       surveyAssignedBy: { select: { name: true, email: true } },

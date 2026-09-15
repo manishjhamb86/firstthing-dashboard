@@ -270,17 +270,25 @@ export async function finalizeDocument(input: {
 
   const kycType: KycDocumentType =
     spec.id === "kycGstCertificate" ? "gst_certificate" : "electricity_bill";
-  const result = await recordKycDocument(input.contextId, {
+  // KYC is a society fact (kyc-society.ts): the file is uploaded against the
+  // SOCIETY and lands on its most recent deal's row, which every deal reads.
+  const holder = await db.pipeline.findFirst({
+    where: { societyId: input.contextId },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  });
+  if (!holder) return { error: "This society has no deal yet — log a lead first, then file its KYC documents." };
+  const result = await recordKycDocument(holder.id, {
     type: kycType,
     s3Key: input.s3Key,
     fileName: input.fileName,
     receiptChannel: "in_person",
   });
   if (result && "error" in result && result.error) return { error: result.error };
-  logger.info("document.filed", { actorId: actor.id, docTypeId: spec.id, pipelineId: input.contextId });
+  logger.info("document.filed", { actorId: actor.id, docTypeId: spec.id, societyId: input.contextId, pipelineId: holder.id });
   return {
-    message: "Filed against the society's KYC checklist, awaiting verification.",
-    href: `/admin/pipeline/${input.contextId}/kyc`,
+    message: "Filed against the society — one document covers every deal — awaiting verification.",
+    href: `/admin/pipeline/${holder.id}/kyc`,
   };
 }
 

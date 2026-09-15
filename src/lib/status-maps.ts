@@ -37,6 +37,8 @@ export const KYC_REQUIREMENT_STATUS: Record<string, StatusMeta> = {
   received: { label: "Received — awaiting verification", tone: "info" },
   verified: { label: "Verified", tone: "ok" },
   not_applicable: { label: "Not applicable", tone: "neu" },
+  // kyc-society.ts's derived state: the number is recorded, the document is still wanted.
+  fact_only: { label: "Recorded — document pending", tone: "info" },
 };
 
 export const KYC_FILE_STATE: Record<string, StatusMeta> = {

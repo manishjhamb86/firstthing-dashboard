@@ -22,6 +22,7 @@ import { EditSocietyForm } from "./edit-society-form";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { NextStepCallout } from "@/components/deal-stepper";
 import type { NextAction } from "@/lib/deal-progress";
+import { bestKycAcross, kycDocumentsWanted } from "@/lib/kyc-society";
 
 const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 
@@ -37,7 +38,10 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     viewer !== null && isOperations(viewer.team) && viewer.permissions.includes("manage_pipeline");
 
   const { id } = await params;
-  const society = await db.society.findUnique({ where: { id } });
+  const society = await db.society.findUnique({
+    where: { id },
+    include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } },
+  });
   if (!society) notFound();
 
   const [accounts, engagements, pipelines, circuitCount, waterTanks] = await Promise.all([
@@ -141,6 +145,32 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           </div>
         }
       />
+
+      {/* KYC documents the society still owes (kyc-society.ts): the number is
+          on record so the deal moved on, but the paper has not been filed —
+          said here, where the society is, with the route to file it. */}
+      {kycDocumentsWanted(bestKycAcross(society.pipelines.flatMap((p) => p.kycRequirements), ""), {
+        gstNumber: society.gstNumber,
+        electricityUnitRate: society.electricityUnitRate,
+      }).map((type) => (
+        <div
+          key={type}
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-[var(--r-md)] border p-3 text-sm"
+          style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+        >
+          <span>
+            {type === "gst_certificate"
+              ? `GST certificate not uploaded yet — GSTIN ${society.gstNumber} is on record, the certificate is not.`
+              : `Electricity bill not uploaded yet — the tariff (₹${society.electricityUnitRate}/kWh) is on record, the bill is not.`}
+          </span>
+          <Link
+            href={`/admin/documents?type=${type === "gst_certificate" ? "kycGstCertificate" : "kycElectricityBill"}&societyId=${society.id}`}
+            className="btn-secondary btn-sm"
+          >
+            Upload {type === "gst_certificate" ? "GST certificate" : "electricity bill"}
+          </Link>
+        </div>
+      ))}
 
       {/* The one thing this page was missing: where the work is. One
           callout per open deal, so a society running two service lines does

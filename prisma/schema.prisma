@@ -340,6 +340,14 @@ model Society {
   longitude        Float?
   status           SocietyStatus @default(prospect)
   nextElectionDate DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
+  /// KYC facts a deal can move forward on without the document in hand
+  /// (user's call 2026-09-15): the GSTIN, and the tariff a recent bill would
+  /// show. The document itself stays wanted — the society page says so until
+  /// it is filed — but GATE-01 no longer waits on it.
+  gstNumber                   String?   @map("gst_number")
+  gstNumberRecordedAt         DateTime? @map("gst_number_recorded_at")
+  electricityUnitRate         Float?    @map("electricity_unit_rate")
+  electricityUnitRateRecordedAt DateTime? @map("electricity_unit_rate_recorded_at")
   createdAt        DateTime      @default(now()) @map("created_at")
 
   contacts           SocietyContact[]

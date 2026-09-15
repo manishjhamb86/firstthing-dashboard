@@ -11,8 +11,9 @@ import {
   RECEIPT_CHANNEL_LABEL,
   statusMeta,
 } from "@/lib/status-maps";
-import { KYC_REQUIREMENTS, kycIsSettled } from "@/lib/kyc";
-import { bestKycAcross } from "@/lib/kyc-society";
+import { KYC_REQUIREMENTS } from "@/lib/kyc";
+import { bestKycAcross, kycStateOf, kycStateSettles } from "@/lib/kyc-society";
+import { KycFactForm } from "./kyc-fact-form";
 import { publicS3Url } from "@/lib/s3";
 import { KycItem } from "./kyc-item";
 import { loadDealProgress } from "@/lib/pipeline-facts";
@@ -50,6 +51,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
   // request action, not an empty panel" is then true for free on a pipeline
   // nobody has touched yet.
   const best = bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id);
+  const facts = { gstNumber: pipeline.society.gstNumber, electricityUnitRate: pipeline.society.electricityUnitRate };
   const items = KYC_REQUIREMENTS.map((req) => {
     const b = best.get(req.type);
     return {
@@ -57,9 +59,12 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
       record: b?.record ?? null,
       // Recorded on another of the society's deals — shown, never re-collected.
       onFileFrom: b && !b.own ? b.record.pipeline : null,
+      // Verified / not applicable / the number recorded — any of them settles GATE-01.
+      state: kycStateOf(req.type, best, facts),
+      fact: req.type === "gst_certificate" ? facts.gstNumber : facts.electricityUnitRate != null ? String(facts.electricityUnitRate) : null,
     };
   });
-  const settled = items.filter((i) => i.record && kycIsSettled(i.record.status)).length;
+  const settled = items.filter((i) => kycStateSettles(i.state)).length;
   const allSettled = settled === items.length;
   // What comes next on the deal once this step is closed out. Resolved from
   // the same sequencing module every other screen uses, so this page cannot
@@ -94,7 +99,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
       {progress?.next ? (
         <NextStepCallout
           next={progress.next}
-          done={allSettled ? "KYC complete — every document is verified or recorded as not applicable, so GATE-01 no longer holds the agreement." : undefined}
+          done={allSettled ? "KYC complete — every item is verified, recorded, or not applicable, so GATE-01 no longer holds the agreement." : undefined}
         />
       ) : (
         allSettled && (
@@ -108,7 +113,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
       <div className="max-w-none space-y-6">
         {items.map((item) => {
           const record = item.record;
-          const status = statusMeta(KYC_REQUIREMENT_STATUS, record?.status ?? "outstanding");
+          const status = statusMeta(KYC_REQUIREMENT_STATUS, item.state);
           return (
             <Card key={item.type} className="p-5">
               <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-1">
@@ -134,6 +139,16 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
                 <p className="mb-4 text-sm">
                   Marked not applicable by {record.markedNaBy?.name ?? record.markedNaBy?.email ?? "—"}:{" "}
                   <span className="text-[var(--text-muted)]">{record.notApplicableReason}</span>
+                </p>
+              )}
+
+              {item.fact && item.state !== "not_applicable" && (
+                <p className="mb-4 text-sm">
+                  {item.type === "gst_certificate" ? "GSTIN on record: " : "Tariff on record: "}
+                  <span className="num">{item.type === "gst_certificate" ? item.fact : `₹${item.fact}/kWh`}</span>
+                  {item.state === "fact_only" && (
+                    <span className="text-[var(--text-muted)]"> — the document itself is still to be filed.</span>
+                  )}
                 </p>
               )}
 
@@ -205,6 +220,9 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
                 </div>
               )}
 
+              {canEdit && item.state !== "verified" && item.state !== "not_applicable" && (
+                <KycFactForm pipelineId={pipeline.id} type={item.type} current={item.fact} />
+              )}
               {canEdit && !item.onFileFrom && (
                 <KycItem
                   pipelineId={pipeline.id}

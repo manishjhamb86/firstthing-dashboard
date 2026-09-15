@@ -17,9 +17,16 @@ export const metadata = { title: "Documents" };
  * what it has to be attached to, and what happens to it — so a document
  * cannot be accepted here under rules its own screen would not apply.
  */
-export default async function DocumentsPage() {
+export default async function DocumentsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ type?: string; societyId?: string }>;
+}) {
   await requireAdminPage();
   const actor = await resolveAdmin();
+  // A prompt elsewhere ("Upload GST" on the society page) lands here with
+  // the type and society already chosen.
+  const sp = await searchParams;
 
   const [societies, pipelines, circuits, recent] = await Promise.all([
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
@@ -54,6 +61,8 @@ export default async function DocumentsPage() {
         <Card className="p-6 lg:col-span-7">
           <DocumentUploadClient
             canUpload={Boolean(actor?.permissions.includes("manage_pipeline"))}
+            initialTypeId={DOCUMENT_TYPES.some((t) => t.id === sp.type) ? sp.type : undefined}
+            initialSocietyId={sp.societyId}
             types={DOCUMENT_TYPES.map((t) => ({
               id: t.id,
               label: t.label,

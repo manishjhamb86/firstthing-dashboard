@@ -89,8 +89,8 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
   {
     id: "kycGstCertificate",
     label: "GST certificate (KYC)",
-    operation: "Filed against the society's KYC checklist, awaiting verification.",
-    context: "pipeline",
+    operation: "Filed against the society — one document covers every deal — awaiting verification.",
+    context: "society",
     needsPeriod: true,
     periodHint: "The month the certificate was issued.",
     acceptedKinds: ["pdf", "png", "jpeg"],
@@ -102,8 +102,8 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
   {
     id: "kycElectricityBill",
     label: "Electricity bill (KYC)",
-    operation: "Filed against the society's KYC checklist, awaiting verification.",
-    context: "pipeline",
+    operation: "Filed against the society — one document covers every deal — awaiting verification.",
+    context: "society",
     needsPeriod: true,
     periodHint: "The month the bill covers.",
     acceptedKinds: ["pdf", "png", "jpeg"],

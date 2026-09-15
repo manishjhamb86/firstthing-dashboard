@@ -53,6 +53,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
   // Across every deal of the society — KYC is a society fact (kyc-society.ts).
   const { total: kycTotal, resolved: kycSettled } = kycCounts(
     bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id),
+    { gstNumber: pipeline.society.gstNumber, electricityUnitRate: pipeline.society.electricityUnitRate },
   );
   const kycDone = kycTotal > 0 && kycSettled >= kycTotal;
   const canPrepare = offerAccepted && kycDone;

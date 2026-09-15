@@ -192,3 +192,47 @@ export async function rejectKycDocument(pipelineId: string, fileId: string, reas
   revalidatePath(`/admin/pipeline/${pipelineId}/kyc`);
   return {};
 }
+
+/**
+ * Record the FACT behind a KYC document without the document (the user's
+ * call, 2026-09-15): the GSTIN, or the tariff a bill would show. The deal
+ * moves on; the society page chases the document until it is filed. A blank
+ * value clears the fact — but never once a document is verified, since then
+ * the fact is read off the document.
+ */
+export async function recordKycFact(
+  pipelineId: string,
+  type: KycDocumentType,
+  value: string,
+): Promise<{ error?: string }> {
+  const session = await requirePer01();
+  const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId }, select: { societyId: true } });
+  if (!pipeline) return { error: "Deal not found." };
+  const v = value.trim();
+  if (type === "gst_certificate") {
+    // GSTIN: 2-digit state code, PAN, entity number, Z, check digit — 15 characters.
+    if (v && !/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(v.toUpperCase())) {
+      logger.warn("kyc.fact_refused", { actorId: session.user.id, pipelineId, type, reason: "invalid_gstin" });
+      return { error: "That does not look like a GSTIN — 15 characters, e.g. 09AAACF1234A1Z5." };
+    }
+    await db.society.update({
+      where: { id: pipeline.societyId },
+      data: { gstNumber: v ? v.toUpperCase() : null, gstNumberRecordedAt: v ? new Date() : null },
+    });
+  } else {
+    const rate = Number(v);
+    if (v && !(rate > 0 && rate < 100)) {
+      logger.warn("kyc.fact_refused", { actorId: session.user.id, pipelineId, type, reason: "invalid_rate" });
+      return { error: "Give the tariff as rupees per kWh — a figure above 0 and below 100." };
+    }
+    await db.society.update({
+      where: { id: pipeline.societyId },
+      data: { electricityUnitRate: v ? rate : null, electricityUnitRateRecordedAt: v ? new Date() : null },
+    });
+  }
+  logger.info("kyc.fact_recorded", { actorId: session.user.id, pipelineId, societyId: pipeline.societyId, type, cleared: !v });
+  revalidatePath(`/admin/pipeline/${pipelineId}/kyc`);
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  revalidatePath(`/admin/societies/${pipeline.societyId}`);
+  return {};
+}

@@ -5980,6 +5980,31 @@ future date are each refused BY THE SERVER with nothing written; issued 02-05-20
 10-05-2026 stores and renders; printing dated before the acceptance is refused, dated after it
 stores. 887 unit tests, `tsc`/`lint`/`build` clean. No schema change.
 
+## The KYC number settles the gate; the document is chased on the society page (2026-09-15) — user's call
+
+"Electricity bill and GST are optional… if not GST-registered mark not applicable and skip; if
+available but not provided simply add the GST number and move forward… same for electricity, add
+the unit price and move on; show a notification on the society page to upload the bill." Built
+exactly so. `Society.gstNumber` / `electricityUnitRate` (with recorded-at stamps; migration
+`…_add_society_kyc_facts`, additive) hold the facts; `recordKycFact` writes them from the KYC
+checklist (GSTIN format checked — 15 characters, state code + PAN + entity + Z + check; a tariff
+between 0 and 100 ₹/kWh). `kyc-society.ts` gained a derived state per document type — verified ·
+not applicable · **fact_only** ("Recorded — document pending") · received · outstanding — and the
+first three settle GATE-01, so the spine, the agreement page and `prepareAgreement` all move on
+with the number alone. `kycDocumentsWanted` is the society page's chase: a banner per document
+whose fact is on record but which no deal has a verified (or even received) file for, with an
+**Upload GST certificate / Upload electricity bill** button that opens `/admin/documents?type=…&
+societyId=…` with both preselected. The two KYC types in the document catalog are **society-scoped**
+now (the file lands on the society's newest deal's row, which every deal reads); the recorded
+tariff is where the offer's unit rate starts. Recorded as FEAT-024-AC-7.
+
+Verified 14/14 in a browser: a malformed GSTIN is refused by the server with nothing stored; the
+GSTIN and tariff land on the society; both cards read "Recorded — document pending" and the step is
+2 of 2 with no `KycRequirement` row at all; the deal spine reads done; the society page shows both
+banners naming the facts, the upload button lands on the documents tab preselected with no deal
+picker; verifying the certificate clears its banner and leaves the bill's; the offer starts at
+₹7.24. 891 unit tests, `tsc`/`lint`/`build` clean.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -55,7 +55,10 @@ export function toDealProgress(
       replacementScheduled: c.replacementOwnerId != null && (c.scheduledEvents?.length ?? 0) > 0,
     })),
     reportStatus: pipeline.demoReports[0]?.status ?? null,
-    kyc: kycCounts(bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id)),
+    kyc: kycCounts(bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id), {
+      gstNumber: pipeline.society.gstNumber,
+      electricityUnitRate: pipeline.society.electricityUnitRate,
+    }),
     offerStatus: pipeline.offers[0]?.status ?? null,
     contractStatus: pipeline.contract?.status ?? null,
     installationState: pipeline.installationProject?.state ?? null,

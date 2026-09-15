@@ -39,7 +39,10 @@ society: { include: { pipelines: { select: { kycRequirements: { select: { pipeli
   const accepted = pipeline.offers[0];
   if (!accepted) return { error: "No accepted offer — an agreement is prepared from the terms the society accepted." };
 
-  const missing = kycMissing(bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipelineId));
+  const missing = kycMissing(bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipelineId), {
+    gstNumber: pipeline.society.gstNumber,
+    electricityUnitRate: pipeline.society.electricityUnitRate,
+  });
   if (missing.length > 0) {
     return {
       error: `KYC is incomplete — ${missing.map((m) => KYC_TYPE_LABEL[m]).join(" and ")} still outstanding.`,

@@ -2908,6 +2908,14 @@ features:
         then: "that deal's checklist shows the document as already on file from the deal it was recorded on, offers no collection controls, and GATE-01 and the deal spine count it as settled"
         scope_note: "Amended 2026-09-15 (the user's call): a society registers for GST once; the rows stay per pipeline, the answer is read across the society (kyc-society.ts)."
         tests: [TC-024-6]
+      - id: FEAT-024-AC-7
+        title: "The number settles the gate; the document is chased on the society page"
+        type: happy
+        given: "a society with a GSTIN or a tariff but no document yet"
+        when: "operations records the GSTIN or the unit rate on the KYC checklist"
+        then: "GATE-01 is settled for that item and the deal moves on; the society page says the document is not uploaded yet with an Upload button preselecting type and society on the documents tab, until it is filed and verified"
+        scope_note: "Amended 2026-09-15 (the user's call): neither document is mandatory to proceed — not applicable when the society has none, the number recorded when it does but has not handed the paper over."
+        tests: [TC-024-7]
     stories:
       - id: STORY-024-1
         title: "As ops, I want to request and track the KYC documents a society still owes, so that nothing stalls silently waiting on a document nobody's chasing."

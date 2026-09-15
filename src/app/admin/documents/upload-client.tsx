@@ -49,19 +49,24 @@ export function DocumentUploadClient({
   societies,
   pipelines,
   circuits,
+  initialTypeId,
+  initialSocietyId,
 }: {
   canUpload: boolean;
   types: TypeOption[];
   societies: Option[];
   pipelines: Scoped[];
   circuits: Scoped[];
+  /** Arriving from a "Upload GST" / "Upload bill" prompt: the type and society are already known. */
+  initialTypeId?: string;
+  initialSocietyId?: string;
 }) {
   const router = useRouter();
-  const [typeId, setTypeId] = useState("");
+  const [typeId, setTypeId] = useState(initialTypeId ?? "");
   // Society is asked FIRST, always (the user's call, 2026-08-26). Asking for a
   // circuit up front dead-ends every society that has none yet — which is all
   // of them until a survey has run — with an empty dropdown and no way on.
-  const [societyId, setSocietyId] = useState("");
+  const [societyId, setSocietyId] = useState(initialSocietyId ?? "");
   const [contextId, setContextId] = useState("");
   const [period, setPeriod] = useState("");
   const [file, setFile] = useState<File | null>(null);

@@ -133,7 +133,14 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <Card className="p-6">
             <CardTitle>Generate an offer</CardTitle>
             <div className="mt-4">
-              <OfferForm pipelineId={pipeline.id} mode="generate" baseRows={baseRows} hasDemoReport={!!demoReport} />
+              <OfferForm
+                pipelineId={pipeline.id}
+                mode="generate"
+                baseRows={baseRows}
+                hasDemoReport={!!demoReport}
+                // The tariff recorded at KYC is where the offer's unit rate starts.
+                defaults={pipeline.society.electricityUnitRate != null ? { unitElectricityRate: pipeline.society.electricityUnitRate } : undefined}
+              />
             </div>
           </Card>
         </div>

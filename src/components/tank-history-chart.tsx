@@ -127,8 +127,12 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
 
       {/* The readout sits outside the SVG so it can use real type and wrap
           like everything else on the page. */}
+      {/* min-h reserves the ACTIVE state's height, so the card does not grow
+          on hover: the 16px bold figure sets a taller line than the 13px
+          resting sentence (user-caught 2026-09-15 — the same 1px-caption
+          lesson the portal charts learned on 2026-08-31). */}
       <div
-        className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--r-sm)] border px-3 py-2 text-[13px]"
+        className="mt-2 flex min-h-[42px] flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--r-sm)] border px-3 py-2 text-[13px] leading-6"
         style={{
           borderColor: active ? "var(--accent-line)" : "var(--border-subtle)",
           background: active ? "var(--accent-subtle)" : "var(--surface-sunken)",
@@ -137,7 +141,7 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
       >
         {active ? (
           <>
-            <span className="num text-base font-bold">{active.level}%</span>
+            <span className="num text-base font-bold leading-6">{active.level}%</span>
             <span className="num" style={{ color: "var(--text-muted)" }}>
               {formatInstant(new Date(active.at))}
             </span>

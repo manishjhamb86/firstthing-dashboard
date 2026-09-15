@@ -35,20 +35,20 @@ function isGroup(entry: NavEntry): entry is NavGroup {
   return "items" in entry;
 }
 
-const OPEN_GROUPS_KEY = "ft.nav.openGroups";
+const OPEN_GROUP_KEY = "ft.nav.openGroup";
 
-function readOpenGroups(): Record<string, boolean> {
+/** The one group the viewer last opened by hand; "" means they folded everything. */
+function readOpenGroup(): string | null {
   try {
-    const raw = window.localStorage.getItem(OPEN_GROUPS_KEY);
-    return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    return window.localStorage.getItem(OPEN_GROUP_KEY);
   } catch {
-    return {};
+    return null;
   }
 }
 
-function writeOpenGroups(next: Record<string, boolean>) {
+function writeOpenGroup(id: string) {
   try {
-    window.localStorage.setItem(OPEN_GROUPS_KEY, JSON.stringify(next));
+    window.localStorage.setItem(OPEN_GROUP_KEY, id);
   } catch {
     /* a private window or blocked storage — the toggle still works for this page */
   }
@@ -117,28 +117,42 @@ export function NavShell({
     return !allItems.some((other) => other !== item && matches(other) && other.href.length > item.href.length);
   }
 
-  // Which groups the viewer has opened or closed by hand. Read after mount
-  // so the server render and the first client render agree (a localStorage
-  // read in a useState initializer is the hydration mismatch this codebase
-  // has already hit once). Until then, only the active group is open.
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  // ONE group open at a time (user's call, 2026-09-15: several unfolded at
+  // once "defeats the whole purpose"). The open group is the one holding the
+  // current page until the viewer opens another, which folds it; the choice
+  // is remembered per viewer and re-read after mount so the server and first
+  // client render agree (a storage read in a useState initializer is the
+  // hydration mismatch this codebase already hit once).
+  const activeGroupId = items.find((e): e is NavGroup => isGroup(e) && e.items.some(isActive))?.id ?? null;
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
+    // On a fresh load the group holding the current page wins; the
+    // remembered choice only carries a fold/open made while staying put.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a one-time read of browser storage after mount; there is no render-time source for it
-    setOpenGroups(readOpenGroups());
+    setOpenId(activeGroupId ?? readOpenGroup());
+    setHydrated(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only; route changes are handled by the render-time adjustment below
   }, []);
+  // A navigation into another group opens that group and folds the rest.
+  const [lastActive, setLastActive] = useState(activeGroupId);
+  if (activeGroupId !== lastActive) {
+    setLastActive(activeGroupId);
+    if (activeGroupId) {
+      setOpenId(activeGroupId);
+      writeOpenGroup(activeGroupId);
+    }
+  }
 
   function groupOpen(group: NavGroup): boolean {
-    const active = group.items.some(isActive);
-    if (active) return true;
-    return openGroups[group.id] ?? false;
+    if (!hydrated) return group.id === activeGroupId;
+    return (openId ?? activeGroupId) === group.id;
   }
 
   function toggleGroup(group: NavGroup) {
-    setOpenGroups((prev) => {
-      const next = { ...prev, [group.id]: !groupOpen(group) };
-      writeOpenGroups(next);
-      return next;
-    });
+    const next = groupOpen(group) ? "" : group.id;
+    setOpenId(next);
+    writeOpenGroup(next);
   }
 
   const linkFor = (item: NavItem, onNavigate?: () => void, nested = false) => {

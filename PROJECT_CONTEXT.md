@@ -6050,6 +6050,21 @@ admin or portal, both wear `NavShell` — can be scrolled far enough up for a pi
 Verified by scrolling the last control of a form page into view and measuring ≥340px of room
 beneath it at a 700px-tall viewport. Not a data change.
 
+## An inventory area's count can be corrected (2026-09-16) — user-asked
+
+"Should be able to change the light count, as on installation light count can change." The
+inventory row had Remove and nothing else. `updateLightingInventoryArea` (field permission, typed
+errors, old and new in the log line) with an inline Edit count on the row — count, walked/estimated,
+and the note an estimate still requires. The candidate circuit that represents the light type is
+deliberately NOT moved: its represented count is what the offer and the bill read, and it has its
+own correction path (the circuit page / the offer's "priced on X, survey counted Y" prompt), so the
+row says "the circuit still represents 1,773 — correct it on the circuit page" rather than
+silently rewriting a figure a society may be billed on. FEAT-006-AC-7. Verified 6/6: an estimate
+with no note refused by the server with the count unchanged; the correction stored; the warning
+shown; the totals re-read. One harness note: `getByLabel("Light count")` matched TWO controls once
+the editor opened — the candidate form has one too — so the editor's labels are now
+"Corrected light count" etc.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

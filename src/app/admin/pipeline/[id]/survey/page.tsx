@@ -6,6 +6,7 @@ import { LightingInventoryForm } from "./lighting-inventory-form";
 import { CircuitEligibilityForm } from "./circuit-eligibility-form";
 import { EligibilityControls } from "./eligibility-controls";
 import { DeleteAreaButton } from "./delete-area-button";
+import { EditAreaForm } from "./edit-area-form";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { resolveCircuitRemoval } from "@/lib/circuit-removal";
 import { criterionLabel, MIN_METERED_LIGHTS, outstandingCriteria } from "@/lib/circuit-eligibility";
@@ -364,7 +365,19 @@ export default async function SiteSurveyPage({
                     </td>
                     {canEdit && (
                       <td className="text-right">
-                        <DeleteAreaButton id={a.id} siteSurveyId={siteSurvey.id} />
+                        <div className="inline-flex flex-wrap items-center justify-end gap-3">
+                          <EditAreaForm
+                            id={a.id}
+                            siteSurveyId={siteSurvey.id}
+                            count={a.count}
+                            method={a.method}
+                            note={a.note}
+                            circuitRepresented={
+                              circuits.find((c) => c.lightType === a.lightType)?.representedLightCount ?? null
+                            }
+                          />
+                          <DeleteAreaButton id={a.id} siteSurveyId={siteSurvey.id} />
+                        </div>
                       </td>
                     )}
                   </tr>

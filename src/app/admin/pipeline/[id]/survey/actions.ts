@@ -51,6 +51,48 @@ export async function addLightingInventoryArea(input: {
   return {};
 }
 
+/**
+ * Correct an area's count after the fact (user-asked 2026-09-16: "as on
+ * installation light count can change"). The inventory is CON-11's
+ * extrapolation base; a changed count is stated as a change — old and new in
+ * the log line — and the candidate circuit that represents this light type is
+ * NOT silently moved: its represented count is corrected on its own page,
+ * where the offer and the bill read it.
+ */
+export async function updateLightingInventoryArea(
+  id: string,
+  siteSurveyId: string,
+  input: { count: number; method: "walked" | "estimated"; note?: string },
+): Promise<{ error?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_survey")) {
+    logger.warn("survey.lighting_inventory_area_update_refused", { actorId: actor.id, rowId: id, reason: "no_permission" });
+    return { error: "Correcting the inventory is field work — it needs the survey permission." };
+  }
+  const row = await db.lightingInventoryArea.findUnique({ where: { id } });
+  if (!row || row.siteSurveyId !== siteSurveyId) return { error: "That inventory row no longer exists." };
+  if (!Number.isFinite(input.count) || input.count < 0 || !Number.isInteger(input.count)) {
+    return { error: "Count must be a non-negative whole number." };
+  }
+  if (input.method === "estimated" && !input.note?.trim()) {
+    return { error: "A note is required when the count is estimated, not walked." };
+  }
+  await db.lightingInventoryArea.update({
+    where: { id },
+    data: { count: input.count, method: input.method, note: input.note?.trim() || null },
+  });
+  logger.info("survey.lighting_inventory_area_updated", {
+    actorId: actor.id,
+    siteSurveyId,
+    rowId: id,
+    from: { count: row.count, method: row.method },
+    to: { count: input.count, method: input.method },
+  });
+  revalidatePath(`/admin/pipeline`);
+  return {};
+}
+
 export async function deleteLightingInventoryArea(id: string, siteSurveyId: string) {
   await requireAdminPermission("manage_survey");
   await db.lightingInventoryArea.delete({ where: { id } });

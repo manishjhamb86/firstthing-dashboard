@@ -1756,6 +1756,14 @@ features:
         when: "is saved"
         then: "it carries a light type and a count method; given the method is `estimated`, then a note is required, and that row is surfaced as an explicit weakness on FEAT-010's review (SCR-014) rather than appearing identical to a walked count. **Rationale:** FLOW-02 step 4 states a miscount here biases billing for the whole term with no downstream check, and a desk reviewer cannot re-count 1,200 lights — how the number was obtained is the only reviewable property it has"
         tests: [TC-006-6]
+      - id: FEAT-006-AC-7
+        title: "An inventory area's count can be corrected after the fact"
+        type: happy
+        given: "a recorded inventory area"
+        when: "field staff correct its count, method or note"
+        then: "the row is updated with old and new logged; an estimated count still needs a note; the screen says when the candidate circuit still represents the old figure, which is corrected on its own page rather than moved silently"
+        scope_note: "Amended 2026-09-16: the count changes at installation, and the inventory is CON-11's extrapolation base."
+        tests: [TC-006-7]
     stories:
       - id: STORY-006-1
         title: "As the surveyor, I want to record the whole society's lighting inventory by area, with how each count was obtained, so that the highest-leverage number in the product is reviewable, not just typed."

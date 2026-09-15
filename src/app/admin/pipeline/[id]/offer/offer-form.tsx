@@ -5,7 +5,13 @@ import type { BenchmarkSource } from "@prisma/client";
 import type { ReactNode } from "react";
 import { ErrorText, Field } from "@/components/ui";
 import { ALLOWED_TOLERANCE_PCT, type PricingModel } from "@/lib/offer";
-import { deriveWorksheet, unitRateForSavedValue, type WorksheetCircuitInput } from "@/lib/offer-worksheet";
+import {
+  defaultPreInstallBasis,
+  deriveWorksheet,
+  unitRateForSavedValue,
+  type PreInstallBasis,
+  type WorksheetCircuitInput,
+} from "@/lib/offer-worksheet";
 import type { OfferBaseRow } from "@/lib/offer-base";
 import { counterOffer, generateOffer, updateOffer, type OfferCircuitInput, type OfferTermInput } from "./actions";
 
@@ -29,7 +35,7 @@ const kwh = (n: number) => `${n.toLocaleString("en-IN", { maximumFractionDigits:
 const pct = (n: number | null) => (n == null ? "—" : `${n.toFixed(2)}%`);
 const money = (n: number) => (Math.round(n * 100) / 100).toString();
 
-type RowState = { lights: string; pct: string; pre: string };
+type RowState = { lights: string; pct: string; basis: PreInstallBasis; watts: string; hours: string; pre: string };
 
 /**
  * The offer as a worksheet (user-redesigned 2026-09-15).
@@ -74,10 +80,19 @@ export function OfferForm({
     const out: Record<string, RowState> = {};
     for (const r of baseRows) {
       const d = byId.get(r.circuitId);
+      const lights = d?.agreedLightCount ?? r.representedLightCount;
+      const watts = d?.wattagePerLight ?? r.wattagePerLight;
+      const hours = d?.hoursPerDay ?? r.hoursPerDay;
       out[r.circuitId] = {
-        lights: (d?.agreedLightCount ?? r.representedLightCount).toString(),
+        lights: lights.toString(),
         pct: (d?.agreedBenchmarkSavingsPct ?? r.demoBenchmarkSavingsPct ?? "").toString(),
-        pre: d?.preInstallKwhPerDay != null && r.preInstallBaseline == null ? d.preInstallKwhPerDay.toString() : "",
+        // A fresh sheet starts on the HIGHER of demo and theoretical (the user's rule).
+        basis:
+          d?.preInstallBasis ??
+          defaultPreInstallBasis({ preInstallBaseline: r.preInstallBaseline, meteredLightCount: r.meteredLightCount, agreedLightCount: lights, wattagePerLight: watts, hoursPerDay: hours }),
+        watts: watts != null ? (Math.round(watts * 100) / 100).toString() : "",
+        hours: hours != null ? (Math.round(hours * 100) / 100).toString() : "",
+        pre: d?.preInstallKwhPerDay != null ? d.preInstallKwhPerDay.toString() : "",
       };
     }
     return out;
@@ -110,7 +125,10 @@ export function OfferForm({
           demoBenchmarkSavingsPct: r.demoBenchmarkSavingsPct,
           agreedLightCount: Number(s?.lights),
           agreedBenchmarkSavingsPct: Number(s?.pct),
-          preInstallKwhPerDayOverride: s?.pre === "" ? null : Number(s?.pre),
+          preInstallBasis: s?.basis ?? "demo",
+          wattagePerLight: s?.watts === "" || s?.watts == null ? null : Number(s.watts),
+          hoursPerDay: s?.hours === "" || s?.hours == null ? null : Number(s.hours),
+          preInstallKwhPerDayOverride: s?.pre === "" || s?.pre == null ? null : Number(s.pre),
         };
       }),
     [baseRows, rows],
@@ -145,7 +163,10 @@ export function OfferForm({
         circuitId: r.circuitId,
         agreedLightCount: Number(rows[r.circuitId]?.lights),
         agreedBenchmarkSavingsPct: Number(rows[r.circuitId]?.pct),
-        preInstallKwhPerDay: r.preInstallBaseline == null && rows[r.circuitId]?.pre !== "" ? Number(rows[r.circuitId]?.pre) : null,
+        preInstallBasis: rows[r.circuitId]?.basis ?? "demo",
+        wattagePerLight: rows[r.circuitId]?.watts ? Number(rows[r.circuitId].watts) : null,
+        hoursPerDay: rows[r.circuitId]?.hours ? Number(rows[r.circuitId].hours) : null,
+        preInstallKwhPerDay: rows[r.circuitId]?.basis === "custom" && rows[r.circuitId]?.pre !== "" ? Number(rows[r.circuitId].pre) : null,
       })),
       unitElectricityRate: effectiveRate,
       monthlyFee: effectiveFee,
@@ -213,7 +234,6 @@ export function OfferForm({
           <div className="space-y-3">
             {ws.circuits.map((c) => {
               const r = rows[c.circuitId];
-              const measured = c.preInstallBaseline != null;
               return (
                 <div key={c.circuitId} className="rounded-[var(--r-md)] border p-3 space-y-3" style={{ borderColor: "var(--border)" }}>
                   <p className="text-sm font-medium">
@@ -238,28 +258,33 @@ export function OfferForm({
                         className="field"
                       />
                     </Field>
-                    {measured ? (
-                      <Field label="Pre-installation consumption" hint={`${(c.preInstallBaseline! / Math.max(c.meteredLightCount, 1)).toFixed(3)} kWh/day per light from the demo × lights.`}>
-                        <p className="field num" aria-readonly>
-                          {kwh(c.preInstallKwhPerDay)}/day · {kwh(c.preInstallKwhPerDay * 30)}/month
-                        </p>
-                      </Field>
-                    ) : (
-                      <Field label="Pre-installation consumption (kWh/day)" htmlFor={`of-p-${c.circuitId}`} hint="No demo measured these lights — type what they burn today.">
-                        <input
-                          id={`of-p-${c.circuitId}`}
-                          type="number"
-                          inputMode="decimal"
-                          min="0"
-                          step="0.01"
-                          value={r?.pre ?? ""}
-                          onChange={(e) => setRow(c.circuitId, { pre: e.target.value })}
-                          disabled={pending}
-                          className="field"
-                        />
-                      </Field>
-                    )}
                     <Field
+                      label="Pre-installation consumption"
+                      htmlFor={`of-basis-${c.circuitId}`}
+                      hint={
+                        r?.basis === "demo" && c.demoKwhPerDay != null
+                          ? `${(c.preInstallBaseline! / Math.max(c.meteredLightCount, 1)).toFixed(3)} kWh/day per light from the demo × lights${c.theoreticalKwhPerDay != null && c.theoreticalKwhPerDay > c.demoKwhPerDay ? " — the theoretical figure is higher" : ""}.`
+                          : r?.basis === "theoretical" && c.theoreticalKwhPerDay != null
+                            ? `Lights × ${r.watts || "?"} W × ${r.hours || "?"} h ÷ 1000${c.demoKwhPerDay != null && c.demoKwhPerDay > c.theoreticalKwhPerDay ? " — the demo's figure is higher" : ""}.`
+                            : "What these lights burn today, for the agreed count — usually the higher of demo and theoretical."
+                      }
+                    >
+                      <select
+                        id={`of-basis-${c.circuitId}`}
+                        value={r?.basis ?? "demo"}
+                        onChange={(e) => setRow(c.circuitId, { basis: e.target.value as PreInstallBasis })}
+                        disabled={pending}
+                        className="field"
+                      >
+                        <option value="demo" disabled={c.demoKwhPerDay == null}>
+                          {c.demoKwhPerDay != null ? `From the demo — ${kwh(c.demoKwhPerDay)}/day` : "From the demo — not measured"}
+                        </option>
+                        <option value="theoretical">
+                          {c.theoreticalKwhPerDay != null ? `Theoretical — ${kwh(c.theoreticalKwhPerDay)}/day` : "Theoretical — give the wattage and hours"}
+                        </option>
+                        <option value="custom">Custom — type a figure</option>
+                      </select>
+                    </Field>                    <Field
                       label="Agreed savings %"
                       htmlFor={`of-b-${c.circuitId}`}
                       hint={
@@ -284,8 +309,26 @@ export function OfferForm({
                       />
                     </Field>
                   </div>
+                  {r?.basis === "theoretical" && (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Field label="Watts per light (old fitting)" htmlFor={`of-w-${c.circuitId}`} hint="From the circuit's load inventory; change if the agreement says otherwise.">
+                        <input id={`of-w-${c.circuitId}`} type="number" inputMode="decimal" min="0" step="0.1" value={r?.watts ?? ""} onChange={(e) => setRow(c.circuitId, { watts: e.target.value })} disabled={pending} className="field" />
+                      </Field>
+                      <Field label="Hours a day" htmlFor={`of-h-${c.circuitId}`} hint="24 for lights that never switch off; 12 for dusk-to-dawn.">
+                        <input id={`of-h-${c.circuitId}`} type="number" inputMode="decimal" min="0" max="24" step="0.5" value={r?.hours ?? ""} onChange={(e) => setRow(c.circuitId, { hours: e.target.value })} disabled={pending} className="field" />
+                      </Field>
+                    </div>
+                  )}
+                  {r?.basis === "custom" && (
+                    <div className="grid gap-3 sm:grid-cols-3">
+                      <Field label="Pre-installation consumption (kWh/day)" htmlFor={`of-p-${c.circuitId}`} hint="For the agreed number of lights.">
+                        <input id={`of-p-${c.circuitId}`} type="number" inputMode="decimal" min="0" step="0.01" value={r?.pre ?? ""} onChange={(e) => setRow(c.circuitId, { pre: e.target.value })} disabled={pending} className="field" />
+                      </Field>
+                    </div>
+                  )}
                   <p className="text-xs text-[var(--text-muted)]">
-                    Projected saving: <span className="num">{kwh(c.savedKwhPerDay)}</span>/day ·{" "}
+                    Priced on <span className="num">{kwh(c.preInstallKwhPerDay)}</span>/day · <span className="num">{kwh(c.preInstallKwhPerDay * 30)}</span>/month before
+                    → projected saving <span className="num">{kwh(c.savedKwhPerDay)}</span>/day ·{" "}
                     <span className="num">{kwh(c.savedKwhPerDay * 30)}</span>/month
                   </p>
                 </div>

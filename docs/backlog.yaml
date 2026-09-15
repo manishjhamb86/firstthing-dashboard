@@ -3092,7 +3092,7 @@ features:
         type: happy
         given: "the offer form"
         when: "the operator prices a deal"
-        then: "the inputs are lights as per the agreement, pre-installation consumption extrapolated per light from the demo, the agreed savings % (demo's by default, recorded as negotiated when changed), the unit rate and ₹ saving bound both ways, the monthly amount payable to FirsThing and spare lights; the society's take and both share percentages are derived, never typed"
+        then: "the inputs are lights as per the agreement, pre-installation consumption on a chosen basis (the demo's per-light baseline, the theoretical draw watts × hours, or a typed figure — defaulting to the higher of the first two), the agreed savings % (demo's by default, recorded as negotiated when changed), the unit rate and ₹ saving bound both ways, the monthly amount payable to FirsThing and spare lights; the society's take and both share percentages are derived, never typed"
         scope_note: "Amended 2026-09-15, the user's redesign: the negotiation happens in figures, and the share percentage is a consequence of them, not an input."
         tests: [TC-027-6]
       - id: FEAT-027-AC-7

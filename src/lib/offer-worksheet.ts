@@ -27,15 +27,28 @@ export type WorksheetCircuitInput = {
   /** The benchmark the offer carries; equals the demo figure unless negotiated. */
   agreedBenchmarkSavingsPct: number;
   /**
-   * Demo-skip only: the pre-install consumption of the agreed lights, typed
-   * because nothing measured it. Ignored when a baseline exists.
+   * Where the pre-install consumption comes from (user-specified 2026-09-15:
+   * "we decide based on which is higher"): the demo's measured baseline
+   * extrapolated per light, the theoretical draw of the agreed lights
+   * (wattage × hours), or a figure typed by hand.
    */
+  preInstallBasis: PreInstallBasis;
+  /** Per-light watts of the OLD fittings — the theoretical basis multiplies this. */
+  wattagePerLight?: number | null;
+  /** Hours a day the lights run — the theoretical basis multiplies this. */
+  hoursPerDay?: number | null;
+  /** The custom basis: kWh/day for the agreed lights, typed. */
   preInstallKwhPerDayOverride?: number | null;
 };
 
+export type PreInstallBasis = "demo" | "theoretical" | "custom";
+
 export type WorksheetCircuit = WorksheetCircuitInput & {
-  /** kWh/day the agreed population burned before — extrapolated per light from the demo. */
+  /** kWh/day the agreed population burned before, on the chosen basis. */
   preInstallKwhPerDay: number;
+  /** What each basis would give, so the operator can compare — null where the inputs are missing. */
+  demoKwhPerDay: number | null;
+  theoreticalKwhPerDay: number | null;
   savedKwhPerDay: number;
   /** Whether the agreed benchmark departs from what the demo measured. */
   benchmarkNegotiated: boolean;
@@ -63,23 +76,42 @@ export type WorksheetTotals = {
 
 export type Worksheet = { circuits: WorksheetCircuit[]; totals: WorksheetTotals };
 
+/** The demo's per-light baseline scaled to the agreed population — never a society-wide average (CON-11). */
+export function demoBasisKwhPerDay(c: Pick<WorksheetCircuitInput, "preInstallBaseline" | "meteredLightCount" | "agreedLightCount">): number | null {
+  if (c.preInstallBaseline == null || !(c.meteredLightCount > 0)) return null;
+  return (c.preInstallBaseline / c.meteredLightCount) * c.agreedLightCount;
+}
+
+/** lights × watts × hours ÷ 1000 — what the old fittings draw on paper. */
+export function theoreticalBasisKwhPerDay(c: Pick<WorksheetCircuitInput, "wattagePerLight" | "hoursPerDay" | "agreedLightCount">): number | null {
+  if (!(c.wattagePerLight != null && c.wattagePerLight > 0) || !(c.hoursPerDay != null && c.hoursPerDay > 0)) return null;
+  return (c.agreedLightCount * c.wattagePerLight * c.hoursPerDay) / 1000;
+}
+
+/** The basis a fresh worksheet starts on: the higher of the two computed figures, the user's rule. */
+export function defaultPreInstallBasis(c: Pick<WorksheetCircuitInput, "preInstallBaseline" | "meteredLightCount" | "agreedLightCount" | "wattagePerLight" | "hoursPerDay">): PreInstallBasis {
+  const demo = demoBasisKwhPerDay(c);
+  const theo = theoreticalBasisKwhPerDay(c);
+  if (demo == null && theo == null) return "custom";
+  if (demo == null) return "theoretical";
+  if (theo == null) return "demo";
+  return theo > demo ? "theoretical" : "demo";
+}
+
 export function deriveCircuitRow(c: WorksheetCircuitInput): WorksheetCircuit {
-  let pre: number;
-  let notDerivable = false;
-  if (c.preInstallBaseline != null && c.meteredLightCount > 0) {
-    // Per light, then scaled to the agreed population — never a society-wide
-    // average (CON-11).
-    pre = (c.preInstallBaseline / c.meteredLightCount) * c.agreedLightCount;
-  } else if (c.preInstallKwhPerDayOverride != null && Number.isFinite(c.preInstallKwhPerDayOverride)) {
-    pre = c.preInstallKwhPerDayOverride;
-  } else {
-    pre = 0;
-    notDerivable = true;
-  }
+  const demo = demoBasisKwhPerDay(c);
+  const theo = theoreticalBasisKwhPerDay(c);
+  const custom =
+    c.preInstallKwhPerDayOverride != null && Number.isFinite(c.preInstallKwhPerDayOverride) ? c.preInstallKwhPerDayOverride : null;
+  const chosen = c.preInstallBasis === "demo" ? demo : c.preInstallBasis === "theoretical" ? theo : custom;
+  const notDerivable = chosen == null;
+  const pre = chosen ?? 0;
   const pct = Number.isFinite(c.agreedBenchmarkSavingsPct) ? c.agreedBenchmarkSavingsPct : 0;
   return {
     ...c,
     preInstallKwhPerDay: pre,
+    demoKwhPerDay: demo,
+    theoreticalKwhPerDay: theo,
     savedKwhPerDay: pre * (pct / 100),
     benchmarkNegotiated: c.demoBenchmarkSavingsPct == null || Math.abs(c.demoBenchmarkSavingsPct - pct) > 1e-9,
     notDerivable,
@@ -142,7 +174,7 @@ export const WORKSHEET_BLOCKER_MESSAGE: Record<WorksheetBlocker, string> = {
   "invalid-light-count": "Every light type needs the number of lights the agreement installs — a whole number above zero.",
   "invalid-benchmark": "The agreed savings percentage has to sit inside CON-20's 60–80% band on every light type.",
   "not-derivable":
-    "A light type has no pre-installation consumption to price from — the demo did not measure it, so type what those lights burn today.",
+    "A light type has no pre-installation consumption on the basis chosen — pick the demo's figure, give the wattage and hours for the theoretical one, or type a value.",
   "invalid-unit-rate": "Set the unit electricity rate — the saving cannot be turned into rupees without it.",
   "invalid-fee": "Set the monthly amount payable to FirsThing.",
   "fee-exceeds-saving":

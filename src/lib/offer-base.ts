@@ -20,7 +20,31 @@ export type OfferBaseRow = {
   representedLightCount: number;
   preInstallBaseline: number | null;
   demoBenchmarkSavingsPct: number | null;
+  /**
+   * The OLD fittings' per-light watts and daily hours — the theoretical basis
+   * (lights × watts × hours). From the circuit's load inventory where it has
+   * one (count-weighted over the lines being retrofitted), else the circuit's
+   * own wattage and working hours.
+   */
+  wattagePerLight: number | null;
+  hoursPerDay: number | null;
 };
+
+function loadFigures(c: {
+  wattage: number;
+  workingHours: number | null;
+  devices: { count: number; wattage: number; hoursPerDay: number; excludedFromCalculation: boolean }[];
+}): { wattagePerLight: number | null; hoursPerDay: number | null } {
+  const lines = c.devices.filter((d) => !d.excludedFromCalculation && d.count > 0);
+  const n = lines.reduce((s, d) => s + d.count, 0);
+  if (n > 0) {
+    return {
+      wattagePerLight: lines.reduce((s, d) => s + d.count * d.wattage, 0) / n,
+      hoursPerDay: lines.reduce((s, d) => s + d.count * d.hoursPerDay, 0) / n,
+    };
+  }
+  return { wattagePerLight: c.wattage > 0 ? c.wattage : null, hoursPerDay: c.workingHours ?? 24 };
+}
 
 export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBaseRow[]; demoReportId: string | null }> {
   const pipeline = await db.pipeline.findUnique({
@@ -40,6 +64,9 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
               representedLightCount: true,
               preInstallBaseline: true,
               benchmarkSavingsPct: true,
+              wattage: true,
+              workingHours: true,
+              devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
             },
           },
         },
@@ -62,6 +89,7 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
         representedLightCount: live.get(c.circuitId)?.representedLightCount ?? c.representedLightCount,
         preInstallBaseline: c.preInstallBaseline,
         demoBenchmarkSavingsPct: c.benchmarkSavingsPct,
+        ...(live.get(c.circuitId) ? loadFigures(live.get(c.circuitId)!) : { wattagePerLight: null, hoursPerDay: null }),
       })),
     };
   }
@@ -75,6 +103,7 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
       representedLightCount: c.representedLightCount,
       preInstallBaseline: c.preInstallBaseline,
       demoBenchmarkSavingsPct: c.benchmarkSavingsPct,
+      ...loadFigures(c),
     })),
   };
 }
@@ -85,6 +114,10 @@ export function worksheetInputsFromTerms(terms: OfferCircuitTerm[]) {
     circuitId: t.circuitId,
     agreedLightCount: t.representedLightCount,
     agreedBenchmarkSavingsPct: t.benchmarkSavingsPct,
-    preInstallKwhPerDay: t.preInstallKwhPerDay ?? null,
+    // Older offers carry no basis: their figure came from the demo.
+    preInstallBasis: t.preInstallBasis ?? "demo",
+    wattagePerLight: t.wattagePerLight ?? null,
+    hoursPerDay: t.hoursPerDay ?? null,
+    preInstallKwhPerDay: t.preInstallBasis === "custom" ? (t.preInstallKwhPerDay ?? null) : null,
   }));
 }

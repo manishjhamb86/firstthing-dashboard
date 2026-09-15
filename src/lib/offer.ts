@@ -14,6 +14,10 @@ export type OfferCircuitTerm = {
   demoBenchmarkSavingsPct?: number | null;
   /** kWh/day the agreed population burned before the retrofit (worksheet offers only). */
   preInstallKwhPerDay?: number;
+  /** Which figure that was — the demo's, the theoretical draw, or typed (2026-09-15). */
+  preInstallBasis?: "demo" | "theoretical" | "custom";
+  wattagePerLight?: number | null;
+  hoursPerDay?: number | null;
 };
 
 /**

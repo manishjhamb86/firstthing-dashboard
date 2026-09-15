@@ -290,7 +290,15 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                       </td>
                       <td className="num">{c.meteredLightCount}</td>
                       <td className="num">{c.representedLightCount.toLocaleString("en-IN")}</td>
-                      <td className="num">{c.preInstallKwhPerDay != null ? `${kwh(c.preInstallKwhPerDay)}/day` : "—"}</td>
+                      <td className="num">
+                        {c.preInstallKwhPerDay != null ? `${kwh(c.preInstallKwhPerDay)}/day` : "—"}
+                        {c.preInstallBasis && (
+                          <span className="text-[var(--text-muted)]">
+                            {" "}
+                            · {c.preInstallBasis === "demo" ? "demo" : c.preInstallBasis === "theoretical" ? `theoretical (${c.wattagePerLight ?? "?"} W × ${c.hoursPerDay ?? "?"} h)` : "custom"}
+                          </span>
+                        )}
+                      </td>
                       <td className="num">{c.demoBenchmarkSavingsPct != null ? `${c.demoBenchmarkSavingsPct.toFixed(2)}%` : "—"}</td>
                       <td className="num">{c.benchmarkSavingsPct.toFixed(2)}%</td>
                     </tr>

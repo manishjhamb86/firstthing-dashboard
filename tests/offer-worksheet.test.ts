@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  defaultPreInstallBasis,
   deriveWorksheet,
   refuseWorksheet,
   unitRateForSavedValue,
@@ -17,6 +18,9 @@ const liftLobby: WorksheetCircuitInput = {
   demoBenchmarkSavingsPct: 77.12,
   agreedLightCount: 1773,
   agreedBenchmarkSavingsPct: 77.12,
+  preInstallBasis: "demo",
+  wattagePerLight: 20,
+  hoursPerDay: 24,
 };
 const bounds = { benchmarkMinPct: 60, benchmarkMaxPct: 80 };
 
@@ -62,21 +66,44 @@ describe("deriveWorksheet — the figures fall out of lights, baseline, % and fe
     expect(ws.totals.agreedLightCount).toBe(1100);
   });
 
-  it("takes a typed pre-install consumption on the demo-skip path, and flags a row with neither", () => {
-    const typed = deriveWorksheet({
-      circuits: [{ ...liftLobby, preInstallBaseline: null, demoBenchmarkSavingsPct: null, preInstallKwhPerDayOverride: 300 }],
+  it("offers three bases — demo, theoretical, custom — and prices on the chosen one", () => {
+    const demo = deriveWorksheet({ circuits: [liftLobby], unitElectricityRate: 7, monthlyFee: 1 }).circuits[0];
+    expect(demo.demoKwhPerDay).toBeCloseTo(265.95, 6);
+    // 1773 × 20 W × 24 h ÷ 1000 = 851.04 kWh/day
+    expect(demo.theoreticalKwhPerDay).toBeCloseTo(851.04, 6);
+    expect(demo.preInstallKwhPerDay).toBeCloseTo(265.95, 6);
+    const theo = deriveWorksheet({ circuits: [{ ...liftLobby, preInstallBasis: "theoretical" }], unitElectricityRate: 7, monthlyFee: 1 }).circuits[0];
+    expect(theo.preInstallKwhPerDay).toBeCloseTo(851.04, 6);
+    const custom = deriveWorksheet({
+      circuits: [{ ...liftLobby, preInstallBasis: "custom", preInstallKwhPerDayOverride: 300 }],
       unitElectricityRate: 7,
       monthlyFee: 1,
-    });
-    expect(typed.circuits[0].preInstallKwhPerDay).toBe(300);
-    expect(typed.circuits[0].notDerivable).toBe(false);
+    }).circuits[0];
+    expect(custom.preInstallKwhPerDay).toBe(300);
+    expect(custom.notDerivable).toBe(false);
+  });
+
+  it("defaults to the HIGHER of demo and theoretical — the user's rule", () => {
+    expect(defaultPreInstallBasis(liftLobby)).toBe("theoretical"); // 851 > 266
+    expect(defaultPreInstallBasis({ ...liftLobby, wattagePerLight: 2 })).toBe("demo"); // 85 < 266
+    expect(defaultPreInstallBasis({ ...liftLobby, preInstallBaseline: null })).toBe("theoretical");
+    expect(defaultPreInstallBasis({ ...liftLobby, preInstallBaseline: null, wattagePerLight: null })).toBe("custom");
+  });
+
+  it("flags a row whose chosen basis has nothing behind it", () => {
     const none = deriveWorksheet({
-      circuits: [{ ...liftLobby, preInstallBaseline: null, demoBenchmarkSavingsPct: null }],
+      circuits: [{ ...liftLobby, preInstallBasis: "demo", preInstallBaseline: null, demoBenchmarkSavingsPct: null }],
       unitElectricityRate: 7,
       monthlyFee: 1,
     });
     expect(none.circuits[0].notDerivable).toBe(true);
     expect(refuseWorksheet(none, bounds)).toBe("not-derivable");
+    const blankCustom = deriveWorksheet({
+      circuits: [{ ...liftLobby, preInstallBasis: "custom" }],
+      unitElectricityRate: 7,
+      monthlyFee: 1,
+    });
+    expect(refuseWorksheet(blankCustom, bounds)).toBe("not-derivable");
   });
 });
 

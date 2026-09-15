@@ -15,9 +15,11 @@ import {
   type PricingModel,
 } from "@/lib/offer";
 import {
+  defaultPreInstallBasis,
   deriveWorksheet,
   refuseWorksheet,
   WORKSHEET_BLOCKER_MESSAGE,
+  type PreInstallBasis,
   type WorksheetCircuitInput,
 } from "@/lib/offer-worksheet";
 import { offerBaseRows, worksheetInputsFromTerms } from "@/lib/offer-base";
@@ -36,7 +38,12 @@ export type OfferCircuitInput = {
   agreedLightCount?: number;
   /** The benchmark the offer carries — the demo's figure unless negotiated. */
   agreedBenchmarkSavingsPct: number;
-  /** Demo-skip only: what the agreed lights burn today, kWh/day. */
+  /** Where the pre-install consumption comes from. Omitted = the higher of demo and theoretical. */
+  preInstallBasis?: PreInstallBasis;
+  /** The theoretical basis's inputs — omitted = the circuit's own load figures. */
+  wattagePerLight?: number | null;
+  hoursPerDay?: number | null;
+  /** The custom basis: kWh/day for the agreed lights, typed. */
   preInstallKwhPerDay?: number | null;
 };
 
@@ -104,7 +111,7 @@ async function buildOfferRecord(pipelineId: string, input: OfferTermInput): Prom
   const byId = new Map(input.circuits.map((c) => [c.circuitId, c]));
   const rows: WorksheetCircuitInput[] = base.rows.map((r) => {
     const c = byId.get(r.circuitId);
-    return {
+    const partial = {
       circuitId: r.circuitId,
       lightType: r.lightType,
       location: r.location,
@@ -113,8 +120,11 @@ async function buildOfferRecord(pipelineId: string, input: OfferTermInput): Prom
       demoBenchmarkSavingsPct: r.demoBenchmarkSavingsPct,
       agreedLightCount: c?.agreedLightCount ?? r.representedLightCount,
       agreedBenchmarkSavingsPct: c?.agreedBenchmarkSavingsPct ?? r.demoBenchmarkSavingsPct ?? NaN,
+      wattagePerLight: c?.wattagePerLight ?? r.wattagePerLight,
+      hoursPerDay: c?.hoursPerDay ?? r.hoursPerDay,
       preInstallKwhPerDayOverride: c?.preInstallKwhPerDay ?? null,
     };
+    return { ...partial, preInstallBasis: c?.preInstallBasis ?? defaultPreInstallBasis(partial) };
   });
   const ws = deriveWorksheet({ circuits: rows, unitElectricityRate: input.unitElectricityRate, monthlyFee: input.monthlyFee });
   const blocker = refuseWorksheet(ws, { benchmarkMinPct: BENCHMARK_MIN_PCT, benchmarkMaxPct: BENCHMARK_MAX_PCT });
@@ -132,6 +142,9 @@ async function buildOfferRecord(pipelineId: string, input: OfferTermInput): Prom
     demoBenchmarkSavingsPct: c.demoBenchmarkSavingsPct,
     preInstallBaseline: c.preInstallBaseline ?? 0,
     preInstallKwhPerDay: c.preInstallKwhPerDay,
+    preInstallBasis: c.preInstallBasis,
+    wattagePerLight: c.wattagePerLight ?? null,
+    hoursPerDay: c.hoursPerDay ?? null,
     projectedSavedKwhPerDay: c.savedKwhPerDay,
   }));
   const lump = input.pricingModel === "lump_sum";

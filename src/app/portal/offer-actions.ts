@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { applyOfferPopulation } from "@/lib/offer-population";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { checkOfferResponse } from "@/lib/offer-authority";
 
@@ -46,8 +47,8 @@ export async function respondToOffer(
     return { error: "Please say what didn't work — it helps us come back with something better." };
   }
 
-  await db.$transaction([
-    db.offer.update({
+  await db.$transaction(async (tx) => {
+    await tx.offer.update({
       where: { id: offerId },
       data: {
         status: outcome,
@@ -55,14 +56,27 @@ export async function respondToOffer(
         respondedById: viewer!.id,
         responseNote: note.trim() || null,
       },
-    }),
+    });
     // FEAT-028-AC-1 — acceptance advances the pipeline to agreement
     // preparation. A rejection deliberately does not close the deal: it is
     // flagged and usually followed by a counter (AC-3).
-    ...(outcome === "accepted"
-      ? [db.pipeline.update({ where: { id: offer!.pipeline.id }, data: { stage: "offered" } })]
-      : []),
-  ]);
+    if (outcome === "accepted") {
+      await tx.pipeline.update({ where: { id: offer!.pipeline.id }, data: { stage: "offered" } });
+      // The agreed light count becomes the record's count on acceptance
+      // (offer-population.ts). The audit row is owned by the admin who issued
+      // the offer — a society account cannot own one (INV-01).
+      if (offer!.issuedById) {
+        const d = new Date();
+        await applyOfferPopulation(
+          tx,
+          offer!,
+          offer!.issuedById,
+          `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`,
+          "portal",
+        );
+      }
+    }
+  });
 
   logger.info("portal.offer_response", {
     actorId: viewer!.id,

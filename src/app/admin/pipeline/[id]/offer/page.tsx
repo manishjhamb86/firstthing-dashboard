@@ -9,7 +9,40 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { BENCHMARK_SOURCE_LABEL, OFFER_STATUS, statusMeta } from "@/lib/status-maps";
 import type { OfferCircuitTerm } from "@/lib/offer";
-import { OfferForm } from "./offer-form";
+import { offerBaseRows, worksheetInputsFromTerms } from "@/lib/offer-base";
+import { OfferForm, type OfferFormDefaults } from "./offer-form";
+
+const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const kwh = (n: number) => `${n.toLocaleString("en-IN", { maximumFractionDigits: 1 })} kWh`;
+
+/** The worksheet's inputs as an offer recorded them — what a draft's form or a counter's form opens on. */
+function formDefaults(o: {
+  benchmarkSource: "measured" | "negotiated_fixed";
+  tolerancePct: number;
+  pricingModel: string;
+  circuitTerms: unknown;
+  unitElectricityRate: number;
+  projectedMonthlyFee: number | null;
+  revenueSharePct: number | null;
+  termMonths: number;
+  spareStockCount: number;
+  exclusions: unknown;
+  amcTerms: unknown;
+}): OfferFormDefaults {
+  return {
+    benchmarkSource: o.benchmarkSource,
+    tolerancePct: o.tolerancePct,
+    pricingModel: o.pricingModel as OfferFormDefaults["pricingModel"],
+    circuits: worksheetInputsFromTerms((o.circuitTerms as OfferCircuitTerm[]) ?? []),
+    unitElectricityRate: o.unitElectricityRate,
+    monthlyFee: o.projectedMonthlyFee,
+    firsthingSharePct: o.revenueSharePct != null ? 100 - o.revenueSharePct : undefined,
+    termMonths: o.termMonths,
+    spareStockCount: o.spareStockCount,
+    exclusions: Array.isArray(o.exclusions) ? (o.exclusions as string[]).join("\n") : "",
+    amcTerms: o.amcTerms && typeof o.amcTerms === "object" && "summary" in o.amcTerms ? String((o.amcTerms as { summary: unknown }).summary ?? "") : "",
+  };
+}
 import { IssueOfferButton, RecordOutcomeControls, RegenerateOffer } from "./offer-controls";
 
 function daysSince(d: Date) {
@@ -50,6 +83,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
   });
   if (!pipeline) notFound();
 
+  const { rows: baseRows } = await offerBaseRows(id);
   const current = pipeline.offers[0] ?? null;
   const history = pipeline.offers.slice(1);
   const demoReport = pipeline.demoReports[0] ?? null;
@@ -98,7 +132,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <Card className="p-6">
             <CardTitle>Generate an offer</CardTitle>
             <div className="mt-4">
-              <OfferForm pipelineId={pipeline.id} mode="generate" hasDemoReport={!!demoReport} />
+              <OfferForm pipelineId={pipeline.id} mode="generate" baseRows={baseRows} hasDemoReport={!!demoReport} />
             </div>
           </Card>
         </div>
@@ -110,50 +144,92 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
               <StatusChip tone={status!.tone}>{status!.label}</StatusChip>
             </div>
 
-            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 mt-4 text-sm">
-              <div>
-                <dt className="lbl">Benchmark source</dt>
-                <dd>{BENCHMARK_SOURCE_LABEL[current.benchmarkSource]}</dd>
+            {current.status === "draft" ? (
+              // A draft is edited where it stands (user-asked 2026-09-15:
+              // "keep the offer editable"); issuing it is what freezes it.
+              <div className="mt-4">
+                <OfferForm
+                  pipelineId={pipeline.id}
+                  mode="edit"
+                  offerId={current.id}
+                  baseRows={baseRows}
+                  hasDemoReport={!!demoReport}
+                  defaults={formDefaults(current)}
+                  aside={<IssueOfferButton pipelineId={pipeline.id} offerId={current.id} tone="secondary" />}
+                />
               </div>
-              <div>
-                <dt className="lbl">Tolerance band</dt>
-                <dd className="num">±{current.tolerancePct}%</dd>
-              </div>
-              <div>
-                <dt className="lbl">{current.pricingModel === "lump_sum" ? "Fee" : "Revenue share"}</dt>
-                {/* Stated with the party named, deliberately: this exact
-                    split has been shipped inverted twice in this project. */}
-                <dd className="num">{describePricing(current)}</dd>
-              </div>
-              <div>
-                <dt className="lbl">Unit rate</dt>
-                <dd className="num">₹{current.unitElectricityRate.toFixed(2)}/kWh</dd>
-              </div>
-              <div>
-                <dt className="lbl">Term</dt>
-                <dd className="num">{current.termMonths} months</dd>
-              </div>
-              <div>
-                <dt className="lbl">Projected monthly fee</dt>
-                <dd className="num">
-                  {current.projectedMonthlyFee != null
-                    ? `₹${current.projectedMonthlyFee.toFixed(2)}`
-                    : "—"}
-                </dd>
-              </div>
-              <div>
-                <dt className="lbl">Contracted spare stock</dt>
-                <dd className="num">{current.spareStockCount}</dd>
-              </div>
-              <div>
-                <dt className="lbl">Issued</dt>
-                <dd>
-                  {current.issuedAt
-                    ? `${formatDate(current.issuedAt)} by ${current.issuedBy?.name ?? current.issuedBy?.email ?? "—"}`
-                    : "Not yet issued"}
-                </dd>
-              </div>
-            </dl>
+            ) : (
+              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-3 mt-4 text-sm">
+                <div>
+                  <dt className="lbl">Lights as per agreement</dt>
+                  <dd className="num">
+                    {(current.circuitTerms as OfferCircuitTerm[]).reduce((n, c) => n + c.representedLightCount, 0).toLocaleString("en-IN")}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="lbl">Benchmark source</dt>
+                  <dd>
+                    {BENCHMARK_SOURCE_LABEL[current.benchmarkSource]}
+                    {(current.circuitTerms as OfferCircuitTerm[]).some(
+                      (c) => c.demoBenchmarkSavingsPct != null && Math.abs(c.demoBenchmarkSavingsPct - c.benchmarkSavingsPct) > 1e-9,
+                    ) && <span className="text-[var(--text-muted)]"> · benchmark negotiated</span>}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="lbl">Tolerance band</dt>
+                  <dd className="num">±{current.tolerancePct}%</dd>
+                </div>
+                <div>
+                  <dt className="lbl">Projected energy saving</dt>
+                  <dd className="num">{current.projectedSavedKwhPerMonth != null ? `${kwh(current.projectedSavedKwhPerMonth)}/month` : "—"}</dd>
+                </div>
+                <div>
+                  <dt className="lbl">Unit rate</dt>
+                  <dd className="num">₹{current.unitElectricityRate.toFixed(2)}/kWh</dd>
+                </div>
+                <div>
+                  <dt className="lbl">Total expected saving</dt>
+                  <dd className="num">{current.projectedSavedValue != null ? `${inr(current.projectedSavedValue)}/month` : "—"}</dd>
+                </div>
+                <div>
+                  <dt className="lbl">Payable to FirsThing</dt>
+                  <dd className="num">
+                    {current.projectedMonthlyFee != null ? `${inr(current.projectedMonthlyFee)}/month` : "—"}
+                    {current.pricingModel === "lump_sum" && <span className="text-[var(--text-muted)]"> · fixed</span>}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="lbl">Society keeps</dt>
+                  <dd className="num">
+                    {current.projectedSavedValue != null && current.projectedMonthlyFee != null
+                      ? `${inr(current.projectedSavedValue - current.projectedMonthlyFee)}/month`
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="lbl">{current.pricingModel === "lump_sum" ? "Fee" : "Share of the saving"}</dt>
+                  {/* Stated with the party named, deliberately: this exact
+                      split has been shipped inverted twice in this project. */}
+                  <dd className="num">{describePricing(current)}</dd>
+                </div>
+                <div>
+                  <dt className="lbl">Term</dt>
+                  <dd className="num">{current.termMonths} months</dd>
+                </div>
+                <div>
+                  <dt className="lbl">Spare lights as per agreement</dt>
+                  <dd className="num">{current.spareStockCount}</dd>
+                </div>
+                <div>
+                  <dt className="lbl">Issued</dt>
+                  <dd>
+                    {current.issuedAt
+                      ? `${formatDate(current.issuedAt)} by ${current.issuedBy?.name ?? current.issuedBy?.email ?? "—"}`
+                      : "Not yet issued"}
+                  </dd>
+                </div>
+              </dl>
+            )}
 
             {current.benchmarkSource === "negotiated_fixed" && (
               <p
@@ -186,9 +262,6 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
               </p>
             )}
 
-            <div className="mt-5 flex flex-wrap gap-3">
-              {current.status === "draft" && <IssueOfferButton pipelineId={pipeline.id} offerId={current.id} />}
-            </div>
           </Card>
 
           {(current.circuitTerms as OfferCircuitTerm[])?.length > 0 && (
@@ -202,8 +275,10 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                   <tr>
                     <th>Light type</th>
                     <th>Metered</th>
-                    <th>Represents</th>
-                    <th>Benchmark</th>
+                    <th>Lights agreed</th>
+                    <th>Pre-install</th>
+                    <th>Demo measured</th>
+                    <th>Agreed %</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -214,7 +289,9 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                         {c.location && <span className="text-[var(--text-muted)]"> · {c.location}</span>}
                       </td>
                       <td className="num">{c.meteredLightCount}</td>
-                      <td className="num">{c.representedLightCount}</td>
+                      <td className="num">{c.representedLightCount.toLocaleString("en-IN")}</td>
+                      <td className="num">{c.preInstallKwhPerDay != null ? `${kwh(c.preInstallKwhPerDay)}/day` : "—"}</td>
+                      <td className="num">{c.demoBenchmarkSavingsPct != null ? `${c.demoBenchmarkSavingsPct.toFixed(2)}%` : "—"}</td>
                       <td className="num">{c.benchmarkSavingsPct.toFixed(2)}%</td>
                     </tr>
                   ))}
@@ -314,18 +391,9 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                   pipelineId={pipeline.id}
                   mode="counter"
                   counterOfId={current.id}
+                  baseRows={baseRows}
                   hasDemoReport={!!demoReport}
-                  defaults={{
-                    benchmarkSource: current.benchmarkSource,
-                    tolerancePct: current.tolerancePct,
-                    pricingModel: current.pricingModel,
-                    revenueSharePct: current.revenueSharePct,
-                    lumpSumMonthlyFee: current.lumpSumMonthlyFee,
-                    unitElectricityRate: current.unitElectricityRate,
-                    termMonths: current.termMonths,
-                    spareStockCount: current.spareStockCount,
-                    exclusions: ((current.exclusions as string[]) ?? []).join("\n"),
-                  }}
+                  defaults={formDefaults(current)}
                 />
               </Card>
             </>

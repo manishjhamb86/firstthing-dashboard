@@ -85,6 +85,8 @@ export async function submitCircuitCandidate(input: {
   societyId: string;
   serviceLine: string;
   lightType: string;
+  /** Where the circuit is — names it on every list; optional, since not every survey records one. */
+  location?: string;
   representedLightCount: number;
   lines: CandidateLine[];
   workingHours?: number;
@@ -213,6 +215,7 @@ export async function submitCircuitCandidate(input: {
         siteSurveyId: input.siteSurveyId,
         serviceLine: input.serviceLine as never,
         lightType: input.lightType.trim(),
+        location: input.location?.trim() || null,
         meteredLightCount,
         representedLightCount: input.representedLightCount,
         wattage,

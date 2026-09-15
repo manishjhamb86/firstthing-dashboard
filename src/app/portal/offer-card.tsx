@@ -5,6 +5,8 @@ import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import { respondToOffer } from "./offer-actions";
 import { describePricing } from "@/lib/offer";
 
+const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 // FEAT-108-AC-2 — the screen names who can perform the act rather than
 // silently hiding it, so a committee member understands why they can't.
 export function OfferCard({
@@ -21,6 +23,10 @@ export function OfferCard({
     unitElectricityRate: number;
     termMonths: number;
     projectedMonthlyFee: number | null;
+    /** The worksheet's figures — what the agreed lights are expected to save (offers from 2026-09-15 on). */
+    projectedSavedValue: number | null;
+    projectedSavedKwhPerMonth: number | null;
+    lightCount: number;
     exclusions: string[];
   };
   canRespond: boolean;
@@ -41,14 +47,47 @@ export function OfferCard({
     <Card className="p-6">
       <CardTitle>Your offer</CardTitle>
       <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 mt-4 text-sm">
+        {offer.lightCount > 0 && (
+          <div>
+            <dt className="lbl">Lights to be installed</dt>
+            <dd className="num">{offer.lightCount.toLocaleString("en-IN")}</dd>
+          </div>
+        )}
+        {offer.projectedSavedValue != null && (
+          <div>
+            <dt className="lbl">Expected saving each month</dt>
+            <dd className="num">
+              {inr(offer.projectedSavedValue)}
+              {offer.projectedSavedKwhPerMonth != null && (
+                <span className="text-[var(--text-muted)]">
+                  {" "}
+                  · {offer.projectedSavedKwhPerMonth.toLocaleString("en-IN", { maximumFractionDigits: 0 })} kWh
+                </span>
+              )}
+            </dd>
+          </div>
+        )}
         <div>
-          <dt className="lbl">
-            {offer.pricingModel === "lump_sum" ? "The monthly fee" : "Your share of the savings"}
-          </dt>
+          {/* On a lump-sum offer this is not an ESTIMATE — it is the agreed
+              figure, and calling it estimated in front of the society would
+              misdescribe what they are being asked to accept. */}
+          <dt className="lbl">{offer.pricingModel === "lump_sum" ? "Monthly fee to FirsThing" : "Estimated monthly fee to FirsThing"}</dt>
+          <dd className="num">{offer.projectedMonthlyFee != null ? inr(offer.projectedMonthlyFee) : "—"}</dd>
+        </div>
+        {offer.projectedSavedValue != null && offer.projectedMonthlyFee != null && (
+          <div>
+            <dt className="lbl">Your society keeps</dt>
+            <dd className="num">{inr(offer.projectedSavedValue - offer.projectedMonthlyFee)} each month</dd>
+          </div>
+        )}
+        <div>
+          <dt className="lbl">{offer.pricingModel === "lump_sum" ? "How the fee works" : "Your share of the savings"}</dt>
           <dd className="num">
             {offer.pricingModel === "lump_sum"
               ? describePricing(offer)
-              : `${offer.revenueSharePct}%`}
+              : offer.revenueSharePct != null
+                ? `${(Math.round(offer.revenueSharePct * 100) / 100).toFixed(2)}%`
+                : "—"}
           </dd>
         </div>
         <div>
@@ -58,22 +97,6 @@ export function OfferCard({
         <div>
           <dt className="lbl">Term</dt>
           <dd className="num">{offer.termMonths} months</dd>
-        </div>
-        <div>
-          {/* On a lump-sum offer this is not an ESTIMATE — it is the agreed
-              figure, and calling it estimated in front of the society would
-              misdescribe what they are being asked to accept. */}
-          <dt className="lbl">
-            {offer.pricingModel === "lump_sum" ? "Monthly fee" : "Estimated monthly fee"}
-          </dt>
-          <dd className="num">
-            {offer.projectedMonthlyFee != null
-              ? `₹${offer.projectedMonthlyFee.toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}`
-              : "—"}
-          </dd>
         </div>
       </dl>
 

@@ -3087,6 +3087,30 @@ features:
         when: "an offer is generated with a negotiated benchmark"
         then: "`benchmarkSource = negotiated-fixed` is set and the offer records that the savings **percentage** is agreement-derived while consumption is still metered and monitored against the first post-install month (FEAT-052) — INV-02's narrowed exception, made explicit on the document"
         tests: [TC-027-5]
+      - id: FEAT-027-AC-6
+        title: "The offer is a worksheet of the negotiated figures; the share is derived"
+        type: happy
+        given: "the offer form"
+        when: "the operator prices a deal"
+        then: "the inputs are lights as per the agreement, pre-installation consumption extrapolated per light from the demo, the agreed savings % (demo's by default, recorded as negotiated when changed), the unit rate and ₹ saving bound both ways, the monthly amount payable to FirsThing and spare lights; the society's take and both share percentages are derived, never typed"
+        scope_note: "Amended 2026-09-15, the user's redesign: the negotiation happens in figures, and the share percentage is a consequence of them, not an input."
+        tests: [TC-027-6]
+      - id: FEAT-027-AC-7
+        title: "A draft offer is edited in place; issuing freezes it"
+        type: happy
+        given: "a draft offer"
+        when: "the operator changes any figure"
+        then: "the draft is saved in place; issuing freezes it, after which a change is a counter (FEAT-028-AC-5)"
+        scope_note: "Amended 2026-09-15: a draft nobody outside has seen is edited where it stands, the same rule as a draft inspection."
+        tests: [TC-027-7]
+      - id: FEAT-027-AC-8
+        title: "Acceptance applies the agreed light count to the circuit"
+        type: edge
+        given: "an accepted offer whose agreed light count differs from a circuit's represented count"
+        when: "the acceptance is recorded (back office or portal)"
+        then: "the agreed count is applied to the circuit as a RepresentedCountChange, so the month is never billed on a population the agreement does not state"
+        scope_note: "Amended 2026-09-15: a population correction, deliberately not an INV-07 rescale."
+        tests: [TC-027-8]
     stories:
       - id: STORY-027-1
         title: "As ops, I want to generate an offer with the per-circuit benchmark table from the demo numbers, so that CON-11's per-circuit pricing is what the society actually negotiates against."

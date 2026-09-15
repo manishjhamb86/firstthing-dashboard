@@ -5873,6 +5873,64 @@ Zero console/page errors; 868 unit tests, `tsc`/`lint`/`build` clean.
 stale-Prisma-client trap a sixth time (`Unknown argument fileHash`) — and `pkill -f "next dev"`
 also kills the DB tunnel `pnpm dev` opened, so both had to come back.
 
+## The offer is a worksheet of the negotiated figures, and a draft is editable (2026-09-15) — user-redesigned
+
+**The ask, from a screenshot of the offer page**: keep the offer editable, and instead of asking for
+a percentage, ask for the figures the negotiation actually has — lights to install as per the
+agreement, the pre-installation consumption of those lights extrapolated from the demo circuit, the
+agreed savings % if it differs from the demo, the projected energy saving, the total saving in ₹
+with the unit rate auto-populated and bound both ways, the monthly amount payable to FirsThing, the
+society's take derived, both share percentages derived, and spare lights.
+
+**The old form had the causality backwards.** It asked for a society share % and derived a fee. A
+committee never agrees a percentage first — it agrees how many lights go in, what those burn, and
+what it pays a month. `src/lib/offer-worksheet.ts` (pure, 12 cases) takes exactly those inputs and
+derives everything else: per light type, pre-install kWh/day = demo baseline ÷ metered × agreed
+lights (per light, never a society average — CON-11); saved kWh = pre × agreed %; totals at 30
+days; ₹ = kWh × rate; society keeps = ₹ − fee; **the shares fall out of the fee** (FirsThing = fee ÷
+saving, the party named, since this project has shipped that inversion twice). The stored
+`revenueSharePct` is the derived society share, unrounded so billing reproduces the agreed fee to
+the paisa; `describePricing` rounds to 2 dp for every screen. Two pairs are bound both ways in the
+form: unit rate ⇄ ₹ saving (type either, the other follows), and the fee starts at 42% of the
+saving until typed. The server never trusts the browser's figures — `buildOfferRecord` re-derives
+from the pipeline's own base rows (`offer-base.ts`: the demo report's snapshot, or the survey's
+circuits on the demo-skip path, where the pre-install consumption is typed because nothing
+measured it). The offer stores `projectedSavedKwhPerMonth` / `projectedSavedValue` (migration
+`…_add_offer_worksheet_figures`, additive) so it keeps saying what it was priced on (INV-02), and
+each circuit term keeps the demo's measured % beside the agreed one, so a negotiated benchmark is
+visible as one.
+
+**A draft is edited in place** (`updateOffer`) — it is a working document nobody outside has seen,
+the same rule as a draft inspection; issuing freezes it, after which a change is a counter and a
+new version, unchanged. The page renders the worksheet for a draft with Save beside Issue (one solid
+button), and a read-only summary — lights, saving in kWh and ₹, fee, society keeps, shares — once
+issued. The portal's offer card shows the society the same story.
+
+**Acceptance applies the agreed light count to the circuit.** Otherwise the offer would be
+decorative: the month is billed on `Circuit.representedLightCount`, and if the agreement said 1,800
+lights while the record said 1,773 the bill would be computed on a number nobody agreed. Both
+acceptance paths (back office and portal) write a `RepresentedCountChange` — the same audit row an
+invoice's count correction writes, a population correction and deliberately NOT an INV-07 rescale;
+on the portal path the row is owned by the admin who issued the offer, since a society account
+cannot own one (INV-01). Recorded as FEAT-027-AC-6/7/8 in `03-features.md` and the backlog.
+
+**Verified 24/24 in a browser against a disposable deal** (18 metered lift-lobby lights standing in
+for 1,773, 77.12%, the screenshot's own figures), asserted on rows: defaults from the demo; rate
+7.24 → ₹44,547.86; typing ₹50,000 → rate 8.13; fee typed → society keeps and both shares derived;
+stored kWh/₹/share match an independent computation; the draft reopens editable and saves in place
+(still v1, agreed % changed to 70 with the demo's 77.12 kept beside it, figures re-derived); a fee
+larger than the saving is **refused by the server** with nothing written; issued → read-only;
+acceptance moves the circuit 1,773 → 1,800 with the audit row. Both widths clean at 0 px overflow.
+
+**Also in this pass, user-caught**: "Unnamed · Lift Lobby and Staircase" on the intake review's
+circuit picker — the candidate form had **no location field at all**; only the registry's config
+edit and the backfill ever set one. The form asks for it now (stored on the circuit, verified
+3/3), and `circuitLabelOf` renders an unlocated circuit as its light type alone rather than
+"Unnamed". And the intake list: a single upload now lands straight on its review page (a list of
+one is not what the operator wanted), a batch populates a proper table (invoice number, society ·
+month, total, status with the note clamped to two lines, action) worked through row by row.
+25/25 on the intake harness.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

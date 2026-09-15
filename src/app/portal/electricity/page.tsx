@@ -62,7 +62,9 @@ export default async function PortalElectricityPage() {
 
   // One sentence when every part agrees, a range when they differ — never
   // one part's figure presented as the whole society's.
-  const shares = [...new Set(contracts.map((c) => c.versions[0]?.revenueSharePct).filter((v): v is number => v != null))].sort((a, b) => a - b);
+  // Rounded to a whole point: a share derived from an agreed fee is a long
+  // fraction, and a committee reads "24%" not "24.2055…%".
+  const shares = [...new Set(contracts.map((c) => c.versions[0]?.revenueSharePct).filter((v): v is number => v != null).map((v) => Math.round(v)))].sort((a, b) => a - b);
   const shareNote =
     shares.length === 0
       ? null

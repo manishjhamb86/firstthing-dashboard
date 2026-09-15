@@ -60,6 +60,7 @@ export function CircuitEligibilityForm({
   canApproveException: boolean;
 }) {
   const [lightType, setLightType] = useState("");
+  const [location, setLocation] = useState("");
   // Devices proposed from this form, held locally so the surveyor can carry
   // on recording the circuit instead of waiting on an approval.
   const [proposed, setProposed] = useState<CatalogOption[]>([]);
@@ -158,6 +159,7 @@ export function CircuitEligibilityForm({
         societyId,
         serviceLine,
         lightType,
+        location,
         representedLightCount: Number(representedLightCount),
         lines: payload,
         workingHours: workingHours.trim() === "" ? undefined : Number(workingHours),
@@ -205,6 +207,20 @@ export function CircuitEligibilityForm({
                 }
               }}
               disabled={pending}
+              className="field"
+            />
+          </Field>
+          <Field
+            label="Location"
+            htmlFor="cand-location"
+            hint="Where this circuit is — “Tower A B C D”, “Basement B2”. Names the circuit everywhere it is listed."
+          >
+            <input
+              id="cand-location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              disabled={pending}
+              placeholder="Tower A B C D"
               className="field"
             />
           </Field>

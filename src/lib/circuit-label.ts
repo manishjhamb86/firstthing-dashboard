@@ -12,7 +12,11 @@
  * re-exports it so every existing call site keeps working unchanged.
  */
 export function circuitLabelOf(location: string | null, lightType: string): string {
-  const place = location?.trim() || "Unnamed";
+  const place = location?.trim() ?? "";
+  // No location recorded → the light type alone. "Unnamed · Lift Lobby" read
+  // as though something was missing from the record rather than never asked
+  // for (user-caught 2026-09-15 — the candidate form had no location field).
+  if (place === "") return lightType.trim();
   if (place.toLowerCase() === lightType.trim().toLowerCase()) return place;
   return `${place} · ${lightType}`;
 }

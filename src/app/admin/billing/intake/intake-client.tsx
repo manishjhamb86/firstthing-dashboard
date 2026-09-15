@@ -91,10 +91,13 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
       setPendingDupes({ dupes, fresh, chosen: new Set() });
       return;
     }
-    await uploadFresh(fresh, new Map([...unique].map(([h, f]) => [f, h])));
+    // One invoice: the operator wants its review, not a list of one
+    // (user-asked 2026-09-15). A batch populates the list and is worked
+    // through row by row.
+    await uploadFresh(fresh, new Map([...unique].map(([h, f]) => [f, h])), fresh.length === 1);
   }
 
-  async function uploadFresh(list: File[], hashes: Map<File, string>) {
+  async function uploadFresh(list: File[], hashes: Map<File, string>, openWhenDone = false) {
     if (list.length === 0) return;
     setInFlight((cur) => [...cur, ...list.map((f) => f.name)]);
     await Promise.all(
@@ -129,6 +132,9 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
           startTransition(() => router.refresh());
           const extracted = await extractIntake(created.intakeId!);
           if (extracted.error) setRefusals((cur) => [...cur, `${file.name} — ${extracted.error}`]);
+          // Read or not, the review page is where a single invoice is dealt
+          // with — an unreadable one is entered by hand there.
+          if (openWhenDone) router.push(`/admin/billing/intake/${created.intakeId}`);
         } catch (err) {
           setRefusals((cur) => [...cur, `${file.name} — ${err instanceof Error ? err.message : "failed"}`]);
         } finally {
@@ -162,7 +168,10 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
     const toReprocess = decision.dupes.filter((d) => decision.chosen.has(d.intakeId) && d.reprocessable);
     const hashes = new Map<File, string>();
     for (const f of decision.fresh) hashes.set(f, await sha256Hex(f));
-    await Promise.all([uploadFresh(decision.fresh, hashes), ...toReprocess.map((d) => retry(d.intakeId))]);
+    await Promise.all([
+      uploadFresh(decision.fresh, hashes, decision.fresh.length === 1 && toReprocess.length === 0),
+      ...toReprocess.map((d) => retry(d.intakeId)),
+    ]);
   }
 
   const visible = rows.filter((r) => {
@@ -258,56 +267,77 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
                   : "Nothing submitted yet."}
           </p>
         ) : (
-          <ul className="divide-y" style={{ borderColor: "var(--border-subtle)" }}>
-            {visible.map((r) => (
-              <li key={r.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-4">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{r.fileName}</p>
-                  <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                    {(r.fileSize / 1024).toFixed(0)} KB
-                    {r.invoiceNumber ? ` · ${r.invoiceNumber}` : ""} · {r.uploadedAgo} · {r.uploadedBy}
-                  </p>
-                </div>
-                <div className="min-w-0 sm:w-56">
-                  <p className="truncate text-sm">{r.society ?? <span style={{ color: "var(--text-subtle)" }}>Society not confirmed</span>}</p>
-                  <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>{r.period ?? "Month not confirmed"}</p>
-                </div>
-                <div className="num text-right text-sm sm:w-28">{r.total !== null ? inr(r.total) : "—"}</div>
-                <div className="sm:w-44">
-                  <StatusChip tone={r.statusTone}>{r.statusLabel}</StatusChip>
-                  {r.note && (
-                    <p className="mt-1 text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                      {r.note}
-                    </p>
-                  )}
-                </div>
-                <div className="sm:w-28 sm:text-right">
-                  {r.status === "submitted" && r.calculationId ? (
-                    <Link href={`/admin/billing/${r.calculationId}`} className="btn-ghost btn-sm">
-                      Open month
-                    </Link>
-                  ) : r.status === "reading" ? (
-                    <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                      Reading…
-                    </span>
-                  ) : r.status === "could_not_read" ? (
-                    <div className="flex flex-col items-end gap-1.5">
-                      <button type="button" className="btn-secondary btn-sm" disabled={retrying.has(r.id)} onClick={() => void retry(r.id)}>
-                        {retrying.has(r.id) ? "Reading…" : "Retry"}
-                      </button>
-                      <Link href={`/admin/billing/intake/${r.id}`} className="btn-ghost btn-sm">
-                        Enter by hand
-                      </Link>
-                    </div>
-                  ) : (
-                    <Link href={`/admin/billing/intake/${r.id}`} className="btn-secondary btn-sm">
-                      Review
-                    </Link>
-                  )}
-                </div>
-              </li>
-            ))}
-          </ul>
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Invoice</th>
+                  <th className="hidden md:table-cell">Society · month</th>
+                  <th className="text-right">Total</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((r) => {
+                  const reviewHref = `/admin/billing/intake/${r.id}`;
+                  return (
+                    <tr key={r.id}>
+                      <td className="max-w-[18rem] md:max-w-[26rem]">
+                        <p className="truncate font-medium" title={r.fileName}>
+                          {r.invoiceNumber ?? r.fileName}
+                        </p>
+                        <p className="truncate text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                          {r.invoiceNumber ? `${r.fileName} · ` : ""}
+                          {(r.fileSize / 1024).toFixed(0)} KB · {r.uploadedAgo} · {r.uploadedBy}
+                        </p>
+                        <p className="text-[12px] md:hidden" style={{ color: "var(--text-subtle)" }}>
+                          {r.society ?? "Society not confirmed"} · {r.period ?? "month not confirmed"}
+                        </p>
+                      </td>
+                      <td className="hidden md:table-cell">
+                        {r.society ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
+                        <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>{r.period ?? "Month not confirmed"}</p>
+                      </td>
+                      <td className="num whitespace-nowrap text-right">{r.total !== null ? inr(r.total) : "—"}</td>
+                      <td className="max-w-[16rem]">
+                        <StatusChip tone={r.statusTone}>{r.statusLabel}</StatusChip>
+                        {r.note && (
+                          <p className="mt-1 line-clamp-2 text-[12px]" style={{ color: "var(--text-subtle)" }} title={r.note}>
+                            {r.note}
+                          </p>
+                        )}
+                      </td>
+                      <td className="whitespace-nowrap text-right">
+                        {r.status === "submitted" && r.calculationId ? (
+                          <Link href={`/admin/billing/${r.calculationId}`} className="btn-ghost btn-sm">
+                            Open month
+                          </Link>
+                        ) : r.status === "reading" ? (
+                          <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                            Reading…
+                          </span>
+                        ) : r.status === "could_not_read" ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <button type="button" className="btn-secondary btn-sm" disabled={retrying.has(r.id)} onClick={() => void retry(r.id)}>
+                              {retrying.has(r.id) ? "Reading…" : "Retry"}
+                            </button>
+                            <Link href={reviewHref} className="btn-ghost btn-sm">
+                              Enter by hand
+                            </Link>
+                          </span>
+                        ) : (
+                          <Link href={reviewHref} className="btn-secondary btn-sm">
+                            Review
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 

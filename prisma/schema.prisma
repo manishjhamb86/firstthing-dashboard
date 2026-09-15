@@ -1306,6 +1306,12 @@ model Offer {
 
   // Derived at generation from the demo numbers, shown on the offer.
   projectedMonthlyFee Float? @map("projected_monthly_fee")
+  /// The worksheet's own figures (2026-09-15): what the agreed lights are
+  /// expected to save a month, in kWh and at the unit rate in rupees. Stored
+  /// so the offer keeps saying what it was priced on (INV-02); the share
+  /// percentage is derived from these and the fee, never typed.
+  projectedSavedKwhPerMonth Float? @map("projected_saved_kwh_per_month")
+  projectedSavedValue       Float? @map("projected_saved_value")
 
   demoReportId String? @map("demo_report_id")
 

@@ -4,14 +4,22 @@ import { useState, useTransition } from "react";
 import { ErrorText, Field } from "@/components/ui";
 import { issueOffer, recordOfferOutcome, repriceOffer } from "./actions";
 
-export function IssueOfferButton({ pipelineId, offerId }: { pipelineId: string; offerId: string }) {
+export function IssueOfferButton({
+  pipelineId,
+  offerId,
+  tone = "primary",
+}: {
+  pipelineId: string;
+  offerId: string;
+  tone?: "primary" | "secondary";
+}) {
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
   return (
     <div>
       <button
         type="button"
-        className="btn-primary btn-sm"
+        className={tone === "secondary" ? "btn-secondary" : "btn-primary btn-sm"}
         disabled={pending}
         onClick={() => startTransition(async () => setError((await issueOffer(pipelineId, offerId))?.error))}
       >

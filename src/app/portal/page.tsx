@@ -225,6 +225,12 @@ export default async function PortalHomePage() {
               unitElectricityRate: openOffer.unitElectricityRate,
               termMonths: openOffer.termMonths,
               projectedMonthlyFee: openOffer.projectedMonthlyFee,
+              projectedSavedValue: openOffer.projectedSavedValue,
+              projectedSavedKwhPerMonth: openOffer.projectedSavedKwhPerMonth,
+              lightCount: ((openOffer.circuitTerms as { representedLightCount: number }[] | null) ?? []).reduce(
+                (n, c) => n + c.representedLightCount,
+                0,
+              ),
               exclusions: (openOffer.exclusions as string[]) ?? [],
             }}
             canRespond={isOfficeBearer}

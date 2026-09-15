@@ -10,6 +10,10 @@ export type OfferCircuitTerm = {
   benchmarkSavingsPct: number;
   preInstallBaseline: number;
   projectedSavedKwhPerDay: number;
+  /** What the demo measured, kept beside the agreed figure so a negotiated benchmark is visible as one. Absent on older offers. */
+  demoBenchmarkSavingsPct?: number | null;
+  /** kWh/day the agreed population burned before the retrofit (worksheet offers only). */
+  preInstallKwhPerDay?: number;
 };
 
 /**
@@ -60,9 +64,11 @@ export function describePricing(t: {
           maximumFractionDigits: 2,
         })}/month, a flat fee rather than a share`;
   }
-  return t.revenueSharePct == null
-    ? "Revenue share — split not recorded"
-    : `${t.revenueSharePct}% society / ${100 - t.revenueSharePct}% FirsThing`;
+  if (t.revenueSharePct == null) return "Revenue share — split not recorded";
+  // Two decimals: a share derived from a fee (offer-worksheet.ts) is a long
+  // fraction, and 40.7234123% reads as a figure nobody agreed.
+  const soc = Math.round(t.revenueSharePct * 100) / 100;
+  return `${soc}% society / ${Math.round((100 - t.revenueSharePct) * 100) / 100}% FirsThing`;
 }
 
 // FEAT-027-AC-3 — tolerance, revenue-share and term are hard requirements to

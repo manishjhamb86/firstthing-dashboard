@@ -33,18 +33,23 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
   const padL = 34;
   const padR = 12;
   const padB = 22;
+  // Headroom above 100%: the markers are 4px circles and the label is 10px
+  // type centred on the gridline — with y(100) at 0 both were clipped at
+  // the top of the viewBox (user-caught 2026-09-15).
+  const padT = 10;
   const plotW = w - padL - padR;
-  const plotH = h - padB;
+  const plotH = h - padB - padT;
+  const bottom = padT + plotH;
 
   const times = points.map((p) => new Date(p.at).getTime());
   const t0 = times[0];
   const t1 = times[times.length - 1];
   const span = Math.max(1, t1 - t0);
   const x = (i: number) => padL + ((times[i] - t0) / span) * plotW;
-  const y = (v: number) => plotH - (v / 100) * plotH;
+  const y = (v: number) => padT + plotH - (v / 100) * plotH;
 
   const line = points.map((p, i) => `${i === 0 ? "M" : "L"}${x(i).toFixed(1)} ${y(p.level).toFixed(1)}`).join(" ");
-  const area = `${line} L${x(points.length - 1).toFixed(1)} ${plotH} L${x(0).toFixed(1)} ${plotH} Z`;
+  const area = `${line} L${x(points.length - 1).toFixed(1)} ${bottom} L${x(0).toFixed(1)} ${bottom} Z`;
   const active = hover !== null ? points[hover] : null;
 
   return (
@@ -85,7 +90,7 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
                 x={x(i) - Math.max(8, plotW / points.length / 2)}
                 y={0}
                 width={Math.max(16, plotW / points.length)}
-                height={plotH}
+                height={bottom}
                 fill="transparent"
                 onMouseEnter={() => setHover(i)}
                 onFocus={() => setHover(i)}
@@ -102,7 +107,7 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
               x1={x(hover)}
               x2={x(hover)}
               y1={0}
-              y2={plotH}
+              y2={bottom}
               stroke="var(--chart-mark)"
               strokeWidth={1}
               strokeDasharray="3 3"
@@ -110,7 +115,7 @@ export function TankHistoryChart({ points }: { points: HistoryPoint[] }) {
             />
           )}
 
-          <line x1={padL} x2={w - padR} y1={plotH} y2={plotH} stroke="var(--border)" strokeWidth={1.5} />
+          <line x1={padL} x2={w - padR} y1={bottom} y2={bottom} stroke="var(--border)" strokeWidth={1.5} />
           <text x={padL} y={h - 5} fontSize={10} fill="var(--text-subtle)" fontFamily="ui-monospace, Menlo, monospace">
             {formatInstant(new Date(points[0].at))}
           </text>

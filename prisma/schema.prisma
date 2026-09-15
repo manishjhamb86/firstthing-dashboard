@@ -2529,6 +2529,10 @@ model BillingInvoiceLine {
 // snapshots — the extraction as returned (audit), and the operator's
 // confirmed choices (so a review interrupted by a reload resumes).
 enum InvoiceIntakeStatus {
+  /// Stored, not yet read — a batch is uploaded first and read one by one
+  /// (user's call 2026-09-16), so a dozen files do not hit the reader's
+  /// rate limit at once.
+  uploaded
   reading
   needs_review
   could_not_read

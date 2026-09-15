@@ -167,11 +167,15 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
             return;
           }
           startTransition(() => router.refresh());
-          const extracted = await extractIntake(created.intakeId!);
-          if (extracted.error) setRefusals((cur) => [...cur, `${file.name} — ${extracted.error}`]);
-          // Read or not, the review page is where a single invoice is dealt
-          // with — an unreadable one is entered by hand there.
-          if (openWhenDone) router.push(`/admin/billing/intake/${created.intakeId}`);
+          // A single invoice is read now and opened; a batch is only STORED
+          // (user's call 2026-09-16) — the operator reads each row when they
+          // come to it, so a dozen files never hit the reader's rate limit
+          // at once.
+          if (openWhenDone) {
+            const extracted = await extractIntake(created.intakeId!);
+            if (extracted.error) setRefusals((cur) => [...cur, `${file.name} — ${extracted.error}`]);
+            router.push(`/admin/billing/intake/${created.intakeId}`);
+          }
         } catch (err) {
           setRefusals((cur) => [...cur, `${file.name} — ${err instanceof Error ? err.message : "failed"}`]);
         } finally {
@@ -182,11 +186,11 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
     );
   }
 
-  async function retry(intakeId: string) {
+  async function retry(intakeId: string, fresh = false) {
     setRetrying((cur) => new Set(cur).add(intakeId));
     startTransition(() => router.refresh());
     try {
-      const r = await retryIntake(intakeId);
+      const r = fresh ? await extractIntake(intakeId) : await retryIntake(intakeId);
       if (r.error) setRefusals((cur) => [...cur, r.error!]);
     } finally {
       setRetrying((cur) => {
@@ -212,7 +216,7 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
   }
 
   const visible = rows.filter((r) => {
-    if (view === "review") return r.status === "needs_review" || r.status === "could_not_read" || r.status === "reading" || r.status === "refused_duplicate";
+    if (view === "review") return r.status === "needs_review" || r.status === "could_not_read" || r.status === "reading" || r.status === "refused_duplicate" || r.status === "uploaded";
     if (view === "ready") return r.status === "ready";
     if (view === "submitted") return r.status === "submitted";
     return true;
@@ -360,6 +364,15 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
                         ) : r.status === "reading" ? (
                           <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
                             Reading…
+                          </span>
+                        ) : r.status === "uploaded" ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <button type="button" className="btn-primary btn-sm" disabled={retrying.has(r.id)} onClick={() => void retry(r.id, true)}>
+                              {retrying.has(r.id) ? "Reading…" : "Read"}
+                            </button>
+                            <Link href={reviewHref} className="btn-ghost btn-sm">
+                              Enter by hand
+                            </Link>
                           </span>
                         ) : r.status === "could_not_read" ? (
                           <span className="inline-flex items-center gap-1.5">

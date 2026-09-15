@@ -11,6 +11,7 @@ import { IntakeClient, type IntakeRow } from "./intake-client";
 // is next. The per-invoice review is SCR-094 (./[intakeId]).
 
 const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
+  uploaded: { label: "Not read yet", tone: "neu" },
   reading: { label: "Reading…", tone: "neu" },
   needs_review: { label: "Needs review", tone: "warn" },
   could_not_read: { label: "Could not read", tone: "bad" },
@@ -53,7 +54,7 @@ export default async function IntakePage() {
   });
 
   const counts = {
-    needsReview: rows.filter((r) => r.status === "needs_review" || r.status === "could_not_read").length,
+    needsReview: rows.filter((r) => r.status === "needs_review" || r.status === "could_not_read" || r.status === "uploaded").length,
     ready: rows.filter((r) => r.status === "ready").length,
     submitted: rows.filter((r) => r.status === "submitted").length,
   };

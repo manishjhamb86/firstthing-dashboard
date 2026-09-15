@@ -8,7 +8,7 @@ import { Modal } from "@/components/modal";
 import { formatDate, monthLabel } from "@/lib/format-date";
 import type { ExtractedInvoice } from "@/lib/invoice-extract";
 import type { Review, ReviewLine } from "@/lib/invoice-intake";
-import { discardIntake, previewIntake, saveIntakeReview, submitIntake, type IntakePreview } from "../actions";
+import { discardIntake, extractIntake, previewIntake, saveIntakeReview, submitIntake, type IntakePreview } from "../actions";
 
 /**
  * SCR-094's form. Five cards in the order a person checks an invoice, each
@@ -84,6 +84,8 @@ export function ReviewForm({
   const [discarding, setDiscarding] = useState(false);
   const [discardReason, setDiscardReason] = useState("");
   const [pending, startTransition] = useTransition();
+  const [reading, startReading] = useTransition();
+  const [readError, setReadError] = useState<string | undefined>();
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const first = useRef(true);
 
@@ -212,6 +214,26 @@ export function ReviewForm({
       </div>
 
       <div className="flex flex-col gap-4 lg:col-span-7">
+        {status === "uploaded" && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--info-bg)", borderColor: "var(--info-line)", color: "var(--info-fg)" }}>
+            <span>Stored, not read yet — read it now and check what it says, or enter the lines by hand.</span>
+            <button
+              type="button"
+              className="btn-primary btn-sm"
+              disabled={reading}
+              onClick={() =>
+                startReading(async () => {
+                  const r = await extractIntake(intakeId);
+                  setReadError(r.error);
+                  router.refresh();
+                })
+              }
+            >
+              {reading ? "Reading…" : "Read this invoice"}
+            </button>
+            {readError && <ErrorText>{readError}</ErrorText>}
+          </div>
+        )}
         {status === "could_not_read" && (
           <div className="rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}>
             The invoice could not be read automatically — enter what it says by hand, reading from the PDF.

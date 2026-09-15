@@ -68,7 +68,9 @@ export default async function IntakeReviewPage({ params }: { params: Promise<{ i
       <PageHeader
         title={review.invoiceNumber ? `Review invoice ${review.invoiceNumber}` : `Review ${intake.fileName}`}
         chip={
-          intake.status === "reading" ? (
+          intake.status === "uploaded" ? (
+            <StatusChip tone="neu">Not read yet</StatusChip>
+          ) : intake.status === "reading" ? (
             <StatusChip tone="neu">Reading…</StatusChip>
           ) : intake.status === "could_not_read" ? (
             <StatusChip tone="bad">Could not read</StatusChip>

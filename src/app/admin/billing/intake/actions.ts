@@ -141,7 +141,9 @@ export async function createIntakeUpload(input: {
       fileHash: input.fileHash,
       s3Key: "pending",
       uploadedById: ops.actor.id,
-      status: "reading",
+      // Stored first; read when the operator asks (a single file is read
+      // straight away by its own upload path, a batch one row at a time).
+      status: "uploaded",
     },
   });
   // The society and month are not known yet, so the object lands under a
@@ -257,6 +259,7 @@ export async function extractIntake(intakeId: string): Promise<Result<{ status: 
   const intake = await db.invoiceIntake.findUnique({ where: { id: intakeId } });
   if (!intake) return { error: "That upload no longer exists." };
   if (intake.status === "submitted") return { error: "This invoice has already been submitted." };
+  await db.invoiceIntake.update({ where: { id: intakeId }, data: { status: "reading", extractionError: null } });
 
   let bytes: Uint8Array;
   try {

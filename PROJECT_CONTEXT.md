@@ -6092,6 +6092,18 @@ than in the refusal style. Encrypted or oddly-compressed entries are reported by
 silently dropped. Verified 5/5 with a zip holding a deflated PDF, a stored PDF, a text file and a
 macOS resource fork: two rows, both fingerprinted, the note stating what was left out.
 
+**A batch is stored first and read one row at a time** — the user's instruction, given twice
+("in case of multiple invoices, first upload and populate the list, and the user can come back
+later to process the invoices one by one"), and the second time with the evidence: every file in a
+drop was being sent to the reader at once, and the free-tier limit turned most of them into
+"rate-limited — try again in 49 seconds" rows. New `InvoiceIntake` status `uploaded` (migration
+`…_add_intake_uploaded_status`): a batch upload creates the rows and stops; each row offers **Read**
+(which flips it through `reading` to needs_review / could_not_read) and *Enter by hand*, the
+review page of an unread row offers **Read this invoice** at the top, and "Needs review" counts
+the unread rows so they are never out of sight. A single dropped file is still read straight away
+and opened. Re-verified 9/9 (zip) and 25/25 (dedupe): two rows from one archive both `uploaded`
+with no reader call, Read on one row reads only that row, the other's review page offers the read.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

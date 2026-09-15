@@ -3198,6 +3198,14 @@ features:
         when: "PER-07 records a counter (or generates an offer) priced as a lump sum"
         then: "the offer carries a flat monthly fee and no revenue share, states its terms as a fee on every surface that shows them, and the contract it activates bills that amount"
         scope_note: "Added 2026-09-08 (CON-01 amendment, the user's call: 'in a counter offer. also give option for a lumpsum amount instead of percentage'). The two models are alternatives, never both. A shortfall month needed no new rule: CON-01c's actual-metered fee already equals contracted × (measured / benchmark) under a revenue share, so a lump sum scales the same way — asserted to the paisa against the revenue-share case on identical readings."
+      - id: FEAT-028-AC-6
+        title: "A backdated offer carries the dates it actually happened on"
+        type: edge
+        given: "an issued or responded-to offer on a deal typed up after the fact"
+        when: "operations corrects the issue and response dates, or dates an agreement step"
+        then: "the dates are stored as given, ordered in both directions (meeting ≤ issued ≤ responded ≤ signed, none in the future)"
+        scope_note: "Amended 2026-09-15: a demo in December, an offer accepted in May, billing from June, all recorded in September — the record has to say when it happened, not when it was typed."
+        tests: [TC-028-6]
     stories:
       - id: STORY-028-1
         title: "As an office-bearer, I want to accept, counter, or reject an offer, so that the decision that commits the society is made by someone who actually holds that authority."

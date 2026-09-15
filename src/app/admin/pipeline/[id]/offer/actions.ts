@@ -24,6 +24,9 @@ import {
 } from "@/lib/offer-worksheet";
 import { offerBaseRows, worksheetInputsFromTerms } from "@/lib/offer-base";
 import { applyOfferPopulation } from "@/lib/offer-population";
+import { resolveAdmin } from "@/lib/admin-permissions";
+import { isOperations } from "@/lib/admin-teams";
+import { refuseOrderedDate } from "@/lib/step-dates";
 
 // FEAT-027-AC-4 / FEAT-028-AC-4 — offer work is PER-01/PER-07's. Both hold
 // manage_pipeline; the PER-01 proxy (both permissions) would wrongly exclude
@@ -412,4 +415,87 @@ export async function repriceOffer(pipelineId: string) {
 
 function amcSummary(raw: unknown): string {
   return raw && typeof raw === "object" && "summary" in raw ? String((raw as { summary: unknown }).summary ?? "") : "";
+}
+
+/**
+ * Correct when an offer was issued and responded to (user-asked 2026-09-15:
+ * "for backdated offers allow date change" — a demo done in December, an offer
+ * accepted in May, installed in May, billing from June, all typed up in
+ * September).
+ *
+ * Operations only, like every other correction of what a record SAYS. Not
+ * gated on demo mode: a pre-system deal is exactly the production case. Every
+ * ordering rule holds in both directions — not in the future, issued no
+ * earlier than the first meeting (a real-world date, itself correctable —
+ * never against a row-creation stamp, the circular trap recorded three times
+ * in PROJECT_CONTEXT), responded no earlier than issued, and no later than
+ * the agreement's signature where one is recorded.
+ */
+export async function correctOfferDates(
+  pipelineId: string,
+  offerId: string,
+  input: { issuedOn: string; respondedOn: string | null },
+): Promise<{ error?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team) || !actor.permissions.includes("manage_pipeline")) {
+    logger.warn("offer.dates_refused", { actorId: actor.id, pipelineId, offerId, reason: "not_operations" });
+    return { error: "Correcting an offer's recorded dates is an operations action." };
+  }
+  const offer = await db.offer.findUnique({
+    where: { id: offerId },
+    include: { pipeline: { select: { id: true, meetingDate: true, agreement: { select: { signedAt: true } } } } },
+  });
+  if (!offer || offer.pipeline.id !== pipelineId) return { error: "Offer not found." };
+  if (offer.status === "draft" || !offer.issuedAt) return { error: "A draft has no issue date yet — issue it first." };
+
+  const day = (v: string) => (/^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T00:00:00.000Z`) : new Date(NaN));
+  const issued = day(input.issuedOn);
+  const now = new Date();
+  const r1 = refuseOrderedDate({
+    subject: "The issue date",
+    date: issued,
+    now,
+    mustNotPrecede: [{ label: "the first meeting", date: offer.pipeline.meetingDate }],
+  });
+  if (r1) {
+    logger.warn("offer.dates_refused", { actorId: actor.id, pipelineId, offerId, reason: r1 });
+    return { error: r1 };
+  }
+  let responded: Date | null = null;
+  if (offer.respondedAt) {
+    if (!input.respondedOn) return { error: "This offer was responded to — give the response date as well." };
+    responded = day(input.respondedOn);
+    const r2 = refuseOrderedDate({
+      subject: "The response date",
+      date: responded,
+      now,
+      mustNotPrecede: [{ label: "the offer was issued", date: issued }],
+    });
+    if (r2) {
+      logger.warn("offer.dates_refused", { actorId: actor.id, pipelineId, offerId, reason: r2 });
+      return { error: r2 };
+    }
+    const signed = offer.pipeline.agreement?.signedAt ?? null;
+    if (signed && responded.getTime() > signed.getTime()) {
+      const msg = "The response cannot be dated after the agreement was signed — correct the signature date first.";
+      logger.warn("offer.dates_refused", { actorId: actor.id, pipelineId, offerId, reason: "after_signature" });
+      return { error: msg };
+    }
+  }
+
+  await db.offer.update({
+    where: { id: offerId },
+    data: { issuedAt: issued, ...(responded ? { respondedAt: responded } : {}) },
+  });
+  logger.info("offer.dates_corrected", {
+    actorId: actor.id,
+    pipelineId,
+    offerId,
+    from: { issuedAt: offer.issuedAt, respondedAt: offer.respondedAt },
+    to: { issuedAt: issued, respondedAt: responded },
+  });
+  revalidatePath(`/admin/pipeline/${pipelineId}/offer`);
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  return {};
 }

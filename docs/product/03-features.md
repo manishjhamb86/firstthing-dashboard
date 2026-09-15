@@ -912,6 +912,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
   - AC-3 (failure/rejection): Given the society rejects, the offer is marked rejected with a reason and the pipeline is flagged as stalled rather than silently closed — a rejected offer is often followed by a counter-proposal in practice.
   - AC-4 (permission): Given a non-PER-01/PER-07 actor, recording an outcome is unavailable.
   - AC-5 (edge): Given a counter is recorded, a new offer version is created carrying the requested terms, and the previous version remains retrievable exactly as issued.
+  - AC-6 (backdated — amended 2026-09-15, the user's call): Given an issued or responded-to offer on a deal typed up after it happened, when operations corrects the issue and response dates, then they are stored as given — not in the future, issued no earlier than the first meeting, responded no earlier than issued and no later than the agreement's signature — and the deal reads the dates it actually happened on. The agreement's print / notarise / sign steps likewise accept a date when recorded after the fact, ordered the same way.
 - **Permissions:** PER-01, PER-07 (record outcomes on the society's behalf; the society itself does not accept in-app at MVP).
 - **Data touched:** Updates `Offer` state; creates new `Offer` versions on counter.
 - **Triggers:** Manual, as the negotiation happens.

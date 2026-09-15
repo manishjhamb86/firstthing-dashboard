@@ -11,6 +11,7 @@ import { BENCHMARK_SOURCE_LABEL, OFFER_STATUS, statusMeta } from "@/lib/status-m
 import type { OfferCircuitTerm } from "@/lib/offer";
 import { offerBaseRows, worksheetInputsFromTerms } from "@/lib/offer-base";
 import { OfferForm, type OfferFormDefaults } from "./offer-form";
+import { OfferDatesForm } from "./offer-dates-form";
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const kwh = (n: number) => `${n.toLocaleString("en-IN", { maximumFractionDigits: 1 })} kWh`;
@@ -228,7 +229,29 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                       : "Not yet issued"}
                   </dd>
                 </div>
+                {current.respondedAt && (
+                  <div>
+                    <dt className="lbl">{statusMeta(OFFER_STATUS, current.status).label}</dt>
+                    <dd>
+                      {formatDate(current.respondedAt)}
+                      {current.respondedBy ? ` by ${current.respondedBy.name ?? current.respondedBy.email}` : ""}
+                    </dd>
+                  </div>
+                )}
               </dl>
+            )}
+
+            {/* A deal typed up long after it happened carries the dates it
+                actually happened on (user-asked 2026-09-15). */}
+            {current.status !== "draft" && current.issuedAt && canOverride && (
+              <div className="mt-4">
+                <OfferDatesForm
+                  pipelineId={pipeline.id}
+                  offerId={current.id}
+                  issuedOn={current.issuedAt.toISOString().slice(0, 10)}
+                  respondedOn={current.respondedAt ? current.respondedAt.toISOString().slice(0, 10) : null}
+                />
+              </div>
             )}
 
             {current.benchmarkSource === "negotiated_fixed" && (

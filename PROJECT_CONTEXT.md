@@ -5961,6 +5961,25 @@ first, both cards say where the document came from and show its files, no contro
 the spine's KYC step reads done, the agreement page ticks GATE-01, and the first deal is unchanged.
 887 unit tests, `tsc`/`lint`/`build` clean. No schema change.
 
+## Backdated deals: the offer and the agreement carry the dates they happened on (2026-09-15) — user-asked
+
+"The demo was done in December 2025, the offer was issued and accepted in May 2026, installation
+completed in May, billing started in June" — typed up in September. `correctOfferDates` (operations
+only; deliberately NOT demo-mode gated, since a pre-system deal is the production case) moves an
+issued or responded-to offer's dates behind a "Correct the dates" control on the read-only summary,
+with every ordering rule holding both ways: not in the future, issued no earlier than the first
+meeting (a real-world, itself-correctable date — never a row-creation stamp, the circular trap this
+file has recorded three times), responded no earlier than issued and no later than the agreement's
+signature. The agreement's print / notarise / sign buttons gained "Happened earlier?", which opens a
+date and passes it to `markAgreementStep(…, on)`, ordered against the acceptance and each other.
+The contract's term start and the installation certificate's date were already explicit inputs.
+Recorded as FEAT-028-AC-6.
+
+Verified 9/9 in a browser on a fixture: a pre-meeting issue date, a response before issue and a
+future date are each refused BY THE SERVER with nothing written; issued 02-05-2026 / accepted
+10-05-2026 stores and renders; printing dated before the acceptance is refused, dated after it
+stores. 887 unit tests, `tsc`/`lint`/`build` clean. No schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

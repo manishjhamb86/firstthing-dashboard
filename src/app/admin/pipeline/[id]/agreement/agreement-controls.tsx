@@ -36,16 +36,35 @@ export function StepButton({
 }) {
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
+  // Recording after the fact: the step happened on a day, not necessarily
+  // today (backdated deals, 2026-09-15). Closed until asked for.
+  const [dated, setDated] = useState(false);
+  const [on, setOn] = useState("");
   return (
-    <span>
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {dated && (
+        <input
+          type="date"
+          aria-label={`${label} — on`}
+          className="field field-auto"
+          value={on}
+          onChange={(e) => setOn(e.target.value)}
+          disabled={pending || disabled}
+        />
+      )}
       <button
         type="button"
         className="btn-secondary btn-sm"
-        disabled={pending || disabled}
-        onClick={() => startTransition(async () => setError((await markAgreementStep(pipelineId, step))?.error))}
+        disabled={pending || disabled || (dated && !on)}
+        onClick={() => startTransition(async () => setError((await markAgreementStep(pipelineId, step, dated ? on : undefined))?.error))}
       >
-        {pending ? "Saving…" : label}
+        {pending ? "Saving…" : dated ? `${label} on that date` : label}
       </button>
+      {!dated && !disabled && (
+        <button type="button" className="btn-ghost btn-sm" onClick={() => setDated(true)}>
+          Happened earlier?
+        </button>
+      )}
       {error && <ErrorText>{error}</ErrorText>}
     </span>
   );

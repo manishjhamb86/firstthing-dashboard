@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { refuseOrderedDate } from "@/lib/step-dates";
 import { KYC_TYPE_LABEL } from "@/lib/kyc";
 import { bestKycAcross, kycMissing } from "@/lib/kyc-society";
 import type { OfferCircuitTerm } from "@/lib/offer";
@@ -56,9 +57,16 @@ society: { include: { pipelines: { select: { kycRequirements: { select: { pipeli
 
 // FEAT-029-AC-2 — print / notarize / sign are discrete steps, so each is
 // stamped on its own rather than collapsing into one opaque status.
-export async function markAgreementStep(pipelineId: string, step: "printed" | "notarized" | "signed") {
+/**
+ * `on` (YYYY-MM-DD) dates the step when it is being recorded after the fact
+ * (user-asked 2026-09-15, backdated deals); omitted, it is now. The steps are
+ * ordered in reality, so they are ordered here in both directions: printed no
+ * earlier than the offer was accepted, notarized no earlier than printed,
+ * signed no earlier than notarized, none in the future.
+ */
+export async function markAgreementStep(pipelineId: string, step: "printed" | "notarized" | "signed", on?: string) {
   const session = await requirePer01();
-  const agreement = await db.agreement.findUnique({ where: { pipelineId } });
+  const agreement = await db.agreement.findUnique({ where: { pipelineId }, include: { offer: { select: { respondedAt: true } } } });
   if (!agreement) return { error: "Prepare the agreement first." };
 
   // The steps are ordered in reality, so they are ordered here: a document
@@ -66,12 +74,33 @@ export async function markAgreementStep(pipelineId: string, step: "printed" | "n
   if (step === "notarized" && !agreement.printedAt) return { error: "Print the agreement before notarizing it." };
   if (step === "signed" && !agreement.notarizedAt) return { error: "Notarize the agreement before recording signature." };
 
+  let at = new Date();
+  if (on) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(on)) return { error: "Pick a valid date." };
+    at = new Date(`${on}T00:00:00.000Z`);
+    const label = { printed: "Printing", notarized: "Notarization", signed: "The signature" }[step];
+    const refusal = refuseOrderedDate({
+      subject: label,
+      date: at,
+      now: new Date(),
+      mustNotPrecede: [
+        { label: "the offer was accepted", date: agreement.offer.respondedAt },
+        ...(step !== "printed" ? [{ label: "it was printed", date: agreement.printedAt }] : []),
+        ...(step === "signed" ? [{ label: "it was notarized", date: agreement.notarizedAt }] : []),
+      ],
+    });
+    if (refusal) {
+      logger.warn("agreement.step_refused", { actorId: session.user.id, pipelineId, step, reason: refusal });
+      return { error: refusal };
+    }
+  }
+
   await db.agreement.update({
     where: { pipelineId },
-    data: { [`${step}At`]: new Date() },
+    data: { [`${step}At`]: at },
   });
 
-  logger.info("agreement.step_recorded", { actorId: session.user.id, pipelineId, step });
+  logger.info("agreement.step_recorded", { actorId: session.user.id, pipelineId, step, on: on ?? null });
   revalidatePath(`/admin/pipeline/${pipelineId}/agreement`);
   return {};
 }

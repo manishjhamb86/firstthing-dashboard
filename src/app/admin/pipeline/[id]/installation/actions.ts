@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { demoBypass } from "@/lib/demo-mode";
 import { requireAdmin, requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { startOfDayUTC } from "@/lib/step-dates";
 import {
   completionBlockers,
   describeCompletionBlocker,
@@ -273,21 +274,37 @@ export async function submitBatch(
     skippedReason: string;
     locationDetail: string;
     photoKeys: string[];
+    /** Old records only: why there are no photos for a day already past. */
+    photosWaivedReason?: string;
   },
 ) {
   const session = await requireField();
 
   const batch = await db.installationBatch.findUnique({
     where: { id: batchId },
-    include: { project: true, fieldVisit: { include: { areaClaims: true } } },
+    include: { project: true, fieldVisit: { include: { areaClaims: true } }, plannedDay: { select: { plannedDate: true } } },
   });
   if (!batch || batch.project.pipelineId !== pipelineId) return { error: "Batch not found." };
   if (batch.state !== "draft") return { error: "This batch has already been submitted." };
 
   // FEAT-034-AC-3 — photos are what make the society's review and any dispute
   // resolvable. Without them a dispute is one person's word against another's.
+  // The one exception (user's call 2026-09-15, "skip for old records"): a day
+  // already in the past, being typed up after the fact, may be submitted
+  // without photos — with the reason stated on the batch, so a reviewer can
+  // tell an old record from a day somebody forgot to photograph.
+  const waived = input.photosWaivedReason?.trim() ?? "";
   if (input.photoKeys.length === 0) {
-    return { error: "Photo evidence is required. The society reviews this batch against the photos, and a dispute has to be checkable by someone standing in the building tomorrow." };
+    const plannedDay = batch.plannedDay?.plannedDate ? startOfDayUTC(batch.plannedDay.plannedDate) : null;
+    const today = startOfDayUTC(new Date());
+    const isOld = plannedDay != null && plannedDay.getTime() < today.getTime();
+    if (!isOld) {
+      return { error: "Photo evidence is required. The society reviews this batch against the photos, and a dispute has to be checkable by someone standing in the building tomorrow." };
+    }
+    if (!waived) {
+      logger.warn("installation.batch_submit_refused", { actorId: session.user.id, pipelineId, batchId, reason: "no_photos_no_waiver" });
+      return { error: "No photos for a past day — say why this record has none (e.g. recorded after the fact from the installation register)." };
+    }
   }
   if (input.installedCount < 0 || input.skippedCount < 0) return { error: "Counts cannot be negative." };
   if (input.installedCount === 0 && input.skippedCount === 0) return { error: "Record what was installed." };
@@ -317,6 +334,7 @@ export async function submitBatch(
         skippedReason: input.skippedReason.trim() || null,
         locationDetail: input.locationDetail.trim() || null,
         photoKeys: input.photoKeys,
+        photosWaivedReason: input.photoKeys.length === 0 ? waived : null,
         state: "awaiting_review",
         submittedById: session.user.id,
         submittedAt: new Date(),
@@ -333,6 +351,7 @@ export async function submitBatch(
     actorId: session.user.id,
     pipelineId,
     batchId,
+    photosWaived: input.photoKeys.length === 0,
     day: batch.day,
     areaKey: batch.areaKey,
     installedCount: input.installedCount,

@@ -202,6 +202,7 @@ export default async function PortalHomePage() {
               skippedReason: b.skippedReason,
               submittedAt: b.submittedAt?.toISOString() ?? null,
               photoUrls: ((b.photoKeys as string[]) ?? []).map(publicS3Url),
+              photosWaivedReason: b.photosWaivedReason,
             }))}
           />
         </div>

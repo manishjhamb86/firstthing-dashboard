@@ -1070,6 +1070,7 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
   - AC-3 (failure): Given photo evidence is missing, the batch cannot be submitted — photos are what make the society's review and any dispute (FEAT-035) resolvable.
   - AC-4 (permission): Given a non-PER-04 actor, batch submission is unavailable.
   - AC-5 (edge): Given some fixtures in an area were skipped (inaccessible flat, damaged wiring), they're recorded as skipped with a reason and remain in the project's outstanding scope rather than silently reducing it.
+  - AC-6 (old records — amended 2026-09-15, the user's call: "skip for old records"): Given a batch whose planned day is already past — a day being typed up after the fact — when the field team submits it without photos and states why, then it is accepted with the waiver recorded on the batch and shown wherever the batch is reviewed (back office and portal) as "recorded after the fact: <reason>". A batch for today or a future day keeps AC-3's rule unchanged; a past day with no photos and no stated reason is refused.
 - **Permissions:** PER-04 (submit), PER-01 (view, correct).
 - **Data touched:** Creates `InstallationBatch` (day, areas, counts, skipped items + reasons, photos).
 - **Triggers:** Manual, end of each installation day.

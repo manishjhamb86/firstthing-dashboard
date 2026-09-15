@@ -16,6 +16,8 @@ export type ReviewBatch = {
   skippedCount: number;
   skippedReason: string | null;
   photoUrls: string[];
+  /** Set when the day was recorded after the fact with no photos. */
+  photosWaivedReason?: string | null;
   submittedAt: string | null;
 };
 
@@ -88,6 +90,11 @@ export function BatchReviewCard({
               <span className="num">{b.installedCount}</span> installed
               {b.skippedCount > 0 ? ` · ${b.skippedCount} skipped (${b.skippedReason ?? "no reason given"})` : ""}
             </p>
+            {b.photoUrls.length === 0 && b.photosWaivedReason && (
+              <p className="mt-1 text-sm" style={{ color: "var(--warn-fg)" }}>
+                No photos — this day was recorded after the fact: {b.photosWaivedReason}
+              </p>
+            )}
             {b.photoUrls.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {b.photoUrls.map((u, i) => (

@@ -3592,6 +3592,14 @@ features:
         when: "the condition is evaluated"
         then: "damaged wiring), they're recorded as skipped with a reason and remain in the project's outstanding scope rather than silently reducing it"
         tests: [TC-034-5]
+      - id: FEAT-034-AC-6
+        title: "A past day may be submitted without photos, with the reason stated"
+        type: edge
+        given: "a batch whose planned day is already past"
+        when: "it is submitted with no photos and a stated reason"
+        then: "it is accepted, the waiver is stored on the batch and shown on every review surface; a day not yet past keeps AC-3's photo rule, and a past day with no reason is refused"
+        scope_note: "Amended 2026-09-15: installations completed before the system existed are recorded from the register; the waiver is what tells a reviewer an old record from a day nobody photographed."
+        tests: [TC-034-6]
     stories:
       - id: STORY-034-1
         title: "As the installer, I want to log each day's installation batch from site, so that installation progress is visible the same day it happens, not reconstructed later."

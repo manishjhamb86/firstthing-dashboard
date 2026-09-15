@@ -248,13 +248,18 @@ export function BatchCaptureForm({
   batchId,
   societyName,
   plannedCount,
+  isOldRecord,
 }: {
   pipelineId: string;
   batchId: string;
   societyName: string;
   plannedCount: number;
+  /** The planned day is already past — photos may be waived with a reason. */
+  isOldRecord: boolean;
 }) {
   const [installed, setInstalled] = useState(String(plannedCount));
+  const [noPhotos, setNoPhotos] = useState(false);
+  const [waivedReason, setWaivedReason] = useState("");
   const [removed, setRemoved] = useState("0");
   const [skipped, setSkipped] = useState("0");
   const [skippedReason, setSkippedReason] = useState("");
@@ -298,6 +303,7 @@ export function BatchCaptureForm({
                 skippedReason,
                 locationDetail: location,
                 photoKeys: keys,
+                photosWaivedReason: noPhotos ? waivedReason : undefined,
               });
               setError(r?.error);
             });
@@ -330,16 +336,34 @@ export function BatchCaptureForm({
         <input id="batch-location" className="field" value={location} onChange={(e) => setLocation(e.target.value)} />
       </Field>
 
-      <Field label="Photos" htmlFor="batch-photos" hint="Required. Without them a dispute is one person's word against another's.">
-        <input
-          id="batch-photos"
-          className="field"
-          type="file"
-          accept="image/*"
-          multiple
-          onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-        />
-      </Field>
+      {!noPhotos && (
+        <Field label="Photos" htmlFor="batch-photos" hint={isOldRecord ? "Without them a dispute is one person's word against another's." : "Required. Without them a dispute is one person's word against another's."}>
+          <input
+            id="batch-photos"
+            className="field"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+          />
+        </Field>
+      )}
+      {isOldRecord && (
+        // A day already past, typed up after the fact — the photos may not
+        // exist. The waiver is stated on the batch so a reviewer can tell an
+        // old record from a day somebody forgot to photograph.
+        <div className="space-y-2">
+          <label className="flex items-center gap-2 text-sm">
+            <input id="batch-no-photos" type="checkbox" checked={noPhotos} onChange={(e) => { setNoPhotos(e.target.checked); if (e.target.checked) setFiles([]); }} />
+            No photos — this day is being recorded after the fact
+          </label>
+          {noPhotos && (
+            <Field label="Why there are none" htmlFor="batch-waived-reason" hint="Stated on the batch, where the society reviews it.">
+              <input id="batch-waived-reason" className="field" value={waivedReason} onChange={(e) => setWaivedReason(e.target.value)} placeholder="Recorded from the installation register; no photos were taken at the time." />
+            </Field>
+          )}
+        </div>
+      )}
 
       <button type="submit" className="btn-primary" disabled={busy}>
         {uploading ? "Uploading photos…" : pending ? "Submitting…" : "Submit the day's batch"}

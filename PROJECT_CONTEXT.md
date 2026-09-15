@@ -6005,6 +6005,20 @@ banners naming the facts, the upload button lands on the documents tab preselect
 picker; verifying the certificate clears its banner and leaves the bill's; the offer starts at
 ₹7.24. 891 unit tests, `tsc`/`lint`/`build` clean.
 
+## An old installation day may be recorded without photos, saying so (2026-09-15) — user's call
+
+"Skip for old records." FEAT-034-AC-3's photo rule is what makes a society's review and any dispute
+resolvable, and it stays for any day not yet past. For a batch whose planned day is already behind
+us — an installation completed before the system existed, typed up from the register — the form
+offers "No photos — this day is being recorded after the fact" with a required reason;
+`submitBatch` accepts it only when the planned day is genuinely past AND the reason is stated, and
+stores it in `InstallationBatch.photosWaivedReason` (migration `…_add_batch_photos_waived`). Both
+review surfaces — the back-office batch list and the portal's review card — say "recorded after the
+fact: <reason>", so a reviewer can tell an old record from a day somebody forgot to photograph.
+FEAT-034-AC-6. Verified 7/7: a past day without the waiver is still refused with nothing written, a
+ticked waiver with no reason is refused by the server, a stated reason submits and shows on the
+list, and a batch for today offers no waiver at all. 891 unit tests, `tsc`/`lint`/`build` clean.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

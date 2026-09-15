@@ -436,6 +436,10 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   batchId={b.id}
                   societyName={pipeline.society.name}
                   plannedCount={project.plannedDays.find((d) => d.id === b.plannedDayId)?.plannedCount ?? 0}
+                  isOldRecord={(() => {
+                    const pd = project.plannedDays.find((d) => d.id === b.plannedDayId)?.plannedDate;
+                    return pd != null && pd.toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10);
+                  })()}
                 />
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">Logging a batch is field staff&apos;s action.</p>
@@ -471,6 +475,9 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                         {b.locationDetail ? `${b.locationDetail} · ` : ""}
                         submitted {day(b.submittedAt)} by {b.submittedBy?.name ?? b.submittedBy?.email ?? "—"} ·{" "}
                         {photos.length} photo{photos.length === 1 ? "" : "s"}
+                        {b.photosWaivedReason && (
+                          <span style={{ color: "var(--warn-fg)" }}> — recorded after the fact: {b.photosWaivedReason}</span>
+                        )}
                       </p>
                       {photos.length > 0 && (
                         <p className="mt-1 text-sm">

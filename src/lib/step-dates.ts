@@ -24,7 +24,7 @@ export const STEP_DATE_ERRORS = {
     "There are pre-install readings dated after this replacement date. Replacement has to come after the readings it is measured against.",
 } as const;
 
-function startOfDayUTC(d: Date): Date {
+export function startOfDayUTC(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }
 

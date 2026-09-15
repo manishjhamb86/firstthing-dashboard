@@ -1689,6 +1689,12 @@ model InstallationBatch {
   // FEAT-034-AC-3 — photos are what make the society's review and any
   // dispute resolvable, so a batch cannot be submitted without them.
   photoKeys Json @default("[]") @map("photo_keys")
+  /// A day recorded after the fact (user's call 2026-09-15, "skip for old
+  /// records") may carry no photos — only when the planned day is already
+  /// past, and only with the reason stated here. Null on every batch that
+  /// carried photos; a stated waiver is what distinguishes an old record from
+  /// a batch someone forgot to photograph.
+  photosWaivedReason String? @map("photos_waived_reason")
 
   state         BatchState @default(draft)
   submittedById String?    @map("submitted_by_id")

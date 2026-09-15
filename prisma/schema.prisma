@@ -351,6 +351,7 @@ model Society {
   meterDevices       MeterDevice[]
   meterInstallations MeterInstallation[]
   contracts          Contract[]
+  invoiceIntakes     InvoiceIntake[]
   engagements        Engagement[]
 
   // MS-06
@@ -530,6 +531,7 @@ model AdminUser {
   invoiceMismatchesAcked   BillingInvoice[]         @relation("InvoiceMismatchAckBy")
   invoicesVoided           BillingInvoice[]         @relation("InvoiceVoidedBy")
   representedCountChanges  RepresentedCountChange[] @relation("RepresentedCountChangeBy")
+  invoiceIntakes           InvoiceIntake[]          @relation("InvoiceIntakeUploadedBy")
   paymentsRecorded         Payment[]                @relation("PaymentRecordedBy")
   extensionsGranted        InvoiceExtension[]       @relation("ExtensionGrantedBy")
   contractTermsRecorded    ContractTermVersion[]    @relation("ContractTermRecordedBy")
@@ -2496,6 +2498,59 @@ model BillingInvoiceLine {
   @@unique([billingInvoiceId, lineNo])
   @@index([circuitId])
   @@map("billing_invoice_lines")
+}
+
+// CON-47 / FEAT-109 — one uploaded invoice PDF in flight: from the moment
+// the bytes land (SCR-093's row) through extraction and review (SCR-094) to
+// submit, which creates the month of record. A draft is deliberately its own
+// row rather than a BillingInvoice, because a BillingInvoice belongs to a
+// MonthlyCalculation and there is none until the operator has confirmed the
+// society and the month (INV-04). `extraction` and `review` are JSON
+// snapshots — the extraction as returned (audit), and the operator's
+// confirmed choices (so a review interrupted by a reload resumes).
+enum InvoiceIntakeStatus {
+  reading
+  needs_review
+  could_not_read
+  ready
+  submitted
+  refused_duplicate
+  discarded
+
+  @@map("invoice_intake_status")
+}
+
+model InvoiceIntake {
+  id           String   @id @default(cuid())
+  fileName     String   @map("file_name")
+  fileSize     Int      @map("file_size")
+  s3Key        String   @map("s3_key")
+  uploadedById String   @map("uploaded_by_id")
+  uploadedAt   DateTime @default(now()) @map("uploaded_at")
+
+  status          InvoiceIntakeStatus @default(reading)
+  extraction      Json?
+  extractionError String?             @map("extraction_error")
+  review          Json?
+
+  // The operator's CONFIRMED society and month (INV-04) — set from the review, never from the extraction.
+  societyId String? @map("society_id")
+  period    String?
+
+  // Set on submit — the month of record this intake became.
+  monthlyCalculationId String?   @map("monthly_calculation_id")
+  billingInvoiceId     String?   @unique @map("billing_invoice_id")
+  submittedAt          DateTime? @map("submitted_at")
+
+  discardedAt   DateTime? @map("discarded_at")
+  discardReason String?   @map("discard_reason")
+
+  uploadedBy AdminUser @relation("InvoiceIntakeUploadedBy", fields: [uploadedById], references: [id])
+  society    Society?  @relation(fields: [societyId], references: [id], onDelete: SetNull)
+
+  @@index([status, uploadedAt])
+  @@index([societyId, period])
+  @@map("invoice_intakes")
 }
 
 // CON-47 d / FEAT-109-AC-6 — a forward-only correction of a circuit's

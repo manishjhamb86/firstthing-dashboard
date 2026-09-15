@@ -104,35 +104,45 @@ export default async function TankStatusPage({
           properly"): the thing the reader came to DO — assign — first, the
           level beside it on a wide screen and beneath it on a phone, the
           history next, and the device's identifiers last as a compact list. */}
-      <div className="mb-5 grid items-start gap-5 lg:grid-cols-12">
-          <Card className="p-5 sm:p-6 lg:col-span-7">
+      {/* items-stretch + h-full: the two cards share one height whatever the
+          assignment state (user-caught 2026-09-15 — the form card was shorter
+          when unassigned, and the level card set the row). */}
+      <div className="mb-5 grid items-stretch gap-5 lg:grid-cols-12">
+          <Card className="flex h-full flex-col p-5 sm:p-6 lg:col-span-7">
             <CardTitle>Assignment</CardTitle>
-            {tank.society ? (
-              <dl className="mb-4 space-y-2.5 text-sm">
-                <div className="flex justify-between gap-4">
-                  <dt style={{ color: "var(--text-muted)" }}>Assigned to</dt>
-                  <dd className="text-right">
-                    <Link href={`/admin/societies/${tank.society.id}`} className="font-semibold hover:underline">
-                      {tank.society.name}
-                    </Link>
-                    <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
-                      {tank.society.location} · {tank.society.flatCount} flats
-                    </span>
-                  </dd>
-                </div>
-                <div className="flex justify-between gap-4">
-                  <dt style={{ color: "var(--text-muted)" }}>Assigned</dt>
-                  <dd>
-                    {tank.assignedAt ? <span className="num">{formatDate(tank.assignedAt)}</span> : "—"}
-                    {tank.assignedBy && ` · by ${tank.assignedBy.name ?? tank.assignedBy.email}`}
-                  </dd>
-                </div>
-              </dl>
-            ) : (
-              <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
-                Not assigned to any society yet — no portal shows this tank.
-              </p>
-            )}
+            {/* Always the same two rows, so the card's height does not depend on
+                whether a society is assigned. */}
+            <dl className="mb-4 space-y-2.5 text-sm">
+              <div className="flex justify-between gap-4">
+                <dt style={{ color: "var(--text-muted)" }}>Assigned to</dt>
+                <dd className="text-right">
+                  {tank.society ? (
+                    <>
+                      <Link href={`/admin/societies/${tank.society.id}`} className="font-semibold hover:underline">
+                        {tank.society.name}
+                      </Link>
+                      <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                        {tank.society.location} · {tank.society.flatCount} flats
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="font-semibold">Not assigned yet</span>
+                      <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                        No portal shows this tank until it is.
+                      </span>
+                    </>
+                  )}
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt style={{ color: "var(--text-muted)" }}>Assigned</dt>
+                <dd>
+                  {tank.assignedAt ? <span className="num">{formatDate(tank.assignedAt)}</span> : "—"}
+                  {tank.assignedBy && ` · by ${tank.assignedBy.name ?? tank.assignedBy.email}`}
+                </dd>
+              </div>
+            </dl>
             {tank.hasLevelSignal ? (
               <>
                 <span className="lbl mb-2">{tank.society ? "Move to a different society" : "Assign to a society"}</span>
@@ -143,7 +153,7 @@ export default async function TankStatusPage({
                   currentLocation={tank.location ?? null}
                   societies={societies}
                 />
-                <p className="mt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p className="mt-auto pt-3 text-xs" style={{ color: "var(--text-muted)" }}>
                   Portal accounts of the assigned society see this tank — nobody else does (INV-05).
                 </p>
               </>
@@ -153,7 +163,7 @@ export default async function TankStatusPage({
               </p>
             )}
           </Card>
-        <Card className="flex flex-col items-center gap-4 p-6 lg:col-span-5">
+        <Card className="flex h-full flex-col items-center gap-4 p-6 lg:col-span-5">
           <span className="lbl">Water level</span>
           {tank.hasLevelSignal ? (
             <>

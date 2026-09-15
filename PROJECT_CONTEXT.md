@@ -5736,6 +5736,54 @@ disabled until dirty and sits after the last field; typing "rg res" narrows the 
 Residency; one click writes society, setup and tower together (`soc-rg-residency|flush|Tower Q`),
 confirmed by query and restored afterwards. Zero console/page errors.
 
+## MS-09 step 2 done (2026-09-15) — the real invoice walked upload → review → submit → release, 31/31
+
+**Built**: `invoice-extract.ts` (the Zoho invoice read back on the same Gemini path as the
+demo-report reader, every figure with its verbatim words, clarifications where the paper does not
+settle something), `invoice-intake.ts` (the review's pure decisions: line classification, circuit
+proposal by light count with a whole-word description tiebreaker, society by normalised name,
+month parsing, FEAT-109's submit gates), `invoice-month-loader.ts` (society-month →
+`InvoiceMonthPart[]`, resolving circuits to contracts through their survey's pipeline exactly as
+`runCalculation` does — and, deliberately, billing a contract with no completion certificate from
+its own term start, since none of the 14 backfilled contracts has one), the `InvoiceIntake` draft
+row (migration `20260915091558`), five server actions (presign to a holding key, extract, save
+review, preview, submit in one transaction; discard), and the two screens — SCR-093's intake list
+with a multi-file dropzone and SCR-094's review with its five cards and the live derived preview.
+
+**Driven end to end in a browser with FT/2026-27/055 itself, 31/31, asserting on rows**: the upload
+lands under `Invoices/_intake/`, Gemini reads the society, `July-2026`, both dates, Qty 605 at
+₹23.23 with the **4.15 discount**, and the line is proposed onto the Basement circuit by its 605
+lights; the arithmetic reconciles; card 5 previews the agreed basis; only "payment status" is open;
+submit writes a `MonthlyCalculation` (`source: invoice`, `submitted`, **₹43,765.51 saved** — exactly
+TC-110-1 — fee 14,050 untouched, coverage 0/31), one `CircuitFeeLine` (`agreed`, 605 billed, 64%,
+in band), a `BillingInvoice` (16,579 = 14,050 + 2,529, `not_applicable`, **paid**, the printed
+"July-2026" kept beside the operator's `2026-07`), its line with the discount and circuit, a
+`Payment` dated as chosen, and no represented-count change (the invoice matched the record). A
+second upload of the same month is **refused by name** on the review; the accountant is offered
+Release, releases, and the invoice **stays paid with no clock**.
+
+**Three defects found by driving it, none by reading it:**
+1. **The calculation page 500'd on an invoice-first month** — `RECON_META[reconciliationStatus].tone`
+   with the new `not_applicable` value undefined. The status maps also lacked `submitted` and
+   `sent_back`; all added. **The class**: a `Record<string, …>` lookup map is a silent contract with
+   an enum, and every enum value added needs every map that indexes it checked.
+2. **Release would have overwritten `paid` with `released`** and started CON-13's clock on a bill
+   settled at intake. Release now stamps `releasedAt` and moves only an `attached` invoice to
+   `released`.
+3. **The panel offered Release only while the invoice was `attached`** — an invoice paid at intake
+   never is. It now offers it while the MONTH is unreleased, whatever the invoice's paid state.
+
+Also: the billing board hides "Run month" for an `invoice`-sourced month (its stats re-derive
+from readings, they are not re-run), and the Billing nav group gained "Invoice intake".
+
+**Harness notes, two of them old friends**: `getByRole("radio").first()` matched the theme
+switcher's radiogroup, not the Paid option; `||` concatenation in psql prints booleans as `true`,
+bare `-tA` as `t` — both already recorded here and both caught again.
+
+**Not yet**: the flow is not deployed with a run on stage; SCR-092's batch publish and the
+re-derivation hook (steps 3 and 5) are unbuilt; the portal step of the E2E skipped for want of an
+Aditya Mega City office-bearer on dev.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

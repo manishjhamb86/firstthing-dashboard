@@ -21,7 +21,10 @@ function currentPeriod(): string {
 
 const CALC_STATUS: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "neu" | "info" }> = {
   held: { label: "Held", tone: "warn" },
+  // CON-47 — an invoice-first month ops has submitted, awaiting the accountant.
+  submitted: { label: "Submitted", tone: "info" },
   calculated: { label: "Calculated", tone: "info" },
+  sent_back: { label: "Sent back", tone: "warn" },
   released: { label: "Released", tone: "ok" },
   superseded: { label: "Superseded", tone: "neu" },
 };
@@ -103,9 +106,14 @@ export default async function BillingPage({
         chip={heldCount > 0 ? <StatusChip tone="warn">{heldCount} held</StatusChip> : undefined}
         action={
           isOps(gate.actor) ? (
-            <Link href="/admin/billing/deviations" className="btn-outline btn-sm">
-              Deviations
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/admin/billing/intake" className="btn-secondary btn-sm">
+                Invoice intake
+              </Link>
+              <Link href="/admin/billing/deviations" className="btn-outline btn-sm">
+                Deviations
+              </Link>
+            </div>
           ) : undefined
         }
       />
@@ -224,7 +232,9 @@ export default async function BillingPage({
                       )}
                     </td>
                     <td className="text-right whitespace-nowrap">
-                      {isOps(gate.actor) && calc?.status !== "released" ? (
+                      {/* An invoice-first month (CON-47) is not re-run from readings —
+                          its stats re-derive themselves when readings arrive. */}
+                      {isOps(gate.actor) && calc?.status !== "released" && calc?.source !== "invoice" ? (
                         <RunMonthButton
                           societyId={contract.societyId}
                           serviceLine={contract.serviceLine}

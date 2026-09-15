@@ -225,12 +225,15 @@ export async function releaseCalculation(calculationId: string): Promise<{ error
     // invoice is guaranteed non-null here — refuseRelease refuses when it's
     // null, so this update targets the one live row the refusal check itself
     // already confirmed exists.
+    // An invoice paid at intake (CON-47 e) is released as PAID — moving it
+    // to `released` would start CON-13's clock on a bill settled long ago.
+    // Only an unpaid `attached` invoice becomes `released`.
     db.billingInvoice.update({
       where: { id: invoice!.id },
-      data: { status: "released", releasedAt: now },
+      data: { releasedAt: now, ...(invoice!.status === "attached" ? { status: "released" as const } : {}) },
     }),
   ]);
-  logger.info("billing.released", { actorId: acc.actor.id, calculationId });
+  logger.info("billing.released", { actorId: acc.actor.id, calculationId, invoiceStatus: invoice!.status });
   revalidatePath(`/admin/billing/${calculationId}`);
   revalidatePath("/admin/billing");
   return {};

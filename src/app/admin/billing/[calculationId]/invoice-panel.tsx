@@ -49,6 +49,8 @@ const RECON_META: Record<string, { label: string; tone: "ok" | "warn" | "bad" }>
   matched: { label: "Matches our figure", tone: "ok" },
   mismatched: { label: "Doesn't match — needs acknowledging", tone: "bad" },
   acknowledged: { label: "Mismatch acknowledged", tone: "warn" },
+  // CON-47 — an invoice-first month has no computed total to compare against.
+  not_applicable: { label: "From the invoice itself — no computed total to compare", tone: "ok" },
 };
 
 const STATUS_META: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "info" }> = {
@@ -77,6 +79,7 @@ export type VoidedInvoice = {
 
 export function InvoicePanel({
   calculationId,
+  calculationStatus,
   invoice,
   canRelease,
   releaseBlockedReason,
@@ -85,6 +88,10 @@ export function InvoicePanel({
   arrears,
 }: {
   calculationId: string;
+  /** The MONTH's own status — release is offered while it is unreleased,
+   *  whichever paid state the invoice is in (an invoice-first month paid at
+   *  intake is `paid` from the start; CON-47). */
+  calculationStatus: string;
   invoice: InvoiceState;
   /** Whether the viewer holds PER-08 (the accountant) — release is offered
    *  to no one else, including ops (CON-33). */
@@ -380,7 +387,7 @@ export function InvoicePanel({
             </div>
           )}
 
-          {invoice.status === "attached" && (
+          {(invoice.status === "attached" || (calculationStatus !== "released" && calculationStatus !== "superseded")) && (
             <div className="border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
               {canRelease ? (
                 releaseBlockedReason ? (

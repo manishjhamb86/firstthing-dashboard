@@ -424,7 +424,11 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
         amount: review.total!,
         subtotal: review.subtotal,
         taxAmount: review.taxAmount,
-        invoiceForMonth: (intake.extraction as { invoiceForMonth?: { value?: string } } | null)?.invoiceForMonth?.value ?? null,
+        // The printed words, verbatim ("July-2026") — `period` is the operator's own selection (INV-04).
+        invoiceForMonth: (() => {
+          const f = (intake.extraction as { invoiceForMonth?: { value?: string; sourceText?: string } } | null)?.invoiceForMonth;
+          return f?.sourceText || f?.value || null;
+        })(),
         extractionRaw: (intake.extraction ?? undefined) as Prisma.InputJsonValue | undefined,
         s3Key: key,
         fileName: intake.fileName,

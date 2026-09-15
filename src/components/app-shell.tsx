@@ -111,6 +111,8 @@ export function AppShell({
     ]),
     ...group("billing", "Billing", Receipt, [
       showBilling && { href: "/admin/billing", label: "Billing", icon: Receipt },
+      // CON-47 — the Zoho invoice is the month of record; this is where it enters.
+      showBilling && { href: "/admin/billing/intake", label: "Invoice intake", icon: Receipt },
       showBilling && { href: "/admin/billing/deviations", label: "Deviations", icon: Receipt },
     ]),
     ...group("settings", "Settings", Settings, [

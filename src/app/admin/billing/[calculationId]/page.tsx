@@ -25,6 +25,8 @@ const rupees = (n: number) =>
 const CALC_STATUS: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "neu" | "info" }> = {
   held: { label: "Held", tone: "warn" },
   calculated: { label: "Calculated", tone: "info" },
+  submitted: { label: "Submitted — awaiting release", tone: "info" },
+  sent_back: { label: "Sent back", tone: "warn" },
   released: { label: "Released", tone: "ok" },
   superseded: { label: "Superseded", tone: "neu" },
 };
@@ -197,6 +199,7 @@ export default async function CalculationPage({
       {calc.status !== "held" && (
         <InvoicePanel
           calculationId={calc.id}
+          calculationStatus={calc.status}
           canRelease={canRelease(gate.actor)}
           isOps={isOps(gate.actor)}
           releaseBlockedReason={releaseBlockedReason}

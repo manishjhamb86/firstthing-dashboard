@@ -219,8 +219,8 @@ export default async function PortalTanksPage() {
             {sub.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, history }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
-                <Card key={t.id} className="flex flex-wrap items-stretch gap-x-6 gap-y-5 p-5 sm:p-6">
-                  <TankVisual pct={level ?? 0} offline={offline} width={132} height={184} pctSize={26} />
+                <Card key={t.id} className="flex flex-wrap items-stretch gap-x-5 gap-y-3 p-4 sm:p-5">
+                  <TankVisual pct={level ?? 0} offline={offline} width={92} height={128} pctSize={20} />
                   <div className="flex min-w-[170px] flex-1 flex-col">
                     {flat && (
                       <p className="lbl mb-1">
@@ -231,7 +231,7 @@ export default async function PortalTanksPage() {
                     <p className="text-[15px] font-bold" title={t.name}>
                       {t.name}
                     </p>
-                    <div className="mt-2">
+                    <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs" style={{ color: "var(--text-muted)" }}>
                       {offline ? (
                         <StatusChip tone="warn">Sensor offline</StatusChip>
                       ) : isLow ? (
@@ -239,22 +239,22 @@ export default async function PortalTanksPage() {
                       ) : (
                         <StatusChip tone="ok">Live</StatusChip>
                       )}
+                      <span>
+                        {quiet ? "Last reported" : "Updated"}{" "}
+                        <span className="num">{reportedAt ? formatInstant(reportedAt) : "—"}</span>
+                        {" · "}
+                        {timeAgo(reportedAt)}
+                      </span>
                     </div>
-                    <p className="mt-3 text-xs leading-relaxed" style={{ color: "var(--text-muted)" }}>
-                      {quiet ? "Last reported" : "Updated"}{" "}
-                      <span className="num">{reportedAt ? formatInstant(reportedAt) : "—"}</span>
-                      <span className="block">{timeAgo(reportedAt)}</span>
-                    </p>
                     {quiet ? (
-                      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                      <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
                         The level above is that last report, not a live reading.
                       </p>
                     ) : unchangedFor ? (
                       // Not a warning: the sensor reports four discrete levels,
                       // so an unchanged reading is the level holding steady.
-                      <p className="mt-2 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                        Unchanged since then — this sensor reports in steps of 25%, so a steady
-                        reading means the level has not moved a quarter.
+                      <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                        Steady since then — this sensor reports in steps of 25%.
                       </p>
                     ) : null}
                   </div>

@@ -163,7 +163,7 @@ export function TankHistory({
   const width = 560;
   const gutter = 26;
   const plotW = width - gutter;
-  const height = 88;
+  const height = 72;
   const y = (v: number) => height - (v / 100) * (height - 8) - 4;
   const x = (i: number) => gutter + ((i + 0.5) / n) * plotW;
   const stroke = quiet ? "var(--chart-mark-inert)" : "var(--chart-mark)";
@@ -195,8 +195,39 @@ export function TankHistory({
 
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <p className="lbl">Level history</p>
+      {/* One header row (user-asked 2026-09-15: two tank rows must fit a
+          screen): the window and its arrows on the left, the period control
+          on the right — what used to be two rows. */}
+      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            className="tank-nav"
+            onClick={() => step(1)}
+            disabled={!canGoBack}
+            aria-label={`Earlier ${mode === "day" ? "day" : mode}`}
+          >
+            ‹
+          </button>
+          <span
+            className="num text-[12px] font-semibold"
+            style={{ color: "var(--text-muted)" }}
+            // Pressing an arrow changes only this label and the chart, and a
+            // chart announces nothing — so the window is what gets read out.
+            aria-live="polite"
+          >
+            {w.label}
+          </span>
+          <button
+            type="button"
+            className="tank-nav"
+            onClick={() => step(-1)}
+            disabled={offset === 0}
+            aria-label={`Later ${mode === "day" ? "day" : mode}`}
+          >
+            ›
+          </button>
+        </div>
         <nav className="seg seg-sm" aria-label="History period">
           {MODES.map((m) => (
             <button
@@ -213,36 +244,6 @@ export function TankHistory({
             </button>
           ))}
         </nav>
-      </div>
-
-      <div className="mb-1.5 flex items-center gap-1.5">
-        <button
-          type="button"
-          className="tank-nav"
-          onClick={() => step(1)}
-          disabled={!canGoBack}
-          aria-label={`Earlier ${mode === "day" ? "day" : mode}`}
-        >
-          ‹
-        </button>
-        <span
-          className="num flex-1 text-center text-[12px] font-semibold"
-          style={{ color: "var(--text-muted)" }}
-          // Pressing an arrow changes only this label and the chart, and a
-          // chart announces nothing — so the window is what gets read out.
-          aria-live="polite"
-        >
-          {w.label}
-        </span>
-        <button
-          type="button"
-          className="tank-nav"
-          onClick={() => step(-1)}
-          disabled={offset === 0}
-          aria-label={`Later ${mode === "day" ? "day" : mode}`}
-        >
-          ›
-        </button>
       </div>
 
       {/* The frame is ALWAYS drawn, empty window or not (user-reported

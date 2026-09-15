@@ -254,7 +254,11 @@ export function NavShell({
         <div className="px-6 pt-7 pb-6">
           <BrandMark variant={sidebarBrandVariant} className="h-7" />
         </div>
-        <nav className="flex-1 px-4" aria-label="Main">
+        {/* min-h-0 + overflow-y-auto: a fixed, full-height flex column does not
+            scroll on its own, so with several groups open the last items were
+            clipped below the viewport (user-caught, 2026-09-15). The nav
+            scrolls; the brand and the footer stay put. */}
+        <nav className="flex-1 min-h-0 overflow-y-auto px-4 pb-4" aria-label="Main">
           <p
             className="px-3.5 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] truncate"
             style={{ color: "var(--chrome-subtle)" }}
@@ -299,7 +303,7 @@ export function NavShell({
 
           {open && (
             <div
-              className="lg:hidden px-4 pb-4 pt-2 space-y-1"
+              className="lg:hidden px-4 pb-4 pt-2 space-y-1 max-h-[calc(100vh-64px)] overflow-y-auto"
               style={{ background: "var(--chrome)", borderTop: "1px solid var(--chrome-border)" }}
             >
               {navLinks(() => setOpen(false))}

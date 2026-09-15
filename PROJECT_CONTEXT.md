@@ -5697,6 +5697,45 @@ invoice void/reattach, CON-13's sweep, the inspection reminder and photo, MS-09'
 this). Both new migrations applied there; all four job chains held one pending link through the
 restart; `arrears_sweep` seeded on stage for the first time.
 
+## The sidebar clipped, the tank list showed meters, and Assign did nothing (2026-09-15) — three user-caught defects in one afternoon
+
+**1. "Menu doesn't scroll."** The grouped sidebar is a `fixed`, full-height flex column whose `nav`
+had `flex-1` and no `overflow-y`, so with several groups open the last items were simply below the
+viewport with no way to reach them. `min-h-0 overflow-y-auto` on the nav (the brand and footer
+stay put); the mobile drawer capped at `calc(100vh − 64px)` and scrolling inside itself. Verified
+5/5: with every group open the nav overflows its box, "Admin users" scrolls into view, the footer
+note stays pinned; the drawer does the same on a 600px-tall phone. **One harness note**: the
+suite's own desktop clicks were REMEMBERED into the drawer, so the same clicks closed the groups
+again — open only the ones reading `aria-expanded="false"`.
+
+**2. "Doesn't the API return the device type? Show water tanks only."** It does — every Tuya
+device carries a `category` (`tdq` for the water-level controllers, `zndb`/`cz` for the energy
+meters and sockets) and the sync already derives `hasLevelSignal` from the datapoints. The list
+showed the non-tanks dimmed because of the 2026-08-25 call that "nothing in the account is
+invisible". Both now hold: the list's `All tanks` / `Unassigned` / `Assigned` chips count tanks
+only, and the other devices sit behind their own `Other devices · N` chip.
+
+**3. "Tried assigning and nothing happened" — and the log proves it.** Stage's log holds
+`tank.setup_set` (09:39) and `tank.location_set` (09:40) from the user's clicks, and **no
+`tank.assigned` and no `tank.assign_refused`** — the Assign click never reached the server. The
+control ran `assignTanks` inside `startTransition` with no `catch`, so a thrown action error (a
+stale server-action reference from a tab left open across the 09:31 deploy is the likely one)
+vanished — the exact "the button is broken" shape this file has recorded for the React 19 form
+reset and the pre-hydration fill. Rebuilt as the user specified: **one form** — a `SearchSelect`
+typeahead for the society (it was a 22-row `<select>`), setup, tower — with **one save at the end**
+(`saveTankAssignment`, one transaction, the same gate and checks as the three actions it replaces,
+`assignedAt` stamped only when the society actually changes), disabled until something is dirty,
+a thrown error shown as a sentence, and "Saved." confirmed. The detail page was reordered
+mobile-first — Assignment first, the level beside it on a wide screen and beneath it on a phone,
+history, then the device's identifiers as a compact two-column list. `assignTanks` stays for the
+list's bulk bar; `setTankSetup`/`setTankLocation` have no callers left.
+
+Verified 16/16 at 390px, asserted on the row: the list shows 2 of 4 devices by default and the
+other two under their chip; the page reads Assignment → Level history → Device; the save is
+disabled until dirty and sits after the last field; typing "rg res" narrows the typeahead to RG
+Residency; one click writes society, setup and tower together (`soc-rg-residency|flush|Tower Q`),
+confirmed by query and restored afterwards. Zero console/page errors.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

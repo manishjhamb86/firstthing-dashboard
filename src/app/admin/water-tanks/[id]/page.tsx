@@ -100,51 +100,12 @@ export default async function TankStatusPage({
         subtitle={`${tank.productName || "Tank sensor"} · ${tank.tuyaDeviceId}`}
       />
 
+      {/* Mobile-first order (user-caught 2026-09-15: "page is not organised
+          properly"): the thing the reader came to DO — assign — first, the
+          level beside it on a wide screen and beneath it on a phone, the
+          history next, and the device's identifiers last as a compact list. */}
       <div className="mb-5 grid items-start gap-5 lg:grid-cols-12">
-        <Card className="flex flex-col items-center gap-4 p-7 lg:col-span-4">
-          <span className="lbl">Water level</span>
-          {tank.hasLevelSignal ? (
-            <>
-              <TankVisual pct={live.level ?? 0} offline={!tank.lastOnline} width={210} height={280} pctSize={38} />
-              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                Last reading{" "}
-                <span className="num">{live.reportedAt ? formatInstant(live.reportedAt) : "—"}</span>
-                {live.reportedAt && ` · ${timeAgo(live.reportedAt)}`}
-              </p>
-              {/* A quiet ONLINE sensor is not a fault (corrected 2026-08-26,
-                  the user's call). These controllers report four discrete
-                  levels — 25/50/75/100 — so a tank whose level has not moved a
-                  quarter genuinely has nothing new to say, sometimes for many
-                  hours. Warning about that trained the reader to distrust a
-                  figure that was correct. The earlier "connected is not
-                  reporting" warning was written when the level itself looked
-                  wrong; that turned out to be the levelMax scale bug, which is
-                  fixed. Only an OFFLINE sensor gets a warning now. */}
-              {tank.lastOnline && stale && (
-                <p className="w-full text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                  Last change {timeAgo(live.reportedAt)}. This sensor reports in steps of 25%, so a
-                  steady reading means the level has not moved a quarter — not that it has stopped
-                  reporting.
-                </p>
-              )}
-              {!tank.lastOnline && (
-                <div
-                  className="w-full rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]"
-                  style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}
-                >
-                  Sensor offline — the level shown is its last report, not live.
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-              This device reports no water level — it is listed for completeness only.
-            </p>
-          )}
-        </Card>
-
-        <div className="flex flex-col gap-5 lg:col-span-8">
-          <Card className="p-6">
+          <Card className="p-5 sm:p-6 lg:col-span-7">
             <CardTitle>Assignment</CardTitle>
             {tank.society ? (
               <dl className="mb-4 space-y-2.5 text-sm">
@@ -192,25 +153,47 @@ export default async function TankStatusPage({
               </p>
             )}
           </Card>
-
-          <Card className="p-6">
-            <CardTitle>Device</CardTitle>
-            <dl className="space-y-2.5 text-sm">
-              {[
-                ["Device ID", <span key="v" className="num">{tank.tuyaDeviceId}</span>],
-                ["Product", tank.productName || "—"],
-                ["Category", <span key="v" className="num">{tank.category}</span>],
-                ["First seen here", <span key="v" className="num">{formatDate(tank.createdAt)}</span>],
-                ["Device list synced", <span key="v" className="num">{formatInstant(tank.syncedAt)}</span>],
-              ].map(([k, v]) => (
-                <div key={String(k)} className="flex justify-between gap-4">
-                  <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
-                  <dd className="text-right">{v}</dd>
+        <Card className="flex flex-col items-center gap-4 p-6 lg:col-span-5">
+          <span className="lbl">Water level</span>
+          {tank.hasLevelSignal ? (
+            <>
+              <TankVisual pct={live.level ?? 0} offline={!tank.lastOnline} width={210} height={280} pctSize={38} />
+              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                Last reading{" "}
+                <span className="num">{live.reportedAt ? formatInstant(live.reportedAt) : "—"}</span>
+                {live.reportedAt && ` · ${timeAgo(live.reportedAt)}`}
+              </p>
+              {/* A quiet ONLINE sensor is not a fault (corrected 2026-08-26,
+                  the user's call). These controllers report four discrete
+                  levels — 25/50/75/100 — so a tank whose level has not moved a
+                  quarter genuinely has nothing new to say, sometimes for many
+                  hours. Warning about that trained the reader to distrust a
+                  figure that was correct. The earlier "connected is not
+                  reporting" warning was written when the level itself looked
+                  wrong; that turned out to be the levelMax scale bug, which is
+                  fixed. Only an OFFLINE sensor gets a warning now. */}
+              {tank.lastOnline && stale && (
+                <p className="w-full text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                  Last change {timeAgo(live.reportedAt)}. This sensor reports in steps of 25%, so a
+                  steady reading means the level has not moved a quarter — not that it has stopped
+                  reporting.
+                </p>
+              )}
+              {!tank.lastOnline && (
+                <div
+                  className="w-full rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]"
+                  style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}
+                >
+                  Sensor offline — the level shown is its last report, not live.
                 </div>
-              ))}
-            </dl>
-          </Card>
-        </div>
+              )}
+            </>
+          ) : (
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+              This device reports no water level — it is listed for completeness only.
+            </p>
+          )}
+        </Card>
       </div>
 
       {tank.hasLevelSignal && (
@@ -252,6 +235,25 @@ export default async function TankStatusPage({
           />
         </Card>
       )}
+      <div className="mt-5">
+          <Card className="p-5 sm:p-6">
+            <CardTitle>Device</CardTitle>
+            <dl className="grid gap-x-8 gap-y-2.5 text-sm sm:grid-cols-2">
+              {[
+                ["Device ID", <span key="v" className="num">{tank.tuyaDeviceId}</span>],
+                ["Product", tank.productName || "—"],
+                ["Category", <span key="v" className="num">{tank.category}</span>],
+                ["First seen here", <span key="v" className="num">{formatDate(tank.createdAt)}</span>],
+                ["Device list synced", <span key="v" className="num">{formatInstant(tank.syncedAt)}</span>],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="flex justify-between gap-4">
+                  <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
+                  <dd className="text-right">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+      </div>
     </>
   );
 }

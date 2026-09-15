@@ -44,7 +44,12 @@ export function TanksListClient({
 }) {
   const router = useRouter();
   const [q, setQ] = useState("");
-  const [view, setView] = useState<"all" | "unassigned" | "assigned">("all");
+  // "All" means all TANKS (2026-09-15, user's call: "we should display water
+  // tanks only in the list"). The account's other devices — energy meters,
+  // sockets, whatever Tuya category they carry — sit behind their own chip
+  // so nothing in the account is invisible, but a list of tanks is a list
+  // of tanks.
+  const [view, setView] = useState<"all" | "unassigned" | "assigned" | "other">("all");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [societyId, setSocietyId] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -54,7 +59,9 @@ export function TanksListClient({
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return tanks.filter((t) => {
-      if (view === "unassigned" && (t.society !== null || !t.hasLevelSignal)) return false;
+      if (view === "other") { if (t.hasLevelSignal) return false; }
+      else if (!t.hasLevelSignal) return false;
+      if (view === "unassigned" && t.society !== null) return false;
       if (view === "assigned" && t.society === null) return false;
       if (!needle) return true;
       return (
@@ -67,9 +74,10 @@ export function TanksListClient({
 
   const counts = useMemo(
     () => ({
-      all: tanks.length,
+      all: tanks.filter((t) => t.hasLevelSignal).length,
       unassigned: tanks.filter((t) => t.hasLevelSignal && t.society === null).length,
-      assigned: tanks.filter((t) => t.society !== null).length,
+      assigned: tanks.filter((t) => t.hasLevelSignal && t.society !== null).length,
+      other: tanks.filter((t) => !t.hasLevelSignal).length,
     }),
     [tanks],
   );
@@ -142,9 +150,10 @@ export function TanksListClient({
     <>
       <div className="mb-3.5 flex flex-wrap items-center gap-2.5">
         <SearchInput value={q} onChange={setQ} placeholder="Search tank or society…" label="Search tanks" className="w-72" />
-        {seg("all", "All", counts.all)}
+        {seg("all", "All tanks", counts.all)}
         {seg("unassigned", "Unassigned", counts.unassigned)}
         {seg("assigned", "Assigned", counts.assigned)}
+        {counts.other > 0 && seg("other", "Other devices", counts.other)}
         <div className="flex-1" />
         <button type="button" className="btn-ghost btn-sm" onClick={sync} disabled={pending}>
           {pending ? "Working…" : "Sync device list"}

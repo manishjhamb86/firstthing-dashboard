@@ -200,3 +200,66 @@ export async function setTankLocation(input: {
   revalidatePath(`/admin/water-tanks/${input.tankId}`);
   return {};
 }
+
+/**
+ * The tank page's one save (2026-09-15, user-caught: "assign button should
+ * be after all the fields shown and all the values should save on
+ * assign/submit button click"). Society, setup and tower/building were
+ * three separate actions firing on three separate controls — a form that
+ * saved on blur and a button sitting between fields. One act, one
+ * transaction, one gate; the same checks as the three it replaces.
+ */
+export async function saveTankAssignment(input: {
+  tankId: string;
+  societyId: string | null;
+  setup: "domestic" | "flush" | "stp" | null;
+  location: string;
+}): Promise<{ error?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_users")) {
+    logger.warn("tank.assign_refused", { actorId: actor.id, tankId: input.tankId, reason: "permission" });
+    return { error: "Assigning tanks is a society-management action (Manage users)." };
+  }
+  if (input.setup !== null && !["domestic", "flush", "stp"].includes(input.setup)) {
+    return { error: "That is not a tank setup." };
+  }
+  const tank = await db.waterTank.findUnique({
+    where: { id: input.tankId },
+    select: { id: true, hasLevelSignal: true, name: true, societyId: true },
+  });
+  if (!tank) return { error: "That device no longer exists." };
+  if (input.societyId && !tank.hasLevelSignal) {
+    return { error: `${tank.name} has no water-level signal — only tank sensors can be assigned to a society.` };
+  }
+  if (input.societyId) {
+    const society = await db.society.findUnique({ where: { id: input.societyId }, select: { id: true } });
+    if (!society) return { error: "That society no longer exists." };
+  }
+  const location = input.location.trim();
+  const societyChanged = input.societyId !== tank.societyId;
+  await db.waterTank.update({
+    where: { id: tank.id },
+    data: {
+      societyId: input.societyId,
+      ...(societyChanged
+        ? { assignedAt: input.societyId ? new Date() : null, assignedById: input.societyId ? actor.id : null }
+        : {}),
+      setupType: input.setup,
+      location: location === "" ? null : location,
+    },
+  });
+  logger.info("tank.assignment_saved", {
+    actorId: actor.id,
+    tankId: tank.id,
+    societyId: input.societyId,
+    societyChanged,
+    setup: input.setup,
+    location,
+  });
+  revalidatePath("/admin/water-tanks");
+  revalidatePath(`/admin/water-tanks/${tank.id}`);
+  if (input.societyId) revalidatePath(`/admin/societies/${input.societyId}`);
+  if (tank.societyId && tank.societyId !== input.societyId) revalidatePath(`/admin/societies/${tank.societyId}`);
+  return {};
+}

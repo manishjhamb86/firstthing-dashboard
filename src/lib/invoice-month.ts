@@ -59,6 +59,8 @@ export type InvoiceMonthCircuit = {
 /** One deal's contract terms and the circuits billing under it (CON-24 as amended). */
 export type InvoiceMonthPart = {
   contractId: string;
+  /** The term version in force — recorded on the month for provenance; not used by the arithmetic. */
+  termVersionId?: string;
   unitElectricityRate: number;
   /** ±5 / ±10 — informational here (`belowBand`), never a billing consequence. */
   tolerancePct: number | null;

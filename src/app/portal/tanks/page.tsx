@@ -166,11 +166,15 @@ export default async function PortalTanksPage() {
         </EmptyState>
       ) : (
         <>
-          {/* auto-fit at 1fr, and the card itself wraps: one tank fills the
-              row with its history beside it instead of sitting in the first
-              cell of a four-column grid with three empty ones next to it
-              (user-reported 2026-08-26); four tanks make two columns, where
-              the history wraps under the facts on its own. */}
+          {/* auto-FILL, not auto-fit (user-caught 2026-09-15): a tank alone in
+              its group used to stretch across the row and lay its history
+              beside the facts, while the two in the next group sat side by
+              side with the history beneath — one page, two orientations.
+              auto-fill keeps the empty column, so every tank is the same
+              width and the same shape whether it is alone or not. The 440px
+              minimum makes that two columns on a desktop and one on a phone
+              — never the four-column grid with three empties that the
+              2026-08-26 fix was about. */}
           {groups.map((g) => (
           <section key={g.title} className="mb-7">
           <div className="mb-3 flex items-baseline gap-2.5">
@@ -186,7 +190,7 @@ export default async function PortalTanksPage() {
           )}
           <div
             className="mb-5 grid gap-5 last:mb-0"
-            style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 340px), 1fr))" }}
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 440px), 1fr))" }}
           >
             {sub.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, history }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;

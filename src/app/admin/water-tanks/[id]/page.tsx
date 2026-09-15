@@ -171,46 +171,6 @@ export default async function TankStatusPage({
         </Card>
       )}
           <div className="mt-5 grid items-stretch gap-5 lg:grid-cols-12">
-          <Card className="flex h-full flex-col p-5 sm:p-6 lg:col-span-7">
-            <CardTitle>Assignment</CardTitle>
-            {/* Always the same two rows, so the card's height does not depend on
-                whether a society is assigned. */}
-            <dl className="mb-4 space-y-2.5 text-sm">
-              <div className="flex justify-between gap-4">
-                <dt style={{ color: "var(--text-muted)" }}>Assigned to</dt>
-                <dd className="text-right">
-                  {tank.society ? (
-                    <>
-                      <Link href={`/admin/societies/${tank.society.id}`} className="font-semibold hover:underline">
-                        {tank.society.name}
-                      </Link>
-                      <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
-                        {tank.society.location} · {tank.society.flatCount} flats
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="font-semibold">Not assigned yet</span>
-                      <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
-                        No portal shows this tank until it is.
-                      </span>
-                    </>
-                  )}
-                </dd>
-              </div>
-              <div className="flex justify-between gap-4">
-                <dt style={{ color: "var(--text-muted)" }}>Assigned</dt>
-                <dd>
-                  {tank.assignedAt ? <span className="num">{formatDate(tank.assignedAt)}</span> : "—"}
-                  {tank.assignedBy && ` · by ${tank.assignedBy.name ?? tank.assignedBy.email}`}
-                </dd>
-              </div>
-            </dl>
-            <p className="mt-auto pt-3 text-xs" style={{ color: "var(--text-muted)" }}>
-              Portal accounts of the assigned society see this tank — nobody else does (INV-05). Use
-              Reassign, top right, to move it.
-            </p>
-          </Card>
         <Card className="flex h-full flex-col items-center gap-4 p-6 lg:col-span-5">
           <span className="lbl">Water level</span>
           {tank.hasLevelSignal ? (
@@ -252,6 +212,46 @@ export default async function TankStatusPage({
             </p>
           )}
         </Card>
+          <Card className="flex h-full flex-col p-5 sm:p-6 lg:col-span-7">
+            <CardTitle>Device</CardTitle>
+            {/* The assignment's two facts live here (user's call, 2026-09-15 —
+                a card holding only them was "useless"); Reassign is top right. */}
+            <dl className="grid gap-x-8 gap-y-2.5 text-sm sm:grid-cols-2">
+              <div className="flex justify-between gap-4">
+                <dt style={{ color: "var(--text-muted)" }}>Assigned to</dt>
+                <dd className="text-right">
+                  <Link href={`/admin/societies/${tank.society.id}`} className="font-semibold hover:underline">
+                    {tank.society.name}
+                  </Link>
+                  <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+                    {tank.society.location} · {tank.society.flatCount} flats
+                  </span>
+                </dd>
+              </div>
+              <div className="flex justify-between gap-4">
+                <dt style={{ color: "var(--text-muted)" }}>Assigned</dt>
+                <dd className="text-right">
+                  {tank.assignedAt ? <span className="num">{formatDate(tank.assignedAt)}</span> : "—"}
+                  {tank.assignedBy && ` · by ${tank.assignedBy.name ?? tank.assignedBy.email}`}
+                </dd>
+              </div>
+              {[
+                ["Device ID", <span key="v" className="num">{tank.tuyaDeviceId}</span>],
+                ["Product", tank.productName || "—"],
+                ["Category", <span key="v" className="num">{tank.category}</span>],
+                ["First seen here", <span key="v" className="num">{formatDate(tank.createdAt)}</span>],
+                ["Device list synced", <span key="v" className="num">{formatInstant(tank.syncedAt)}</span>],
+              ].map(([k, v]) => (
+                <div key={String(k)} className="flex justify-between gap-4">
+                  <dt style={{ color: "var(--text-muted)" }}>{k}</dt>
+                  <dd className="text-right">{v}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className="mt-auto pt-3 text-xs" style={{ color: "var(--text-muted)" }}>
+              Portal accounts of the assigned society see this tank — nobody else does (INV-05).
+            </p>
+          </Card>
           </div>
         </>
       ) : (
@@ -377,9 +377,6 @@ export default async function TankStatusPage({
           />
         </Card>
       )}
-        </>
-      )}
-
       <div className="mt-5">
           <Card className="p-5 sm:p-6">
             <CardTitle>Device</CardTitle>
@@ -399,6 +396,9 @@ export default async function TankStatusPage({
             </dl>
           </Card>
       </div>
+        </>
+      )}
+
     </>
   );
 }

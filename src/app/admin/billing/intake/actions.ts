@@ -23,6 +23,7 @@ import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildInvoiceKey } from "@/lib/ingest-keys";
 import { sniffKind } from "@/lib/file-signature";
 import { extractInvoice, type ExtractedInvoice } from "@/lib/invoice-extract";
+import { quotaKind } from "@/lib/gemini-models";
 import {
   arithmeticReport,
   classifyLine,
@@ -212,11 +213,11 @@ function proposeReview(x: ExtractedInvoice, societyId: string | null, circuits: 
 
 /** Google's rate-limit reply is a paragraph with a URL in it; the row needs a sentence. */
 function friendlyExtractionError(raw: string): string {
-  if (/429|quota|rate.?limit/i.test(raw)) {
-    const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
-    const secs = m ? Math.ceil(m[2].toLowerCase() === "ms" ? Number(m[1]) / 1000 : Number(m[1])) : null;
-    if (/per\s*day|daily/i.test(raw)) return "The document reader's daily allowance is used up — read it tomorrow, or enter the lines by hand now.";
-    return `The document reader is rate-limited right now${secs ? ` — wait about ${Math.max(secs, 5)} seconds before Retry` : " — wait a minute before Retry"}, or enter the lines by hand.`;
+  if (quotaKind(raw) === "quota") {
+    // Every model in the list refused (withModelFallback tried each). The
+    // endpoint does not say whether that is the minute's window or the day's
+    // 20-read cap on a free key, so the message covers both honestly.
+    return "The document reader refused on every model it can use. Wait a minute and Retry; if it refuses again, today's free allowance (20 reads a day per model on a free key) is used up — enter the lines by hand, read it tomorrow, or move the key to a billed plan to lift the cap.";
   }
   if (/GEMINI_API_KEY/.test(raw)) return "The document reader is not configured on this server.";
   return "The invoice could not be read automatically — retry, or enter its lines by hand.";
@@ -237,7 +238,7 @@ async function readWithOneRetry(bytes: Uint8Array): Promise<ExtractedInvoice> {
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
     const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
-    if (!/429/.test(raw) || !m) throw err;
+    if (quotaKind(raw) !== "quota" || !m) throw err;
     const waitMs = Math.min(m[2].toLowerCase() === "ms" ? Number(m[1]) : Number(m[1]) * 1000, 65_000);
     await new Promise((r) => setTimeout(r, waitMs + 1_000));
     return await extractInvoice({ base64, mimeType: "application/pdf" });

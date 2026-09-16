@@ -20,8 +20,7 @@
  */
 
 import { GoogleGenAI } from "@google/genai";
-
-const MODEL = "gemini-3.6-flash";
+import { withModelFallback } from "./gemini-models";
 
 let client: GoogleGenAI | null = null;
 function gemini(): GoogleGenAI {
@@ -196,14 +195,19 @@ Rules:
 9. "notFound": the names of fields you could not find on the page.`;
 
 export async function extractInvoice(params: { base64: string; mimeType: string }): Promise<ExtractedInvoice> {
-  const interaction = await gemini().interactions.create({
-    model: MODEL,
-    input: [
-      { type: "text", text: PROMPT },
-      { type: "document", data: params.base64, mime_type: params.mimeType },
-    ],
-    response_format: { type: "text", mime_type: "application/json", schema: SCHEMA },
+  // A model whose daily free quota is spent hands the same request to the
+  // next one (gemini-models.ts) — the refusal's "retry in 55s" is the
+  // per-minute window and never clears a per-day cap.
+  return withModelFallback(async (model) => {
+    const interaction = await gemini().interactions.create({
+      model,
+      input: [
+        { type: "text", text: PROMPT },
+        { type: "document", data: params.base64, mime_type: params.mimeType },
+      ],
+      response_format: { type: "text", mime_type: "application/json", schema: SCHEMA },
+    });
+    if (!interaction.output_text) throw new Error("Gemini returned no output");
+    return JSON.parse(interaction.output_text) as ExtractedInvoice;
   });
-  if (!interaction.output_text) throw new Error("Gemini returned no output");
-  return JSON.parse(interaction.output_text) as ExtractedInvoice;
 }

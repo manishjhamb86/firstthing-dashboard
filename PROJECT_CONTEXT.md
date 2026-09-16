@@ -6114,6 +6114,20 @@ first cut capped the wait at 20 s, so a Retry clicked straight after the refusal
 and was refused the same way. The message says "wait about N seconds before Retry", and a
 daily-allowance refusal is told apart from a per-minute one.
 
+**Then the actual cause, read off the live refusal rather than the message**: the stage key is a
+FREE-TIER key, and Google's QuotaFailure names `GenerateRequestsPerDayPerProjectPerModel-FreeTier`,
+`quotaValue: "20"` — **20 reads a DAY per model**. The "retry in 55s" the message carries is the
+per-minute window and is simply misleading for a daily cap, which is why every Retry the user
+pressed failed identically. The Interactions endpoint strips those details from what the SDK
+throws (checked: the body holds only the message), so per-day and per-minute cannot be told apart
+in code — instead `src/lib/gemini-models.ts` treats every quota refusal the same way: **try the
+next model**, whose quota is its own (`GEMINI_MODELS`, default 3.6-flash → 3.5-flash →
+flash-latest → flash-lite-latest; each answers the same JSON-schema request). Driven live against
+the exhausted key: 3.6-flash refused, 3.5-flash read FT/2026-27/055 correctly. When every model
+refuses, the row says so plainly and names the two real remedies — enter by hand, or a billed key
+(pay-as-you-go on a flash model is a fraction of a rupee per invoice and lifts the cap). The
+earlier per-day/per-minute wording was withdrawn as unprovable.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

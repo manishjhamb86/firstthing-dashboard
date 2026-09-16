@@ -176,7 +176,7 @@ async function circuitOptionsFor(societyId: string): Promise<CircuitOption[]> {
 
 function proposeReview(x: ExtractedInvoice, societyId: string | null, circuits: CircuitOption[]): Review {
   const lines: ReviewLine[] = x.lines.map((l) => {
-    const kind = classifyLine({ hsn: l.hsn, description: l.description, proposal: l.kindProposal });
+    const kind = classifyLine({ hsn: l.hsn, description: l.description, proposal: l.kindProposal, qty: l.qty.value });
     const proposal = kind === "service" ? proposeCircuit({ qty: l.qty.value, description: l.description }, circuits) : null;
     return {
       lineNo: l.lineNo,

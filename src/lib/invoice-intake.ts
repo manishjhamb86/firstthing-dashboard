@@ -22,13 +22,24 @@ export type LineKind = "service" | "other";
  * the description is the second; goods HSNs (85xx — meters, hardware) and a
  * "pcs" unit are the signals for `other`.
  */
-export function classifyLine(input: { hsn: string; description: string; proposal?: LineKind | null }): LineKind {
+export function classifyLine(input: { hsn: string; description: string; proposal?: LineKind | null; qty?: number | null }): LineKind {
   const hsn = input.hsn.replace(/\D/g, "");
   const desc = input.description.toLowerCase();
-  if (hsn.startsWith("9985")) return "service";
-  if (hsn.startsWith("85") || hsn.startsWith("84")) return "other";
+  // The HSN is the tax code the invoice was raised under, and it settles goods
+  // versus services before any wording does: chapter 99 is services; 84
+  // (machinery), 85 (electrical), 90 (meters and instruments) and 94 (lamps
+  // and lighting fittings) are goods. A smart meter billed under 9405 with the
+  // description "Energy Efficiency services" is a goods line (user-caught
+  // 2026-09-16) — the wording alone read it as a savings fee.
+  if (hsn.startsWith("99")) return "service";
+  if (/^(84|85|90|94)/.test(hsn)) return "other";
   if (/\bmeter\b|\bhardware\b|\bdevice\b|\bpcs\b|\bsensor\b|\brouter\b/.test(desc)) return "other";
-  if (/energy (saving|efficiency)|performance management|maintenance charges/.test(desc)) return "service";
+  if (/energy (saving|efficiency)|performance management|maintenance charges/.test(desc)) {
+    // A savings fee is priced per light for a month; a quantity of one with
+    // no month named is a unit of something, not a light count.
+    if (input.qty != null && input.qty <= 1 && !/month|\b20\d\d\b/.test(desc)) return "other";
+    return "service";
+  }
   return input.proposal ?? "service";
 }
 

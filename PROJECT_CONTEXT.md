@@ -6128,6 +6128,18 @@ refuses, the row says so plainly and names the two real remedies — enter by ha
 (pay-as-you-go on a flash model is a fraction of a rupee per invoice and lifts the cap). The
 earlier per-day/per-minute wording was withdrawn as unprovable.
 
+## A smart meter billed as "Energy Efficiency services" is a goods line (2026-09-16) — user-caught
+
+"This line item is not light, it's a smart meter — why is it showing qty lights?" `classifyLine`
+read the wording first ("Energy Efficiency services" → a savings fee) and looked at the HSN only for
+chapters 84/85. The line's HSN was 94054090 — chapter 94, lamps and lighting fittings, i.e. goods.
+The HSN is the tax code the invoice was raised under and settles goods versus services before any
+wording does: chapter 99 is services; 84, 85, 90 (meters and instruments) and 94 are goods. And a
+savings fee is priced per light for a month, so a quantity of one with no month named in the
+description is a unit of something, not a light count — that tie-breaker covers a line with no HSN
+at all. The review's quantity field reads "Qty (lights)" only on a service line, "Qty" otherwise.
+Six new cases in `tests/invoice-intake.test.ts` (the user's exact line included). 901 unit tests.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

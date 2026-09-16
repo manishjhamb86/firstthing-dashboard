@@ -330,7 +330,7 @@ export function ReviewForm({
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {([["qty", "Qty (lights)"], ["rate", "Rate"], ["discount", "Discount"], ["amount", "Amount"]] as const).map(([k, label]) => (
+                    {([["qty", l.kind === "service" ? "Qty (lights)" : "Qty"], ["rate", "Rate"], ["discount", "Discount"], ["amount", "Amount"]] as const).map(([k, label]) => (
                       <label key={k} className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
                         {label}
                         <input type="number" step="any" inputMode="decimal" className="field num mt-1" value={k === "discount" ? String(l.discount) : numInput(l[k])} onChange={(e) => setLine(l.lineNo, k === "discount" ? { discount: parseNum(e.target.value) ?? 0 } : ({ [k]: parseNum(e.target.value) } as Partial<ReviewLine>))} />

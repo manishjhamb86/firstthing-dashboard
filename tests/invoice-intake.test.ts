@@ -16,6 +16,17 @@ describe("classifyLine — service vs other (FEAT-109-AC-5)", () => {
     expect(classifyLine({ hsn: "998599", description: "Energy Efficiency & Performance Management Service" })).toBe("service");
     expect(classifyLine({ hsn: "85351030", description: "Smart Meter\nSmart Energy Meter On Demo Circuit" })).toBe("other");
   });
+  it("the HSN chapter settles goods before the wording does — a meter under 9405 is not a savings fee (user-caught 2026-09-16)", () => {
+    expect(classifyLine({ hsn: "94054090", description: "Energy Efficiency services\nServices provided by FirsThing", qty: 1 })).toBe("other");
+    expect(classifyLine({ hsn: "90283010", description: "Energy Efficiency services", qty: 1 })).toBe("other");
+    // Chapter 99 is services whatever the wording.
+    expect(classifyLine({ hsn: "998599", description: "Smart meter rental", qty: 1 })).toBe("service");
+  });
+  it("with no HSN, a quantity of one and no month named is a unit of something, not a light count", () => {
+    expect(classifyLine({ hsn: "", description: "Energy Efficiency services", qty: 1 })).toBe("other");
+    expect(classifyLine({ hsn: "", description: "Energy Saving charges for the month of July-2026", qty: 1 })).toBe("service");
+    expect(classifyLine({ hsn: "", description: "Energy Efficiency services", qty: 605 })).toBe("service");
+  });
   it("uses the description when the HSN is missing, and the proposal last", () => {
     expect(classifyLine({ hsn: "", description: "Energy Saving and Maintenance charges by FirsThing" })).toBe("service");
     expect(classifyLine({ hsn: "", description: "4G router, 1 pcs" })).toBe("other");

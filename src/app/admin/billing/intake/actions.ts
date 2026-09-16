@@ -215,13 +215,21 @@ function friendlyExtractionError(raw: string): string {
   if (/429|quota|rate.?limit/i.test(raw)) {
     const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
     const secs = m ? Math.ceil(m[2].toLowerCase() === "ms" ? Number(m[1]) / 1000 : Number(m[1])) : null;
-    return `The document reader is rate-limited right now${secs ? ` — try again in about ${Math.max(secs, 5)} seconds` : " — try again in a minute"}, or enter the lines by hand.`;
+    if (/per\s*day|daily/i.test(raw)) return "The document reader's daily allowance is used up — read it tomorrow, or enter the lines by hand now.";
+    return `The document reader is rate-limited right now${secs ? ` — wait about ${Math.max(secs, 5)} seconds before Retry` : " — wait a minute before Retry"}, or enter the lines by hand.`;
   }
   if (/GEMINI_API_KEY/.test(raw)) return "The document reader is not configured on this server.";
   return "The invoice could not be read automatically — retry, or enter its lines by hand.";
 }
 
-/** One automatic retry on a rate limit, after the delay the service asks for (capped so the action returns). */
+/**
+ * One automatic retry on a rate limit, after the delay the service asks for.
+ * The free tier's window is a minute, and the reader says exactly how long to
+ * wait ("retry in 49s"); the first cut capped the wait at 20 s, so a Retry
+ * clicked straight after the refusal waited too little and failed the same
+ * way (user-caught 2026-09-16). Honoured up to a minute now — the operator
+ * sees "Reading…" for that long, which beats a second identical refusal.
+ */
 async function readWithOneRetry(bytes: Uint8Array): Promise<ExtractedInvoice> {
   const base64 = Buffer.from(bytes).toString("base64");
   try {
@@ -230,8 +238,8 @@ async function readWithOneRetry(bytes: Uint8Array): Promise<ExtractedInvoice> {
     const raw = err instanceof Error ? err.message : String(err);
     const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
     if (!/429/.test(raw) || !m) throw err;
-    const waitMs = Math.min(m[2].toLowerCase() === "ms" ? Number(m[1]) : Number(m[1]) * 1000, 20_000);
-    await new Promise((r) => setTimeout(r, waitMs + 500));
+    const waitMs = Math.min(m[2].toLowerCase() === "ms" ? Number(m[1]) : Number(m[1]) * 1000, 65_000);
+    await new Promise((r) => setTimeout(r, waitMs + 1_000));
     return await extractInvoice({ base64, mimeType: "application/pdf" });
   }
 }

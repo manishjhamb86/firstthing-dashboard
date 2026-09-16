@@ -21,6 +21,11 @@ const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
   discarded: { label: "Discarded", tone: "neu" },
 };
 
+/** A read that started before this and never finished has no process behind it. */
+function staleReadCutoff(): Date {
+  return new Date(Date.now() - 5 * 60_000);
+}
+
 export default async function IntakePage() {
   const gate = await requireBillingOps();
   if (!gate.ok) redirect("/admin/billing");
@@ -32,15 +37,20 @@ export default async function IntakePage() {
     take: 200,
   });
 
+  // A read that started more than a few minutes ago and never finished has no
+  // process behind it any more (the tab moved on, or the reader refused) — it
+  // is unread, and the row says so rather than "Reading…" forever.
+  const staleBefore = staleReadCutoff();
   const rows: IntakeRow[] = intakes.map((i) => {
     const review = (i.review ?? null) as { total?: number | null; invoiceNumber?: string; paid?: string | null } | null;
+    const status = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
     return {
       id: i.id,
       fileName: i.fileName,
       fileSize: i.fileSize,
-      status: i.status,
-      statusLabel: STATUS_META[i.status]?.label ?? i.status,
-      statusTone: STATUS_META[i.status]?.tone ?? "neu",
+      status,
+      statusLabel: STATUS_META[status]?.label ?? status,
+      statusTone: STATUS_META[status]?.tone ?? "neu",
       society: i.society?.name ?? null,
       period: i.period ? monthLabel(i.period) : null,
       invoiceNumber: review?.invoiceNumber ?? null,

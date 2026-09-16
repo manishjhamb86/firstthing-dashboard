@@ -6104,6 +6104,16 @@ the unread rows so they are never out of sight. A single dropped file is still r
 and opened. Re-verified 9/9 (zip) and 25/25 (dedupe): two rows from one archive both `uploaded`
 with no reader call, Read on one row reads only that row, the other's review page offers the read.
 
+**Stage then showed the leftover of the old behaviour** — 137 rows stuck at "Reading…" for eight
+hours (each bulk-dropped file had its read started by the browser and never finished), and Retry
+on the rate-limited ones failing identically. Three fixes: a data migration resets every `reading`
+row to `uploaded` (a transient state with no process behind it); the list renders any read older
+than five minutes as unread with a Read button, so a crashed read can never sit as "Reading…" for
+good; and `readWithOneRetry` now honours the reader's own "retry in 49s" up to a minute — the
+first cut capped the wait at 20 s, so a Retry clicked straight after the refusal waited too little
+and was refused the same way. The message says "wait about N seconds before Retry", and a
+daily-allowance refusal is told apart from a per-minute one.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

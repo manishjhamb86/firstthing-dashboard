@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  allocateLine,
   arithmeticReport,
+  lineAllocations,
+  refuseSplit,
   classifyLine,
   isIsoDate,
   normaliseName,
@@ -144,5 +147,55 @@ describe("isIsoDate", () => {
   it("rejects a rolled-over calendar date", () => {
     expect(isIsoDate("2026-02-31")).toBe(false);
     expect(isIsoDate("2026-07-31")).toBe(true);
+  });
+});
+
+describe("FEAT-109-AC-11 — one invoice line billing two circuits of one type", () => {
+  const towers = [
+    { circuitId: "lla", label: "Lift Lobby A–D", representedLightCount: 1_786, lightType: "lift-lobby" },
+    { circuitId: "lle", label: "Lift Lobby E", representedLightCount: 466, lightType: "lift-lobby" },
+    { circuitId: "b", label: "Basement", representedLightCount: 1_444, lightType: "basement" },
+  ];
+  const line = { lineNo: 2, qty: 2_252, amount: 44_480.16, circuitId: null, applyCountForward: false };
+
+  it("proposes the pair whose counts add up to the billed count (the user's own 2,252)", () => {
+    const p = proposeCircuit({ qty: 2_252, description: "Energy Saving … of Surface Light" }, towers);
+    expect(p.circuitId).toBeNull();
+    expect(p.split).toEqual(["lla", "lle"]);
+    expect(p.why).toMatch(/1,786.*466.*2,252/);
+  });
+
+  it("does not pair circuits of different types", () => {
+    // 1,786 + 1,444 = 3,230 but lift lobby + basement is not one line's population.
+    expect(proposeCircuit({ qty: 3_230, description: "" }, towers).split).toBeUndefined();
+  });
+
+  it("refuses a split that does not add up, names every gap, and passes one that does", () => {
+    expect(refuseSplit({ ...line, split: [{ circuitId: "lla", lights: 1_786, applyCountForward: false }, { circuitId: "lle", lights: 400, applyCountForward: false }] })).toMatch(/1,786 \+ 400 = 2,186\) does not add to the 2,252/);
+    expect(refuseSplit({ ...line, split: [{ circuitId: "lla", lights: 1_786, applyCountForward: false }, { circuitId: "", lights: 466, applyCountForward: false }] })).toMatch(/choose every circuit/);
+    expect(refuseSplit({ ...line, split: [{ circuitId: "lla", lights: 1_786, applyCountForward: false }, { circuitId: "lla", lights: 466, applyCountForward: false }] })).toMatch(/same circuit twice/);
+    expect(refuseSplit({ ...line, split: [{ circuitId: "lla", lights: null, applyCountForward: false }, { circuitId: "lle", lights: 466, applyCountForward: false }] })).toMatch(/how many of its lights/);
+    expect(refuseSplit({ ...line, split: [{ circuitId: "lla", lights: 1_786, applyCountForward: false }, { circuitId: "lle", lights: 466, applyCountForward: false }] })).toBeNull();
+    expect(refuseSplit({ ...line, split: undefined })).toBeNull();
+  });
+
+  it("shares the line's amount by lights, to the paisa, the parts adding back to the printed amount exactly", () => {
+    const parts = allocateLine({ ...line, split: [{ circuitId: "lla", lights: 1_786, applyCountForward: false }, { circuitId: "lle", lights: 466, applyCountForward: false }] });
+    expect(parts.map((p) => p.lightsBilled)).toEqual([1_786, 466]);
+    expect(parts[0].amount).toBeCloseTo(44_480.16 * (1_786 / 2_252), 2);
+    expect(parts[0].amount + parts[1].amount).toBeCloseTo(44_480.16, 10);
+    expect(parts.every((p) => p.lineNo === 2)).toBe(true);
+  });
+
+  it("a single-circuit line is one allocation carrying the whole quantity and amount", () => {
+    expect(allocateLine({ ...line, circuitId: "b" })).toEqual([{ lineNo: 2, circuitId: "b", lightsBilled: 2_252, amount: 44_480.16 }]);
+    expect(lineAllocations({ ...line, circuitId: "b" })).toEqual([{ circuitId: "b", lights: 2_252, applyCountForward: false }]);
+  });
+
+  it("openItems carries the split's gap and refuses one circuit on two lines", () => {
+    const split = { ...CLEAN.lines[0], circuitId: null, split: [{ circuitId: "ckt", lights: 400, applyCountForward: false }, { circuitId: "ckt2", lights: 200, applyCountForward: false }] };
+    expect(openItems({ ...CLEAN, lines: [split] }, { duplicateOf: null })).toContain("Line 1: the split across its circuits (400 + 200 = 600) does not add to the 605 billed (step 2)");
+    const twice = [CLEAN.lines[0], { ...CLEAN.lines[0], lineNo: 2 }];
+    expect(openItems({ ...CLEAN, lines: twice }, { duplicateOf: null })).toContain("Lines 1 and 2 both bill the same circuit (step 2)");
   });
 });

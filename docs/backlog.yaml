@@ -8270,6 +8270,13 @@ features:
         when: "the operator tries to submit"
         then: "submit is blocked with the named gap and a link to create the circuit — a stat is never derived against no circuit"
         tests: [TC-109-10]
+      - id: FEAT-109-AC-11
+        title: "One invoice line billing several circuits of one type is split across them"
+        type: edge
+        given: "a service line whose count is the sum of two or more circuits of one light type"
+        when: "the operator names each circuit and how many of the billed lights sit on it (a pair adding up exactly is proposed automatically)"
+        then: "the split must add up to the line's quantity; each circuit gets its own fee line with the amount shared in proportion to its lights, adding back to the printed amount exactly, its own count disagreement and apply-forward; the invoice line points at no single circuit (added 2026-09-16)"
+        tests: []
     stories:
       - id: STORY-109-1
         title: "As billing ops, I want to drop a month's Zoho invoices and have each one read into a review row, so that the month of record comes from the invoice we actually raised rather than a spreadsheet."

@@ -5815,6 +5815,34 @@ degraded state, and the run's other 31 checks (the new figures included) passed.
 are metered; a verification suite that re-reads the same PDF a dozen times a day will find the
 ceiling.
 
+## One invoice line can bill two circuits of one type (2026-09-16) — user-specified
+
+**"Sometimes the line item count doesn't match the circuit count because two circuits of the
+same type (all basement lights, all lift-lobby lights) are counted as one line item. In that case
+give an option to select two circuits against one line."** The review bound one circuit per line,
+so the user's own case — a 2,252-light line against a 1,786-light circuit — could only be recorded
+as a disagreement and a forced count. `ReviewLine.split` (FEAT-109-AC-11, recorded in
+`03-features.md` and the backlog) names each circuit the line bills and how many of the billed
+lights sit on it; `lineAllocations` / `refuseSplit` / `allocateLine` in `invoice-intake.ts` are the
+pure rules (6 new cases): the split must add up to the line's quantity, every circuit must be
+chosen and chosen once, and the line's amount is shared in proportion to the lights to the paisa
+with the last circuit taking the remainder so the parts add back to the printed amount exactly
+(INV-02 — the fee lines must sum to the invoice line). `proposeCircuit` now proposes the split
+itself when a pair of same-type circuits adds up exactly (1,786 + 466 = 2,252), each prefilled
+with what it records. Each circuit gets its own fee line, its own count disagreement and its own
+apply-forward; the invoice line points at no single circuit; a circuit on two lines is refused
+(one billing grain, one fee line — CON-11). On the review: "+ This line bills more than one
+circuit" turns the select into rows of circuit + lights with a running "1,786 + 400 = 2,186 of
+2,252 billed · 66 short" line.
+
+**Verified 14/14 in a browser** on RG Residency with two fixture lift-lobby circuits: the split
+rows prefill from the records and read "adds up"; a short split is named on the row and in the
+submit bar; a split that adds up but disagrees with the records states it per circuit; submit
+writes three fee lines (basement 1,444; lift lobby 1,700 / 552) whose two lift-lobby amounts sum
+to ₹44,480.16 exactly, the invoice line with no circuit, and one `RepresentedCountChange`
+466 → 552 on the circuit whose apply-forward was ticked. 925 unit tests, `tsc`/`lint`/`build`
+clean; no schema change (the split lives in the review JSON and the fee lines).
+
 ## A wrong replacement date can be corrected, and the dashboard says the whole story (2026-09-16) — user-asked, twice
 
 **"Should be able to change the light replacement day in case choose wrong date by mistake."** The

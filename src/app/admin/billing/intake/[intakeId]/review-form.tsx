@@ -7,7 +7,7 @@ import { SearchSelect } from "@/components/search-select";
 import { Modal } from "@/components/modal";
 import { formatDate, monthLabel } from "@/lib/format-date";
 import type { ExtractedInvoice } from "@/lib/invoice-extract";
-import type { Review, ReviewLine } from "@/lib/invoice-intake";
+import type { LineSplitEntry, Review, ReviewLine } from "@/lib/invoice-intake";
 import { discardIntake, extractIntake, previewIntake, saveIntakeReview, submitIntake, type IntakePreview } from "../actions";
 
 /**
@@ -119,6 +119,11 @@ export function ReviewForm({
       ],
     }));
   const removeLine = (lineNo: number) => setReview((r) => ({ ...r, lines: r.lines.filter((l) => l.lineNo !== lineNo) }));
+  const setSplitEntry = (lineNo: number, index: number, patch: Partial<LineSplitEntry>) =>
+    setReview((r) => ({
+      ...r,
+      lines: r.lines.map((l) => (l.lineNo === lineNo ? { ...l, split: (l.split ?? []).map((e, j) => (j === index ? { ...e, ...patch } : e)) } : l)),
+    }));
 
   const numInput = (v: number | null) => (v === null ? "" : String(v));
   const parseNum = (s: string): number | null => (s.trim() === "" ? null : Number.isFinite(Number(s)) ? Number(s) : null);
@@ -250,7 +255,7 @@ export function ReviewForm({
                   id="rv-society"
                   options={societies.map((s) => ({ id: s.id, label: s.name, sublabel: s.location }))}
                   value={review.societyId}
-                  onCommit={(id) => setReview((r) => ({ ...r, societyId: id, lines: r.lines.map((l) => ({ ...l, circuitId: null })) }))}
+                  onCommit={(id) => setReview((r) => ({ ...r, societyId: id, lines: r.lines.map((l) => ({ ...l, circuitId: null, split: undefined, applyCountForward: false })) }))}
                   placeholder="Search societies…"
                 />
               </Field>
@@ -308,6 +313,7 @@ export function ReviewForm({
           <div className="space-y-3">
             {review.lines.map((l) => {
               const check = lineCheck(l.lineNo);
+              const isSplit = (l.split?.length ?? 0) >= 2;
               const dline = derived?.lines.find((d) => d.lineNo === l.lineNo);
               const nd = derived?.notDerivable.find((d) => d.lineNo === l.lineNo);
               return (
@@ -341,35 +347,159 @@ export function ReviewForm({
                   {check && check.ok && check.rounded && <p className="mt-2 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>{check.note}</p>}
                   {l.kind === "service" ? (
                     <div className="mt-2">
-                      <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
-                        Circuit
-                        <select className="field mt-1" value={l.circuitId ?? ""} onChange={(e) => setLine(l.lineNo, { circuitId: e.target.value || null, applyCountForward: false })} disabled={!review.societyId}>
-                          <option value="">{review.societyId ? (circuitOptions.length ? "Choose the circuit this line bills…" : "This society has no circuits yet") : "Confirm the society first"}</option>
-                          {circuitOptions.map((c) => (
-                            <option key={c.circuitId} value={c.circuitId}>
-                              {c.label} · {num(c.representedLightCount)} lights
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      {!l.circuitId && review.societyId && circuitOptions.length === 0 && (
-                        <p className="mt-1 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
-                          No circuit on record for this society — create it from its deal&apos;s survey (or the document backfill) first.
-                        </p>
-                      )}
-                      {dline && dline.countDisagreement !== null && (
-                        <div className="mt-2 rounded-[var(--r-sm)] border px-3 py-2 text-[12.5px]" style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}>
-                          <p>
-                            <b>Invoice bills {num(dline.lightsBilled)} lights; the circuit records {num(dline.countDisagreement)}.</b> This month&apos;s stats use {num(dline.lightsBilled)}. The bill itself is not affected.
+                      {isSplit ? (
+                        // FEAT-109-AC-11 — one line, several circuits of one type.
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
+                            Circuits this line bills
                           </p>
-                          <label className="mt-1.5 flex items-start gap-2" style={{ color: "var(--text)" }}>
-                            <input type="checkbox" className="mt-0.5" checked={l.applyCountForward} onChange={(e) => setLine(l.lineNo, { applyCountForward: e.target.checked })} />
-                            <span>
-                              Also apply {num(dline.lightsBilled)} to this circuit from {monthLabel(review.period)} onward
-                              <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>recorded with this invoice as the reason; earlier months are never restated</span>
-                            </span>
-                          </label>
+                          {l.split!.map((e, i) => {
+                            const d = derived?.lines.find((x) => x.lineNo === l.lineNo && x.circuitId === e.circuitId);
+                            return (
+                              <div key={i} className="rounded-[var(--r-sm)] border p-2" style={{ borderColor: "var(--border-subtle)" }}>
+                                <div className="grid gap-2 sm:grid-cols-[1fr_9rem_auto] sm:items-end">
+                                  <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
+                                    Circuit
+                                    <select
+                                      className="field mt-1"
+                                      value={e.circuitId}
+                                      aria-label={`Line ${l.lineNo} circuit ${i + 1}`}
+                                      onChange={(ev) => {
+                                        const id = ev.target.value;
+                                        const rec = circuitOptions.find((c) => c.circuitId === id)?.representedLightCount ?? null;
+                                        setSplitEntry(l.lineNo, i, { circuitId: id, lights: e.lights ?? rec, applyCountForward: false });
+                                      }}
+                                    >
+                                      <option value="">Choose a circuit…</option>
+                                      {circuitOptions.map((c) => (
+                                        <option key={c.circuitId} value={c.circuitId}>
+                                          {c.label} · {num(c.representedLightCount)} lights
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
+                                    Lights on it
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      className="field num mt-1"
+                                      aria-label={`Line ${l.lineNo} lights on circuit ${i + 1}`}
+                                      value={e.lights ?? ""}
+                                      onChange={(ev) => setSplitEntry(l.lineNo, i, { lights: parseNum(ev.target.value), applyCountForward: false })}
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    className="btn-ghost btn-sm sm:mb-1"
+                                    onClick={() =>
+                                      setReview((r) => ({
+                                        ...r,
+                                        lines: r.lines.map((x) => {
+                                          if (x.lineNo !== l.lineNo) return x;
+                                          const rest = (x.split ?? []).filter((_, j) => j !== i);
+                                          // Back to one circuit once only one is left.
+                                          return rest.length >= 2
+                                            ? { ...x, split: rest }
+                                            : { ...x, split: undefined, circuitId: rest[0]?.circuitId || null, applyCountForward: false };
+                                        }),
+                                      }))
+                                    }
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                                {d && d.countDisagreement !== null && (
+                                  <div className="mt-2 rounded-[var(--r-sm)] border px-3 py-2 text-[12.5px]" style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}>
+                                    <p>
+                                      <b>Invoice puts {num(d.lightsBilled)} lights on this circuit; it records {num(d.countDisagreement)}.</b> This month&apos;s stats use {num(d.lightsBilled)}.
+                                    </p>
+                                    <label className="mt-1.5 flex items-start gap-2" style={{ color: "var(--text)" }}>
+                                      <input type="checkbox" className="mt-0.5" checked={e.applyCountForward} onChange={(ev) => setSplitEntry(l.lineNo, i, { applyCountForward: ev.target.checked })} />
+                                      <span>Also apply {num(d.lightsBilled)} to this circuit from {monthLabel(review.period)} onward</span>
+                                    </label>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          {(() => {
+                            const sum = l.split!.reduce((s, e) => s + (e.lights ?? 0), 0);
+                            const ok = l.qty !== null && sum === l.qty && l.split!.every((e) => e.circuitId && e.lights);
+                            return (
+                              <p className="text-[12.5px]" style={{ color: ok ? "var(--text-muted)" : "var(--warn-fg)" }}>
+                                {l.split!.map((e) => num(e.lights ?? 0)).join(" + ")} = {num(sum)} of {l.qty !== null ? num(l.qty) : "—"} billed
+                                {ok ? " · adds up" : l.qty !== null ? ` · ${num(Math.abs(l.qty - sum))} ${sum < l.qty ? "short" : "over"}` : ""}
+                              </p>
+                            );
+                          })()}
+                          <button
+                            type="button"
+                            className="btn-ghost btn-sm"
+                            onClick={() => setReview((r) => ({ ...r, lines: r.lines.map((x) => (x.lineNo === l.lineNo ? { ...x, split: [...(x.split ?? []), { circuitId: "", lights: null, applyCountForward: false }] } : x)) }))}
+                          >
+                            + Add another circuit
+                          </button>
                         </div>
+                      ) : (
+                        <>
+                          <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
+                            Circuit
+                            <select className="field mt-1" value={l.circuitId ?? ""} onChange={(e) => setLine(l.lineNo, { circuitId: e.target.value || null, applyCountForward: false })} disabled={!review.societyId}>
+                              <option value="">{review.societyId ? (circuitOptions.length ? "Choose the circuit this line bills…" : "This society has no circuits yet") : "Confirm the society first"}</option>
+                              {circuitOptions.map((c) => (
+                                <option key={c.circuitId} value={c.circuitId}>
+                                  {c.label} · {num(c.representedLightCount)} lights
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {!l.circuitId && review.societyId && circuitOptions.length === 0 && (
+                            <p className="mt-1 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
+                              No circuit on record for this society — create it from its deal&apos;s survey (or the document backfill) first.
+                            </p>
+                          )}
+                          {circuitOptions.length >= 2 && (
+                            <button
+                              type="button"
+                              className="btn-ghost btn-sm mt-1"
+                              onClick={() =>
+                                setReview((r) => ({
+                                  ...r,
+                                  lines: r.lines.map((x) => {
+                                    if (x.lineNo !== l.lineNo) return x;
+                                    const first = x.circuitId ? circuitOptions.find((c) => c.circuitId === x.circuitId) : undefined;
+                                    return {
+                                      ...x,
+                                      circuitId: null,
+                                      applyCountForward: false,
+                                      split: [
+                                        { circuitId: x.circuitId ?? "", lights: first?.representedLightCount ?? null, applyCountForward: false },
+                                        { circuitId: "", lights: null, applyCountForward: false },
+                                      ],
+                                    };
+                                  }),
+                                }))
+                              }
+                            >
+                              + This line bills more than one circuit
+                            </button>
+                          )}
+                          {dline && dline.countDisagreement !== null && (
+                            <div className="mt-2 rounded-[var(--r-sm)] border px-3 py-2 text-[12.5px]" style={{ background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }}>
+                              <p>
+                                <b>Invoice bills {num(dline.lightsBilled)} lights; the circuit records {num(dline.countDisagreement)}.</b> This month&apos;s stats use {num(dline.lightsBilled)}. The bill itself is not affected.
+                              </p>
+                              <label className="mt-1.5 flex items-start gap-2" style={{ color: "var(--text)" }}>
+                                <input type="checkbox" className="mt-0.5" checked={l.applyCountForward} onChange={(e) => setLine(l.lineNo, { applyCountForward: e.target.checked })} />
+                                <span>
+                                  Also apply {num(dline.lightsBilled)} to this circuit from {monthLabel(review.period)} onward
+                                  <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>recorded with this invoice as the reason; earlier months are never restated</span>
+                                </span>
+                              </label>
+                            </div>
+                          )}
+                        </>
                       )}
                       {nd && <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>{nd.reason}</p>}
                     </div>
@@ -464,7 +594,7 @@ export function ReviewForm({
                 </thead>
                 <tbody>
                   {derived.lines.map((d) => (
-                    <tr key={d.lineNo}>
+                    <tr key={`${d.lineNo}-${d.circuitId}`}>
                       <td>
                         {circuitOptions.find((c) => c.circuitId === d.circuitId)?.label ?? d.lightType}
                         <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
@@ -493,7 +623,7 @@ export function ReviewForm({
                     </tr>
                   ))}
                   {derived.notDerivable.map((n) => (
-                    <tr key={`nd-${n.lineNo}`}>
+                    <tr key={`nd-${n.lineNo}-${n.circuitId}`}>
                       <td colSpan={7} className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>Line {n.lineNo}: {n.reason}</td>
                     </tr>
                   ))}

@@ -25,8 +25,10 @@ import { sniffKind } from "@/lib/file-signature";
 import { extractInvoice, type ExtractedInvoice } from "@/lib/invoice-extract";
 import { quotaKind } from "@/lib/gemini-models";
 import {
+  allocateLine,
   arithmeticReport,
   classifyLine,
+  lineAllocations,
   openItems,
   parseInvoiceMonth,
   proposeCircuit,
@@ -191,6 +193,15 @@ function proposeReview(x: ExtractedInvoice, societyId: string | null, circuits: 
       kind,
       circuitId: proposal?.circuitId ?? null,
       applyCountForward: false,
+      // A proposed pair arrives as a split, each circuit's share prefilled
+      // with what it records — the operator confirms or corrects it.
+      split: proposal?.split
+        ? proposal.split.map((id) => ({
+            circuitId: id,
+            lights: circuits.find((c) => c.circuitId === id)?.representedLightCount ?? null,
+            applyCountForward: false,
+          }))
+        : undefined,
     };
   });
   return {
@@ -356,9 +367,9 @@ async function buildPreview(review: Review): Promise<IntakePreview> {
     circuitOptions = ctx.circuitOptions;
     contextNotes = ctx.notes;
     if (/^\d{4}-\d{2}$/.test(review.period)) {
-      const serviceLines = review.lines
-        .filter((l) => l.kind === "service" && l.circuitId && l.qty !== null && l.amount !== null)
-        .map((l) => ({ lineNo: l.lineNo, circuitId: l.circuitId!, lightsBilled: l.qty!, amount: l.amount! }));
+      // One derive line per circuit a review line bills (a split line
+      // yields several, its amount shared in proportion to the lights).
+      const serviceLines = review.lines.filter((l) => l.kind === "service").flatMap((l) => allocateLine(l));
       derived = deriveInvoiceMonth({ period: review.period, parts: ctx.parts, lines: serviceLines, readingsByCircuit: ctx.readingsByCircuit });
     }
   }
@@ -575,14 +586,17 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
             taxAmount: l.taxAmount,
             amount: l.amount ?? 0,
             kind: l.kind,
-            circuitId: l.kind === "service" ? l.circuitId : null,
+            // A split line bills several circuits; the fee lines carry each
+            // circuit's own share, so the invoice line points at none.
+            circuitId: l.kind === "service" && lineAllocations(l).length === 1 ? lineAllocations(l)[0].circuitId : null,
             arithmeticOk: preview.arithmetic.lines.find((a) => a.lineNo === l.lineNo)?.check.ok ?? true,
             // A rounded-off line is reconciled and says so; the note stays on the record either way.
             arithmeticNote: (() => {
               const c = preview.arithmetic.lines.find((a) => a.lineNo === l.lineNo)?.check;
               return c && (!c.ok || c.rounded) ? c.note : null;
             })(),
-            countDisagreement: derived.lines.find((d) => d.lineNo === l.lineNo)?.countDisagreement ?? null,
+            countDisagreement:
+              lineAllocations(l).length === 1 ? (derived.lines.find((d) => d.lineNo === l.lineNo)?.countDisagreement ?? null) : null,
           })),
         },
       },
@@ -602,11 +616,13 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
 
     // FEAT-109-AC-6 — a forward-only population correction, its own audit row.
     for (const l of review.lines) {
-      const d = derived.lines.find((x) => x.lineNo === l.lineNo);
-      if (l.kind === "service" && l.applyCountForward && d && d.countDisagreement !== null && l.circuitId) {
+      if (l.kind !== "service") continue;
+      for (const a of lineAllocations(l)) {
+        const d = derived.lines.find((x) => x.lineNo === l.lineNo && x.circuitId === a.circuitId);
+        if (!a.applyCountForward || !d || d.countDisagreement === null) continue;
         await tx.representedCountChange.create({
           data: {
-            circuitId: l.circuitId,
+            circuitId: a.circuitId,
             previousCount: d.countDisagreement,
             nextCount: d.lightsBilled,
             effectiveFrom: period,
@@ -615,7 +631,7 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
             recordedById: ops.actor.id,
           },
         });
-        await tx.circuit.update({ where: { id: l.circuitId }, data: { representedLightCount: d.lightsBilled } });
+        await tx.circuit.update({ where: { id: a.circuitId }, data: { representedLightCount: d.lightsBilled } });
       }
     }
 

@@ -6140,6 +6140,18 @@ description is a unit of something, not a light count — that tie-breaker cover
 at all. The review's quantity field reads "Qty (lights)" only on a service line, "Qty" otherwise.
 Six new cases in `tests/invoice-intake.test.ts` (the user's exact line included). 901 unit tests.
 
+## A finalised inspection stays editable (2026-09-16) — user's call: "KEEP THIS EDITABLE"
+
+The inspection detail page rendered a finalised visit read-only with Void as the only act.
+`updateInspection` (field permission, the same rules as finalising, findings replaced as a set in
+one transaction, old and new totals logged) and `?edit=1` on the detail page reopen the finalise
+form prefilled — total, representative, notes, every fixture — with Save changes / Cancel; the
+signed-checklist photo is kept unless a new one is chosen, and the presign no longer refuses a
+finalised inspection so the photo can be added after the fact. A voided inspection stays
+read-only. Verified 7/7: prefilled, total 774 → 780, one fixture removed, one edited, one added
+(renumbered 1..2), the view re-reads the new figures, and a fixture with no location is refused by
+the server with nothing written.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

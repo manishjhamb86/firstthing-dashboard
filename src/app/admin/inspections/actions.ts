@@ -141,7 +141,8 @@ export async function getInspectionEvidenceUploadUrl(input: {
   });
   if (!inspection) return { error: "That inspection no longer exists." };
   if (inspection.voidedAt) return { error: "This inspection has been voided." };
-  if (inspection.totalLightsChecked !== null) return { error: "This inspection is already finalised." };
+  // A finalised inspection stays editable (user's call 2026-09-16), so the
+  // signed-checklist photo can be added or replaced after the fact too.
 
   const extension = (input.fileName.split(".").pop() ?? "jpg").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   const key = buildDocumentKey({
@@ -261,6 +262,76 @@ export async function voidInspection(input: { id: string; reason: string }): Pro
     data: { voidedAt: new Date(), voidedById: admin.id, voidReason: input.reason.trim() },
   });
   logger.info("inspection.voided", { actorId: admin.id, inspectionId: input.id });
+  revalidatePath("/admin/inspections");
+  revalidatePath(`/admin/inspections/${input.id}`);
+  return {};
+}
+
+/**
+ * Correct a finalised inspection in place (user's call 2026-09-16: "keep this
+ * editable"). The same rules as finalising; the findings are replaced as a
+ * set inside one transaction, so the record never holds half of each. Old
+ * and new totals go to the log line; the photo is kept unless a new one was
+ * uploaded.
+ */
+export async function updateInspection(input: FinalizeInspectionInput): Promise<{ error?: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!admin.permissions.includes("manage_survey")) {
+    logger.warn("inspection.update_refused", { actorId: admin.id, inspectionId: input.id, reason: "permission" });
+    return { error: "Correcting an inspection is field work (Manage survey)." };
+  }
+  const inspection = await db.inspection.findUnique({
+    where: { id: input.id },
+    select: { voidedAt: true, totalLightsChecked: true, findings: { select: { id: true } } },
+  });
+  if (!inspection) return { error: "That inspection no longer exists." };
+  if (inspection.voidedAt) return { error: "This inspection has been voided." };
+  if (inspection.totalLightsChecked === null) return { error: "This inspection has not been finalised yet — finish the visit first." };
+
+  const findings: FindingInput[] = input.findings.map((f, i) => ({
+    srNo: i + 1,
+    location: f.location,
+    sensorStatus: f.sensorStatus,
+    physicalDamage: f.physicalDamage,
+    actionReplace: f.actionReplace,
+    remarks: f.remarks,
+  }));
+  const refusal = refuseInspectionFinalize({ totalLightsChecked: input.totalLightsChecked, findings });
+  if (refusal) {
+    logger.warn("inspection.update_refused", { actorId: admin.id, inspectionId: input.id, reason: refusal });
+    return { error: refusal };
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.inspectionFinding.deleteMany({ where: { inspectionId: input.id } });
+    await tx.inspection.update({
+      where: { id: input.id },
+      data: {
+        totalLightsChecked: input.totalLightsChecked,
+        societyRepName: input.societyRepName.trim() || null,
+        notes: input.notes.trim() || null,
+        ...(input.evidencePhotoKey ? { evidencePhotoKey: input.evidencePhotoKey } : {}),
+        findings: {
+          create: findings.map((f) => ({
+            srNo: f.srNo,
+            location: f.location.trim(),
+            sensorStatus: f.sensorStatus,
+            physicalDamage: f.physicalDamage,
+            actionReplace: f.actionReplace,
+            remarks: f.remarks.trim() || null,
+          })),
+        },
+      },
+    });
+  });
+
+  logger.info("inspection.updated", {
+    actorId: admin.id,
+    inspectionId: input.id,
+    from: { totalLightsChecked: inspection.totalLightsChecked, findingCount: inspection.findings.length },
+    to: { totalLightsChecked: input.totalLightsChecked, findingCount: findings.length },
+  });
   revalidatePath("/admin/inspections");
   revalidatePath(`/admin/inspections/${input.id}`);
   return {};

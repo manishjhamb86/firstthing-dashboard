@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
@@ -14,14 +15,17 @@ export const metadata = { title: "Inspection" };
 
 export default async function InspectionDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ edit?: string }>;
 }) {
   await requireAdminPage();
   const actor = await resolveAdmin();
   if (!actor?.permissions.includes("manage_survey")) redirect("/admin");
 
   const { id } = await params;
+  const { edit } = await searchParams;
   const inspection = await db.inspection.findUnique({
     where: { id },
     include: {
@@ -34,6 +38,10 @@ export default async function InspectionDetailPage({
   if (!inspection) notFound();
 
   const isDraft = inspection.totalLightsChecked === null && !inspection.voidedAt;
+  // A finalised inspection stays editable (user's call 2026-09-16): `?edit=1`
+  // reopens the same form prefilled — a step you open, with a Cancel that
+  // drops the parameter, the same shape as every other correction here.
+  const isEditing = edit === "1" && inspection.totalLightsChecked !== null && !inspection.voidedAt;
 
   const summary = inspectionSummary({
     totalLightsChecked: inspection.totalLightsChecked ?? 0,
@@ -83,6 +91,25 @@ export default async function InspectionDetailPage({
         <FinalizeInspectionForm
           inspectionId={inspection.id}
           defaultTotal={inspection.circuit?.representedLightCount ?? null}
+        />
+      ) : isEditing ? (
+        <FinalizeInspectionForm
+          inspectionId={inspection.id}
+          defaultTotal={inspection.circuit?.representedLightCount ?? null}
+          cancelHref={`/admin/inspections/${inspection.id}`}
+          initial={{
+            totalLightsChecked: inspection.totalLightsChecked ?? 0,
+            societyRepName: inspection.societyRepName ?? "",
+            notes: inspection.notes ?? "",
+            hasPhoto: !!inspection.evidencePhotoKey,
+            findings: inspection.findings.map((f) => ({
+              location: f.location,
+              sensorStatus: f.sensorStatus,
+              physicalDamage: f.physicalDamage,
+              actionReplace: f.actionReplace,
+              remarks: f.remarks ?? "",
+            })),
+          }}
         />
       ) : (
         <>
@@ -163,9 +190,14 @@ export default async function InspectionDetailPage({
         </>
       )}
 
-      {!inspection.voidedAt && isOperations(actor.team) && (
-        <div className="mt-6">
-          <VoidInspectionButton id={inspection.id} />
+      {!inspection.voidedAt && (
+        <div className="mt-6 flex flex-wrap items-center gap-4">
+          {inspection.totalLightsChecked !== null && !isEditing && (
+            <Link href={`/admin/inspections/${inspection.id}?edit=1`} className="btn-secondary btn-sm">
+              Edit this inspection
+            </Link>
+          )}
+          {isOperations(actor.team) && <VoidInspectionButton id={inspection.id} />}
         </div>
       )}
     </>

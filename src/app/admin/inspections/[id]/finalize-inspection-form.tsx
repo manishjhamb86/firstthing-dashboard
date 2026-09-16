@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field } from "@/components/ui";
-import { finalizeInspection, getInspectionEvidenceUploadUrl } from "../actions";
+import { finalizeInspection, getInspectionEvidenceUploadUrl, updateInspection } from "../actions";
 import type { InspectionSensorStatus } from "@prisma/client";
 
 const SENSOR_OPTIONS: { value: InspectionSensorStatus; label: string }[] = [
@@ -33,23 +33,39 @@ function emptyRow(key: number): Row {
  * inspection is still a draft (`totalLightsChecked` null); a finalized one
  * shows the read-only summary instead.
  */
+export type InspectionInitial = {
+  totalLightsChecked: number;
+  societyRepName: string;
+  notes: string;
+  hasPhoto: boolean;
+  findings: Omit<Row, "key">[];
+};
+
 export function FinalizeInspectionForm({
   inspectionId,
   defaultTotal,
+  initial,
+  cancelHref,
 }: {
   inspectionId: string;
   defaultTotal: number | null;
+  /** Set when correcting a finalised inspection (user's call 2026-09-16: "keep this editable"). */
+  initial?: InspectionInitial;
+  cancelHref?: string;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const editing = initial != null;
 
-  const [totalLightsChecked, setTotalLightsChecked] = useState(defaultTotal != null ? String(defaultTotal) : "");
-  const [societyRepName, setSocietyRepName] = useState("");
-  const [notes, setNotes] = useState("");
+  const [totalLightsChecked, setTotalLightsChecked] = useState(
+    initial ? String(initial.totalLightsChecked) : defaultTotal != null ? String(defaultTotal) : "",
+  );
+  const [societyRepName, setSocietyRepName] = useState(initial?.societyRepName ?? "");
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   const [evidencePhoto, setEvidencePhoto] = useState<File | null>(null);
-  const [rows, setRows] = useState<Row[]>([]);
-  const [nextKey, setNextKey] = useState(1);
+  const [rows, setRows] = useState<Row[]>(() => (initial?.findings ?? []).map((f, i) => ({ ...f, key: i + 1 })));
+  const [nextKey, setNextKey] = useState((initial?.findings.length ?? 0) + 1);
 
   function addRow() {
     setRows((r) => [...r, emptyRow(nextKey)]);
@@ -79,7 +95,7 @@ export function FinalizeInspectionForm({
         evidencePhotoKey = presign.key;
       }
 
-      const result = await finalizeInspection({
+      const result = await (editing ? updateInspection : finalizeInspection)({
         id: inspectionId,
         totalLightsChecked: Number(totalLightsChecked),
         societyRepName,
@@ -94,6 +110,7 @@ export function FinalizeInspectionForm({
         })),
       });
       if (result.error) return setError(result.error);
+      if (editing && cancelHref) router.replace(cancelHref);
       router.refresh();
     });
   }
@@ -231,7 +248,11 @@ export function FinalizeInspectionForm({
           <Field
             label="Photo of the signed checklist"
             htmlFor="evidencePhoto"
-            hint="One photo covering both signature blocks and the stamp — optional, but the only proof kept that the visit was signed off."
+            hint={
+              editing && initial?.hasPhoto
+                ? "A photo is already on file — choose one only to replace it."
+                : "One photo covering both signature blocks and the stamp — optional, but the only proof kept that the visit was signed off."
+            }
           >
             <input
               id="evidencePhoto"
@@ -243,10 +264,15 @@ export function FinalizeInspectionForm({
             />
           </Field>
         </div>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <button type="submit" className="btn-primary" disabled={pending}>
-            {pending ? "Saving…" : "Save inspection"}
+            {pending ? "Saving…" : editing ? "Save changes" : "Save inspection"}
           </button>
+          {editing && cancelHref && (
+            <a href={cancelHref} className="btn-ghost">
+              Cancel
+            </a>
+          )}
         </div>
       </Card>
     </form>

@@ -336,3 +336,87 @@ export async function updateInspection(input: FinalizeInspectionInput): Promise<
   revalidatePath(`/admin/inspections/${input.id}`);
   return {};
 }
+
+export type FindingValues = {
+  location: string;
+  sensorStatus: InspectionSensorStatus;
+  physicalDamage: boolean;
+  actionReplace: boolean;
+  remarks: string;
+};
+
+async function requireEditableInspection(inspectionId: string, act: string) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." } as const;
+  if (!admin.permissions.includes("manage_survey")) {
+    logger.warn(`inspection.${act}_refused`, { actorId: admin.id, inspectionId, reason: "permission" });
+    return { error: "Correcting an inspection is field work (Manage survey)." } as const;
+  }
+  const inspection = await db.inspection.findUnique({
+    where: { id: inspectionId },
+    select: { voidedAt: true, totalLightsChecked: true, findings: { select: { id: true, srNo: true }, orderBy: { srNo: "asc" } } },
+  });
+  if (!inspection) return { error: "That inspection no longer exists." } as const;
+  if (inspection.voidedAt) return { error: "This inspection has been voided." } as const;
+  if (inspection.totalLightsChecked === null) return { error: "This inspection has not been finalised yet — finish the visit first." } as const;
+  return { admin, inspection } as const;
+}
+
+/**
+ * Correct ONE fixture on a finalised inspection, or add one (user's call
+ * 2026-09-16: "editing should be both line-item wise and the whole form").
+ * `findingId` null adds a new row at the end. The total-lights rule still
+ * holds — a fixture cannot be added past the total checked.
+ */
+export async function saveInspectionFinding(
+  inspectionId: string,
+  findingId: string | null,
+  values: FindingValues,
+): Promise<{ error?: string }> {
+  const gate = await requireEditableInspection(inspectionId, "finding_save");
+  if ("error" in gate) return { error: gate.error };
+  const { admin, inspection } = gate;
+  if (values.location.trim() === "") {
+    logger.warn("inspection.finding_save_refused", { actorId: admin.id, inspectionId, findingId, reason: "no_location" });
+    return { error: "A location is required — what a reader needs to go and find the fixture." };
+  }
+  const data = {
+    location: values.location.trim(),
+    sensorStatus: values.sensorStatus,
+    physicalDamage: values.physicalDamage,
+    actionReplace: values.actionReplace,
+    remarks: values.remarks.trim() || null,
+  };
+  if (findingId) {
+    if (!inspection.findings.some((f) => f.id === findingId)) return { error: "That fixture is not on this inspection." };
+    await db.inspectionFinding.update({ where: { id: findingId }, data });
+  } else {
+    if (inspection.findings.length + 1 > (inspection.totalLightsChecked ?? 0)) {
+      return { error: "Total lights checked cannot be less than the number of fixtures listed — raise the total first." };
+    }
+    await db.inspectionFinding.create({ data: { ...data, inspectionId, srNo: inspection.findings.length + 1 } });
+  }
+  logger.info("inspection.finding_saved", { actorId: admin.id, inspectionId, findingId, created: !findingId });
+  revalidatePath(`/admin/inspections/${inspectionId}`);
+  revalidatePath("/admin/inspections");
+  return {};
+}
+
+/** Remove one fixture from a finalised inspection; the rest are renumbered so Sr stays contiguous. */
+export async function removeInspectionFinding(inspectionId: string, findingId: string): Promise<{ error?: string }> {
+  const gate = await requireEditableInspection(inspectionId, "finding_remove");
+  if ("error" in gate) return { error: gate.error };
+  const { admin, inspection } = gate;
+  if (!inspection.findings.some((f) => f.id === findingId)) return { error: "That fixture is not on this inspection." };
+  await db.$transaction(async (tx) => {
+    await tx.inspectionFinding.delete({ where: { id: findingId } });
+    const rest = inspection.findings.filter((f) => f.id !== findingId);
+    for (const [i, f] of rest.entries()) {
+      if (f.srNo !== i + 1) await tx.inspectionFinding.update({ where: { id: f.id }, data: { srNo: i + 1 } });
+    }
+  });
+  logger.info("inspection.finding_removed", { actorId: admin.id, inspectionId, findingId });
+  revalidatePath(`/admin/inspections/${inspectionId}`);
+  revalidatePath("/admin/inspections");
+  return {};
+}

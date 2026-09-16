@@ -6152,6 +6152,14 @@ read-only. Verified 7/7: prefilled, total 774 → 780, one fixture removed, one 
 (renumbered 1..2), the view re-reads the new figures, and a fixture with no location is refused by
 the server with nothing written.
 
+**Then per line as well** ("editing should be both line-item wise and the whole form"): each
+fixture on the read-only view carries Edit / Remove, opening that one row in place, and the list
+ends in + Add fixture — `saveInspectionFinding` (update or create; a fixture cannot be added past
+the total checked) and `removeInspectionFinding` (the rest renumbered so Sr stays contiguous),
+same gate and rules as the whole-form edit. Verified 8/8: one row edited with the other untouched,
+a blank location refused server-side, a third added as Sr 3, the first removed and the rest
+renumbered 1..2, the summary re-reading 2 faulty, the whole-form Edit still beside it.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

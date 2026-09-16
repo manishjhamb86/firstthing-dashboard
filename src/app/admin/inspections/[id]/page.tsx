@@ -5,10 +5,11 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { formatDateTime, monthLabel } from "@/lib/format-date";
-import { inspectionSummary, SENSOR_STATUS_META } from "@/lib/inspection";
+import { inspectionSummary } from "@/lib/inspection";
 import { publicS3Url } from "@/lib/s3";
 import { VoidInspectionButton } from "./void-button";
 import { FinalizeInspectionForm } from "./finalize-inspection-form";
+import { AddFindingRow, FindingRow } from "./finding-row";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inspection" };
@@ -156,34 +157,27 @@ export default async function InspectionDetailPage({
               </p>
             ) : (
               <div className="space-y-2.5">
-                {inspection.findings.map((f) => {
-                  const meta = SENSOR_STATUS_META[f.sensorStatus];
-                  return (
-                    <div
-                      key={f.id}
-                      className="rounded-[var(--r-md)] border p-3"
-                      style={{ borderColor: "var(--border-subtle)" }}
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                        <span className="min-w-0 truncate font-medium">
-                          {f.srNo}. {f.location}
-                        </span>
-                        <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
-                      </div>
-                      {(f.physicalDamage || f.actionReplace || f.remarks) && (
-                        <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                          {[
-                            f.physicalDamage ? "Physical damage" : null,
-                            f.actionReplace ? "To be replaced" : null,
-                            f.remarks,
-                          ]
-                            .filter(Boolean)
-                            .join(" · ")}
-                        </p>
-                      )}
-                    </div>
-                  );
-                })}
+                {inspection.findings.map((f) => (
+                  <FindingRow
+                    key={f.id}
+                    inspectionId={inspection.id}
+                    canEdit={!inspection.voidedAt}
+                    finding={{
+                      id: f.id,
+                      srNo: f.srNo,
+                      location: f.location,
+                      sensorStatus: f.sensorStatus,
+                      physicalDamage: f.physicalDamage,
+                      actionReplace: f.actionReplace,
+                      remarks: f.remarks ?? "",
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            {!inspection.voidedAt && (
+              <div className="mt-3">
+                <AddFindingRow inspectionId={inspection.id} nextSrNo={inspection.findings.length + 1} />
               </div>
             )}
           </Card>

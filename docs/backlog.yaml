@@ -8459,13 +8459,13 @@ features:
         title: "As a committee member, I want to see my society's invoices and what we saved each month, labelled by how it was measured, so that the number on the portal is one I can trust and check."
         estimate_days: 3
         satisfies: [FEAT-111-AC-1, FEAT-111-AC-2, FEAT-111-AC-3, FEAT-111-AC-7]
-        status: proposed
+        status: done
         depends_on: [STORY-110-1]
       - id: STORY-111-2
         title: "Harden the portal months: empty, unpublished and cross-society handling (FEAT-111-AC-4, AC-5, AC-6)"
         estimate_days: 1
         satisfies: [FEAT-111-AC-4, FEAT-111-AC-5, FEAT-111-AC-6, FEAT-111-AC-8]
-        status: proposed
+        status: done
         depends_on: [STORY-111-1]
 
 # FEAT-104/105/106 are spike-gated (blocked on SPIKE-01, see below), not cut in the

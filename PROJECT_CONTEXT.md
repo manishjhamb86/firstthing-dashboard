@@ -5815,6 +5815,40 @@ degraded state, and the run's other 31 checks (the new figures included) passed.
 are metered; a verification suite that re-reads the same PDF a dozen times a day will find the
 ceiling.
 
+## MS-09 step 4 — the society sees only what was published, and sees it in rupees (2026-09-16) — user-caught, three screenshots
+
+**"Bills show up in the customer portal whether released or not — what's its relevance?"** The
+release IS the relevance: CON-33 / CON-47 (c) say a month reaches the society only once the
+accountant publishes it, and the intake's own screen says so. The portal's Billing page was
+gated on `status != attached` — written when an invoice could only become `paid` after release.
+An invoice recorded as **paid at intake** is `paid` before anyone has released anything, and
+walked straight through. Gated on the calculation's `releasedAt` now, which is the one field
+every other release gate reads.
+
+**"Saved in ₹ is not populating even after multiple invoices uploaded."** Two causes. The first is
+the same rule from the other side: nothing was published — every one of those months sits at
+"Submitted — awaiting release" with the Release button in the screenshot, so ₹ correctly stays
+empty until the accountant presses it. The second was real: the ₹ tile was keyed to the month of
+the LATEST READING (August), so a July month released while readings run into August would never
+have shown either. That was FEAT-111, MS-09's unbuilt step 4, and it is built now:
+`src/lib/published-months.ts` (pure, 6 cases) + `published-months-loader.ts` — the society's
+RELEASED months, live versions only, each stating saved ₹, **paid to FirsThing** (the fee),
+**you kept** (saved − fee), saved kWh, the weighted savings %, and the basis in ASSUM-30's own
+words ("Based on your agreement." / "From meter readings."), with the re-derivation date when a
+version replaced an earlier one (AC-7). The dashboard hero becomes the latest published month
+with a "saved since we started · N months" figure (AC-2); the Electricity page's ₹ tile reads it
+and a "Billed months" table lists every published month with its basis (AC-3); with nothing
+published, the hero states what will fill it and no zero is shown (AC-4). `portal-energy.ts` no
+longer computes `rupeesSaved` — the ₹ side of the portal has one owner.
+
+**Verified 16/16 in a browser** on a June-released / July-submitted fixture for Ace City: Billing
+lists June and not the paid-but-unreleased July; the hero reads "This month · June 2026 · billed"
+with ₹39,028 saved, ₹24,978 kept, ₹14,050 paid and the basis sentence; Electricity's tile and
+table show June only; releasing July in Postgres moves the hero to July, "2 months · ₹78,056",
+the table to July-then-June and Billing to both; Settlement Nexus's office-bearer sees none of it
+(AC-5/INV-05). 915 unit tests, `tsc`/`lint`/`build` clean; no schema change. **Still open**: step
+3 (SCR-092 batch publish) and step 5 (the re-derivation hook that produces an AC-7 version).
+
 ## The intake list: chips that count what they show, sort, search, and a rounding that is not a warning (2026-09-16) — user-caught, from a stage screenshot
 
 **"INCORRECT FILTER count"** — right, and the cause was two rules for one question. The page computed

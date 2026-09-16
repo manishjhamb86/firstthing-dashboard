@@ -6,6 +6,8 @@ import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { effectiveGrants } from "@/lib/portal-access";
 import { monthlyTotals, societyEnergy } from "@/lib/portal-energy";
+import { publishedMonthsFor } from "@/lib/published-months-loader";
+import { formatDate } from "@/lib/format-date";
 import { societyMeterRows } from "@/lib/meter-view";
 import { societyEvents } from "@/lib/portal-notifications";
 import { Card, CardTitle, ChartPending, PageHeader, StatusChip } from "@/components/ui";
@@ -74,6 +76,10 @@ export default async function PortalHomePage() {
   if (!society) redirect("/login");
 
   const energy = grants.has("electricity") ? await societyEnergy(societyId) : null;
+  // FEAT-111 — the months the accountant has published, in rupees. Only
+  // released months (CON-33); a submitted one is invisible here.
+  const published = grants.has("electricity") ? await publishedMonthsFor(societyId) : null;
+  const billed = published?.latest ?? null;
   const meters = grants.has("electricity") ? await societyMeterRows(societyId) : [];
   const metersOnline = meters.filter((m) => m.state === "reporting").length;
   const events = (await societyEvents(societyId)).slice(0, 4);
@@ -262,7 +268,57 @@ export default async function PortalHomePage() {
         carry"), not something this pass silently undid. What is different
         is prominence and the trend, not the vocabulary.
       */}
-      {energy && energy.totals.savingsPct !== null && (() => {
+      {billed && (
+        <Card className="mb-5 p-6 sm:p-8">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <p className="lbl">This month · {monthName(billed.period)} · billed</p>
+            <StatusChip tone="ok">Published</StatusChip>
+          </div>
+          <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
+            <div>
+              <p className="flex flex-wrap items-baseline gap-2.5">
+                <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
+                  ₹{Math.round(billed.savedValue).toLocaleString("en-IN")}
+                </span>
+                <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                  saved on electricity
+                </span>
+              </p>
+              <p className="mt-1.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
+                You kept <strong className="num">₹{Math.round(billed.societyKeeps).toLocaleString("en-IN")}</strong> after paying FirsThing{" "}
+                <strong className="num">₹{Math.round(billed.paidToFirsthing).toLocaleString("en-IN")}</strong>.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-x-8 gap-y-3">
+              <span>
+                <strong className="num text-[20px]">{Math.round(billed.savedKwh).toLocaleString("en-IN")}</strong>{" "}
+                <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>kWh saved</span>
+              </span>
+              {billed.savingsPct !== null && (
+                <span>
+                  <strong className="num text-[20px]">{billed.savingsPct.toFixed(1)}%</strong>{" "}
+                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>vs before FirsThing</span>
+                </span>
+              )}
+              {published?.sinceStart && (
+                <span>
+                  <strong className="num text-[20px]">₹{Math.round(published.sinceStart.savedValue).toLocaleString("en-IN")}</strong>{" "}
+                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                    saved since we started · {published.sinceStart.months} month{published.sinceStart.months === 1 ? "" : "s"}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+          <p className="mt-5 border-t pt-3 text-[12.5px]" style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}>
+            {billed.basisWords}
+            {billed.updatedAt ? ` Updated ${formatDate(billed.updatedAt)} from meter readings.` : ""}{" "}
+            <Link href="/portal/electricity" className="underline">Month by month →</Link>
+          </p>
+        </Card>
+      )}
+
+      {!billed && energy && energy.totals.savingsPct !== null && (() => {
         const months = monthlyTotals(energy.daily);
         const idx = months.findIndex((m) => m.month === energy.month);
         const thisMonth = idx >= 0 ? months[idx] : null;
@@ -287,12 +343,10 @@ export default async function PortalHomePage() {
               <div>
                 <p className="flex flex-wrap items-baseline gap-2.5">
                   <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
-                    {energy.rupeesSaved !== null
-                      ? `₹${Math.round(energy.rupeesSaved).toLocaleString("en-IN")}`
-                      : `${energy.totals.savingsPct.toFixed(1)}%`}
+                    {energy.totals.savingsPct.toFixed(1)}%
                   </span>
                   <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                    {energy.rupeesSaved !== null ? "saved this month, billed" : "saved vs before FirsThing"}
+                    saved vs before FirsThing
                   </span>
                 </p>
                 {pctDelta !== null ? (
@@ -336,19 +390,17 @@ export default async function PortalHomePage() {
                 </span>
               </div>
             </div>
-            {energy.rupeesSaved === null && (
-              <p
-                className="mt-5 border-t pt-3 text-[12.5px]"
-                style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}
-              >
-                ₹ appears once the month is billed.
-              </p>
-            )}
+            <p
+              className="mt-5 border-t pt-3 text-[12.5px]"
+              style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}
+            >
+              ₹ appears once FirsThing publishes your first billed month.
+            </p>
           </Card>
         );
       })()}
 
-      {energy && energy.totals.savingsPct === null && (
+      {!billed && energy && energy.totals.savingsPct === null && (
         <Card className="mb-5 p-6">
           <p className="lbl mb-2">This month</p>
           <p className="text-sm" style={{ color: "var(--text-muted)" }}>

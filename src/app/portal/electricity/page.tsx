@@ -5,6 +5,7 @@ import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
 import { societyEnergy } from "@/lib/portal-energy";
+import { publishedMonthsFor } from "@/lib/published-months-loader";
 import { societyMeterRows } from "@/lib/meter-view";
 import { SAVINGS_BAND_META } from "@/lib/circuit-load";
 import { formatDate } from "@/lib/format-date";
@@ -38,9 +39,11 @@ export default async function PortalElectricityPage() {
   if (!hasGrant(viewer, "electricity")) redirect("/portal");
   const societyId = viewer.societyId;
 
-  const [energy, meters, contracts] = await Promise.all([
+  const [energy, meters, published, contracts] = await Promise.all([
     societyEnergy(societyId),
     societyMeterRows(societyId),
+    // FEAT-111 — released months only (CON-33), the ₹ side of this page.
+    publishedMonthsFor(societyId),
     // Every activated contract's current share — a line delivered in parts
     // (CON-24 as amended) can carry different shares per deal, and quoting
     // one part's figure as the society's would misstate the sibling's.
@@ -58,7 +61,9 @@ export default async function PortalElectricityPage() {
   ]);
 
   const metersOnline = meters.filter((m) => m.state === "reporting").length;
-  const noData = energy.circuits.length === 0 && meters.length === 0;
+  const noData = energy.circuits.length === 0 && meters.length === 0 && published.months.length === 0;
+  const billed = published.latest;
+  const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 
   // One sentence when every part agrees, a range when they differ — never
   // one part's figure presented as the whole society's.
@@ -117,15 +122,15 @@ export default async function PortalElectricityPage() {
             ) : (
               <StatPending label="Avoided vs before" detail="Once monthly readings arrive" />
             )}
-            {energy.rupeesSaved !== null ? (
+            {billed ? (
               <Stat
-                label="Saved in rupees"
-                value={`₹${Math.round(energy.rupeesSaved).toLocaleString("en-IN")}`}
+                label={`Saved in rupees · ${monthName(billed.period).split(" ")[0]}`}
+                value={inr(billed.savedValue)}
                 tone="ok"
-                detail="from the released monthly calculation"
+                detail={`billed month · you kept ${inr(billed.societyKeeps)}`}
               />
             ) : (
-              <StatPending label="Saved in rupees" detail="Appears once the month is billed" />
+              <StatPending label="Saved in rupees" detail="Appears once FirsThing publishes a billed month" />
             )}
             <Stat
               label="Meters online"
@@ -152,6 +157,52 @@ export default async function PortalElectricityPage() {
               its saving is scaled up to that full count before it is billed (see the circuit table
               below for each circuit&apos;s count).
             </p>
+          )}
+
+          {published.months.length > 0 && (
+            <Card className="mb-5 p-6">
+              <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+                <CardTitle className="mb-0">Billed months</CardTitle>
+                {published.sinceStart && (
+                  <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                    {inr(published.sinceStart.savedValue)} saved over {published.sinceStart.months} month{published.sinceStart.months === 1 ? "" : "s"} · you kept {inr(published.sinceStart.societyKeeps)}
+                  </p>
+                )}
+              </div>
+              <p className="mb-3 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                Each month as FirsThing billed it. The saving is what the old lights would have cost; FirsThing&apos;s share is your invoice, and the rest stays with you.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="tbl tbl-compact">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th className="text-right">Saved · kWh</th>
+                      <th className="text-right">Saved · ₹</th>
+                      <th className="text-right">Paid to FirsThing</th>
+                      <th className="text-right">You kept</th>
+                      <th>Basis</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {published.months.map((m) => (
+                      <tr key={m.period}>
+                        <td className="whitespace-nowrap">{monthName(m.period)}</td>
+                        <td className="num text-right">{Math.round(m.savedKwh).toLocaleString("en-IN")}</td>
+                        <td className="num text-right">{inr(m.savedValue)}</td>
+                        <td className="num text-right">{inr(m.paidToFirsthing)}</td>
+                        <td className="num text-right">{inr(m.societyKeeps)}</td>
+                        <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                          {m.basisWords}
+                          {m.savingsPct !== null ? ` ${m.savingsPct.toFixed(1)}%.` : ""}
+                          {m.updatedAt ? ` Updated ${formatDate(m.updatedAt)}.` : ""}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
           )}
 
           {energy.daily.length > 0 && (

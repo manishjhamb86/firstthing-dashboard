@@ -32,7 +32,11 @@ export default async function PortalBillingPage() {
   if (!hasGrant(viewer, "billing")) redirect("/portal");
 
   const invoices = await db.billingInvoice.findMany({
-    where: { calculation: { societyId: viewer.societyId }, status: { not: "attached" }, voidedAt: null },
+    // Released MONTHS only — an invoice recorded as paid at intake carries
+    // status `paid` before the accountant has published anything, and
+    // `status != attached` let it through (user-caught 2026-09-16: "bills
+    // show up whether released to society or not").
+    where: { calculation: { societyId: viewer.societyId, releasedAt: { not: null } }, voidedAt: null },
     include: { calculation: { select: { period: true } }, payments: { select: { amount: true } } },
     orderBy: { issueDate: "desc" },
   });

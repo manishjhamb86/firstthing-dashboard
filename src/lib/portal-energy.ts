@@ -120,8 +120,6 @@ export type PortalEnergy = {
    * what the old lights would have drawn and inflate the saving.
    */
   daily: { date: string; kWh: number; baseline: number | null }[];
-  /** Released ₹ for the headline month — null means "not billed yet". */
-  rupeesSaved: number | null;
 };
 
 export const societyEnergy = cache(async (societyId: string): Promise<PortalEnergy> => {
@@ -229,20 +227,8 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       baseline: v.missingBaseline ? null : v.baseline,
     }));
 
-  // ₹ — released fee lines only (INV-02). The society's share of the saving
-  // is the whole commercial story, but this portal repeats a billed figure,
-  // never derives one.
-  let rupeesSaved: number | null = null;
-  if (month) {
-    const fees = await db.circuitFeeLine.findMany({
-      where: {
-        circuit: { societyId },
-        calculation: { period: month, releasedAt: { not: null } },
-      },
-      select: { savedValue: true },
-    });
-    if (fees.length > 0) rupeesSaved = fees.reduce((s, f) => s + f.savedValue, 0);
-  }
+  // ₹ is FEAT-111's (published-months.ts): the society's rupee figures come
+  // from RELEASED months, whichever month the readings have reached.
 
   return {
     month,
@@ -254,6 +240,5 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       band: totalPct !== null ? savingsBand(totalPct) : null,
     },
     daily,
-    rupeesSaved,
   };
 });

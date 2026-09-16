@@ -7,7 +7,7 @@ import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { canOwn, teamMeta } from "@/lib/admin-teams";
 import { eventTitle } from "@/lib/schedule";
 import { logger } from "@/lib/logger";
-import { refuseOrderedDate, refuseReplacementDate, surveyHappenedAt } from "@/lib/step-dates";
+import { refuseOrderedDate, refuseReplacementDate, refuseReplacementMove, surveyHappenedAt } from "@/lib/step-dates";
 import { scheduleJob } from "@/lib/jobs";
 import { nextDayUTC } from "@/lib/monitoring-window";
 import { recomputeCircuitFigures } from "@/lib/circuit-recompute";
@@ -677,6 +677,118 @@ export async function recordLightReplacement(
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   return {};
+}
+
+/**
+ * Correct a recorded replacement date (user-asked 2026-09-16: "should be
+ * able to change the light replacement day in case choose wrong date by
+ * mistake"). Not demo-gated — the date is typed by hand in every mode, so a
+ * mistyped one is an ordinary case, not a backdating one.
+ *
+ * The ordering rules hold both ways (refuseReplacementDate), and the move is
+ * refused once a stored day would change sides between the pre- and
+ * post-install sets while a baseline or a window-computed benchmark already
+ * rests on them (refuseReplacementMove). While nothing rests on them the
+ * figures are re-derived in the same transaction, the same rule every other
+ * date correction here follows: a figure derived from a set of rows is
+ * re-derived when the set changes.
+ */
+export async function correctLightReplacementDate(
+  circuitId: string,
+  replacedOn: string,
+): Promise<{ error?: string; ok?: true }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!(admin.permissions as string[]).includes("manage_survey")) {
+    return { error: "Correcting a circuit's replacement date is a field-survey action." };
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(replacedOn)) return { error: "Pick a date." };
+
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    select: {
+      id: true,
+      societyId: true,
+      voidedAt: true,
+      meterInstalledAt: true,
+      lightReplacementDate: true,
+      preInstallBaseline: true,
+      benchmarkSavingsPct: true,
+      benchmarkOverridePct: true,
+      postInstallWindowStartAt: true,
+      demos: { where: { rejected: false }, select: { id: true }, take: 1 },
+    },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  if (!circuit.lightReplacementDate) {
+    return { error: "No replacement date is recorded yet — record it on the replacement step." };
+  }
+  const to = new Date(`${replacedOn}T00:00:00Z`);
+  const from = circuit.lightReplacementDate;
+  if (Number.isNaN(to.getTime())) return { error: "Pick a date." };
+  if (to.getTime() === from.getTime()) return { error: "That is already the recorded date." };
+
+  const lastPre = await db.commissioningReading.findFirst({
+    where: { circuitId, windowType: "pre_install" },
+    orderBy: { date: "desc" },
+    select: { date: true },
+  });
+  const dateRefusal = refuseReplacementDate({
+    replacementDate: to,
+    meterInstalledAt: circuit.meterInstalledAt,
+    lastPreInstallReading: lastPre?.date ?? null,
+    now: new Date(),
+  });
+  if (dateRefusal) {
+    logger.warn("circuit.replacement_date_correction_refused", { circuitId, replacedOn, reason: dateRefusal });
+    return { error: dateRefusal };
+  }
+
+  // The days whose side changes: everything from the earlier of the two
+  // pivots to the later, inclusive — the pivot days themselves belong to
+  // neither set, so they change too.
+  const lo = from < to ? from : to;
+  const hi = from < to ? to : from;
+  const [stored, commissioning] = await Promise.all([
+    db.meterReading.count({ where: { circuitId, date: { gte: lo, lte: hi } } }),
+    db.commissioningReading.count({ where: { circuitId, date: { gte: lo, lte: hi } } }),
+  ]);
+  const moveRefusal = refuseReplacementMove({
+    readingsWhosePhaseChanges: stored + commissioning,
+    baselineSettled: !baselineUnsettled(circuit),
+    benchmarkFromWindow:
+      circuit.benchmarkSavingsPct !== null && circuit.demos.length === 0 && circuit.benchmarkOverridePct === null,
+  });
+  if (moveRefusal) {
+    logger.warn("circuit.replacement_date_correction_refused", { circuitId, replacedOn, reason: moveRefusal });
+    return { error: moveRefusal };
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.circuit.update({
+      where: { id: circuitId },
+      data: {
+        lightReplacementDate: to,
+        // The post window opens the day after the replacement, wherever it is.
+        postInstallWindowStartAt: circuit.postInstallWindowStartAt ? nextDayUTC(to) : null,
+      },
+    });
+    // The per-line record carries the same day.
+    await tx.circuitDevice.updateMany({
+      where: { circuitId, replacedAt: { not: null } },
+      data: { replacedAt: to },
+    });
+    await recomputeCircuitFigures(tx, circuitId);
+  });
+  logger.info("circuit.replacement_date_corrected", {
+    actorId: admin.id,
+    circuitId,
+    from: from.toISOString().slice(0, 10),
+    to: replacedOn,
+    readingsWhosePhaseChanged: stored + commissioning,
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  return { ok: true };
 }
 
 // ── FEAT-013 — the replacement is somebody's job before it is a record ─────

@@ -33,7 +33,8 @@ export const metadata = { title: "Electricity" };
 //
 // Grant-gated server-side: the sidebar hiding the tab is a courtesy, this
 // redirect is the boundary.
-export default async function PortalElectricityPage() {
+export default async function PortalElectricityPage({ searchParams }: { searchParams: Promise<{ year?: string }> }) {
+  const { year: yearParam } = await searchParams;
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
   if (!hasGrant(viewer, "electricity")) redirect("/portal");
@@ -64,6 +65,15 @@ export default async function PortalElectricityPage() {
   const noData = energy.circuits.length === 0 && meters.length === 0 && published.months.length === 0;
   const billed = published.latest;
   const inr = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+  // Year by year is a filter on this page (user's rule 2026-09-16); the
+  // dashboard carries only the total to date.
+  const years = [...new Set(published.months.map((m) => m.period.slice(0, 4)))];
+  const year = yearParam && years.includes(yearParam) ? yearParam : null;
+  const shownMonths = year ? published.months.filter((m) => m.period.startsWith(year)) : published.months;
+  const shownTotals = shownMonths.reduce(
+    (t, m) => ({ savedValue: t.savedValue + m.savedValue, societyKeeps: t.societyKeeps + m.societyKeeps, months: t.months + 1 }),
+    { savedValue: 0, societyKeeps: 0, months: 0 },
+  );
 
   // One sentence when every part agrees, a range when they differ — never
   // one part's figure presented as the whole society's.
@@ -162,13 +172,29 @@ export default async function PortalElectricityPage() {
           {published.months.length > 0 && (
             <Card className="mb-5 p-6">
               <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
-                <CardTitle className="mb-0">Billed months</CardTitle>
-                {published.sinceStart && (
-                  <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                    {inr(published.sinceStart.savedValue)} saved over {published.sinceStart.months} month{published.sinceStart.months === 1 ? "" : "s"} · you kept {inr(published.sinceStart.societyKeeps)}
-                  </p>
-                )}
+                <CardTitle className="mb-0">Billed months{year ? ` · ${year}` : ""}</CardTitle>
+                <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                  {inr(shownTotals.savedValue)} saved over {shownTotals.months} month{shownTotals.months === 1 ? "" : "s"} · you kept {inr(shownTotals.societyKeeps)}
+                </p>
               </div>
+              {years.length > 1 && (
+                <div className="mb-3 flex flex-wrap gap-2" aria-label="Filter by year">
+                  {[null, ...years].map((y) => (
+                    <Link
+                      key={y ?? "all"}
+                      href={y ? `/portal/electricity?year=${y}` : "/portal/electricity"}
+                      className="rounded-full border px-3 py-1 text-xs font-semibold"
+                      style={
+                        y === year
+                          ? { background: "var(--chrome)", borderColor: "var(--chrome)", color: "var(--chrome-text)" }
+                          : { background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-muted)" }
+                      }
+                    >
+                      {y ?? "All years"}
+                    </Link>
+                  ))}
+                </div>
+              )}
               <p className="mb-3 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
                 Each month as FirsThing billed it. The saving is what the old lights would have cost; FirsThing&apos;s share is your invoice, and the rest stays with you.
               </p>
@@ -185,7 +211,7 @@ export default async function PortalElectricityPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {published.months.map((m) => (
+                    {shownMonths.map((m) => (
                       <tr key={m.period}>
                         <td className="whitespace-nowrap">{monthName(m.period)}</td>
                         <td className="num text-right">{Math.round(m.savedKwh).toLocaleString("en-IN")}</td>

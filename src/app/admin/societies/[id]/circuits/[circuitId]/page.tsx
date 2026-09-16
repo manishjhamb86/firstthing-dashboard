@@ -7,6 +7,7 @@ import { HistoricalCommissioning } from "./historical-commissioning";
 import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/demo-mode";
 import { InstallDateForm } from "./install-date-form";
+import { ReplacementDateForm } from "./replacement-date-form";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { LoadValidationForm } from "./load-validation-form";
@@ -1111,6 +1112,11 @@ export default async function CircuitDetailPage({
                 summary = circuit.lightReplacementDate
                   ? `Replaced ${formatDate(circuit.lightReplacementDate)} — that day is excluded; the post window starts the day after`
                   : "No stored date — the lifecycle advanced past this step";
+                // A wrong date is correctable from the done step (user-asked
+                // 2026-09-16); the server decides whether the move is safe.
+                if (canEdit && circuit.lightReplacementDate) {
+                  body = <ReplacementDateForm circuitId={circuit.id} current={isoDate(circuit.lightReplacementDate)} />;
+                }
               }
               break;
             }

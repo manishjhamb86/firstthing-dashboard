@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { formatDate } from "@/lib/format-date";
-import { refuseReplacementDate, STEP_DATE_ERRORS, refuseOrderedDate } from "@/lib/step-dates";
+import { refuseReplacementDate, refuseReplacementMove, STEP_DATE_ERRORS, refuseOrderedDate } from "@/lib/step-dates";
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 const NOW = d("2026-08-19");
@@ -163,5 +163,20 @@ describe("refuseOrderedDate — the deal's own dates", () => {
     expect(refuseOrderedDate({ subject: "The lead", date: new Date("nope"), now })).toContain(
       "valid date",
     );
+  });
+});
+
+describe("refuseReplacementMove — the pivot can move while the sets it divides are not yet relied on", () => {
+  it("is free when no stored day changes sides", () => {
+    expect(refuseReplacementMove({ readingsWhosePhaseChanges: 0, baselineSettled: true, benchmarkFromWindow: true })).toBeNull();
+  });
+  it("is free when days change sides but nothing has been computed from them yet", () => {
+    expect(refuseReplacementMove({ readingsWhosePhaseChanges: 3, baselineSettled: false, benchmarkFromWindow: false })).toBeNull();
+  });
+  it("refuses, naming the baseline, once the pre-install set is settled", () => {
+    expect(refuseReplacementMove({ readingsWhosePhaseChanges: 1, baselineSettled: true, benchmarkFromWindow: false })).toMatch(/1 stored reading would move.*baseline/);
+  });
+  it("refuses, naming the benchmark, once it was computed from the post-install set", () => {
+    expect(refuseReplacementMove({ readingsWhosePhaseChanges: 4, baselineSettled: true, benchmarkFromWindow: true })).toMatch(/4 stored readings would move.*benchmark.*CON-20/);
   });
 });

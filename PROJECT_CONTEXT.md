@@ -5815,6 +5815,35 @@ degraded state, and the run's other 31 checks (the new figures included) passed.
 are metered; a verification suite that re-reads the same PDF a dozen times a day will find the
 ceiling.
 
+## A wrong replacement date can be corrected, and the dashboard says the whole story (2026-09-16) — user-asked, twice
+
+**"Should be able to change the light replacement day in case choose wrong date by mistake."** The
+done step showed the date and offered nothing — the same shape the install date had on 2026-09-07.
+`correctLightReplacementDate` (field permission; NOT demo-gated, since the date is typed by hand
+in every mode and a mistyped one is an ordinary case) sits behind "Correct the replacement date"
+on the done step. The ordering rules hold both ways through `refuseReplacementDate`; the new rule
+is `refuseReplacementMove` (`step-dates.ts`, pure, 4 cases): the date is the pivot between the
+pre-install set and the post-install set, so the move is free while no stored day sits between the
+old date and the new one — the sets do not change — or while nothing has been computed from them;
+once a day WOULD change sides and the baseline is settled, or the benchmark was computed from the
+post-install window (not from demos or an override), it is refused naming that figure and the
+count of readings. When the move is allowed the post window follows to the day after, every
+per-line `replacedAt` follows, and the figures re-derive in the same transaction — the standing
+rule that a figure derived from a set of rows is re-derived when the set changes.
+
+**"Dashboard should show overall savings till date; month by month or year by year on the
+respective page."** The published hero's headline is now the total since the first billed month —
+saved ₹, kept, paid, kWh, "N billed months" — with the latest billed month as one line beneath.
+The Electricity page's Billed months table gained year chips (`?year=`) that appear only once a
+second year is on record, and its own total follows the filter.
+
+**Verified 11/11** on two fixture circuits: a future date and a pre-install date refused; a move
+across six stored readings refused naming the benchmark and CON-20 with nothing written; a move
+crossing none accepted (window 13-06, baseline and benchmark untouched); on a circuit with nothing
+settled, a move that reclassifies three days re-derives baseline 10 and benchmark 65% from the new
+split. Portal 19/19 with the total-to-date hero and the year filter. 919 unit tests,
+`tsc`/`lint`/`build` clean; no schema change.
+
 ## MS-09 step 4 — the society sees only what was published, and sees it in rupees (2026-09-16) — user-caught, three screenshots
 
 **"Bills show up in the customer portal whether released or not — what's its relevance?"** The

@@ -268,55 +268,55 @@ export default async function PortalHomePage() {
         carry"), not something this pass silently undid. What is different
         is prominence and the trend, not the vocabulary.
       */}
-      {billed && (
-        <Card className="mb-5 p-6 sm:p-8">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <p className="lbl">This month · {monthName(billed.period)} · billed</p>
-            <StatusChip tone="ok">Published</StatusChip>
-          </div>
-          <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
-            <div>
-              <p className="flex flex-wrap items-baseline gap-2.5">
-                <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
-                  ₹{Math.round(billed.savedValue).toLocaleString("en-IN")}
-                </span>
-                <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                  saved on electricity
-                </span>
-              </p>
-              <p className="mt-1.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
-                You kept <strong className="num">₹{Math.round(billed.societyKeeps).toLocaleString("en-IN")}</strong> after paying FirsThing{" "}
-                <strong className="num">₹{Math.round(billed.paidToFirsthing).toLocaleString("en-IN")}</strong>.
-              </p>
+      {billed && published?.sinceStart && (() => {
+        // The headline is the whole story to date (user's rule 2026-09-16:
+        // "dashboard should show overall savings till date" — month by month
+        // and year by year live on the Electricity page). The latest billed
+        // month is one line beneath it.
+        const total = published.sinceStart;
+        return (
+          <Card className="mb-5 p-6 sm:p-8">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="lbl">Saved since we started · {total.months} billed month{total.months === 1 ? "" : "s"}</p>
+              <StatusChip tone="ok">Published</StatusChip>
             </div>
-            <div className="flex flex-wrap gap-x-8 gap-y-3">
-              <span>
-                <strong className="num text-[20px]">{Math.round(billed.savedKwh).toLocaleString("en-IN")}</strong>{" "}
-                <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>kWh saved</span>
-              </span>
-              {billed.savingsPct !== null && (
+            <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
+              <div>
+                <p className="flex flex-wrap items-baseline gap-2.5">
+                  <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
+                    ₹{Math.round(total.savedValue).toLocaleString("en-IN")}
+                  </span>
+                  <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                    saved on electricity to date
+                  </span>
+                </p>
+                <p className="mt-1.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
+                  You kept <strong className="num">₹{Math.round(total.societyKeeps).toLocaleString("en-IN")}</strong> after paying FirsThing{" "}
+                  <strong className="num">₹{Math.round(total.paidToFirsthing).toLocaleString("en-IN")}</strong>.
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-x-8 gap-y-3">
                 <span>
-                  <strong className="num text-[20px]">{billed.savingsPct.toFixed(1)}%</strong>{" "}
-                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>vs before FirsThing</span>
+                  <strong className="num text-[20px]">{Math.round(total.savedKwh).toLocaleString("en-IN")}</strong>{" "}
+                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>kWh saved to date</span>
                 </span>
-              )}
-              {published?.sinceStart && (
                 <span>
-                  <strong className="num text-[20px]">₹{Math.round(published.sinceStart.savedValue).toLocaleString("en-IN")}</strong>{" "}
+                  <strong className="num text-[20px]">₹{Math.round(billed.savedValue).toLocaleString("en-IN")}</strong>{" "}
                   <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                    saved since we started · {published.sinceStart.months} month{published.sinceStart.months === 1 ? "" : "s"}
+                    latest billed month · {monthName(billed.period)}
+                    {billed.savingsPct !== null ? ` · ${billed.savingsPct.toFixed(1)}%` : ""}
                   </span>
                 </span>
-              )}
+              </div>
             </div>
-          </div>
-          <p className="mt-5 border-t pt-3 text-[12.5px]" style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}>
-            {billed.basisWords}
-            {billed.updatedAt ? ` Updated ${formatDate(billed.updatedAt)} from meter readings.` : ""}{" "}
-            <Link href="/portal/electricity" className="underline">Month by month →</Link>
-          </p>
-        </Card>
-      )}
+            <p className="mt-5 border-t pt-3 text-[12.5px]" style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}>
+              {billed.basisWords}
+              {billed.updatedAt ? ` Updated ${formatDate(billed.updatedAt)} from meter readings.` : ""}{" "}
+              <Link href="/portal/electricity" className="underline">Month by month →</Link>
+            </p>
+          </Card>
+        );
+      })()}
 
       {!billed && energy && energy.totals.savingsPct !== null && (() => {
         const months = monthlyTotals(energy.daily);

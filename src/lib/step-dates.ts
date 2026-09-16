@@ -62,6 +62,38 @@ export function refuseReplacementDate(input: {
   return null;
 }
 
+/**
+ * Moving an already-recorded replacement date (user-asked 2026-09-16: "should
+ * be able to change the light replacement day in case of a wrong date").
+ *
+ * The date is the pivot between the pre-install set (the baseline) and the
+ * post-install set (the benchmark). Moving it is free while nothing rests on
+ * those sets, or while no stored day sits between the old date and the new
+ * one — the sets do not change. Once a day WOULD change sides and a figure
+ * has already been computed from the side it is leaving, the move would
+ * silently restate that figure (INV-02), so it is refused in words that say
+ * which figure.
+ */
+export function refuseReplacementMove(input: {
+  /** stored days dated between the old and the new replacement day, inclusive */
+  readingsWhosePhaseChanges: number;
+  /** the pre-install baseline is settled (averaged from the pre-install set) */
+  baselineSettled: boolean;
+  /** the benchmark was computed from the post-install set, not from demos or an override */
+  benchmarkFromWindow: boolean;
+}): string | null {
+  const n = input.readingsWhosePhaseChanges;
+  if (n === 0) return null;
+  const days = `${n} stored reading${n === 1 ? "" : "s"} would move between the pre- and post-install sets`;
+  if (input.benchmarkFromWindow) {
+    return `${days}, and the benchmark was computed from those sets — it is fixed for the term (CON-20). Pick a date on the same side of every stored reading.`;
+  }
+  if (input.baselineSettled) {
+    return `${days}, and the baseline was averaged from the pre-install set. Pick a date on the same side of every stored reading.`;
+  }
+  return null;
+}
+
 // ── The deal's own dates ─────────────────────────────────────────────────
 // Same rule as the circuit's, one level up: DEMO_MODE lets a whole past deal
 // be entered with its real dates (a society formed in January, a lead logged

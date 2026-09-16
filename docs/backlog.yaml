@@ -8224,9 +8224,9 @@ features:
         tests: [TC-109-2]
       - id: FEAT-109-AC-3
         type: failure
-        given: "any line where Qty × Rate − Discount ≠ Amount, or the lines do not sum to the sub-total, tax or total"
+        given: "any line where Qty × Rate − Discount ≠ Amount by more than ₹0.50, or the lines do not sum to the sub-total, tax or total by more than ₹0.50"
         when: "the operator tries to submit"
-        then: "the row is flagged with both figures and cannot be submitted until corrected or acknowledged with a reason"
+        then: "the row is flagged with both figures and cannot be submitted until corrected or acknowledged with a reason; a difference of ₹0.50 or less is Zoho's rounding — accepted, labelled 'rounded off', never asked about (amended 2026-09-16)"
         tests: [TC-109-3]
       - id: FEAT-109-AC-4
         type: permission

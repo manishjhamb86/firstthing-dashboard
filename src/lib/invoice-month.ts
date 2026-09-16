@@ -394,22 +394,43 @@ export function deriveInvoiceMonth(input: {
 // then the lines against the sub-total, tax and total.
 // ---------------------------------------------------------------------------
 
-/** Zoho prints paise; a line reconciles when the printed figure is within half a paisa. */
+/** Zoho prints paise; a figure reconciles exactly when it is within half a paisa. */
 export const ARITHMETIC_TOLERANCE = 0.005;
+/**
+ * Zoho rounds a line, a sub-total or a total to the rupee, and a printed
+ * figure within half a rupee of the arithmetic IS that rounding (user's rule
+ * 2026-09-16: "unless the difference is more than ₹0.50 it should auto
+ * accept and mark rounded off, and not show an error or warning"). It is
+ * accepted as reconciled and labelled, never asked about.
+ */
+export const ROUNDING_TOLERANCE = 0.5;
 
 export type PrintedLine = { lineNo: number; qty: number; rate: number; discount: number; amount: number };
 
-export type ArithmeticCheck = { ok: true } | { ok: false; expected: number; printed: number; note: string };
+export type ArithmeticCheck =
+  | { ok: true; rounded?: false }
+  | { ok: true; rounded: true; expected: number; printed: number; note: string }
+  | { ok: false; expected: number; printed: number; note: string };
+
+/** Exact → ok; within a rupee's rounding → ok and said so; beyond → not reconciled, with the two figures named. */
+function compareFigures(expected: number, printed: number, what: string, arithmetic: string): ArithmeticCheck {
+  const diff = Math.abs(expected - printed);
+  if (diff <= ARITHMETIC_TOLERANCE) return { ok: true };
+  if (diff <= ROUNDING_TOLERANCE) {
+    return {
+      ok: true,
+      rounded: true,
+      expected,
+      printed,
+      note: `${what} rounded off by ₹${fmt(diff)} — ${arithmetic} = ₹${fmt(expected)}, printed as ₹${fmt(printed)}.`,
+    };
+  }
+  return { ok: false, expected, printed, note: `${arithmetic} = ₹${fmt(expected)}, but ${what.toLowerCase()} prints ₹${fmt(printed)}.` };
+}
 
 export function checkLineArithmetic(line: PrintedLine): ArithmeticCheck {
   const expected = line.qty * line.rate - line.discount;
-  if (Math.abs(expected - line.amount) <= ARITHMETIC_TOLERANCE) return { ok: true };
-  return {
-    ok: false,
-    expected,
-    printed: line.amount,
-    note: `Line ${line.lineNo}: ${fmt(line.qty)} × ₹${fmt(line.rate)} − ₹${fmt(line.discount)} = ₹${fmt(expected)}, but the invoice prints ₹${fmt(line.amount)}.`,
-  };
+  return compareFigures(expected, line.amount, `Line ${line.lineNo}`, `Line ${line.lineNo}: ${fmt(line.qty)} × ₹${fmt(line.rate)} − ₹${fmt(line.discount)}`);
 }
 
 export type PrintedTotals = { subtotal: number; taxAmount: number; total: number; taxPct: number | null };
@@ -419,28 +440,31 @@ export type TotalsCheck = {
   tax: ArithmeticCheck;
   total: ArithmeticCheck;
   ok: boolean;
+  /** Any of the three reconciled only by rounding. */
+  rounded: boolean;
 };
 
 export function checkTotalsArithmetic(lines: PrintedLine[], totals: PrintedTotals): TotalsCheck {
   const linesSum = lines.reduce((s, l) => s + l.amount, 0);
-  const subtotal: ArithmeticCheck =
-    Math.abs(linesSum - totals.subtotal) <= ARITHMETIC_TOLERANCE
-      ? { ok: true }
-      : { ok: false, expected: linesSum, printed: totals.subtotal, note: `The lines add to ₹${fmt(linesSum)}, but the sub-total prints ₹${fmt(totals.subtotal)}.` };
+  const subtotal = compareFigures(linesSum, totals.subtotal, "The sub-total", "The lines add up");
   let tax: ArithmeticCheck = { ok: true };
   if (totals.taxPct !== null) {
     const expectedTax = totals.subtotal * (totals.taxPct / 100);
     // Tax is rounded to the rupee or the paisa by Zoho; allow a rupee of rounding across the lines.
     if (Math.abs(expectedTax - totals.taxAmount) > 1) {
       tax = { ok: false, expected: expectedTax, printed: totals.taxAmount, note: `${fmt(totals.taxPct)}% of ₹${fmt(totals.subtotal)} is ₹${fmt(expectedTax)}, but the tax prints ₹${fmt(totals.taxAmount)}.` };
+    } else if (Math.abs(expectedTax - totals.taxAmount) > ARITHMETIC_TOLERANCE) {
+      tax = { ok: true, rounded: true, expected: expectedTax, printed: totals.taxAmount, note: `Tax rounded off by ₹${fmt(Math.abs(expectedTax - totals.taxAmount))} — ${fmt(totals.taxPct)}% of ₹${fmt(totals.subtotal)} = ₹${fmt(expectedTax)}, printed as ₹${fmt(totals.taxAmount)}.` };
     }
   }
-  const expectedTotal = totals.subtotal + totals.taxAmount;
-  const total: ArithmeticCheck =
-    Math.abs(expectedTotal - totals.total) <= ARITHMETIC_TOLERANCE
-      ? { ok: true }
-      : { ok: false, expected: expectedTotal, printed: totals.total, note: `Sub-total plus tax is ₹${fmt(expectedTotal)}, but the total prints ₹${fmt(totals.total)}.` };
-  return { subtotal, tax, total, ok: subtotal.ok && tax.ok && total.ok };
+  const total = compareFigures(totals.subtotal + totals.taxAmount, totals.total, "The total", "Sub-total plus tax");
+  return {
+    subtotal,
+    tax,
+    total,
+    ok: subtotal.ok && tax.ok && total.ok,
+    rounded: [subtotal, tax, total].some((c) => c.ok && c.rounded === true),
+  };
 }
 
 function fmt(n: number): string {

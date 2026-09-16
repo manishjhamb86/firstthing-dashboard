@@ -283,14 +283,39 @@ describe("FEAT-109-AC-3 — the invoice's own arithmetic", () => {
     expect(checkLineArithmetic({ lineNo: 2, qty: 1_155, rate: 12.19, discount: 8.09, amount: 14_071.36 })).toEqual({ ok: true });
   });
 
-  it("flags a line whose printed amount does not follow from its own figures, naming both", () => {
+  it("accepts a line rounded to the rupee, marks it rounded off, and asks nothing (the user's ₹0.50 rule)", () => {
     const r = checkLineArithmetic({ lineNo: 2, qty: 1_155, rate: 12.19, discount: 8.09, amount: 14_071 });
+    expect(r.ok).toBe(true);
+    if (r.ok && r.rounded) {
+      expect(r.expected).toBeCloseTo(14_071.36, 2);
+      expect(r.note).toMatch(/rounded off by ₹0\.36/);
+    } else {
+      throw new Error("expected a rounded-off check");
+    }
+    // Exactly half a rupee is still rounding; a paisa more is not.
+    expect(checkLineArithmetic({ lineNo: 1, qty: 1, rate: 100.5, discount: 0, amount: 100 }).ok).toBe(true);
+    expect(checkLineArithmetic({ lineNo: 1, qty: 1, rate: 100.51, discount: 0, amount: 100 }).ok).toBe(false);
+  });
+
+  it("flags a line whose printed amount is off by more than rounding can explain, naming both", () => {
+    const r = checkLineArithmetic({ lineNo: 2, qty: 1_155, rate: 12.19, discount: 8.09, amount: 14_070 });
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.expected).toBeCloseTo(14_071.36, 2);
       expect(r.note).toContain("14,071.36");
-      expect(r.note).toContain("14,071.00");
+      expect(r.note).toContain("14,070.00");
     }
+  });
+
+  it("accepts the screenshot's total — ₹99,286.99 printed as ₹99,287 — as rounded off, not a warning", () => {
+    const r = checkTotalsArithmetic(
+      [{ lineNo: 1, qty: 1, rate: 84_141.52, discount: 0, amount: 84_141.52 }],
+      { subtotal: 84_141.52, taxAmount: 15_145.47, total: 99_287, taxPct: 18 },
+    );
+    expect(r.ok).toBe(true);
+    expect(r.rounded).toBe(true);
+    expect(r.total.ok && r.total.rounded).toBe(true);
+    expect(r.subtotal).toEqual({ ok: true });
   });
 
   it("reconciles the real totals: lines → sub-total → 18% → total", () => {
@@ -301,6 +326,7 @@ describe("FEAT-109-AC-3 — the invoice's own arithmetic", () => {
     ];
     const r = checkTotalsArithmetic(lines, { subtotal: 40_370.36, taxAmount: 7_266.66, total: 47_637.02, taxPct: 18 });
     expect(r.ok).toBe(true);
+    expect(r.rounded).toBe(false);
   });
 
   it("flags a sub-total the lines do not add to", () => {

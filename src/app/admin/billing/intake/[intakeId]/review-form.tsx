@@ -338,6 +338,7 @@ export function ReviewForm({
                     ))}
                   </div>
                   {check && !check.ok && <p className="mt-2 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>{check.note}</p>}
+                  {check && check.ok && check.rounded && <p className="mt-2 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>{check.note}</p>}
                   {l.kind === "service" ? (
                     <div className="mt-2">
                       <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
@@ -389,7 +390,7 @@ export function ReviewForm({
 
         {/* Card 3 — totals */}
         <Card className="p-5">
-          <CardHead step={3} title="Totals" chip={arithmetic ? arithmetic.ok ? <StatusChip tone="ok">Reconciles</StatusChip> : review.arithmeticAcknowledgement.trim() ? <StatusChip tone="info">Acknowledged</StatusChip> : <StatusChip tone="warn">Does not reconcile</StatusChip> : <StatusChip tone="neu">—</StatusChip>} />
+          <CardHead step={3} title="Totals" chip={arithmetic ? arithmetic.ok ? <StatusChip tone="ok">{arithmetic.totals?.rounded || arithmetic.lines.some((l) => l.check.ok && l.check.rounded) ? "Reconciles · rounded off" : "Reconciles"}</StatusChip> : review.arithmeticAcknowledgement.trim() ? <StatusChip tone="info">Acknowledged</StatusChip> : <StatusChip tone="warn">Does not reconcile</StatusChip> : <StatusChip tone="neu">—</StatusChip>} />
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {([["subtotal", "Sub total"], ["taxPct", "Tax %"], ["taxAmount", "Tax amount"], ["total", "Total"]] as const).map(([k, label]) => (
               <label key={k} className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
@@ -401,7 +402,10 @@ export function ReviewForm({
           {arithmetic?.totals && (
             <div className="mt-2 space-y-1 text-[12.5px]">
               {[arithmetic.totals.subtotal, arithmetic.totals.tax, arithmetic.totals.total].map((c, i) =>
-                c.ok ? null : (
+                c.ok ? (
+                  // Rounding to the rupee is Zoho's own doing — stated, never asked about.
+                  c.rounded ? <p key={i} style={{ color: "var(--text-subtle)" }}>{c.note}</p> : null
+                ) : (
                   <p key={i} style={{ color: "var(--warn-fg)" }}>{c.note}</p>
                 ),
               )}

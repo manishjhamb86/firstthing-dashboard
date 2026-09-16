@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip, type ChipTone } from "@/components/ui";
@@ -8,6 +8,16 @@ import { Modal } from "@/components/modal";
 import { sniffKind } from "@/lib/file-signature";
 import { isZip, readZip } from "@/lib/zip-browser";
 import { formatInstant } from "@/lib/format-date";
+import {
+  compareIntakes,
+  INTAKE_SORTS,
+  INTAKE_VIEWS,
+  initialSortDir,
+  intakeMatches,
+  intakeViewOf,
+  type IntakeSortKey,
+  type IntakeView,
+} from "@/lib/intake-list";
 import { checkIntakeDuplicates, createIntakeUpload, extractIntake, retryIntake, type IntakeDuplicate } from "./actions";
 
 export type IntakeRow = {
@@ -18,17 +28,20 @@ export type IntakeRow = {
   statusLabel: string;
   statusTone: ChipTone;
   society: string | null;
+  /** `YYYY-MM`, for sorting and the month filter; `period` is its label. */
+  periodKey: string | null;
   period: string | null;
   invoiceNumber: string | null;
   total: number | null;
   uploadedAt: string;
+  uploadedAtMs: number;
   uploadedAgo: string;
   uploadedBy: string;
   note: string | null;
   calculationId: string | null;
 };
 
-type View = "review" | "ready" | "submitted" | "all";
+type View = IntakeView | "all";
 
 function inr(n: number): string {
   return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -43,10 +56,16 @@ function inr(n: number): string {
  * sniffs again and is the one that decides. Extraction is kicked off per
  * file and the list refreshes as each completes.
  */
-export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { needsReview: number; ready: number; submitted: number } }) {
+export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  const [view, setView] = useState<View>("review");
+  // Opens on the first chip that has work in it, in the order work flows.
+  const [view, setView] = useState<View>(() => INTAKE_VIEWS.find((v) => rows.some((r) => intakeViewOf(r.status) === v.key))?.key ?? "all");
+  const [query, setQuery] = useState("");
+  const [societyFilter, setSocietyFilter] = useState("");
+  const [monthFilter, setMonthFilter] = useState("");
+  const [sortKey, setSortKey] = useState<IntakeSortKey>("uploaded");
+  const [sortDir, setSortDir] = useState<1 | -1>(-1);
   const [refusals, setRefusals] = useState<string[]>([]);
   // What a dropped archive yielded — information, not a refusal.
   const [archiveNotes, setArchiveNotes] = useState<string[]>([]);
@@ -215,12 +234,51 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
     ]);
   }
 
-  const visible = rows.filter((r) => {
-    if (view === "review") return r.status === "needs_review" || r.status === "could_not_read" || r.status === "reading" || r.status === "refused_duplicate" || r.status === "uploaded";
-    if (view === "ready") return r.status === "ready";
-    if (view === "submitted") return r.status === "submitted";
-    return true;
-  });
+  // The search, society and month filters narrow EVERY chip, so typing an
+  // invoice number shows which chip its row sits under rather than "nothing
+  // here" on the one that happens to be open (user-reported 2026-09-16: a
+  // partially typed number could not find its row).
+  const narrowed = useMemo(() => {
+    const q = query.trim();
+    return rows.filter(
+      (r) =>
+        (!societyFilter || r.society === societyFilter) &&
+        (!monthFilter || r.periodKey === monthFilter) &&
+        intakeMatches({ ...r, periodLabel: r.period }, q),
+    );
+  }, [rows, query, societyFilter, monthFilter]);
+
+  const counts = useMemo(() => {
+    const c: Record<View, number> = { unread: 0, review: 0, ready: 0, submitted: 0, all: narrowed.length };
+    for (const r of narrowed) {
+      const v = intakeViewOf(r.status);
+      if (v) c[v] += 1;
+    }
+    return c;
+  }, [narrowed]);
+
+  const visible = useMemo(
+    () => narrowed.filter((r) => view === "all" || intakeViewOf(r.status) === view).sort(compareIntakes(sortKey, sortDir)),
+    [narrowed, view, sortKey, sortDir],
+  );
+
+  const societies = useMemo(() => [...new Set(rows.map((r) => r.society).filter((s): s is string => !!s))].sort(), [rows]);
+  const months = useMemo(
+    () =>
+      [...new Map(rows.filter((r) => r.periodKey).map((r) => [r.periodKey!, r.period!])).entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)),
+    [rows],
+  );
+  const filtering = query.trim() !== "" || societyFilter !== "" || monthFilter !== "";
+
+  // Clicking the sorted column reverses it; another column starts at its own natural end.
+  function sortBy(key: IntakeSortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 1 ? -1 : 1));
+      return;
+    }
+    setSortKey(key);
+    setSortDir(initialSortDir(key));
+  }
 
   const chip = (key: View, label: string, n: number) => (
     <button
@@ -297,10 +355,53 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
       </Card>
 
       <div className="mb-3.5 flex flex-wrap items-center gap-2">
-        {chip("review", "Needs review", counts.needsReview)}
-        {chip("ready", "Ready to submit", counts.ready)}
-        {chip("submitted", "Submitted", counts.submitted)}
-        {chip("all", "All", rows.length)}
+        {INTAKE_VIEWS.map((v) => chip(v.key, v.label, counts[v.key]))}
+        {chip("all", "All", counts.all)}
+      </div>
+
+      <div className="mb-3.5 flex flex-wrap items-center gap-2">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search invoice number, file, society or month"
+          aria-label="Search invoices"
+          className="field field-auto min-w-[16rem] flex-1 text-sm"
+        />
+        <select
+          value={societyFilter}
+          onChange={(e) => setSocietyFilter(e.target.value)}
+          aria-label="Filter by society"
+          className="field field-auto text-sm"
+        >
+          <option value="">Every society</option>
+          {societies.map((name) => (
+            <option key={name} value={name}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} aria-label="Filter by month" className="field field-auto text-sm">
+          <option value="">Every month</option>
+          {months.map(([key, label]) => (
+            <option key={key} value={key}>
+              {label}
+            </option>
+          ))}
+        </select>
+        {filtering && (
+          <button
+            type="button"
+            className="btn-ghost btn-sm"
+            onClick={() => {
+              setQuery("");
+              setSocietyFilter("");
+              setMonthFilter("");
+            }}
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       <Card className="overflow-hidden">
@@ -308,21 +409,21 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
           <p className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>
             {rows.length === 0
               ? "Nothing in flight. Drop this month's invoices, or the whole backfill — one file per invoice."
-              : view === "review"
-                ? "Nothing needs review."
-                : view === "ready"
-                  ? "Nothing is ready to submit."
-                  : "Nothing submitted yet."}
+              : filtering
+                ? `No invoice matches${counts.all > 0 ? " under this chip — " + counts.all + " match under All" : ""}.`
+                : (INTAKE_VIEWS.find((v) => v.key === view)?.empty ?? "Nothing here.")}
           </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
-                  <th>Invoice</th>
-                  <th className="hidden md:table-cell">Society · month</th>
-                  <th className="text-right">Total</th>
-                  <th>Status</th>
+                  <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                  <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden md:table-cell" />
+                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden md:table-cell" />
+                  <SortHeader k="total" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" />
+                  <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
+                  <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden lg:table-cell" />
                   <th />
                 </tr>
               </thead>
@@ -345,7 +446,9 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
                       </td>
                       <td className="hidden md:table-cell">
                         {r.society ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
-                        <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>{r.period ?? "Month not confirmed"}</p>
+                      </td>
+                      <td className="hidden whitespace-nowrap md:table-cell">
+                        {r.period ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
                       </td>
                       <td className="num whitespace-nowrap text-right">{r.total !== null ? inr(r.total) : "—"}</td>
                       <td className="max-w-[16rem]">
@@ -355,6 +458,9 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
                             {r.note}
                           </p>
                         )}
+                      </td>
+                      <td className="hidden whitespace-nowrap text-[12.5px] lg:table-cell" style={{ color: "var(--text-muted)" }} title={r.uploadedAt}>
+                        {r.uploadedAgo}
                       </td>
                       <td className="whitespace-nowrap text-right">
                         {r.status === "submitted" && r.calculationId ? (
@@ -463,5 +569,44 @@ export function IntakeClient({ rows, counts }: { rows: IntakeRow[]; counts: { ne
         )}
       </Modal>
     </>
+  );
+}
+
+/**
+ * A sortable column header — the meters list's own, hoisted to module scope
+ * rather than declared inside the list (a component declared in a render
+ * body is a new type every render). The caret shows only on the sorted
+ * column: an arrow on every header says nothing about which is in force.
+ */
+function SortHeader({
+  k,
+  sortKey,
+  dir,
+  onSort,
+  align = "left",
+  className,
+}: {
+  k: IntakeSortKey;
+  sortKey: IntakeSortKey;
+  dir: 1 | -1;
+  onSort: (k: IntakeSortKey) => void;
+  align?: "left" | "right";
+  className?: string;
+}) {
+  const active = k === sortKey;
+  return (
+    <th className={[align === "right" ? "text-right" : "", className ?? ""].join(" ").trim() || undefined} aria-sort={active ? (dir === 1 ? "ascending" : "descending") : "none"}>
+      <button
+        type="button"
+        onClick={() => onSort(k)}
+        className="inline-flex items-center gap-1.5 hover:opacity-80"
+        style={{ color: active ? "var(--text)" : "inherit", font: "inherit", letterSpacing: "inherit", textTransform: "inherit" }}
+      >
+        {INTAKE_SORTS[k].label}
+        <span aria-hidden style={{ opacity: active ? 1 : 0.25 }}>
+          {active ? (dir === 1 ? "↑" : "↓") : "↕"}
+        </span>
+      </button>
+    </th>
   );
 }

@@ -5815,6 +5815,44 @@ degraded state, and the run's other 31 checks (the new figures included) passed.
 are metered; a verification suite that re-reads the same PDF a dozen times a day will find the
 ceiling.
 
+## The intake list: chips that count what they show, sort, search, and a rounding that is not a warning (2026-09-16) — user-caught, from a stage screenshot
+
+**"INCORRECT FILTER count"** — right, and the cause was two rules for one question. The page computed
+"Needs review 140" as `needs_review + could_not_read + uploaded`, while the chip's own filter admitted
+`reading` and `refused_duplicate` too and the user's real objection was that **a file nobody has read
+yet is not a review item at all**. `src/lib/intake-list.ts` is now the one place that says which chip a
+status belongs under (`intakeViewOf`): **Not read yet** (uploaded, reading) · **Needs review**
+(needs_review, could_not_read, refused_duplicate) · Ready · Submitted. The header's "N need review"
+chip, the list's chips and the list's filter all read it, so a count can no longer disagree with the
+rows beneath it. The list opens on the first chip that has work in it, in the order work flows.
+
+**Sorting and filtering** — every column header sorts on click (the meters list's rules: a row with
+nothing in the sorted column sinks in BOTH directions; text and status start from the front, figures
+and dates from the far end), plus a search box and society/month selects. **The search narrows every
+chip, not only the open one** — typing an invoice number re-counts the chips, so the operator sees
+which chip the row sits under, and a chip with no match says "3 match under All" rather than "nothing
+here". That is also the answer to the browser-find report: `window.find` was checked against the live
+stage DOM and does reach a partial number — but a row under another chip is simply not in the DOM, and
+140 near-identical file names make the browser's first hit land somewhere unhelpful. The in-app search
+matches any fragment of the file name, invoice number, society or month, words in any order. 10 unit
+cases (`tests/intake-list.test.ts`).
+
+**"It should not ask for rounded-off cases."** The arithmetic check accepted only a half-paisa, so a
+total printing ₹99,287.00 against a computed ₹99,286.99 warned and demanded a reason. The user's rule,
+now `ROUNDING_TOLERANCE = 0.5` in `invoice-month.ts` (FEAT-109-AC-3 amended in `03-features.md` and
+`backlog.yaml`): a difference of ₹0.50 or less on a line, the sub-total or the total is Zoho's rounding
+to the rupee — `ArithmeticCheck` gained a third outcome, `{ok: true, rounded: true, note}`, which
+reconciles, renders as a quiet "rounded off by ₹0.01" line and "Reconciles · rounded off" on the chip,
+asks nothing, and is stored on the fee line's `arithmeticNote` so the record says it was rounded.
+Beyond ₹0.50 the warning and the reason field return exactly as before. Tax already allowed a rupee.
+
+**Verified 24/24 in a browser** on a six-row fixture (two unread, two review, two ready): chip counts
+equal the rows each shows and no unread row appears under Needs review; Total/Society/Status sort in
+both directions with the empty rows last either way; "80850044", "27/055" and "ace aspire july" each
+find their one row; the society and month selects narrow; the screenshot's own totals (84,141.52 +
+15,145.47 vs 99,287) read "Reconciles · rounded off" with no reason field, and ₹1.01 out brings the
+warning back. 909 unit tests, `tsc`/`lint`/`build` clean; no schema change.
+
 ## Day validity: a month measures from its complete days only (2026-09-15) — user-specified
 
 **The rule, in the user's words**: out of 30 days, 4 with complete 24-hour readings, 7 with partial

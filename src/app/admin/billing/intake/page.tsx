@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { formatInstant, monthLabel, timeAgo } from "@/lib/format-date";
 import { Card, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { requireBillingOps } from "../access";
+import { intakeViewOf } from "@/lib/intake-list";
 import { IntakeClient, type IntakeRow } from "./intake-client";
 
 // SCR-093 — Invoice intake (CON-47 / FEAT-109). A dropzone and the list of
@@ -52,10 +53,12 @@ export default async function IntakePage() {
       statusLabel: STATUS_META[status]?.label ?? status,
       statusTone: STATUS_META[status]?.tone ?? "neu",
       society: i.society?.name ?? null,
+      periodKey: i.period ?? null,
       period: i.period ? monthLabel(i.period) : null,
       invoiceNumber: review?.invoiceNumber ?? null,
       total: review?.total ?? null,
       uploadedAt: formatInstant(i.uploadedAt),
+      uploadedAtMs: i.uploadedAt.getTime(),
       uploadedAgo: timeAgo(i.uploadedAt),
       uploadedBy: i.uploadedBy.name ?? i.uploadedBy.email,
       note: i.extractionError ?? null,
@@ -63,25 +66,22 @@ export default async function IntakePage() {
     };
   });
 
-  const counts = {
-    needsReview: rows.filter((r) => r.status === "needs_review" || r.status === "could_not_read" || r.status === "uploaded").length,
-    ready: rows.filter((r) => r.status === "ready").length,
-    submitted: rows.filter((r) => r.status === "submitted").length,
-  };
+  // The header's count reads the same rule as the chips (src/lib/intake-list).
+  const needsReview = rows.filter((r) => intakeViewOf(r.status) === "review").length;
 
   return (
     <>
       <PageHeader
         title="Invoice intake"
         subtitle="Drop this month's Zoho invoices — or the whole backfill. Each file becomes a row; confirm the row and it goes to the accountant."
-        chip={counts.needsReview > 0 ? <StatusChip tone="warn">{counts.needsReview} need review</StatusChip> : undefined}
+        chip={needsReview > 0 ? <StatusChip tone="warn">{needsReview} need review</StatusChip> : undefined}
         action={
           <Link href="/admin/billing" className="btn-ghost">
             Billing board
           </Link>
         }
       />
-      <IntakeClient rows={rows} counts={counts} />
+      <IntakeClient rows={rows} />
       <Card className="mt-5 p-5 text-[12.5px]" >
         <p style={{ color: "var(--text-muted)" }}>
           The society and the month are always yours to confirm on the review, whatever the invoice

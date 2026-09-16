@@ -577,9 +577,10 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
             kind: l.kind,
             circuitId: l.kind === "service" ? l.circuitId : null,
             arithmeticOk: preview.arithmetic.lines.find((a) => a.lineNo === l.lineNo)?.check.ok ?? true,
+            // A rounded-off line is reconciled and says so; the note stays on the record either way.
             arithmeticNote: (() => {
               const c = preview.arithmetic.lines.find((a) => a.lineNo === l.lineNo)?.check;
-              return c && !c.ok ? c.note : null;
+              return c && (!c.ok || c.rounded) ? c.note : null;
             })(),
             countDisagreement: derived.lines.find((d) => d.lineNo === l.lineNo)?.countDisagreement ?? null,
           })),

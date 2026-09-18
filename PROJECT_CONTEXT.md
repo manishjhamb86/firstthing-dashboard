@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-15
+2026-09-18
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6288,6 +6288,86 @@ the total checked) and `removeInspectionFinding` (the rest renumbered so Sr stay
 same gate and rules as the whole-form edit. Verified 8/8: one row edited with the other untouched,
 a blank location refused server-side, a third added as Sr 3, the first removed and the rest
 renumbered 1..2, the summary re-reading 2 faulty, the whole-form Edit still beside it.
+
+## KYC: the deal spine must agree with the actual gate it names (2026-09-18) — user-caught, two screens disagreeing
+
+**Reported**: "the electricity bill was not uploaded and also not marked as not applicable... the
+system was showing execute the agreement continue. and on click it takes to the agreement execution
+page. but there it shows KYC not complete. check at both places are not same." Real, and traced to
+a genuine bug rather than a caching or staleness issue.
+
+**`kycCounts()`'s `total` silently shrank the moment one requirement type got anything recorded.**
+It skipped any type with `state === "outstanding" && no record at all` from its own count —
+`kyc-society.ts`'s original doc comment even said so: "how many types have anything recorded". So
+settling the GST fact alone made `total` drop from 2 to 1, `resolved` read `1 of 1`, and both the
+deal spine's `kycDone` (`pipeline-facts.ts` → `deal-progress.ts`) and the agreement page's own
+banner read KYC as fully settled — while `prepareAgreement`'s actual refusal, driven by
+`kycMissing()` (which has never had this shortcut — it just checks every fixed requirement
+unconditionally), correctly still named the untouched electricity bill. The test suite had this
+exact disagreement encoded and passing (`kycCounts` returning `{total:1,resolved:1}` in the same
+test where the next line asserted `kycMissing` still names the second type). `total` is now always
+`KYC_REQUIREMENTS.length` — the full fixed checklist, never gated on what happens to be touched —
+so `kycDone` (`resolved >= total`) and `kycMissing().length === 0` can no longer disagree. A new
+`kycStarted()` export carries the old "has anything been touched at all" signal, now used only for
+phrasing ("not started yet" vs "N of M resolved"), never for the gate itself. 3 new unit cases in
+`tests/kyc-society.test.ts`, one asserting the two functions agree by construction.
+
+**The KYC page also folds now.** A settled card (verified, not applicable, or a recorded fact) used
+to stay fully expanded — the upload dropzone, the fact form, the follow-up field, the empty state —
+because `KycItem`'s own "chasing" logic is keyed on the raw DB `status` column, which a recorded
+FACT never touches. Rather than teach that component a second settled-state, the whole record now
+folds behind a "View the record" `<details>` toggle at the page level (`kyc/page.tsx`), leaving only
+the title, hint and status chip visible by default — the same closed-by-default convention as
+`StepSection`'s done rows.
+
+Verified: `tsc`/`lint`/`pnpm test` (926) clean, `pnpm build` clean. Deployed to
+`stage.firsthing.earth` (`1d0495f`), `unstable restarts: 0`.
+
+## CSV readings: an operator-chosen date range, and full control over what's stored (2026-09-18) — user-asked
+
+**The ask**: a vendor export can hold a year of history, and only a specific stretch of it should
+feed a given benchmark — the upload should ask for a from/to range rather than silently taking
+whatever the phase-derived window admits. Plus, for already-stored readings: delete unwanted days
+outright (not just exclude them), keep full include/exclude control, and be able to clear a phase's
+readings and re-upload from scratch.
+
+**The range narrows, it never widens.** `narrowToChosenRange()` (`circuit-load.ts`, pure, 4 unit
+cases) intersects the operator's chosen from/to with the phase-derived window
+(`circuitReadingWindow`) — CON-19's boundaries (before the meter, the replacement day, today) stay
+hard limits regardless of what the operator picks; the two date inputs on the upload panel are
+themselves `min`/`max`-clamped to the full window so a reach-outside attempt is caught client-side
+too, and the server re-derives and re-intersects independently rather than trusting either bound
+from the client — the same "the client's rows are never authority" rule this pipeline has followed
+since CON-45. `previewCircuitReadings`/`commitCircuitReadings` both take optional `rangeFrom`/
+`rangeTo` now; a day outside the chosen (narrower) window gets the SAME `out_of_window` disposition
+a day outside the phase window already gets, so the existing show/hide-out-of-window mechanism and
+the commit's existing skip-on-`out_of_window` logic needed no changes at all — narrowing is just
+another input to the one window a day is already checked against.
+
+**Delete is a genuine removal, not the existing soft exclude** — `deleteStoredReading()`, for a row
+that should never have landed at all (the wrong day pulled in from too wide a range) rather than a
+real day being disputed, where exclude's struck-through, reason-carrying record is the right shape.
+Same freeze rule as exclusion (`exclusionRefusal`, reused verbatim) — a day that can no longer be
+excluded can no longer be deleted, and INV-03 makes a billed day untouchable regardless of which
+action is asked for it.
+
+**`discardStoredReadings(circuitId, phase, reason)`** clears every stored reading in one phase and
+re-derives whatever figure they fed — the "wrong range uploaded, wipe it and re-upload the sheet"
+case. Deliberately NOT demo-mode-gated, unlike the existing `discardDemoReadings` (a real upload can
+go wrong too) — refuses outright if anything in scope is billed (INV-03), same message shape as
+`discardDemoReadings`. Needs no explicit baseline/benchmark reset the way `discardDemoReadings`
+does: `exclusionRefusal`'s freeze rule already blocks the action once the phase's figure is settled
+(replacement recorded for pre-install, benchmark confirmed for post-install), so by the time a
+discard is ever allowed to run, `recomputeCircuitFigures`'s own "while unfrozen" checks are already
+true and naturally re-derive the figure — including back down to `null` — from whatever readings
+survive.
+
+**Verified end to end in a browser against the real DB (14/14, zero console/page errors)**: the
+range inputs render defaulting to the full derived window; narrowing to a 5-day sub-range and
+uploading a real 300-day SONOFF-format CSV produces a Save button reading "Save 5 readings," and the
+database afterward holds exactly those 5 dates and no others; Delete on a stored row removes exactly
+one row; Clear & start over on the phase empties it completely and the baseline re-derives to `null`.
+`tsc`/`lint`/`pnpm test` (930)/`pnpm build` all clean.
 
 ## Current Phase (archived application — history)
 

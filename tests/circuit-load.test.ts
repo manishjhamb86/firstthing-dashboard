@@ -15,6 +15,7 @@ import {
   addDays,
   windowIsEmpty,
   firstQualifyingDay,
+  narrowToChosenRange,
 } from "@/lib/circuit-load";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { matchKnownFormat, stripBom } from "@/lib/reading-formats";
@@ -459,6 +460,29 @@ describe("addDays is UTC-safe", () => {
     expect(addDays(d("2026-11-01"), -1)).toEqual(d("2026-10-31"));
     expect(addDays(d("2026-02-28"), 1)).toEqual(d("2026-03-01")); // 2026 is not a leap year
     expect(addDays(d("2028-02-28"), 1)).toEqual(d("2028-02-29")); // 2028 is
+  });
+});
+
+describe("narrowToChosenRange — the operator can narrow the window, never widen it", () => {
+  const window = { from: d("2026-01-01"), to: d("2026-12-31") };
+
+  it("no chosen range leaves the window untouched", () => {
+    expect(narrowToChosenRange(window, null)).toEqual(window);
+  });
+
+  it("a range inside the window narrows to it", () => {
+    const chosen = { from: d("2026-06-01"), to: d("2026-06-30") };
+    expect(narrowToChosenRange(window, chosen)).toEqual(chosen);
+  });
+
+  it("a range wider than the window clamps to the window — it can only narrow", () => {
+    const wider = { from: d("2025-01-01"), to: d("2027-01-01") };
+    expect(narrowToChosenRange(window, wider)).toEqual(window);
+  });
+
+  it("a range straddling one edge clamps only that edge", () => {
+    const straddling = { from: d("2025-06-01"), to: d("2026-06-30") };
+    expect(narrowToChosenRange(window, straddling)).toEqual({ from: window.from, to: d("2026-06-30") });
   });
 });
 

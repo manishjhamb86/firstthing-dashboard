@@ -15,7 +15,7 @@ import {
   type SavingsBand,
   type VarianceBand,
 } from "@/lib/circuit-load";
-import { setReadingExclusion } from "./reading-actions";
+import { deleteStoredReading, discardStoredReadings, setReadingExclusion } from "./reading-actions";
 
 export type StoredReadingDTO = {
   id: string;
@@ -93,6 +93,76 @@ function ExclusionControl({ reading, editable }: { reading: StoredReadingDTO; ed
   );
 }
 
+// A genuine removal, not a soft exclude — for a row that should never have
+// landed at all (a day pulled in from too wide a CSV range), rather than a
+// real day being disputed. Same freeze rule as exclusion; nothing offered
+// once the row is billed or the phase's figure is frozen for the term
+// (user-asked 2026-09-18).
+function DeleteControl({ reading }: { reading: StoredReadingDTO }) {
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  function run() {
+    const reason = window.prompt(`Remove ${reading.date} entirely — it will not be kept as excluded. Why?`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Say why this day is being removed.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await deleteStoredReading(reading.id, reason);
+      setError("error" in result ? result.error : undefined);
+    });
+  }
+
+  if (reading.frozenReason) return null;
+  return (
+    <span>
+      <button type="button" onClick={run} disabled={pending} className="btn-ghost text-xs" style={{ color: "var(--bad-fg)" }}>
+        Delete
+      </button>
+      {error && <ErrorText>{error}</ErrorText>}
+    </span>
+  );
+}
+
+function DiscardPhaseControl({
+  circuitId,
+  phase,
+  rowCount,
+}: {
+  circuitId: string;
+  phase: StoredReadingDTO["phase"];
+  rowCount: number;
+}) {
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  function run() {
+    const reason = window.prompt(
+      `Clear all ${rowCount} day${rowCount === 1 ? "" : "s"} of ${PHASE_LABEL[phase].toLowerCase()} and start over — nothing will be kept. Why?`,
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Say why these readings are being cleared.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await discardStoredReadings(circuitId, phase, reason);
+      setError("error" in result ? result.error : undefined);
+    });
+  }
+
+  return (
+    <span className="shrink-0">
+      <button type="button" onClick={run} disabled={pending} className="btn-ghost text-xs" style={{ color: "var(--bad-fg)" }}>
+        Clear & start over
+      </button>
+      {error && <ErrorText>{error}</ErrorText>}
+    </span>
+  );
+}
+
 function rowStyle(r: StoredReadingDTO): React.CSSProperties {
   if (r.excluded) return { opacity: 0.55 };
   if (r.phase === "pre_install" && r.varianceBand) {
@@ -106,6 +176,7 @@ function rowStyle(r: StoredReadingDTO): React.CSSProperties {
 }
 
 export function StoredReadingsPanel({
+  circuitId,
   readings,
   canEdit,
   summaries,
@@ -114,6 +185,7 @@ export function StoredReadingsPanel({
   demoDayCount = 0,
   fromDemoReport = false,
 }: {
+  circuitId: string;
   readings: StoredReadingDTO[];
   canEdit: boolean;
   /** Every step on this circuit is done — nothing here needs looking at. */
@@ -193,44 +265,51 @@ export function StoredReadingsPanel({
         const excludedCount = rows.filter((r) => r.excluded).length;
         return (
           <Card key={phase} className="p-4 space-y-3">
-            <button
-              type="button"
-              className="w-full flex flex-wrap items-center gap-x-3 gap-y-1 text-left"
-              onClick={() =>
-                setOpenPhases((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(phase)) next.delete(phase);
-                  else next.add(phase);
-                  return next;
-                })
-              }
-            >
-              <span className="font-medium text-sm">{PHASE_LABEL[phase]}</span>
-              <span className="text-xs text-[var(--text-muted)]">
-                {rows.length} day{rows.length === 1 ? "" : "s"}
-                {excludedCount > 0 && ` · ${excludedCount} excluded`}
-              </span>
-              {summary?.averageKwh != null && (
-                <StatusChip tone="info">
-                  {/* Named, not just "avg": this is the average of the days
-                      LISTED HERE, which is not necessarily the figure in
-                      force. */}
-                  these days average {summary.averageKwh.toFixed(2)} kWh/day
-                </StatusChip>
-              )}
-              {summary?.savingsPct != null && summary.savingsBand && (
-                <span
-                  className="num text-xs font-semibold rounded-[var(--r-sm)] px-2 py-0.5"
-                  style={{
-                    backgroundColor: SAVINGS_BAND_META[summary.savingsBand].bg,
-                    color: SAVINGS_BAND_META[summary.savingsBand].accent,
-                  }}
-                >
-                  {summary.savingsPct.toFixed(1)}% savings · {SAVINGS_BAND_META[summary.savingsBand].label}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button
+                type="button"
+                className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-left min-w-0"
+                onClick={() =>
+                  setOpenPhases((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(phase)) next.delete(phase);
+                    else next.add(phase);
+                    return next;
+                  })
+                }
+              >
+                <span className="font-medium text-sm">{PHASE_LABEL[phase]}</span>
+                <span className="text-xs text-[var(--text-muted)]">
+                  {rows.length} day{rows.length === 1 ? "" : "s"}
+                  {excludedCount > 0 && ` · ${excludedCount} excluded`}
                 </span>
+                {summary?.averageKwh != null && (
+                  <StatusChip tone="info">
+                    {/* Named, not just "avg": this is the average of the days
+                        LISTED HERE, which is not necessarily the figure in
+                        force. */}
+                    these days average {summary.averageKwh.toFixed(2)} kWh/day
+                  </StatusChip>
+                )}
+                {summary?.savingsPct != null && summary.savingsBand && (
+                  <span
+                    className="num text-xs font-semibold rounded-[var(--r-sm)] px-2 py-0.5"
+                    style={{
+                      backgroundColor: SAVINGS_BAND_META[summary.savingsBand].bg,
+                      color: SAVINGS_BAND_META[summary.savingsBand].accent,
+                    }}
+                  >
+                    {summary.savingsPct.toFixed(1)}% savings · {SAVINGS_BAND_META[summary.savingsBand].label}
+                  </span>
+                )}
+                <span className="ml-auto text-xs text-[var(--text-muted)]">{open ? "Hide" : "Show"}</span>
+              </button>
+              {/* Sibling to the toggle button, never nested in it (a button
+                  in a button is invalid, and would fire the toggle too). */}
+              {canEdit && !fromDemoReport && (
+                <DiscardPhaseControl circuitId={circuitId} phase={phase} rowCount={rows.length} />
               )}
-              <span className="ml-auto text-xs text-[var(--text-muted)]">{open ? "Hide" : "Show"}</span>
-            </button>
+            </div>
 
             {/* The two figures are both correct and they are not the same
                 thing: the commissioned baseline froze when the lights were
@@ -320,7 +399,14 @@ export function StoredReadingsPanel({
                                 : "Counted"}
                         </td>
                         {canEdit && (
-                          <td>{!r.released && <ExclusionControl reading={r} editable={canEdit} />}</td>
+                          <td>
+                            {!r.released && (
+                              <span className="flex flex-wrap items-center gap-2">
+                                <ExclusionControl reading={r} editable={canEdit} />
+                                <DeleteControl reading={r} />
+                              </span>
+                            )}
+                          </td>
                         )}
                       </tr>
                     ))}

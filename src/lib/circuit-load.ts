@@ -502,6 +502,25 @@ export function circuitReadingWindow(args: {
   return { kind, from: w.from, to: w.to, empty: windowIsEmpty(w), demoExtended: args.demo };
 }
 
+/**
+ * The operator's own choice of which days in a file to actually consider —
+ * narrower than the phase-derived window, never wider than it (user-asked
+ * 2026-09-18: a vendor export can hold a year of history, and only a
+ * stretch of it should feed a given benchmark). Intersecting rather than
+ * replacing means CON-19's phase boundaries — before the meter, the
+ * replacement day, today — can never be reached around, only narrowed
+ * within.
+ */
+export function narrowToChosenRange(
+  window: { from: Date; to: Date },
+  chosenRange: { from: Date; to: Date } | null,
+): { from: Date; to: Date } {
+  if (!chosenRange) return window;
+  const from = window.from.getTime() > chosenRange.from.getTime() ? window.from : chosenRange.from;
+  const to = window.to.getTime() < chosenRange.to.getTime() ? window.to : chosenRange.to;
+  return { from, to };
+}
+
 /** Whole days the window spans, inclusive. 0 when the window is empty. */
 export function windowLengthDays(w: { from: Date; to: Date }): number {
   if (windowIsEmpty(w)) return 0;

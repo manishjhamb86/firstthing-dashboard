@@ -37,6 +37,7 @@ import {
   buildReviewRows,
   deriveUploadKind,
   circuitReadingWindow,
+  narrowToChosenRange,
   theoreticalDailyKwh,
   savingsPct,
   savingsBand,
@@ -59,6 +60,17 @@ function circuitPath(societyId: string, circuitId: string) {
 
 function iso(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+/** Person-typed date-only fields are read at UTC midnight (this repo's own rule). */
+function parseChosenRange(rangeFrom?: string, rangeTo?: string): { from: Date; to: Date } | { error: string } | null {
+  if (!rangeFrom && !rangeTo) return null;
+  if (!rangeFrom || !rangeTo) return { error: "Choose both a from and a to date, or leave both blank to use the full window." };
+  const from = new Date(`${rangeFrom}T00:00:00Z`);
+  const to = new Date(`${rangeTo}T00:00:00Z`);
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return { error: "That date range isn't valid." };
+  if (from.getTime() > to.getTime()) return { error: "The from date has to be on or before the to date." };
+  return { from, to };
 }
 
 // ── Permissions ──────────────────────────────────────────────────────────
@@ -187,7 +199,12 @@ type Derived = {
 
 type Circuit = NonNullable<Awaited<ReturnType<typeof loadCircuitForReadings>>>;
 
-function deriveReview(circuit: Circuit, fileText: string, demoWindow: boolean): Derived | { error: string } {
+function deriveReview(
+  circuit: Circuit,
+  fileText: string,
+  demoWindow: boolean,
+  chosenRange: { from: Date; to: Date } | null = null,
+): Derived | { error: string } {
   if (!circuit.meterInstalledAt) {
     return { error: "Install and validate the meter first — readings only mean something against a recorded install date." };
   }
@@ -229,7 +246,7 @@ function deriveReview(circuit: Circuit, fileText: string, demoWindow: boolean): 
     lastStoredDate,
     demo: demoWindow,
   })!;
-  const window = { from: resolved.from, to: resolved.to };
+  const window = narrowToChosenRange({ from: resolved.from, to: resolved.to }, chosenRange);
 
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
   const baselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
@@ -428,11 +445,16 @@ export async function previewCircuitReadings(
   rawFileId: string,
   fileText: string,
   chosenSheet?: string,
+  rangeFrom?: string,
+  rangeTo?: string,
 ): Promise<{ preview: CircuitPreviewDTO } | { chooseSheet: SheetChoice[] } | { error: string }> {
   const admin = await resolveAdmin();
   if (!admin || !(admin.permissions as string[]).includes("manage_survey")) {
     return { error: "Recording circuit readings is a field-survey action." };
   }
+
+  const chosenRange = parseChosenRange(rangeFrom, rangeTo);
+  if (chosenRange && "error" in chosenRange) return chosenRange;
 
   const file = await db.rawReadingFile.findUnique({ where: { id: rawFileId } });
   if (!file) return { error: "That upload is no longer in the queue." };
@@ -449,7 +471,12 @@ export async function previewCircuitReadings(
     return { error: source.error };
   }
 
-  const derived = deriveReview(circuit, source.text, await demoBypass("reading_window_end", { circuitId: circuit.id }));
+  const derived = deriveReview(
+    circuit,
+    source.text,
+    await demoBypass("reading_window_end", { circuitId: circuit.id }),
+    chosenRange,
+  );
   if ("error" in derived) {
     await db.rawReadingFile.update({
       where: { id: file.id },
@@ -509,7 +536,12 @@ export async function commitCircuitReadings(
   rawFileId: string,
   fileText: string,
   decisions: RowDecision[],
+  rangeFrom?: string,
+  rangeTo?: string,
 ): Promise<{ summary: CommitSummary } | { error: string }> {
+  const chosenRange = parseChosenRange(rangeFrom, rangeTo);
+  if (chosenRange && "error" in chosenRange) return chosenRange;
+
   const file = await db.rawReadingFile.findUnique({ where: { id: rawFileId } });
   if (!file) return { error: "That upload is no longer in the queue." };
   if (file.status === "committed") return { error: "This file has already been committed." };
@@ -529,7 +561,12 @@ export async function commitCircuitReadings(
   }
   if ("error" in source) return { error: source.error };
 
-  const derived = deriveReview(circuit, source.text, await demoBypass("reading_window_end", { circuitId: circuit.id }));
+  const derived = deriveReview(
+    circuit,
+    source.text,
+    await demoBypass("reading_window_end", { circuitId: circuit.id }),
+    chosenRange,
+  );
   if ("error" in derived) return { error: derived.error };
 
   const gate = await requireForKind(derived.kind);
@@ -825,6 +862,182 @@ export async function setReadingExclusion(
     reason: reason.trim() || null,
   });
   revalidatePath(circuitPath(reading.circuit.societyId, reading.circuit.id));
+  return { ok: true };
+}
+
+/**
+ * A genuine removal, not a soft exclude — for a row that should never have
+ * landed at all (the wrong day pulled in from too wide a CSV range, say),
+ * rather than a real day being disputed. Exclude keeps the evidence, struck
+ * through, because a report that silently omits a day invites the dispute
+ * it exists to settle; this is for the opposite case, where the row itself
+ * is noise nobody needs kept on record. Same freeze rule as exclusion
+ * (`exclusionRefusal`) — a day that can no longer be excluded can no
+ * longer be deleted either, and INV-03 makes a billed day untouchable
+ * regardless (user-asked 2026-09-18).
+ */
+export async function deleteStoredReading(readingId: string, reason: string): Promise<Outcome> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid." };
+  const perms = admin.permissions as string[];
+  if (!perms.includes("manage_survey")) {
+    return { error: "Removing a reading is a field-survey action." };
+  }
+  if (!reason.trim()) return { error: "Say why this day is being removed — the log will show it." };
+
+  const reading = await db.meterReading.findUnique({
+    where: { id: readingId },
+    include: {
+      circuit: {
+        select: {
+          id: true,
+          societyId: true,
+          meterInstalledAt: true,
+          lightReplacementDate: true,
+          benchmarkSavingsPct: true,
+          benchmarkOverridePct: true,
+          voidedAt: true,
+          demos: { where: { rejected: false }, select: { id: true }, take: 1 },
+        },
+      },
+    },
+  });
+  if (!reading || reading.circuit.voidedAt) return { error: "That reading no longer exists." };
+  if (reading.usedInCalculationId !== null) {
+    return { error: "Billed on a released calculation — it can't be removed (INV-03)." };
+  }
+
+  let phase: ReturnType<typeof classifyDay> | "monitoring" | null = reading.circuit.meterInstalledAt
+    ? classifyDay(reading.date, reading.circuit.meterInstalledAt, reading.circuit.lightReplacementDate)
+    : null;
+  // Same reclassification as setReadingExclusion — a benchmark resting on
+  // demos was never fed by these rows, so a monitoring day is never frozen
+  // by a rule protecting a computation it was never part of.
+  if (
+    phase === "post_install" &&
+    reading.circuit.benchmarkSavingsPct !== null &&
+    (reading.circuit.demos.length > 0 || reading.circuit.benchmarkOverridePct !== null)
+  ) {
+    phase = "monitoring";
+  }
+  if (phase === null || phase === "before_meter" || phase === "replacement_day") {
+    return { error: "That day does not belong to any of this circuit's phases." };
+  }
+
+  const refusal = exclusionRefusal({
+    phase,
+    replacementRecorded: reading.circuit.lightReplacementDate !== null,
+    benchmarkConfirmed: reading.circuit.benchmarkSavingsPct !== null,
+    billed: false, // already checked above, with the specific INV-03 message
+    isOps: perms.includes("manage_pipeline"),
+  });
+  if (refusal) {
+    logger.warn("circuit_ingest.delete_refused", { readingId, circuitId: reading.circuit.id, refusal });
+    return { error: refusal };
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.meterReading.delete({ where: { id: reading.id } });
+    await recomputeCircuitFigures(tx, reading.circuit.id);
+  });
+
+  logger.warn("circuit_ingest.reading_deleted", {
+    actorId: admin.id,
+    readingId,
+    circuitId: reading.circuit.id,
+    date: iso(reading.date),
+    reason: reason.trim(),
+  });
+  revalidatePath(circuitPath(reading.circuit.societyId, reading.circuit.id));
+  return { ok: true };
+}
+
+/**
+ * Clears every stored reading in one phase and re-derives whatever figure
+ * they fed, so the operator can start that phase's evidence over — the
+ * "wrong date range uploaded, wipe it and re-upload the sheet" case
+ * (user-asked 2026-09-18). Refuses outright if any of them is billed
+ * (INV-03), same as discardDemoReadings; unlike that action this is NOT
+ * demo-mode-only, since a real upload can go wrong too. The freeze rule
+ * (exclusionRefusal) does the rest of the gating — a phase whose figure is
+ * already frozen for the term can't be cleared any more than one of its
+ * days could be excluded, so recomputeCircuitFigures always finds the
+ * figure still unsettled once this is allowed to run at all.
+ */
+export async function discardStoredReadings(
+  circuitId: string,
+  phase: "pre_install" | "post_install" | "monitoring",
+  reason: string,
+): Promise<Outcome> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid." };
+  const perms = admin.permissions as string[];
+  if (!perms.includes("manage_survey")) {
+    return { error: "Removing circuit readings is a field-survey action." };
+  }
+  if (!reason.trim()) return { error: "Say why these readings are being cleared — the log will show it." };
+
+  const circuit = await db.circuit.findUnique({
+    where: { id: circuitId },
+    include: {
+      meterReadings: { where: { source: "csv" } },
+      demos: { where: { rejected: false }, select: { id: true } },
+    },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  if (!circuit.meterInstalledAt) return { error: "That circuit has no recorded install date." };
+
+  const benchmarkFromDemos = circuit.demos.length > 0 || circuit.benchmarkOverridePct !== null;
+  const matching = circuit.meterReadings.filter((r) => {
+    let p: string = classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate);
+    if (p === "post_install" && circuit.benchmarkSavingsPct !== null && benchmarkFromDemos) p = "monitoring";
+    return p === phase;
+  });
+  if (matching.length === 0) return { error: "This circuit holds no readings in that phase." };
+
+  const billed = matching.filter((r) => r.usedInCalculationId !== null);
+  if (billed.length > 0) {
+    return {
+      error: `${billed.length} of these days ${
+        billed.length === 1 ? "is" : "are"
+      } billed on a released calculation and cannot be removed (INV-03). Issue a correction there instead.`,
+    };
+  }
+
+  const refusal = exclusionRefusal({
+    phase,
+    replacementRecorded: circuit.lightReplacementDate !== null,
+    benchmarkConfirmed: circuit.benchmarkSavingsPct !== null,
+    billed: false,
+    isOps: perms.includes("manage_pipeline"),
+  });
+  if (refusal) {
+    logger.warn("circuit_ingest.discard_refused", { circuitId, phase, refusal });
+    return { error: refusal };
+  }
+
+  const rawFileIds = [...new Set(matching.map((r) => r.rawFileId).filter((id): id is string => id !== null))];
+
+  await db.$transaction(async (tx) => {
+    await tx.meterReading.deleteMany({ where: { id: { in: matching.map((r) => r.id) } } });
+    // A raw file is only removed once nothing else still points at it — the
+    // monitoring overlap day, for one, can share a file with a neighbouring
+    // phase's own upload.
+    for (const id of rawFileIds) {
+      const remaining = await tx.meterReading.count({ where: { rawFileId: id } });
+      if (remaining === 0) await tx.rawReadingFile.deleteMany({ where: { id } });
+    }
+    await recomputeCircuitFigures(tx, circuitId);
+  });
+
+  logger.warn("circuit_ingest.readings_discarded", {
+    actorId: admin.id,
+    circuitId,
+    phase,
+    days: matching.length,
+    reason: reason.trim(),
+  });
+  revalidatePath(circuitPath(circuit.societyId, circuitId));
   return { ok: true };
 }
 

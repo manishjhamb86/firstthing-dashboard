@@ -1263,6 +1263,7 @@ export default async function CircuitDetailPage({
       {circuit.meterInstalledAt && !usesLegacyFlow && (
         <section className="max-w-none mb-10 space-y-4">
           <StoredReadingsPanel
+            circuitId={circuit.id}
             readings={displayReadings}
             canEdit={canEdit}
             fromDemoReport={displayReadings === demoDays && demoDays.length > 0}

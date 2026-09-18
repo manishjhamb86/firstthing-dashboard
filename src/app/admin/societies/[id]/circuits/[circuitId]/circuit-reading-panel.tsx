@@ -187,6 +187,13 @@ export function CircuitReadingPanel({
   const [noAverage, setNoAverage] = useState<Set<string>>(new Set());
   const [summary, setSummary] = useState<CommitSummary | undefined>();
   const [showOutOfWindow, setShowOutOfWindow] = useState(false);
+  // The operator's own choice of which days in the file to actually consider
+  // — a CSV can hold a year of history and only a stretch of it should feed
+  // this benchmark (user-asked 2026-09-18). Defaults to the full step
+  // window and can only narrow within it, never reach outside it — the min/
+  // max on the inputs below enforce that, and the server re-checks it.
+  const [rangeFrom, setRangeFrom] = useState(windowInfo?.from ?? "");
+  const [rangeTo, setRangeTo] = useState(windowInfo?.to ?? "");
   // DEMO_MODE only: the pre-filled day values, held as strings so a field can
   // be cleared and retyped without the row jumping to 0.
   const [draft, setDraft] = useState<{ date: string; kWh: string }[] | undefined>();
@@ -298,7 +305,7 @@ export function CircuitReadingPanel({
     setError(undefined);
     setStage("working");
     startTransition(async () => {
-      const previewed = await previewCircuitReadings(rawFileId, "", name);
+      const previewed = await previewCircuitReadings(rawFileId, "", name, rangeFrom, rangeTo);
       if ("error" in previewed) {
         setError(previewed.error);
         setStage("sheet");
@@ -332,7 +339,7 @@ export function CircuitReadingPanel({
     setFileName(resumeFile.fileName);
     startTransition(async () => {
       try {
-        const previewed = await previewCircuitReadings(resumeFile.id, "");
+        const previewed = await previewCircuitReadings(resumeFile.id, "", undefined, rangeFrom, rangeTo);
         if ("error" in previewed) throw new Error(previewed.error);
         setRawFileId(resumeFile.id);
         setFileText(undefined);
@@ -382,7 +389,7 @@ export function CircuitReadingPanel({
           byteSize: file.size,
         });
         if ("error" in recorded) throw new Error(recorded.error);
-        const previewed = await previewCircuitReadings(recorded.rawFileId, text);
+        const previewed = await previewCircuitReadings(recorded.rawFileId, text, undefined, rangeFrom, rangeTo);
         if ("error" in previewed) throw new Error(previewed.error);
         setRawFileId(recorded.rawFileId);
         setFileText(text);
@@ -413,7 +420,7 @@ export function CircuitReadingPanel({
           ? { countInAverage: !noAverage.has(r.date) && !r.partial }
           : {}),
       }));
-      const result = await commitCircuitReadings(rawFileId, fileText ?? "", decisions);
+      const result = await commitCircuitReadings(rawFileId, fileText ?? "", decisions, rangeFrom, rangeTo);
       if ("error" in result) {
         setError(result.error);
       } else {
@@ -595,6 +602,58 @@ export function CircuitReadingPanel({
     return (
       <Card className="p-5 space-y-4">
         {windowInfo && <ValidPeriod window={windowInfo} />}
+
+        {windowInfo && !windowInfo.empty && (
+          <div className="rounded-[var(--r-sm)] border p-3 text-sm" style={{ borderColor: "var(--border)" }}>
+            <p className="lbl mb-1">Only use readings from</p>
+            <p className="mb-2 text-xs text-[var(--text-muted)]">
+              A vendor export can hold far more than this step needs — a year of history, several
+              circuits, whatever the meter has ever recorded. Narrow it to the days that should
+              actually count here; anything outside this range is still shown, just never saved.
+            </p>
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-[var(--text-muted)]">
+                <span className="block mb-1">From</span>
+                <input
+                  type="date"
+                  className="field field-auto num"
+                  value={rangeFrom}
+                  min={windowInfo.from}
+                  max={windowInfo.to}
+                  onChange={(e) => setRangeFrom(e.target.value)}
+                  disabled={pending}
+                  aria-label="Only use readings from this date"
+                />
+              </label>
+              <label className="text-xs text-[var(--text-muted)]">
+                <span className="block mb-1">To</span>
+                <input
+                  type="date"
+                  className="field field-auto num"
+                  value={rangeTo}
+                  min={rangeFrom || windowInfo.from}
+                  max={windowInfo.to}
+                  onChange={(e) => setRangeTo(e.target.value)}
+                  disabled={pending}
+                  aria-label="Only use readings up to this date"
+                />
+              </label>
+              {(rangeFrom !== windowInfo.from || rangeTo !== windowInfo.to) && (
+                <button
+                  type="button"
+                  className="btn-ghost btn-sm"
+                  onClick={() => {
+                    setRangeFrom(windowInfo.from);
+                    setRangeTo(windowInfo.to);
+                  }}
+                  disabled={pending}
+                >
+                  Use the full window
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* A file already in the queue comes first: the meter page filed it,
             and making the operator re-upload what the system already holds

@@ -954,6 +954,7 @@ export default async function CircuitDetailPage({
                       validCount={preInstallValidCount}
                       pendingAnomaly={preInstallPendingAnomaly}
                       canEdit={canEdit && circuit.preInstallBaseline == null}
+                      canClear={canEdit}
                       embedded
                     />
                   ) : (
@@ -975,6 +976,29 @@ export default async function CircuitDetailPage({
                 );
               } else if (step.status === "done" && circuit.preInstallBaseline == null) {
                 summary = "No stored baseline — the lifecycle advanced past this step";
+                // The rank-inferred "done" above can still leave real
+                // CommissioningReading rows sitting on the circuit — an
+                // abandoned or partial attempt, never completed — that were
+                // previously invisible here entirely (user-reported
+                // 2026-09-18: "nowhere I see premetering records"). Shown
+                // and, since nothing here is frozen (no baseline was ever
+                // set), clearable the same way the current step's window is.
+                if (circuit.preInstallWindowStartAt && preInstallReadings.length > 0) {
+                  body = (
+                    <MonitoringWindowPanel
+                      circuitId={circuit.id}
+                      windowType="pre_install"
+                      windowStartAt={circuit.preInstallWindowStartAt.toISOString()}
+                      title="Pre-install monitoring window"
+                      readings={preInstallReadings}
+                      validCount={preInstallValidCount}
+                      pendingAnomaly={preInstallPendingAnomaly}
+                      canEdit={false}
+                      canClear={canEdit}
+                      embedded
+                    />
+                  );
+                }
               } else if (step.status === "done" && circuit.preInstallBaseline != null) {
                 summary = usesLegacyFlow
                   ? `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day from 5 valid days`
@@ -1014,6 +1038,7 @@ export default async function CircuitDetailPage({
                         validCount={preInstallValidCount}
                         pendingAnomaly={preInstallPendingAnomaly}
                         canEdit={false}
+                        frozen
                         embedded
                       />
                     )}
@@ -1150,6 +1175,7 @@ export default async function CircuitDetailPage({
                           validCount={postInstallValidCount}
                           pendingAnomaly={postInstallPendingAnomaly}
                           canEdit={false}
+                          canClear={canOverride}
                           embedded
                         />
                       )}
@@ -1172,6 +1198,7 @@ export default async function CircuitDetailPage({
                           validCount={postInstallValidCount}
                           pendingAnomaly={postInstallPendingAnomaly}
                           canEdit={false}
+                          canClear={canOverride}
                           embedded
                         />
                       )}
@@ -1193,6 +1220,7 @@ export default async function CircuitDetailPage({
                       validCount={postInstallValidCount}
                       pendingAnomaly={postInstallPendingAnomaly}
                       canEdit={canEdit}
+                      canClear={canOverride}
                       embedded
                     />
                   ) : (
@@ -1238,6 +1266,7 @@ export default async function CircuitDetailPage({
                       validCount={postInstallValidCount}
                       pendingAnomaly={postInstallPendingAnomaly}
                       canEdit={false}
+                      frozen
                       embedded
                     />
                   );

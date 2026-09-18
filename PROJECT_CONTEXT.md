@@ -6369,6 +6369,74 @@ database afterward holds exactly those 5 dates and no others; Delete on a stored
 one row; Clear & start over on the phase empties it completely and the baseline re-derives to `null`.
 `tsc`/`lint`/`pnpm test` (930)/`pnpm build` all clean.
 
+## The legacy commissioning-window flow gets the same delete/clear control (2026-09-18) — user-caught, follow-on to the CSV-flow work above
+
+**Reported against a real stuck circuit**: "After clearing its still on the same window" — the
+CSV-flow discard I'd just built had no effect, because this circuit is on the OLDER
+`CommissioningReading` flow (`usesLegacyFlow`, per-day manual entries, no CSV upload), which my new
+work never touched at all. Then, in quick succession: "it should ask for new upload"; "also no
+where i see premetering records. that should also be editable"; and, against a screenshot of a
+"Pre-install baseline window ✓ No stored baseline — the lifecycle advanced past this step" line
+with nothing else on it: "This also should show the readings. and the option to remove and restart
+or re upload the readings for same period as previos."
+
+**Two new actions in `monitoring-actions.ts`, mirroring the CSV flow's shape but for
+`CommissioningReading`**: `deleteCommissioningReading()` (a single day, before its window has
+completed — once complete the figure is frozen the same way `exclusionRefusal` freezes the CSV
+flow's stored days, so the correction path becomes clearing the whole window, not one row) and
+`clearCommissioningWindow(circuitId, windowType, mode, reason)`, where `mode` is the two doors the
+user asked for: **`same_period`** clears every reading but leaves `windowStartAt` untouched, so the
+same dates can be re-entered or re-uploaded (the straightforward "bad readings, do it again" case);
+**`restart`** moves the window forward exactly as the existing `fixCommissioningAnomaly`'s restart
+already does. Either way, a circuit stuck at `benchmark_review` moves back to
+`post_install_monitoring` and any OPEN `DemoResultReview` is resolved — its own escalation was
+raised against a measurement that, after this, no longer exists, and leaving it open is exactly
+what "still on the same window" was reporting: the stale "attempt N" form kept rendering because
+nothing had told the review it was moot. Resolved, never deleted (ADR-005).
+
+**A real bug found by the browser check itself, not by reading the diff**: the first cut set
+`state: "pre_install_monitoring"` unconditionally whenever the pre-install window was cleared. On
+the exact reported shape — a circuit already at `benchmark_review` because of its POST-install
+window, carrying two long-abandoned PRE-install rows that never produced a baseline — clearing
+those two stray rows rolled the circuit's state all the way back to `pre_install_monitoring`,
+discarding everything downstream (the replacement date, the post-install window, the escalation)
+that was still perfectly real. Fixed to match `recomputeCircuitFigures`'s own discipline: the state
+transition only fires when it is a genuine forward move (`circuit.state === "meter_installed"`);
+otherwise clearing a pre-install window leaves `state` exactly as it was. A second script
+(`pre-clear-noregress.mjs`) reproduced the exact shape and confirmed the fix: clearing the two
+stray pre-install rows on a `benchmark_review` circuit now leaves it at `benchmark_review`, and the
+open review untouched.
+
+**The "premetering records" gap was a real display hole, not a data hole.** The pre-install step's
+`step.status === "done" && circuit.preInstallBaseline == null` branch (the rank-inferred-done case,
+when the lifecycle has moved on without ever settling a baseline) set only a summary line and
+rendered no `body` at all — so an abandoned attempt's rows sat in the database, invisible on the
+page, however many there were. Now renders `MonitoringWindowPanel` there too whenever
+`preInstallReadings.length > 0`, matching the sibling "done, baseline set" branch just below it
+which already did this.
+
+**`MonitoringWindowPanel` gained two new props**, `canClear` and `frozen`, deliberately independent
+of `canEdit` — the escalation view renders this panel `canEdit={false}` (day-by-day recording has
+to go through the review's own resolution form, not be bypassed), but still needed a way out
+without filling that form. `frozen` (the window's baseline/benchmark is already set) suppresses
+both the per-row Delete column and the two Clear buttons entirely — "don't offer what can only
+refuse," the same rule `ExclusionControl` already follows in the CSV flow. Wired at all seven call
+sites in `page.tsx`: pre-install current/done-no-baseline get `canClear={canEdit}`, done-with-
+baseline gets `frozen`; post-install current/escalation/`benchmark_review` get
+`canClear={canOverride}` (the PER-01 proxy, matching `resolveDemoResultReview`'s own gate), done-
+confirmed gets `frozen`.
+
+**Verified end to end in a browser against the real DB, two scripts, 16/16, zero console/page
+errors**: a fixture circuit at `benchmark_review` (occurrence 4, matching the reported screenshot)
+with 2 abandoned pre-install rows and 5 out-of-band post-install rows — the pre-install readings
+render where they were previously invisible; both Clear buttons render on both windows (4 total);
+clearing the post-install window via "same period" empties it, keeps `postInstallWindowStartAt`
+unchanged, resolves the stale review, and the page then renders a genuinely fresh "Record day" form
+in place of the escalation — confirming "it should ask for new upload." The second script isolated
+the no-regression fix: clearing only the pre-install rows on the same stuck circuit leaves `state`
+at `benchmark_review` and the open review untouched. `tsc`/`lint`/`pnpm test` (930)/`pnpm build` all
+clean. No schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

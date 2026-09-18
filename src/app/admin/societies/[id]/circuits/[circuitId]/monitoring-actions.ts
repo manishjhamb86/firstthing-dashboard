@@ -456,3 +456,168 @@ export async function fixCommissioningAnomaly(circuitId: string, windowType: Com
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   return {};
 }
+
+// ── Deleting and clearing (the legacy window's own "delete unwanted days,
+// clear and re-upload" — user-asked 2026-09-18, mirroring what the CON-45
+// CSV-review flow already has in reading-actions.ts) ──────────────────────
+
+/**
+ * A single stored day removed outright — for a mis-entered reading, before
+ * the window has completed (baselineAlready). Once a window is complete
+ * its figure is frozen for the same reason exclusionRefusal freezes the
+ * CSV flow's stored days: an input can't change once its output is in
+ * force. Clear the whole window instead, which is the correction path
+ * once that's true.
+ */
+export async function deleteCommissioningReading(readingId: string, reason: string): Promise<{ error?: string }> {
+  const gate = await resolveAdmin();
+  if (!gate) return { error: "Your session is no longer valid. Sign in again." };
+  if (!gate.permissions.includes("manage_survey")) {
+    logger.warn("commissioning.delete_refused", { actorId: gate.id, readingId, gate: "manage_survey" });
+    return { error: "Removing a reading is a field-survey action." };
+  }
+  if (!reason.trim()) return { error: "Say why this day is being removed." };
+
+  const reading = await db.commissioningReading.findUnique({
+    where: { id: readingId },
+    include: { circuit: { select: { id: true, societyId: true, voidedAt: true, preInstallBaseline: true, benchmarkSavingsPct: true } } },
+  });
+  if (!reading || reading.circuit.voidedAt) return { error: "That reading no longer exists." };
+
+  const frozen =
+    reading.windowType === "pre_install"
+      ? reading.circuit.preInstallBaseline !== null
+      : reading.circuit.benchmarkSavingsPct !== null;
+  if (frozen) {
+    return { error: "This window has already completed — clear the whole window to correct it, not one day." };
+  }
+  if (reading.windowType === "post_install" && !gate.permissions.includes("manage_pipeline")) {
+    logger.warn("commissioning.delete_refused", { actorId: gate.id, readingId, gate: "per01" });
+    return { error: "Removing a post-install reading is an operations lead action." };
+  }
+
+  await db.commissioningReading.delete({ where: { id: readingId } });
+
+  logger.warn("commissioning.reading_deleted", {
+    actorId: gate.id,
+    readingId,
+    circuitId: reading.circuitId,
+    windowType: reading.windowType,
+    date: reading.date.toISOString().slice(0, 10),
+    reason: reason.trim(),
+  });
+  revalidatePath(`/admin/societies/${reading.circuit.societyId}/circuits/${reading.circuitId}`);
+  return {};
+}
+
+export type ClearWindowMode = "same_period" | "restart";
+
+/**
+ * Clears every stored reading in one commissioning window and lets the
+ * operator start over — "remove and restart," or "re-upload for the same
+ * period as before" for a straightforward data-entry correction
+ * (user-asked 2026-09-18). "same_period" leaves windowStartAt untouched so
+ * the same dates can be re-entered; "restart" moves it forward exactly as
+ * fixCommissioningAnomaly's restart does.
+ *
+ * A circuit stuck in benchmark_review is returned to post_install_monitoring
+ * either way, and any OPEN FEAT-015 review is resolved — its own escalation
+ * was raised against a measurement that no longer exists, so leaving it open
+ * would keep showing a stale "attempt N" form over a window that has, in
+ * fact, been cleared (the reported bug: clearing readings left the review
+ * and the state exactly as they were, so the same escalation kept
+ * rendering). Resolved, never deleted, same "the record stays, the figure
+ * doesn't" rule as everywhere else in this schema (ADR-005).
+ */
+export async function clearCommissioningWindow(
+  circuitId: string,
+  windowType: CommissioningWindowType,
+  mode: ClearWindowMode,
+  reason: string,
+): Promise<{ error?: string }> {
+  const gate = await resolveAdmin();
+  if (!gate) return { error: "Your session is no longer valid. Sign in again." };
+  if (!gate.permissions.includes("manage_survey")) {
+    logger.warn("commissioning.clear_refused", { actorId: gate.id, circuitId, windowType, gate: "manage_survey" });
+    return { error: "Clearing commissioning readings is a field-survey action." };
+  }
+  const isOps = gate.permissions.includes("manage_pipeline");
+  // Post-install carries FEAT-015's stakes — the same PER-01 proxy
+  // resolveDemoResultReview already requires to act on a review.
+  if (windowType === "post_install" && !isOps) {
+    logger.warn("commissioning.clear_refused", { actorId: gate.id, circuitId, windowType, gate: "per01" });
+    return { error: "Clearing the post-install window is an operations lead action." };
+  }
+  if (!reason.trim()) return { error: "Say why these readings are being cleared." };
+
+  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+
+  const frozen =
+    windowType === "pre_install" ? circuit.preInstallBaseline !== null : circuit.benchmarkSavingsPct !== null;
+  if (frozen) {
+    return {
+      error:
+        windowType === "pre_install"
+          ? "The pre-install baseline is already set — clearing it would restate the figure the savings are measured against. Record a light-count change instead if the fixtures themselves changed."
+          : "The benchmark is already confirmed and fixed for the term — it can't be cleared.",
+    };
+  }
+
+  const rows = await db.commissioningReading.findMany({ where: { circuitId, windowType }, select: { id: true } });
+  if (rows.length === 0) return { error: "This circuit holds no readings in that window." };
+
+  const windowStartAt =
+    windowType === "pre_install" ? circuit.preInstallWindowStartAt : circuit.postInstallWindowStartAt;
+  const newStart = mode === "restart" ? await restartWindow(circuitId, windowType) : windowStartAt;
+
+  await db.$transaction(async (tx) => {
+    await tx.commissioningReading.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+    await tx.circuit.update({
+      where: { id: circuitId },
+      data:
+        windowType === "pre_install"
+          ? {
+              preInstallBaseline: null,
+              preInstallWindowStartAt: newStart,
+              // Only a genuine forward move (recomputeCircuitFigures's own
+              // discipline) — a pre-install window can sit abandoned on a
+              // circuit that has long since moved on (replacement recorded,
+              // post-install underway or even stuck in benchmark_review),
+              // and clearing that old attempt must not roll the circuit's
+              // real progress backward. Found exactly this way: clearing 2
+              // leftover pre-install rows on a circuit stuck at
+              // benchmark_review reset it to pre_install_monitoring,
+              // discarding everything downstream that was still real.
+              ...(circuit.state === "meter_installed" ? { state: "pre_install_monitoring" as const } : {}),
+            }
+          : { postInstallBaseline: null, postInstallWindowStartAt: newStart, state: "post_install_monitoring" },
+    });
+    if (windowType === "post_install") {
+      await tx.demoResultReview.updateMany({
+        where: { circuitId, state: "open" },
+        data: {
+          state: "resolved",
+          resolution: "rerun_window",
+          resolutionNote: `Readings cleared and the window ${
+            mode === "restart" ? "restarted" : "reopened for the same period"
+          } — ${reason.trim()}`,
+          resolvedById: gate.id,
+          resolvedAt: new Date(),
+        },
+      });
+    }
+  });
+
+  logger.warn("commissioning.window_cleared", {
+    actorId: gate.id,
+    circuitId,
+    windowType,
+    mode,
+    days: rows.length,
+    reason: reason.trim(),
+  });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  revalidatePath("/admin/demo-monitoring");
+  return {};
+}

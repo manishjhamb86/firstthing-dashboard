@@ -5,6 +5,8 @@ import {
   recordCommissioningReading,
   fixCommissioningAnomaly,
   escalateOutOfBandResult,
+  deleteCommissioningReading,
+  clearCommissioningWindow,
 } from "./monitoring-actions";
 import { CsvUploadForm } from "./csv-upload-form";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
@@ -23,6 +25,92 @@ function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function DeleteReadingButton({ readingId, date }: { readingId: string; date: string }) {
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  function run() {
+    const reason = window.prompt(`Remove ${date} entirely. Why?`);
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Say why this day is being removed.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await deleteCommissioningReading(readingId, reason);
+      setError(result?.error);
+    });
+  }
+
+  return (
+    <span>
+      <button type="button" onClick={run} disabled={pending} className="btn-ghost text-xs" style={{ color: "var(--bad-fg)" }}>
+        Delete
+      </button>
+      {error && <ErrorText>{error}</ErrorText>}
+    </span>
+  );
+}
+
+// The two doors out of a stuck window — a straightforward mis-upload gets
+// re-entered for the SAME days, a genuinely wrong period gets a fresh
+// window starting from tomorrow. Rendered whenever canClear is true, which
+// is deliberately independent of canEdit: the escalation view shows this
+// panel read-only (no day-by-day recording — that goes through the
+// review's own form), but a way to just clear and start over has to exist
+// without filling that form (user-asked 2026-09-18).
+function ClearWindowControls({
+  circuitId,
+  windowType,
+}: {
+  circuitId: string;
+  windowType: "pre_install" | "post_install";
+}) {
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  function run(mode: "same_period" | "restart") {
+    const reason = window.prompt(
+      mode === "same_period"
+        ? "Clear every reading in this window and re-upload for the SAME period. Why?"
+        : "Clear every reading in this window and restart it fresh from tomorrow. Why?",
+    );
+    if (reason === null) return;
+    if (!reason.trim()) {
+      setError("Say why these readings are being cleared.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await clearCommissioningWindow(circuitId, windowType, mode, reason);
+      setError(result?.error);
+    });
+  }
+
+  return (
+    <div className="mb-4 space-y-1.5">
+      <p className="text-xs text-[var(--text-muted)]">
+        Wrong data, wrong days, or a window that needs to start over — clear every reading and pick
+        which.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => run("same_period")} disabled={pending} className="btn-ghost text-xs">
+          Clear & re-upload the same period
+        </button>
+        <button
+          type="button"
+          onClick={() => run("restart")}
+          disabled={pending}
+          className="btn-ghost text-xs"
+          style={{ color: "var(--bad-fg)" }}
+        >
+          Clear & restart fresh
+        </button>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </div>
+  );
+}
+
 export function MonitoringWindowPanel({
   circuitId,
   windowType,
@@ -33,6 +121,8 @@ export function MonitoringWindowPanel({
   canEdit,
   windowStartAt,
   embedded = false,
+  canClear = false,
+  frozen = false,
 }: {
   circuitId: string;
   windowType: "pre_install" | "post_install";
@@ -49,6 +139,20 @@ export function MonitoringWindowPanel({
   /** Inside a StepSection the step header already names the window, so the
    *  panel drops its own heading and section wrapper. */
   embedded?: boolean;
+  /**
+   * Whether "delete this day" / "clear & restart or re-upload" render at
+   * all — independent of `canEdit`, since the escalation view renders this
+   * panel read-only (canEdit=false, no day-by-day recording — that has to
+   * go through the review's own resolution form) but still needs a way out
+   * without filling that form (user-asked 2026-09-18).
+   */
+  canClear?: boolean;
+  /**
+   * The window's own figure (baseline / benchmark) is already set for this
+   * circuit — clearing would restate it, so neither control renders at all
+   * rather than rendering something that can only refuse.
+   */
+  frozen?: boolean;
 }) {
   const defaultDate = () => {
     const today = todayISO();
@@ -139,6 +243,7 @@ export function MonitoringWindowPanel({
               <tr>
                 <th>Date</th>
                 <th>Reading</th>
+                {canEdit && !frozen && <th />}
               </tr>
             </thead>
             <tbody>
@@ -163,6 +268,11 @@ export function MonitoringWindowPanel({
                       </span>
                     )}
                   </td>
+                  {canEdit && !frozen && (
+                    <td>
+                      <DeleteReadingButton readingId={r.id} date={r.date.slice(0, 10)} />
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -172,6 +282,10 @@ export function MonitoringWindowPanel({
 
       {!canEdit && !complete && (
         <p className="text-sm text-[var(--text-muted)]">Only PER-04/PER-01 can record days on this window.</p>
+      )}
+
+      {canClear && !frozen && readings.length > 0 && (
+        <ClearWindowControls circuitId={circuitId} windowType={windowType} />
       )}
 
       {canEdit && pendingAnomaly && (

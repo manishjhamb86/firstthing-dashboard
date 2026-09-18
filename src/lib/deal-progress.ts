@@ -107,7 +107,7 @@ export type DealFacts = {
   candidates: CandidateFacts[];
   /** Latest report version, if any. */
   reportStatus: "draft" | "shared" | null;
-  kyc: { total: number; resolved: number };
+  kyc: { total: number; resolved: number; started: boolean };
   /** Latest offer version, if any. */
   offerStatus: string | null;
   contractStatus: string | null;
@@ -254,8 +254,13 @@ export function dealProgress(f: DealFacts): DealProgress {
   // point the user to the share step and the customer again gets confused").
   const reportGenerated = f.demoSkipped || f.reportStatus !== null;
   const reportShared = f.demoSkipped || f.reportStatus === "shared";
-  const kycStarted = f.kyc.total > 0;
-  const kycDone = kycStarted && f.kyc.resolved >= f.kyc.total;
+  const kycStarted = f.kyc.started;
+  // total is always the full fixed checklist (kyc-society.ts's kycCounts) —
+  // never gated on kycStarted, so an untouched requirement can't silently
+  // drop out of the count the moment a sibling gets touched. The `total > 0`
+  // guard is only for the degenerate "no requirements at all" case (a
+  // checklist of zero items isn't "satisfied", it's not applicable).
+  const kycDone = f.kyc.total > 0 && f.kyc.resolved >= f.kyc.total;
   const offerDone = f.offerStatus === "accepted";
   const contractDone = f.contractStatus === "active" || f.contractStatus === "amended";
   const installDone = f.certificateSigned || f.stage === "active_billing";

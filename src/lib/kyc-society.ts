@@ -87,17 +87,36 @@ export function kycStateSettles(state: KycState): boolean {
 
 const NO_FACTS: KycFacts = { gstNumber: null, electricityUnitRate: null };
 
-/** The counts the deal spine and GATE-01 read: how many types have anything recorded, and how many of those are settled. */
+/**
+ * The counts the deal spine and GATE-01 read. `total` is always the FULL
+ * fixed checklist (`KYC_REQUIREMENTS.length`), never just the types that
+ * happen to have something recorded — a requirement with literally nothing
+ * against it (no file, no fact, no waiver) still has to count, or it
+ * silently drops out of "resolved >= total" the moment a SIBLING type gets
+ * touched, and the gate reads as settled while that type has had nothing
+ * done to it.
+ *
+ * Found 2026-09-18 (user-reported): recording only the GST number made the
+ * deal spine and the agreement page both show KYC as done and offer
+ * "Execute the agreement", while `prepareAgreement`'s own refusal — driven
+ * by `kycMissing`, which has never had this shortcut — correctly still
+ * named the untouched electricity bill as outstanding. Two functions
+ * answering "is KYC done?" differently is exactly the class of bug this
+ * codebase has hit and fixed repeatedly elsewhere (the deal-progress map,
+ * the FEAT-020 report gate); `kycDone` must always agree with
+ * `kycMissing().length === 0`.
+ */
 export function kycCounts(best: Map<KycDocumentType, BestKyc<KycRow>>, facts: KycFacts = NO_FACTS): { total: number; resolved: number } {
-  let total = 0;
   let resolved = 0;
   for (const req of KYC_REQUIREMENTS) {
-    const state = kycStateOf(req.type, best, facts);
-    if (state === "outstanding" && !best.get(req.type)) continue;
-    total += 1;
-    if (kycStateSettles(state)) resolved += 1;
+    if (kycStateSettles(kycStateOf(req.type, best, facts))) resolved += 1;
   }
-  return { total, resolved };
+  return { total: KYC_REQUIREMENTS.length, resolved };
+}
+
+/** Whether ANYTHING has been recorded against any requirement yet — a file, a fact, a waiver. Purely for phrasing ("not started yet" vs "N of M resolved"); the gate itself (kycCounts) always counts the full fixed checklist regardless. */
+export function kycStarted(best: Map<KycDocumentType, BestKyc<KycRow>>, facts: KycFacts = NO_FACTS): boolean {
+  return KYC_REQUIREMENTS.some((req) => best.has(req.type) || kycFactFor(req.type, facts));
 }
 
 /** The document types still genuinely outstanding for the society, in checklist order. */

@@ -114,14 +114,16 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
         {items.map((item) => {
           const record = item.record;
           const status = statusMeta(KYC_REQUIREMENT_STATUS, item.state);
-          return (
-            <Card key={item.type} className="p-5">
-              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-1">
-                <CardTitle>{item.label}</CardTitle>
-                <StatusChip tone={status.tone}>{status.label}</StatusChip>
-              </div>
-              <p className="text-sm text-[var(--text-muted)] mb-4">{item.hint}</p>
-
+          // Settled items (verified, not applicable, or a recorded fact) fold
+          // to just the status chip — user-reported 2026-09-18: both cards
+          // stayed fully expanded (upload dropzone, follow-up field, every
+          // form) even once "Recorded — document pending" already settled
+          // GATE-01, which buried the one line that mattered under controls
+          // for chasing something no longer being chased. Same closed-by-
+          // default / one-toggle-away convention as StepSection's done rows.
+          const settled = kycStateSettles(item.state);
+          const body = (
+            <>
               {item.onFileFrom && (
                 <p
                   className="mb-4 rounded-[var(--r-md)] border p-3 text-sm"
@@ -231,6 +233,27 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
                   status={record?.status ?? "outstanding"}
                   files={record?.files.map((f) => ({ id: f.id, fileName: f.fileName, state: f.state })) ?? []}
                 />
+              )}
+            </>
+          );
+          return (
+            <Card key={item.type} className="p-5">
+              <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-1">
+                <CardTitle>{item.label}</CardTitle>
+                <StatusChip tone={status.tone}>{status.label}</StatusChip>
+              </div>
+              <p className="text-sm text-[var(--text-muted)] mb-4">{item.hint}</p>
+
+              {settled ? (
+                <details className="group">
+                  <summary className="flex cursor-pointer select-none list-none items-center gap-1.5 text-sm font-medium text-[var(--accent)] [&::-webkit-details-marker]:hidden">
+                    <span className="group-open:hidden">View the record</span>
+                    <span className="hidden group-open:inline">Hide the record</span>
+                  </summary>
+                  <div className="mt-4">{body}</div>
+                </details>
+              ) : (
+                body
               )}
             </Card>
           );

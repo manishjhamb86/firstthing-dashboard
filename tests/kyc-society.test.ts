@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bestKycAcross, kycCounts, kycDocumentsWanted, kycMissing, kycStateOf, type KycRow } from "@/lib/kyc-society";
+import { bestKycAcross, kycCounts, kycDocumentsWanted, kycMissing, kycStarted, kycStateOf, type KycRow } from "@/lib/kyc-society";
 
 const d = (s: string) => new Date(s);
 const row = (pipelineId: string, type: KycRow["type"], status: KycRow["status"], at = "2026-09-01"): KycRow => ({
@@ -28,7 +28,13 @@ describe("bestKycAcross — a society's KYC is one set of documents across its d
       "deal-2",
     );
     expect(best.get("gst_certificate")?.record.pipelineId).toBe("deal-3");
-    expect(kycCounts(best)).toEqual({ total: 1, resolved: 1 });
+    // gst_certificate is settled but electricity_bill is genuinely untouched
+    // (no row anywhere) — the total must still count it, or kycCounts and
+    // kycMissing disagree about whether KYC is done (the bug reported
+    // 2026-09-18: settling GST alone made the deal spine read KYC as
+    // complete while the agreement action still refused, correctly, on the
+    // untouched electricity bill).
+    expect(kycCounts(best)).toEqual({ total: 2, resolved: 1 });
     expect(kycMissing(best)).toEqual(["electricity_bill"]);
   });
 
@@ -43,11 +49,22 @@ describe("bestKycAcross — a society's KYC is one set of documents across its d
   it("a received-but-unverified sibling does not settle the gate", () => {
     const best = bestKycAcross([row("deal-1", "gst_certificate", "received")], "deal-2");
     expect(kycMissing(best)).toEqual(["gst_certificate", "electricity_bill"]);
-    expect(kycCounts(best)).toEqual({ total: 1, resolved: 0 });
+    expect(kycCounts(best)).toEqual({ total: 2, resolved: 0 });
   });
 
-  it("nothing anywhere → nothing started", () => {
-    expect(kycCounts(bestKycAcross([], "deal-1"))).toEqual({ total: 0, resolved: 0 });
+  it("nothing anywhere → nothing started, total is still the full checklist", () => {
+    expect(kycCounts(bestKycAcross([], "deal-1"))).toEqual({ total: 2, resolved: 0 });
+    expect(kycStarted(bestKycAcross([], "deal-1"), { gstNumber: null, electricityUnitRate: null })).toBe(false);
+  });
+
+  it("kycCounts and kycMissing must always agree on whether KYC is done", () => {
+    // One type settled, the other genuinely untouched — this is exactly the
+    // shape that broke: resolving GST alone must not make the count read as
+    // fully done while kycMissing still names the electricity bill.
+    const best = bestKycAcross([row("deal-1", "gst_certificate", "verified")], "deal-1");
+    const { total, resolved } = kycCounts(best);
+    expect(resolved >= total).toBe(kycMissing(best).length === 0);
+    expect(resolved >= total).toBe(false);
   });
 });
 
@@ -75,6 +92,6 @@ describe("KYC facts — the number settles the gate, the document stays wanted",
   it("with no facts, the old rules hold unchanged", () => {
     const best = bestKycAcross([row("deal-1", "gst_certificate", "received")], "deal-1");
     expect(kycMissing(best)).toEqual(["gst_certificate", "electricity_bill"]);
-    expect(kycCounts(best)).toEqual({ total: 1, resolved: 0 });
+    expect(kycCounts(best)).toEqual({ total: 2, resolved: 0 });
   });
 });

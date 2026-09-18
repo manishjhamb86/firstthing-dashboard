@@ -10,7 +10,7 @@
 import type { Prisma } from "@prisma/client";
 import { db } from "./db";
 import { dealProgress, type DealProgress } from "./deal-progress";
-import { bestKycAcross, kycCounts } from "./kyc-society";
+import { bestKycAcross, kycCounts, kycStarted } from "./kyc-society";
 
 export const DEAL_PROGRESS_INCLUDE = {
   // team as well: the deal page names which team is holding the survey.
@@ -55,10 +55,11 @@ export function toDealProgress(
       replacementScheduled: c.replacementOwnerId != null && (c.scheduledEvents?.length ?? 0) > 0,
     })),
     reportStatus: pipeline.demoReports[0]?.status ?? null,
-    kyc: kycCounts(bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id), {
-      gstNumber: pipeline.society.gstNumber,
-      electricityUnitRate: pipeline.society.electricityUnitRate,
-    }),
+    kyc: (() => {
+      const best = bestKycAcross(pipeline.society.pipelines.flatMap((p) => p.kycRequirements), pipeline.id);
+      const facts = { gstNumber: pipeline.society.gstNumber, electricityUnitRate: pipeline.society.electricityUnitRate };
+      return { ...kycCounts(best, facts), started: kycStarted(best, facts) };
+    })(),
     offerStatus: pipeline.offers[0]?.status ?? null,
     contractStatus: pipeline.contract?.status ?? null,
     installationState: pipeline.installationProject?.state ?? null,

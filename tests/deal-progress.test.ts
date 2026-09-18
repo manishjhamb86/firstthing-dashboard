@@ -19,7 +19,7 @@ const freshLead: DealFacts = {
   areaCount: 0,
   candidates: [],
   reportStatus: null,
-  kyc: { total: 0, resolved: 0 },
+  kyc: { total: 0, resolved: 0, started: false },
   offerStatus: null,
   contractStatus: null,
   installationState: null,
@@ -178,7 +178,7 @@ describe("report → offer → agreement → installation → billing", () => {
       ...benchmarked,
       reportStatus: "shared",
       offerStatus: "accepted",
-      kyc: { total: 3, resolved: 1 },
+      kyc: { total: 3, resolved: 1, started: true },
     });
     expect(steps.find((s) => s.key === "agreement")?.status).toBe("current");
     expect(next?.label).toBe("Complete KYC first");
@@ -190,7 +190,7 @@ describe("report → offer → agreement → installation → billing", () => {
       ...benchmarked,
       reportStatus: "shared",
       offerStatus: "accepted",
-      kyc: { total: 3, resolved: 3 },
+      kyc: { total: 3, resolved: 3, started: true },
     });
     expect(next?.label).toBe("Execute the agreement");
   });
@@ -200,7 +200,7 @@ describe("report → offer → agreement → installation → billing", () => {
       ...benchmarked,
       reportStatus: "shared",
       offerStatus: "accepted",
-      kyc: { total: 3, resolved: 3 },
+      kyc: { total: 3, resolved: 3, started: true },
       contractStatus: "active",
     });
     expect(next?.label).toBe("Set up the installation project");
@@ -212,7 +212,7 @@ describe("report → offer → agreement → installation → billing", () => {
       stage: "active_billing",
       reportStatus: "shared",
       offerStatus: "accepted",
-      kyc: { total: 3, resolved: 3 },
+      kyc: { total: 3, resolved: 3, started: true },
       contractStatus: "active",
       installationState: "complete",
       certificateSigned: true,
@@ -227,7 +227,7 @@ describe("the KYC parallel track", () => {
     expect(byKey(freshLead).kyc.status).toBe("locked");
     const moving = { ...freshLead, stage: "survey_pending", surveyExists: true, surveyOwnerName: "Neha Kapoor" };
     expect(byKey(moving).kyc.status).toBe("parallel");
-    expect(byKey({ ...moving, kyc: { total: 3, resolved: 3 } }).kyc.status).toBe("done");
+    expect(byKey({ ...moving, kyc: { total: 3, resolved: 3, started: true } }).kyc.status).toBe("done");
   });
 
   it("zero requirements is 'not started', never 'done'", () => {
@@ -429,7 +429,7 @@ describe("a locked step names what it is waiting on", () => {
   it("skips the parallel KYC track — it never blocks a spine step", () => {
     // KYC runs alongside; treating it as a sequential blocker would tell the
     // operator the offer is held up by a document, which is not the rule.
-    const withKyc: DealFacts = { ...freshLead, kyc: { total: 2, resolved: 0 } };
+    const withKyc: DealFacts = { ...freshLead, kyc: { total: 2, resolved: 0, started: false } };
     const steps = byKey(withKyc);
     // Before the lead is approved KYC reads "locked" like anything else —
     // which is exactly why the skip is keyed on the track, not the status.
@@ -820,7 +820,7 @@ describe("a deal whose every candidate was ruled out", () => {
     areaCount: 3,
     candidates: [{ id: "c1", state: "ineligible", location: null, lightType: "TubeLight" }],
     reportStatus: null,
-    kyc: { total: 2, resolved: 0 },
+    kyc: { total: 2, resolved: 0, started: false },
     offerStatus: null,
     contractStatus: null,
     installationState: null,

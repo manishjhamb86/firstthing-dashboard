@@ -271,10 +271,10 @@ describe("buildReviewRows — dispositions", () => {
         { date: d("2026-11-13"), kWh: 4.2, excluded: false, released: false }, // cut mid-day at last upload
       ],
       parsedDays: [
-        { date: d("2026-11-12"), kWh: 12, intervalCount: 24 }, // unchanged
-        { date: d("2026-11-13"), kWh: 11.8, intervalCount: 24 }, // fuller value
-        { date: d("2026-11-14"), kWh: 12.1, intervalCount: 24 },
-        { date: d("2026-11-15"), kWh: 11.9, intervalCount: 24 },
+        { date: d("2026-11-12"), kWh: 12, intervalCount: 24, dataHours: 24 }, // unchanged
+        { date: d("2026-11-13"), kWh: 11.8, intervalCount: 24, dataHours: 24 }, // fuller value
+        { date: d("2026-11-14"), kWh: 12.1, intervalCount: 24, dataHours: 24 },
+        { date: d("2026-11-15"), kWh: 11.9, intervalCount: 24, dataHours: 24 },
       ],
     });
     expect(rows.map((r) => r.disposition)).toEqual(["stored_match", "supersede", "new", "new"]);
@@ -292,10 +292,10 @@ describe("buildReviewRows — dispositions", () => {
         { date: d("2026-11-03"), kWh: 10.4, excluded: false, released: false },
       ],
       parsedDays: [
-        { date: d("2026-11-02"), kWh: 10.2, intervalCount: 24 },
-        { date: d("2026-11-03"), kWh: 9.9, intervalCount: 24 }, // sheet disagrees with store
-        { date: d("2026-11-05"), kWh: 6.0, intervalCount: 24 }, // replacement day
-        { date: d("2026-11-06"), kWh: 11.0, intervalCount: 24 },
+        { date: d("2026-11-02"), kWh: 10.2, intervalCount: 24, dataHours: 24 },
+        { date: d("2026-11-03"), kWh: 9.9, intervalCount: 24, dataHours: 24 }, // sheet disagrees with store
+        { date: d("2026-11-05"), kWh: 6.0, intervalCount: 24, dataHours: 24 }, // replacement day
+        { date: d("2026-11-06"), kWh: 11.0, intervalCount: 24, dataHours: 24 },
       ],
     });
     const byDate = new Map(rows.map((r) => [r.date.toISOString().slice(0, 10), r]));
@@ -314,7 +314,7 @@ describe("buildReviewRows — dispositions", () => {
       window: { from: d("2026-11-06"), to: d("2026-11-08") },
       lastStoredDate: d("2026-11-07"),
       stored: [{ date: d("2026-11-07"), kWh: 12, excluded: false, released: true }],
-      parsedDays: [{ date: d("2026-11-07"), kWh: 13, intervalCount: 24 }],
+      parsedDays: [{ date: d("2026-11-07"), kWh: 13, intervalCount: 24, dataHours: 24 }],
     });
     expect(rows[0].disposition).toBe("released");
     expect(actionableRows(rows)).toHaveLength(0);
@@ -333,7 +333,7 @@ describe("buildReviewRows — dispositions", () => {
       window: { from: d("2026-11-02"), to: d("2026-11-08") },
       lastStoredDate: null,
       stored: [],
-      parsedDays: [{ date: d("2026-11-04"), kWh: 3.1, intervalCount: 13 }],
+      parsedDays: [{ date: d("2026-11-04"), kWh: 3.1, intervalCount: 13, dataHours: 13 }],
     });
     expect(rows[0].partial).toBe(true);
     expect(rows[0].phase).toBe("pre_install");
@@ -347,7 +347,7 @@ describe("buildReviewRows — dispositions", () => {
       window: { from: d("2026-11-02"), to: d("2026-11-08") },
       lastStoredDate: null,
       stored: [],
-      parsedDays: [{ date: d("2026-11-04"), kWh: 3.1, intervalCount: 24 }],
+      parsedDays: [{ date: d("2026-11-04"), kWh: 3.1, intervalCount: 24, dataHours: 24 }],
     });
     expect(full[0].partial).toBe(false);
     expect(full[0].varianceBand).toBe("warn");
@@ -382,8 +382,8 @@ describe("buildReviewRows — dispositions", () => {
       lastStoredDate: null,
       stored: [],
       parsedDays: [
-        { date: d("2026-11-03"), kWh: 10.4, intervalCount: 24 }, // pre
-        { date: d("2026-11-07"), kWh: 10.5, intervalCount: 24 }, // post: 65% savings vs 30
+        { date: d("2026-11-03"), kWh: 10.4, intervalCount: 24, dataHours: 24 }, // pre
+        { date: d("2026-11-07"), kWh: 10.5, intervalCount: 24, dataHours: 24 }, // post: 65% savings vs 30
       ],
     });
     const pre = rows[0];
@@ -393,6 +393,25 @@ describe("buildReviewRows — dispositions", () => {
     expect(post.variancePct).toBeNull();
     expect(post.savingsPct).toBeCloseTo(65, 10);
     expect(post.savingsBand).toBe("green");
+  });
+
+  it("dataHours carries through to the review row — a 24-row day can still be mostly silence", () => {
+    const rows = buildReviewRows({
+      ...base,
+      kind: "pre_install",
+      lightReplacementDate: null,
+      window: { from: d("2026-11-02"), to: d("2026-11-08") },
+      lastStoredDate: null,
+      stored: [],
+      parsedDays: [
+        // 24 rows in the file, but only 18 of them are non-zero — the vendor
+        // writes 0 for an hour the meter was offline, so this is a full-
+        // looking day that is actually 6 hours of silence.
+        { date: d("2026-11-04"), kWh: 9.0, intervalCount: 24, dataHours: 18 },
+      ],
+    });
+    expect(rows[0].intervalCount).toBe(24);
+    expect(rows[0].dataHours).toBe(18);
   });
 });
 

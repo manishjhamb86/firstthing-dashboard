@@ -852,6 +852,20 @@ export function CircuitReadingPanel({
                     {row.partial && (
                       <span style={{ color: "var(--warn-fg)" }}> of {preview.expectedIntervals}</span>
                     )}
+                    {/* The export writes 0 for an hour the meter was offline
+                        or off — so a full row count can still be mostly
+                        silence, and this has to be said before anything is
+                        saved, not just after (user-asked 2026-09-18). Same
+                        wording as the stored-readings listing. */}
+                    {row.dataHours < row.intervalCount && (
+                      <div
+                        className="whitespace-nowrap text-[11px] font-normal"
+                        style={{ color: "var(--warn-fg)" }}
+                        title="Hours the meter reported a reading. The export writes 0 for an hour the meter was offline or switched off."
+                      >
+                        {row.dataHours === 0 ? "no hours with data" : `${row.dataHours}h with data`}
+                      </div>
+                    )}
                   </td>
                   <td className="num">
                     {cmp.text}

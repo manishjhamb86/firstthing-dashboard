@@ -317,6 +317,14 @@ export type ReviewRow = {
   date: Date;
   kWh: number;
   intervalCount: number;
+  /**
+   * Intervals in this day whose value was non-zero — a 24-row day can still
+   * be mostly silence, since the vendor's export writes 0 for an hour the
+   * meter was offline (same rule the stored-readings listing already shows
+   * after commit; the review table now shows it BEFORE, per the user's own
+   * 2026-09-18 ask).
+   */
+  dataHours: number;
   expectedIntervals: number | null;
   partial: boolean;
   phase: DayPhase;
@@ -338,7 +346,7 @@ export type ReviewRow = {
  */
 export function buildReviewRows(args: {
   kind: UploadKind;
-  parsedDays: { date: Date; kWh: number; intervalCount: number }[];
+  parsedDays: { date: Date; kWh: number; intervalCount: number; dataHours: number }[];
   expectedIntervals: number | null;
   window: { from: Date; to: Date };
   meterInstalledAt: Date;
@@ -406,6 +414,7 @@ export function buildReviewRows(args: {
       date: at,
       kWh: day.kWh,
       intervalCount: day.intervalCount,
+      dataHours: day.dataHours,
       expectedIntervals: args.expectedIntervals,
       partial,
       phase,

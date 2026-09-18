@@ -378,6 +378,10 @@ export type PreviewRowDTO = {
   date: string;
   kWh: number;
   intervalCount: number;
+  /** Non-zero intervals in this day — the vendor writes 0 for an hour the
+   *  meter was offline, so a full-looking row count can still be mostly
+   *  silence (user-asked 2026-09-18). */
+  dataHours: number;
   expectedIntervals: number | null;
   partial: boolean;
   phase: string;
@@ -422,6 +426,7 @@ function toPreviewDTO(derived: Derived): CircuitPreviewDTO {
       date: iso(r.date),
       kWh: r.kWh,
       intervalCount: r.intervalCount,
+      dataHours: r.dataHours,
       expectedIntervals: r.expectedIntervals,
       partial: r.partial,
       phase: r.phase,

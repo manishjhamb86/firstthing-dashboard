@@ -45,6 +45,16 @@ export type DailyReading = {
   date: Date;
   kWh: number;
   intervalCount: number;
+  /**
+   * Intervals in this day whose own value was non-zero — the vendor's export
+   * writes 0 for an hour the meter was offline or switched off (the same
+   * rule already applied to the meter's own hourly store, live-monitoring's
+   * readings listing and invoice-month derivation), so a day can hold a full
+   * `intervalCount` of rows and still be mostly silence. User-asked
+   * 2026-09-18: the review table shown BEFORE anything is saved should say
+   * so too, not just the stored-readings list after the fact.
+   */
+  dataHours: number;
 };
 
 export type ParseResult = {
@@ -342,7 +352,7 @@ export function applyMapping(text: string, mapping: ReadingMapping, period: stri
   const dataLines = { length: rowsAttempted };
   const scale = UNIT_TO_KWH[mapping.valueUnit];
 
-  const byDay = new Map<number, { kWh: number; intervalCount: number }>();
+  const byDay = new Map<number, { kWh: number; intervalCount: number; dataHours: number }>();
   let rowsOutOfPeriod = 0;
   for (const p of intervals) {
     const day = utcDayOf(p.at);
@@ -351,9 +361,10 @@ export function applyMapping(text: string, mapping: ReadingMapping, period: stri
       continue;
     }
     const key = day.getTime();
-    const acc = byDay.get(key) ?? { kWh: 0, intervalCount: 0 };
+    const acc = byDay.get(key) ?? { kWh: 0, intervalCount: 0, dataHours: 0 };
     acc.kWh += p.value * scale;
     acc.intervalCount += 1;
+    if (p.value !== 0) acc.dataHours += 1;
     byDay.set(key, acc);
   }
 
@@ -369,7 +380,7 @@ export function applyMapping(text: string, mapping: ReadingMapping, period: stri
   }
 
   const days = [...byDay.entries()]
-    .map(([ts, v]) => ({ date: new Date(ts), kWh: v.kWh, intervalCount: v.intervalCount }))
+    .map(([ts, v]) => ({ date: new Date(ts), kWh: v.kWh, intervalCount: v.intervalCount, dataHours: v.dataHours }))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   return {
@@ -425,17 +436,18 @@ export function applyMappingAllDays(text: string, mapping: ReadingMapping): Rang
   const parsed = parseIntervals(text, mapping);
   const scale = UNIT_TO_KWH[mapping.valueUnit];
 
-  const byDay = new Map<number, { kWh: number; intervalCount: number }>();
+  const byDay = new Map<number, { kWh: number; intervalCount: number; dataHours: number }>();
   for (const p of parsed.intervals) {
     const key = utcDayOf(p.at).getTime();
-    const acc = byDay.get(key) ?? { kWh: 0, intervalCount: 0 };
+    const acc = byDay.get(key) ?? { kWh: 0, intervalCount: 0, dataHours: 0 };
     acc.kWh += p.value * scale;
     acc.intervalCount += 1;
+    if (p.value !== 0) acc.dataHours += 1;
     byDay.set(key, acc);
   }
 
   const days = [...byDay.entries()]
-    .map(([ts, v]) => ({ date: new Date(ts), kWh: v.kWh, intervalCount: v.intervalCount }))
+    .map(([ts, v]) => ({ date: new Date(ts), kWh: v.kWh, intervalCount: v.intervalCount, dataHours: v.dataHours }))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   return {

@@ -6529,6 +6529,41 @@ shows its OWN upload, correctly windowed 17-08-2026 onward (the day after the RE
 meter install) — the user's own stated expectation, walked for real rather than assumed.
 `tsc`/`lint`/`pnpm test` (930)/`pnpm build` all clean. No schema change.
 
+## The upload review table gets the same silent-hours warning the stored list already has (2026-09-18) — user-asked
+
+**The ask**: "need to show whether these readings are full 24 hrs reading of some days are missing
+few hours. 0 rrading means missing." The rule itself was already established and shipped — 2026-08-28's
+"A 24-row day can still be mostly silence" entry — but only on the STORED readings listing
+(`readings-explorer.tsx`), read after a file is committed. The REVIEW table shown before anything
+is saved (`circuit-reading-panel.tsx`'s preview, visible in the user's own screenshot) had no such
+signal at all: a day with 24 rows of which several are literal 0s (the vendor's own convention for
+"the meter was offline that hour," not real zero consumption) looked identical to a fully-reported
+day.
+
+**`dataHours` (non-zero intervals) now flows the whole length of the pipeline, not just the stored
+side.** `DailyReading` (`reading-normalize.ts`) gained the field, computed identically in both
+`applyMapping` (the month-scoped AI-assisted path) and `applyMappingAllDays` (CON-45's circuit-page
+path) — one `if (p.value !== 0) acc.dataHours += 1` alongside the existing `intervalCount` tally, so
+the two parsers can't drift on what "has data" means. `ReviewRow` (`circuit-load.ts`) and
+`PreviewRowDTO` (`reading-actions.ts`) both carry it through to the client untouched — the server
+still recomputes everything at commit from the raw file, per this pipeline's standing rule; nothing
+here changes what's authoritative, only what's shown before the decision is made.
+
+**The review table's HOURS column now carries the exact same annotation and wording as the stored
+list** — "Nh with data" / "no hours with data," amber, with the same explanatory title text — so a
+day that looks complete in row count but is actually mostly silent reads the same way whether it's
+being reviewed for the first time or looked up afterward. Shown only when `dataHours < intervalCount`
+— a fully-reported day gets no extra text, matching the established "don't say what doesn't need
+saying" convention.
+
+**Verified in a browser with a real 3-day CSV (5/5, zero console/page errors)**: a fully-reported
+24-hour day shows nothing extra; an 18-of-24 day (6 hours of zeros) reads "18h with data"; a
+fully-silent day (24 zeros) reads "no hours with data" — all in the REVIEW table, before Save is
+ever clicked. 3 new unit cases (`applyMapping`, `applyMappingAllDays`, `buildReviewRows` each
+asserting `dataHours` independently) plus a fix to 8 existing `circuit-load.test.ts` fixtures that
+needed the now-required field added. `tsc`/`lint`/`pnpm test` (934)/`pnpm build` all clean. No
+schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyMapping,
+  applyMappingAllDays,
   daysInPeriod,
   parseRate,
   parseTimestamp,
@@ -175,6 +176,30 @@ describe("applyMapping — hourly to daily (CON-30)", () => {
     expect(r.days).toHaveLength(31);
     expect(r.rowsParsed).toBe(744);
     expect(r.days.every((d) => d.kWh === 36)).toBe(true);
+  });
+
+  it("counts dataHours as the non-zero intervals, not the row count — a 24-row day can be mostly silence", () => {
+    // The vendor writes 0 for an hour the meter was offline, so 24 rows in
+    // the file is not the same claim as 24 hours of real data.
+    const csv = hourlyCsv("2026-07-01", [2, 2, 0, 0, 0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0]);
+    const r = applyMapping(csv, HOURLY, "2026-07");
+    expect(r.days[0].intervalCount).toBe(24);
+    expect(r.days[0].dataHours).toBe(18);
+  });
+
+  it("a fully-reported day has dataHours equal to intervalCount", () => {
+    const csv = hourlyCsv("2026-07-01", Array(24).fill(1.5));
+    const r = applyMapping(csv, HOURLY, "2026-07");
+    expect(r.days[0].dataHours).toBe(r.days[0].intervalCount);
+  });
+});
+
+describe("applyMappingAllDays — the circuit-page flow's range-scoped parse", () => {
+  it("also carries dataHours per day, same rule as the month-scoped parse", () => {
+    const csv = hourlyCsv("2026-07-01", [0, 0, 0, ...Array(21).fill(1)]);
+    const r = applyMappingAllDays(csv, HOURLY);
+    expect(r.days[0].intervalCount).toBe(24);
+    expect(r.days[0].dataHours).toBe(21);
   });
 });
 

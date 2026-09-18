@@ -975,7 +975,33 @@ export default async function CircuitDetailPage({
                   </p>
                 );
               } else if (step.status === "done" && circuit.preInstallBaseline == null) {
-                summary = "No stored baseline — the lifecycle advanced past this step";
+                // The rank-inferred "done" above (the circuit walked past
+                // this step: replacement recorded, gate passes approved)
+                // can still be genuinely true while NO pre-install baseline
+                // was ever actually set — found 2026-09-18: a circuit
+                // reached benchmark_review with a real replacement date and
+                // an approved completion gate pass, yet no MeterReading had
+                // ever produced a baseline. The step's own map coherence
+                // rule (rank OR artifact) is about the CHECKMARK, not about
+                // whether there's still real work to do — CON-45's own
+                // evidence-based phase derivation (readingWindowDTO.kind,
+                // shared with the CSV upload panel) still says this circuit
+                // needs pre-install readings, and that has to stay
+                // reachable from here rather than surfacing, mislabeled,
+                // under the "Post-install window" step below (the reported
+                // bug: a panel titled "Post-install" showing the PRE-install
+                // window and asking for pre-install-shaped readings).
+                summary = "No stored baseline — record it now to set one";
+                if (!usesLegacyFlow && canEdit && readingWindowDTO?.kind === "pre_install") {
+                  body = (
+                    <CircuitReadingPanel
+                      circuitId={circuit.id}
+                      window={readingWindowDTO}
+                      demoMode={demoMode}
+                      resumeFile={resumeFile}
+                    />
+                  );
+                }
                 // The rank-inferred "done" above can still leave real
                 // CommissioningReading rows sitting on the circuit — an
                 // abandoned or partial attempt, never completed — that were
@@ -1226,6 +1252,29 @@ export default async function CircuitDetailPage({
                     />
                   ) : (
                     <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
+                  );
+                } else if (readingWindowDTO?.kind === "pre_install") {
+                  // The rank-based sequencing marks this step "current," but
+                  // CON-45's own evidence-based phase derivation — the same
+                  // one the CSV upload panel itself relies on — still says
+                  // pre_install: no baseline has ever actually been set.
+                  // Rendering the upload panel here would title it "Post-
+                  // install window" while it silently asked for and judged
+                  // PRE-install-shaped readings against the meter-install
+                  // date, not the replacement date (the reported bug — a
+                  // "Post-install window" chip showing 2026-08-06 (day after
+                  // METER install) instead of 2026-08-17 (day after the
+                  // REPLACEMENT), with the caption naming the meter-install
+                  // date as the basis for a step titled "post-install").
+                  chip = <StatusChip tone="warn">Pre-install baseline missing</StatusChip>;
+                  summary = ""; // the body says it, in full
+                  body = (
+                    <p className="text-sm text-[var(--text-muted)]">
+                      This circuit has no recorded pre-install baseline yet, so there is nothing to
+                      measure post-install savings against. Record it on the{" "}
+                      <strong>Pre-install baseline window</strong> step above — this step opens once
+                      that baseline is set.
+                    </p>
                   );
                 } else {
                   chip = periodChip;

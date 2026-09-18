@@ -6474,6 +6474,61 @@ different wording than the first draft of the check assumed. `tsc`/`lint`/`pnpm 
 `pnpm build` all clean. No schema change. **This fix is what actually clears Paras Tiera** — the
 button now works there; nothing was patched by hand in its data.
 
+## The CSV flow's own phase derivation disagreed with the step map about which window is open (2026-09-18) — user-caught, real circuit
+
+**Reported with a screenshot**: lights replaced 16-08-2026, but the step titled "Post-install window
+→ benchmark" showed a valid period of 06-08-2026 → 15-08-2026 — "which is actually the pre install
+window" — and the pre-install step above it showed no upload option at all, just "No stored baseline
+— the lifecycle advanced past this step." The user's own expectation, stated plainly: "it should
+first open the pre install window and ask for reading to set preinstall benchmark. after uploading
+premetering readings then it should show post install reading upload window with correct valid
+period."
+
+**Two systems computing "which phase is this circuit in" disagreed, the same class this file has
+hit and fixed repeatedly (most recently the KYC gate two entries above).** `circuitSteps()`
+(`deal-progress.ts`) decides the numbered stepper's done/current/locked status by **rank** — `const
+baselineDone = c.preInstallBaseline != null || rank >= 4`, the rank-OR-artifact rule from
+2026-08-15, there so an early step doesn't read "current" while later ones read "done." On this
+circuit the rank WAS legitimately high (replacement recorded, completion gate pass approved) even
+though `preInstallBaseline` had genuinely never been set — no CSV of pre-install readings was ever
+uploaded. Meanwhile `deriveUploadKind()`/`circuitReadingWindow()` (`circuit-load.ts`) — the SAME
+function the CSV upload panel itself calls to decide what it's even asking for — derives phase from
+**evidence alone**: `baselineUnsettled` (`lightReplacementDate === null || preInstallBaseline ===
+null`) is true here, so it still says `"pre_install"`. That single shared `readingWindowDTO` is
+computed ONCE at the top of the page and handed to whichever step happens to render the panel — so
+when the rank-based map put "current" on step 8 (post-install), the SAME pre-install-shaped window
+and upload rendered there, under the wrong title, asking for the wrong kind of readings measured
+against the wrong pivot date (meter-install, not replacement).
+
+**Fixed by making each step render only the panel that actually matches what it is, deferring to
+the evidence-based `readingWindowDTO.kind` rather than the rank-based "done" checkmark for which
+step gets the live upload:**
+- The pre-install step's "done, no baseline" branch (already touched twice today) now also renders
+  the real `CircuitReadingPanel` there — editable — whenever `!usesLegacyFlow && readingWindowDTO?.
+  kind === "pre_install"`, so the step the user actually needs to act on is where the upload lives,
+  under its own correct title and correctly-worded summary.
+- The post-install step's "current" branch checks `readingWindowDTO?.kind === "pre_install"` FIRST:
+  when true, it no longer renders the (mislabelled) upload at all — it states plainly that no
+  pre-install baseline exists yet and points back at the step above, rather than silently asking for
+  post-install readings that can't mean anything yet.
+- Once a real pre-install baseline lands (readings uploaded, saved, `preInstallBaseline` set),
+  `readingWindowDTO.kind` naturally becomes `"post_install"` on the next render, and the post-install
+  step then shows its own upload, correctly windowed from the day after the REPLACEMENT date — no
+  new state machine, just letting the same evidence-based derivation the panel always used finally
+  reach the step that's asking for it.
+
+**Verified against the exact reported shape, two scripts, 13/13, zero console/page errors**: a
+fixture circuit (meter installed 05-08-2026, replaced 16-08-2026, rank high enough that pre-install
+reads "done" with no baseline set) — the pre-install step now offers a real upload windowed
+06-08-2026 → 15-08-2026 (day after METER install, correct for pre-install); the post-install step
+states the missing baseline instead of rendering a second, mislabelled copy of the same upload;
+exactly one upload surface exists on the whole page, not two. The second script walked the fix all
+the way through: uploaded a real 10-day SONOFF CSV for the pre-install period, saved it,
+`preInstallBaseline` landed at 12 (0.5 kWh × 24h, exact), reloaded, and the post-install step now
+shows its OWN upload, correctly windowed 17-08-2026 onward (the day after the REPLACEMENT, not the
+meter install) — the user's own stated expectation, walked for real rather than assumed.
+`tsc`/`lint`/`pnpm test` (930)/`pnpm build` all clean. No schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -123,6 +123,7 @@ export function MonitoringWindowPanel({
   embedded = false,
   canClear = false,
   frozen = false,
+  hasStalledReview = false,
 }: {
   circuitId: string;
   windowType: "pre_install" | "post_install";
@@ -153,6 +154,17 @@ export function MonitoringWindowPanel({
    * rather than rendering something that can only refuse.
    */
   frozen?: boolean;
+  /**
+   * An open FEAT-015 review sits on this circuit with nothing behind it in
+   * this table at all — found on a real circuit (2026-09-18): three prior
+   * restart/defect resolutions had each moved the window on without
+   * leaving rows to clear, so the fourth attempt's escalation had none
+   * stored either. Widens the Clear buttons' gate past "readings exist,"
+   * since the review being stuck open is itself the actionable thing —
+   * without this they never rendered at all on exactly the screen someone
+   * reaches for them from.
+   */
+  hasStalledReview?: boolean;
 }) {
   const defaultDate = () => {
     const today = todayISO();
@@ -284,7 +296,7 @@ export function MonitoringWindowPanel({
         <p className="text-sm text-[var(--text-muted)]">Only PER-04/PER-01 can record days on this window.</p>
       )}
 
-      {canClear && !frozen && readings.length > 0 && (
+      {canClear && !frozen && (readings.length > 0 || hasStalledReview) && (
         <ClearWindowControls circuitId={circuitId} windowType={windowType} />
       )}
 

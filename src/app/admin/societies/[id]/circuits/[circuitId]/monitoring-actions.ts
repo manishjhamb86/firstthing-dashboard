@@ -565,7 +565,18 @@ export async function clearCommissioningWindow(
   }
 
   const rows = await db.commissioningReading.findMany({ where: { circuitId, windowType }, select: { id: true } });
-  if (rows.length === 0) return { error: "This circuit holds no readings in that window." };
+  // A review can be open with nothing behind it in this table at all — found
+  // on a real circuit (2026-09-18): three prior restart/defect resolutions
+  // had each moved the window on without ever leaving its own rows deleted,
+  // and the fourth attempt's escalation was raised with none stored either.
+  // "Nothing to clear" is only really true when there's ALSO no open review
+  // to resolve — otherwise the operator has an actionable stuck screen and
+  // no rows is exactly why they reached for this control.
+  const openReview =
+    windowType === "post_install" ? await db.demoResultReview.findFirst({ where: { circuitId, state: "open" } }) : null;
+  if (rows.length === 0 && !openReview) {
+    return { error: "This circuit holds no readings in that window." };
+  }
 
   const windowStartAt =
     windowType === "pre_install" ? circuit.preInstallWindowStartAt : circuit.postInstallWindowStartAt;

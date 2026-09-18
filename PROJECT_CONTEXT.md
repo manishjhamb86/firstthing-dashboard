@@ -6437,6 +6437,43 @@ the no-regression fix: clearing only the pre-install rows on the same stuck circ
 at `benchmark_review` and the open review untouched. `tsc`/`lint`/`pnpm test` (930)/`pnpm build` all
 clean. No schema change.
 
+## The clear buttons need nothing to clear (2026-09-18) — user-caught on a real stage circuit, same day as the fix above
+
+**Reported immediately after the deploy above**: "i dont see all those options for Paras Tiera,"
+against a screenshot identical in shape to the one that started this whole thread — occurrence 4,
+still open, no controls visible. Checked directly against stage's database rather than guessed:
+`commissioning_post = 0`, `meter_readings = 0` — this circuit's stuck review has **nothing behind
+it in either reading table**. The user then explained why: **they had already clicked my just-
+deployed Clear button on this exact circuit before this second fix landed** — at that point the
+readings genuinely existed, the click deleted them and reset the circuit's state correctly, but the
+review-resolving step never ran, because both the button's own render gate and the action's
+"nothing to clear" refusal were written assuming a clear always has rows to act on. The result was
+exactly the reported "in-between" state: readings gone, state reset, review still open forever,
+because nothing left ever satisfied `readings.length > 0`.
+
+**Both gates widened from "readings exist" to "there's something actionable" — a stuck OPEN review
+counts on its own.** `clearCommissioningWindow`'s refusal now reads `rows.length === 0 && !openReview`
+rather than `rows.length === 0` alone, so clearing a window that's already had its readings removed
+by hand still runs — it just skips the (now empty) delete and goes straight to resolving the review
+and resetting state, which is the actionable part left undone. `MonitoringWindowPanel` gained
+`hasStalledReview`, passed `true` only at the one call site that actually has an open review in
+scope (the `openReview && urgency` escalation branch in `page.tsx`) — the sibling `benchmark_review`-
+without-an-open-review-object branch is left alone, since there genuinely is nothing to resolve
+there and showing a button that can only refuse would be the same mistake in reverse.
+
+**Verified against the exact reported shape** (a fixture: `state: post_install_monitoring`, zero
+rows in both `commissioning_readings` and `meter_readings`, one `demo_result_review` row still
+`open` at occurrence 4) **— 7/7, zero console/page errors**: both Clear buttons now render where
+they previously didn't at all; clicking "same period" resolves the review and leaves state
+untouched (there was nothing to reset — it was already correct); reloading shows the escalation
+genuinely gone, replaced by a working recording surface. **One thing the fixture surfaced, not a
+bug**: with both reading tables at zero, `usesLegacyFlow` (`commissioningReadings.length > 0 &&
+storedReadings.length === 0`) correctly evaluates false, so the circuit falls through to the modern
+CON-45 CSV upload panel rather than the legacy per-day form — a reasonable landing spot, just
+different wording than the first draft of the check assumed. `tsc`/`lint`/`pnpm test` (930)/
+`pnpm build` all clean. No schema change. **This fix is what actually clears Paras Tiera** — the
+button now works there; nothing was patched by hand in its data.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

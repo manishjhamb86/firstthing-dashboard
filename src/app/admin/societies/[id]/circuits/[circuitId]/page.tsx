@@ -1176,6 +1176,7 @@ export default async function CircuitDetailPage({
                           pendingAnomaly={postInstallPendingAnomaly}
                           canEdit={false}
                           canClear={canOverride}
+                          hasStalledReview
                           embedded
                         />
                       )}

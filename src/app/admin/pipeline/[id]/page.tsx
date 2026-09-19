@@ -14,7 +14,7 @@ import { SurveyVisitForm } from "./survey-visit-form";
 import { VisitDetails } from "@/components/visit-details";
 import { formatDate, isoDate, isoDateTimeLocal } from "@/lib/format-date";
 import Link from "next/link";
-import { DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
+import { DEAL_CANDIDATE_SELECT, DEAL_PROGRESS_INCLUDE, toDealProgress } from "@/lib/pipeline-facts";
 import { DealStepper, NextStepCallout, WaitingOnCallout } from "@/components/deal-stepper";
 
 const OUTCOME_LABEL: Record<string, string> = {
@@ -68,18 +68,7 @@ export default async function PipelineDetailPage({
   const candidates = pipeline.siteSurvey
     ? await db.circuit.findMany({
         where: { siteSurveyId: pipeline.siteSurvey.id, voidedAt: null },
-        select: {
-          id: true,
-          state: true,
-          location: true,
-          lightType: true,
-          replacementOwnerId: true,
-          scheduledEvents: {
-            where: { kind: "installation_day" as const, status: "scheduled" as const },
-            select: { id: true },
-            take: 1,
-          },
-        },
+        select: DEAL_CANDIDATE_SELECT,
       })
     : [];
 

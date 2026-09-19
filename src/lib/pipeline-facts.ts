@@ -27,18 +27,44 @@ export const DEAL_PROGRESS_INCLUDE = {
 
 type PipelineWithProgress = Prisma.PipelineGetPayload<{ include: typeof DEAL_PROGRESS_INCLUDE }>;
 
+/**
+ * The candidate fields `toDealProgress` actually reads.
+ *
+ * Shared, not copied, because copying it silently broke the map: the deal
+ * page selected `replacementOwnerId` and the booked `installation_day` while
+ * `loadDealProgress` below selected neither — so `replacementScheduled`
+ * evaluated false on every page that used the loader (the society page, the
+ * circuit page, the KYC screen, the installation screen), and all four told
+ * an operator to "schedule the replacement and assign it to a crew" for work
+ * that was already assigned AND booked, while the deal page correctly said to
+ * record it. One question, two answers, decided by which query the caller
+ * happened to write — the exact drift `deal-progress.ts` exists to prevent.
+ */
+export const DEAL_CANDIDATE_SELECT = {
+  id: true,
+  state: true,
+  location: true,
+  lightType: true,
+  replacementOwnerId: true,
+  scheduledEvents: {
+    where: { kind: "installation_day" as const, status: "scheduled" as const },
+    select: { id: true },
+    take: 1,
+  },
+} satisfies Prisma.CircuitSelect;
+
+/**
+ * Typed from the select above rather than hand-written: the previous
+ * hand-written shape made `replacementOwnerId` and `scheduledEvents`
+ * OPTIONAL, so a caller that simply forgot them type-checked cleanly and
+ * silently produced `replacementScheduled: false`. Required now — a query
+ * missing either field fails the build instead of the screen.
+ */
+export type DealCandidateRow = Prisma.CircuitGetPayload<{ select: typeof DEAL_CANDIDATE_SELECT }>;
+
 export function toDealProgress(
   pipeline: PipelineWithProgress,
-  candidates: {
-    id: string;
-    state: string;
-    location: string | null;
-    lightType: string;
-    /** Null until the replacement is handed to a crew — see CandidateFacts. */
-    replacementOwnerId?: string | null;
-    /** The booked installation day, if one exists. */
-    scheduledEvents?: { id: string }[];
-  }[],
+  candidates: DealCandidateRow[],
 ): DealProgress {
   return dealProgress({
     pipelineId: pipeline.id,
@@ -77,7 +103,7 @@ export async function loadDealProgress(pipelineId: string): Promise<DealProgress
   const candidates = pipeline.siteSurvey
     ? await db.circuit.findMany({
         where: { siteSurveyId: pipeline.siteSurvey.id, voidedAt: null },
-        select: { id: true, state: true, location: true, lightType: true },
+        select: DEAL_CANDIDATE_SELECT,
       })
     : [];
   return toDealProgress(pipeline, candidates);

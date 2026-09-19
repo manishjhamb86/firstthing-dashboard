@@ -16,7 +16,8 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 // a working list, not a roll-call — so it gains a status filter and a name
 // search (both server-side via searchParams, no client JS), and each row
 // carries what someone actually scans for: which service lines are live and
-// how many circuits are metered. Counts come from _count, not N+1 queries.
+// how many circuits are metered — all read from one live-circuit array, so
+// no two columns on this page can disagree about what still exists.
 
 const STATUS_TABS = ["all", "prospect", "active", "suspended", "terminated"] as const;
 
@@ -49,12 +50,19 @@ export default async function SocietiesPage({
       orderBy: { createdAt: "desc" },
       include: {
         engagements: { select: { serviceLine: true, status: true } },
-        _count: { select: { circuits: true } },
         // What each society's live circuits stand in for. The Flats column is
         // empty for exactly the societies we know most about — their imported
         // flat counts turned out to be light counts and were cleared — so the
         // list was blankest where there is most on record. This is the figure
         // that actually matters for these: what they are billed against.
+        //
+        // The Circuits column counts THIS array rather than carrying its own
+        // `_count: { circuits: true }`, which had no `voidedAt` filter: a
+        // removed circuit was still counted there while the Lights column
+        // beside it (and the "No circuit yet" stat, and "Circuits metered")
+        // all excluded it, so one row could read "2 circuits · — lights". A
+        // soft delete is only as good as the reads that honour it, and two
+        // reads of one fact is how they stop agreeing.
         circuits: {
           where: { voidedAt: null },
           select: { representedLightCount: true },
@@ -75,11 +83,11 @@ export default async function SocietiesPage({
   // own, sitting a few pixels below, and repeating them is the duplication
   // reported on 2026-08-21. These say what the portfolio holds.
   const totalSocieties = statusGroups.reduce((n, g) => n + g._count._all, 0);
-  const meteredCircuits = societies.reduce((n, s) => n + s._count.circuits, 0);
+  const meteredCircuits = societies.reduce((n, s) => n + s.circuits.length, 0);
   const linesLive = new Set(
     societies.flatMap((s) => s.engagements.filter((e) => e.status === "active").map((e) => e.serviceLine)),
   ).size;
-  const withoutCircuits = societies.filter((s) => s._count.circuits === 0).length;
+  const withoutCircuits = societies.filter((s) => s.circuits.length === 0).length;
 
   return (
     <>
@@ -244,10 +252,10 @@ export default async function SocietiesPage({
                       )}
                     </td>
                     <td className="num hidden md:table-cell">
-                      {s._count.circuits === 0 ? (
+                      {s.circuits.length === 0 ? (
                         <span className="text-[var(--text-subtle)]">—</span>
                       ) : (
-                        s._count.circuits
+                        s.circuits.length
                       )}
                     </td>
                     <td>

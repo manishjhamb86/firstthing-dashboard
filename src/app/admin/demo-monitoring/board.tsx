@@ -21,6 +21,12 @@ export type BoardRow = {
   urgent: boolean;
   validCount: number | null;
   requiredDays: number;
+  /**
+   * Progress for a flow with no five-day gate — CON-45's stored readings.
+   * Mutually exclusive with `validCount`: one strip or one sentence, never
+   * both, and never a "/5" for a window that does not count to five.
+   */
+  progressLabel: string | null;
   today: "logged" | "not_yet" | null;
   signal: string;
   signalTone: "ok" | "warn" | "bad" | "neu" | null;
@@ -179,7 +185,7 @@ export function MonitoringBoard({
                   </StatusChip>
                 </div>
 
-                {r.validCount !== null && (
+                {r.validCount !== null ? (
                   <div className="mt-3 flex items-center gap-3">
                     <span className="num text-[22px] font-semibold leading-none">
                       {r.validCount}/{r.requiredDays}
@@ -188,7 +194,9 @@ export function MonitoringBoard({
                       <DayStrip validCount={r.validCount} required={r.requiredDays} />
                     </span>
                   </div>
-                )}
+                ) : r.progressLabel !== null ? (
+                  <p className="num mt-3 text-[15px] font-semibold leading-none">{r.progressLabel}</p>
+                ) : null}
 
                 <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
                   {r.today !== null &&
@@ -243,15 +251,17 @@ export function MonitoringBoard({
                     </StatusChip>
                   </td>
                   <td>
-                    {r.validCount === null ? (
-                      <span className="text-[var(--text-muted)]">—</span>
-                    ) : (
+                    {r.validCount !== null ? (
                       <span className="flex items-center gap-2">
                         <DayStrip validCount={r.validCount} required={r.requiredDays} />
                         <span className="num text-xs text-[var(--text-muted)]">
                           {r.validCount}/{r.requiredDays}
                         </span>
                       </span>
+                    ) : r.progressLabel !== null ? (
+                      <span className="num text-xs text-[var(--text-muted)]">{r.progressLabel}</span>
+                    ) : (
+                      <span className="text-[var(--text-muted)]">—</span>
                     )}
                   </td>
                   <td>

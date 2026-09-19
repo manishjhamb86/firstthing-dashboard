@@ -4,24 +4,16 @@ import { PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { MonitoringBoard, type BoardRow } from "./board";
 import { latestVarianceFromAveragePct, averageOfValid } from "@/lib/monitoring-window";
 import { reviewUrgency } from "@/lib/demo-result-review";
+import { windowProgress } from "@/lib/window-progress";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
 
 const REQUIRED_VALID_DAYS = 5;
 
-/** Days here are stored at UTC midnight; compare on the same footing. */
-function utcDay(d: Date) {
-  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
-}
-
-function loggedToday(readings: { date: Date }[], now: Date) {
-  const today = utcDay(now);
-  return readings.some((r) => utcDay(r.date) === today);
-}
-
-function dayCount(readings: { status: string }[]) {
-  return readings.filter((r) => r.status === "valid").length;
-}
+// The day-counting, anomaly and logged-today rules moved to
+// `lib/window-progress.ts` when this board had to answer for BOTH ingest
+// paths, not just the legacy one. They are shared and unit-tested there
+// rather than living as private helpers on the one screen that reads them.
 
 export default async function MonitoringDashboardPage() {
   const session = await requireAdminPage();
@@ -55,11 +47,19 @@ export default async function MonitoringDashboardPage() {
       include: { circuit: { include: { society: true } } },
       orderBy: [{ occurrence: "desc" }, { raisedAt: "asc" }],
     }),
+    // Both stores, deliberately. The pre-install window opens the moment the
+    // meter install is recorded, so every commissioning circuit lands here —
+    // including the ones on CON-45's CSV path, which never write a
+    // CommissioningReading. Reading only the legacy table showed those rows a
+    // legacy-only gate ("0/5") and a daily-logging prompt ("Not logged
+    // today") that their flow does not have, while the circuit's own page
+    // listed the days that had just been uploaded.
     db.circuit.findMany({
       where: { voidedAt: null, preInstallWindowStartAt: { not: null }, preInstallBaseline: null },
       include: {
         society: true,
         commissioningReadings: { where: { windowType: "pre_install" }, orderBy: { date: "asc" } },
+        meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
       },
       orderBy: { preInstallWindowStartAt: "asc" },
     }),
@@ -68,6 +68,7 @@ export default async function MonitoringDashboardPage() {
       include: {
         society: true,
         commissioningReadings: { where: { windowType: "post_install" }, orderBy: { date: "asc" } },
+        meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
       },
       orderBy: { postInstallWindowStartAt: "asc" },
     }),
@@ -85,35 +86,49 @@ export default async function MonitoringDashboardPage() {
   ]);
   const liveIds = new Set(liveCircuitIds.map((c) => c.id));
 
+  // The variance and projected-savings figures are computed from the days the
+  // progress count ACTUALLY came from. Reading the legacy table for these
+  // while counting both stores put two contradictory statements on one row —
+  // "4 days uploaded" beside "Awaiting first reading" — which is the same
+  // one-question-two-answers fault this whole pass is closing.
+  const asDays = (c: { commissioningReadings: { date: Date; status: string; consumptionKwh: number | null }[]; meterReadings: { date: Date; kWh: number; excludedAt: Date | null }[] }, start: Date | null, flow: string) =>
+    flow === "stored"
+      ? c.meterReadings
+          .filter((r) => !start || r.date >= start)
+          .map((r) => ({ date: r.date, status: r.excludedAt === null ? "valid" : "excluded", consumptionKwh: r.kWh }))
+      : c.commissioningReadings.filter((r) => !start || r.date >= start);
+
   const preRows = preInstallActive.map((c) => {
-    const readings = c.commissioningReadings.filter(
-      (r) => c.preInstallWindowStartAt && r.date >= c.preInstallWindowStartAt,
-    );
+    const progress = windowProgress({
+      legacy: c.commissioningReadings,
+      stored: c.meterReadings,
+      windowStartAt: c.preInstallWindowStartAt,
+      requiredValidDays: REQUIRED_VALID_DAYS,
+      now,
+    });
+    const readings = asDays(c, c.preInstallWindowStartAt, progress.flow);
     return {
       circuit: c,
-      validCount: dayCount(readings),
-      pendingAnomaly: readings.some((r) => r.status === "anomaly"),
-      loggedToday: loggedToday(readings, now),
+      progress,
       variancePct: latestVarianceFromAveragePct(readings),
     };
   });
 
   const postRows = postInstallActive.map((c) => {
-    const readings = c.commissioningReadings.filter(
-      (r) => c.postInstallWindowStartAt && r.date >= c.postInstallWindowStartAt,
-    );
+    const progress = windowProgress({
+      legacy: c.commissioningReadings,
+      stored: c.meterReadings,
+      windowStartAt: c.postInstallWindowStartAt,
+      requiredValidDays: REQUIRED_VALID_DAYS,
+      now,
+    });
+    const readings = asDays(c, c.postInstallWindowStartAt, progress.flow);
     const avgSoFar = averageOfValid(readings);
     const projectedSavingsPct =
       avgSoFar != null && c.preInstallBaseline
         ? ((c.preInstallBaseline - avgSoFar) / c.preInstallBaseline) * 100
         : null;
-    return {
-      circuit: c,
-      validCount: dayCount(readings),
-      pendingAnomaly: readings.some((r) => r.status === "anomaly"),
-      loggedToday: loggedToday(readings, now),
-      projectedSavingsPct,
-    };
+    return { circuit: c, progress, projectedSavingsPct };
   });
 
   // Four stacked empty states is not a dashboard; when there is genuinely
@@ -121,9 +136,9 @@ export default async function MonitoringDashboardPage() {
 
   const activeWindows = preRows.length + postRows.length;
   const awaitingToday = [...preRows, ...postRows].filter(
-    (r) => !r.loggedToday && !r.pendingAnomaly,
+    (r) => !r.progress.loggedToday && !r.progress.pendingAnomaly,
   ).length;
-  const anomaliesOpen = [...preRows, ...postRows].filter((r) => r.pendingAnomaly).length;
+  const anomaliesOpen = [...preRows, ...postRows].filter((r) => r.progress.pendingAnomaly).length;
 
 
   // One row set, ranked by how much it needs a person. Rank decides the whole
@@ -152,6 +167,7 @@ export default async function MonitoringDashboardPage() {
       urgent: true,
       validCount: null,
       requiredDays: REQUIRED_VALID_DAYS,
+      progressLabel: null,
       today: null,
       signal: `${r.measuredSavingsPct.toFixed(1)}% measured`,
       signalTone: "bad" as const,
@@ -165,17 +181,23 @@ export default async function MonitoringDashboardPage() {
       serviceLine: r.circuit.serviceLine,
       group: "pre" as const,
       stageLabel: "Pre-install window",
-      rank: r.pendingAnomaly ? 1 : r.loggedToday ? 3 : 2,
-      urgent: r.pendingAnomaly,
-      validCount: r.validCount,
+      rank: r.progress.pendingAnomaly ? 1 : r.progress.loggedToday ? 3 : 2,
+      urgent: r.progress.pendingAnomaly,
+      // The five-day strip belongs to the legacy window alone — CON-45's path
+      // averages every non-excluded day instead, so "3/5" would be a claim
+      // about a gate that flow does not have.
+      validCount: r.progress.flow === "legacy" ? r.progress.dayCount : null,
       requiredDays: REQUIRED_VALID_DAYS,
-      today: r.pendingAnomaly ? null : ((r.loggedToday ? "logged" : "not_yet") as "logged" | "not_yet"),
-      signal: r.pendingAnomaly
+      progressLabel: r.progress.flow === "legacy" ? null : r.progress.label,
+      today: r.progress.flow !== "legacy" || r.progress.pendingAnomaly
+        ? null
+        : ((r.progress.loggedToday ? "logged" : "not_yet") as "logged" | "not_yet"),
+      signal: r.progress.pendingAnomaly
         ? "Anomaly open"
         : r.variancePct != null
           ? `${r.variancePct >= 0 ? "+" : ""}${r.variancePct.toFixed(1)}% vs average`
           : "Awaiting first reading",
-      signalTone: r.pendingAnomaly ? ("warn" as const) : null,
+      signalTone: r.progress.pendingAnomaly ? ("warn" as const) : null,
     })),
     ...postRows.map((r) => {
       const inBand =
@@ -188,17 +210,20 @@ export default async function MonitoringDashboardPage() {
         serviceLine: r.circuit.serviceLine,
         group: "post" as const,
         stageLabel: "Post-install window",
-        rank: r.pendingAnomaly ? 1 : r.loggedToday ? 3 : 2,
-        urgent: r.pendingAnomaly,
-        validCount: r.validCount,
+        rank: r.progress.pendingAnomaly ? 1 : r.progress.loggedToday ? 3 : 2,
+        urgent: r.progress.pendingAnomaly,
+        validCount: r.progress.flow === "legacy" ? r.progress.dayCount : null,
         requiredDays: REQUIRED_VALID_DAYS,
-        today: r.pendingAnomaly ? null : ((r.loggedToday ? "logged" : "not_yet") as "logged" | "not_yet"),
-        signal: r.pendingAnomaly
+        progressLabel: r.progress.flow === "legacy" ? null : r.progress.label,
+        today: r.progress.flow !== "legacy" || r.progress.pendingAnomaly
+          ? null
+          : ((r.progress.loggedToday ? "logged" : "not_yet") as "logged" | "not_yet"),
+        signal: r.progress.pendingAnomaly
           ? "Anomaly open"
           : r.projectedSavingsPct != null
             ? `${r.projectedSavingsPct.toFixed(1)}% so far`
             : "Awaiting first reading",
-        signalTone: r.pendingAnomaly ? ("warn" as const) : r.projectedSavingsPct != null ? (inBand ? ("ok" as const) : ("warn" as const)) : null,
+        signalTone: r.progress.pendingAnomaly ? ("warn" as const) : r.projectedSavingsPct != null ? (inBand ? ("ok" as const) : ("warn" as const)) : null,
       };
     }),
     ...recentlyResolved
@@ -215,6 +240,7 @@ export default async function MonitoringDashboardPage() {
       urgent: false,
       validCount: null,
       requiredDays: REQUIRED_VALID_DAYS,
+      progressLabel: null,
       today: null,
       signal:
         c.benchmarkSavingsPct != null ? `${c.benchmarkSavingsPct.toFixed(1)}% confirmed` : "Out of band",

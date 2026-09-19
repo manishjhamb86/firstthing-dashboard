@@ -6662,6 +6662,50 @@ browser on fixtures reproducing each defect — including that the badge and the
 are now the same number and a society request is listed exactly once — fixtures removed by count.
 Not deployed.
 
+## The review pass's follow-ups: a drift guard, a collapsed reminder, three nav moves (2026-09-20)
+
+**Four decisions put to the user rather than taken.** Answers: collapse the inspection reminder,
+keep the Portfolio and bell counts separate, make three of the four nav changes, deploy.
+
+**The drift guard, which is the one that prevents a repeat.** `circuitNextLabel` is a second,
+hand-maintained statement of the ordering `circuitSteps` defines, and it has drifted twice — naming
+the completion gate pass before the replacement for months after that order was corrected, and
+knowing nothing about the replacement being assigned first. Both shipped. There are now 11 cases
+asserting that for EVERY circuit state the label names whatever step the map calls current, plus a
+table lookup that fails loudly ("add it here") when a step is added to the spine and not to the
+label. **Both historical drifts were re-introduced deliberately to confirm the guard bites**: the
+reorder fails the pre-existing scenario test, the assignment-unaware label fails the new systematic
+one.
+
+**The inspection reminder collapses to one row** (the user's call). With no inspection ever filed
+against 14 active contracts, 14 of the bell's 15 items were the same sentence and the badge had
+stopped being a signal — it read 15 permanently. One row now carries the count and links to
+`/admin/inspections?missing=<period>`, a new panel naming every society with a prefilled "File it"
+link, so nothing is hidden, only one click further away. A SINGLE overdue society still gets its own
+named row: "Ace City's 2026-08 inspection was never filed" is more useful than "1 society has not
+filed". `societiesMissingInspection` is exported and shared by the notification and the panel, so
+the count on the bell and the rows on the page are one query — the same discipline this whole pass
+was about. Badge 15 → 1, verified.
+
+**Three nav moves, one declined.** Documents left Deals for Societies (the screen asks which society
+first and scopes everything to it); Invoice intake moved above the billing board, which became
+"Billing board" (CON-47 made invoice-first the primary monthly path, so intake is where the month
+enters); "Readings" became "Monthly uploads" on both the nav and the page, because sitting beside
+"Meters" the old label read as a synonym for it. The user declined adding Notifications to the nav —
+the bell stays its only route. Group order unchanged.
+
+**Two counts stay separate, deliberately** (the user's call): the Portfolio chip counts all work
+waiting on a person, including circuit decisions and frozen leads; the bell counts notifications.
+Each is correct for its own question and the card states its scope.
+
+**One harness lesson worth keeping: the admin sidebar is an ACCORDION** — opening one group closes
+the last — so a check that clicks every collapsed group in turn ends with only the final one open,
+and reading the whole nav's text finds only that group's items. Three nav assertions failed against
+a correct app for exactly this reason. Read one group at a time.
+
+955 unit tests (11 new), `tsc`/`lint`/`build` clean, no schema change. Verified 14/14 on the nav and
+the collapse, with the two earlier suites re-run green (12/12, 10/10).
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { formatDate, monthLabel } from "@/lib/format-date";
+import { inspectionReminderPeriod, societiesMissingInspection } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inspections" };
@@ -12,10 +13,24 @@ export const metadata = { title: "Inspections" };
 // real paper checklist FirsThing's inspectors already carry into the field.
 // Field work (manage_survey), same gate as gate passes, benchmark rescale
 // entry and circuit replacement recording.
-export default async function InspectionsPage() {
+export default async function InspectionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ missing?: string }>;
+}) {
   await requireAdminPage();
   const actor = await resolveAdmin();
   if (!actor?.permissions.includes("manage_survey")) redirect("/admin");
+
+  // Where the collapsed "N societies have no <period> inspection" reminder
+  // lands. The notification carries the count; this is the who. Both read
+  // `societiesMissingInspection`, so the number on the bell and the rows
+  // here are the same query rather than two that can disagree.
+  const { missing: missingParam } = await searchParams;
+  const missingPeriod =
+    missingParam && /^\d{4}-\d{2}$/.test(missingParam) ? missingParam : null;
+  const missing = missingPeriod ? await societiesMissingInspection(missingPeriod) : [];
+  const currentReminderPeriod = inspectionReminderPeriod();
 
   const inspections = await db.inspection.findMany({
     orderBy: [{ inspectedAt: "desc" }],
@@ -36,7 +51,57 @@ export default async function InspectionsPage() {
             New inspection
           </Link>
         }
+        chip={
+          missingPeriod === null ? (
+            <Link href={`/admin/inspections?missing=${currentReminderPeriod}`}>
+              <StatusChip tone="warn">Who has not filed?</StatusChip>
+            </Link>
+          ) : undefined
+        }
       />
+
+      {missingPeriod !== null && (
+        <Card className="mb-6 p-6">
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-[15px] font-semibold">
+              Not filed for {monthLabel(`${missingPeriod}-01`)}
+            </h2>
+            <Link href="/admin/inspections" className="text-[13px] font-semibold underline">
+              Show all inspections →
+            </Link>
+          </div>
+          {missing.length === 0 ? (
+            <p className="text-[13px] text-[var(--text-muted)]">
+              Every society with an active contract has a finalised inspection for this month.
+            </p>
+          ) : (
+            <>
+              <p className="mb-3 text-[13px] text-[var(--text-muted)]">
+                {missing.length} societ{missing.length === 1 ? "y" : "ies"} with an active contract
+                {missing.length === 1 ? " has" : " have"} no finalised inspection for this month. A
+                started-but-abandoned draft does not count.
+              </p>
+              <ul className="flex flex-col">
+                {missing.map((m, i) => (
+                  <li
+                    key={m.societyId}
+                    className="flex flex-wrap items-center justify-between gap-3 py-2"
+                    style={i < missing.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
+                  >
+                    <span className="text-[13.5px] font-medium">{m.name}</span>
+                    <Link
+                      href={`/admin/inspections/new?societyId=${m.societyId}`}
+                      className="btn-ghost btn-sm"
+                    >
+                      File it →
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Card>
+      )}
 
       {inspections.length === 0 ? (
         <EmptyState title="No inspections filed yet">

@@ -68,7 +68,7 @@ export default async function ReadingsPage({
   return (
     <>
       <PageHeader
-        title="Meter readings"
+        title="Monthly uploads"
         subtitle={`${period} · ${committedCircuitIds.size} of ${circuits.length} billable circuits have readings`}
         chip={
           openAnomalies > 0 ? (

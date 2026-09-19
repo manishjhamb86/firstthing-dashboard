@@ -874,3 +874,107 @@ describe("a deal whose every candidate was ruled out", () => {
     expect(steps.find((s) => s.key === "commissioning")!.status).toBe("done");
   });
 });
+
+// ---------------------------------------------------------------------------
+// The drift guard.
+//
+// `circuitNextLabel` is a SECOND, hand-maintained statement of the ordering
+// `circuitSteps` defines, kept in step by hand — and it has drifted twice:
+// it named the completion gate pass before the replacement for months after
+// that order was corrected, and it knew nothing about the replacement being
+// assigned first. Both times the symptom was a screen confidently naming the
+// wrong next step. The two cases below this one pin specific scenarios; this
+// pins EVERY state, so a step added or reordered in `circuitSteps` fails here
+// unless the label moved with it.
+// ---------------------------------------------------------------------------
+describe("circuitNextLabel agrees with circuitSteps for every state", () => {
+  // What the operator-facing label must mention when a given step is current.
+  const MUST_MENTION: Record<string, RegExp> = {
+    eligibility: /exception/i,
+    meter: /install the meter/i,
+    "install-gate": /install gate pass/i,
+    "pre-window": /baseline/i,
+    "assign-replacement": /schedule the replacement/i,
+    replacement: /record the light replacement/i,
+    "completion-gate": /completion gate pass/i,
+    benchmark: /benchmark|resolve/i,
+  };
+
+  const bare = {
+    hasInstallGatePass: false,
+    hasCompletionGatePass: false,
+    preInstallBaseline: null,
+    replacementOwnerName: null,
+    replacementScheduledAt: null,
+    lightReplacementDate: null,
+    benchmarkSavingsPct: null,
+  };
+
+  const booked = {
+    replacementOwnerName: "Crew",
+    replacementScheduledAt: new Date("2026-08-27T09:00:00.000Z"),
+  };
+
+  // Each row is a circuit as it genuinely exists in that state — the facts
+  // are the ones a circuit reaching it would actually carry.
+  const cases: Array<{
+    name: string;
+    facts: Parameters<typeof circuitSteps>[0];
+    label: Parameters<typeof circuitNextLabel>[0];
+  }> = [
+    { name: "surveyed", facts: { ...bare, state: "surveyed" }, label: { state: "surveyed" } },
+    { name: "eligible", facts: { ...bare, state: "eligible" }, label: { state: "eligible" } },
+    { name: "meter_installed", facts: { ...bare, state: "meter_installed" }, label: { state: "meter_installed" } },
+    {
+      name: "pre_install_monitoring",
+      facts: { ...bare, state: "pre_install_monitoring" },
+      label: { state: "pre_install_monitoring" },
+    },
+    {
+      name: "awaiting_installation — nobody holds it",
+      facts: { ...bare, state: "awaiting_installation" },
+      label: { state: "awaiting_installation", replacementScheduled: false },
+    },
+    {
+      name: "awaiting_installation — assigned and booked",
+      facts: { ...bare, ...booked, state: "awaiting_installation" },
+      label: { state: "awaiting_installation", replacementScheduled: true },
+    },
+    {
+      name: "post_install_pending",
+      facts: { ...bare, state: "post_install_pending" },
+      label: { state: "post_install_pending" },
+    },
+    {
+      name: "post_install_monitoring",
+      facts: { ...bare, state: "post_install_monitoring" },
+      label: { state: "post_install_monitoring" },
+    },
+    { name: "benchmark_review", facts: { ...bare, state: "benchmark_review" }, label: { state: "benchmark_review" } },
+  ];
+
+  for (const c of cases) {
+    it(`${c.name}: the label names the step the map calls current`, () => {
+      const current = circuitSteps(c.facts).find((s) => s.status === "current");
+      expect(current, `${c.name} has no current step`).toBeDefined();
+      const expected = MUST_MENTION[current!.key];
+      expect(expected, `no expected wording for step "${current!.key}" — add it here`).toBeDefined();
+      expect(circuitNextLabel(c.label)).toMatch(expected);
+    });
+  }
+
+  it("exactly one step is current in every one of them", () => {
+    for (const c of cases) {
+      expect(circuitSteps(c.facts).filter((s) => s.status === "current")).toHaveLength(1);
+    }
+  });
+
+  // `ineligible` is deliberately outside this: it is a branch, not a stage,
+  // and its next move (correct the answers, waive, or pick another candidate)
+  // happens on the survey page rather than on the circuit's own spine.
+  it("a fully commissioned circuit asks for nothing", () => {
+    const done = circuitSteps({ ...bare, state: "benchmark_confirmed", benchmarkSavingsPct: 68, lightReplacementDate: new Date("2026-08-01T00:00:00.000Z") });
+    expect(done.filter((s) => s.status === "current")).toHaveLength(0);
+    expect(circuitNextLabel({ state: "benchmark_confirmed" })).toBe("Open the circuit");
+  });
+});

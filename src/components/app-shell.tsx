@@ -84,14 +84,17 @@ export function AppShell({
       showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
       // The field team's own list — they do not get the deal (2026-08-24).
       showField && { href: "/admin/field", label: "Field work", icon: HardHat },
-      // One place to file any document, whatever kind it is (2026-08-26).
-      showPipeline && { href: "/admin/documents", label: "Documents", icon: FileText },
     ]),
     ...group("societies", "Societies", Building2, [
       { href: "/admin/societies", label: "Societies", icon: Building2 },
       // The monthly per-society motion-sensor checklist (2026-09-12) — field
       // work, same gate as gate passes and benchmark rescale entry.
       showField && { href: "/admin/inspections", label: "Inspections", icon: ClipboardCheck },
+      // One place to file any document, whatever kind it is (2026-08-26).
+      // Sits here rather than under Deals (2026-09-20): the screen asks which
+      // society first and scopes everything else to it, so it reads as a
+      // society surface, not a deal one.
+      showPipeline && { href: "/admin/documents", label: "Documents", icon: FileText },
       showSupport && { href: "/admin/tickets", label: "Support tickets", icon: LifeBuoy },
     ]),
     // Two tabs, not one: a circuit chasing a benchmark and a society holding
@@ -102,7 +105,9 @@ export function AppShell({
       // The eWeLink meter mirror: an account's devices, assigned to what they
       // serve — a circuit.
       showMeters && { href: "/admin/meters", label: "Meters", icon: Zap },
-      showReadings && { href: "/admin/readings", label: "Readings", icon: Gauge },
+      // Named for what it is, not for what it holds: next to "Meters" the
+      // old label "Readings" read as a synonym for it (2026-09-20).
+      showReadings && { href: "/admin/readings", label: "Monthly uploads", icon: Gauge },
     ]),
     // Water tank monitoring (2026-08-25) — mirrors the Smart Life account,
     // society-management's to run. Its own service line, its own group.
@@ -110,9 +115,11 @@ export function AppShell({
       showTanks && { href: "/admin/water-tanks", label: "Water tanks", icon: Droplets },
     ]),
     ...group("billing", "Billing", Receipt, [
-      showBilling && { href: "/admin/billing", label: "Billing", icon: Receipt },
-      // CON-47 — the Zoho invoice is the month of record; this is where it enters.
+      // Intake FIRST (2026-09-20): CON-47 made invoice-first the primary
+      // monthly path — the platform reads the bill back rather than computing
+      // it — so this is where the month actually enters.
       showBilling && { href: "/admin/billing/intake", label: "Invoice intake", icon: Receipt },
+      showBilling && { href: "/admin/billing", label: "Billing board", icon: Receipt },
       showBilling && { href: "/admin/billing/deviations", label: "Deviations", icon: Receipt },
     ]),
     ...group("settings", "Settings", Settings, [

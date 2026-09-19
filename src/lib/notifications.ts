@@ -152,52 +152,107 @@ function previousPeriod(now: Date): string {
  * whichever area or circuit it was filed against; this is a "did anyone
  * visit," not a per-circuit requirement.
  */
+/** The period the reminder is about — the last IST month to fully elapse. */
+export function inspectionReminderPeriod(now = new Date()): string {
+  return previousPeriod(now);
+}
+
+/**
+ * Which societies owe an inspection for `period`, newest contract set first.
+ *
+ * Exported so the notification and the inspections page's own "not filed"
+ * panel read ONE query rather than two that can disagree about who is
+ * overdue — the fault this whole review pass was about.
+ */
+export const societiesMissingInspection = cache(
+  async (period: string): Promise<{ societyId: string; name: string }[]> => {
+    const societies = await db.contract.findMany({
+      where: { status: "active" },
+      select: { societyId: true, society: { select: { name: true } } },
+      distinct: ["societyId"],
+    });
+    if (societies.length === 0) return [];
+
+    // A FINALIZED inspection counts (totalLightsChecked is written only at
+    // finalize) — a bare draft that was started and abandoned must not silence
+    // the reminder, the same rule the portal's "latest inspection" query uses.
+    const filed = await db.inspection.findMany({
+      where: {
+        societyId: { in: societies.map((s) => s.societyId) },
+        period,
+        voidedAt: null,
+        totalLightsChecked: { not: null },
+      },
+      select: { societyId: true },
+    });
+    const filedIds = new Set(filed.map((f) => f.societyId));
+
+    return societies
+      .filter((s) => !filedIds.has(s.societyId))
+      .map((s) => ({ societyId: s.societyId, name: s.society.name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  },
+);
+
+/**
+ * Collapsed to ONE row when more than one society owes an inspection
+ * (2026-09-20, the user's call).
+ *
+ * A row per society is the honest shape, and it was also unreadable: with no
+ * inspection ever filed against 14 active contracts, 14 of the bell's 15
+ * items were the same sentence, and a badge that always reads 15 stops being
+ * a signal at all. The collapsed row carries the count and links to the list
+ * of exactly who, so nothing is hidden — it is one click further away.
+ *
+ * A single overdue society still gets its own named row: "Ace City's 2026-08
+ * inspection was never filed" is more useful than "1 society has not filed",
+ * and it links straight to that society's prefilled form.
+ */
 const openInspectionOverdueNotifications = cache(async (): Promise<Notification[]> => {
   const now = new Date();
-  const period = previousPeriod(now);
+  const period = inspectionReminderPeriod(now);
   // Start of the current IST month — the moment the previous period closed,
   // used only to order these rows in the feed.
   const cur = istMonth(now, 0);
   const closedAt = new Date(Date.UTC(cur.year, cur.month, 1) - IST_OFFSET_MS);
 
-  const societies = await db.contract.findMany({
-    where: { status: "active" },
-    select: { societyId: true, society: { select: { name: true } } },
-    distinct: ["societyId"],
-  });
-  if (societies.length === 0) return [];
+  const missing = await societiesMissingInspection(period);
+  if (missing.length === 0) return [];
 
-  // A FINALIZED inspection counts (totalLightsChecked is written only at
-  // finalize) — a bare draft that was started and abandoned must not silence
-  // the reminder, the same rule the portal's "latest inspection" query uses.
-  const filed = await db.inspection.findMany({
-    where: {
-      societyId: { in: societies.map((s) => s.societyId) },
-      period,
-      voidedAt: null,
-      totalLightsChecked: { not: null },
+  const base = {
+    kind: "inspection_overdue",
+    openedAt: closedAt.toISOString(),
+    closedAt: null,
+    closedReason: null,
+    acknowledgedAt: null,
+    raiseCount: 1,
+    subject: `${period} inspection`,
+    circuitLabel: null,
+    ownerLabel: null,
+  };
+
+  if (missing.length === 1) {
+    const only = missing[0];
+    return [
+      {
+        ...base,
+        id: `inspection-overdue-${only.societyId}-${period}`,
+        message: `${only.name}'s ${period} inspection was never filed.`,
+        societyName: only.name,
+        href: `/admin/inspections/new?societyId=${only.societyId}`,
+      },
+    ];
+  }
+
+  return [
+    {
+      ...base,
+      id: `inspection-overdue-${period}`,
+      message: `${missing.length} societies have no ${period} inspection on file.`,
+      societyName: null,
+      href: `/admin/inspections?missing=${period}`,
     },
-    select: { societyId: true },
-  });
-  const filedIds = new Set(filed.map((f) => f.societyId));
-
-  return societies
-    .filter((s) => !filedIds.has(s.societyId))
-    .map((s) => ({
-      id: `inspection-overdue-${s.societyId}-${period}`,
-      kind: "inspection_overdue",
-      message: `${s.society.name}'s ${period} inspection was never filed.`,
-      openedAt: closedAt.toISOString(),
-      closedAt: null,
-      closedReason: null,
-      acknowledgedAt: null,
-      raiseCount: 1,
-      subject: `${period} inspection`,
-      societyName: s.society.name,
-      circuitLabel: null,
-      ownerLabel: null,
-      href: `/admin/inspections/new?societyId=${s.societyId}`,
-    }));
+  ];
 });
 
 /**

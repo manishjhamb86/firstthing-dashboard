@@ -6564,6 +6564,44 @@ asserting `dataHours` independently) plus a fix to 8 existing `circuit-load.test
 needed the now-required field added. `tsc`/`lint`/`pnpm test` (934)/`pnpm build` all clean. No
 schema change.
 
+## Clearing a window now sweeps the stale pending upload and its demo overlap too (2026-09-19) — user-asked, against a real screenshot
+
+**The ask, clarified through two questions rather than guessed**: after using a Clear action, the
+"An upload was left mid-review" banner (a pending, never-committed `RawReadingFile`) should NOT be
+offered again for review — the operator's own words: "once cleared just remove the old readings.
+and ask the user to re upload the files. instead of showing again for review." And separately,
+demo-generated readings overlapping that pending file's own date range should be deleted too, since
+neither of the two Clear actions built the last two days touched a pending file at all — a stuck
+upload from before the clear kept sitting there, resurfacing the exact confusion the clear was
+meant to end.
+
+**One shared helper, called from inside both Clear transactions** — `discardPendingUploadAndDemoOverlap()`
+(`circuit-recompute.ts`, alongside `recomputeCircuitFigures` for the same "used by two 'use server'
+files, so it has to live in a lib module" reason). It finds the circuit's own pending upload (status
+`pending_normalization`/`awaiting_mapping`/`ready` — the same set `page.tsx`'s own `resumeFile` query
+reads), and: (1) if the pending file recorded a `rangeStart`/`rangeEnd` (set at its own preview
+time), deletes any `MeterReading` rows in that range tagged as demo-generated (`DEMO_RAW_KEY_PREFIX`,
+the same mark `discardDemoReadings` already reads) — deliberately NOT scoped to the phase being
+cleared, since a pending file can span more calendar ground than one window and the overlap can sit
+in a sibling phase entirely; (2) marks the pending file `abandoned` with a reason, rather than
+deleting the row outright (soft, same convention as every other correction in this schema) — a file
+with rows already attached is left untouched, though that case can't actually occur for a genuinely
+pending file (commit is what attaches rows).
+
+Wired into both `discardStoredReadings` (the CSV/CON-45 flow, `reading-actions.ts`) and
+`clearCommissioningWindow` (the legacy flow, `monitoring-actions.ts`) — a legacy-flow circuit can
+still hold a pending CSV upload (a meter-page hand-off sitting in the same queue), so both needed
+the sweep, not just the one the reported screenshot happened to show.
+
+**Verified against the real database, two scripts, 13/13, zero console/page errors**: a fixture
+circuit with a pending upload (recorded range 08-02→08-10), a demo-generated reading inside that
+range, and real committed pre-install readings — clicking "Clear & start over" removes the real
+readings, deletes the demo-generated reading, marks the pending file `abandoned`, and on reload the
+banner is gone entirely, replaced by a plain upload form (not a "review it" invitation). The second
+script repeated the same shape on the legacy flow's `clearCommissioningWindow`, confirming the sweep
+runs there too alongside the review-resolving behaviour already built. `tsc`/`lint`/`pnpm test`
+(934)/`pnpm build` all clean. No schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

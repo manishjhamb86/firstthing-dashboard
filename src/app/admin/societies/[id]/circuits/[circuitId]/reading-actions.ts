@@ -20,7 +20,7 @@ import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { buildCircuitFlowReadingKey } from "@/lib/ingest-keys";
-import { recomputeCircuitFigures } from "@/lib/circuit-recompute";
+import { discardPendingUploadAndDemoOverlap, recomputeCircuitFigures } from "@/lib/circuit-recompute";
 import { matchKnownFormat } from "@/lib/reading-formats";
 import { readWorkbook } from "@/lib/xlsx";
 import { readingSheets, sheetToReadingCsv } from "@/lib/xlsx-readings";
@@ -1023,7 +1023,7 @@ export async function discardStoredReadings(
 
   const rawFileIds = [...new Set(matching.map((r) => r.rawFileId).filter((id): id is string => id !== null))];
 
-  await db.$transaction(async (tx) => {
+  const cleanup = await db.$transaction(async (tx) => {
     await tx.meterReading.deleteMany({ where: { id: { in: matching.map((r) => r.id) } } });
     // A raw file is only removed once nothing else still points at it — the
     // monitoring overlap day, for one, can share a file with a neighbouring
@@ -1032,7 +1032,18 @@ export async function discardStoredReadings(
       const remaining = await tx.meterReading.count({ where: { rawFileId: id } });
       if (remaining === 0) await tx.rawReadingFile.deleteMany({ where: { id } });
     }
+    // "Once cleared, ask the user to re-upload — don't resurface the old
+    // upload for review" (user-asked 2026-09-19): a pending, never-
+    // committed file left in the queue is abandoned rather than offered
+    // again, and any demo-generated readings inside its own recorded range
+    // are cleared too, even outside this phase.
+    const result = await discardPendingUploadAndDemoOverlap(
+      tx,
+      circuitId,
+      `Cleared alongside the ${phase.replace("_", "-")} window — ${reason.trim()}`,
+    );
     await recomputeCircuitFigures(tx, circuitId);
+    return result;
   });
 
   logger.warn("circuit_ingest.readings_discarded", {
@@ -1041,6 +1052,8 @@ export async function discardStoredReadings(
     phase,
     days: matching.length,
     reason: reason.trim(),
+    pendingUploadAbandoned: cleanup.abandonedFileName,
+    demoReadingsDeleted: cleanup.demoReadingsDeleted,
   });
   revalidatePath(circuitPath(circuit.societyId, circuitId));
   return { ok: true };

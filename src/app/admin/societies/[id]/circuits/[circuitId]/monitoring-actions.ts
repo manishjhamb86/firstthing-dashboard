@@ -23,6 +23,7 @@ import {
   judgePostInstallDay,
 } from "@/lib/commissioning-anomaly";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { discardPendingUploadAndDemoOverlap } from "@/lib/circuit-recompute";
 
 // The row-level rules (anomaly gating, completion/benchmark computation)
 // used by both a single day's submission and the CSV bulk upload below —
@@ -582,7 +583,7 @@ export async function clearCommissioningWindow(
     windowType === "pre_install" ? circuit.preInstallWindowStartAt : circuit.postInstallWindowStartAt;
   const newStart = mode === "restart" ? await restartWindow(circuitId, windowType) : windowStartAt;
 
-  await db.$transaction(async (tx) => {
+  const cleanup = await db.$transaction(async (tx) => {
     await tx.commissioningReading.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
     await tx.circuit.update({
       where: { id: circuitId },
@@ -618,6 +619,16 @@ export async function clearCommissioningWindow(
         },
       });
     }
+    // "Once cleared, ask the user to re-upload — don't resurface the old
+    // upload for review" (user-asked 2026-09-19): this circuit's CSV-flow
+    // side (a legacy circuit can still have a pending meter-page hand-off
+    // sitting in the same queue) gets the same cleanup a CSV-flow clear
+    // already does.
+    return discardPendingUploadAndDemoOverlap(
+      tx,
+      circuitId,
+      `Cleared alongside the ${windowType.replace("_", "-")} window — ${reason.trim()}`,
+    );
   });
 
   logger.warn("commissioning.window_cleared", {
@@ -627,6 +638,8 @@ export async function clearCommissioningWindow(
     mode,
     days: rows.length,
     reason: reason.trim(),
+    pendingUploadAbandoned: cleanup.abandonedFileName,
+    demoReadingsDeleted: cleanup.demoReadingsDeleted,
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   revalidatePath("/admin/demo-monitoring");

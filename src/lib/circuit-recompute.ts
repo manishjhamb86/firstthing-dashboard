@@ -3,6 +3,7 @@ import { addDays, classifyDay } from "@/lib/circuit-load";
 import { baselineAverage, baselineUnsettled, periodSavingsSummary } from "@/lib/circuit-load";
 import { BENCHMARK_MAX_PCT, BENCHMARK_MIN_PCT } from "@/lib/commissioning-anomaly";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
+import { DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
 
 /**
  * Re-derive a circuit's baseline and benchmark from the readings it holds and
@@ -141,4 +142,67 @@ export async function recomputeCircuitFigures(
     await tx.circuit.update({ where: { id: circuit.id }, data: updates });
   }
   return { baseline, benchmark };
+}
+
+/**
+ * Called from inside a "clear this window" transaction (both the CSV flow's
+ * `discardStoredReadings` and the legacy flow's `clearCommissioningWindow`).
+ * Two things the operator asked for after clearing (2026-09-19), neither of
+ * which either action already did on its own:
+ *
+ * 1. A pending, never-committed upload left sitting in the review queue
+ *    (the "An upload was left mid-review" banner, filed by the meter page's
+ *    hand-off or a reload mid-review) is abandoned rather than surfaced
+ *    again — the operator explicitly chose to start over, so re-offering
+ *    the exact upload that's now stale is the wrong invitation. "Ask the
+ *    user to re-upload" was the user's own wording, not "resume reviewing
+ *    what's already there."
+ * 2. Demo-generated readings (tagged via the stored file's own
+ *    `DEMO_RAW_KEY_PREFIX` key, the same mark `discardDemoReadings` reads)
+ *    that fall inside the pending file's own recorded range are deleted
+ *    too — they can sit in a DIFFERENT phase than the one being cleared
+ *    (a pending upload can span more calendar ground than one window), so
+ *    the phase-scoped clear alone would leave them behind, stale and
+ *    conflicting with whatever gets uploaded next.
+ *
+ * A pending file with rows already attached is never touched here — commit
+ * is what attaches rows, so a genuinely pending (never-committed) file
+ * always has zero, but the check is kept rather than assumed.
+ */
+export async function discardPendingUploadAndDemoOverlap(
+  tx: Tx,
+  circuitId: string,
+  reason: string,
+): Promise<{ abandonedFileName: string | null; demoReadingsDeleted: number }> {
+  const pending = await tx.rawReadingFile.findFirst({
+    where: { circuitId, status: { in: ["pending_normalization", "awaiting_mapping", "ready"] } },
+    orderBy: { uploadedAt: "desc" },
+  });
+  if (!pending) return { abandonedFileName: null, demoReadingsDeleted: 0 };
+
+  let demoReadingsDeleted = 0;
+  if (pending.rangeStart && pending.rangeEnd) {
+    const demoRows = await tx.meterReading.findMany({
+      where: {
+        circuitId,
+        date: { gte: pending.rangeStart, lte: pending.rangeEnd },
+        rawFile: { s3Key: { startsWith: DEMO_RAW_KEY_PREFIX } },
+      },
+      select: { id: true },
+    });
+    if (demoRows.length > 0) {
+      await tx.meterReading.deleteMany({ where: { id: { in: demoRows.map((r) => r.id) } } });
+      demoReadingsDeleted = demoRows.length;
+    }
+  }
+
+  const attached = await tx.meterReading.count({ where: { rawFileId: pending.id } });
+  if (attached === 0) {
+    await tx.rawReadingFile.update({
+      where: { id: pending.id },
+      data: { status: "abandoned", aiError: reason.slice(0, 500) },
+    });
+  }
+
+  return { abandonedFileName: pending.fileName, demoReadingsDeleted };
 }

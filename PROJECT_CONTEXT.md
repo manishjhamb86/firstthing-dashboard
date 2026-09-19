@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-18
+2026-09-20
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6601,6 +6601,66 @@ banner is gone entirely, replaced by a plain upload form (not a "review it" invi
 script repeated the same shape on the legacy flow's `clearCommissioningWindow`, confirming the sweep
 runs there too alongside the review-resolving behaviour already built. `tsc`/`lint`/`pnpm test`
 (934)/`pnpm build` all clean. No schema change.
+
+## Four screens answering one question four ways (2026-09-20) — user-asked, a review pass
+
+**The ask**: "review the whole process done so far... see if checks are same for same usecases
+everywhere. i have noticed the same thing shows different statuses at different places" — plus the
+nav, the admin home and the society list. Four real disagreements, all the same fault, all fixed
+and verified against the dev database.
+
+**1. `loadDealProgress` dropped two fields, so four pages gave the wrong next step.** Its candidate
+select carried neither `replacementOwnerId` nor the booked `installation_day`, so
+`replacementScheduled` was false on every page using it — the society page, the circuit page, the
+KYC screen and the installation screen all said "Schedule the replacement and assign it to a crew"
+for work already assigned AND booked, while the deal page (which wrote its own fuller query) said
+to record it. The select is shared now, and `DealCandidateRow` is derived from it: the previous
+hand-written type made both fields OPTIONAL, so a query that forgot them type-checked cleanly and
+silently produced the wrong answer. A query that forgets one fails the build instead of the screen.
+
+**2. `/admin/demo-monitoring` counted one of the two reading stores.** The pre-install window opens
+the moment the meter install is recorded, so every commissioning circuit lands on that board —
+including CON-45's CSV path, which never writes a `CommissioningReading`. Those rows read "0/5" and
+"Not logged today" while the circuit's own page listed the days just uploaded. **The five-day gate
+is the legacy window's alone** (CON-19); the CSV path averages every non-excluded day and settles
+the baseline as soon as one exists, so "Day 3 of 5" is a true sentence about one flow and a
+meaningless one about the other. `src/lib/window-progress.ts` (pure, 10 cases) answers for both and
+returns the label each flow can actually support. **Found by the browser check, not by reading**:
+the first cut fixed the count and left the variance figure reading the legacy table, so one row
+said "4 days uploaded" and "Awaiting first reading" at once — the figures now read whichever store
+the count came from.
+
+**3. The societies list counted removed circuits in one column and not the next.**
+`_count: { circuits: true }` had no `voidedAt` filter while the Lights column beside it, "Circuits
+metered" and "No circuit yet" all excluded them — so a row could read "2 circuits · — lights", and
+a society whose only circuit was removed never surfaced as having nothing to bill against. All four
+read one live-circuit array now. The standing rule this missed is already recorded here twice: a
+soft delete is only as good as the reads that honour it.
+
+**4. The Portfolio was a fifth answer to "what needs attention".** Its "Needs a decision" card only
+queried circuits in `benchmark_review` or `surveyed`. Four things that need a person had nowhere on
+that page at all — an overdue invoice, a never-filed inspection, an open society request, and a
+lead logged on someone's behalf and frozen until its owner confirms it, which was reported as a
+number in a stat's subtitle with no way to reach one. `openTicketNotifications` folds requests into
+`openNotifications()`, and `unreadNotificationCount` is counted off that one list — the bell had
+been adding `db.ticket.count` to its total, which forced the notifications page to issue a matching
+`findMany` "to show what the badge counted" (its own comment). The Portfolio reads the feed and
+**deliberately excludes meter faults and below-band circuits**, which already have their own cards
+in the same column; deal-blocking items sort above the routine feed so 14 overdue inspections
+cannot bury one frozen lead.
+
+**The IA held up better than the flow.** All 50 admin and 13 portal routes checked: nothing
+duplicated, nothing orphaned; `/admin/monitoring`, `/portal/lighting` and `/portal/meters` are
+legacy redirects doing their job. Left as recommendations rather than done unilaterally: "Readings"
+reads as a synonym for "Meters" when it is the monthly upload board; Invoice intake sits below
+Billing though CON-47 made invoice-first the primary path; Documents sits under Deals though it
+scopes to a society first. The field open/closed discipline was checked and is already uniform —
+`StepSection` and `ClickToEdit` are used consistently and no form stands open that should not.
+
+944 unit tests (10 new), `tsc`/`lint`/`build` clean, no schema change. Verified 12/12 and 10/10 in a
+browser on fixtures reproducing each defect — including that the badge and the notifications page
+are now the same number and a society request is listed exactly once — fixtures removed by count.
+Not deployed.
 
 ## Current Phase (archived application — history)
 

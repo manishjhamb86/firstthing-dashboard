@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { openNotifications, pastNotifications } from "@/lib/notifications";
-import { db } from "@/lib/db";
 import { AcknowledgeButton } from "./acknowledge-button";
 
 const KIND_LABEL: Record<string, string> = {
@@ -14,13 +13,20 @@ const KIND_LABEL: Record<string, string> = {
   billing_warning: "Overdue — warning stage",
   billing_suspended: "Suspended",
   inspection_overdue: "Inspection not filed",
+  ticket_open: "Society request",
 };
 
 // "offline"/"billing_suspended"/an unrecognised future kind default to the
 // more alarming tone; every other named kind here is deliberately opted
 // into the calmer one — a wrongly-alarming default is the safer failure
 // mode for a kind this map hasn't seen yet.
-const CALM_KINDS = new Set(["out_of_range", "savings_out_of_band", "billing_overdue", "inspection_overdue"]);
+const CALM_KINDS = new Set([
+  "out_of_range",
+  "savings_out_of_band",
+  "billing_overdue",
+  "inspection_overdue",
+  "ticket_open",
+]);
 function notificationTone(kind: string): "bad" | "warn" {
   return CALM_KINDS.has(kind) ? "warn" : "bad";
 }
@@ -60,19 +66,17 @@ export const metadata = { title: "Notifications" };
 export default async function NotificationsPage() {
   const actor = await requireAdminPage();
   if (!actor) redirect("/api/session-ended");
-  const [open, past, openTickets] = await Promise.all([
-    openNotifications(),
-    pastNotifications(),
-    // The badge counts open society requests too — a page the badge points
-    // at must show what the badge counted.
-    db.ticket.findMany({
-      where: { status: "open" },
-      orderBy: { createdAt: "asc" },
-      include: { society: { select: { name: true } } },
-    }),
-  ]);
+  // Open society requests are IN the feed now (notifications.ts) rather than
+  // fetched again here to "show what the badge counted" — one list, so the
+  // count and the page are the same arithmetic by construction.
+  const [open, past] = await Promise.all([openNotifications(), pastNotifications()]);
   const canAck = actor.user.adminPermissions.includes("manage_users");
-  const unattended = open.filter((n) => n.acknowledgedAt === null).length + openTickets.length;
+  const openTickets = open.filter((n) => n.kind === "ticket_open");
+  // Requests keep their own card above, so they are excluded from the feed
+  // list below — in the feed for counting and for the Portfolio, rendered
+  // once here.
+  const openFeed = open.filter((n) => n.kind !== "ticket_open");
+  const unattended = open.filter((n) => n.acknowledgedAt === null).length;
 
   return (
     <>
@@ -104,7 +108,7 @@ export default async function NotificationsPage() {
                 style={i < openTickets.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
               >
                 <p className="text-[13.5px]">
-                  <strong>{t.society.name}</strong> — {t.subject}
+                  <strong>{t.societyName}</strong> — {t.subject}
                 </p>
                 <StatusChip tone="bad">Open</StatusChip>
               </div>
@@ -120,7 +124,7 @@ export default async function NotificationsPage() {
             These conditions are still true. Acknowledging takes one off the badge without closing
             it — only the meter reporting again, or reading back inside its ceiling, does that.
           </p>
-          {open.length === 0 ? (
+          {openFeed.length === 0 ? (
             <div className="mt-4">
               <EmptyState title="Nothing open">
                 Every meter is reporting, and every day is inside what its circuit can draw.
@@ -128,7 +132,7 @@ export default async function NotificationsPage() {
             </div>
           ) : (
             <ul className="mt-4 space-y-2">
-              {open.map((n) => (
+              {openFeed.map((n) => (
                 <li
                   key={n.id}
                   className="rounded-[var(--r-sm)] p-3"

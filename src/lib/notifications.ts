@@ -200,6 +200,46 @@ const openInspectionOverdueNotifications = cache(async (): Promise<Notification[
     }));
 });
 
+/**
+ * Open society requests (the portal's ticket desk).
+ *
+ * Folded into the feed itself (2026-09-20) rather than staying a separate
+ * query the bell counted and the page re-fetched on its own. The bell already
+ * added `db.ticket.count` to its total, so the notifications page had to
+ * issue its own matching `findMany` to "show what the badge counted" — its
+ * own comment said exactly that. Two queries kept in step by hand is the
+ * shape this codebase keeps finding as a bug, and it left the Portfolio with
+ * no way to show them at all without writing a third. One feed, three
+ * readers.
+ *
+ * In-progress tickets deliberately stay out: taking one up IS the attention
+ * this feed asks for.
+ */
+const openTicketNotifications = cache(async (): Promise<Notification[]> => {
+  const rows = await db.ticket.findMany({
+    where: { status: "open" },
+    orderBy: { createdAt: "asc" },
+    include: { society: { select: { name: true } } },
+  });
+  return rows.map((t) => ({
+    id: t.id,
+    kind: "ticket_open",
+    message: `${t.society.name} raised a request: ${t.subject}`,
+    openedAt: t.createdAt.toISOString(),
+    closedAt: null,
+    closedReason: null,
+    // Resolving it with a stated outcome is the act; there is no separate
+    // "seen" state, so these never read as acknowledged.
+    acknowledgedAt: null,
+    raiseCount: 1,
+    subject: t.subject,
+    societyName: t.society.name,
+    circuitLabel: null,
+    ownerLabel: null,
+    href: "/admin/tickets",
+  }));
+});
+
 function toNotification(a: Row): Notification {
   const circuit = a.circuit ?? a.meter?.circuit ?? null;
   const owner = a.meter?.owner ?? a.circuit?.meterDevice?.owner ?? null;
@@ -238,37 +278,29 @@ function toNotification(a: Row): Notification {
  * stops meaning anything.
  */
 export const unreadNotificationCount = cache(async (): Promise<number> => {
-  // Unattended alerts plus OPEN society requests (customer portal,
-  // 2026-08-31) plus overdue/warning/suspended invoices (2026-09-12) plus a
-  // society's never-filed monthly inspection (2026-09-14): none of these
-  // four has a "somebody looked at it" state the way an acknowledged meter
-  // alert does — following up IS the act (confirmPaymentStatus/recordPayment,
-  // or simply filing the inspection) — so every one of them counts until
-  // resolved. In-progress tickets deliberately do not count — taking one up
-  // is the attention the badge asks for.
-  // The two derived feeds are cache()-memoized, so counting them by their own
-  // list length (rather than a separate count query) reuses the exact rows
-  // openNotifications renders — the badge and the page can never disagree —
-  // and adds no query on a page that also lists them.
-  const [alerts, tickets, invoiceRows, inspectionRows] = await Promise.all([
-    db.meterAlert.count({ where: { closedAt: null, acknowledgedAt: null } }),
-    db.ticket.count({ where: { status: "open" } }),
-    openInvoiceNotifications(),
-    openInspectionOverdueNotifications(),
-  ]);
-  return alerts + tickets + invoiceRows.length + inspectionRows.length;
+  // Counted off the feed itself, so the badge and every surface that renders
+  // the feed are arithmetically the same answer rather than two lists kept in
+  // step by hand. `openNotifications` is cache()-memoized, so a page that
+  // also renders the list pays for this once.
+  const open = await openNotifications();
+  return open.filter((n) => n.acknowledgedAt === null).length;
 });
 
 /** Everything still open, worst-first by age. */
 export const openNotifications = cache(async (): Promise<Notification[]> => {
-  const [alertRows, invoiceNotifications, inspectionNotifications] = await Promise.all([
-    db.meterAlert.findMany({ where: { closedAt: null }, orderBy: { openedAt: "asc" }, include }),
-    openInvoiceNotifications(),
-    openInspectionOverdueNotifications(),
-  ]);
-  return [...alertRows.map(toNotification), ...invoiceNotifications, ...inspectionNotifications].sort(
-    (a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime(),
-  );
+  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications] =
+    await Promise.all([
+      db.meterAlert.findMany({ where: { closedAt: null }, orderBy: { openedAt: "asc" }, include }),
+      openInvoiceNotifications(),
+      openInspectionOverdueNotifications(),
+      openTicketNotifications(),
+    ]);
+  return [
+    ...alertRows.map(toNotification),
+    ...invoiceNotifications,
+    ...inspectionNotifications,
+    ...ticketNotifications,
+  ].sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
 });
 
 /** The history — resolved alerts, most recently closed first. */

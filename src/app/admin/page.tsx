@@ -4,9 +4,10 @@ import { dealLabel } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
-import { CIRCUIT_STATE, PIPELINE_STAGE, statusMeta } from "@/lib/status-maps";
+import { PIPELINE_STAGE, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { openNotifications } from "@/lib/notifications";
 
 // The Portfolio overview. Every figure here is a real query — nothing is
 // fabricated, and anything the schema can't yet answer is simply absent
@@ -43,7 +44,7 @@ export default async function AdminHomePage() {
     activeSocietyCount,
     prospectCount,
     openPipelineCount,
-    pendingApprovalCount,
+    pendingApprovals,
     circuitsInCommissioning,
     benchmarkConfirmedCount,
     recentPipelines,
@@ -52,12 +53,20 @@ export default async function AdminHomePage() {
     benchmarkedCircuits,
     meterRows,
     belowBand,
+    feed,
   ] = await Promise.all([
     db.society.count(),
     db.society.count({ where: { status: "active" } }),
     db.society.count({ where: { status: "prospect" } }),
     db.pipeline.count({ where: { stage: { in: ["lead", "survey_pending"] } } }),
-    db.pipeline.count({ where: { authoritative: false } }),
+    // The ROWS, not just a count: a lead logged on someone's behalf is frozen
+    // until its owner confirms it (FEAT-001-AC-2), and this page reported the
+    // number in a stat's subtitle with no way to reach one.
+    db.pipeline.findMany({
+      where: { authoritative: false },
+      orderBy: { createdAt: "asc" },
+      include: { society: { select: { name: true } }, salesOwner: { select: { name: true, email: true } } },
+    }),
     db.circuit.count({
       where: {
         voidedAt: null,
@@ -109,6 +118,13 @@ export default async function AdminHomePage() {
           },
         })
       : Promise.resolve([]),
+    // The same feed the bell counts and the notification centre renders.
+    // Reading it here rather than writing a fourth set of "what needs
+    // attention" queries is the whole point: four items that had no home on
+    // this page at all (arrears, never-filed inspections, society requests,
+    // and leads frozen awaiting their owner) now appear where someone starts
+    // their day, and they cannot disagree with the badge about what is waiting.
+    openNotifications(),
   ]);
 
   // The meter fleet, summarised — the same view model the meters page uses,
@@ -126,7 +142,50 @@ export default async function AdminHomePage() {
   const closedLost = stageCount.get("closed_lost") ?? 0;
   const today = longDate(new Date());
 
-  const decisionCount = circuitsNeedingAttention.length;
+  // What is waiting on a person, assembled once.
+  //
+  // Meter faults and below-band circuits are deliberately EXCLUDED: both
+  // already have their own card further down this column, and listing them
+  // twice on one screen is the duplication this page has been pulled up on
+  // before. What is left is everything that had nowhere to appear at all —
+  // arrears, a never-filed inspection, a society's request, and a lead frozen
+  // awaiting its owner — plus the circuit decisions this card already carried.
+  const SHOWN_ELSEWHERE = new Set(["offline", "out_of_range", "savings_out_of_band"]);
+  type Waiting = { id: string; label: string; detail: string; href: string; tone: "warn" | "bad" };
+
+  const waiting: Waiting[] = [
+    ...(canSeePipeline
+      ? pendingApprovals.map((p) => ({
+          id: `appr-${p.id}`,
+          label: `${p.society.name} — lead awaiting confirmation`,
+          detail: `Logged for ${p.salesOwner.name ?? p.salesOwner.email}. The deal cannot advance until they confirm it.`,
+          href: `/admin/pipeline/${p.id}`,
+          tone: "warn" as const,
+        }))
+      : []),
+    ...(canSeeMonitoring
+      ? circuitsNeedingAttention.map((c) => ({
+          id: `ckt-${c.id}`,
+          label: `${c.society.name} · ${c.location || c.lightType}`,
+          detail:
+            c.state === "surveyed"
+              ? "Awaiting a light-count exception decision before it can be commissioned."
+              : "The measured result fell outside CON-20's band — the review is open.",
+          href: `/admin/societies/${c.societyId}/circuits/${c.id}`,
+          tone: "warn" as const,
+        }))
+      : []),
+    ...feed
+      .filter((n) => !SHOWN_ELSEWHERE.has(n.kind) && n.acknowledgedAt === null)
+      .map((n) => ({
+        id: `feed-${n.id}`,
+        label: n.societyName ?? n.subject,
+        detail: n.message,
+        href: n.href,
+        tone: n.kind === "billing_suspended" ? ("bad" as const) : ("warn" as const),
+      })),
+  ];
+  const decisionCount = waiting.length;
 
   return (
     <>
@@ -139,10 +198,10 @@ export default async function AdminHomePage() {
         title="Portfolio"
         subtitle={today}
         chip={
-          canSeeMonitoring && decisionCount > 0 ? (
-            <a href="#needs-decision" aria-label="Jump to the circuits needing a decision">
+          decisionCount > 0 ? (
+            <a href="#needs-decision" aria-label="Jump to what is waiting on you">
               <StatusChip tone="warn">
-                {decisionCount} {decisionCount === 1 ? "circuit needs" : "circuits need"} a decision
+                {decisionCount} {decisionCount === 1 ? "item needs" : "items need"} you
               </StatusChip>
             </a>
           ) : undefined
@@ -159,7 +218,7 @@ export default async function AdminHomePage() {
           <Stat
             label="Open pipelines"
             value={openPipelineCount}
-            detail={pendingApprovalCount > 0 ? `${pendingApprovalCount} pending approval` : "None pending approval"}
+            detail={pendingApprovals.length > 0 ? `${pendingApprovals.length} pending approval` : "None pending approval"}
           />
         )}
         {canSeeMonitoring && (
@@ -429,44 +488,46 @@ export default async function AdminHomePage() {
             </Card>
           )}
 
-          {canSeeMonitoring && (
-            <Card className="p-6" >
-              <div id="needs-decision" className="scroll-mt-24">
-                <CardTitle>Needs a decision</CardTitle>
-              </div>
-              {circuitsNeedingAttention.length === 0 ? (
-                <EmptyState title="Nothing waiting">
-                  No circuit is sitting on a light-count exception or a benchmark outside CON-20&apos;s band.
-                </EmptyState>
-              ) : (
-                <ul className="space-y-3">
-                  {circuitsNeedingAttention.map((c) => {
-                    const state =
-                      c.state === "surveyed"
-                        ? { label: "Awaiting light-count exception", tone: "warn" as const }
-                        : statusMeta(CIRCUIT_STATE, c.state);
-                    return (
-                      <li
-                        key={c.id}
-                        className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
-                      >
-                        <div className="min-w-0">
-                          <Link
-                            href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {c.location || c.lightType}
-                          </Link>
-                          <p className="text-sm text-[var(--text-muted)] truncate">{c.society.name}</p>
-                        </div>
-                        <StatusChip tone={state.tone}>{state.label}</StatusChip>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Card>
-          )}
+          <Card className="p-6">
+            <div id="needs-decision" className="scroll-mt-24 mb-1 flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="mb-0">Needs you</CardTitle>
+              {waiting.length > 0 && <StatusChip tone="warn">{waiting.length}</StatusChip>}
+            </div>
+            <p className="mb-3 text-[13px] text-[var(--text-muted)]">
+              Everything waiting on a person that is not already a card below. Meter faults and
+              below-band circuits have their own, so they are not repeated here.
+            </p>
+            {waiting.length === 0 ? (
+              <EmptyState title="Nothing waiting">
+                No circuit decision, no unconfirmed lead, no overdue invoice or inspection, and no
+                open society request.
+              </EmptyState>
+            ) : (
+              <ul className="space-y-3">
+                {waiting.slice(0, 8).map((w) => (
+                  <li
+                    key={w.id}
+                    className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                      <Link href={w.href} className="min-w-0 font-medium hover:underline">
+                        {w.label}
+                      </Link>
+                      <StatusChip tone={w.tone}>Open</StatusChip>
+                    </div>
+                    <p className="mt-0.5 text-[13px] text-[var(--text-muted)]">{w.detail}</p>
+                  </li>
+                ))}
+                {waiting.length > 8 && (
+                  <li className="border-t border-[var(--border-subtle)] pt-3 text-[13px]">
+                    <Link href="/admin/notifications" className="underline">
+                      and {waiting.length - 8} more →
+                    </Link>
+                  </li>
+                )}
+              </ul>
+            )}
+          </Card>
 
           {/* Confirmed benchmarks against CON-20's band — the number the whole
               commercial model rests on, so it belongs on the home screen. */}

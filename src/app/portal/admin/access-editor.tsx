@@ -6,6 +6,7 @@ import type { PortalGrant } from "@prisma/client";
 import { Card, CardTitle, ErrorText, StatusChip } from "@/components/ui";
 import { GRANT_META } from "@/lib/portal-access";
 import { setMemberGrants } from "./grant-actions";
+import { MemberAvatar, RoleBadge } from "../member-badges";
 
 type Member = {
   id: string;
@@ -81,18 +82,21 @@ export function AccessEditor({
                   ...(selectedId === m.id ? { background: "var(--accent-subtle)", borderRadius: "var(--r-sm)", padding: "12px" } : {}),
                 }}
               >
-                <div className="min-w-0">
-                  <p className="text-[13.5px] font-semibold">
-                    {m.name ?? m.email}
-                    {m.isSelf && (
-                      <span className="ml-2 text-[11px] font-medium" style={{ color: "var(--text-subtle)" }}>
-                        you
-                      </span>
-                    )}
-                  </p>
-                  <p className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                    {isOb ? "Office-bearer" : m.authority === "manager" ? "Facility manager" : "Committee"}
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <MemberAvatar name={m.name} email={m.email} />
+                  <div className="min-w-0">
+                    <p className="truncate text-[13.5px] font-semibold">
+                      {m.name ?? m.email}
+                      {m.isSelf && (
+                        <span className="ml-2 text-[11px] font-medium" style={{ color: "var(--text-subtle)" }}>
+                          you
+                        </span>
+                      )}
+                    </p>
+                    <div className="mt-0.5">
+                      <RoleBadge authority={m.authority} />
+                    </div>
+                  </div>
                 </div>
                 <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-1.5">
                   {isOb ? (

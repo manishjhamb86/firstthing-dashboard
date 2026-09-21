@@ -197,12 +197,24 @@ export default async function PortalTanksPage() {
               minimum makes that two columns on a desktop and one on a phone
               — never the four-column grid with three empties that the
               2026-08-26 fix was about. */}
-          {groups.map((g) => (
+          {groups.map((g) => {
+            const groupQuiet = g.rows.filter((r) => r.quiet).length;
+            return (
           <section key={g.title ?? g.key} className="mb-7">
           {g.title && (
-            <div className="mb-3 flex items-baseline gap-2.5">
-              <h2 className="text-[15px] font-bold">{g.title}</h2>
-              <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{g.note}</span>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+              <div className="flex items-baseline gap-2.5">
+                <h2 className="text-[15px] font-bold">{g.title}</h2>
+                <span className="text-xs" style={{ color: "var(--text-subtle)" }}>{g.note}</span>
+              </div>
+              {g.rows.length > 0 &&
+                (groupQuiet === 0 ? (
+                  <StatusChip tone="ok">All reporting</StatusChip>
+                ) : (
+                  <StatusChip tone="warn">
+                    {groupQuiet} of {g.rows.length} offline
+                  </StatusChip>
+                ))}
             </div>
           )}
           {byLocation(g.rows).map((sub) => (
@@ -281,7 +293,8 @@ export default async function PortalTanksPage() {
           </div>
           ))}
           </section>
-          ))}
+            );
+          })}
           <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>
             Levels refresh automatically. Only tanks assigned to your society appear here.
           </p>

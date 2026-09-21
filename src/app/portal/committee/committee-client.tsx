@@ -2,10 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
-import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
+import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
 import { createSocietyAccount, deactivateSocietyAccount } from "../actions";
 import { TransferButton } from "../transfer-button";
+import { MemberAvatar, RoleBadge } from "../member-badges";
 
 type Account = {
   id: string;
@@ -154,23 +154,26 @@ export function CommitteeClient({
               style={{ borderColor: "var(--border-subtle)" }}
             >
               <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                <div className="min-w-0">
-                  <span className="text-sm font-semibold">
-                    {a.name ?? a.email}
-                    {a.isSelf && (
-                      <span className="ml-1.5 text-xs font-semibold" style={{ color: "var(--text-subtle)" }}>
-                        (you)
-                      </span>
-                    )}
-                  </span>
-                  <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                    {a.email}
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <MemberAvatar name={a.name} email={a.email} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold">
+                      {a.name ?? a.email}
+                      {a.isSelf && (
+                        <span className="ml-1.5 text-xs font-semibold" style={{ color: "var(--text-subtle)" }}>
+                          (you)
+                        </span>
+                      )}
+                    </p>
+                    <p className="truncate text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+                      {a.email}
+                    </p>
+                    <div className="mt-1">
+                      <RoleBadge authority={a.authority} />
+                    </div>
+                  </div>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <StatusChip tone={a.authority === "office_bearer" ? "ok" : "info"}>
-                    {PORTAL_AUTHORITY_LABEL[a.authority] ?? a.authority}
-                  </StatusChip>
                   {viewerIsOfficeBearer && a.authority !== "office_bearer" && (
                     <>
                       <TransferButton profileId={a.id} />

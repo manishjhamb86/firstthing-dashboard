@@ -4,8 +4,10 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
-import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { RaiseTicketCards, TicketStatusControl } from "./support-client";
+import { KpiBubble } from "../kpi-tiles";
+import { CheckCircle2, CircleDot, Clock, Timer } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Support" };
@@ -56,16 +58,18 @@ export default async function PortalSupportPage() {
         }
       />
 
-      <StatRow>
-        <Stat label="Open" value={String(open)} tone={open > 0 ? "warn" : undefined} />
-        <Stat label="In progress" value={String(inProgress)} />
-        <Stat label="Resolved" value={String(resolved)} />
-        {medianDays !== null ? (
-          <Stat label="Median time to resolve" value={`${medianDays.toFixed(1)} days`} detail="across your resolved tickets" />
-        ) : (
-          <Stat label="Median time to resolve" value="—" detail="no resolved tickets yet" />
-        )}
-      </StatRow>
+      <div className="mb-6 grid gap-4 grid-cols-2 xl:grid-cols-4">
+        <KpiBubble icon={CircleDot} tone={open > 0 ? "bad" : "ok"} value={String(open)} label="Open" detail="awaiting a first look" />
+        <KpiBubble icon={Clock} tone="warn" value={String(inProgress)} label="In progress" detail="being worked on" />
+        <KpiBubble icon={CheckCircle2} tone="ok" value={String(resolved)} label="Resolved" detail="closed out" />
+        <KpiBubble
+          icon={Timer}
+          tone="info"
+          value={medianDays !== null ? `${medianDays.toFixed(1)} days` : "—"}
+          label="Median time to resolve"
+          detail={medianDays !== null ? "across your resolved tickets" : "no resolved tickets yet"}
+        />
+      </div>
 
       <RaiseTicketCards canManage={canManage} />
 

@@ -9,19 +9,11 @@ import { publishedMonthsFor } from "@/lib/published-months-loader";
 import { societyMeterRows } from "@/lib/meter-view";
 import { SAVINGS_BAND_META } from "@/lib/circuit-load";
 import { formatDate } from "@/lib/format-date";
-import {
-  Card,
-  CardTitle,
-  ChartPending,
-  EmptyState,
-  PageHeader,
-  Stat,
-  StatPending,
-  StatRow,
-  StatusChip,
-} from "@/components/ui";
+import { Card, CardTitle, ChartPending, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { BAND_TONE, monthName } from "../portal-widgets";
 import { ConsumptionChart } from "../consumption-chart";
+import { KpiBubble } from "../kpi-tiles";
+import { Gauge, IndianRupee, Leaf, Zap } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Electricity" };
@@ -112,43 +104,49 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
         </EmptyState>
       ) : (
         <>
-          <StatRow>
-            {energy.totals.consumedKwh !== null ? (
-              <Stat
-                label={`Consumed · ${energy.month ? monthName(energy.month).split(" ")[0] : "month"}`}
-                value={`${Math.round(energy.totals.consumedKwh).toLocaleString("en-IN")} kWh`}
-                detail="across your metered circuits"
-              />
-            ) : (
-              <StatPending label="Consumed" detail="Once monthly readings arrive" />
-            )}
-            {energy.totals.avoidedKwh !== null ? (
-              <Stat
-                label="Avoided vs before"
-                value={`${Math.round(energy.totals.avoidedKwh).toLocaleString("en-IN")} kWh`}
-                tone="ok"
-                detail="what the old lights would have drawn"
-              />
-            ) : (
-              <StatPending label="Avoided vs before" detail="Once monthly readings arrive" />
-            )}
-            {billed ? (
-              <Stat
-                label={`Saved in rupees · ${monthName(billed.period).split(" ")[0]}`}
-                value={inr(billed.savedValue)}
-                tone="ok"
-                detail={`billed month · you kept ${inr(billed.societyKeeps)}`}
-              />
-            ) : (
-              <StatPending label="Saved in rupees" detail="Appears once FirsThing publishes a billed month" />
-            )}
-            <Stat
-              label="Meters online"
+          {/* Icon-bubble tiles (design canvas fidelity, 2026-09-21) — same
+              four real figures the StatRow they replace carried, none
+              dropped: this page has more to say than LiveMetering.dc.html's
+              own simpler 2-row card, so it keeps saying all of it, just in
+              the mockup's visual language. */}
+          <div className="mb-6 grid gap-4 grid-cols-2 xl:grid-cols-4">
+            <KpiBubble
+              icon={Zap}
+              tone="info"
+              value={
+                energy.totals.consumedKwh !== null
+                  ? `${Math.round(energy.totals.consumedKwh).toLocaleString("en-IN")} kWh`
+                  : "—"
+              }
+              label={`Consumed · ${energy.month ? monthName(energy.month).split(" ")[0] : "month"}`}
+              detail="across your metered circuits"
+            />
+            <KpiBubble
+              icon={Leaf}
+              tone="ok"
+              value={
+                energy.totals.avoidedKwh !== null
+                  ? `${Math.round(energy.totals.avoidedKwh).toLocaleString("en-IN")} kWh`
+                  : "—"
+              }
+              label="Avoided vs before"
+              detail="what the old lights would have drawn"
+            />
+            <KpiBubble
+              icon={IndianRupee}
+              tone="ok"
+              value={billed ? inr(billed.savedValue) : "—"}
+              label={billed ? `Saved in rupees · ${monthName(billed.period).split(" ")[0]}` : "Saved in rupees"}
+              detail={billed ? `billed month · you kept ${inr(billed.societyKeeps)}` : "Appears once FirsThing publishes a billed month"}
+            />
+            <KpiBubble
+              icon={Gauge}
+              tone={meters.length > 0 && metersOnline < meters.length ? "warn" : "info"}
               value={`${metersOnline} of ${meters.length}`}
-              tone={meters.length > 0 && metersOnline < meters.length ? "warn" : undefined}
+              label="Meters online"
               detail="watching your circuits"
             />
-          </StatRow>
+          </div>
 
           {/* The kWh figures above describe only the metered circuits; the ₹
               figure describes the whole society, because a metered circuit

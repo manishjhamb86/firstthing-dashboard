@@ -9,6 +9,7 @@ import { Card, EmptyState, PageHeader, StatusChip, type ChipTone } from "@/compo
 import { publicS3Url } from "@/lib/s3";
 import { monthName } from "../portal-widgets";
 import { inspectionSummary, SENSOR_STATUS_META } from "@/lib/inspection";
+import { FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents" };
@@ -32,6 +33,30 @@ const VISIBLE: Record<string, { label: string; tone: ChipTone }> = {
   postDemoReport: { label: "Demo report (after)", tone: "neu" },
   inspectionReport: { label: "Inspection report", tone: "ok" },
 };
+
+// The icon bubble each document row wears — the design canvas's own row
+// anatomy (Documents.dc.html: a colored icon circle, then title/subtitle,
+// 2026-09-21), applied on top of the existing filter/group/download
+// structure rather than replacing it.
+const ROW_TINT: Record<ChipTone, { bg: string; fg: string }> = {
+  info: { bg: "var(--info-bg)", fg: "var(--info-fg)" },
+  ok: { bg: "var(--ok-bg)", fg: "var(--ok-fg)" },
+  warn: { bg: "var(--warn-bg)", fg: "var(--warn-fg)" },
+  bad: { bg: "var(--bad-bg)", fg: "var(--bad-fg)" },
+  neu: { bg: "var(--neu-bg)", fg: "var(--neu-fg)" },
+};
+function DocIcon({ tone }: { tone: ChipTone }) {
+  const { bg, fg } = ROW_TINT[tone];
+  return (
+    <span
+      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+      style={{ background: bg, color: fg }}
+      aria-hidden
+    >
+      <FileText size={16} strokeWidth={2.1} />
+    </span>
+  );
+}
 
 export default async function PortalDocumentsPage({
   searchParams,
@@ -201,11 +226,14 @@ export default async function PortalDocumentsPage({
           {agreement && (activeType === null || activeType === "agreement") && (
             <Card className="mb-5 p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-sm font-bold">Signed agreement — the copy on record</p>
-                  <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                    {agreement.fileName} · {kb(agreement.byteSize)}
-                  </p>
+                <div className="flex min-w-0 items-center gap-3">
+                  <DocIcon tone="info" />
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold">Signed agreement — the copy on record</p>
+                    <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                      {agreement.fileName} · {kb(agreement.byteSize)}
+                    </p>
+                  </div>
                 </div>
                 <a
                   href={publicS3Url(agreement.s3Key)}
@@ -230,12 +258,13 @@ export default async function PortalDocumentsPage({
                     style={i < items.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
                   >
                     <div className="flex min-w-0 items-center gap-3">
-                      <StatusChip tone={VISIBLE[d.docType].tone}>{VISIBLE[d.docType].label}</StatusChip>
+                      <DocIcon tone={VISIBLE[d.docType].tone} />
                       <div className="min-w-0">
                         <p className="truncate text-[13.5px] font-semibold" title={d.fileName}>
                           {d.fileName}
                         </p>
                         <p className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+                          <StatusChip tone={VISIBLE[d.docType].tone}>{VISIBLE[d.docType].label}</StatusChip>{" "}
                           filed {formatDate(d.uploadedAt)} · {kb(d.byteSize)}
                           {d.version > 1 ? ` · v${d.version}` : ""}
                         </p>

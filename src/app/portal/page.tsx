@@ -22,161 +22,10 @@ import { publicS3Url } from "@/lib/s3";
 import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
 import { PORTAL_NAV_ICONS, portalNavEntries } from "./portal-nav-entries";
-import { Check, ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap, type LucideIcon } from "lucide-react";
+import { ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap } from "lucide-react";
+import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkRow } from "./kpi-tiles";
 
 export const dynamic = "force-dynamic";
-
-// One KPI tile: an icon in a white bubble over a tinted card, a big figure,
-// a bold label, a muted detail line. Deliberately new (not the shared
-// `Stat`) — `Stat`'s own comment states this codebase's standing rule ("no
-// icon variant... a green number carries no information the absence of
-// amber does not already carry"), which this dashboard's canvas mockup
-// explicitly overrides (user's call, 2026-09-21: "full rebuild... closer to
-// the mockup's look"). Scoping the override to this one component, used only
-// here, keeps every other screen's tiles exactly as that rule left them.
-function KpiBubble({
-  icon: Icon,
-  tone,
-  value,
-  label,
-  detail,
-}: {
-  icon: LucideIcon;
-  tone: "ok" | "info";
-  value: string;
-  label: string;
-  detail: string;
-}) {
-  const bg = tone === "ok" ? "var(--ok-bg)" : "var(--info-bg)";
-  const fg = tone === "ok" ? "var(--ok-fg)" : "var(--info-fg)";
-  return (
-    <div className="flex flex-col gap-2.5 rounded-[var(--r-md)] p-5" style={{ background: bg }}>
-      <span
-        className="flex h-9 w-9 items-center justify-center rounded-full"
-        style={{ background: "var(--surface)", color: fg }}
-      >
-        <Icon size={17} strokeWidth={2.3} aria-hidden />
-      </span>
-      <p className="num text-[24px] font-extrabold leading-none tracking-[-0.02em]" style={{ color: fg }}>
-        {value}
-      </p>
-      <p className="text-[13px] font-bold">{label}</p>
-      <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-        {detail}
-      </p>
-    </div>
-  );
-}
-
-// The phone mockup's own hero tile (Main.dc.html) — NOT the desktop 4-tile
-// row collapsed to one column. Stacking four equal, full-detail tiles on a
-// narrow screen just makes four tall cards (user-caught, 2026-09-21, with a
-// side-by-side screenshot of the two): the canvas's actual phone layout is
-// one prominent ₹ hero, a compact 2-up kWh/% row with no icon, then the
-// health bar — a deliberately different hierarchy per breakpoint, not a
-// naive reflow of the same markup.
-function HeroSavedTile({ value, detail }: { value: string; detail: string }) {
-  return (
-    <div
-      className="flex items-center gap-3.5 rounded-[var(--r-md)] p-4"
-      style={{ background: "var(--ok-bg)", border: "1px solid var(--ok-line)" }}
-    >
-      <span
-        aria-hidden
-        className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full text-[18px] font-extrabold"
-        style={{ background: "var(--surface)", color: "var(--ok-fg)" }}
-      >
-        ₹
-      </span>
-      <div className="flex min-w-0 flex-col gap-0.5">
-        <p className="num text-[28px] font-extrabold leading-none tracking-[-0.02em]" style={{ color: "var(--ok-fg)" }}>
-          {value}
-        </p>
-        <p className="text-[13.5px] font-bold">Saved this month</p>
-        <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-          {detail}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// The 2-up kWh/% row beside it — deliberately icon-less and smaller than
-// `KpiBubble`, matching the mockup's own compact treatment for these two.
-function CompactTile({ tone, value, label }: { tone: "ok" | "info"; value: string; label: string }) {
-  const bg = tone === "ok" ? "var(--ok-bg)" : "var(--info-bg)";
-  const fg = tone === "ok" ? "var(--ok-fg)" : "var(--info-fg)";
-  const line = tone === "ok" ? "var(--ok-line)" : "var(--info-line)";
-  return (
-    <div
-      className="flex flex-col gap-1.5 rounded-[var(--r-md)] p-4"
-      style={{ background: bg, border: `1px solid ${line}` }}
-    >
-      <p className="num text-[21px] font-extrabold leading-none" style={{ color: fg }}>
-        {value}
-      </p>
-      <p className="text-[12.5px] font-bold">{label}</p>
-    </div>
-  );
-}
-
-// The mockup's fourth KPI tile — a merged meters+tanks health read in a
-// distinct purple. Deliberately kept OUTSIDE the shared token system: no
-// other surface in this product uses this hue, and adding it globally for
-// one tile would be a bigger change than this dashboard asked for.
-const HEALTH_PURPLE = { bg: "#F1EDFB", iconBg: "#5B3FB8", title: "#4A2FA5", subtitle: "#5B4E86" };
-
-// The two highlighted rows under the phone hero (Main.dc.html) — real
-// shortcuts, not the full module list the bottom tab bar's "More" sheet
-// already covers, so this is two curated links, not a second nav.
-function MobileQuickLink({
-  icon: Icon,
-  tone,
-  label,
-  href,
-}: {
-  icon: LucideIcon;
-  tone: "info" | "warn";
-  label: string;
-  href: string;
-}) {
-  const bg = tone === "info" ? "var(--info-bg)" : "var(--warn-bg)";
-  const fg = tone === "info" ? "var(--info-fg)" : "var(--warn-fg)";
-  return (
-    <Link
-      href={href}
-      className="flex items-center gap-3 rounded-[var(--r-md)] border px-3.5 py-3"
-      style={{ borderColor: "var(--border-subtle)", background: "var(--surface)" }}
-    >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: bg, color: fg }}>
-        <Icon size={16} strokeWidth={2.2} aria-hidden />
-      </span>
-      <span className="flex-1 text-[14px] font-semibold">{label}</span>
-      <ChevronRight size={17} style={{ color: "var(--text-subtle)" }} aria-hidden />
-    </Link>
-  );
-}
-
-function HealthBubble({ allReporting, summary }: { allReporting: boolean; summary: string }) {
-  return (
-    <div className="flex items-center gap-3.5 rounded-[var(--r-md)] p-5" style={{ background: HEALTH_PURPLE.bg }}>
-      <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white"
-        style={{ background: HEALTH_PURPLE.iconBg }}
-      >
-        <Check size={20} strokeWidth={3} aria-hidden />
-      </span>
-      <div className="flex flex-col gap-0.5">
-        <p className="text-[16px] font-extrabold" style={{ color: HEALTH_PURPLE.title }}>
-          {allReporting ? "All reporting" : "Needs attention"}
-        </p>
-        <p className="text-[12px]" style={{ color: HEALTH_PURPLE.subtitle }}>
-          System health · {summary}
-        </p>
-      </div>
-    </div>
-  );
-}
 
 // The resident dashboard (customer-portal revamp, 2026-08-29; icon-bubble
 // KPI/trend/quick-actions/bottom-row layout added 2026-09-21 to match the
@@ -453,9 +302,9 @@ export default async function PortalHomePage() {
                 </div>
                 <HealthBubble allReporting={allReporting} summary={healthSummary} />
                 <div className="flex flex-col gap-2">
-                  <MobileQuickLink icon={Zap} tone="info" label="Electricity" href="/portal/electricity" />
+                  <QuickLinkRow icon={Zap} tone="info" label="Electricity" href="/portal/electricity" />
                   {grants.has("billing") && (
-                    <MobileQuickLink
+                    <QuickLinkRow
                       icon={Receipt}
                       tone="warn"
                       label={

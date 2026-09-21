@@ -293,6 +293,40 @@ export function ConsumptionChart({
             </text>
           ) : null,
         )}
+
+        {/* The mockup's floating callout (2026-09-21) — layered ON TOP of,
+            never instead of, the fixed readout strip below: this is what
+            gives the chart the canvas's visual "68% saved on 20 Jun" bubble,
+            while the strip stays the thing a keyboard or screen-reader user
+            actually reads (a floating SVG label is not reliably announced).
+            `pointerEvents: none` so it can never itself block the hover
+            target underneath it. */}
+        {active !== null && hover !== null && (() => {
+          const bh = Math.max(2, (active.kWh / top) * height);
+          const barTopY = height - bh;
+          const cx = padLeft + hover * (bw + gap) + bw / 2;
+          const savedPct =
+            active.baseline !== null && active.baseline > 0
+              ? ((active.baseline - active.kWh) / active.baseline) * 100
+              : null;
+          const text =
+            savedPct !== null
+              ? `${savedPct.toFixed(0)}% saved · ${active.label}`
+              : `${active.kWh.toFixed(1)} kWh · ${active.label}`;
+          const bubbleW = Math.min(210, Math.max(104, text.length * 6.3 + 24));
+          const bx = Math.min(Math.max(cx - bubbleW / 2, padLeft), w - bubbleW);
+          const by = Math.max(barTopY - 40, -6);
+          return (
+            <g style={{ pointerEvents: "none" }}>
+              <line x1={cx} y1={by + 30} x2={cx} y2={barTopY} stroke="var(--ok-fg)" strokeWidth={1} strokeDasharray="2 3" />
+              <circle cx={cx} cy={barTopY} r={4} fill="var(--surface)" stroke="var(--ok-fg)" strokeWidth={2.4} />
+              <rect x={bx} y={by} width={bubbleW} height={30} rx={9} fill="var(--ok-bg)" stroke="var(--ok-line)" />
+              <text x={bx + bubbleW / 2} y={by + 19.5} textAnchor="middle" fontSize={12.5} fontWeight={800} fill="var(--ok-fg)">
+                {text}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
 
       {/* The readout is a fixed strip, not a floating tooltip: it uses real

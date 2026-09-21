@@ -4,8 +4,10 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
-import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
 import { circuitLabelOf } from "@/lib/meter-view";
+import { KpiBubble } from "../kpi-tiles";
+import { Droplets, Lightbulb, Zap } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventory" };
@@ -122,10 +124,12 @@ export default async function PortalInventoryPage() {
         </EmptyState>
       ) : (
         <>
-          <StatRow>
-            <Stat
-              label="LED lights installed"
+          <div className="mb-6 grid gap-4 grid-cols-1 sm:grid-cols-3">
+            <KpiBubble
+              icon={Lightbulb}
+              tone="ok"
               value={societyLights.toLocaleString("en-IN")}
+              label="LED lights installed"
               detail={
                 extrapolated
                   ? `across your society · ${meteredLights.toLocaleString("en-IN")} on ${
@@ -134,9 +138,9 @@ export default async function PortalInventoryPage() {
                   : `across ${circuits.length} circuit${circuits.length === 1 ? "" : "s"}`
               }
             />
-            <Stat label="Smart meters" value={String(meters.length)} detail="watching your circuits" />
-            <Stat label="Tank level sensors" value={String(sensors.length)} detail="on your water tanks" />
-          </StatRow>
+            <KpiBubble icon={Zap} tone="info" value={String(meters.length)} label="Smart meters" detail="watching your circuits" />
+            <KpiBubble icon={Droplets} tone="info" value={String(sensors.length)} label="Tank level sensors" detail="on your water tanks" />
+          </div>
 
           {circuits.some((c) => c.devices.length > 0) && (
             <Card className="mb-5 p-6">

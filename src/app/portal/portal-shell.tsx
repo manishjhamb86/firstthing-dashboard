@@ -56,6 +56,22 @@ export function PortalShell({
     icon: PORTAL_NAV_ICONS[e.key],
     exact: e.exact,
   }));
+
+  // Up to 3 destinations on the phone tab bar: Home, always, plus whichever
+  // of the highest-priority modules this viewer actually holds — a limited
+  // member with no electricity grant gets their next-best two rather than a
+  // bar with an empty slot. Labels stay the sidebar's own ("Electricity",
+  // not the mockup's "Savings") so the tab bar and the "More" sheet never
+  // name the same destination two different things.
+  const TAB_PRIORITY: PortalNavKey[] = ["electricity", "documents", "billing", "water", "inventory", "support", "admin"];
+  const primary = TAB_PRIORITY.map((key) => entries.find((e) => e.key === key))
+    .filter((e): e is PortalNavEntry => e !== undefined)
+    .slice(0, 2);
+  const mobileTabBar: NavItem[] = [
+    { href: "/portal", label: "Home", icon: PORTAL_NAV_ICONS.dashboard, exact: true },
+    ...primary.map((e) => ({ href: e.href, label: e.label, icon: PORTAL_NAV_ICONS[e.key], exact: e.exact })),
+  ];
+
   return (
     <NavShell
       theme={theme}
@@ -64,6 +80,7 @@ export function PortalShell({
       navLabel={societyName}
       footerNote="FirsThing · your society's portal"
       extras={<NotificationBell count={bellCount} href="/portal/notifications" surface="content" />}
+      mobileTabBar={mobileTabBar}
     >
       {children}
     </NavShell>

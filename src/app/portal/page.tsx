@@ -5,14 +5,13 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { effectiveGrants } from "@/lib/portal-access";
-import { monthlyTotals, societyEnergy } from "@/lib/portal-energy";
+import { societyEnergy } from "@/lib/portal-energy";
 import { publishedMonthsFor } from "@/lib/published-months-loader";
 import { formatDate } from "@/lib/format-date";
 import { societyMeterRows } from "@/lib/meter-view";
 import { societyEvents } from "@/lib/portal-notifications";
+import { inspectionSummary } from "@/lib/inspection";
 import { Card, CardTitle, ChartPending, PageHeader, StatusChip } from "@/components/ui";
-import { SAVINGS_BAND_META } from "@/lib/circuit-load";
-import { TankVisual } from "@/components/tank-visual";
 import Link from "next/link";
 import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 import { DemoReportView } from "@/components/demo-report-view";
@@ -23,17 +22,171 @@ import { publicS3Url } from "@/lib/s3";
 import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
 import { PORTAL_NAV_ICONS, portalNavEntries } from "./portal-nav-entries";
+import { Check, ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap, type LucideIcon } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
-// The resident dashboard (customer-portal revamp, 2026-08-29): what the
-// society has to DO first (offer, batch review — the acts with deadlines),
-// then how it is doing — electricity savings and water health, each card
-// rendered only for a member granted that module. Every query is scoped by
-// the viewer's own societyId (INV-05), and every figure is either computed
-// from stored readings exactly as the back office computes it, or absent
-// with the condition that produces it stated (the standing no-fabrication
-// rule).
+// One KPI tile: an icon in a white bubble over a tinted card, a big figure,
+// a bold label, a muted detail line. Deliberately new (not the shared
+// `Stat`) — `Stat`'s own comment states this codebase's standing rule ("no
+// icon variant... a green number carries no information the absence of
+// amber does not already carry"), which this dashboard's canvas mockup
+// explicitly overrides (user's call, 2026-09-21: "full rebuild... closer to
+// the mockup's look"). Scoping the override to this one component, used only
+// here, keeps every other screen's tiles exactly as that rule left them.
+function KpiBubble({
+  icon: Icon,
+  tone,
+  value,
+  label,
+  detail,
+}: {
+  icon: LucideIcon;
+  tone: "ok" | "info";
+  value: string;
+  label: string;
+  detail: string;
+}) {
+  const bg = tone === "ok" ? "var(--ok-bg)" : "var(--info-bg)";
+  const fg = tone === "ok" ? "var(--ok-fg)" : "var(--info-fg)";
+  return (
+    <div className="flex flex-col gap-2.5 rounded-[var(--r-md)] p-5" style={{ background: bg }}>
+      <span
+        className="flex h-9 w-9 items-center justify-center rounded-full"
+        style={{ background: "var(--surface)", color: fg }}
+      >
+        <Icon size={17} strokeWidth={2.3} aria-hidden />
+      </span>
+      <p className="num text-[24px] font-extrabold leading-none tracking-[-0.02em]" style={{ color: fg }}>
+        {value}
+      </p>
+      <p className="text-[13px] font-bold">{label}</p>
+      <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+        {detail}
+      </p>
+    </div>
+  );
+}
+
+// The phone mockup's own hero tile (Main.dc.html) — NOT the desktop 4-tile
+// row collapsed to one column. Stacking four equal, full-detail tiles on a
+// narrow screen just makes four tall cards (user-caught, 2026-09-21, with a
+// side-by-side screenshot of the two): the canvas's actual phone layout is
+// one prominent ₹ hero, a compact 2-up kWh/% row with no icon, then the
+// health bar — a deliberately different hierarchy per breakpoint, not a
+// naive reflow of the same markup.
+function HeroSavedTile({ value, detail }: { value: string; detail: string }) {
+  return (
+    <div
+      className="flex items-center gap-3.5 rounded-[var(--r-md)] p-4"
+      style={{ background: "var(--ok-bg)", border: "1px solid var(--ok-line)" }}
+    >
+      <span
+        aria-hidden
+        className="flex h-[52px] w-[52px] shrink-0 items-center justify-center rounded-full text-[18px] font-extrabold"
+        style={{ background: "var(--surface)", color: "var(--ok-fg)" }}
+      >
+        ₹
+      </span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <p className="num text-[28px] font-extrabold leading-none tracking-[-0.02em]" style={{ color: "var(--ok-fg)" }}>
+          {value}
+        </p>
+        <p className="text-[13.5px] font-bold">Saved this month</p>
+        <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+          {detail}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// The 2-up kWh/% row beside it — deliberately icon-less and smaller than
+// `KpiBubble`, matching the mockup's own compact treatment for these two.
+function CompactTile({ tone, value, label }: { tone: "ok" | "info"; value: string; label: string }) {
+  const bg = tone === "ok" ? "var(--ok-bg)" : "var(--info-bg)";
+  const fg = tone === "ok" ? "var(--ok-fg)" : "var(--info-fg)";
+  const line = tone === "ok" ? "var(--ok-line)" : "var(--info-line)";
+  return (
+    <div
+      className="flex flex-col gap-1.5 rounded-[var(--r-md)] p-4"
+      style={{ background: bg, border: `1px solid ${line}` }}
+    >
+      <p className="num text-[21px] font-extrabold leading-none" style={{ color: fg }}>
+        {value}
+      </p>
+      <p className="text-[12.5px] font-bold">{label}</p>
+    </div>
+  );
+}
+
+// The mockup's fourth KPI tile — a merged meters+tanks health read in a
+// distinct purple. Deliberately kept OUTSIDE the shared token system: no
+// other surface in this product uses this hue, and adding it globally for
+// one tile would be a bigger change than this dashboard asked for.
+const HEALTH_PURPLE = { bg: "#F1EDFB", iconBg: "#5B3FB8", title: "#4A2FA5", subtitle: "#5B4E86" };
+
+// The two highlighted rows under the phone hero (Main.dc.html) — real
+// shortcuts, not the full module list the bottom tab bar's "More" sheet
+// already covers, so this is two curated links, not a second nav.
+function MobileQuickLink({
+  icon: Icon,
+  tone,
+  label,
+  href,
+}: {
+  icon: LucideIcon;
+  tone: "info" | "warn";
+  label: string;
+  href: string;
+}) {
+  const bg = tone === "info" ? "var(--info-bg)" : "var(--warn-bg)";
+  const fg = tone === "info" ? "var(--info-fg)" : "var(--warn-fg)";
+  return (
+    <Link
+      href={href}
+      className="flex items-center gap-3 rounded-[var(--r-md)] border px-3.5 py-3"
+      style={{ borderColor: "var(--border-subtle)", background: "var(--surface)" }}
+    >
+      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: bg, color: fg }}>
+        <Icon size={16} strokeWidth={2.2} aria-hidden />
+      </span>
+      <span className="flex-1 text-[14px] font-semibold">{label}</span>
+      <ChevronRight size={17} style={{ color: "var(--text-subtle)" }} aria-hidden />
+    </Link>
+  );
+}
+
+function HealthBubble({ allReporting, summary }: { allReporting: boolean; summary: string }) {
+  return (
+    <div className="flex items-center gap-3.5 rounded-[var(--r-md)] p-5" style={{ background: HEALTH_PURPLE.bg }}>
+      <span
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white"
+        style={{ background: HEALTH_PURPLE.iconBg }}
+      >
+        <Check size={20} strokeWidth={3} aria-hidden />
+      </span>
+      <div className="flex flex-col gap-0.5">
+        <p className="text-[16px] font-extrabold" style={{ color: HEALTH_PURPLE.title }}>
+          {allReporting ? "All reporting" : "Needs attention"}
+        </p>
+        <p className="text-[12px]" style={{ color: HEALTH_PURPLE.subtitle }}>
+          System health · {summary}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// The resident dashboard (customer-portal revamp, 2026-08-29; icon-bubble
+// KPI/trend/quick-actions/bottom-row layout added 2026-09-21 to match the
+// design canvas): what the society has to DO first (offer, batch review —
+// the acts with deadlines), then how it is doing — electricity savings and
+// water health, each card rendered only for a member granted that module.
+// Every query is scoped by the viewer's own societyId (INV-05), and every
+// figure is either computed from stored readings exactly as the back office
+// computes it, or absent with the condition that produces it stated (the
+// standing no-fabrication rule).
 export default async function PortalHomePage() {
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
@@ -83,6 +236,23 @@ export default async function PortalHomePage() {
   const meters = grants.has("electricity") ? await societyMeterRows(societyId) : [];
   const metersOnline = meters.filter((m) => m.state === "reporting").length;
   const events = (await societyEvents(societyId)).slice(0, 4);
+
+  // The bottom row's own two remaining cards — real rows, gated on the
+  // grant that already governs their own full page (documents, billing).
+  const latestInspection = grants.has("documents")
+    ? await db.inspection.findFirst({
+        where: { societyId, voidedAt: null, totalLightsChecked: { not: null } },
+        orderBy: { inspectedAt: "desc" },
+        include: { findings: { select: { id: true } } },
+      })
+    : null;
+  const billedInvoice =
+    grants.has("billing") && billed
+      ? await db.billingInvoice.findFirst({
+          where: { calculation: { societyId, period: billed.period, releasedAt: { not: null } }, voidedAt: null },
+          select: { number: true, amount: true, dueDate: true, status: true },
+        })
+      : null;
 
   const gates = installations
     .map((installation) => {
@@ -147,31 +317,14 @@ export default async function PortalHomePage() {
         }
       />
 
-      {/* Mobile-only jump row: on desktop the sidebar already puts every
-          granted module one click away, so a second copy here would be pure
-          duplication (weighed against a reference mockup's "Quick Actions"
-          idea and deliberately not built there for that reason, 2026-09-12).
-          It earns its place only where the sidebar collapses behind a Menu
-          toggle — `lg:hidden` matches that exact breakpoint (nav-shell.tsx),
-          so this row is never visible alongside a fully open sidebar. */}
-      {quickActions.length > 0 && (
-        <div className="mb-6 flex flex-wrap gap-2.5 lg:hidden">
-          {quickActions.map((e) => {
-            const Icon = PORTAL_NAV_ICONS[e.key];
-            return (
-              <Link
-                key={e.href}
-                href={e.href}
-                className="flex items-center gap-1.5 rounded-[var(--r-pill)] border px-3 py-1.5 text-[12.5px] font-semibold"
-                style={{ borderColor: "var(--border-subtle)", background: "var(--surface)" }}
-              >
-                <Icon size={14} strokeWidth={2} style={{ color: "var(--accent)" }} aria-hidden />
-                {e.label}
-              </Link>
-            );
-          })}
-        </div>
-      )}
+      {/* The mobile pill row this replaced duplicated the header's own
+          hamburger drawer one-for-one (same six links, same one tap away)
+          and read as visual noise sitting under the greeting (user-caught,
+          2026-09-21, with a screenshot: "the whole page looks bad because
+          of this"). The mockup's own mobile page has nothing here either —
+          its equivalent is a bottom tab bar this app doesn't have, not a
+          second copy of the sidebar's links. Removed rather than restyled:
+          the hamburger already does this job. */}
 
       {pendingActions.length > 0 && (
         <div
@@ -253,204 +406,169 @@ export default async function PortalHomePage() {
       ))}
 
       {/*
-        The hero, rebuilt (2026-09-12, user-asked for a genuinely bolder
-        read rather than the same two cards restyled): ONE headline figure
-        with its real trend against last month, not two medium cards
-        repeating the same numbers at a smaller size. The month-over-month
-        delta is a real computation over stored daily readings
-        (monthlyTotals, src/lib/portal-energy.ts) — never a decorative
-        arrow with nothing behind it.
-
-        Deliberately still no icon bubbles and still tinting only what
-        needs attention — that is a considered, documented rule
-        (Stat's own comment, `src/components/ui.tsx`: "a green number
-        carries no information the absence of amber does not already
-        carry"), not something this pass silently undid. What is different
-        is prominence and the trend, not the vocabulary.
+        Icon-bubble KPI row + "Live savings trend"/Quick actions + a bottom
+        row (Latest inspection / Water tank status / Billing) — rebuilt to
+        match the design canvas's dashboard closely (user's explicit call,
+        2026-09-21: "full rebuild... deliberately overriding" the house
+        rules `Stat`'s own comment states (no icon bubbles, no green "good"
+        numbers) for this one, dashboard-scoped set of tiles. Every figure
+        below is still real — the billed month's own released totals, or
+        this month's own computed savings when nothing has billed yet —
+        never fabricated to fill the mockup's shape.
       */}
-      {billed && published?.sinceStart && (() => {
-        // The headline is the whole story to date (user's rule 2026-09-16:
-        // "dashboard should show overall savings till date" — month by month
-        // and year by year live on the Electricity page). The latest billed
-        // month is one line beneath it.
-        const total = published.sinceStart;
-        return (
-          <Card className="mb-5 p-6 sm:p-8">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="lbl">Saved since we started · {total.months} billed month{total.months === 1 ? "" : "s"}</p>
-              <StatusChip tone="ok">Published</StatusChip>
-            </div>
-            <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
-              <div>
-                <p className="flex flex-wrap items-baseline gap-2.5">
-                  <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
-                    ₹{Math.round(total.savedValue).toLocaleString("en-IN")}
-                  </span>
-                  <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                    saved on electricity to date
-                  </span>
-                </p>
-                <p className="mt-1.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
-                  You kept <strong className="num">₹{Math.round(total.societyKeeps).toLocaleString("en-IN")}</strong> after paying FirsThing{" "}
-                  <strong className="num">₹{Math.round(total.paidToFirsthing).toLocaleString("en-IN")}</strong>.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-x-8 gap-y-3">
-                <span>
-                  <strong className="num text-[20px]">{Math.round(total.savedKwh).toLocaleString("en-IN")}</strong>{" "}
-                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>kWh saved to date</span>
-                </span>
-                <span>
-                  <strong className="num text-[20px]">₹{Math.round(billed.savedValue).toLocaleString("en-IN")}</strong>{" "}
-                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                    latest billed month · {monthName(billed.period)}
-                    {billed.savingsPct !== null ? ` · ${billed.savingsPct.toFixed(1)}%` : ""}
-                  </span>
-                </span>
-              </div>
-            </div>
-            <p className="mt-5 border-t pt-3 text-[12.5px]" style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}>
-              {billed.basisWords}
-              {billed.updatedAt ? ` Updated ${formatDate(billed.updatedAt)} from meter readings.` : ""}{" "}
-              <Link href="/portal/electricity" className="underline">Month by month →</Link>
-            </p>
-          </Card>
-        );
-      })()}
+      {energy &&
+        (() => {
+          const rupeesValue = billed ? billed.savedValue : null;
+          const rupeesDetail = billed
+            ? `You kept ₹${Math.round(billed.societyKeeps).toLocaleString("en-IN")} · paid ₹${Math.round(billed.paidToFirsthing).toLocaleString("en-IN")}`
+            : "Appears once FirsThing publishes a billed month";
+          const kwhValue = billed ? billed.savedKwh : energy.totals.avoidedKwh;
+          const pctValue = billed ? billed.savingsPct : energy.totals.savingsPct;
+          const kwhDetail = billed ? billed.basisWords : "vs before FirsThing";
+          const monthLabel = billed ? monthName(billed.period) : energy.month ? monthName(energy.month) : null;
+          const healthParts: string[] = [];
+          if (meters.length > 0) healthParts.push(`${meters.length} meter${meters.length === 1 ? "" : "s"}`);
+          if (tanks.length > 0) healthParts.push(`${tanks.length} tank${tanks.length === 1 ? "" : "s"}`);
+          const allReporting =
+            (meters.length === 0 || metersOnline === meters.length) &&
+            (tanks.length === 0 || reporting === tanks.length) &&
+            (meters.length > 0 || tanks.length > 0);
 
-      {!billed && energy && energy.totals.savingsPct !== null && (() => {
-        const months = monthlyTotals(energy.daily);
-        const idx = months.findIndex((m) => m.month === energy.month);
-        const thisMonth = idx >= 0 ? months[idx] : null;
-        const lastMonth = idx > 0 ? months[idx - 1] : null;
-        const pctDelta =
-          thisMonth && lastMonth && thisMonth.savingsPct !== null && lastMonth.savingsPct !== null
-            ? thisMonth.savingsPct - lastMonth.savingsPct
-            : null;
-        const kwhDelta = thisMonth && lastMonth ? thisMonth.avoidedKwh - lastMonth.avoidedKwh : null;
-        const deltaColor = (v: number) => (v >= 0 ? "var(--ok-fg)" : "var(--warn-fg)");
-        return (
-          <Card className="mb-5 p-6 sm:p-8">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-              <p className="lbl">This month{energy.month ? ` · ${monthName(energy.month)}` : ""}</p>
-              {energy.totals.band && (
-                <StatusChip tone={BAND_TONE[energy.totals.band]}>
-                  {SAVINGS_BAND_META[energy.totals.band].label}
-                </StatusChip>
-              )}
-            </div>
-            <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
-              <div>
-                <p className="flex flex-wrap items-baseline gap-2.5">
-                  <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
-                    {energy.totals.savingsPct.toFixed(1)}%
-                  </span>
-                  <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                    saved vs before FirsThing
-                  </span>
+          const rupeesText = rupeesValue !== null ? `₹${Math.round(rupeesValue).toLocaleString("en-IN")}` : "—";
+          const kwhText = kwhValue !== null ? `${Math.round(kwhValue).toLocaleString("en-IN")} kWh` : "—";
+          const pctText = pctValue !== null ? `${pctValue.toFixed(1)}%` : "—";
+          const healthSummary = healthParts.length > 0 ? healthParts.join(", ") : "no meters or tanks yet";
+
+          return (
+            <>
+              {/* Phone layout — the canvas's own Main.dc.html hierarchy
+                  (hero ₹ card, a compact 2-up kWh/% row, the health bar),
+                  not the desktop 4-tile row simply reflowed to one column
+                  (user-caught 2026-09-21, side by side with the mockup). */}
+              <div className="mb-6 flex flex-col gap-3 sm:hidden">
+                <HeroSavedTile value={rupeesText} detail={rupeesDetail} />
+                <div className="grid grid-cols-2 gap-3">
+                  <CompactTile tone="info" value={kwhText} label="Energy saved" />
+                  <CompactTile tone="ok" value={pctText} label="Savings achieved" />
+                </div>
+                <HealthBubble allReporting={allReporting} summary={healthSummary} />
+                <div className="flex flex-col gap-2">
+                  <MobileQuickLink icon={Zap} tone="info" label="Electricity" href="/portal/electricity" />
+                  {grants.has("billing") && (
+                    <MobileQuickLink
+                      icon={Receipt}
+                      tone="warn"
+                      label={
+                        billedInvoice
+                          ? `Invoice ${billedInvoice.number} · ${billedInvoice.status === "paid" ? "paid" : "pending"}`
+                          : "Billing"
+                      }
+                      href="/portal/billing"
+                    />
+                  )}
+                </div>
+              </div>
+
+              <div className="mb-2 hidden gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
+                <KpiBubble
+                  icon={ShieldCheck}
+                  tone="ok"
+                  value={rupeesText}
+                  label={monthLabel ? `Saved · ${monthLabel}` : "Saved this month"}
+                  detail={rupeesDetail}
+                />
+                <KpiBubble icon={Zap} tone="info" value={kwhText} label="Energy saved" detail={kwhDetail} />
+                <KpiBubble
+                  icon={FileTextIcon}
+                  tone="ok"
+                  value={pctText}
+                  label="Savings achieved"
+                  detail="vs your pre-install baseline"
+                />
+                <HealthBubble allReporting={allReporting} summary={healthSummary} />
+              </div>
+              {published?.sinceStart && published.sinceStart.months > 1 && (
+                <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                  ₹{Math.round(published.sinceStart.savedValue).toLocaleString("en-IN")} saved across{" "}
+                  {published.sinceStart.months} billed months since we started —{" "}
+                  <Link href="/portal/electricity" className="font-semibold underline">
+                    month by month →
+                  </Link>
                 </p>
-                {pctDelta !== null ? (
-                  <p className="mt-1.5 text-[13px] font-semibold" style={{ color: deltaColor(pctDelta) }}>
-                    {pctDelta >= 0 ? "↑" : "↓"} {Math.abs(pctDelta).toFixed(1)} pts vs last month
-                  </p>
-                ) : (
-                  <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                    A trend appears once a second month is on record
-                  </p>
+              )}
+
+              <div className="mb-6 grid items-stretch gap-5 xl:grid-cols-[1fr_300px]">
+                <Card className="p-6">
+                  <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+                    <CardTitle className="mb-0">Live savings trend</CardTitle>
+                    <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                      all circuits
+                    </p>
+                  </div>
+                  {energy.daily.length === 0 ? (
+                    <ChartPending
+                      title="Your consumption appears here"
+                      note="once the first readings are on record"
+                      height={170}
+                    />
+                  ) : (
+                    <ConsumptionChart days={energy.daily} height={170} />
+                  )}
+                </Card>
+
+                {quickActions.length > 0 && (
+                  <Card className="hidden p-6 lg:block">
+                    <CardTitle>Quick actions</CardTitle>
+                    <div className="flex flex-col gap-2">
+                      {quickActions.map((e) => {
+                        const Icon = PORTAL_NAV_ICONS[e.key];
+                        return (
+                          <Link
+                            key={e.href}
+                            href={e.href}
+                            className="flex items-center gap-3 rounded-[var(--r-md)] border px-3.5 py-3 text-[13.5px] font-semibold"
+                            style={{ borderColor: "var(--border-subtle)", background: "var(--surface-sunken)" }}
+                          >
+                            <span
+                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
+                              style={{ background: "var(--info-bg)", color: "var(--info-fg)" }}
+                            >
+                              <Icon size={15} strokeWidth={2.2} aria-hidden />
+                            </span>
+                            <span className="flex-1">{e.label}</span>
+                            <ChevronRight size={17} style={{ color: "var(--text-subtle)" }} aria-hidden />
+                          </Link>
+                        );
+                      })}
+                    </div>
+                  </Card>
                 )}
               </div>
-              <div className="flex flex-wrap gap-x-8 gap-y-3">
-                <span>
-                  <strong className="num text-[20px]">
-                    {Math.round(energy.totals.avoidedKwh ?? 0).toLocaleString("en-IN")}
-                  </strong>{" "}
-                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                    kWh avoided
-                  </span>
-                  {kwhDelta !== null && (
-                    <span className="block text-[11px]" style={{ color: deltaColor(kwhDelta) }}>
-                      {kwhDelta >= 0 ? "↑" : "↓"} {Math.abs(Math.round(kwhDelta)).toLocaleString("en-IN")} vs last
-                      month
-                    </span>
-                  )}
-                </span>
-                <span>
-                  <strong className="num text-[20px]">{energy.totals.savingsPct.toFixed(1)}%</strong>{" "}
-                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                    vs before FirsThing
-                  </span>
-                </span>
-                <span>
-                  <strong className="num text-[20px]">
-                    {Math.round(energy.totals.consumedKwh ?? 0).toLocaleString("en-IN")}
-                  </strong>{" "}
-                  <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                    kWh consumed
-                  </span>
-                </span>
-              </div>
-            </div>
-            <p
-              className="mt-5 border-t pt-3 text-[12.5px]"
-              style={{ borderColor: "var(--border-subtle)", color: "var(--text-subtle)" }}
-            >
-              ₹ appears once FirsThing publishes your first billed month.
-            </p>
-          </Card>
-        );
-      })()}
+            </>
+          );
+        })()}
 
-      {!billed && energy && energy.totals.savingsPct === null && (
-        <Card className="mb-5 p-6">
-          <p className="lbl mb-2">This month</p>
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            Your savings appear here once the first month of readings is on record.
-          </p>
-        </Card>
-      )}
-
-      {/* System status: meters and tanks together, one line each — merged
-          from two separate cards that repeated "reporting" language twice.
-          Tinted only when something needs looking at; each half states its
-          own "nothing yet" independently, the same as the two cards it
-          replaces did, rather than one combined fallback trying to cover
-          every combination of the two. */}
-      {(energy || grants.has("water_tanks")) && (
+      {!energy && grants.has("water_tanks") && (
+        // No electricity grant: still worth the meters+tanks health read,
+        // just without the three energy tiles it would otherwise sit beside.
         <Card className="mb-6 p-5">
           <p className="lbl mb-3">System status</p>
           <div className="flex flex-wrap items-baseline gap-x-9 gap-y-3">
-            {energy &&
-              (meters.length > 0 ? (
-                <span className="text-[13.5px]">
-                  <strong
-                    className="num text-[16px]"
-                    style={metersOnline < meters.length ? { color: "var(--warn-fg)" } : undefined}
-                  >
-                    {metersOnline}/{meters.length}
-                  </strong>{" "}
-                  <span style={{ color: "var(--text-subtle)" }}>meters online</span>
-                </span>
-              ) : (
-                <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                  Meters appear here once one is assigned to your circuits.
-                </span>
-              ))}
-            {grants.has("water_tanks") &&
-              (tanks.length > 0 ? (
-                <span className="text-[13.5px]">
-                  <strong
-                    className="num text-[16px]"
-                    style={reporting < tanks.length ? { color: "var(--warn-fg)" } : undefined}
-                  >
-                    {reporting}/{tanks.length}
-                  </strong>{" "}
-                  <span style={{ color: "var(--text-subtle)" }}>tanks reporting</span>
-                </span>
-              ) : (
-                <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                  Levels appear here once level sensors are installed on your tanks.
-                </span>
-              ))}
+            {tanks.length > 0 ? (
+              <span className="text-[13.5px]">
+                <strong
+                  className="num text-[16px]"
+                  style={reporting < tanks.length ? { color: "var(--warn-fg)" } : undefined}
+                >
+                  {reporting}/{tanks.length}
+                </strong>{" "}
+                <span style={{ color: "var(--text-subtle)" }}>tanks reporting</span>
+              </span>
+            ) : (
+              <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                Levels appear here once level sensors are installed on your tanks.
+              </span>
+            )}
             {setupCells.map((c) => (
               <span key={c.label} className="text-[13.5px]">
                 <strong className="num text-[16px]">{c.avg}%</strong>{" "}
@@ -461,24 +579,110 @@ export default async function PortalHomePage() {
         </Card>
       )}
 
-      {energy && (
-        <Card className="mb-6 p-6">
-          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
-            <CardTitle className="mb-0">Consumption</CardTitle>
-            <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-              all circuits
-            </p>
-          </div>
-          {energy.daily.length === 0 ? (
-            <ChartPending
-              title="Your consumption appears here"
-              note="once the first readings are on record"
-              height={150}
-            />
-          ) : (
-            <ConsumptionChart days={energy.daily} height={170} />
+      {(grants.has("documents") || (grants.has("water_tanks") && tanks.length > 0) || billedInvoice) && (
+        <div className="mb-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+          {grants.has("documents") && (
+            <Card className="p-6">
+              <CardTitle>Latest inspection</CardTitle>
+              {latestInspection ? (
+                (() => {
+                  const summary = inspectionSummary({
+                    totalLightsChecked: latestInspection.totalLightsChecked ?? 0,
+                    findingsCount: latestInspection.findings.length,
+                  });
+                  return (
+                    <div className="flex flex-col gap-2">
+                      <p className="num text-[15px] font-bold">{formatDate(latestInspection.inspectedAt)}</p>
+                      <StatusChip tone={summary.faultyLightsCount === 0 ? "ok" : "warn"}>
+                        {summary.faultyLightsCount === 0
+                          ? "No issues noted"
+                          : `${summary.faultyLightsCount} noted`}
+                      </StatusChip>
+                      <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                        {summary.faultyLightsCount} of {summary.totalLightsChecked} fixtures noted
+                      </p>
+                      <Link href="/portal/documents" className="text-[13px] font-semibold">
+                        View report →
+                      </Link>
+                    </div>
+                  );
+                })()
+              ) : (
+                <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                  Your first monthly inspection appears here once one is filed.
+                </p>
+              )}
+            </Card>
           )}
-        </Card>
+
+          {grants.has("water_tanks") && tanks.length > 0 && (
+            <Card className="p-6">
+              <CardTitle>Water tank status</CardTitle>
+              <p
+                className="mb-3 text-[13.5px] font-bold"
+                style={{ color: reporting === tanks.length ? "var(--ok-fg)" : "var(--warn-fg)" }}
+              >
+                {reporting === tanks.length ? "All tanks reporting" : `${reporting} of ${tanks.length} reporting`}
+              </p>
+              <div className="flex flex-col gap-2.5">
+                {tanks.slice(0, 4).map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 text-[13.5px]">
+                    <span className="w-20 shrink-0 truncate font-medium" title={t.name}>
+                      {t.name}
+                    </span>
+                    <span
+                      className="h-2 flex-1 overflow-hidden rounded-full"
+                      style={{ background: "var(--surface-active)" }}
+                    >
+                      <span
+                        className="block h-full rounded-full"
+                        style={{
+                          width: `${t.lastLevelPercent ?? 0}%`,
+                          background: t.lastOnline ? "var(--ok-fg)" : "var(--warn-fg)",
+                        }}
+                      />
+                    </span>
+                    <span className="num w-9 shrink-0 text-right font-semibold">
+                      {t.lastLevelPercent !== null ? `${t.lastLevelPercent}%` : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {billedInvoice && (
+            <Card className="p-6">
+              <CardTitle>Billing</CardTitle>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="num text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                  {billedInvoice.number}
+                </span>
+                <StatusChip tone={billedInvoice.status === "paid" ? "ok" : "warn"}>
+                  {billedInvoice.status === "paid" ? "Paid" : "Pending"}
+                </StatusChip>
+              </div>
+              <p className="num text-[24px] font-extrabold leading-none">
+                ₹{billedInvoice.amount.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </p>
+              <p className="mt-2 mb-4 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                Due by {formatDate(billedInvoice.dueDate)}
+              </p>
+              {/* "Pay now" in the mockup — labelled honestly here instead: this
+                  product has no payment gateway (portal/billing/page.tsx's own
+                  stated position), so a button claiming to pay would be a real
+                  functional lie, not just a visual choice. */}
+              <Link
+                href="/portal/billing"
+                className="flex items-center justify-center gap-1.5 rounded-[10px] px-4 text-[13.5px] font-bold text-white"
+                style={{ height: 42, background: "var(--ok-fg)" }}
+              >
+                View invoice
+                <ChevronRight size={15} aria-hidden />
+              </Link>
+            </Card>
+          )}
+        </div>
       )}
 
       <div className="mb-6 grid items-start gap-5 lg:grid-cols-12">
@@ -599,35 +803,7 @@ export default async function PortalHomePage() {
               </div>
             )}
           </Card>
-          {grants.has("water_tanks") && tanks.length > 0 && (
-            <Card className="p-6">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <CardTitle className="mb-0">Your tanks</CardTitle>
-                <Link href="/portal/tanks" className="text-[13px] font-semibold">
-                  See all →
-                </Link>
-              </div>
-              <div className="flex flex-wrap justify-center gap-4">
-                {tanks.slice(0, 3).map((t) => (
-                  <div key={t.id} className="flex flex-col items-center gap-2">
-                    <TankVisual
-                      pct={t.lastLevelPercent ?? 0}
-                      offline={!t.lastOnline}
-                      width={84}
-                      height={116}
-                      pctSize={20}
-                      ticks={false}
-                    />
-                    <span className="max-w-[96px] text-center text-[11px]" style={{ color: "var(--text-muted)" }}>
-                      {t.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
         </div>
-
       </div>
     </>
   );

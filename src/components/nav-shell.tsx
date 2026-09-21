@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Menu, X, type LucideIcon } from "lucide-react";
+import { ChevronDown, Menu, MoreHorizontal, X, type LucideIcon } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -74,6 +74,7 @@ export function NavShell({
   navLabel = "Menu",
   footerNote,
   extras,
+  mobileTabBar,
   children,
 }: {
   theme: ThemeId;
@@ -84,6 +85,17 @@ export function NavShell({
   footerNote: string;
   /** Anything that sits beside the theme switcher (the demo toggle, on admin). */
   extras?: ReactNode;
+  /**
+   * A persistent bottom tab bar for phones, in place of the hamburger drawer
+   * — the portal's own mockup canvas uses this pattern, admin does not (the
+   * matching design was never asked for there). Omitted entirely, this
+   * component's behaviour is byte-for-byte what it was before this prop
+   * existed: the hamburger toggle and its top drawer, unconditionally.
+   * Passed, the hamburger is replaced by up to 3 real destinations plus a
+   * "More" tab opening the full `items` list as a sheet anchored above the
+   * bar, so nothing reachable through the old drawer becomes unreachable.
+   */
+  mobileTabBar?: NavItem[];
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -298,16 +310,18 @@ export function NavShell({
         >
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
             <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setOpen((v) => !v)}
-                aria-expanded={open}
-                aria-label="Toggle navigation menu"
-                className="lg:hidden flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] border"
-                style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
-              >
-                {open ? <X size={18} strokeWidth={1.75} /> : <Menu size={18} strokeWidth={1.75} />}
-              </button>
+              {!mobileTabBar && (
+                <button
+                  type="button"
+                  onClick={() => setOpen((v) => !v)}
+                  aria-expanded={open}
+                  aria-label="Toggle navigation menu"
+                  className="lg:hidden flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] border"
+                  style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
+                >
+                  {open ? <X size={18} strokeWidth={1.75} /> : <Menu size={18} strokeWidth={1.75} />}
+                </button>
+              )}
               <span className="lg:hidden">
                 <BrandMark variant={headerBrandVariant} className="h-6" />
               </span>
@@ -315,7 +329,7 @@ export function NavShell({
             {identity}
           </div>
 
-          {open && (
+          {open && !mobileTabBar && (
             <div
               className="lg:hidden px-4 pb-4 pt-2 space-y-1 max-h-[calc(100vh-64px)] overflow-y-auto"
               style={{ background: "var(--chrome)", borderTop: "1px solid var(--chrome-border)" }}
@@ -330,10 +344,71 @@ export function NavShell({
               field on a page opens downward and, in an embedded browser, is
               clipped by the window rather than flipped — with nothing below
               to scroll to, the bottom rows were unreachable (user-caught
-              2026-09-16). The padding lets the field be scrolled up clear. */}
+              2026-09-16). The padding lets the field be scrolled up clear.
+              It already clears the 64px bottom tab bar with room to spare. */}
           <div className="app-shell-main mx-auto max-w-[1600px] p-5 pb-[max(50vh,340px)] sm:p-8 sm:pb-[max(50vh,340px)]">{children}</div>
         </main>
       </div>
+
+      {/* A persistent bottom tab bar on phones, replacing the hamburger
+          drawer — the portal's own design canvas uses this pattern
+          (user's explicit ask, 2026-09-21). "More" opens the full nav as a
+          sheet anchored just above the bar, so a module not one of the 3
+          highlighted here is still one tap away, never hidden. */}
+      {mobileTabBar && (
+        <>
+          {open && (
+            <div
+              className="lg:hidden fixed inset-x-0 bottom-16 z-20 max-h-[60vh] space-y-1 overflow-y-auto px-4 py-3"
+              style={{
+                background: "var(--chrome)",
+                borderTop: "1px solid var(--chrome-border)",
+                boxShadow: "0 -6px 18px rgba(20, 30, 52, 0.16)",
+              }}
+            >
+              {navLinks(() => setOpen(false))}
+            </div>
+          )}
+          <nav
+            aria-label="Portal sections"
+            className="lg:hidden fixed inset-x-0 bottom-0 z-20 grid h-16"
+            style={{
+              gridTemplateColumns: `repeat(${mobileTabBar.length + 1}, minmax(0, 1fr))`,
+              background: "var(--surface)",
+              borderTop: "1px solid var(--border)",
+            }}
+          >
+            {mobileTabBar.map((item) => {
+              const active = matches(item);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setOpen(false)}
+                  aria-current={active ? "page" : undefined}
+                  className="flex flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+                  style={{ color: active ? "var(--accent)" : "var(--text-subtle)" }}
+                >
+                  <Icon size={20} strokeWidth={active ? 2.3 : 1.9} aria-hidden />
+                  {item.label}
+                </Link>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setOpen((v) => !v)}
+              aria-expanded={open}
+              aria-label="More sections"
+              className="flex flex-col items-center justify-center gap-1 text-[11px] font-semibold"
+              style={{ color: open ? "var(--accent)" : "var(--text-subtle)" }}
+            >
+              <MoreHorizontal size={20} strokeWidth={open ? 2.3 : 1.9} aria-hidden />
+              More
+            </button>
+          </nav>
+        </>
+      )}
     </div>
   );
 }

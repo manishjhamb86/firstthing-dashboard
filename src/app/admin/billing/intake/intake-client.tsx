@@ -18,7 +18,7 @@ import {
   type IntakeSortKey,
   type IntakeView,
 } from "@/lib/intake-list";
-import { checkIntakeDuplicates, createIntakeUpload, extractIntake, retryIntake, type IntakeDuplicate } from "./actions";
+import { checkIntakeDuplicates, createIntakeUpload, extractIntake, retryIntake, submitReadyBatch, type IntakeDuplicate } from "./actions";
 
 export type IntakeRow = {
   id: string;
@@ -75,6 +75,10 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
   // Files already in the system, waiting for a reprocess-or-skip decision.
   const [pendingDupes, setPendingDupes] = useState<{ dupes: IntakeDuplicate[]; fresh: File[]; chosen: Set<string> } | null>(null);
   const [retrying, setRetrying] = useState<Set<string>>(new Set());
+  // SCR-093's bulk bar — only `ready` rows are ever selectable.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [submitting, setSubmitting] = useState(false);
+  const [batchResult, setBatchResult] = useState<{ submitted: number; failed: { fileName: string; error: string }[] } | null>(null);
 
   async function sha256Hex(file: File): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
@@ -234,6 +238,28 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
     ]);
   }
 
+  function toggleSelect(id: string) {
+    setSelected((s) => {
+      const next = new Set(s);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  async function submitReady() {
+    setSubmitting(true);
+    setBatchResult(null);
+    try {
+      const r = await submitReadyBatch([...selected]);
+      setBatchResult({ submitted: r.submitted.length, failed: r.failed.map((f) => ({ fileName: f.fileName || "—", error: f.error })) });
+      setSelected(new Set());
+      router.refresh();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // The search, society and month filters narrow EVERY chip, so typing an
   // invoice number shows which chip its row sits under rather than "nothing
   // here" on the one that happens to be open (user-reported 2026-09-16: a
@@ -269,6 +295,15 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
     [rows],
   );
   const filtering = query.trim() !== "" || societyFilter !== "" || monthFilter !== "";
+
+  // Only `ready` rows are ever bulk-selectable (SCR-093: "a Needs review row
+  // has no checkbox") — scoped to what's currently visible, so "select all"
+  // matches what's on screen rather than every ready row in the system.
+  const readyVisible = useMemo(() => visible.filter((r) => r.status === "ready"), [visible]);
+  const allReadySelected = readyVisible.length > 0 && readyVisible.every((r) => selected.has(r.id));
+  function toggleAllReady() {
+    setSelected(allReadySelected ? new Set() : new Set(readyVisible.map((r) => r.id)));
+  }
 
   // Clicking the sorted column reverses it; another column starts at its own natural end.
   function sortBy(key: IntakeSortKey) {
@@ -404,6 +439,44 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
         )}
       </div>
 
+      {batchResult && (
+        <div
+          className="mb-3.5 rounded-[var(--r-sm)] border px-4 py-3 text-sm"
+          style={
+            batchResult.failed.length === 0
+              ? { background: "var(--ok-bg)", borderColor: "var(--ok-line)", color: "var(--ok-fg)" }
+              : { background: "var(--warn-bg)", borderColor: "var(--warn-line)", color: "var(--warn-fg)" }
+          }
+        >
+          <p className="font-semibold">
+            {batchResult.submitted} submitted{batchResult.failed.length > 0 ? `, ${batchResult.failed.length} refused` : ""}.
+          </p>
+          {batchResult.failed.length > 0 && (
+            <ul className="mt-1 list-disc pl-5">
+              {batchResult.failed.map((f, i) => (
+                <li key={i}>
+                  {f.fileName}: {f.error}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {readyVisible.length > 0 && (
+        <div className="mb-3.5 flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input type="checkbox" checked={allReadySelected} onChange={toggleAllReady} />
+            Select all ready ({readyVisible.length})
+          </label>
+          {selected.size > 0 && (
+            <button type="button" className="btn-primary btn-sm" disabled={submitting} onClick={() => void submitReady()}>
+              {submitting ? "Submitting…" : `Submit ${selected.size} ready`}
+            </button>
+          )}
+        </div>
+      )}
+
       <Card className="overflow-hidden">
         {visible.length === 0 ? (
           <p className="p-6 text-sm" style={{ color: "var(--text-muted)" }}>
@@ -418,6 +491,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
             <table className="tbl">
               <thead>
                 <tr>
+                  <th className="w-8" />
                   <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
                   <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden md:table-cell" />
                   <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden md:table-cell" />
@@ -432,6 +506,16 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                   const reviewHref = `/admin/billing/intake/${r.id}`;
                   return (
                     <tr key={r.id}>
+                      <td>
+                        {r.status === "ready" && (
+                          <input
+                            type="checkbox"
+                            checked={selected.has(r.id)}
+                            onChange={() => toggleSelect(r.id)}
+                            aria-label={`Select ${r.invoiceNumber ?? r.fileName}`}
+                          />
+                        )}
+                      </td>
                       <td className="max-w-[18rem] md:max-w-[26rem]">
                         <p className="truncate font-medium" title={r.fileName}>
                           {r.invoiceNumber ?? r.fileName}

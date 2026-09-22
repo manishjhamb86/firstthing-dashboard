@@ -8208,7 +8208,7 @@ features:
     depends_on: [FEAT-062, FEAT-040, FEAT-053]
     status: ready
     milestone: MS-09
-    scope_note: "Added 2026-09-15 (Feature-mode pass, CON-47). Read two real Zoho invoices before specifying: one line (Qty 605 = the circuit's represented count) and one with two deal lines plus a hardware line, a Discount column used to round to whole rupees, and a 1,155-vs-1,153 count disagreement — AC-5/AC-6 exist because of that document."
+    scope_note: "Added 2026-09-15 (Feature-mode pass, CON-47). Read two real Zoho invoices before specifying: one line (Qty 605 = the circuit's represented count) and one with two deal lines plus a hardware line, a Discount column used to round to whole rupees, and a 1,155-vs-1,153 count disagreement — AC-5/AC-6 exist because of that document. Built 2026-09-22: SCR-093's own bulk bar (\"Submit N ready\") — only `ready` rows are selectable, and `submitReadyBatch()` (src/app/admin/billing/intake/actions.ts) re-checks each row's status fresh against the database immediately before submitting it, never trusting the selection the client rendered a moment ago, then loops the existing single-item submitIntake() for each — no second write path."
     acceptance_criteria:
       - id: FEAT-109-AC-1
         type: happy

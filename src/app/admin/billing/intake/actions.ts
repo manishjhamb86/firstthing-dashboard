@@ -668,6 +668,48 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
 }
 
 // ---------------------------------------------------------------------------
+// 4b. SCR-093's bulk bar — "Submit N ready". Each row still submits through
+// the one function above; this only loops it, re-checking `ready` fresh per
+// row rather than trusting the selection the client rendered a moment ago
+// (a row can stop being ready between the list loading and the click — a
+// duplicate landing, or the permission being pulled).
+// ---------------------------------------------------------------------------
+
+export type BatchSubmitResult = {
+  submitted: string[];
+  failed: { intakeId: string; fileName: string; error: string }[];
+};
+
+export async function submitReadyBatch(intakeIds: string[]): Promise<BatchSubmitResult> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) {
+    return { submitted: [], failed: intakeIds.map((id) => ({ intakeId: id, fileName: "", error: ops.error })) };
+  }
+  const ids = [...new Set(intakeIds)];
+  const submitted: string[] = [];
+  const failed: BatchSubmitResult["failed"] = [];
+
+  for (const id of ids) {
+    const intake = await db.invoiceIntake.findUnique({ where: { id }, select: { status: true, fileName: true, review: true } });
+    if (!intake) {
+      failed.push({ intakeId: id, fileName: "", error: "This upload no longer exists." });
+      continue;
+    }
+    if (intake.status !== "ready") {
+      failed.push({ intakeId: id, fileName: intake.fileName, error: "No longer ready to submit — open it to see why." });
+      continue;
+    }
+    const result = await submitIntake(id, intake.review as unknown as Review);
+    if (result.error) failed.push({ intakeId: id, fileName: intake.fileName, error: result.error });
+    else submitted.push(id);
+  }
+
+  logger.info("intake.batch_submit_completed", { actorId: ops.actor.id, requested: ids.length, submitted: submitted.length, failed: failed.length });
+  revalidatePath(INTAKE_PATH);
+  return { submitted, failed };
+}
+
+// ---------------------------------------------------------------------------
 // 5. Discard — the draft row; the PDF stays in S3 (undeletable by this app).
 // ---------------------------------------------------------------------------
 

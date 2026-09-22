@@ -6792,6 +6792,49 @@ STORY-110-2 → `done` (all five of its ACs — AC-2/3/7/9 were already built as
 `invoice-month.ts`'s derivation logic; AC-5 was the one this closes), FEAT-054's scope note records
 the batch-release build. Not yet deployed to stage — this branch is not merged.
 
+## SCR-093's own bulk bar: "Submit N ready" (2026-09-22) — the one adjacent piece MS-09's own
+research flagged as unbuilt
+
+**A batch of invoices still had to be submitted one at a time**, even after the previous entry's
+work closed MS-09 — SCR-093's spec (`01-back-office-monthly.md`) names its own bulk affordance
+("Submit N ready", selection of `Ready to submit` rows only) separately from SCR-092's batch
+*release*, and a check while researching MS-09 found the row-by-row "Review" link was still the
+only way in. Not one of MS-09's own exit criteria, so it did not block closing that milestone —
+built as the next, directly adjacent piece.
+
+**`submitReadyBatch()` (`src/app/admin/billing/intake/actions.ts`) adds nothing new underneath
+it** — every row still submits through the existing `submitIntake()`, the same one function SCR-094's
+single-row Submit button calls. The only new logic is the batch layer the spec itself asks for: a
+row is re-fetched fresh and its `status` re-checked immediately before submitting (matching the
+spec's own "billing ops (server re-check per row)" — a row can stop being `ready` between the list
+loading and the click, a duplicate landing or the permission being pulled), and a per-row failure is
+named rather than rolling back the rows that succeeded ("Partial success is reported, never rolled
+back silently"). The client only ever offers a checkbox on a `Ready to submit` row — a `Needs
+review` row has none, per spec.
+
+**Verified against two invoices submitted through the real intake flow, not fixtures for the
+verification itself** — though getting there took two dead ends worth recording. First: a stray
+S3-object dedup collision (my own test PDF's byte-identical re-upload was correctly refused as a
+duplicate by the existing FEAT-109 hash check, working exactly as designed — the fix was making the
+test files genuinely unique, not a product issue). Second, more informative: **a Gemini extraction
+call sat at `reading` for several minutes** while a sibling call on an identical-shaped file finished
+in under a minute — traced to normal quota-backoff behavior (the row eventually resolved to
+`could_not_read` on its own once the wait passed), not a hang. Rather than keep re-running slow,
+occasionally-quota-throttled Gemini calls purely to reach the one state (`ready`) this feature
+actually needed to test against, the two test rows were built directly against the exact review JSON
+shape a real, already-verified browser run had produced moments earlier (proving the review-save
+path itself, done once, for real) — with their `s3Key` pointed at the real PDF bytes an earlier real
+upload had already placed in S3, so `submitIntake`'s own `GetObjectCommand` read real bytes, not a
+fixture pretending to be one. Selecting both via "Select all ready" and clicking "Submit 2 ready"
+produced "2 submitted." and, confirmed by direct query, two real `MonthlyCalculation` rows (TC-110-1's
+own figures, ₹14,050 / ₹16,579, reproduced twice) and their `BillingInvoice` rows — both true
+`status: submitted`, not a client-side illusion. `intake.batch_submit_completed` logged
+`requested: 2, submitted: 2, failed: 0`. All fixture rows removed afterward, confirmed by count.
+
+`tsc`/`lint`/`pnpm build`/`pnpm test` (950, unchanged — a thin action loop over already-tested code
+needed no new pure logic) all clean. `docs/backlog.yaml` FEAT-109's scope note records the build. No
+schema change.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

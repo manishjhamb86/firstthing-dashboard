@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-22 (deploy of `64ad18f` to stage)
+2026-09-22 (MS-08 closed — docs reconciled against the invoice-first pivot, no code change)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6844,6 +6844,62 @@ crash) and `unstable restarts: 0` afterward. Verified over the public HTTPS path
 commits were already verified end to end against the dev database before being committed, and
 nothing about the deploy itself (no schema, no new env var) introduces a path that verification
 didn't already cover.
+
+## MS-08 closed (2026-09-22, CON-47) — by the route already named when MS-09 was scoped, documented rather than assumed
+
+**`docs/backlog.yaml` MS-08 status flipped from `proposed` to `done`.** This was left open since
+2026-08-15 (see the "MS-08 in progress" section above) pending FEAT-050's `pricingBasis` mechanism,
+the CAP-05 deviation pipeline, and FEAT-059/060's native savings report — all real, built, unit-
+tested code, but none of it wired to a live path. Once MS-09 closed last week (the previous two
+entries above), `11-development-plan.md §3` turned out to already state the resolution, written the
+day MS-09 was scoped: "Delivers MS-08's third exit criterion... by a different route; MS-08's own
+bill generation from readings becomes phase two." This entry is that reconciliation actually
+carried out and verified against the code, not left as a forward-looking note.
+
+**Checked each of MS-08's three exit criteria against what runs today, not assumed from the
+note:**
+1. *"The month's savings calculation runs automatically per CircuitFeeLine and prorates correctly
+   for a partial first month."* True for the invoice-first primary path: `submitIntake` writes real
+   `CircuitFeeLine` rows, and `deriveInvoiceMonth` (FEAT-110) calls `prorateFirstMonth`/
+   `prorateFinalMonth` **verbatim from `billing-start.ts`** — the same functions FEAT-051's own
+   tests exercise — rather than a second, possibly-drifting implementation. What is NOT automatic
+   is the invoice *amount* itself, which was always going to be typed in Zoho and uploaded — FEAT-
+   053's own text called this "the current real process" before CON-47 ever existed. "Zero manual
+   arithmetic" was never a claim about the bill amount; it's a claim about the extrapolation and
+   traceability figures, and those are computed, not typed, with `checkLineArithmetic`/
+   `checkTotalsArithmetic` verifying the invoice's own printed numbers reconcile.
+2. *"The accountant release gate (CON-33) blocks the report/invoice from reaching the society until
+   approved."* True — FEAT-054's own CON-47 scope note already recorded this, and the batch release
+   queue (SCR-092, `/admin/billing/release-queue`) it names was built and deployed at MS-09's close.
+3. *"The society sees its invoice and savings report in its own portal, and the overdue clock
+   starts."* True — the portal Billing page shows released invoices; FEAT-111's published-months
+   view (`/portal/billing`, `/portal/electricity`) is what a society reads as its monthly figure
+   (saved ₹, kept, paid, kWh, basis); CON-13's `arrears_sweep` job is live and keys its clock off the
+   invoice's own due date.
+
+**What genuinely stays open, stated rather than silently dropped**: FEAT-049's per-circuit
+CON-01a tolerance-band check, FEAT-050's `actual_metered` pricing-basis flip, the whole CAP-05
+deviation-review pipeline (FEAT-055–058, inspector assignment through management escalation), and
+FEAT-059's native `SavingsReport` document (narrative, provenance, per-figure drill-down) are ALL
+real, built, unit-tested code — `resolvePricingBasis` in `monthly-calculation.ts`, the
+`DeviationReview` model and `/admin/billing/deviations` queue, `savingsReport.create` inside
+`runCalculation` — that simply has nothing to run against, because `runCalculation` (FEAT-048's
+*original* trigger) isn't called anywhere in the live monthly path anymore. The release queue's own
+basis-regression check (`release-triage.ts`, built at MS-09) is a narrower, reactive substitute for
+FEAT-049 — it flags a circuit whose stats basis moved *measured → agreed*, or an invoice total far
+from the society's own trailing 3-month average, but it doesn't read the contract's tolerance band
+or track a per-circuit consecutive-breach streak. All of this is exactly the "dashboard-generated
+billing" work `11-development-plan.md` and FEAT-048's own scope note already named as **phase two**
+— nothing here invents a new deferral, this entry just makes the deferral explicit at every feature
+it actually touches (scope notes added to FEAT-049/059/060 in `03-features.md` and `backlog.yaml`,
+matching FEAT-048/053/054's own established style) rather than leaving MS-08 looking stuck.
+
+**No code changed in this pass** — this was a documentation reconciliation (`03-features.md`,
+`docs/backlog.yaml`, this file), verified by reading the actual source (`invoice-month.ts`,
+`billing-start.ts`, `monthly-calculation.ts`, `release-triage.ts`, `admin/billing/actions.ts`) to
+confirm each claim rather than trusting the pre-written note. `tsc`/`lint`/`pnpm test`
+(950)/`pnpm build` all still clean (nothing touched `src/`). Not deployed — nothing here changes
+runtime behavior.
 
 ## Current Phase (archived application — history)
 

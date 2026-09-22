@@ -4672,6 +4672,7 @@ features:
     depends_on: [FEAT-048]
     status: ready
     milestone: MS-08
+    scope_note: "2026-09-22 (CON-47): runs only inside FEAT-048's own (now phase-two) automatic calculation, so it does not fire for an invoice-first month. The release queue's own basis-regression check (release-triage.ts, built at MS-09) is a narrower, reactive substitute -- flags a circuit whose basis moved measured -> agreed, or a total far from the society's trailing 3-month average -- neither reading the contract's tolerance band nor tracking a per-circuit streak. FEAT-050 and the CAP-05 pipeline (FEAT-055-058) inherit the same deferral: real, built, unit-tested code with nothing to act on until this check runs for real."
     acceptance_criteria:
       - id: FEAT-049-AC-1
         type: happy
@@ -5326,6 +5327,7 @@ features:
     status: ready
     milestone: MS-08
     architecture_notes: "docs/engineering/09-architecture.md §5.2 SavingsReport -- immutable once released (ADR-005); provenanceLinks field carries INV-02's chain back to the readings/benchmark versions used."
+    scope_note: "2026-09-22 (CON-47): the native SavingsReport row (narrative, provenance, deviation explanation) is written only by FEAT-048's own (now phase-two) run, so no invoice-first month has one. FEAT-111's published-months portal view (built at MS-09) is what a society sees instead -- saved rupees, paid to FirsThing, kept, saved kWh, the weighted % and its basis -- traceable the same way (INV-02), but a webpage, not a generated document with per-figure drill-down or a deviation narrative. The complete generated-document version stays real, built, tested code deferred alongside FEAT-048/049/050."
     acceptance_criteria:
       - id: FEAT-059-AC-1
         type: happy
@@ -5399,6 +5401,7 @@ features:
     depends_on: [FEAT-054, FEAT-059]
     status: ready
     milestone: MS-08
+    scope_note: "2026-09-22 (CON-47): delivery and release-gating are satisfied for the primary invoice-first path -- /portal/billing and /portal/electricity show only RELEASED months (FEAT-054's gate), scoped server-side to the viewer's own society (INV-05, AC-4), with history retained across versions (AC-5). Not built: outbound delivery over the society's own channel -- already named as this feature's own 'Complete version', blocked on ADR-008 (email provider), still Proposed."
     acceptance_criteria:
       - id: FEAT-060-AC-1
         type: happy
@@ -8586,7 +8589,8 @@ milestones:
       - "The month's savings calculation runs automatically per CircuitFeeLine and prorates correctly for a partial first month"
       - "The accountant release gate (CON-33) blocks the report/invoice from reaching the society until approved"
       - "The society sees its invoice and savings report in its own portal, and the overdue clock starts -- this is R0's own exit condition (08-prioritization.md §6), reached for real"
-    status: proposed
+    status: done
+    note: "Closed 2026-09-22 (CON-47), by the route 11-development-plan.md §3 named when MS-09 was scoped (2026-09-15): all three exit criteria are met through MS-09's invoice-first path, not this milestone's own originally-scoped automatic dashboard calculation. (1) CircuitFeeLine rows are written and proration is correct -- deriveInvoiceMonth (FEAT-110) reuses FEAT-051's own prorateFirstMonth/prorateFinalMonth verbatim, with zero manual arithmetic in the derived stats; only the invoice AMOUNT is manual, which FEAT-053 always described as 'the current real process' even before CON-47. (2) The accountant release gate is FEAT-054's own CON-47-noted queue (SCR-092/093/094), built and deployed. (3) The society sees its invoice (portal Billing) and a defensible monthly figure (FEAT-111's published-months view) with the CON-13 overdue clock live (arrears_sweep). FEAT-049/050/055-058's automatic per-circuit tolerance-band pipeline and FEAT-059's native generated SavingsReport document remain real, built, unit-tested code -- see their own scope notes -- genuinely deferred to phase two (dashboard-generated billing), not silently dropped."
 
   - id: MS-09
     name: "Invoice-first billing & published-month portal stats"

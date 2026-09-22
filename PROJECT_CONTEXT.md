@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-22
+2026-09-22 (deploy of `64ad18f` to stage)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6834,6 +6834,16 @@ own figures, ₹14,050 / ₹16,579, reproduced twice) and their `BillingInvoice`
 `tsc`/`lint`/`pnpm build`/`pnpm test` (950, unchanged — a thin action loop over already-tested code
 needed no new pure logic) all clean. `docs/backlog.yaml` FEAT-109's scope note records the build. No
 schema change.
+
+**Deployed to `stage.firsthing.earth` (2026-09-22, `64ad18f`)** — this deploy carries everything
+since the last one (`a60eeac`): MS-09's closure (the re-derivation hook, SCR-092's batch release
+queue) and this entry's own bulk-submit bar. No schema change in either commit, so no migration
+ran. Both pm2 processes restarted with a clean stopping/started pair in the log (no unattributed
+crash) and `unstable restarts: 0` afterward. Verified over the public HTTPS path: `/login` returns
+200, an unauthenticated `/` correctly 307s. No new browser pass beyond that — this deploy's own two
+commits were already verified end to end against the dev database before being committed, and
+nothing about the deploy itself (no schema, no new env var) introduces a path that verification
+didn't already cover.
 
 ## Current Phase (archived application — history)
 

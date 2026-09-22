@@ -16,6 +16,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
+import { rederiveInvoiceMonthsForCircuit } from "@/lib/invoice-rederive";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -716,6 +717,10 @@ export async function commitCircuitReadings(
   // Readings just changed, so the circuit's standing against its contracted
   // band may have too — the same check the meter-import path runs.
   await syncCircuitBandAlert(circuit.id);
+  // CON-47 / ADR-011 — the same re-derivation check, so a published
+  // invoice-first month responds to a CSV/manual commit exactly as it does
+  // to a meter-store projection.
+  await rederiveInvoiceMonthsForCircuit(circuit.id, admin.id);
 
   logger.info("circuit_ingest.committed", {
     actorId: admin.id,

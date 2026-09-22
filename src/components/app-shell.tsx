@@ -120,6 +120,11 @@ export function AppShell({
       // it — so this is where the month actually enters.
       showBilling && { href: "/admin/billing/intake", label: "Invoice intake", icon: Receipt },
       showBilling && { href: "/admin/billing", label: "Billing board", icon: Receipt },
+      // Accountant-only (requireAccountant, FEAT-054-AC-4) — shown under the
+      // same broad showBilling boolean as Deviations (ops-only, the other
+      // direction), matching this group's own established pattern of each
+      // page doing its own tighter gate and redirect.
+      showBilling && { href: "/admin/billing/release-queue", label: "Release queue", icon: Receipt },
       showBilling && { href: "/admin/billing/deviations", label: "Deviations", icon: Receipt },
     ]),
     ...group("settings", "Settings", Settings, [

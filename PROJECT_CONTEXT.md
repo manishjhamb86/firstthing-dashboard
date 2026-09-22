@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-20
+2026-09-22
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6705,6 +6705,92 @@ a correct app for exactly this reason. Read one group at a time.
 
 955 unit tests (11 new), `tsc`/`lint`/`build` clean, no schema change. Verified 14/14 on the nav and
 the collapse, with the two earlier suites re-run green (12/12, 10/10).
+
+## MS-09 closed: the re-derivation hook and SCR-092's batch publish (2026-09-22) — user-asked, closing PROJECT_CONTEXT's own "still open" note from 2026-09-16
+
+**The two pieces MS-09's 2026-09-16 entry named as open** — "step 3 (SCR-092 batch publish) and
+step 5 (the re-derivation hook that produces an AC-7 version)" — are both built, wired, and verified
+against real reading commits and a real release. `docs/backlog.yaml` MS-09 flipped `proposed` →
+`done`: all three of its exit criteria now hold, the third one (re-derivation) proven end to end
+rather than assumed. No schema change — the migration `20260915090506_add_invoice_first_month` had
+already added `rederivedAt`/`rederivedFromId` and the partial-unique invoice-per-month index months
+before either piece was built; both are "wire this in" work against an already-designed shape.
+
+**The re-derivation hook (`src/lib/invoice-rederive.ts`, FEAT-110-AC-5).** ADR-011 names the exact
+trigger and the exact place it fires: beside `syncCircuitBandAlert`, at both reading-commit
+convergence points (`meter-billing-handoff.ts`'s meter-store projection, and the circuit page's own
+CSV/manual commit in `reading-actions.ts`). A live, RELEASED, invoice-sourced month whose line for a
+just-touched circuit still rests on the `agreed` basis gets re-derived through the exact same
+`deriveInvoiceMonth()` submit already uses; a new **version** is only written when that line's basis
+genuinely flips to `measured` — not on every reading commit regardless of outcome, which would spam
+a version per upload. The comparison is a pure, unit-tested function
+(`anyLineImprovedToMeasured`, 6 cases) kept separate from the DB orchestration around it, this
+codebase's standing split. The new version **inherits `releasedAt`/`releasedById`** from the one it
+replaces — ADR-011's own stated, reversible choice: the accountant reviewed the BILL (CON-33), which
+this never touches; the stats are a computation with no human input, so auto-publishing them needs
+no second look. The SAME `BillingInvoice` row is re-pointed to the new calculation id rather than
+recreated (FEAT-110-AC-5's own words: "the invoice and its amounts are unchanged") — confirmed
+against a real row: `amount` stayed ₹16,579 throughout, only `monthly_calculation_id` moved.
+
+**Verified against a real reading commit, not a mock.** A disposable fixture reproduced a published
+`agreed`-basis month for a real circuit (Aditya Mega City's basement, TC-110-1's own real numbers —
+₹14,050 fee, 605 lights, 36% FirsThing share, baseline 47.4 kWh/day), then a real 5-day SONOFF-format
+CSV (~62% savings, comfortably inside CON-20's band) was uploaded through the actual circuit page's
+review-and-save flow. Confirmed by direct query: the old calculation flipped to `status: superseded`
+with `supersededById` set; a new version 2 landed `released`, `rederivedAt` stamped,
+`rederivedFromId` pointing at the old row, `total_saved_kwh`/`total_saved_value` recomputed from the
+real readings (5,886.82 kWh / ₹41,207.76, replacing the agreed-basis 5,575.40 / ₹39,027.78); the fee
+line's `basis` read `measured` at 62.27%; and `billing.month_rederived` logged with the flipped
+circuit named. **A sixth day committed afterward correctly produced NO new version** — the line was
+already `measured`, so the hook found nothing to flip and stayed silent, confirmed by re-querying
+(still exactly 2 versions) — proving the "not on every commit" design holds, not just asserted.
+
+**SCR-092 batch publish (`/admin/billing/release-queue`, FEAT-054's scope note).** The stale triage
+logic from an earlier design pass (`triage()`/`releaseBlockers()` in `arrears.ts`, written against
+the pre-CON-47 base spec, confirmed dead code — unused anywhere in `src/app`) is removed; the
+CON-47-revision criteria live in `src/lib/release-triage.ts` instead. Most of the revised table
+(society/month confirmed, lines mapped, arithmetic reconciled, paid status chosen) is already
+guaranteed true by construction for any row that reached `status: submitted` at all — `submitIntake`
+refuses to create one otherwise — so those are kept as named, always-true checks (documenting the
+full spec table honestly, per the spec's own "belt-and-braces, not an expected state" framing) rather
+than faked precision. Only two conditions are genuinely computed fresh: the invoice total against the
+society's trailing 3-month **invoiced** mean (>10% away → flagged, no history yet → not judged), and
+whether any circuit's basis moved measured → agreed since the last released month (agreed → measured
+is never a flag; the reverse is a real regression). `src/lib/release-queue-loader.ts`'s
+`computeQueueRow()` is the single place both the page and the batch action read from, so the row an
+accountant looked at and the check re-run before actually releasing can never disagree.
+
+**Every row still releases through the existing single-item `releaseCalculation` transaction** — the
+batch action (`releaseRoutineBatch`) adds only the layer SCR-092 requires on top: a needs-review row
+is never bulk-releasable, re-checked fresh against the database on every call, never trusted from
+whatever the client rendered a moment ago. The confirmation modal states the spec's own required
+breakdown ("N routine · Y already paid · Z will start their clock"), computed client-side from
+already-loaded rows. Gated `requireAccountant()` (PER-08 only, FEAT-054-AC-4's "including PER-01"),
+matching the deviations queue's own established shape (ops-only, the other direction) — both sit
+under the same broad `showBilling` nav boolean, each page doing its own tighter gate and redirect.
+
+**Verified in a browser with real fixtures, 17/17 combined, zero console errors**: an ops account is
+redirected away from the queue; an accountant sees two rows — a routine one (Ace City, first-ever
+invoice month, no trailing history to judge against) and a genuine needs-review one (a second
+Aditya Mega City month whose circuit had just gone `measured` → `agreed`, caught by the SAME basis-
+regression check against the real re-derived row from the test above, not a separately synthesized
+case) — reading "1 circuit moved from measured savings back to the agreed benchmark · Total is 114%
+above the 3-month average" in the accountant's own language, exactly as SCR-092 specifies. Selecting
+the routine row and confirming released it for real: `status: released`, `releasedAt` stamped,
+`billing_invoices.status` flipped `attached` → `released` (unpaid, so CON-13's clock now applies),
+while the needs-review row correctly stayed in the queue afterward. All fixture rows (three
+calculations, their fee lines, invoices, invoice lines, one payment, six real `MeterReading` rows
+and two `RawReadingFile` rows the CSV upload created) removed by direct query afterward — confirmed
+by count (zero remaining) and by re-reading the real circuit's own `preInstallBaseline`/
+`benchmarkSavingsPct`/`state` columns, untouched throughout (47.4 / 64% / `benchmark_confirmed`,
+exactly as before any of this ran).
+
+`tsc`/`lint`/`pnpm build` clean throughout; suite at 950 (net +2 — 15 new cases across
+`invoice-rederive.test.ts` and `release-triage.test.ts`, minus ~13 removed with the dead
+`arrears.ts` triage code and its own now-obsolete tests). `docs/backlog.yaml` MS-09 → `done`,
+STORY-110-2 → `done` (all five of its ACs — AC-2/3/7/9 were already built as part of
+`invoice-month.ts`'s derivation logic; AC-5 was the one this closes), FEAT-054's scope note records
+the batch-release build. Not yet deployed to stage — this branch is not merged.
 
 ## Current Phase (archived application — history)
 

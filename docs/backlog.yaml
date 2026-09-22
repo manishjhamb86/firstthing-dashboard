@@ -5019,7 +5019,7 @@ features:
     depends_on: [FEAT-053]
     status: ready
     milestone: MS-08
-    scope_note: "2026-09-15 (CON-47): the queue receives months submitted by FEAT-109; rows show invoice lines beside derived stats and basis; blocking flags become an unacknowledged arithmetic mismatch, an unmapped line or an unconfirmed month. Batch release of clean months is pulled into this build. Paid state travels from upload so release never starts CON-13 on a settled bill."
+    scope_note: "2026-09-15 (CON-47): the queue receives months submitted by FEAT-109; rows show invoice lines beside derived stats and basis; blocking flags become an unacknowledged arithmetic mismatch, an unmapped line or an unconfirmed month. Batch release of clean months is pulled into this build. Paid state travels from upload so release never starts CON-13 on a settled bill. Built 2026-09-22 as SCR-092 (/admin/billing/release-queue, requireAccountant-gated): triage-and-batch-release for invoice-first submitted months, with the six-criterion routine rule in src/lib/release-triage.ts. Every row still releases through the same single-item releaseCalculation transaction; the layer this adds is the routine/needs-review split, never bulk-releasing a flagged row."
     acceptance_criteria:
       - id: FEAT-054-AC-1
         type: happy
@@ -8386,7 +8386,7 @@ features:
         title: "As ops, I want a month with readings to use the measured savings instead, and a month to re-derive itself as a new version when readings arrive later (FEAT-110-AC-2, AC-3, AC-5, AC-7)"
         estimate_days: 2
         satisfies: [FEAT-110-AC-2, FEAT-110-AC-3, FEAT-110-AC-5, FEAT-110-AC-7, FEAT-110-AC-9]
-        status: proposed
+        status: done
         depends_on: [STORY-110-1]
   - id: FEAT-111
     title: "Published months on the society portal"
@@ -8598,8 +8598,8 @@ milestones:
       - "A past month's Zoho invoice is uploaded in a batch, read by the AI, confirmed row by row, submitted by ops and published by the accountant — and appears on the society's portal with its paid state"
       - "A society with no readings shows that month's saved kWh/₹ on the agreed basis, labelled; Ace City's month shows the measured basis from its real readings, with the fee unchanged"
       - "Committing readings for an already-published agreed-basis month re-derives its stats as a new version, the old retained, the invoice untouched, and the portal shows the change dated"
-    status: proposed
-    note: "Added 2026-09-15 (CON-47). Delivers MS-08's third exit criterion ('the society sees its invoice... in its own portal, and the overdue clock starts') by the invoice-first path; MS-08's own calculation-driven bill generation becomes phase two."
+    status: done
+    note: "Added 2026-09-15 (CON-47). Delivers MS-08's third exit criterion ('the society sees its invoice... in its own portal, and the overdue clock starts') by the invoice-first path; MS-08's own calculation-driven bill generation becomes phase two. Closed 2026-09-22: SCR-092 batch publish (/admin/billing/release-queue) and the re-derivation hook (src/lib/invoice-rederive.ts, wired into both reading-commit convergence points per ADR-011) were the two remaining pieces; all three exit criteria now verified end to end against real fixtures (see PROJECT_CONTEXT.md)."
 
 invariants:
   - id: INV-02

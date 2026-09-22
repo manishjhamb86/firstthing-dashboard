@@ -6,6 +6,7 @@ import { buildCircuitFlowReadingKey } from "@/lib/ingest-keys";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { savingsPct, SAVINGS_SUSPECT_ABOVE } from "@/lib/circuit-load";
 import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
+import { rederiveInvoiceMonthsForCircuit } from "@/lib/invoice-rederive";
 
 /**
  * The meter store and the billing store hold THE SAME READINGS — the user's
@@ -376,5 +377,8 @@ export async function projectMeterStoreToCircuit(input: {
   // contracted band may have too. Evaluated here rather than only on a timer,
   // so an import that pushes a circuit out of band is noticed at once.
   await syncCircuitBandAlert(circuit.id);
+  // CON-47 / ADR-011 — a published invoice-first month resting on the
+  // agreed basis re-derives itself once readings clear CON-12's floor.
+  await rederiveInvoiceMonthsForCircuit(circuit.id, input.actorId);
   return summary;
 }

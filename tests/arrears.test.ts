@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  addDays,
-  arrearsStateOf,
-  refuseExtension,
-  releaseBlockers,
-  shouldFireSuspension,
-  triage,
-} from "../src/lib/arrears";
+import { addDays, arrearsStateOf, refuseExtension, shouldFireSuspension } from "../src/lib/arrears";
 
 const RELEASED = new Date("2026-09-01T00:00:00.000Z");
 // The default fixture's due date equals its release date — an "immediately
@@ -194,94 +187,9 @@ describe("CON-13 — extension limits", () => {
   });
 });
 
-describe("SCR-092 — release-queue triage", () => {
-  const routine = {
-    anyOutOfBand: false,
-    basisChangedSinceLastMonth: false,
-    total: 100_000,
-    trailingMean: 100_000,
-    hasOpenDispute: false,
-    coverageDays: 31,
-    unacknowledgedInvoiceMismatch: false,
-    invoiceAttached: true,
-  };
-
-  it("calls a clean month routine", () => {
-    expect(triage(routine)).toEqual({ routine: true, reasons: [] });
-  });
-
-  it("needs review when any circuit is out of band", () => {
-    const t = triage({ ...routine, anyOutOfBand: true });
-    expect(t.routine).toBe(false);
-    expect(t.reasons).toContain("A circuit is outside its contracted band");
-  });
-
-  it("needs review when a circuit changed pricing basis", () => {
-    expect(triage({ ...routine, basisChangedSinceLastMonth: true }).routine).toBe(false);
-  });
-
-  it("needs review when the total moves more than 10% from the 3-month mean", () => {
-    expect(triage({ ...routine, total: 110_001 }).reasons[0]).toMatch(/above the 3-month average/);
-    expect(triage({ ...routine, total: 89_999 }).reasons[0]).toMatch(/below the 3-month average/);
-  });
-
-  it("accepts a total exactly 10% away — the rule is 'more than'", () => {
-    expect(triage({ ...routine, total: 110_000 }).routine).toBe(true);
-    expect(triage({ ...routine, total: 90_000 }).routine).toBe(true);
-  });
-
-  it("states the variance in the accountant's language, with a real number", () => {
-    // "Total is 34% above the 3-month average", never "anomaly".
-    expect(triage({ ...routine, total: 134_000 }).reasons).toContain(
-      "Total is 34% above the 3-month average",
-    );
-  });
-
-  it("does not judge variance for a society with no billing history", () => {
-    expect(triage({ ...routine, trailingMean: null, total: 999_999 }).routine).toBe(true);
-  });
-
-  it("needs review below 28 days of coverage, and says how many there are", () => {
-    expect(triage({ ...routine, coverageDays: 27 }).reasons).toContain("Only 27 days of readings");
-    expect(triage({ ...routine, coverageDays: 28 }).routine).toBe(true);
-  });
-
-  it("needs review on an open dispute or a missing/mismatched invoice", () => {
-    expect(triage({ ...routine, hasOpenDispute: true }).routine).toBe(false);
-    expect(triage({ ...routine, invoiceAttached: false }).routine).toBe(false);
-    expect(triage({ ...routine, unacknowledgedInvoiceMismatch: true }).routine).toBe(false);
-  });
-
-  it("reports every failing condition, not just the first", () => {
-    const t = triage({ ...routine, anyOutOfBand: true, hasOpenDispute: true, coverageDays: 10 });
-    expect(t.reasons).toHaveLength(3);
-  });
-});
-
-describe("FEAT-054-AC-3 — hard release blockers", () => {
-  const ok = {
-    status: "calculated",
-    invoiceAttached: true,
-    unacknowledgedInvoiceMismatch: false,
-    openBlockingAnomalies: 0,
-    reportGenerated: true,
-  };
-
-  it("permits a complete month", () => {
-    expect(releaseBlockers(ok)).toEqual([]);
-  });
-
-  it("blocks on unresolved reading flags (INV-09), and counts them", () => {
-    expect(releaseBlockers({ ...ok, openBlockingAnomalies: 3 })[0]).toMatch(/3 reading flag/);
-  });
-
-  it("blocks a held month, a missing invoice, a missing report, and a re-release", () => {
-    expect(releaseBlockers({ ...ok, status: "held" })).toHaveLength(1);
-    expect(releaseBlockers({ ...ok, invoiceAttached: false })).toHaveLength(1);
-    expect(releaseBlockers({ ...ok, reportGenerated: false })).toHaveLength(1);
-    expect(releaseBlockers({ ...ok, status: "released" })).toHaveLength(1);
-  });
-});
+// SCR-092's triage and FEAT-054-AC-3's release blockers were tested here
+// against the pre-CON-47 base spec; the rewritten rule now lives in
+// release-triage.ts, tested in tests/release-triage.test.ts.
 
 describe("addDays", () => {
   it("crosses a month boundary without drifting", () => {

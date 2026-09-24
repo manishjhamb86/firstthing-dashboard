@@ -523,26 +523,38 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                 : (INTAKE_VIEWS.find((v) => v.key === view)?.empty ?? "Nothing here.")}
           </p>
         ) : (
-          /* tbl-compact's own tighter gutters (built 2026-08-31 for this
-             exact class of problem — "seven columns fit a half-page column
-             instead of forcing a horizontal scroll") plus narrower per-
-             column caps below: eight columns of generous max-widths summed
-             past a typical laptop's content area, so the table needed
-             scrolling to see at all (user-reported 2026-09-24). The
-             overflow-x-auto wrapper stays as the safety net for a genuinely
-             long society name or a narrow viewport, not the normal case. */
+          /* table-layout: fixed, widths declared once on the header row.
+             tbl-compact's tighter gutters plus per-column max-widths (built
+             2026-08-31/2026-09-24) were not enough on their own: under the
+             default `auto` layout, eight columns' worth of generous
+             max-widths still summed past a typical laptop's content area,
+             so the table needed scrolling to see at all. Narrowing those
+             max-widths fixed every single-status filter but not "All"
+             specifically — `auto` sizes each column
+             to the WIDEST content across every RENDERED row, and "All" is
+             the one view that renders every status's own widest Action-cell
+             shape (a "Retry" + "Enter by hand" pair, an "Open month" link,
+             a "Reading…" button) side by side at once — a single-status
+             filter only ever needs its own narrower shape, so it fit while
+             "All" did not (user-reported again, same day: "rest is fixed
+             but the default all filter page is still not fixed"). Fixed
+             layout makes every column's width deterministic from this row
+             alone, independent of which rows happen to be on screen; cell
+             content that doesn't fit still truncates/wraps via the
+             existing per-cell classes. The overflow-x-auto wrapper stays as
+             the safety net for a genuinely narrow viewport. */
           <div className="overflow-x-auto">
-            <table className="tbl tbl-compact">
+            <table className="tbl tbl-compact" style={{ tableLayout: "fixed", width: "100%" }}>
               <thead>
                 <tr>
-                  <th className="w-8" />
-                  <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
-                  <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden md:table-cell" />
-                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden md:table-cell" />
-                  <SortHeader k="total" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" />
-                  <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} />
-                  <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden lg:table-cell" />
-                  <th />
+                  <th className="w-10" />
+                  <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[220px]" />
+                  <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[120px] md:table-cell" />
+                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[95px] md:table-cell" />
+                  <SortHeader k="total" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" className="w-[110px]" />
+                  <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[150px]" />
+                  <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[95px] lg:table-cell" />
+                  <th className="w-[190px]" />
                 </tr>
               </thead>
               <tbody>

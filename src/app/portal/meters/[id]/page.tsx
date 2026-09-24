@@ -5,6 +5,9 @@ import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
 import { hasGrant } from "@/lib/portal-access";
 import { MeterAlerts, MeterDemoCard, MeterHourlyChart, MeterReadout, MeterStateChip } from "@/components/meter-ui";
 import { meterDemoContext, meterHourly, meterRow } from "@/lib/meter-view";
+import { readMeterIfDue } from "@/lib/meter-read-on-open";
+import { nextLiveReadAt } from "@/lib/meter-live";
+import { formatInstant } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Meter" };
@@ -21,8 +24,14 @@ export default async function PortalMeterPage({ params }: { params: Promise<{ id
   if (!hasGrant(viewer, "electricity")) redirect("/portal");
   const { id } = await params;
 
-  const meter = await meterRow(id, viewer.societyId);
-  if (!meter) notFound();
+  // Scope first (INV-05): a society can never trigger a read of a meter
+  // that is not its own. Then read live if the last reading is over an hour
+  // old — once an hour per meter, whoever opens it.
+  const owned = await meterRow(id, viewer.societyId);
+  if (!owned) notFound();
+  const read = await readMeterIfDue(id, "portal");
+  const meter = read === "read" ? ((await meterRow(id, viewer.societyId)) ?? owned) : owned;
+  const nextRead = nextLiveReadAt(meter.readAt ? new Date(meter.readAt) : null, "portal");
 
   const [days, demo] = await Promise.all([meterHourly(id, 14), meterDemoContext(id, viewer.societyId)]);
 
@@ -38,6 +47,12 @@ export default async function PortalMeterPage({ params }: { params: Promise<{ id
       <div className="space-y-6">
         <MeterAlerts meter={meter} />
         <MeterReadout meter={meter} />
+        {nextRead && read !== "failed" && (
+          <p className="-mt-3 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+            The meter is read live at most once an hour — the next live reading is available after{" "}
+            {formatInstant(nextRead)}.
+          </p>
+        )}
         <MeterDemoCard context={demo} />
 
         <Card className="p-6">

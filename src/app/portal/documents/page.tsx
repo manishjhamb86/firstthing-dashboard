@@ -103,18 +103,56 @@ export default async function PortalDocumentsPage({
     if (!latest.has(slot)) latest.set(slot, d);
   }
   const all = [...latest.values()];
-  const typesPresent = [...new Set(all.map((d) => d.docType))];
-  const shown = activeType ? all.filter((d) => d.docType === activeType) : all;
 
-  const agreement = all.find((d) => d.docType === "agreement");
-  const rest = shown.filter((d) => d.id !== agreement?.id);
-  const byPeriod = new Map<string, typeof rest>();
-  for (const d of rest) {
-    if (!byPeriod.has(d.period)) byPeriod.set(d.period, []);
-    byPeriod.get(d.period)!.push(d);
+  // Monthly savings reports FirsThing has published (2026-09-24) — the
+  // latest version of each circuit-month, rendered from its frozen snapshot.
+  const published = await db.publishedSavingsReport.findMany({
+    where: { societyId, voidedAt: null },
+    orderBy: [{ period: "desc" }, { version: "desc" }],
+    select: { id: true, circuitId: true, period: true, version: true, publishedAt: true, snapshot: true },
+  });
+  const latestReport = new Map<string, (typeof published)[number]>();
+  for (const r of published) {
+    const slot = `${r.circuitId}|${r.period}`;
+    if (!latestReport.has(slot)) latestReport.set(slot, r);
   }
 
   const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+
+  type Row = { id: string; docType: string; period: string; title: string; detail: string; href: string; external: boolean };
+  const agreement = all.find((d) => d.docType === "agreement");
+  const rows: Row[] = [
+    ...all
+      .filter((d) => d.id !== agreement?.id)
+      .map((d) => ({
+        id: d.id,
+        docType: d.docType,
+        period: d.period,
+        title: d.fileName,
+        detail: `filed ${formatDate(d.uploadedAt)} · ${kb(d.byteSize)}${d.version > 1 ? ` · v${d.version}` : ""}`,
+        href: publicS3Url(d.s3Key),
+        external: true,
+      })),
+    ...[...latestReport.values()].map((r) => {
+      const snap = r.snapshot as { circuitLabel?: string };
+      return {
+        id: r.id,
+        docType: "savingsReport",
+        period: r.period,
+        title: `Monthly savings report — ${snap.circuitLabel ?? "circuit"}`,
+        detail: `published ${formatDate(r.publishedAt)}${r.version > 1 ? ` · v${r.version}` : ""}`,
+        href: `/portal/reports/savings/${r.id}`,
+        external: false,
+      };
+    }),
+  ];
+  const typesPresent = [...new Set([...(agreement ? ["agreement"] : []), ...rows.map((d) => d.docType)])];
+  const shown = activeType ? rows.filter((d) => d.docType === activeType) : rows;
+  const byPeriod = new Map<string, Row[]>();
+  for (const d of [...shown].sort((a, b) => (a.period < b.period ? 1 : a.period > b.period ? -1 : 0))) {
+    if (!byPeriod.has(d.period)) byPeriod.set(d.period, []);
+    byPeriod.get(d.period)!.push(d);
+  }
 
   return (
     <>
@@ -181,7 +219,7 @@ export default async function PortalDocumentsPage({
         </Card>
       )}
 
-      {all.length === 0 ? (
+      {!agreement && rows.length === 0 ? (
         <EmptyState title="No documents filed yet">
           Savings reports, your agreement and inspection reports appear here as FirsThing files
           them.
@@ -253,19 +291,23 @@ export default async function PortalDocumentsPage({
                     <div className="flex min-w-0 items-center gap-3">
                       <DocIcon tone={VISIBLE[d.docType].tone} />
                       <div className="min-w-0">
-                        <p className="truncate text-[13.5px] font-semibold" title={d.fileName}>
-                          {d.fileName}
+                        <p className="truncate text-[13.5px] font-semibold" title={d.title}>
+                          {d.title}
                         </p>
                         <p className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                          <StatusChip tone={VISIBLE[d.docType].tone}>{VISIBLE[d.docType].label}</StatusChip>{" "}
-                          filed {formatDate(d.uploadedAt)} · {kb(d.byteSize)}
-                          {d.version > 1 ? ` · v${d.version}` : ""}
+                          <StatusChip tone={VISIBLE[d.docType].tone}>{VISIBLE[d.docType].label}</StatusChip> {d.detail}
                         </p>
                       </div>
                     </div>
-                    <a href={publicS3Url(d.s3Key)} target="_blank" rel="noreferrer" className="btn-secondary">
-                      Download
-                    </a>
+                    {d.external ? (
+                      <a href={d.href} target="_blank" rel="noreferrer" className="btn-secondary">
+                        Download
+                      </a>
+                    ) : (
+                      <Link href={d.href} className="btn-secondary">
+                        Open &amp; download
+                      </Link>
+                    )}
                   </div>
                 ))}
               </div>

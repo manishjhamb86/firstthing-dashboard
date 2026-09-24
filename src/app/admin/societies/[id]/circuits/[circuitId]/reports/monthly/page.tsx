@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { monthLabel, monthShort, shortDate } from "@/lib/format-date";
+import { monthShort } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
-import { circuitFeeLineFor, loadCircuitReport, monthDays, monthsWithData, summarize } from "../report-data";
+import { db } from "@/lib/db";
+import { buildMonthlySnapshot, loadCircuitReport, monthsWithData } from "../report-data";
+import { MonthlySavingsSheet } from "../monthly-sheet";
+import { PublishReportButton } from "./publish-button";
 import { PrintButton } from "../report-shared";
 import { BackButton } from "@/components/back-button";
-import { StatusChip } from "@/components/ui";
-import { BAND_TONE, DaysGrid, ExclusionNotes, ReportLegend, pct } from "../report-format";
+
 
 // CON-45 — the monthly savings report for one explicitly-selected month
 // (INV-04: the month is a selection, never inferred). Circuit-scoped, and
@@ -18,10 +19,6 @@ import { BAND_TONE, DaysGrid, ExclusionNotes, ReportLegend, pct } from "../repor
 // (`circuitFeeLineFor`), which this report never duplicates the arithmetic
 // of — two independently-computed money figures for one month is how they
 // end up disagreeing.
-
-function inr(n: number): string {
-  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
 
 export default async function MonthlyReportPage({
   params,
@@ -38,7 +35,7 @@ export default async function MonthlyReportPage({
   const { month: monthParam } = await searchParams;
   const report = await loadCircuitReport(circuitId);
   if (!report || report.society.id !== id) notFound();
-  const { circuit, society, effBaselineNow } = report;
+  const { circuit, society } = report;
   const circuitHref = `/admin/societies/${id}/circuits/${circuitId}`;
 
   const months = monthsWithData(report);
@@ -89,18 +86,16 @@ export default async function MonthlyReportPage({
       ? monthParam
       : months[months.length - 1];
 
-  const days = monthDays(report, month);
-  const summary = summarize(effBaselineNow, days);
-  const feeLine = await circuitFeeLineFor(circuitId, month);
-  const excludedCount = days.filter((d) => d.excluded).length;
-  const countedCount = days.length - excludedCount;
-  const asMonth = monthLabel;
-  const monthTitle = asMonth(month);
+  const snapshot = await buildMonthlySnapshot(report, month);
+  const published = await db.publishedSavingsReport.findFirst({
+    where: { circuitId, period: month, voidedAt: null },
+    orderBy: { version: "desc" },
+    select: { version: true, publishedAt: true },
+  });
   const shortMonth = monthShort;
   // Two Februaries in one picker have to be told apart, so the year appears
   // only when the months actually span more than one.
   const multiYear = new Set(months.map((m) => m.slice(0, 4))).size > 1;
-  const generated = shortDate(new Date());
 
   return (
     <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
@@ -128,208 +123,17 @@ export default async function MonthlyReportPage({
             </nav>
           </>
         )}
+        <PublishReportButton
+          circuitId={circuitId}
+          month={month}
+          publishedVersion={published?.version ?? null}
+          publishedAt={published?.publishedAt.toISOString() ?? null}
+          hasFee={snapshot.fee !== null}
+        />
         <PrintButton />
       </div>
 
-      {/* The report is a sheet: it is a document, and it prints. */}
-      <article className="report-sheet">
-        <header className="report-masthead">
-          <div className="min-w-0 flex-1">
-            <p className="lbl" style={{ color: "var(--accent)" }}>
-              FirsThing · Monthly savings report
-            </p>
-            <h1 className="mt-2 text-[26px] font-extrabold leading-tight tracking-[-0.02em]">
-              {society.name}
-            </h1>
-            <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
-              {society.location}
-              <br />
-              {circuit.location || circuit.lightType} circuit ·{" "}
-              {circuit.meteredLightCount.toLocaleString("en-IN")} metered lights of{" "}
-              {circuit.representedLightCount.toLocaleString("en-IN")} represented
-            </p>
-          </div>
-          <div className="report-period">
-            <p className="text-[20px] font-bold tracking-[-0.01em]">{monthTitle}</p>
-            <p className="mt-1 text-xs text-[var(--text-subtle)]">
-              Generated <span className="num">{generated}</span>
-            </p>
-          </div>
-        </header>
-
-        {/* The answer, first. It was the last paragraph on the page, at body
-            size, after every row of the evidence it summarises. */}
-        <section className="report-result">
-          <div className="shrink-0">
-            <p className="lbl" style={{ color: "var(--info-fg)" }}>
-              Verified savings
-            </p>
-            <p className="mt-1.5 flex flex-wrap items-baseline gap-2.5">
-              <span className="num text-[46px] font-bold leading-none tracking-[-0.02em]">
-                {summary.savingsPct === null ? "—" : pct(summary.savingsPct)}
-              </span>
-              {summary.band && (
-                <StatusChip tone={BAND_TONE[summary.band]}>
-                  {SAVINGS_BAND_META[summary.band].label}
-                </StatusChip>
-              )}
-            </p>
-          </div>
-          {/* Read ONLY from a released calculation's own fee line (INV-02) —
-              this report never computes a rupee figure of its own (user-
-              asked 2026-09-24, "how amount is saved"). Absent one, states
-              what will produce it rather than a blank or an invented rate. */}
-          <div className="shrink-0">
-            <p className="lbl" style={{ color: "var(--info-fg)" }}>
-              Saved this month
-            </p>
-            {feeLine ? (
-              <p className="mt-1.5 num text-[46px] font-bold leading-none tracking-[-0.02em]">
-                {inr(feeLine.savedValue)}
-              </p>
-            ) : (
-              <p className="mt-1.5 max-w-[220px] text-[12.5px] leading-relaxed text-[var(--text-subtle)]">
-                Appears once this month is released for billing.
-              </p>
-            )}
-          </div>
-          <p className="min-w-0 flex-1 basis-64 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
-            {monthTitle} averaged{" "}
-            <strong className="num text-[var(--text)]">
-              {summary.averageKwh?.toFixed(2) ?? "—"}
-            </strong>{" "}
-            kWh/day against the{" "}
-            <strong className="num text-[var(--text)]">{effBaselineNow?.toFixed(2) ?? "—"}</strong>{" "}
-            kWh/day pre-installation baseline, over{" "}
-            <strong className="text-[var(--text)]">
-              {countedCount} counted day{countedCount === 1 ? "" : "s"}
-            </strong>
-            {circuit.benchmarkSavingsPct !== null && (
-              <>
-                {" "}
-                — against a contracted benchmark of{" "}
-                <strong className="num text-[var(--text)]">
-                  {pct(circuit.benchmarkSavingsPct)}
-                </strong>
-              </>
-            )}
-            .{" "}
-            {feeLine && (
-              <>
-                Of that, <strong className="num text-[var(--text)]">{inr(feeLine.amount)}</strong> is
-                FirsThing&rsquo;s fee and <strong className="num text-[var(--text)]">{inr(feeLine.societyNet)}</strong>{" "}
-                is kept by the society.
-              </>
-            )}
-            {summary.warn &&
-              summary.savingsPct !== null &&
-              summary.savingsPct < SAVINGS_WARN_BELOW && (
-                <>
-                  {" "}
-                  <strong className="text-[var(--text)]">
-                    This month is below the {SAVINGS_WARN_BELOW}% the commercial model is built on.
-                  </strong>
-                </>
-              )}
-          </p>
-        </section>
-
-        {/* The facts that were run together in one sentence under the title. */}
-        <section className="report-facts">
-          <div>
-            <p className="lbl">Baseline in force</p>
-            <p className="mt-1.5">
-              <span className="num text-[17px] font-bold">
-                {effBaselineNow?.toFixed(2) ?? "—"}
-              </span>{" "}
-              <span className="text-xs text-[var(--text-subtle)]">kWh/day</span>
-            </p>
-          </div>
-          <div>
-            <p className="lbl">Contracted benchmark</p>
-            <p className="mt-1.5">
-              <span className="num text-[17px] font-bold">
-                {circuit.benchmarkSavingsPct === null ? "—" : pct(circuit.benchmarkSavingsPct)}
-              </span>
-            </p>
-          </div>
-          <div>
-            <p className="lbl">Days counted</p>
-            <p className="mt-1.5">
-              <span className="num text-[17px] font-bold">{countedCount}</span>{" "}
-              <span className="text-xs text-[var(--text-subtle)]">of {days.length} recorded</span>
-            </p>
-          </div>
-          <div>
-            <p className="lbl">Excluded</p>
-            <p className="mt-1.5">
-              <span className="num text-[17px] font-bold">{excludedCount}</span>{" "}
-              <span className="text-xs text-[var(--text-subtle)]">
-                {excludedCount === 1 ? "day" : "days"}
-              </span>
-            </p>
-          </div>
-        </section>
-
-        <section className="px-8 pb-8 pt-7">
-          <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="text-[15px] font-semibold">Daily consumption &amp; savings</h2>
-            <p className="text-xs text-[var(--text-subtle)]">
-              Excluded days are shown, never hidden
-            </p>
-          </div>
-
-          <DaysGrid days={days} mode="savings" />
-
-          {/* The month, footed up. With the days in columns there is no one
-              tfoot to carry it, and a per-column subtotal would be arithmetic
-              nobody asked for. */}
-          <div className="report-total">
-            <span>
-              {countedCount} day{countedCount === 1 ? "" : "s"} counted
-            </span>
-            <span className="ml-auto flex items-baseline gap-2">
-              <span className="text-[var(--text-subtle)]">Average</span>
-              <span className="num text-[15px] font-bold">
-                {summary.averageKwh?.toFixed(2) ?? "—"}
-              </span>
-              <span className="text-xs text-[var(--text-subtle)]">kWh/day</span>
-            </span>
-            <span className="flex items-baseline gap-2">
-              <span className="text-[var(--text-subtle)]">Savings</span>
-              <span
-                className={`num report-band text-[15px]${summary.band ? ` report-band-${summary.band}` : ""}`}
-                style={{ background: summary.band ? SAVINGS_BAND_META[summary.band].bg : undefined }}
-              >
-                {summary.savingsPct === null ? "—" : pct(summary.savingsPct)}
-              </span>
-            </span>
-          </div>
-
-          <ReportLegend days={days} mode="savings" />
-
-          <ExclusionNotes days={days} />
-
-          <p className="mt-4 text-xs leading-relaxed text-[var(--text-subtle)]">
-            The rupee figure above is read from the released monthly calculation, never computed on
-            this page — extrapolation across the represented lights, the invoice, every other billing
-            figure lives there too. This report states the measured circuit, and the two can never
-            disagree because both read one store.
-          </p>
-        </section>
-
-        <footer className="report-footer">
-          <span>
-            FirsThing · every figure traces to stored daily readings and the baseline in force on
-            each day (INV-02, INV-07).
-          </span>
-          {/* Only on paper: a printed page has left the screen that knew
-              which circuit it was. */}
-          <span className="num report-colophon">
-            {society.name} · {circuit.location || circuit.lightType} · {month}
-          </span>
-        </footer>
-      </article>
+      <MonthlySavingsSheet s={snapshot} />
     </div>
   );
 }

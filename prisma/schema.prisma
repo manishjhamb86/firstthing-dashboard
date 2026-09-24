@@ -327,32 +327,32 @@ enum LightCountMethod {
 // ── Society & account (COMP-09) ──────────────────────────────────────────
 
 model Society {
-  id               String        @id @default(cuid())
-  name             String
+  id                            String        @id @default(cuid())
+  name                          String
   /// Normalised "name|location" — the DB-level guarantee that a society is
   /// never entered twice (2026-08-26). An application check cannot win a
   /// race with itself; a unique index can. See src/lib/society-key.ts.
-  dedupeKey        String        @unique @map("dedupe_key")
+  dedupeKey                     String        @unique @map("dedupe_key")
   /// Nullable: a society can be on the system before anyone has a
   /// trustworthy flat count (2026-08-26). Listing-site figures for the
   /// first import were demonstrably wrong, and this repo states a gap
   /// rather than fabricating a figure — the same rule as the Portfolio's
   /// "not yet tracked" tiles. Nothing computes money from it.
-  flatCount        Int?          @map("flat_count")
-  location         String
-  latitude         Float?
-  longitude        Float?
-  status           SocietyStatus @default(prospect)
-  nextElectionDate DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
+  flatCount                     Int?          @map("flat_count")
+  location                      String
+  latitude                      Float?
+  longitude                     Float?
+  status                        SocietyStatus @default(prospect)
+  nextElectionDate              DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
   /// KYC facts a deal can move forward on without the document in hand
   /// (user's call 2026-09-15): the GSTIN, and the tariff a recent bill would
   /// show. The document itself stays wanted — the society page says so until
   /// it is filed — but GATE-01 no longer waits on it.
-  gstNumber                   String?   @map("gst_number")
-  gstNumberRecordedAt         DateTime? @map("gst_number_recorded_at")
-  electricityUnitRate         Float?    @map("electricity_unit_rate")
-  electricityUnitRateRecordedAt DateTime? @map("electricity_unit_rate_recorded_at")
-  createdAt        DateTime      @default(now()) @map("created_at")
+  gstNumber                     String?       @map("gst_number")
+  gstNumberRecordedAt           DateTime?     @map("gst_number_recorded_at")
+  electricityUnitRate           Float?        @map("electricity_unit_rate")
+  electricityUnitRateRecordedAt DateTime?     @map("electricity_unit_rate_recorded_at")
+  createdAt                     DateTime      @default(now()) @map("created_at")
 
   contacts           SocietyContact[]
   profiles           Profile[]
@@ -371,10 +371,11 @@ model Society {
   installationProjects InstallationProject[]
 
   // MS-08
-  monthlyCalculations MonthlyCalculation[]
-  storedDocuments     StoredDocument[]
-  tickets             Ticket[]
-  inspections         Inspection[]
+  monthlyCalculations     MonthlyCalculation[]
+  storedDocuments         StoredDocument[]
+  publishedSavingsReports PublishedSavingsReport[]
+  tickets                 Ticket[]
+  inspections             Inspection[]
 
   @@map("societies")
 }
@@ -488,27 +489,29 @@ model AdminUser {
   deletedBy AdminUser?  @relation("AdminDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   deleted   AdminUser[] @relation("AdminDeletedBy")
 
-  pipelinesOwned              Pipeline[]           @relation("PipelineSalesOwner")
-  pipelinesSurveying          Pipeline[]           @relation("PipelineSurveyOwner")
-  pipelinesSurveyAssigned     Pipeline[]           @relation("PipelineSurveyAssignedBy")
-  scheduledEvents             ScheduledEvent[]     @relation("ScheduledEventAssignee")
-  circuitsReplacing           Circuit[]            @relation("CircuitReplacementOwner")
-  waterTanksAssigned          WaterTank[]          @relation("WaterTankAssignedBy")
-  meterDevicesAssigned        MeterDevice[]        @relation("MeterDeviceAssignedBy")
-  meterInstallationsOpened    MeterInstallation[]  @relation("MeterInstalledBy")
-  meterInstallationsClosed    MeterInstallation[]  @relation("MeterRemovedBy")
-  meterDevicesOwned           MeterDevice[]        @relation("MeterDeviceOwner")
-  meterAlertsAcknowledged     MeterAlert[]         @relation("MeterAlertAcknowledgedBy")
-  meterCsvImports             MeterCsvImport[]     @relation("MeterCsvImportUploadedBy")
-  storedDocuments             StoredDocument[]     @relation("StoredDocumentUploadedBy")
-  ticketsTouched              Ticket[]             @relation("TicketStatusByAdmin")
-  storedDocumentsVoided       StoredDocument[]     @relation("StoredDocumentVoidedBy")
-  documentExtractions         DocumentExtraction[] @relation("DocumentExtractionConfirmedBy")
-  ewelinkConfigsUpdated       EwelinkApiConfig[]   @relation("EwelinkApiConfigUpdatedBy")
-  tankApiConfigUpdated        TankApiConfig[]      @relation("TankApiConfigUpdatedBy")
-  circuitsReplacementAssigned Circuit[]            @relation("CircuitReplacementAssignedBy")
-  scheduledEventsCreated      ScheduledEvent[]     @relation("ScheduledEventCreatedBy")
-  pipelinesLogged             Pipeline[]           @relation("PipelineLoggedBy")
+  pipelinesOwned              Pipeline[]               @relation("PipelineSalesOwner")
+  pipelinesSurveying          Pipeline[]               @relation("PipelineSurveyOwner")
+  pipelinesSurveyAssigned     Pipeline[]               @relation("PipelineSurveyAssignedBy")
+  scheduledEvents             ScheduledEvent[]         @relation("ScheduledEventAssignee")
+  circuitsReplacing           Circuit[]                @relation("CircuitReplacementOwner")
+  waterTanksAssigned          WaterTank[]              @relation("WaterTankAssignedBy")
+  meterDevicesAssigned        MeterDevice[]            @relation("MeterDeviceAssignedBy")
+  meterInstallationsOpened    MeterInstallation[]      @relation("MeterInstalledBy")
+  meterInstallationsClosed    MeterInstallation[]      @relation("MeterRemovedBy")
+  meterDevicesOwned           MeterDevice[]            @relation("MeterDeviceOwner")
+  meterAlertsAcknowledged     MeterAlert[]             @relation("MeterAlertAcknowledgedBy")
+  meterCsvImports             MeterCsvImport[]         @relation("MeterCsvImportUploadedBy")
+  storedDocuments             StoredDocument[]         @relation("StoredDocumentUploadedBy")
+  ticketsTouched              Ticket[]                 @relation("TicketStatusByAdmin")
+  storedDocumentsVoided       StoredDocument[]         @relation("StoredDocumentVoidedBy")
+  savingsReportsPublished     PublishedSavingsReport[] @relation("SavingsReportPublishedBy")
+  savingsReportsVoided        PublishedSavingsReport[] @relation("SavingsReportVoidedBy")
+  documentExtractions         DocumentExtraction[]     @relation("DocumentExtractionConfirmedBy")
+  ewelinkConfigsUpdated       EwelinkApiConfig[]       @relation("EwelinkApiConfigUpdatedBy")
+  tankApiConfigUpdated        TankApiConfig[]          @relation("TankApiConfigUpdatedBy")
+  circuitsReplacementAssigned Circuit[]                @relation("CircuitReplacementAssignedBy")
+  scheduledEventsCreated      ScheduledEvent[]         @relation("ScheduledEventCreatedBy")
+  pipelinesLogged             Pipeline[]               @relation("PipelineLoggedBy")
 
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
   circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
@@ -868,19 +871,20 @@ model Circuit {
   voidedById String?   @map("voided_by_id")
   voidReason String?   @map("void_reason")
 
-  society                  Society                 @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  siteSurvey               SiteSurvey?             @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
-  loadValidationOverrideBy AdminUser?              @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
-  createdBy                AdminUser?              @relation("CircuitCreatedBy", fields: [createdById], references: [id])
-  voidedBy                 AdminUser?              @relation("CircuitVoidedBy", fields: [voidedById], references: [id])
-  replacementOwner         AdminUser?              @relation("CircuitReplacementOwner", fields: [replacementOwnerId], references: [id])
-  replacementAssignedBy    AdminUser?              @relation("CircuitReplacementAssignedBy", fields: [replacementAssignedById], references: [id])
+  society                  Society                  @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  siteSurvey               SiteSurvey?              @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
+  loadValidationOverrideBy AdminUser?               @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
+  createdBy                AdminUser?               @relation("CircuitCreatedBy", fields: [createdById], references: [id])
+  voidedBy                 AdminUser?               @relation("CircuitVoidedBy", fields: [voidedById], references: [id])
+  replacementOwner         AdminUser?               @relation("CircuitReplacementOwner", fields: [replacementOwnerId], references: [id])
+  replacementAssignedBy    AdminUser?               @relation("CircuitReplacementAssignedBy", fields: [replacementAssignedById], references: [id])
   scheduledEvents          ScheduledEvent[]
   gatePasses               GatePass[]
   commissioningReadings    CommissioningReading[]
   rescaleEvents            BenchmarkRescaleEvent[]
   demoResultReviews        DemoResultReview[]
   demos                    CircuitDemo[]
+  publishedSavingsReports  PublishedSavingsReport[]
 
   // MS-07
   rawReadingFiles         RawReadingFile[]
@@ -1317,7 +1321,7 @@ model Offer {
   spareStockCount     Int          @default(0) @map("spare_stock_count")
 
   // Derived at generation from the demo numbers, shown on the offer.
-  projectedMonthlyFee Float? @map("projected_monthly_fee")
+  projectedMonthlyFee       Float? @map("projected_monthly_fee")
   /// The worksheet's own figures (2026-09-15): what the agreed lights are
   /// expected to save a month, in kWh and at the unit rate in rupees. Stored
   /// so the offer keeps saying what it was priced on (INV-02); the share
@@ -1692,7 +1696,7 @@ model InstallationBatch {
 
   // FEAT-034-AC-3 — photos are what make the society's review and any
   // dispute resolvable, so a batch cannot be submitted without them.
-  photoKeys Json @default("[]") @map("photo_keys")
+  photoKeys          Json    @default("[]") @map("photo_keys")
   /// A day recorded after the fact (user's call 2026-09-15, "skip for old
   /// records") may carry no photos — only when the planned day is already
   /// past, and only with the reason stated here. Null on every batch that
@@ -2578,7 +2582,7 @@ model InvoiceIntake {
   // separate non-service bill (2026-09-24) — devices, installation, a
   // one-off charge that is not competing for this month's savings figure.
   // Filed as a StoredDocument, never fed into any calculation.
-  filedAsDocumentId String? @map("filed_as_document_id")
+  filedAsDocumentId    String?   @map("filed_as_document_id")
 
   discardedAt   DateTime? @map("discarded_at")
   discardReason String?   @map("discard_reason")
@@ -3545,4 +3549,32 @@ model InspectionFinding {
 
   @@index([inspectionId])
   @@map("inspection_findings")
+}
+
+/// A monthly savings report published to the society's portal (2026-09-24,
+/// user-asked). The report is frozen as a snapshot at the moment of
+/// publishing, so what the society downloads is exactly what was published;
+/// a correction is a new version, the previous kept (ADR-005).
+model PublishedSavingsReport {
+  id            String   @id @default(cuid())
+  societyId     String   @map("society_id")
+  circuitId     String   @map("circuit_id")
+  period        String
+  version       Int
+  snapshot      Json
+  publishedAt   DateTime @default(now()) @map("published_at")
+  publishedById String   @map("published_by_id")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
+  society     Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  circuit     Circuit    @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  publishedBy AdminUser  @relation("SavingsReportPublishedBy", fields: [publishedById], references: [id])
+  voidedBy    AdminUser? @relation("SavingsReportVoidedBy", fields: [voidedById], references: [id])
+
+  @@unique([circuitId, period, version])
+  @@index([societyId])
+  @@map("published_savings_reports")
 }

@@ -25,11 +25,18 @@
 export const LIVE_FRESH_MS = 60 * 1000;
 
 /**
- * The floor between reads for a portal viewer. A society opening its own
- * meter should see a live figure; a society leaving the page open should not
- * spend the account's allowance on it.
+ * The floor between reads for a portal viewer: once an hour (user-specified
+ * 2026-09-24 — "fetch the live readings once and not for the next hour").
+ * Per METER, not per viewer, so several committee members opening the same
+ * meter spend one vendor call between them, not one each.
  */
-export const PORTAL_MIN_INTERVAL_MS = 5 * 60 * 1000;
+export const PORTAL_MIN_INTERVAL_MS = 60 * 60 * 1000;
+
+/** When the next live read is allowed, given the last one. */
+export function nextLiveReadAt(lastReadAt: Date | null, surface: Surface): Date | null {
+  if (!lastReadAt) return null;
+  return new Date(lastReadAt.getTime() + minIntervalFor(surface));
+}
 
 export type Surface = "admin" | "portal";
 

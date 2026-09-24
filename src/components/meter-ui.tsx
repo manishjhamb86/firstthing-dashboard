@@ -527,11 +527,13 @@ export function MeterDemoCard({ context }: { context: MeterDemoContext }) {
                 <Stat
                   key={p.key}
                   label={p.label}
-                  value={`${p.kWh.toFixed(2)} kWh`}
+                  value={p.kWh === null ? "—" : `${p.kWh.toFixed(2)} kWh`}
                   detail={
-                    p.expectedKwh === null
-                      ? "no baseline to compare against"
-                      : `${meta ? meta.label + " · " : ""}${p.savingsPct!.toFixed(1)}% vs ${p.expectedKwh.toFixed(2)} kWh expected`
+                    p.kWh === null
+                      ? p.note
+                      : p.expectedKwh === null
+                        ? `no baseline to compare against · ${p.note}`
+                        : `${meta ? meta.label + " · " : ""}${p.savingsPct!.toFixed(1)}% vs ${p.expectedKwh.toFixed(2)} kWh without FirsThing · ${p.note}`
                   }
                   tone={p.band === "red" || p.band === "orange" ? "bad" : p.band === "yellow" ? "warn" : "accent"}
                 />

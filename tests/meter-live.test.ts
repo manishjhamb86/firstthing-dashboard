@@ -70,3 +70,9 @@ describe("isStale", () => {
     expect(STALE_AFTER_MS).toBeGreaterThan(60 * 60 * 1000);
   });
 });
+
+describe("portal read floor (2026-09-24)", () => {
+  it("is one hour — a portal viewer triggers at most one live read an hour", () => {
+    expect(PORTAL_MIN_INTERVAL_MS).toBe(60 * 60 * 1000);
+  });
+});

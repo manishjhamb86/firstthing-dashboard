@@ -171,3 +171,53 @@ export function summarize(baseline: number | null, days: ReportDay[]) {
     days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })),
   );
 }
+
+/**
+ * Everything the monthly savings report shows, as plain data — so the SAME
+ * sheet renders live for the operator and from a frozen, published copy for
+ * the society (user-asked 2026-09-24: publish the report to the customer's
+ * Documents tab). A published report is this object stored at the moment of
+ * publishing; later reading corrections produce a new version rather than
+ * silently changing what the society was shown (ADR-005).
+ */
+export type SavingsReportSnapshot = {
+  societyName: string;
+  societyLocation: string;
+  circuitLabel: string;
+  meteredLightCount: number;
+  representedLightCount: number;
+  benchmarkSavingsPct: number | null;
+  month: string;
+  baselineKwhPerDay: number | null;
+  days: ReportDay[];
+  summary: ReturnType<typeof summarize>;
+  fee: CircuitFeeLineForMonth | null;
+  generatedAt: string;
+};
+
+export async function buildMonthlySnapshot(
+  report: NonNullable<Awaited<ReturnType<typeof loadCircuitReport>>>,
+  month: string,
+): Promise<SavingsReportSnapshot> {
+  const days = monthDays(report, month);
+  return {
+    societyName: report.society.name,
+    societyLocation: report.society.location,
+    circuitLabel: report.circuit.location || report.circuit.lightType,
+    meteredLightCount: report.circuit.meteredLightCount,
+    representedLightCount: report.circuit.representedLightCount,
+    benchmarkSavingsPct: report.circuit.benchmarkSavingsPct,
+    month,
+    baselineKwhPerDay: report.effBaselineNow,
+    days,
+    summary: summarize(report.effBaselineNow, days),
+    fee: await circuitFeeLineFor(report.circuit.id, month),
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+/** Two snapshots say the same thing — the generated stamp aside. */
+export function sameSnapshot(a: SavingsReportSnapshot, b: SavingsReportSnapshot): boolean {
+  const strip = (s: SavingsReportSnapshot) => JSON.stringify({ ...s, generatedAt: "" });
+  return strip(a) === strip(b);
+}

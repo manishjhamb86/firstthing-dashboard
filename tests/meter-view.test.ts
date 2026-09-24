@@ -1,72 +1,65 @@
 import { describe, expect, it } from "vitest";
 import { periodComparisons } from "@/lib/meter-view";
 
-// meterHourly() returns most-recent-day-first — these fixtures follow that
-// order, since periodComparisons reads hourly[0] as "today".
+// meterHourly() returns most-recent-day-first.
 function day(d: string, total: number, intervalCount = 24) {
   return { day: d, hours: [], total, intervalCount };
 }
+// 24 Sept 2026, 12:00 IST (06:30 UTC).
+const NOW = new Date("2026-09-24T06:30:00Z");
+const READ = new Date("2026-09-24T06:00:00Z"); // 11:30 IST
+const live = { dayKwh: 2.01, monthKwh: 74.3, readAt: READ };
+const get = (out: ReturnType<typeof periodComparisons>, k: string) => out.find((p) => p.key === k)!;
 
-describe("periodComparisons — a meter's live reading against its baseline", () => {
-  it("returns nothing for a meter with no hourly history yet", () => {
-    expect(periodComparisons([], 10)).toEqual([]);
+describe("periodComparisons — each period from the source that holds it", () => {
+  it("takes today from the meter's own live counter, never from an old uploaded day", () => {
+    // History ends on the 16th — the reported bug labelled the 16th as today.
+    const out = periodComparisons([day("2026-09-16", 2.29, 18)], 30, live, NOW);
+    const today = get(out, "today");
+    expect(today.kWh).toBe(2.01);
+    expect(today.days).toBeCloseTo(11.5 / 24, 5);
+    expect(today.expectedKwh).toBeCloseTo(30 * (11.5 / 24), 5);
   });
 
-  it("windows 'today' from the meter's own latest day, not the wall clock", () => {
-    const hourly = [day("2026-09-16", 3, 10)]; // 10 of 24 hours so far
-    const out = periodComparisons(hourly, 12); // baseline 12 kWh/day
-    const today = out.find((p) => p.key === "today")!;
-    expect(today.kWh).toBe(3);
-    expect(today.days).toBeCloseTo(10 / 24, 5);
-    // Fair comparison: 12 kWh/day scaled to the SAME 10/24 the actual covers.
-    expect(today.expectedKwh).toBeCloseTo(5, 5);
-    expect(today.savingsPct).toBeCloseTo(40, 5); // (5-3)/5 * 100
+  it("shows no 'today' figure when the meter has not been read today", () => {
+    const out = periodComparisons([], 30, { ...live, readAt: new Date("2026-09-23T06:00:00Z") }, NOW);
+    expect(get(out, "today").kWh).toBeNull();
+    expect(get(out, "today").note).toBe("not read yet today");
   });
 
-  it("omits 'yesterday' when the day before the latest is not in the store", () => {
-    const hourly = [day("2026-09-16", 3)];
-    const out = periodComparisons(hourly, 10);
-    expect(out.find((p) => p.key === "yesterday")).toBeUndefined();
+  it("says where history ends instead of substituting an older day for yesterday", () => {
+    const out = periodComparisons([day("2026-09-16", 5)], 30, live, NOW);
+    const y = get(out, "yesterday");
+    expect(y.kWh).toBeNull();
+    expect(y.note).toBe("uploaded history ends 16-09-2026");
   });
 
-  it("includes 'yesterday' when it is present, as a full day", () => {
-    const hourly = [day("2026-09-16", 3), day("2026-09-15", 8)];
-    const out = periodComparisons(hourly, 10);
-    const yest = out.find((p) => p.key === "yesterday")!;
-    expect(yest.kWh).toBe(8);
-    expect(yest.days).toBe(1);
-    expect(yest.expectedKwh).toBe(10);
+  it("uses yesterday's uploaded day when history reaches it", () => {
+    const out = periodComparisons([day("2026-09-23", 8)], 10, live, NOW);
+    const y = get(out, "yesterday");
+    expect(y.kWh).toBe(8);
+    expect(y.expectedKwh).toBe(10);
+    expect(y.savingsPct).toBeCloseTo(20, 5);
   });
 
-  it("sums the 7 most recent days for 'week', gaps and all", () => {
-    const hourly = [
-      day("2026-09-16", 1),
-      day("2026-09-15", 2),
-      day("2026-09-13", 3), // the 14th is missing — a real gap
-      day("2026-09-12", 4),
-      day("2026-09-11", 5),
-      day("2026-09-10", 6),
-      day("2026-09-09", 7),
-      day("2026-09-08", 8), // the 8th falls outside the 7 most recent
-    ];
-    const out = periodComparisons(hourly, 1);
-    const week = out.find((p) => p.key === "week")!;
-    expect(week.kWh).toBe(1 + 2 + 3 + 4 + 5 + 6 + 7);
-    expect(week.days).toBe(7);
+  it("sums only the seven days before today for the week, and says how many were recorded", () => {
+    const out = periodComparisons([day("2026-09-23", 1), day("2026-09-22", 2), day("2026-09-10", 99)], 10, live, NOW);
+    const w = get(out, "week");
+    expect(w.kWh).toBe(3); // the 10th is outside the week
+    expect(w.days).toBe(2);
+    expect(w.note).toContain("2 of 7 days recorded");
   });
 
-  it("sums only the days sharing the latest day's calendar month for 'month'", () => {
-    const hourly = [day("2026-09-02", 5), day("2026-09-01", 4), day("2026-08-31", 9)];
-    const out = periodComparisons(hourly, 1);
-    const month = out.find((p) => p.key === "month")!;
-    expect(month.kWh).toBe(9); // 5 + 4, the 31 Aug day excluded
+  it("takes this month from the meter's own month counter, scaled to the days elapsed", () => {
+    const out = periodComparisons([], 10, live, NOW);
+    const m = get(out, "month");
+    expect(m.kWh).toBe(74.3);
+    expect(m.days).toBeCloseTo(23 + 11.5 / 24, 5);
   });
 
-  it("reports no expected figure and no band with no baseline to compare against", () => {
-    const out = periodComparisons([day("2026-09-16", 3)], null);
-    const today = out.find((p) => p.key === "today")!;
-    expect(today.expectedKwh).toBeNull();
-    expect(today.savingsPct).toBeNull();
-    expect(today.band).toBeNull();
+  it("reports no expected figure with no baseline", () => {
+    const out = periodComparisons([], null, live, NOW);
+    expect(get(out, "today").expectedKwh).toBeNull();
+    expect(get(out, "today").band).toBeNull();
   });
 });

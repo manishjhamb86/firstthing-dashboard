@@ -523,8 +523,16 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                 : (INTAKE_VIEWS.find((v) => v.key === view)?.empty ?? "Nothing here.")}
           </p>
         ) : (
+          /* tbl-compact's own tighter gutters (built 2026-08-31 for this
+             exact class of problem — "seven columns fit a half-page column
+             instead of forcing a horizontal scroll") plus narrower per-
+             column caps below: eight columns of generous max-widths summed
+             past a typical laptop's content area, so the table needed
+             scrolling to see at all (user-reported 2026-09-24). The
+             overflow-x-auto wrapper stays as the safety net for a genuinely
+             long society name or a narrow viewport, not the normal case. */
           <div className="overflow-x-auto">
-            <table className="tbl">
+            <table className="tbl tbl-compact">
               <thead>
                 <tr>
                   <th className="w-8" />
@@ -552,7 +560,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                           />
                         )}
                       </td>
-                      <td className="max-w-[18rem] md:max-w-[26rem]">
+                      <td className="max-w-[14rem] md:max-w-[18rem]">
                         <p className="truncate font-medium" title={r.fileName}>
                           {r.invoiceNumber ?? r.fileName}
                         </p>
@@ -564,14 +572,14 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                           {r.society ?? "Society not confirmed"} · {r.period ?? "month not confirmed"}
                         </p>
                       </td>
-                      <td className="hidden md:table-cell">
+                      <td className="hidden max-w-[9rem] truncate md:table-cell" title={r.society ?? undefined}>
                         {r.society ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
                       </td>
                       <td className="hidden whitespace-nowrap md:table-cell">
                         {r.period ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
                       </td>
                       <td className="num whitespace-nowrap text-right">{r.total !== null ? inr(r.total) : "—"}</td>
-                      <td className="max-w-[16rem]">
+                      <td className="max-w-[11rem]">
                         <StatusChip tone={r.statusTone}>{r.statusLabel}</StatusChip>
                         {r.note && (
                           <p className="mt-1 line-clamp-2 text-[12px]" style={{ color: "var(--text-subtle)" }} title={r.note}>

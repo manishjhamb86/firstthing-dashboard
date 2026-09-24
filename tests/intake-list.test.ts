@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { compareIntakes, initialSortDir, intakeMatches, intakeViewOf, type IntakeListRow } from "@/lib/intake-list";
+import {
+  compareIntakes,
+  initialSortDir,
+  intakeMatches,
+  intakeViewOf,
+  submittedDisplayStatus,
+  type IntakeListRow,
+} from "@/lib/intake-list";
 
 const row = (over: Partial<IntakeListRow>): IntakeListRow => ({
   fileName: "Invoice_INV80850044.pdf",
@@ -31,6 +38,28 @@ describe("intakeViewOf — an unread file is not a review item", () => {
     expect(intakeViewOf("submitted_awaiting_release")).toBe("submitted");
     expect(intakeViewOf("submitted_released")).toBe("submitted");
     expect(intakeViewOf("submitted_superseded")).toBe("submitted");
+  });
+});
+
+describe("submittedDisplayStatus", () => {
+  it("names 'awaiting release' for a calculation still sitting at CalculationStatus.submitted — the exact collision that shipped once", () => {
+    // CalculationStatus's own "awaiting release" value IS the literal string
+    // "submitted", which is also the intake's own terminal status — a naive
+    // `submitted_${calcStatus}` template collides into "submitted_submitted"
+    // and matches nothing. This is the live bug found on stage 2026-09-24.
+    expect(submittedDisplayStatus("submitted")).toBe("submitted_awaiting_release");
+    expect(submittedDisplayStatus("submitted")).not.toBe("submitted_submitted");
+  });
+  it("maps every other real calculation status", () => {
+    expect(submittedDisplayStatus("released")).toBe("submitted_released");
+    expect(submittedDisplayStatus("sent_back")).toBe("submitted_sent_back");
+    expect(submittedDisplayStatus("superseded")).toBe("submitted_superseded");
+  });
+  it("falls back to the bare status for a missing link or a pre-submission shape", () => {
+    expect(submittedDisplayStatus(null)).toBe("submitted");
+    expect(submittedDisplayStatus(undefined)).toBe("submitted");
+    expect(submittedDisplayStatus("held")).toBe("submitted");
+    expect(submittedDisplayStatus("calculated")).toBe("submitted");
   });
 });
 

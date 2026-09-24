@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { formatInstant, monthLabel, timeAgo } from "@/lib/format-date";
 import { Card, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { requireBillingOps } from "../access";
-import { intakeViewOf } from "@/lib/intake-list";
+import { intakeViewOf, submittedDisplayStatus } from "@/lib/intake-list";
 import { CALCULATION_STATUS } from "@/lib/status-maps";
 import { IntakeClient, type IntakeRow } from "./intake-client";
 
@@ -68,12 +68,7 @@ export default async function IntakePage() {
     let status: string = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
     if (status === "submitted") {
       const calcStatus = i.monthlyCalculationId ? calcStatusById.get(i.monthlyCalculationId) : undefined;
-      status = calcStatus ? `submitted_${calcStatus}` : "submitted";
-      // `held`/`calculated` are pre-submission states of a *different*
-      // calculation shape (the phase-two dashboard-generated run) — an
-      // invoice-first month's own status can only ever land on one of the
-      // four keys STATUS_META actually names once it has been submitted.
-      if (!(status in STATUS_META)) status = "submitted";
+      status = submittedDisplayStatus(calcStatus);
     }
     return {
       id: i.id,

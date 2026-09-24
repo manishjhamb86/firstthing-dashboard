@@ -8,6 +8,7 @@ import { Modal } from "@/components/modal";
 import { formatDate, monthLabel } from "@/lib/format-date";
 import type { ExtractedInvoice } from "@/lib/invoice-extract";
 import type { LineSplitEntry, Review, ReviewLine } from "@/lib/invoice-intake";
+import { READ_CUT_OFF_MESSAGE } from "@/lib/intake-read-error";
 import { discardIntake, extractIntake, previewIntake, saveIntakeReview, submitIntake, type IntakePreview } from "../actions";
 
 /**
@@ -234,7 +235,7 @@ export function ReviewForm({
               disabled={reading}
               onClick={() =>
                 startReading(async () => {
-                  const r = await extractIntake(intakeId);
+                  const r = await extractIntake(intakeId).catch(() => ({ error: READ_CUT_OFF_MESSAGE }));
                   setReadError(r.error);
                   router.refresh();
                 })

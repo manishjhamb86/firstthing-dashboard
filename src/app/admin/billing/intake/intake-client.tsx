@@ -18,6 +18,7 @@ import {
   type IntakeSortKey,
   type IntakeView,
 } from "@/lib/intake-list";
+import { READ_CUT_OFF_MESSAGE } from "@/lib/intake-read-error";
 import { checkIntakeDuplicates, createIntakeUpload, extractIntake, retryIntake, submitReadyBatch, type IntakeDuplicate } from "./actions";
 
 export type IntakeRow = {
@@ -214,7 +215,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
           // come to it, so a dozen files never hit the reader's rate limit
           // at once.
           if (openWhenDone) {
-            const extracted = await extractIntake(created.intakeId!);
+            const extracted = await extractIntake(created.intakeId!).catch(() => ({ error: READ_CUT_OFF_MESSAGE }));
             if (extracted.error) setRefusals((cur) => [...cur, `${file.name} — ${extracted.error}`]);
             router.push(`/admin/billing/intake/${created.intakeId}`);
           }
@@ -234,7 +235,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
     try {
       const r = fresh ? await extractIntake(intakeId) : await retryIntake(intakeId);
       if (r.error) setRefusals((cur) => [...cur, r.error!]);
-    } catch (err) {
+    } catch {
       // Without this, a rejected request (a dropped connection, a Server
       // Action that genuinely threw) left the button quietly reverting to
       // "Read" with nothing said and no visible change — user-reported
@@ -243,7 +244,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
       // either way, so the button always recovers; this just makes sure a
       // real failure is said out loud instead of looking like nothing
       // happened.
-      setRefusals((cur) => [...cur, `${err instanceof Error ? err.message : "The read failed"} — retry.`]);
+      setRefusals((cur) => [...cur, READ_CUT_OFF_MESSAGE]);
     } finally {
       setRetrying((cur) => {
         const next = new Set(cur);

@@ -65,3 +65,39 @@ export async function publishSavingsReport(circuitId: string, month: string): Pr
   revalidatePath("/portal/documents");
   return { version };
 }
+
+/**
+ * Withdraw one published version from the society's portal. Soft — the row
+ * stays, with who withdrew it and why (a report a society may already have
+ * saved is not erased from the record). If an earlier version is still
+ * live, that one becomes what the society sees; otherwise the month simply
+ * leaves their Documents tab.
+ */
+export async function withdrawSavingsReport(reportId: string, reason: string): Promise<{ error: string } | { remaining: number | null }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_pipeline")) {
+    logger.warn("savings_report.withdraw_refused", { actorId: actor.id, reportId, reason: "permission" });
+    return { error: "Withdrawing from a society is a pipeline action (Manage pipeline)." };
+  }
+  if (!reason.trim()) return { error: "Say why this report is being withdrawn." };
+  const row = await db.publishedSavingsReport.findUnique({
+    where: { id: reportId },
+    select: { id: true, circuitId: true, period: true, version: true, voidedAt: true, societyId: true },
+  });
+  if (!row) return { error: "That report no longer exists." };
+  if (row.voidedAt) return { error: "Already withdrawn." };
+  await db.publishedSavingsReport.update({
+    where: { id: reportId },
+    data: { voidedAt: new Date(), voidedById: actor.id, voidReason: reason.trim() },
+  });
+  const still = await db.publishedSavingsReport.findFirst({
+    where: { circuitId: row.circuitId, period: row.period, voidedAt: null },
+    orderBy: { version: "desc" },
+    select: { version: true },
+  });
+  logger.info("savings_report.withdrawn", { actorId: actor.id, reportId, version: row.version, reason: reason.trim(), nowShowing: still?.version ?? null });
+  revalidatePath(`/admin/societies/${row.societyId}/circuits/${row.circuitId}/reports/monthly`);
+  revalidatePath("/portal/documents");
+  return { remaining: still?.version ?? null };
+}

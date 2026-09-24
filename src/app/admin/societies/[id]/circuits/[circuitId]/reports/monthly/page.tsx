@@ -90,7 +90,7 @@ export default async function MonthlyReportPage({
   const published = await db.publishedSavingsReport.findFirst({
     where: { circuitId, period: month, voidedAt: null },
     orderBy: { version: "desc" },
-    select: { version: true, publishedAt: true },
+    select: { id: true, version: true, publishedAt: true },
   });
   const shortMonth = monthShort;
   // Two Februaries in one picker have to be told apart, so the year appears
@@ -126,6 +126,7 @@ export default async function MonthlyReportPage({
         <PublishReportButton
           circuitId={circuitId}
           month={month}
+          publishedId={published?.id ?? null}
           publishedVersion={published?.version ?? null}
           publishedAt={published?.publishedAt.toISOString() ?? null}
           hasFee={snapshot.fee !== null}

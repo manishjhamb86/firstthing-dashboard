@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { formatInstant } from "@/lib/format-date";
-import { publishSavingsReport } from "./actions";
+import { publishSavingsReport, withdrawSavingsReport } from "./actions";
 
 /**
  * Publish this month's report to the society's Documents tab. States what
@@ -13,10 +13,12 @@ import { publishSavingsReport } from "./actions";
 export function PublishReportButton({
   circuitId,
   month,
+  publishedId,
   publishedVersion,
   publishedAt,
   hasFee,
 }: {
+  publishedId: string | null;
   circuitId: string;
   month: string;
   publishedVersion: number | null;
@@ -44,6 +46,28 @@ export function PublishReportButton({
     });
   }
 
+  function withdraw() {
+    if (!publishedId) return;
+    const reason = window.prompt(`Withdraw v${publishedVersion} from the society's Documents tab? Say why:`);
+    if (reason === null) return;
+    setMessage(null);
+    start(async () => {
+      try {
+        const r = await withdrawSavingsReport(publishedId, reason);
+        if ("error" in r) setMessage({ tone: "bad", text: r.error });
+        else {
+          setMessage({
+            tone: "ok",
+            text: r.remaining ? `Withdrawn — the society now sees v${r.remaining}.` : "Withdrawn — no longer on the society's Documents tab.",
+          });
+          router.refresh();
+        }
+      } catch (err) {
+        setMessage({ tone: "bad", text: err instanceof Error ? err.message : "Withdrawing failed — retry." });
+      }
+    });
+  }
+
   return (
     <span className="no-print inline-flex flex-col items-end gap-1">
       <button type="button" className="btn-secondary" disabled={pending} onClick={publish}>
@@ -56,6 +80,11 @@ export function PublishReportButton({
             ? `Published v${publishedVersion} · ${formatInstant(publishedAt)}`
             : "Not published to the society yet"}
       </span>
+      {publishedId && !message && (
+        <button type="button" className="text-[11.5px] underline" style={{ color: "var(--bad-fg)" }} disabled={pending} onClick={withdraw}>
+          Withdraw v{publishedVersion}
+        </button>
+      )}
     </span>
   );
 }

@@ -29,6 +29,32 @@ export type ReportDay = {
   savingsBand: SavingsBand | null;
 };
 
+export type CircuitFeeLineForMonth = {
+  savedValue: number;
+  amount: number;
+  societyNet: number;
+};
+
+/**
+ * The rupee figure for one circuit's one month — read ONLY from a RELEASED
+ * calculation's own fee line, never computed here (user-asked 2026-09-24:
+ * "in savings report we need to show amount... how amount is saved" — this
+ * report is kWh-only by design, per the standing INV-02 rule already stated
+ * at its own foot: two independently-computed money figures for one month
+ * is how they end up disagreeing). A `superseded` version's status is no
+ * longer `released`, so this can never read a stale re-derivation. Null for
+ * a month that has not been released yet — the report says so rather than
+ * inventing a rate.
+ */
+export async function circuitFeeLineFor(circuitId: string, period: string): Promise<CircuitFeeLineForMonth | null> {
+  const line = await db.circuitFeeLine.findFirst({
+    where: { circuitId, calculation: { period, status: "released" } },
+    select: { savedValue: true, amount: true },
+  });
+  if (!line) return null;
+  return { savedValue: line.savedValue, amount: line.amount, societyNet: line.savedValue - line.amount };
+}
+
 export async function loadCircuitReport(circuitId: string) {
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },

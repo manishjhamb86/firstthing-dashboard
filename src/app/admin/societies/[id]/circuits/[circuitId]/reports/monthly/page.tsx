@@ -3,18 +3,25 @@ import { monthLabel, monthShort, shortDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
-import { loadCircuitReport, monthDays, monthsWithData, summarize } from "../report-data";
+import { circuitFeeLineFor, loadCircuitReport, monthDays, monthsWithData, summarize } from "../report-data";
 import { PrintButton } from "../report-shared";
 import { BackButton } from "@/components/back-button";
 import { StatusChip } from "@/components/ui";
 import { BAND_TONE, DaysGrid, ExclusionNotes, ReportLegend, pct } from "../report-format";
 
 // CON-45 — the monthly savings report for one explicitly-selected month
-// (INV-04: the month is a selection, never inferred). Circuit-scoped and
-// kWh-only by design: the rupee figures a society is billed on come from
-// the released monthly calculation (MS-08), which this report deliberately
-// does not duplicate — two sources for one money figure is how they end up
-// disagreeing.
+// (INV-04: the month is a selection, never inferred). Circuit-scoped, and
+// the kWh/day figures here are computed from stored readings the same way
+// the whole report always has been. The rupee figure (user-asked
+// 2026-09-24) is the one exception, and it is read, never computed: it
+// comes only from a RELEASED calculation's own fee line
+// (`circuitFeeLineFor`), which this report never duplicates the arithmetic
+// of — two independently-computed money figures for one month is how they
+// end up disagreeing.
+
+function inr(n: number): string {
+  return `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
 
 export default async function MonthlyReportPage({
   params,
@@ -84,6 +91,7 @@ export default async function MonthlyReportPage({
 
   const days = monthDays(report, month);
   const summary = summarize(effBaselineNow, days);
+  const feeLine = await circuitFeeLineFor(circuitId, month);
   const excludedCount = days.filter((d) => d.excluded).length;
   const countedCount = days.length - excludedCount;
   const asMonth = monthLabel;
@@ -167,6 +175,24 @@ export default async function MonthlyReportPage({
               )}
             </p>
           </div>
+          {/* Read ONLY from a released calculation's own fee line (INV-02) —
+              this report never computes a rupee figure of its own (user-
+              asked 2026-09-24, "how amount is saved"). Absent one, states
+              what will produce it rather than a blank or an invented rate. */}
+          <div className="shrink-0">
+            <p className="lbl" style={{ color: "var(--info-fg)" }}>
+              Saved this month
+            </p>
+            {feeLine ? (
+              <p className="mt-1.5 num text-[46px] font-bold leading-none tracking-[-0.02em]">
+                {inr(feeLine.savedValue)}
+              </p>
+            ) : (
+              <p className="mt-1.5 max-w-[220px] text-[12.5px] leading-relaxed text-[var(--text-subtle)]">
+                Appears once this month is released for billing.
+              </p>
+            )}
+          </div>
           <p className="min-w-0 flex-1 basis-64 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
             {monthTitle} averaged{" "}
             <strong className="num text-[var(--text)]">
@@ -187,7 +213,14 @@ export default async function MonthlyReportPage({
                 </strong>
               </>
             )}
-            .
+            .{" "}
+            {feeLine && (
+              <>
+                Of that, <strong className="num text-[var(--text)]">{inr(feeLine.amount)}</strong> is
+                FirsThing&rsquo;s fee and <strong className="num text-[var(--text)]">{inr(feeLine.societyNet)}</strong>{" "}
+                is kept by the society.
+              </>
+            )}
             {summary.warn &&
               summary.savingsPct !== null &&
               summary.savingsPct < SAVINGS_WARN_BELOW && (
@@ -278,10 +311,10 @@ export default async function MonthlyReportPage({
           <ExclusionNotes days={days} />
 
           <p className="mt-4 text-xs leading-relaxed text-[var(--text-subtle)]">
-            Billing figures — extrapolation across the represented lights, ₹ values, the invoice —
-            come from the released monthly calculation, which consumes exactly these readings. This
-            report states the measured circuit, and the two can never disagree because both read one
-            store.
+            The rupee figure above is read from the released monthly calculation, never computed on
+            this page — extrapolation across the represented lights, the invoice, every other billing
+            figure lives there too. This report states the measured circuit, and the two can never
+            disagree because both read one store.
           </p>
         </section>
 

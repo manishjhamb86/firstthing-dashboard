@@ -2574,6 +2574,11 @@ model InvoiceIntake {
   monthlyCalculationId String?   @map("monthly_calculation_id")
   billingInvoiceId     String?   @unique @map("billing_invoice_id")
   submittedAt          DateTime? @map("submitted_at")
+  // Set instead of the two above when the operator flagged this as a real,
+  // separate non-service bill (2026-09-24) — devices, installation, a
+  // one-off charge that is not competing for this month's savings figure.
+  // Filed as a StoredDocument, never fed into any calculation.
+  filedAsDocumentId String? @map("filed_as_document_id")
 
   discardedAt   DateTime? @map("discarded_at")
   discardReason String?   @map("discard_reason")

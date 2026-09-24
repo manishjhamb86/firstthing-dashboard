@@ -39,6 +39,8 @@ export type IntakeRow = {
   uploadedBy: string;
   note: string | null;
   calculationId: string | null;
+  /** Set only for a non-service invoice's row — filed, not a calculation. */
+  filedSocietyId: string | null;
 };
 
 type View = IntakeView | "all";
@@ -308,6 +310,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
       duplicate: 0,
       review: 0,
       ready: 0,
+      filed: 0,
       sent_back: 0,
       awaiting_release: 0,
       released: 0,
@@ -608,6 +611,10 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                         {r.status.startsWith("submitted") && r.calculationId ? (
                           <Link href={`/admin/billing/${r.calculationId}`} className="btn-ghost btn-sm">
                             Open month
+                          </Link>
+                        ) : r.status === "submitted_filed_document" && r.filedSocietyId ? (
+                          <Link href={`/admin/documents?societyId=${r.filedSocietyId}&type=nonServiceInvoice`} className="btn-ghost btn-sm">
+                            View document
                           </Link>
                         ) : r.status === "reading" ? (
                           // Same shape as the "uploaded" branch just below

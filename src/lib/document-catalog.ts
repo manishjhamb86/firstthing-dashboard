@@ -20,7 +20,8 @@ export type DocumentTypeId =
   | "postDemoReport"
   | "savingsReport"
   | "gatePass"
-  | "inspectionReport";
+  | "inspectionReport"
+  | "nonServiceInvoice";
 
 export type DocumentTypeSpec = {
   id: DocumentTypeId;
@@ -136,6 +137,25 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     // executed copy; the earlier "an image is a different artefact" reading
     // was about a photograph standing in for a document that exists
     // elsewhere, which is not this case.
+    acceptedKinds: ["pdf", "zip", "png", "jpeg"],
+    acceptedExtensions: ["pdf", "docx", "png", "jpg", "jpeg"],
+    maxBytes: 25 * MB,
+    permission: "manage_pipeline",
+    uploadHere: true,
+  },
+  {
+    id: "nonServiceInvoice",
+    label: "Other invoice (not energy-savings)",
+    // 2026-09-24 — a real second bill (devices, installation, a one-off
+    // charge) is not competing for the society-month's savings figure, so
+    // it must not be refused as a duplicate of it, nor forced through a
+    // pipeline that has nothing to derive from an all-"other" invoice.
+    // Filed and retrievable, same as a scanned historical report, and for
+    // the same reason excluded from every calculation (INV-02).
+    operation: "Filed against the society with its period. Not fed into any month's savings figure, whatever its own total is.",
+    context: "society",
+    needsPeriod: true,
+    periodHint: "The month the bill is for.",
     acceptedKinds: ["pdf", "zip", "png", "jpeg"],
     acceptedExtensions: ["pdf", "docx", "png", "jpg", "jpeg"],
     maxBytes: 25 * MB,

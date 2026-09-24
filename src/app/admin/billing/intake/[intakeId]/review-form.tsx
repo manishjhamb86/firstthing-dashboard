@@ -134,7 +134,13 @@ export function ReviewForm({
   const derived = preview?.derived ?? null;
   const duplicate = preview?.duplicateOf ?? null;
 
-  const step1Ok = review.societyId && /^\d{4}-\d{2}$/.test(review.period) && review.invoiceNumber && review.invoiceDate && review.dueDate && !duplicate;
+  const step1Ok =
+    review.societyId &&
+    /^\d{4}-\d{2}$/.test(review.period) &&
+    review.invoiceNumber &&
+    review.invoiceDate &&
+    review.dueDate &&
+    (!duplicate || review.nonServiceInvoice);
   const step2Open = open.filter((o) => o.includes("(step 2)")).length;
   const step4Ok = review.paid === "unpaid" || (review.paid === "paid" && review.paidOn);
 
@@ -247,7 +253,21 @@ export function ReviewForm({
 
         {/* Card 1 — who and when */}
         <Card className="p-5">
-          <CardHead step={1} title="Who and when" chip={duplicate ? <StatusChip tone="bad">Duplicate</StatusChip> : step1Ok ? <StatusChip tone="ok">Confirmed</StatusChip> : <StatusChip tone="warn">To confirm</StatusChip>} />
+          <CardHead
+            step={1}
+            title="Who and when"
+            chip={
+              duplicate && !review.nonServiceInvoice ? (
+                <StatusChip tone="bad">Duplicate</StatusChip>
+              ) : review.nonServiceInvoice ? (
+                <StatusChip tone="info">Not a savings bill</StatusChip>
+              ) : step1Ok ? (
+                <StatusChip tone="ok">Confirmed</StatusChip>
+              ) : (
+                <StatusChip tone="warn">To confirm</StatusChip>
+              )
+            }
+          />
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Field label="Society" htmlFor="rv-society">
@@ -298,10 +318,29 @@ export function ReviewForm({
               </div>
             </div>
           </div>
-          {duplicate && (
+          <label className="mt-3 flex items-start gap-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={review.nonServiceInvoice}
+              onChange={(e) => set("nonServiceInvoice", e.target.checked)}
+            />
+            <span>
+              This is not the energy-savings bill — a devices, installation or other one-off charge for the same society and month.
+              It will be filed as a document and excluded from every savings figure, not treated as a duplicate of the savings invoice.
+            </span>
+          </label>
+          {duplicate && !review.nonServiceInvoice && (
             <div className="mt-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}>
               A live invoice already exists for this society-month ({duplicate.number}
               {duplicate.released ? ", released" : ""}). Void it from the month first if it was filed in error — this one cannot be submitted over it.
+              If this is a genuinely separate bill (not the savings invoice), check the box above instead.
+            </div>
+          )}
+          {duplicate && review.nonServiceInvoice && (
+            <div className="mt-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--info-bg)", borderColor: "var(--info-line)", color: "var(--info-fg)" }}>
+              This society-month already has its savings invoice ({duplicate.number}) — untouched. This one will be filed separately as a
+              document, not submitted as a second month of record.
             </div>
           )}
         </Card>

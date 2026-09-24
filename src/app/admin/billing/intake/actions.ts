@@ -21,6 +21,8 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildInvoiceKey } from "@/lib/ingest-keys";
+import { buildDocumentKey } from "@/lib/document-keys";
+import { fileStoredDocumentForSociety } from "@/app/admin/documents/actions";
 import { sniffKind } from "@/lib/file-signature";
 import { INTAKE_SERVICE_LINE, runIntakeExtraction } from "@/lib/invoice-intake-extract";
 import {
@@ -269,10 +271,88 @@ export async function saveIntakeReview(intakeId: string, review: Review): Promis
 }
 
 // ---------------------------------------------------------------------------
+// 3b. A real, separate non-service bill — filed, never derived from.
+// ---------------------------------------------------------------------------
+
+/**
+ * The bytes are copied from the intake's holding key to the society's own
+ * `Documents/` tree (the same GET-then-PUT `submitIntake` already does for
+ * the calculation path — this app's IAM user cannot copy or delete an S3
+ * object) and filed through the exact function the Documents tab and the
+ * executed-agreement upload both already use, so a duplicate re-file is
+ * caught the same way theirs is (`fileStoredDocumentForSociety`'s own
+ * content-hash check). No `MonthlyCalculation` is created — there is
+ * nothing to derive from an invoice with no service line, and creating one
+ * anyway would be the fabricated figure INV-02 exists to prevent.
+ */
+async function fileNonServiceInvoice(
+  intake: { id: string; s3Key: string; fileName: string },
+  review: Review,
+  actorId: string,
+): Promise<Result<{ calculationId: string | null }>> {
+  const societyId = review.societyId!;
+  const period = review.period;
+  const society = await db.society.findUnique({ where: { id: societyId }, select: { name: true } });
+  if (!society) return { error: "That society no longer exists." };
+
+  let bytes: Uint8Array;
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: intake.s3Key }));
+    bytes = await obj.Body!.transformToByteArray();
+  } catch {
+    return { error: "The uploaded file could not be read back from storage. Upload it again." };
+  }
+
+  const key = buildDocumentKey({
+    society: society.name,
+    month: period,
+    docType: "nonServiceInvoice",
+    dateLabel: review.invoiceDate || period,
+    identifier: review.invoiceNumber.trim(),
+    extension: "pdf",
+  });
+  await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: bytes, ContentType: "application/pdf" }));
+
+  const filed = await fileStoredDocumentForSociety({
+    societyId,
+    docType: "nonServiceInvoice",
+    s3Key: key,
+    fileName: intake.fileName,
+    contentType: "application/pdf",
+    byteSize: bytes.length,
+    period,
+    actorId,
+  });
+  if (filed.error) return { error: filed.error };
+
+  await db.invoiceIntake.update({
+    where: { id: intake.id },
+    data: {
+      status: "submitted",
+      review: review as unknown as Prisma.InputJsonValue,
+      societyId,
+      period,
+      submittedAt: new Date(),
+      filedAsDocumentId: filed.documentId,
+    },
+  });
+  logger.info("intake.filed_as_non_service_document", {
+    actorId,
+    intakeId: intake.id,
+    documentId: filed.documentId,
+    societyId,
+    period,
+    invoiceNumber: review.invoiceNumber.trim(),
+  });
+  revalidatePath(INTAKE_PATH);
+  return { calculationId: null };
+}
+
+// ---------------------------------------------------------------------------
 // 4. Submit — the month of record, from the confirmed review, in one transaction.
 // ---------------------------------------------------------------------------
 
-export async function submitIntake(intakeId: string, review: Review): Promise<Result<{ calculationId: string }>> {
+export async function submitIntake(intakeId: string, review: Review): Promise<Result<{ calculationId: string | null }>> {
   const ops = await requireBillingOps();
   if (!ops.ok) return { error: ops.error };
   const intake = await db.invoiceIntake.findUnique({ where: { id: intakeId } });
@@ -284,6 +364,13 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
     logger.warn("intake.submit_refused", { actorId: ops.actor.id, intakeId, openItems: preview.openItems });
     return { error: `Not ready to submit: ${preview.openItems.join(" · ")}` };
   }
+
+  // A real, separate non-service bill (devices, installation, a one-off
+  // charge) is not competing for this month's savings figure — file it as a
+  // document instead of forcing it through a pipeline that has nothing to
+  // derive from an all-"other" invoice (user-caught 2026-09-24).
+  if (review.nonServiceInvoice) return fileNonServiceInvoice(intake, review, ops.actor.id);
+
   const derived = preview.derived!;
   const societyId = review.societyId!;
   const period = review.period;

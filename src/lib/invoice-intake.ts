@@ -250,6 +250,19 @@ export type Review = {
   paidOn: string; // YYYY-MM-DD when paid
   /** Required when any arithmetic check fails — the operator's stated reason. */
   arithmeticAcknowledgement: string;
+  /**
+   * A second, real bill for the same society-month that is not the
+   * recurring energy-savings share — a devices/hardware invoice, a one-off
+   * charge (user-caught 2026-09-24: "the society was raised 2 bills for
+   * that month... its not part of the companies share as per agreement").
+   * Same invoice number AND total can legitimately repeat across two
+   * unrelated bills, so a duplicate is a judgement the operator states, not
+   * one the system infers from matching figures. Flagging it here — rather
+   * than silently treating "no service line" as evidence of a duplicate —
+   * routes it through `fileNonServiceInvoice` instead of `submitIntake`:
+   * filed as its own document, never fed into any month's savings figure.
+   */
+  nonServiceInvoice: boolean;
 };
 
 export type ReviewContext = {
@@ -286,11 +299,17 @@ export function openItems(review: Review, context: ReviewContext): string[] {
   if (!review.invoiceNumber.trim()) items.push("Invoice number missing (step 1)");
   if (!isIsoDate(review.invoiceDate)) items.push("Invoice date missing (step 1)");
   if (!isIsoDate(review.dueDate)) items.push("Due date missing (step 1)");
-  if (context.duplicateOf) items.push(`A live invoice already exists for this month (${context.duplicateOf.number}) — void it first`);
+  // Both checks assume this invoice is trying to BE the month's savings
+  // record — neither applies once the operator has said it is a separate,
+  // non-service bill (a devices/hardware charge) instead.
+  if (context.duplicateOf && !review.nonServiceInvoice) items.push(`A live invoice already exists for this month (${context.duplicateOf.number}) — void it first`);
 
   const service = review.lines.filter((l) => l.kind === "service");
   if (review.lines.length === 0) items.push("No lines — enter the invoice's lines (step 2)");
-  if (review.lines.length > 0 && service.length === 0) items.push("No service line — an invoice with no energy-saving line has nothing to derive (step 2)");
+  if (review.lines.length > 0 && service.length === 0 && !review.nonServiceInvoice)
+    items.push("No service line — an invoice with no energy-saving line has nothing to derive (step 2)");
+  if (review.nonServiceInvoice && service.length > 0)
+    items.push(`Line ${service[0].lineNo} is marked "Service" — mark every line "Other", or un-check "not an energy-savings invoice" (step 2)`);
   const seen = new Map<string, number>();
   for (const l of service) {
     const allocs = lineAllocations(l);

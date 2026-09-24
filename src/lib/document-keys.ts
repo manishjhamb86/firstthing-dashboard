@@ -23,7 +23,12 @@ export type DocType =
   | "inspectionReport"
   // The monthly inspection's own evidence photo (2026-09-12) — the signed,
   // stamped paper form, photographed once it's finalized.
-  | "inspectionEvidence";
+  | "inspectionEvidence"
+  // A second, real bill for the same society-month that is not the
+  // recurring energy-savings share (2026-09-24) — devices, installation, a
+  // one-off charge. Filed by `fileNonServiceInvoice`, never by the Documents
+  // tab directly.
+  | "nonServiceInvoice";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
@@ -37,6 +42,7 @@ const DOC_TYPE_FOLDER: Record<DocType, string> = {
   gatePass: "GatePasses",
   inspectionReport: "Reports",
   inspectionEvidence: "Inspections",
+  nonServiceInvoice: "Invoices",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -51,6 +57,7 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
   gatePass: "GatePass",
   inspectionReport: "InspectionReport",
   inspectionEvidence: "SignedChecklist",
+  nonServiceInvoice: "OtherInvoice",
 };
 
 function slugifySociety(name: string): string {

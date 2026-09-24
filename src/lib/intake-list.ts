@@ -15,7 +15,7 @@
 // before anything else, and a SUPERSEDED one (a re-derivation moved the
 // stats on) is history, not a working state — both real, both kept visible
 // rather than folded quietly into a chip they don't belong under.
-export type IntakeView = "unread" | "failed" | "duplicate" | "review" | "ready" | "sent_back" | "awaiting_release" | "released" | "superseded";
+export type IntakeView = "unread" | "failed" | "duplicate" | "review" | "ready" | "filed" | "sent_back" | "awaiting_release" | "released" | "superseded";
 
 // `could_not_read` and `refused_duplicate` used to fold into the same
 // "Needs review" chip as a row that read fine and only wants a human's
@@ -30,6 +30,11 @@ export const INTAKE_VIEWS: { key: IntakeView; label: string; empty: string }[] =
   { key: "duplicate", label: "Refused — duplicate", empty: "Nothing refused as a duplicate." },
   { key: "review", label: "Needs review", empty: "Nothing needs review." },
   { key: "ready", label: "Ready to submit", empty: "Nothing is ready to submit." },
+  // A real, separate non-service bill (2026-09-24) — devices, installation,
+  // a one-off charge, filed as a document rather than submitted as a month
+  // of record. Its own bucket, not folded into "Awaiting release": nothing
+  // here is waiting on the accountant, and calling it that would be false.
+  { key: "filed", label: "Filed as document", empty: "Nothing filed separately." },
   { key: "sent_back", label: "Sent back", empty: "Nothing sent back." },
   { key: "awaiting_release", label: "Awaiting release", empty: "Nothing awaiting release." },
   { key: "released", label: "Released", empty: "Nothing released yet." },
@@ -104,6 +109,8 @@ export function intakeViewOf(status: string): IntakeView | null {
       return "review";
     case "ready":
       return "ready";
+    case "submitted_filed_document":
+      return "filed";
     case "submitted":
     case "submitted_awaiting_release":
       return "awaiting_release";
@@ -146,6 +153,7 @@ const STATUS_ORDER: Record<string, number> = {
   refused_duplicate: 3,
   needs_review: 4,
   ready: 5,
+  submitted_filed_document: 5.5,
   submitted_sent_back: 6,
   submitted: 7,
   submitted_awaiting_release: 7,

@@ -45,6 +45,9 @@ describe("intakeViewOf — an unread file is not a review item", () => {
     expect(intakeViewOf("submitted_released")).toBe("released");
     expect(intakeViewOf("submitted_superseded")).toBe("superseded");
   });
+  it("gives a non-service invoice's filed row its own chip, not Awaiting release (2026-09-24)", () => {
+    expect(intakeViewOf("submitted_filed_document")).toBe("filed");
+  });
 });
 
 describe("submittedDisplayStatus", () => {

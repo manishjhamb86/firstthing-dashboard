@@ -30,6 +30,9 @@ const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
   // Fallback for the (should-not-happen) case of a submitted row whose
   // calculation link is missing.
   submitted: { label: "Submitted", tone: "neu" },
+  // A real, separate non-service bill (2026-09-24) — filed as a document,
+  // never a month of record, so it has no calculation to read a status from.
+  submitted_filed_document: { label: "Filed as document", tone: "info" },
   refused_duplicate: { label: "Refused — duplicate", tone: "bad" },
   discarded: { label: "Discarded", tone: "neu" },
 };
@@ -66,7 +69,9 @@ export default async function IntakePage() {
   const rows: IntakeRow[] = intakes.map((i) => {
     const review = (i.review ?? null) as { total?: number | null; invoiceNumber?: string; paid?: string | null } | null;
     let status: string = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
-    if (status === "submitted") {
+    if (status === "submitted" && i.filedAsDocumentId) {
+      status = "submitted_filed_document";
+    } else if (status === "submitted") {
       const calcStatus = i.monthlyCalculationId ? calcStatusById.get(i.monthlyCalculationId) : undefined;
       status = submittedDisplayStatus(calcStatus);
     }
@@ -88,6 +93,9 @@ export default async function IntakePage() {
       uploadedBy: i.uploadedBy.name ?? i.uploadedBy.email,
       note: i.extractionError ?? null,
       calculationId: i.monthlyCalculationId,
+      // Only set for a non-service invoice's row — where it was filed
+      // instead of submitted as a calculation.
+      filedSocietyId: i.filedAsDocumentId ? i.societyId : null,
     };
   });
 

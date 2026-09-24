@@ -80,6 +80,14 @@ function proposeReview(x: ExtractedInvoice, societyId: string | null, circuits: 
     paid: null,
     paidOn: "",
     arithmeticAcknowledgement: "",
+    // A strong, checkable signal (every line classified "other"), never a
+    // silent decision — the operator confirms or clears it on the review
+    // screen. Correct here for the reported case: a devices/installation
+    // invoice with no service line at all proposes checked; a mixed
+    // invoice (a stray hardware line beside the real savings line)
+    // proposes unchecked, since the invoice AS A WHOLE is still the
+    // month's bill — only that one line is excluded.
+    nonServiceInvoice: lines.length > 0 && lines.every((l) => l.kind === "other"),
   };
 }
 

@@ -112,6 +112,7 @@ const CLEAN: Review = {
   paid: "paid",
   paidOn: "2026-08-06",
   arithmeticAcknowledgement: "",
+  nonServiceInvoice: false,
 };
 
 describe("openItems — FEAT-109's gates", () => {
@@ -140,6 +141,22 @@ describe("openItems — FEAT-109's gates", () => {
   });
   it("names the live duplicate (AC-7)", () => {
     expect(openItems(CLEAN, { duplicateOf: { number: "FT/2026-27/041" } })).toContain("A live invoice already exists for this month (FT/2026-27/041) — void it first");
+  });
+  // 2026-09-24, user-caught: a real second bill for the same society-month
+  // (devices, installation) is not competing for the savings slot, so it
+  // must not be refused as a duplicate of it, nor for having no service line.
+  it("bypasses the duplicate and no-service-line refusals once flagged non-service", () => {
+    const devicesInvoice = { ...CLEAN, lines: [{ ...CLEAN.lines[0], kind: "other" as const, circuitId: null }], nonServiceInvoice: true };
+    expect(openItems(devicesInvoice, { duplicateOf: { number: "FT/2026-27/004" } })).toEqual([]);
+  });
+  it("still refuses a non-service invoice that carries a service line", () => {
+    expect(openItems({ ...CLEAN, nonServiceInvoice: true }, { duplicateOf: null })).toContain(
+      'Line 1 is marked "Service" — mark every line "Other", or un-check "not an energy-savings invoice" (step 2)',
+    );
+  });
+  it("still requires the ordinary fields on a non-service invoice", () => {
+    const noMonth = { ...CLEAN, period: "", nonServiceInvoice: true, lines: [{ ...CLEAN.lines[0], kind: "other" as const, circuitId: null }] };
+    expect(openItems(noMonth, { duplicateOf: null })).toContain("Month not confirmed (step 1)");
   });
 });
 

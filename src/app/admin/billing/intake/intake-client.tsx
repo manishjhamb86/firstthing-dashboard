@@ -553,12 +553,18 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
               <thead>
                 <tr>
                   <th className="w-10" />
-                  <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[220px]" />
-                  <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[120px] md:table-cell" />
-                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[95px] md:table-cell" />
-                  <SortHeader k="total" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" className="w-[110px]" />
-                  <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[150px]" />
-                  <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[95px] lg:table-cell" />
+                  <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[180px]" />
+                  <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[110px] md:table-cell" />
+                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[90px] md:table-cell" />
+                  <SortHeader k="total" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" className="w-[105px]" />
+                  {/* 245px, sized for the single longest real status label
+                      ("Submitted — awaiting release", 29 chars) — narrower
+                      widths overflowed this .chip (white-space: nowrap by
+                      design, so it cannot wrap) right on top of the Uploaded
+                      column beside it (user-reported 2026-09-24, screenshot:
+                      "release8days ago"). */}
+                  <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[245px]" />
+                  <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[90px] lg:table-cell" />
                   <th className="w-[190px]" />
                 </tr>
               </thead>
@@ -596,7 +602,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                         {r.period ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
                       </td>
                       <td className="num whitespace-nowrap text-right">{r.total !== null ? inr(r.total) : "—"}</td>
-                      <td className="max-w-[11rem]">
+                      <td>
                         <StatusChip tone={r.statusTone}>{r.statusLabel}</StatusChip>
                         {r.note && (
                           <p className="mt-1 line-clamp-2 text-[12px]" style={{ color: "var(--text-subtle)" }} title={r.note}>

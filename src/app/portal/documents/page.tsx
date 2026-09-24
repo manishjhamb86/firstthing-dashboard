@@ -8,7 +8,8 @@ import { hasGrant } from "@/lib/portal-access";
 import { Card, EmptyState, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { publicS3Url } from "@/lib/s3";
 import { monthName } from "../portal-widgets";
-import { inspectionSummary, SENSOR_STATUS_META } from "@/lib/inspection";
+import { inspectionSummary } from "@/lib/inspection";
+import { InspectionFindingsSummary } from "./inspection-findings";
 import { FileText } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -149,29 +150,16 @@ export default async function PortalDocumentsPage({
               );
             })()}
           </div>
-          {latestInspection.findings.length > 0 && (
-            // A stacked card per fixture, not a table — the same mobile fix
-            // already made on the admin side (2026-09-12): a multi-column
-            // table has no honest way to fit a phone.
-            <div className="mt-4 space-y-2">
-              {latestInspection.findings.map((f) => {
-                const meta = SENSOR_STATUS_META[f.sensorStatus];
-                return (
-                  <div key={f.id} className="rounded-[var(--r-md)] border p-3" style={{ borderColor: "var(--border-subtle)" }}>
-                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                      <span className="min-w-0 truncate font-medium">{f.location}</span>
-                      <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
-                    </div>
-                    {(f.actionReplace || f.remarks) && (
-                      <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                        {[f.actionReplace ? "To be replaced" : null, f.remarks].filter(Boolean).join(" · ")}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <InspectionFindingsSummary
+            findings={latestInspection.findings.map((f) => ({
+              id: f.id,
+              srNo: f.srNo,
+              location: f.location,
+              sensorStatus: f.sensorStatus,
+              actionReplace: f.actionReplace,
+              remarks: f.remarks,
+            }))}
+          />
           {latestInspection.evidencePhotoKey && (
             <p className="mt-4 text-[12.5px]">
               <a

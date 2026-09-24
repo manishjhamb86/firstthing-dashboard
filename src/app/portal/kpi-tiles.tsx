@@ -136,56 +136,42 @@ export function HealthBubble({
   attentionLabel?: string;
   title?: string;
 }) {
-  if (issues.length === 0) {
-    return (
-      <div className="flex items-center gap-3.5 rounded-[var(--r-md)] p-5" style={{ background: HEALTH_PURPLE.bg }}>
-        <span
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white"
-          style={{ background: HEALTH_PURPLE.iconBg }}
-        >
-          <Check size={20} strokeWidth={3} aria-hidden />
-        </span>
-        <div className="flex flex-col gap-0.5">
-          <p className="text-[16px] font-extrabold" style={{ color: HEALTH_PURPLE.title }}>
-            {okLabel}
-          </p>
-          <p className="text-[12px]" style={{ color: HEALTH_PURPLE.subtitle }}>
-            {title} · {summary}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  const { bg, fg, line } = toneColors("warn");
+  // Same anatomy as KpiBubble — icon bubble on top, the headline where the
+  // figure goes, a bold line, a muted line — so the four tiles line up
+  // (user-caught 2026-09-25: the side-icon layout sat out of line).
+  const ok = issues.length === 0;
+  const colors = ok
+    ? { bg: HEALTH_PURPLE.bg, fg: HEALTH_PURPLE.title, muted: HEALTH_PURPLE.subtitle, iconBg: HEALTH_PURPLE.iconBg, iconFg: "#fff" }
+    : { bg: toneColors("warn").bg, fg: toneColors("warn").fg, muted: "var(--text-subtle)", iconBg: "var(--surface)", iconFg: toneColors("warn").fg };
   return (
-    <div
-      className="flex items-start gap-3.5 rounded-[var(--r-md)] p-5"
-      style={{ background: bg, border: `1px solid ${line}` }}
-      role="status"
-    >
+    <div className="flex flex-col gap-2.5 rounded-[var(--r-md)] p-5" style={{ background: colors.bg }} role={ok ? undefined : "status"}>
       <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
-        style={{ background: "var(--surface)", color: fg }}
+        className="flex h-9 w-9 items-center justify-center rounded-full"
+        style={{ background: colors.iconBg, color: colors.iconFg }}
       >
-        <AlertTriangle size={20} strokeWidth={2.4} aria-hidden />
+        {ok ? <Check size={17} strokeWidth={3} aria-hidden /> : <AlertTriangle size={17} strokeWidth={2.3} aria-hidden />}
       </span>
-      <div className="flex min-w-0 flex-col gap-1">
-        <p className="text-[16px] font-extrabold" style={{ color: fg }}>
-          {attentionLabel}
+      <p className="text-[24px] font-extrabold leading-none tracking-[-0.02em]" style={{ color: colors.fg }}>
+        {ok ? okLabel : attentionLabel}
+      </p>
+      {ok ? (
+        <p className="text-[13px] font-bold" style={{ color: colors.fg }}>
+          {title}
         </p>
+      ) : (
         <ul className="flex flex-col gap-0.5">
           {issues.map((i) => (
             <li key={i.text}>
-              <Link href={i.href} className="text-[12.5px] font-semibold underline" style={{ color: fg }}>
+              <Link href={i.href} className="text-[13px] font-bold underline" style={{ color: colors.fg }}>
                 {i.text} →
               </Link>
             </li>
           ))}
         </ul>
-        <p className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-          {title} · {summary}
-        </p>
-      </div>
+      )}
+      <p className="text-[12px]" style={{ color: colors.muted }}>
+        {ok ? summary : `${title} · ${summary}`}
+      </p>
     </div>
   );
 }

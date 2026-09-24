@@ -13,6 +13,7 @@
 // `submitIntake` re-derives everything from that confirmed review inside
 // the transaction — the client's preview is never trusted.
 
+import { duplicateRefuses, findDuplicateInvoice, type InvoiceDuplicate } from "@/lib/invoice-duplicate";
 import { revalidatePath } from "next/cache";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -198,15 +199,8 @@ export async function extractIntake(intakeId: string): Promise<Result<{ status: 
 // 3. Review — what the operator confirmed, and the live preview of its effect.
 // ---------------------------------------------------------------------------
 
-async function duplicateFor(societyId: string | null, period: string) {
-  if (!societyId || !/^\d{4}-\d{2}$/.test(period)) return null;
-  const calc = await db.monthlyCalculation.findFirst({
-    where: { societyId, serviceLine: SERVICE_LINE, period, status: { notIn: ["superseded"] } },
-    include: { invoices: { where: { voidedAt: null }, select: { number: true }, take: 1 } },
-    orderBy: { version: "desc" },
-  });
-  const inv = calc?.invoices[0];
-  return inv ? { number: inv.number, released: calc!.status === "released" } : null;
+async function duplicateFor(review: Review) {
+  return findDuplicateInvoice({ societyId: review.societyId, period: review.period, invoiceNumber: review.invoiceNumber, serviceLine: SERVICE_LINE });
 }
 
 export type IntakePreview = {
@@ -215,11 +209,11 @@ export type IntakePreview = {
   derived: DerivedMonth | null;
   circuitOptions: CircuitOption[];
   contextNotes: string[];
-  duplicateOf: { number: string; released: boolean } | null;
+  duplicateOf: InvoiceDuplicate | null;
 };
 
 async function buildPreview(review: Review): Promise<IntakePreview> {
-  const duplicateOf = await duplicateFor(review.societyId, review.period);
+  const duplicateOf = await duplicateFor(review);
   const items = openItems(review, { duplicateOf });
   const arithmetic = arithmeticReport(review);
   let derived: DerivedMonth | null = null;
@@ -254,9 +248,9 @@ export async function saveIntakeReview(intakeId: string, review: Review): Promis
   const intake = await db.invoiceIntake.findUnique({ where: { id: intakeId } });
   if (!intake) return { error: "That upload no longer exists." };
   if (intake.status === "submitted") return { error: "This invoice has already been submitted." };
-  const duplicateOf = await duplicateFor(review.societyId, review.period);
+  const duplicateOf = await duplicateFor(review);
   const items = openItems(review, { duplicateOf });
-  const status = duplicateOf ? "refused_duplicate" : items.length === 0 ? "ready" : "needs_review";
+  const status = duplicateRefuses(duplicateOf, review.nonServiceInvoice) ? "refused_duplicate" : items.length === 0 ? "ready" : "needs_review";
   await db.invoiceIntake.update({
     where: { id: intakeId },
     data: {

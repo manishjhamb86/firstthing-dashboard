@@ -267,7 +267,7 @@ export type Review = {
 
 export type ReviewContext = {
   /** A live invoice already holds this society-month. */
-  duplicateOf: { number: string } | null;
+  duplicateOf: { number: string; sameNumber?: boolean } | null;
 };
 
 export type ArithmeticReport = {
@@ -302,7 +302,8 @@ export function openItems(review: Review, context: ReviewContext): string[] {
   // Both checks assume this invoice is trying to BE the month's savings
   // record — neither applies once the operator has said it is a separate,
   // non-service bill (a devices/hardware charge) instead.
-  if (context.duplicateOf && !review.nonServiceInvoice) items.push(`A live invoice already exists for this month (${context.duplicateOf.number}) — void it first`);
+  if (context.duplicateOf?.sameNumber) items.push(`Invoice ${context.duplicateOf.number} is already on record — this is a second copy of it; discard this upload`);
+  else if (context.duplicateOf && !review.nonServiceInvoice) items.push(`A live invoice already exists for this month (${context.duplicateOf.number}) — void it first`);
 
   const service = review.lines.filter((l) => l.kind === "service");
   if (review.lines.length === 0) items.push("No lines — enter the invoice's lines (step 2)");

@@ -216,3 +216,10 @@ describe("FEAT-109-AC-11 — one invoice line billing two circuits of one type",
     expect(openItems({ ...CLEAN, lines: twice }, { duplicateOf: null })).toContain("Lines 1 and 2 both bill the same circuit (step 2)");
   });
 });
+
+describe("openItems — the same invoice number already on record", () => {
+  it("blocks even a flagged non-service bill, and says it is a second copy", () => {
+    const items = openItems({ ...CLEAN, nonServiceInvoice: true }, { duplicateOf: { number: "FT/2026-27/055", sameNumber: true } });
+    expect(items.some((i) => i.includes("second copy"))).toBe(true);
+  });
+});

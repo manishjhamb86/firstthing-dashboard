@@ -23,6 +23,7 @@ import {
   type ReviewLine,
 } from "@/lib/invoice-intake";
 import { loadInvoiceMonthContext } from "@/lib/invoice-month-loader";
+import { duplicateRefuses, findDuplicateInvoice } from "@/lib/invoice-duplicate";
 
 /** Invoice-first months are lighting for now — every contract on record is. */
 export const INTAKE_SERVICE_LINE = "lighting" as const;
@@ -176,14 +177,23 @@ export async function runIntakeExtraction(intakeId: string, actorId: string): Pr
     const circuits = society ? await circuitOptionsFor(society.id) : [];
     const review = proposeReview(extraction, society?.id ?? null, circuits);
     const readable = extraction.lines.length > 0;
+    const duplicate = readable
+      ? await findDuplicateInvoice({ societyId: review.societyId, period: review.period, invoiceNumber: review.invoiceNumber, serviceLine: INTAKE_SERVICE_LINE })
+      : null;
+    const refused = duplicateRefuses(duplicate, review.nonServiceInvoice);
+    const status = !readable ? "could_not_read" : refused ? "refused_duplicate" : "needs_review";
 
     await db.invoiceIntake.update({
       where: { id: intakeId },
       data: {
         extraction: extraction as unknown as Prisma.InputJsonValue,
         review: review as unknown as Prisma.InputJsonValue,
-        status: readable ? "needs_review" : "could_not_read",
-        extractionError: readable ? null : "No line items were found on the invoice.",
+        status,
+        extractionError: !readable
+          ? "No line items were found on the invoice."
+          : refused
+            ? `Duplicate of ${duplicate!.number}${duplicate!.sameNumber ? ", already on record" : ", which already holds this society-month"}.`
+            : null,
         societyId: society?.id ?? null,
         period: review.period || null,
       },
@@ -195,8 +205,9 @@ export async function runIntakeExtraction(intakeId: string, actorId: string): Pr
       societyProposed: society?.id ?? null,
       periodProposed: review.period || null,
       clarifications: extraction.clarifications.length,
+      duplicateOf: refused ? duplicate!.number : null,
     });
-    return { status: readable ? "needs_review" : "could_not_read" };
+    return { status };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error("intake.propose_review_failed", { actorId, intakeId, error: message });

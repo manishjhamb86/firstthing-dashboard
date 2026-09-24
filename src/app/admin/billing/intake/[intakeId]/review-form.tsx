@@ -142,7 +142,7 @@ export function ReviewForm({
     review.invoiceNumber &&
     review.invoiceDate &&
     review.dueDate &&
-    (!duplicate || review.nonServiceInvoice);
+    (!duplicate || (review.nonServiceInvoice && !duplicate.sameNumber));
   const step2Open = open.filter((o) => o.includes("(step 2)")).length;
   const step4Ok = review.paid === "unpaid" || (review.paid === "paid" && review.paidOn);
 
@@ -259,7 +259,7 @@ export function ReviewForm({
             step={1}
             title="Who and when"
             chip={
-              duplicate && !review.nonServiceInvoice ? (
+              duplicate && (duplicate.sameNumber || !review.nonServiceInvoice) ? (
                 <StatusChip tone="bad">Duplicate</StatusChip>
               ) : review.nonServiceInvoice ? (
                 <StatusChip tone="info">Not a savings bill</StatusChip>
@@ -332,14 +332,20 @@ export function ReviewForm({
               It will be filed as a document and excluded from every savings figure, not treated as a duplicate of the savings invoice.
             </span>
           </label>
-          {duplicate && !review.nonServiceInvoice && (
+          {duplicate?.sameNumber && (
+            <div className="mt-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}>
+              Invoice {duplicate.number} is already on record{duplicate.released ? " and released" : ""} — this upload is a second copy of
+              the same bill. Discard it below.
+            </div>
+          )}
+          {duplicate && !duplicate.sameNumber && !review.nonServiceInvoice && (
             <div className="mt-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}>
               A live invoice already exists for this society-month ({duplicate.number}
               {duplicate.released ? ", released" : ""}). Void it from the month first if it was filed in error — this one cannot be submitted over it.
               If this is a genuinely separate bill (not the savings invoice), check the box above instead.
             </div>
           )}
-          {duplicate && review.nonServiceInvoice && (
+          {duplicate && !duplicate.sameNumber && review.nonServiceInvoice && (
             <div className="mt-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--info-bg)", borderColor: "var(--info-line)", color: "var(--info-fg)" }}>
               This society-month already has its savings invoice ({duplicate.number}) — untouched. This one will be filed separately as a
               document, not submitted as a second month of record.

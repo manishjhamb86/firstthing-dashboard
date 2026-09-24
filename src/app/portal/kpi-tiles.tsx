@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Check, ChevronRight, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Check, ChevronRight, type LucideIcon } from "lucide-react";
 
 // Shared icon-bubble tile components for the portal (design canvas fidelity,
 // 2026-09-21) — extracted out of the dashboard so the Electricity page (and
@@ -113,32 +113,76 @@ export function CompactTile({ tone, value, label }: { tone: "ok" | "info"; value
 // a bigger change than the dashboard that introduced it asked for.
 const HEALTH_PURPLE = { bg: "#F1EDFB", iconBg: "#5B3FB8", title: "#4A2FA5", subtitle: "#5B4E86" };
 
+/** One thing wrong, in words, with the page that shows it. */
+export type HealthIssue = { text: string; href: string };
+
+/**
+ * The meters + tanks health read. With nothing wrong it is the calm purple
+ * tick; with anything wrong it turns amber, drops the tick, and NAMES each
+ * problem with a link to where it can be seen — "Needs attention" beside a
+ * tick and no detail read as a success (user-caught 2026-09-25, with 2 of 3
+ * tanks offline).
+ */
 export function HealthBubble({
-  allReporting,
+  issues,
   summary,
   okLabel = "All reporting",
   attentionLabel = "Needs attention",
   title = "System health",
 }: {
-  allReporting: boolean;
+  issues: HealthIssue[];
   summary: string;
   okLabel?: string;
   attentionLabel?: string;
   title?: string;
 }) {
+  if (issues.length === 0) {
+    return (
+      <div className="flex items-center gap-3.5 rounded-[var(--r-md)] p-5" style={{ background: HEALTH_PURPLE.bg }}>
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white"
+          style={{ background: HEALTH_PURPLE.iconBg }}
+        >
+          <Check size={20} strokeWidth={3} aria-hidden />
+        </span>
+        <div className="flex flex-col gap-0.5">
+          <p className="text-[16px] font-extrabold" style={{ color: HEALTH_PURPLE.title }}>
+            {okLabel}
+          </p>
+          <p className="text-[12px]" style={{ color: HEALTH_PURPLE.subtitle }}>
+            {title} · {summary}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  const { bg, fg, line } = toneColors("warn");
   return (
-    <div className="flex items-center gap-3.5 rounded-[var(--r-md)] p-5" style={{ background: HEALTH_PURPLE.bg }}>
+    <div
+      className="flex items-start gap-3.5 rounded-[var(--r-md)] p-5"
+      style={{ background: bg, border: `1px solid ${line}` }}
+      role="status"
+    >
       <span
-        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-white"
-        style={{ background: HEALTH_PURPLE.iconBg }}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full"
+        style={{ background: "var(--surface)", color: fg }}
       >
-        <Check size={20} strokeWidth={3} aria-hidden />
+        <AlertTriangle size={20} strokeWidth={2.4} aria-hidden />
       </span>
-      <div className="flex flex-col gap-0.5">
-        <p className="text-[16px] font-extrabold" style={{ color: HEALTH_PURPLE.title }}>
-          {allReporting ? okLabel : attentionLabel}
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="text-[16px] font-extrabold" style={{ color: fg }}>
+          {attentionLabel}
         </p>
-        <p className="text-[12px]" style={{ color: HEALTH_PURPLE.subtitle }}>
+        <ul className="flex flex-col gap-0.5">
+          {issues.map((i) => (
+            <li key={i.text}>
+              <Link href={i.href} className="text-[12.5px] font-semibold underline" style={{ color: fg }}>
+                {i.text} →
+              </Link>
+            </li>
+          ))}
+        </ul>
+        <p className="text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
           {title} · {summary}
         </p>
       </div>

@@ -23,7 +23,7 @@ import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
 import { PORTAL_NAV_ICONS, portalNavEntries } from "./portal-nav-entries";
 import { ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap } from "lucide-react";
-import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkRow } from "./kpi-tiles";
+import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkRow, type HealthIssue } from "./kpi-tiles";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +83,6 @@ export default async function PortalHomePage() {
   const published = grants.has("electricity") ? await publishedMonthsFor(societyId) : null;
   const billed = published?.latest ?? null;
   const meters = grants.has("electricity") ? await societyMeterRows(societyId) : [];
-  const metersOnline = meters.filter((m) => m.state === "reporting").length;
   const events = (await societyEvents(societyId)).slice(0, 4);
 
   // The bottom row's own two remaining cards — real rows, gated on the
@@ -278,10 +277,26 @@ export default async function PortalHomePage() {
           const healthParts: string[] = [];
           if (meters.length > 0) healthParts.push(`${meters.length} meter${meters.length === 1 ? "" : "s"}`);
           if (tanks.length > 0) healthParts.push(`${tanks.length} tank${tanks.length === 1 ? "" : "s"}`);
-          const allReporting =
-            (meters.length === 0 || metersOnline === meters.length) &&
-            (tanks.length === 0 || reporting === tanks.length) &&
-            (meters.length > 0 || tanks.length > 0);
+          // Each fault named, with where to see it. A meter with no energy
+          // signal (state null) is not watched, so it is not a fault here.
+          const healthIssues: HealthIssue[] = [];
+          const metersOffline = meters.filter((m) => m.state === "offline").length;
+          const metersSilent = meters.filter((m) => m.state === "silent").length;
+          if (metersOffline > 0)
+            healthIssues.push({
+              text: `${metersOffline} of ${meters.length} meter${meters.length === 1 ? "" : "s"} offline`,
+              href: "/portal/electricity",
+            });
+          if (metersSilent > 0)
+            healthIssues.push({
+              text: `${metersSilent} meter${metersSilent === 1 ? "" : "s"} connected but not reporting`,
+              href: "/portal/electricity",
+            });
+          if (tanks.length > 0 && reporting < tanks.length)
+            healthIssues.push({
+              text: `${tanks.length - reporting} of ${tanks.length} tank sensor${tanks.length === 1 ? "" : "s"} offline`,
+              href: grants.has("water_tanks") ? "/portal/tanks" : "/portal",
+            });
 
           const rupeesText = rupeesValue !== null ? `₹${Math.round(rupeesValue).toLocaleString("en-IN")}` : "—";
           const kwhText = kwhValue !== null ? `${Math.round(kwhValue).toLocaleString("en-IN")} kWh` : "—";
@@ -300,7 +315,7 @@ export default async function PortalHomePage() {
                   <CompactTile tone="info" value={kwhText} label="Energy saved" />
                   <CompactTile tone="ok" value={pctText} label="Savings achieved" />
                 </div>
-                <HealthBubble allReporting={allReporting} summary={healthSummary} />
+                <HealthBubble issues={healthIssues} summary={healthSummary} />
                 <div className="flex flex-col gap-2">
                   <QuickLinkRow icon={Zap} tone="info" label="Electricity" href="/portal/electricity" />
                   {grants.has("billing") && (
@@ -334,7 +349,7 @@ export default async function PortalHomePage() {
                   label="Savings achieved"
                   detail="vs your pre-install baseline"
                 />
-                <HealthBubble allReporting={allReporting} summary={healthSummary} />
+                <HealthBubble issues={healthIssues} summary={healthSummary} />
               </div>
               {published?.sinceStart && published.sinceStart.months > 1 && (
                 <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>

@@ -8,6 +8,7 @@ import { refuseOrderedDate } from "@/lib/step-dates";
 import { KYC_TYPE_LABEL } from "@/lib/kyc";
 import { bestKycAcross, kycMissing } from "@/lib/kyc-society";
 import type { OfferCircuitTerm } from "@/lib/offer";
+import { fileStoredDocumentForSociety } from "@/app/admin/documents/actions";
 
 // FEAT-029-AC-4 / FEAT-062-AC-4 — agreement preparation and contract term
 // confirmation are PER-01's, not any pipeline actor's.
@@ -112,9 +113,19 @@ export async function markAgreementStep(pipelineId: string, step: "printed" | "n
 // from the accepted offer has to be *visible*, not silently reconciled.
 export async function uploadExecutedAgreement(
   pipelineId: string,
-  input: { s3Key: string; fileName: string; hasDeviation: boolean; deviationNote: string },
+  input: {
+    s3Key: string;
+    fileName: string;
+    hasDeviation: boolean;
+    deviationNote: string;
+    period: string;
+    contentType: string;
+    byteSize: number;
+  },
 ) {
   const session = await requirePer01();
+  const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId }, select: { societyId: true } });
+  if (!pipeline) return { error: "Deal not found." };
   const agreement = await db.agreement.findUnique({ where: { pipelineId } });
   if (!agreement) return { error: "Prepare the agreement first." };
   if (!agreement.signedAt) return { error: "Record the physical signature before uploading the executed scan." };
@@ -134,6 +145,28 @@ export async function uploadExecutedAgreement(
       deviationNote: input.hasDeviation ? input.deviationNote.trim() : null,
     },
   });
+
+  // File it as a StoredDocument too — this is what the resident portal's
+  // Documents page actually reads (it never reads Agreement.executedS3Key
+  // directly), and a scan that only lands on the internal Agreement record
+  // is invisible to the society it belongs to. A hash collision against an
+  // already-filed version is not a refusal here — the signature was just
+  // recorded, so this scan is genuinely new — logged and swallowed rather
+  // than surfaced, since the executed-scan upload itself must not fail over
+  // a documents-listing nicety.
+  const filed = await fileStoredDocumentForSociety({
+    societyId: pipeline.societyId,
+    docType: "agreement",
+    s3Key: input.s3Key,
+    fileName: input.fileName,
+    contentType: input.contentType,
+    byteSize: input.byteSize,
+    period: input.period,
+    actorId: session.user.id,
+  });
+  if (filed.error) {
+    logger.warn("agreement.executed_document_file_skipped", { pipelineId, reason: filed.error });
+  }
 
   logger.info("agreement.executed_uploaded", {
     actorId: session.user.id,

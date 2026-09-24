@@ -104,6 +104,9 @@ export function ExecutedUploadForm({
           fileName: file.name,
           hasDeviation,
           deviationNote,
+          period,
+          contentType: file.type || "application/octet-stream",
+          byteSize: file.size,
         });
         setError(r?.error);
         if (!r?.error) setFile(null);

@@ -183,6 +183,74 @@ async function sha256OfStoredObject(key: string): Promise<string> {
 }
 
 /**
+ * File a document against a society, with ADR-005's versioning
+ * (`finalizeDocument`'s own `spec.context === "society"` branch, factored
+ * out so a second write path — the live agreement's executed-scan upload —
+ * can share it instead of silently bypassing it, which is what left every
+ * society's agreement invisible on the portal Documents page: the executed
+ * scan landed only on `Agreement.executedS3Key`, never as a `StoredDocument`
+ * row, so the resident-facing page (which reads only `StoredDocument`) had
+ * nothing to show. Two paths writing the same kind of row must not drift.
+ */
+export async function fileStoredDocumentForSociety(input: {
+  societyId: string;
+  docType: string;
+  s3Key: string;
+  fileName: string;
+  contentType: string;
+  byteSize: number;
+  period: string;
+  actorId: string;
+}): Promise<{ error?: string; message?: string; documentId?: string; version?: number }> {
+  const contentSha256 = await sha256OfStoredObject(input.s3Key);
+
+  const identical = await db.storedDocument.findFirst({
+    where: {
+      societyId: input.societyId,
+      docType: input.docType,
+      period: input.period,
+      contentSha256,
+      voidedAt: null,
+    },
+    select: { version: true },
+  });
+  if (identical) {
+    return { error: `That is the same file as version ${identical.version} already on record — nothing was filed.` };
+  }
+
+  const version = await nextVersion(input.societyId, input.docType, input.period);
+  const filed = await db.storedDocument.create({
+    data: {
+      docType: input.docType,
+      societyId: input.societyId,
+      period: input.period,
+      version,
+      contentSha256,
+      s3Key: input.s3Key,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      byteSize: input.byteSize,
+      uploadedById: input.actorId,
+    },
+  });
+  logger.info("document.filed", {
+    actorId: input.actorId,
+    docTypeId: input.docType,
+    societyId: input.societyId,
+    version,
+    documentId: filed.id,
+  });
+  return {
+    documentId: filed.id,
+    version,
+    message:
+      version === 1
+        ? "filed against the society."
+        : `filed as version ${version}. Version ${version - 1} is kept as it was.`,
+  };
+}
+
+/**
  * Once the bytes are in S3, hand the file to the operation its type owns —
  * the same actions the dedicated screens call, not a second implementation.
  * Two paths writing the same rows drift, and the drift shows up as a record
@@ -223,47 +291,19 @@ export async function finalizeDocument(input: {
   }
 
   if (spec.context === "society") {
-    const period = input.period ?? "";
-    const contentSha256 = await sha256OfStoredObject(input.s3Key);
-
-    // Re-checked against the AUTHORITATIVE hash, not the browser's: the
-    // presign check is a courtesy that keeps junk out of the bucket, this is
-    // the one that keeps a duplicate out of the history.
-    const identical = await db.storedDocument.findFirst({
-      where: { societyId: input.contextId, docType: spec.id, period, contentSha256, voidedAt: null },
-      select: { version: true },
-    });
-    if (identical) {
-      return { error: `That is the same file as version ${identical.version} already on record — nothing was filed.` };
-    }
-
-    const version = await nextVersion(input.contextId, spec.id, period);
-    const filed = await db.storedDocument.create({
-      data: {
-        docType: spec.id,
-        societyId: input.contextId,
-        period,
-        version,
-        contentSha256,
-        s3Key: input.s3Key,
-        fileName: input.fileName,
-        contentType: input.contentType,
-        byteSize: input.byteSize,
-        uploadedById: actor.id,
-      },
-    });
-    logger.info("document.filed", {
-      actorId: actor.id,
-      docTypeId: spec.id,
+    const filed = await fileStoredDocumentForSociety({
       societyId: input.contextId,
-      version,
-      documentId: filed.id,
+      docType: spec.id,
+      s3Key: input.s3Key,
+      fileName: input.fileName,
+      contentType: input.contentType,
+      byteSize: input.byteSize,
+      period: input.period ?? "",
+      actorId: actor.id,
     });
+    if (filed.error) return { error: filed.error };
     return {
-      message:
-        version === 1
-          ? `${spec.label} filed against the society.`
-          : `${spec.label} filed as version ${version}. Version ${version - 1} is kept as it was.`,
+      message: `${spec.label} ${filed.message}`,
       href: `/admin/societies/${input.contextId}`,
     };
   }

@@ -160,6 +160,11 @@ export default async function PortalDocumentsPage({
               remarks: f.remarks,
             }))}
           />
+          <p className="mt-3 text-[12.5px]">
+            <Link href={`/portal/inspection/${latestInspection.id}`} className="font-semibold underline" style={{ color: "var(--accent)" }}>
+              Download report
+            </Link>
+          </p>
           {latestInspection.evidencePhotoKey && (
             <p className="mt-4 text-[12.5px]">
               <a

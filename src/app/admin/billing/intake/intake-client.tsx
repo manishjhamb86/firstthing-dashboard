@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip, type ChipTone } from "@/components/ui";
@@ -59,8 +59,10 @@ function inr(n: number): string {
 export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
-  // Opens on the first chip that has work in it, in the order work flows.
-  const [view, setView] = useState<View>(() => INTAKE_VIEWS.find((v) => rows.some((r) => intakeViewOf(r.status) === v.key))?.key ?? "all");
+  // All, by default (2026-09-24, user-asked) — with seven chips now naming
+  // real, distinct states, opening on whichever happens to have work first
+  // read as an unpredictable landing page more than a helpful default.
+  const [view, setView] = useState<View>("all");
   const [query, setQuery] = useState("");
   const [societyFilter, setSocietyFilter] = useState("");
   const [monthFilter, setMonthFilter] = useState("");
@@ -79,6 +81,21 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [batchResult, setBatchResult] = useState<{ submitted: number; failed: { fileName: string; error: string }[] } | null>(null);
+
+  // The background sweep (job-worker.ts) reads a row on its own timer,
+  // independent of any open tab — without this, a row it just started
+  // reading would still show "Read", inviting a second, wasted attempt on
+  // the same invoice (user-asked 2026-09-24: "that should prevent the
+  // frontend user to click read button and instead show reading"). Polling
+  // is scoped to WHILE there is actually a backlog for the sweep to work
+  // through — once every row has moved past "uploaded"/"reading", it stops
+  // rather than refreshing an admin page forever for no reason.
+  const hasPendingReads = useMemo(() => rows.some((r) => r.status === "uploaded" || r.status === "reading"), [rows]);
+  useEffect(() => {
+    if (!hasPendingReads) return;
+    const id = setInterval(() => startTransition(() => router.refresh()), 10_000);
+    return () => clearInterval(id);
+  }, [hasPendingReads, router, startTransition]);
 
   async function sha256Hex(file: File): Promise<string> {
     const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
@@ -215,6 +232,16 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
     try {
       const r = fresh ? await extractIntake(intakeId) : await retryIntake(intakeId);
       if (r.error) setRefusals((cur) => [...cur, r.error!]);
+    } catch (err) {
+      // Without this, a rejected request (a dropped connection, a Server
+      // Action that genuinely threw) left the button quietly reverting to
+      // "Read" with nothing said and no visible change — user-reported
+      // 2026-09-24: "after the document is read, the button changes back...
+      // and the listing also remains same." The `finally` below still runs
+      // either way, so the button always recovers; this just makes sure a
+      // real failure is said out loud instead of looking like nothing
+      // happened.
+      setRefusals((cur) => [...cur, `${err instanceof Error ? err.message : "The read failed"} — retry.`]);
     } finally {
       setRetrying((cur) => {
         const next = new Set(cur);
@@ -275,7 +302,16 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
   }, [rows, query, societyFilter, monthFilter]);
 
   const counts = useMemo(() => {
-    const c: Record<View, number> = { unread: 0, review: 0, ready: 0, submitted: 0, all: narrowed.length };
+    const c: Record<View, number> = {
+      unread: 0,
+      review: 0,
+      ready: 0,
+      sent_back: 0,
+      awaiting_release: 0,
+      released: 0,
+      superseded: 0,
+      all: narrowed.length,
+    };
     for (const r of narrowed) {
       const v = intakeViewOf(r.status);
       if (v) c[v] += 1;
@@ -390,8 +426,8 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
       </Card>
 
       <div className="mb-3.5 flex flex-wrap items-center gap-2">
-        {INTAKE_VIEWS.map((v) => chip(v.key, v.label, counts[v.key]))}
         {chip("all", "All", counts.all)}
+        {INTAKE_VIEWS.map((v) => chip(v.key, v.label, counts[v.key]))}
       </div>
 
       <div className="mb-3.5 flex flex-wrap items-center gap-2">
@@ -547,17 +583,37 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                         {r.uploadedAgo}
                       </td>
                       <td className="whitespace-nowrap text-right">
-                        {intakeViewOf(r.status) === "submitted" && r.calculationId ? (
+                        {r.status.startsWith("submitted") && r.calculationId ? (
                           <Link href={`/admin/billing/${r.calculationId}`} className="btn-ghost btn-sm">
                             Open month
                           </Link>
                         ) : r.status === "reading" ? (
-                          <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                            Reading…
+                          // Same shape as the "uploaded" branch just below
+                          // (a fixed-width disabled button, same gap, same
+                          // sibling link) — a bare span here was a second
+                          // width jump the moment the server's own "reading"
+                          // status landed, on top of the button's own.
+                          <span className="inline-flex items-center gap-1.5">
+                            <button type="button" className="btn-primary btn-sm w-[92px] shrink-0" disabled>
+                              Reading…
+                            </button>
+                            <Link href={reviewHref} className="btn-ghost btn-sm">
+                              Enter by hand
+                            </Link>
                           </span>
                         ) : r.status === "uploaded" ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <button type="button" className="btn-primary btn-sm" disabled={retrying.has(r.id)} onClick={() => void retry(r.id, true)}>
+                            {/* Fixed width, sized for its own longest state
+                                ("Reading…") — user-reported 2026-09-24: this
+                                button growing on click was what shifted every
+                                column beside it, since the table has no fixed
+                                layout of its own. */}
+                            <button
+                              type="button"
+                              className="btn-primary btn-sm w-[92px] shrink-0"
+                              disabled={retrying.has(r.id)}
+                              onClick={() => void retry(r.id, true)}
+                            >
                               {retrying.has(r.id) ? "Reading…" : "Read"}
                             </button>
                             <Link href={reviewHref} className="btn-ghost btn-sm">
@@ -566,7 +622,12 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                           </span>
                         ) : r.status === "could_not_read" ? (
                           <span className="inline-flex items-center gap-1.5">
-                            <button type="button" className="btn-secondary btn-sm" disabled={retrying.has(r.id)} onClick={() => void retry(r.id)}>
+                            <button
+                              type="button"
+                              className="btn-secondary btn-sm w-[92px] shrink-0"
+                              disabled={retrying.has(r.id)}
+                              onClick={() => void retry(r.id)}
+                            >
                               {retrying.has(r.id) ? "Reading…" : "Retry"}
                             </button>
                             <Link href={reviewHref} className="btn-ghost btn-sm">

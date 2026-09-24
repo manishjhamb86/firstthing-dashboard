@@ -4,6 +4,7 @@ import { logger } from "../src/lib/logger";
 import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";
 import { pollMeters } from "../src/lib/meter-poll";
 import { arrearsStateOf, shouldFireSuspension } from "../src/lib/arrears";
+import { runIntakeExtraction } from "../src/lib/invoice-intake-extract";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -35,6 +36,26 @@ const METER_POLL_INTERVAL_MS = 60 * 60 * 1000;
  * hammering the database over a fleet of invoices (2026-09-12).
  */
 const ARREARS_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * User-asked 2026-09-24: "a backend process to read pending uploaded
+ * invoices itself after some interval one by one till all read." One
+ * invoice per pass, on the gate-pass sweep's own cadence — a batch upload
+ * deliberately only STORES rather than reading immediately (2026-09-16,
+ * "a dozen files never hit the reader's rate limit at once"), so a sweep
+ * that read everything on one tick would be the identical mistake on a
+ * timer instead of a click. Spaced out, it drains the backlog steadily
+ * instead.
+ */
+const INVOICE_INTAKE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Nothing this writes persists an actor as a foreign key (confirmed by
+ * reading src/lib/invoice-intake-extract.ts before relying on it) — this
+ * id is for the log line only, so it needs no real AdminUser row behind it,
+ * unlike the sys-data-import actor the one-time SQL backfill used.
+ */
+const INVOICE_INTAKE_SWEEP_ACTOR = "system:invoice-intake-sweep";
 
 // A job left `running` by a process that died mid-run would otherwise sit
 // there forever: it is not `done`, so it never schedules a successor, and it
@@ -107,6 +128,9 @@ async function processJob(job: { id: string; type: string }) {
       break;
     case "arrears_sweep":
       await runArrearsSweep();
+      break;
+    case "invoice_intake_sweep":
+      await runInvoiceIntakeSweep();
       break;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
@@ -284,6 +308,58 @@ async function runArrearsSweep() {
   }
 }
 
+/**
+ * One pending invoice per pass, oldest upload first — a backfill drains in
+ * the order it arrived, the same FIFO discipline as any other queue in this
+ * codebase. Left alone: a row already `reading` (someone's own click, or
+ * this sweep's previous tick still mid-flight) — the query only ever looks
+ * at `uploaded` rows, so there is nothing here to race against a person
+ * using the manual Read button at the same moment.
+ */
+async function runInvoiceIntakeSweep() {
+  try {
+    const next = await db.invoiceIntake.findFirst({
+      where: { status: "uploaded" },
+      orderBy: { uploadedAt: "asc" },
+      select: { id: true, fileName: true },
+    });
+    if (!next) {
+      logger.info("job.invoice_intake_sweep_idle", {});
+      return;
+    }
+    const result = await runIntakeExtraction(next.id, INVOICE_INTAKE_SWEEP_ACTOR);
+    if (result.error) {
+      logger.warn("job.invoice_intake_sweep_failed", { intakeId: next.id, fileName: next.fileName, error: result.error });
+    } else {
+      logger.info("job.invoice_intake_sweep_read", { intakeId: next.id, fileName: next.fileName, status: result.status });
+    }
+  } finally {
+    // Reschedule regardless of outcome — one bad file (a corrupt PDF, a
+    // quota refusal) must not stop the sweep from reaching the rest of the
+    // backlog, the same rule every other recurring job here follows.
+    await scheduleInvoiceIntakeSweep(new Date(Date.now() + INVOICE_INTAKE_SWEEP_INTERVAL_MS));
+  }
+}
+
+async function scheduleInvoiceIntakeSweep(runAt: Date) {
+  const existing = await db.job.findFirst({ where: { type: "invoice_intake_sweep", status: "pending" } });
+  if (existing) {
+    logger.warn("job.invoice_intake_sweep_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "invoice_intake_sweep", runAt } });
+}
+
+async function ensureInvoiceIntakeSweepScheduled() {
+  const existing = await db.job.findFirst({
+    where: { type: "invoice_intake_sweep", status: { in: ["pending", "running"] } },
+  });
+  if (!existing) {
+    await db.job.create({ data: { type: "invoice_intake_sweep", runAt: new Date() } });
+    logger.info("job.invoice_intake_sweep_seeded", {});
+  }
+}
+
 async function scheduleArrearsSweep(runAt: Date) {
   const existing = await db.job.findFirst({ where: { type: "arrears_sweep", status: "pending" } });
   if (existing) {
@@ -458,6 +534,7 @@ async function main() {
   await ensureTankSampleScheduled();
   await ensureMeterPollScheduled();
   await ensureArrearsSweepScheduled();
+  await ensureInvoiceIntakeSweepScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

@@ -28,16 +28,22 @@ describe("intakeViewOf — an unread file is not a review item", () => {
     expect(intakeViewOf("could_not_read")).toBe("review");
     expect(intakeViewOf("refused_duplicate")).toBe("review");
     expect(intakeViewOf("ready")).toBe("ready");
-    expect(intakeViewOf("submitted")).toBe("submitted");
+    // The bare "submitted" fallback (a missing calculation link) reads as
+    // awaiting release — the state a row in that position is almost always
+    // genuinely in.
+    expect(intakeViewOf("submitted")).toBe("awaiting_release");
   });
   it("gives a discarded row no chip at all", () => {
     expect(intakeViewOf("discarded")).toBeNull();
   });
-  it("keeps every submitted month's real status under the same one chip (2026-09-24)", () => {
-    expect(intakeViewOf("submitted_sent_back")).toBe("submitted");
-    expect(intakeViewOf("submitted_awaiting_release")).toBe("submitted");
-    expect(intakeViewOf("submitted_released")).toBe("submitted");
-    expect(intakeViewOf("submitted_superseded")).toBe("submitted");
+  it("gives a submitted month's real status its own filter chip (2026-09-24, user-asked)", () => {
+    // First fixed to show the right text; the user then asked why awaiting
+    // release and released still shared one FILTER once the text was right
+    // — each of the four now has its own chip, not one shared "Submitted".
+    expect(intakeViewOf("submitted_sent_back")).toBe("sent_back");
+    expect(intakeViewOf("submitted_awaiting_release")).toBe("awaiting_release");
+    expect(intakeViewOf("submitted_released")).toBe("released");
+    expect(intakeViewOf("submitted_superseded")).toBe("superseded");
   });
 });
 

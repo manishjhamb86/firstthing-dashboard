@@ -230,6 +230,10 @@ enum JobType {
   tank_level_sample
   meter_poll
   arrears_sweep
+  // User-asked 2026-09-24: a backend process reads the invoice intake
+  // backlog one file at a time on its own cadence, rather than an operator
+  // clicking Read on every row (src/lib/invoice-intake-extract.ts).
+  invoice_intake_sweep
 
   @@map("job_type")
 }

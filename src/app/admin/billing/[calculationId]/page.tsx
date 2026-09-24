@@ -3,7 +3,7 @@ import { formatDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
-import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
+import { CALCULATION_STATUS, SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { canRelease, isOps, requireBillingReader } from "../access";
 import { refuseRelease } from "@/lib/invoice-reconciliation";
 import { arrearsStateOf } from "@/lib/arrears";
@@ -21,15 +21,6 @@ export const dynamic = "force-dynamic";
 
 const rupees = (n: number) =>
   `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-
-const CALC_STATUS: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "neu" | "info" }> = {
-  held: { label: "Held", tone: "warn" },
-  calculated: { label: "Calculated", tone: "info" },
-  submitted: { label: "Submitted — awaiting release", tone: "info" },
-  sent_back: { label: "Sent back", tone: "warn" },
-  released: { label: "Released", tone: "ok" },
-  superseded: { label: "Superseded", tone: "neu" },
-};
 
 export default async function CalculationPage({
   params,
@@ -109,7 +100,7 @@ export default async function CalculationPage({
     }>
   ).filter((pt) => pt && typeof pt.deal === "string");
 
-  const meta = CALC_STATUS[calc.status];
+  const meta = CALCULATION_STATUS[calc.status];
   const outOfBand = calc.feeLines.filter((l) => l.complianceResult === "out_of_band");
   const approaching = calc.feeLines.filter((l) => l.approaching && l.complianceResult === "in_band");
   // FEAT-048-AC-1: the society total is the SUM of the fee lines, never a

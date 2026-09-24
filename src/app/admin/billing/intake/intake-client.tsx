@@ -547,7 +547,7 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
                         {r.uploadedAgo}
                       </td>
                       <td className="whitespace-nowrap text-right">
-                        {r.status === "submitted" && r.calculationId ? (
+                        {intakeViewOf(r.status) === "submitted" && r.calculationId ? (
                           <Link href={`/admin/billing/${r.calculationId}`} className="btn-ghost btn-sm">
                             Open month
                           </Link>

@@ -188,3 +188,18 @@ export const READING_ANOMALY_STATUS: Record<string, StatusMeta> = {
   excluded: { label: "Days excluded", tone: "info" },
   sent_back: { label: "Sent back for re-upload", tone: "warn" },
 };
+
+// A MonthlyCalculation's own lifecycle (CalculationStatus). Shared between
+// the calculation detail page and the invoice intake list (2026-09-24,
+// user-caught) -- the intake list used to show every submitted row as a bare
+// "Submitted", identically whether it was still awaiting the accountant or
+// had been released days ago, which is exactly the state an operator needs
+// to tell apart to find what needs attention.
+export const CALCULATION_STATUS: Record<string, StatusMeta> = {
+  held: { label: "Held", tone: "warn" },
+  calculated: { label: "Calculated", tone: "info" },
+  submitted: { label: "Submitted — awaiting release", tone: "info" },
+  sent_back: { label: "Sent back", tone: "warn" },
+  released: { label: "Released", tone: "ok" },
+  superseded: { label: "Superseded", tone: "neu" },
+};

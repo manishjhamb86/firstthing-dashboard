@@ -5,6 +5,7 @@ import { formatInstant, monthLabel, timeAgo } from "@/lib/format-date";
 import { Card, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { requireBillingOps } from "../access";
 import { intakeViewOf } from "@/lib/intake-list";
+import { CALCULATION_STATUS } from "@/lib/status-maps";
 import { IntakeClient, type IntakeRow } from "./intake-client";
 
 // SCR-093 — Invoice intake (CON-47 / FEAT-109). A dropzone and the list of
@@ -17,6 +18,17 @@ const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
   needs_review: { label: "Needs review", tone: "warn" },
   could_not_read: { label: "Could not read", tone: "bad" },
   ready: { label: "Ready to submit", tone: "info" },
+  // A submitted row's own status never moves again — what moves is the
+  // month it became. These four read the linked MonthlyCalculation's own
+  // status (2026-09-24, user-caught: every submitted row read as a bare
+  // "Submitted" whether still awaiting release or released days ago, with
+  // no way to tell which ones needed the accountant's attention).
+  submitted_sent_back: CALCULATION_STATUS.sent_back,
+  submitted_awaiting_release: CALCULATION_STATUS.submitted,
+  submitted_released: CALCULATION_STATUS.released,
+  submitted_superseded: CALCULATION_STATUS.superseded,
+  // Fallback for the (should-not-happen) case of a submitted row whose
+  // calculation link is missing.
   submitted: { label: "Submitted", tone: "neu" },
   refused_duplicate: { label: "Refused — duplicate", tone: "bad" },
   discarded: { label: "Discarded", tone: "neu" },
@@ -38,13 +50,31 @@ export default async function IntakePage() {
     take: 200,
   });
 
+  // No declared Prisma relation from InvoiceIntake to MonthlyCalculation
+  // (monthlyCalculationId is a plain scalar column) — one batched lookup
+  // rather than adding one, so this stays a read-only, no-schema-change fix.
+  const calcIds = [...new Set(intakes.filter((i) => i.status === "submitted" && i.monthlyCalculationId).map((i) => i.monthlyCalculationId!))];
+  const calcs = calcIds.length
+    ? await db.monthlyCalculation.findMany({ where: { id: { in: calcIds } }, select: { id: true, status: true } })
+    : [];
+  const calcStatusById = new Map(calcs.map((c) => [c.id, c.status]));
+
   // A read that started more than a few minutes ago and never finished has no
   // process behind it any more (the tab moved on, or the reader refused) — it
   // is unread, and the row says so rather than "Reading…" forever.
   const staleBefore = staleReadCutoff();
   const rows: IntakeRow[] = intakes.map((i) => {
     const review = (i.review ?? null) as { total?: number | null; invoiceNumber?: string; paid?: string | null } | null;
-    const status = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
+    let status: string = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
+    if (status === "submitted") {
+      const calcStatus = i.monthlyCalculationId ? calcStatusById.get(i.monthlyCalculationId) : undefined;
+      status = calcStatus ? `submitted_${calcStatus}` : "submitted";
+      // `held`/`calculated` are pre-submission states of a *different*
+      // calculation shape (the phase-two dashboard-generated run) — an
+      // invoice-first month's own status can only ever land on one of the
+      // four keys STATUS_META actually names once it has been submitted.
+      if (!(status in STATUS_META)) status = "submitted";
+    }
     return {
       id: i.id,
       fileName: i.fileName,

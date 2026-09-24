@@ -26,6 +26,12 @@ describe("intakeViewOf — an unread file is not a review item", () => {
   it("gives a discarded row no chip at all", () => {
     expect(intakeViewOf("discarded")).toBeNull();
   });
+  it("keeps every submitted month's real status under the same one chip (2026-09-24)", () => {
+    expect(intakeViewOf("submitted_sent_back")).toBe("submitted");
+    expect(intakeViewOf("submitted_awaiting_release")).toBe("submitted");
+    expect(intakeViewOf("submitted_released")).toBe("submitted");
+    expect(intakeViewOf("submitted_superseded")).toBe("submitted");
+  });
 });
 
 describe("compareIntakes", () => {
@@ -49,6 +55,18 @@ describe("compareIntakes", () => {
   it("orders status by how far behind the row is", () => {
     const rows = ["submitted", "uploaded", "needs_review", "could_not_read"].map((status, i) => row({ status, fileName: `${i}.pdf` }));
     expect(rows.sort(compareIntakes("status", 1)).map((r) => r.status)).toEqual(["uploaded", "could_not_read", "needs_review", "submitted"]);
+  });
+
+  it("within the submitted family, ranks what still needs a person ahead of what's done (2026-09-24)", () => {
+    const rows = ["submitted_released", "submitted_sent_back", "submitted_superseded", "submitted_awaiting_release"].map((status, i) =>
+      row({ status, fileName: `${i}.pdf` }),
+    );
+    expect(rows.sort(compareIntakes("status", 1)).map((r) => r.status)).toEqual([
+      "submitted_sent_back",
+      "submitted_awaiting_release",
+      "submitted_released",
+      "submitted_superseded",
+    ]);
   });
 
   it("breaks ties newest-upload first", () => {

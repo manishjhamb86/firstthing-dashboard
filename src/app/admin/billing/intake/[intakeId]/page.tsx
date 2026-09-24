@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { formatInstant } from "@/lib/format-date";
 import { BackButton } from "@/components/back-button";
+import { INTAKE_LIST_PATH, INTAKE_LIST_RETURN_KEY } from "@/lib/intake-list";
 import { PageHeader, StatusChip } from "@/components/ui";
 import type { ExtractedInvoice } from "@/lib/invoice-extract";
 import type { Review } from "@/lib/invoice-intake";
@@ -68,7 +69,7 @@ export default async function IntakeReviewPage({ params }: { params: Promise<{ i
   return (
     <>
       <div className="mb-4">
-        <BackButton fallbackHref="/admin/billing/intake" />
+        <BackButton fallbackHref={INTAKE_LIST_PATH} rememberedKey={INTAKE_LIST_RETURN_KEY} />
       </div>
       <PageHeader
         title={review.invoiceNumber ? `Review invoice ${review.invoiceNumber}` : `Review ${intake.fileName}`}

@@ -54,7 +54,7 @@ function readStack(): string[] {
  * It does not record anything. The page's own BackButton does that, and every
  * screen that has a Cancel also has a Back.
  */
-export function useGoBack(fallbackHref: string) {
+export function useGoBack(fallbackHref: string, rememberedKey?: string) {
   const router = useRouter();
   return () => {
     const stack = readStack();
@@ -62,14 +62,30 @@ export function useGoBack(fallbackHref: string) {
       sessionStorage.setItem(STACK_KEY, JSON.stringify(stack.slice(0, -1)));
       router.back();
     } else {
-      router.push(fallbackHref);
+      router.push(rememberedFallback(fallbackHref, rememberedKey));
     }
   };
 }
 
-export function BackButton({ fallbackHref }: { fallbackHref: string }) {
+/**
+ * The fallback, with the state its page last had in this tab — a list's
+ * filters, say (invoice intake, user-reported 2026-09-25). Only a URL on the
+ * fallback's own path is accepted, so a stored value can never send Back
+ * anywhere else. Read at click time, never during render.
+ */
+function rememberedFallback(fallbackHref: string, rememberedKey?: string): string {
+  if (!rememberedKey) return fallbackHref;
+  try {
+    const stored = sessionStorage.getItem(rememberedKey);
+    return stored && stored.startsWith(`${fallbackHref}?`) ? stored : fallbackHref;
+  } catch {
+    return fallbackHref;
+  }
+}
+
+export function BackButton({ fallbackHref, rememberedKey }: { fallbackHref: string; rememberedKey?: string }) {
   const pathname = usePathname();
-  const goBack = useGoBack(fallbackHref);
+  const goBack = useGoBack(fallbackHref, rememberedKey);
 
   // Writes only — no state, so this cannot fight React's render.
   useEffect(() => {

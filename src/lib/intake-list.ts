@@ -211,3 +211,64 @@ export function intakeMatches(row: IntakeListRow & { periodLabel?: string | null
     .toLowerCase();
   return words.every((w) => hay.includes(w));
 }
+
+/**
+ * The list's filters, carried in its URL (user-reported 2026-09-25: after
+ * acting on a bill the list came back with every filter reset). The URL is
+ * the one place they live, so Back, a reload, a shared link and the review
+ * page's own return all land on the same filtered list.
+ */
+export type IntakeFilters = {
+  view: IntakeView | "all";
+  q: string;
+  society: string;
+  month: string;
+  sort: IntakeSortKey;
+  dir: 1 | -1;
+};
+
+export const DEFAULT_INTAKE_FILTERS: IntakeFilters = { view: "all", q: "", society: "", month: "", sort: "uploaded", dir: -1 };
+
+/** Read filters from search params; anything unrecognised falls back to the default. */
+export function parseIntakeFilters(p: Record<string, string | string[] | undefined>): IntakeFilters {
+  const one = (k: string) => {
+    const v = p[k];
+    return typeof v === "string" ? v : Array.isArray(v) ? (v[0] ?? "") : "";
+  };
+  const view = one("view");
+  const sort = one("sort");
+  const validView = view === "all" || INTAKE_VIEWS.some((v) => v.key === view);
+  const validSort = sort in INTAKE_SORTS;
+  return {
+    view: validView ? (view as IntakeFilters["view"]) : DEFAULT_INTAKE_FILTERS.view,
+    q: one("q"),
+    society: one("society"),
+    month: one("month"),
+    sort: validSort ? (sort as IntakeSortKey) : DEFAULT_INTAKE_FILTERS.sort,
+    dir: one("dir") === "asc" ? 1 : one("dir") === "desc" ? -1 : validSort ? INTAKE_SORTS[sort as IntakeSortKey].firstDir : DEFAULT_INTAKE_FILTERS.dir,
+  };
+}
+
+/** The query string for a set of filters — defaults are left out, so the plain list stays a plain URL. */
+export function intakeFiltersQuery(f: IntakeFilters): string {
+  const qs = new URLSearchParams();
+  if (f.view !== DEFAULT_INTAKE_FILTERS.view) qs.set("view", f.view);
+  if (f.q.trim()) qs.set("q", f.q);
+  if (f.society) qs.set("society", f.society);
+  if (f.month) qs.set("month", f.month);
+  if (f.sort !== DEFAULT_INTAKE_FILTERS.sort || f.dir !== DEFAULT_INTAKE_FILTERS.dir) {
+    qs.set("sort", f.sort);
+    qs.set("dir", f.dir === 1 ? "asc" : "desc");
+  }
+  const s = qs.toString();
+  return s ? `?${s}` : "";
+}
+
+/** sessionStorage key holding the list URL last shown in this tab, for the review page's return. */
+export const INTAKE_LIST_RETURN_KEY = "intake:list-url";
+export const INTAKE_LIST_PATH = "/admin/billing/intake";
+
+/** Where the review page returns to: the last list URL this tab showed, else the plain list. */
+export function intakeListReturnHref(stored: string | null): string {
+  return stored && stored.startsWith(`${INTAKE_LIST_PATH}?`) ? stored : INTAKE_LIST_PATH;
+}

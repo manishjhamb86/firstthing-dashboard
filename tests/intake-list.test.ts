@@ -140,3 +140,24 @@ describe("intakeMatches — a partial invoice number finds its row", () => {
     expect(intakeMatches(r, "   ")).toBe(true);
   });
 });
+
+import { DEFAULT_INTAKE_FILTERS, intakeFiltersQuery, intakeListReturnHref, parseIntakeFilters } from "@/lib/intake-list";
+
+describe("intake list filters in the URL", () => {
+  it("round-trips every filter through the query string", () => {
+    const f = { view: "review" as const, q: "80850044", society: "soc-ace-city", month: "2026-07", sort: "total" as const, dir: 1 as const };
+    const qs = intakeFiltersQuery(f);
+    expect(parseIntakeFilters(Object.fromEntries(new URLSearchParams(qs.slice(1))))).toEqual(f);
+  });
+  it("leaves the defaults out so the plain list is a plain URL", () => {
+    expect(intakeFiltersQuery(DEFAULT_INTAKE_FILTERS)).toBe("");
+  });
+  it("ignores an unknown view or sort rather than trusting it", () => {
+    expect(parseIntakeFilters({ view: "nope", sort: "evil" })).toEqual(DEFAULT_INTAKE_FILTERS);
+  });
+  it("returns only to the intake list, never to an arbitrary stored URL", () => {
+    expect(intakeListReturnHref("/admin/billing/intake?view=review")).toBe("/admin/billing/intake?view=review");
+    expect(intakeListReturnHref("https://evil.example/")).toBe("/admin/billing/intake");
+    expect(intakeListReturnHref(null)).toBe("/admin/billing/intake");
+  });
+});

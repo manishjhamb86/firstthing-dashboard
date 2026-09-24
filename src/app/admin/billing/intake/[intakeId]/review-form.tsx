@@ -8,6 +8,7 @@ import { Modal } from "@/components/modal";
 import { formatDate, monthLabel } from "@/lib/format-date";
 import type { ExtractedInvoice } from "@/lib/invoice-extract";
 import type { LineSplitEntry, Review, ReviewLine } from "@/lib/invoice-intake";
+import { INTAKE_LIST_RETURN_KEY, intakeListReturnHref } from "@/lib/intake-list";
 import { READ_CUT_OFF_MESSAGE } from "@/lib/intake-read-error";
 import { discardIntake, extractIntake, previewIntake, saveIntakeReview, submitIntake, type IntakePreview } from "../actions";
 
@@ -171,7 +172,7 @@ export function ReviewForm({
       try {
         const r = await submitIntake(intakeId, review);
         if (r.error) setError(r.error);
-        else router.push("/admin/billing/intake");
+        else router.push(listHref());
       } catch {
         setError("Could not submit — the page may be out of date. Reload and try again.");
       }
@@ -183,7 +184,7 @@ export function ReviewForm({
     startTransition(async () => {
       const r = await discardIntake(intakeId, discardReason);
       if (r.error) setError(r.error);
-      else router.push("/admin/billing/intake");
+      else router.push(listHref());
     });
   }
 
@@ -733,4 +734,13 @@ export function ReviewForm({
       </Modal>
     </div>
   );
+}
+
+/** The list as this tab last showed it — filters and all — or the plain list. */
+function listHref(): string {
+  try {
+    return intakeListReturnHref(window.sessionStorage.getItem(INTAKE_LIST_RETURN_KEY));
+  } catch {
+    return intakeListReturnHref(null);
+  }
 }

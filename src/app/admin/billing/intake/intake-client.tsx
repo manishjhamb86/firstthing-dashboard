@@ -15,6 +15,10 @@ import {
   initialSortDir,
   intakeMatches,
   intakeViewOf,
+  intakeFiltersQuery,
+  INTAKE_LIST_PATH,
+  INTAKE_LIST_RETURN_KEY,
+  type IntakeFilters,
   type IntakeSortKey,
   type IntakeView,
 } from "@/lib/intake-list";
@@ -59,18 +63,33 @@ function inr(n: number): string {
  * sniffs again and is the one that decides. Extraction is kicked off per
  * file and the list refreshes as each completes.
  */
-export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
+export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; initialFilters: IntakeFilters }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   // All, by default (2026-09-24, user-asked) — with seven chips now naming
   // real, distinct states, opening on whichever happens to have work first
   // read as an unpredictable landing page more than a helpful default.
-  const [view, setView] = useState<View>("all");
-  const [query, setQuery] = useState("");
-  const [societyFilter, setSocietyFilter] = useState("");
-  const [monthFilter, setMonthFilter] = useState("");
-  const [sortKey, setSortKey] = useState<IntakeSortKey>("uploaded");
-  const [sortDir, setSortDir] = useState<1 | -1>(-1);
+  // Starting values come from the URL (the page parses them), so a return
+  // from a review lands on the same filtered list (user-reported 2026-09-25).
+  const [view, setView] = useState<View>(initialFilters.view);
+  const [query, setQuery] = useState(initialFilters.q);
+  const [societyFilter, setSocietyFilter] = useState(initialFilters.society);
+  const [monthFilter, setMonthFilter] = useState(initialFilters.month);
+  const [sortKey, setSortKey] = useState<IntakeSortKey>(initialFilters.sort);
+  const [sortDir, setSortDir] = useState<1 | -1>(initialFilters.dir);
+
+  // Mirror the filters into the URL (replace, not push — a filter change is
+  // not a page the Back button should step through) and remember that URL
+  // for this tab, so the review page's own return goes back to it.
+  useEffect(() => {
+    const href = `${INTAKE_LIST_PATH}${intakeFiltersQuery({ view, q: query, society: societyFilter, month: monthFilter, sort: sortKey, dir: sortDir })}`;
+    if (`${window.location.pathname}${window.location.search}` !== href) window.history.replaceState(window.history.state, "", href);
+    try {
+      window.sessionStorage.setItem(INTAKE_LIST_RETURN_KEY, href);
+    } catch {
+      // Storage can be unavailable (private mode); the URL alone still works.
+    }
+  }, [view, query, societyFilter, monthFilter, sortKey, sortDir]);
   const [refusals, setRefusals] = useState<string[]>([]);
   // What a dropped archive yielded — information, not a refusal.
   const [archiveNotes, setArchiveNotes] = useState<string[]>([]);

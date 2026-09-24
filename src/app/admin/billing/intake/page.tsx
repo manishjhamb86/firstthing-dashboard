@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { parseIntakeFilters } from "@/lib/intake-list";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatInstant, monthLabel, timeAgo } from "@/lib/format-date";
@@ -42,7 +43,12 @@ function staleReadCutoff(): Date {
   return new Date(Date.now() - 5 * 60_000);
 }
 
-export default async function IntakePage() {
+export default async function IntakePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const filters = parseIntakeFilters(await searchParams);
   const gate = await requireBillingOps();
   if (!gate.ok) redirect("/admin/billing");
 
@@ -114,7 +120,7 @@ export default async function IntakePage() {
           </Link>
         }
       />
-      <IntakeClient rows={rows} />
+      <IntakeClient rows={rows} initialFilters={filters} />
       <Card className="mt-5 p-5 text-[12.5px]" >
         <p style={{ color: "var(--text-muted)" }}>
           The society and the month are always yours to confirm on the review, whatever the invoice

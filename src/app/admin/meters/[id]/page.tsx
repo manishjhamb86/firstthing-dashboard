@@ -3,8 +3,8 @@ import { formatDate, formatInstant } from "@/lib/format-date";
 import Link from "next/link";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { DailyBars, MeterAlerts, MeterHourlyChart, MeterReadout, MeterStateChip } from "@/components/meter-ui";
-import { circuitLabelOf, meterHourly, meterRow } from "@/lib/meter-view";
+import { DailyBars, MeterAlerts, MeterDemoCard, MeterHourlyChart, MeterReadout, MeterStateChip } from "@/components/meter-ui";
+import { circuitLabelOf, meterDemoContext, meterHourly, meterRow } from "@/lib/meter-view";
 import { db } from "@/lib/db";
 import { MeterDetailActions } from "./meter-detail-client";
 
@@ -16,7 +16,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
   const meter = await meterRow(id);
   if (!meter) notFound();
 
-  const [days, imports, alertHistory, stays] = await Promise.all([
+  const [days, imports, alertHistory, stays, demo] = await Promise.all([
     meterHourly(id, 14),
     db.meterCsvImport.findMany({
       where: { meterId: id },
@@ -59,6 +59,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         removedBy: { select: { name: true, email: true } },
       },
     }),
+    meterDemoContext(id),
   ]);
   // How many billing-grade days each stay actually produced — the evidence
   // that the attribution did what it says.
@@ -132,6 +133,8 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
           meter={meter}
           action={canManage ? <MeterDetailActions meterId={meter.id} mode="read" /> : undefined}
         />
+
+        <MeterDemoCard context={demo} />
 
         <Card className="p-6">
           <div className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">

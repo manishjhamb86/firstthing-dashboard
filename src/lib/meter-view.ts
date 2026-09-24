@@ -1,9 +1,11 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
-import { theoreticalDailyKwh } from "@/lib/circuit-load";
+import { addDays, savingsBand, savingsPct, theoreticalDailyKwh, type SavingsBand } from "@/lib/circuit-load";
+import { effectiveBaselineAt, lastVerifiedAt, type RescaleEvent } from "@/lib/benchmark-rescale";
 import { evaluateMeterHealth, outageMessage, outageMinutes, type MeterState } from "@/lib/meter-health";
 import { freshnessLabel, isStale } from "@/lib/meter-live";
 import { circuitLabelOf } from "@/lib/circuit-label";
+import { monthLabel } from "@/lib/format-date";
 
 /**
  * One meter, as every surface shows it.
@@ -273,4 +275,193 @@ export async function meterHourly(meterId: string, days = 14) {
     // Fewer than 24 is a partial day — shown as one, never as a low reading.
     intervalCount: hours.length,
   }));
+}
+
+// ── The demo behind the meter, and how it's doing against it ──────────────
+//
+// 2026-09-24, user-asked: a resident (and an operator) looking at a
+// meter's live reading has no way to see what it's being measured against
+// — the demo that set the benchmark, or how today/this week/this month
+// compares to it. Built from the SAME circuit fields the demo report and
+// the Electricity page already read (`preInstallBaseline`,
+// `benchmarkSavingsPct`, `CircuitDemo`), so this can never disagree with
+// them — and from the SAME `MeterHourlyReading` store `meterHourly()`
+// already reads for the hourly chart, so a meter with no bound circuit or
+// no demo history simply has nothing to show, not a second source of truth.
+
+export type MeterDemo = {
+  sequence: number;
+  lightCount: number;
+  beforeKwhPerDay: number;
+  afterKwhPerDay: number;
+  savingsPct: number;
+  rejected: boolean;
+  rejectionReason: string | null;
+};
+
+export type MeterPeriodComparison = {
+  key: "today" | "yesterday" | "week" | "month";
+  label: string;
+  /** Calendar days actually covered — 0.4 for 10 of 24 hours today so far. */
+  days: number;
+  kWh: number;
+  /** `baselineKwhPerDay × days` — null with no baseline to compare against. */
+  expectedKwh: number | null;
+  savingsPct: number | null;
+  band: SavingsBand | null;
+};
+
+export type MeterDemoContext = {
+  circuitId: string | null;
+  meteredLightCount: number | null;
+  representedLightCount: number | null;
+  /** kWh/day before installation, as commissioned — never mutated (ADR-005). */
+  preInstallBaseline: number | null;
+  /** The baseline actually in force today, after any rescale (INV-07 replay). */
+  currentBaseline: number | null;
+  benchmarkSavingsPct: number | null;
+  installedAt: string | null;
+  lastVerifiedAt: string | null;
+  demos: MeterDemo[];
+  periods: MeterPeriodComparison[];
+};
+
+const EMPTY_DEMO_CONTEXT: MeterDemoContext = {
+  circuitId: null,
+  meteredLightCount: null,
+  representedLightCount: null,
+  preInstallBaseline: null,
+  currentBaseline: null,
+  benchmarkSavingsPct: null,
+  installedAt: null,
+  lastVerifiedAt: null,
+  demos: [],
+  periods: [],
+};
+
+function makeComparison(
+  key: MeterPeriodComparison["key"],
+  label: string,
+  kWh: number,
+  days: number,
+  baselineKwhPerDay: number | null,
+): MeterPeriodComparison {
+  const expectedKwh = baselineKwhPerDay !== null ? baselineKwhPerDay * days : null;
+  const pct = expectedKwh !== null && expectedKwh > 0 ? savingsPct(expectedKwh, kWh) : null;
+  return { key, label, days, kWh, expectedKwh, savingsPct: pct, band: pct !== null ? savingsBand(pct) : null };
+}
+
+/**
+ * Today, yesterday, the last 7 days and the current calendar month, each
+ * against the baseline — built from `meterHourly`'s own output so a gap or
+ * a partial day is handled exactly once, not re-derived here. "Today" and
+ * "this month" are windowed from the LATEST stored day, the same rule
+ * `meterHourly` itself uses, not from the wall clock: a meter whose last
+ * read was yesterday should not report "today" as a suspicious zero.
+ */
+export function periodComparisons(
+  hourly: Awaited<ReturnType<typeof meterHourly>>,
+  baselineKwhPerDay: number | null,
+): MeterPeriodComparison[] {
+  if (hourly.length === 0) return [];
+  const byDay = new Map(hourly.map((h) => [h.day, h]));
+  const latestDay = hourly[0].day;
+
+  const out: MeterPeriodComparison[] = [];
+  const today = byDay.get(latestDay)!;
+  out.push(makeComparison("today", "Today so far", today.total, today.intervalCount / 24, baselineKwhPerDay));
+
+  const yesterdayKey = addDays(new Date(`${latestDay}T00:00:00Z`), -1).toISOString().slice(0, 10);
+  const yesterday = byDay.get(yesterdayKey);
+  if (yesterday) out.push(makeComparison("yesterday", "Yesterday", yesterday.total, yesterday.intervalCount / 24, baselineKwhPerDay));
+
+  const last7 = hourly.slice(0, 7);
+  out.push(
+    makeComparison(
+      "week",
+      "Last 7 days",
+      last7.reduce((s, h) => s + h.total, 0),
+      last7.reduce((s, h) => s + h.intervalCount / 24, 0),
+      baselineKwhPerDay,
+    ),
+  );
+
+  const month = latestDay.slice(0, 7);
+  const monthRows = hourly.filter((h) => h.day.startsWith(month));
+  out.push(
+    makeComparison(
+      "month",
+      monthLabel(month),
+      monthRows.reduce((s, h) => s + h.total, 0),
+      monthRows.reduce((s, h) => s + h.intervalCount / 24, 0),
+      baselineKwhPerDay,
+    ),
+  );
+
+  return out;
+}
+
+/**
+ * One meter's demo/benchmark context, scoped when a society is asking
+ * (INV-05, same convention as `meterRow`). Null fields throughout for a
+ * meter with no bound circuit, no baseline yet, or no demo — never a
+ * fabricated figure standing in for "we don't know yet".
+ */
+export async function meterDemoContext(meterId: string, societyId?: string): Promise<MeterDemoContext> {
+  const m = await db.meterDevice.findFirst({
+    where: { id: meterId, ...(societyId ? { societyId } : {}) },
+    select: {
+      circuitId: true,
+      circuit: {
+        select: {
+          meteredLightCount: true,
+          representedLightCount: true,
+          preInstallBaseline: true,
+          benchmarkSavingsPct: true,
+          lightReplacementDate: true,
+          rescaleEvents: true,
+          demos: {
+            orderBy: { sequence: "asc" },
+            select: {
+              sequence: true,
+              meteredLightCount: true,
+              preInstallBaseline: true,
+              postInstallAverage: true,
+              savingsPct: true,
+              rejected: true,
+              rejectionReason: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!m || !m.circuit) return EMPTY_DEMO_CONTEXT;
+
+  const c = m.circuit;
+  const now = new Date();
+  const events = c.rescaleEvents as RescaleEvent[];
+  const currentBaseline = effectiveBaselineAt(c.preInstallBaseline, events, now);
+  const hourly = await meterHourly(meterId, 35);
+
+  return {
+    circuitId: m.circuitId,
+    meteredLightCount: c.meteredLightCount,
+    representedLightCount: c.representedLightCount,
+    preInstallBaseline: c.preInstallBaseline,
+    currentBaseline,
+    benchmarkSavingsPct: c.benchmarkSavingsPct,
+    installedAt: c.lightReplacementDate?.toISOString().slice(0, 10) ?? null,
+    lastVerifiedAt: lastVerifiedAt(events, c.lightReplacementDate, now)?.toISOString().slice(0, 10) ?? null,
+    demos: c.demos.map((d) => ({
+      sequence: d.sequence,
+      lightCount: d.meteredLightCount,
+      beforeKwhPerDay: d.preInstallBaseline,
+      afterKwhPerDay: d.postInstallAverage,
+      savingsPct: d.savingsPct,
+      rejected: d.rejected,
+      rejectionReason: d.rejectionReason,
+    })),
+    periods: periodComparisons(hourly, currentBaseline),
+  };
 }

@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { dayAxis, formatDate, formatInstant } from "@/lib/format-date";
-import { Card, CardTitle, StatusChip, type ChipTone } from "@/components/ui";
-import type { MeterRow } from "@/lib/meter-view";
+import { Card, CardTitle, Stat, StatRow, StatusChip, type ChipTone } from "@/components/ui";
+import { SAVINGS_BAND_META } from "@/lib/circuit-load";
+import type { MeterDemoContext, MeterRow } from "@/lib/meter-view";
 
 /**
  * The meter presentation shared by the back office and a society's own
@@ -415,6 +416,130 @@ export function MeterAlerts({ meter }: { meter: MeterRow }) {
           </li>
         ))}
       </ul>
+    </Card>
+  );
+}
+
+/**
+ * What this meter is being measured against, and how it's doing right now.
+ *
+ * Built the same "nothing invented" way as `MeterAlerts` — a meter with no
+ * bound circuit, no baseline yet, or no demo shows nothing here rather than
+ * a placeholder pretending to be a figure. The four period tiles are
+ * deliberately windowed from the METER's own latest reading, not the wall
+ * clock — `meterDemoContext` already handles that, the same rule this
+ * page's hourly chart follows, so a meter that hasn't reported today does
+ * not read as a suspicious zero.
+ */
+function DemoDetail({ label, value, detail }: { label: string; value: string | null; detail?: string }) {
+  return (
+    <div>
+      <dt className="lbl mb-1">{label}</dt>
+      <dd className="text-[15px]">
+        {value === null ? <span className="text-[13px]" style={{ color: "var(--text-subtle)" }}>not recorded</span> : value}
+      </dd>
+      {detail && (
+        <p className="mt-0.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+          {detail}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function MeterDemoCard({ context }: { context: MeterDemoContext }) {
+  if (context.circuitId === null) return null;
+  const liveDemos = context.demos.filter((d) => !d.rejected);
+  const rescaled = context.currentBaseline !== null && context.preInstallBaseline !== null && context.currentBaseline !== context.preInstallBaseline;
+
+  return (
+    <Card className="p-6">
+      <CardTitle>The demo behind it</CardTitle>
+      <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>
+        What was measured before and after installation, and how the current reading compares.
+      </p>
+
+      <dl className="mt-4 grid gap-x-6 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
+        <DemoDetail
+          label="Lights on this circuit"
+          value={context.meteredLightCount === null ? null : `${context.meteredLightCount} metered`}
+          detail={
+            context.representedLightCount !== null && context.representedLightCount !== context.meteredLightCount
+              ? `standing in for ${context.representedLightCount} across the society`
+              : undefined
+          }
+        />
+        <DemoDetail
+          label="Before installation"
+          value={context.preInstallBaseline === null ? null : `${context.preInstallBaseline.toFixed(2)} kWh/day`}
+          detail="the commissioned baseline"
+        />
+        <DemoDetail
+          label="Benchmark"
+          value={context.benchmarkSavingsPct === null ? null : `${context.benchmarkSavingsPct.toFixed(1)}% savings`}
+          detail={rescaled ? `baseline now ${context.currentBaseline!.toFixed(2)} kWh/day, after a rescale` : "agreed against the demo"}
+        />
+        <DemoDetail
+          label="Fixture count last verified"
+          value={context.lastVerifiedAt === null ? null : formatDate(context.lastVerifiedAt)}
+        />
+      </dl>
+
+      {context.demos.length > 0 && (
+        <div className="mt-5">
+          <p className="lbl mb-2">
+            {liveDemos.length > 1 ? `${liveDemos.length} demos — averaged into the benchmark above` : "Demo readings"}
+          </p>
+          <ul className="space-y-2">
+            {context.demos.map((d) => (
+              <li
+                key={d.sequence}
+                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-[var(--r-sm)] p-3"
+                style={{ background: "var(--surface-sunken)", border: "1px solid var(--border)", opacity: d.rejected ? 0.65 : 1 }}
+              >
+                <div className="text-[13px]">
+                  <span className="font-semibold">Demo {d.sequence}</span>
+                  <span style={{ color: "var(--text-muted)" }}>
+                    {" — "}
+                    {d.lightCount} lights · {d.beforeKwhPerDay.toFixed(2)} → {d.afterKwhPerDay.toFixed(2)} kWh/day
+                  </span>
+                </div>
+                {d.rejected ? (
+                  <StatusChip tone="bad">Rejected{d.rejectionReason ? ` — ${d.rejectionReason}` : ""}</StatusChip>
+                ) : (
+                  <span className="num text-[13px] font-semibold" style={{ color: "var(--signal)" }}>
+                    {d.savingsPct.toFixed(2)}%
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {context.periods.length > 0 && (
+        <div className="mt-5">
+          <p className="lbl mb-2">Against the baseline</p>
+          <StatRow>
+            {context.periods.map((p) => {
+              const meta = p.band ? SAVINGS_BAND_META[p.band] : null;
+              return (
+                <Stat
+                  key={p.key}
+                  label={p.label}
+                  value={`${p.kWh.toFixed(2)} kWh`}
+                  detail={
+                    p.expectedKwh === null
+                      ? "no baseline to compare against"
+                      : `${meta ? meta.label + " · " : ""}${p.savingsPct!.toFixed(1)}% vs ${p.expectedKwh.toFixed(2)} kWh expected`
+                  }
+                  tone={p.band === "red" || p.band === "orange" ? "bad" : p.band === "yellow" ? "warn" : "accent"}
+                />
+              );
+            })}
+          </StatRow>
+        </div>
+      )}
     </Card>
   );
 }

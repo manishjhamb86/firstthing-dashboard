@@ -304,6 +304,8 @@ export function IntakeClient({ rows }: { rows: IntakeRow[] }) {
   const counts = useMemo(() => {
     const c: Record<View, number> = {
       unread: 0,
+      failed: 0,
+      duplicate: 0,
       review: 0,
       ready: 0,
       sent_back: 0,

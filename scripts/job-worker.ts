@@ -1,4 +1,4 @@
-import "dotenv/config";
+import "./load-env";
 import { db } from "../src/lib/db";
 import { logger } from "../src/lib/logger";
 import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";

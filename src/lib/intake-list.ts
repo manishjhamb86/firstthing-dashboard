@@ -15,10 +15,19 @@
 // before anything else, and a SUPERSEDED one (a re-derivation moved the
 // stats on) is history, not a working state — both real, both kept visible
 // rather than folded quietly into a chip they don't belong under.
-export type IntakeView = "unread" | "review" | "ready" | "sent_back" | "awaiting_release" | "released" | "superseded";
+export type IntakeView = "unread" | "failed" | "duplicate" | "review" | "ready" | "sent_back" | "awaiting_release" | "released" | "superseded";
 
+// `could_not_read` and `refused_duplicate` used to fold into the same
+// "Needs review" chip as a row that read fine and only wants a human's
+// confirmation — user-caught 2026-09-24: "there is no filter for the ones
+// that faced error." Both are real, distinct outcomes with different next
+// actions (retry or enter by hand; void the live invoice first), so each
+// gets its own chip, the same "one bucket per real outcome" rule already
+// applied to the submitted family above.
 export const INTAKE_VIEWS: { key: IntakeView; label: string; empty: string }[] = [
   { key: "unread", label: "Not read yet", empty: "Every uploaded file has been read." },
+  { key: "failed", label: "Could not read", empty: "Nothing failed to read." },
+  { key: "duplicate", label: "Refused — duplicate", empty: "Nothing refused as a duplicate." },
   { key: "review", label: "Needs review", empty: "Nothing needs review." },
   { key: "ready", label: "Ready to submit", empty: "Nothing is ready to submit." },
   { key: "sent_back", label: "Sent back", empty: "Nothing sent back." },
@@ -64,8 +73,11 @@ export function submittedDisplayStatus(calcStatus: string | null | undefined): s
 /**
  * A file the machine has not read is not "needing review" — nobody has
  * looked at it yet, and a read may still settle everything. It has its own
- * chip. A file that was read and came back short, or was refused, is what
- * a person has to look at.
+ * chip. A file that WAS read and came back short (`could_not_read`) or was
+ * refused as a duplicate (`refused_duplicate`) each get their own chip too
+ * — two different failures with two different fixes (retry or enter by
+ * hand; void the live invoice first), not the same "needs a look" bucket
+ * as a row that read fine and only wants confirming.
  *
  * A submitted row's own status field never changes once set — the month it
  * became is what moves, through the accountant's release gate. `page.tsx`
@@ -84,9 +96,11 @@ export function intakeViewOf(status: string): IntakeView | null {
     case "uploaded":
     case "reading":
       return "unread";
-    case "needs_review":
     case "could_not_read":
+      return "failed";
     case "refused_duplicate":
+      return "duplicate";
+    case "needs_review":
       return "review";
     case "ready":
       return "ready";

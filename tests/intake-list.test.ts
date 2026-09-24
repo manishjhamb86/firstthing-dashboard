@@ -25,8 +25,8 @@ describe("intakeViewOf — an unread file is not a review item", () => {
     expect(intakeViewOf("uploaded")).toBe("unread");
     expect(intakeViewOf("reading")).toBe("unread");
     expect(intakeViewOf("needs_review")).toBe("review");
-    expect(intakeViewOf("could_not_read")).toBe("review");
-    expect(intakeViewOf("refused_duplicate")).toBe("review");
+    expect(intakeViewOf("could_not_read")).toBe("failed");
+    expect(intakeViewOf("refused_duplicate")).toBe("duplicate");
     expect(intakeViewOf("ready")).toBe("ready");
     // The bare "submitted" fallback (a missing calculation link) reads as
     // awaiting release — the state a row in that position is almost always

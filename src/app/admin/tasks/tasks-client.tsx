@@ -30,6 +30,8 @@ export type TaskRow = {
   href: string | null;
   closedNote: string | null;
   mayAct: boolean;
+  meetLink: string | null;
+  onGoogle: boolean;
 };
 
 const STATE_TONE: Record<TaskRow["state"], ChipTone> = { overdue: "bad", due_today: "warn", upcoming: "info", done: "ok", cancelled: "neu" };
@@ -159,6 +161,12 @@ export function TasksClient({
                     <span>· {r.assigneeId === me ? "You" : r.assignee}</span>
                     {r.createdById !== r.assigneeId && <span>· set by {r.createdById === me ? "you" : r.createdBy}</span>}
                     {r.society && <span>· {r.society}</span>}
+                    {r.onGoogle && r.status === "scheduled" && <span>· on Google Calendar</span>}
+                    {r.meetLink && r.status === "scheduled" && (
+                      <a href={r.meetLink} target="_blank" rel="noopener noreferrer" className="font-semibold">
+                        · Join Google Meet ↗
+                      </a>
+                    )}
                   </p>
                   {r.closedNote && <p className="mt-1 text-[12px]" style={{ color: "var(--text-subtle)" }}>{r.closedNote}</p>}
                 </div>

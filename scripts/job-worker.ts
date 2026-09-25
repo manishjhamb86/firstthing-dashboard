@@ -6,6 +6,7 @@ import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";
 import { pollMeters } from "../src/lib/meter-poll";
 import { arrearsStateOf, shouldFireSuspension } from "../src/lib/arrears";
 import { runIntakeExtraction } from "../src/lib/invoice-intake-extract";
+import { runCalendarSweep } from "../src/lib/calendar-sync";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -49,6 +50,14 @@ const ARREARS_SWEEP_INTERVAL_MS = 6 * 60 * 60 * 1000;
  * instead.
  */
 const INVOICE_INTAKE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Google Calendar (2026-09-25): push events changed anywhere in the app (a
+ * deal step rescheduled, a push that failed) and read back meeting RSVPs.
+ * Tasks and meetings are pushed immediately by their own action; this is the
+ * catch-all, so five minutes is the longest anything waits.
+ */
+const CALENDAR_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
  * Nothing this writes persists an actor as a foreign key (confirmed by
@@ -132,6 +141,9 @@ async function processJob(job: { id: string; type: string }) {
       break;
     case "invoice_intake_sweep":
       await runInvoiceIntakeSweep();
+      break;
+    case "calendar_sync":
+      await runCalendarSync();
       break;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
@@ -365,6 +377,33 @@ async function ensureInvoiceIntakeSweepScheduled() {
   }
 }
 
+async function runCalendarSync() {
+  try {
+    const r = await runCalendarSweep();
+    if (!r) logger.info("job.calendar_sync_skipped", { reason: "no_config" });
+    else if (r.pushed || r.failed || r.responses) logger.info("job.calendar_sync_ran", r);
+  } finally {
+    await scheduleCalendarSync(new Date(Date.now() + CALENDAR_SYNC_INTERVAL_MS));
+  }
+}
+
+async function scheduleCalendarSync(runAt: Date) {
+  const existing = await db.job.findFirst({ where: { type: "calendar_sync", status: "pending" } });
+  if (existing) {
+    logger.warn("job.calendar_sync_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "calendar_sync", runAt } });
+}
+
+async function ensureCalendarSyncScheduled() {
+  const existing = await db.job.findFirst({ where: { type: "calendar_sync", status: { in: ["pending", "running"] } } });
+  if (!existing) {
+    await db.job.create({ data: { type: "calendar_sync", runAt: new Date() } });
+    logger.info("job.calendar_sync_seeded", {});
+  }
+}
+
 async function scheduleArrearsSweep(runAt: Date) {
   const existing = await db.job.findFirst({ where: { type: "arrears_sweep", status: "pending" } });
   if (existing) {
@@ -540,6 +579,7 @@ async function main() {
   await ensureMeterPollScheduled();
   await ensureArrearsSweepScheduled();
   await ensureInvoiceIntakeSweepScheduled();
+  await ensureCalendarSyncScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

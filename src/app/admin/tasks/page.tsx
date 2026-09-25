@@ -69,7 +69,9 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       societyId: e.society?.id ?? "",
       society: e.society?.name ?? null,
       href:
-        e.kind === "task"
+        e.kind === "meeting"
+          ? `/admin/schedule?open=${e.id}#ev-${e.id}`
+          : e.kind === "task"
           ? null
           : e.pipelineId
             ? e.kind === "survey_visit"
@@ -85,6 +87,8 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
             ? `Cancelled${e.cancelledReason ? ` — ${e.cancelledReason}` : ""}`
             : null,
       mayAct: ops || e.assigneeId === actor.id || e.createdById === actor.id,
+      meetLink: e.meetLink,
+      onGoogle: e.googleEventId !== null && !e.calendarSyncError,
     };
   });
 

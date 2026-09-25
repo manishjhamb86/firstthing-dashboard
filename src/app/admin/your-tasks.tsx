@@ -2,7 +2,7 @@ import Link from "next/link";
 import { db } from "@/lib/db";
 import { Card, StatusChip, type ChipTone } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
-import { SCHEDULE_KIND } from "@/lib/schedule";
+import { SCHEDULE_KIND, timeLabel } from "@/lib/schedule";
 import { TASK_STATE_LABEL, taskState, taskSummary } from "@/lib/tasks";
 
 const TONE: Record<string, ChipTone> = { overdue: "bad", due_today: "warn", upcoming: "info" };
@@ -15,6 +15,20 @@ export async function YourTasks({ userId }: { userId: string }) {
     select: { id: true, kind: true, title: true, startAt: true, status: true, priority: true },
   });
   const today = new Date();
+  // Meetings in the coming week you host or are invited to (2026-09-25) —
+  // joinable from here as well as from Google Calendar.
+  const dayStart = new Date(`${today.toISOString().slice(0, 10)}T00:00:00Z`);
+  const meetings = await db.scheduledEvent.findMany({
+    where: {
+      kind: "meeting",
+      status: "scheduled",
+      startAt: { gte: dayStart, lt: new Date(dayStart.getTime() + 7 * 86_400_000) },
+      OR: [{ assigneeId: userId }, { attendees: { some: { adminUserId: userId } } }],
+    },
+    orderBy: { startAt: "asc" },
+    take: 4,
+    select: { id: true, title: true, startAt: true, endAt: true, meetLink: true },
+  });
   const s = taskSummary(open, today);
   return (
     <Card className="mb-6 p-5">
@@ -61,6 +75,28 @@ export async function YourTasks({ userId }: { userId: string }) {
             })}
           </ul>
         </>
+      )}
+      {meetings.length > 0 && (
+        <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
+          <p className="mb-2 text-[13px] font-semibold">Coming meetings</p>
+          <ul className="space-y-1.5 text-[13.5px]">
+            {meetings.map((m) => (
+              <li key={m.id} className="flex flex-wrap items-center gap-2">
+                <span className="num text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                  {formatDate(m.startAt)} · {timeLabel(m.startAt, m.endAt)}
+                </span>
+                <Link href={`/admin/schedule?open=${m.id}#ev-${m.id}`} className="font-medium">
+                  {m.title}
+                </Link>
+                {m.meetLink && (
+                  <a href={m.meetLink} target="_blank" rel="noopener noreferrer" className="text-[12.5px] font-semibold">
+                    Join ↗
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </Card>
   );

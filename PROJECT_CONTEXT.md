@@ -7185,3 +7185,70 @@ Also the same day: a **quick-access bar** on the Portfolio (Societies · Live mo
 stock), and **advances on retail invoices** — a retail sale's payment is Paid / Advance received
 / Unpaid; the advance is prefilled from the paper's own Total − Balance Due, "still owed" is
 total − advance, and the customer pages show both (migration `20260925150000_retail_advance`).
+
+## Google Calendar & Meet (2026-09-25) — user-asked, researched
+
+A task with a time, and every other open appointment, goes onto people's Google calendars. The
+Schedule tab creates **meetings** with invitees and a Google Meet link. Decision and Google's
+documented constraints are in `docs/engineering/18-google-calendar.md`.
+
+**Route.** firsthing.earth is on Google Workspace, so the app uses a Workspace **service account
+with domain-wide delegation**, scope `calendar.events` only. It acts as the organizer, and Google
+itself sends the invitations. The alternatives were weighed and not chosen: an emailed `.ics` has
+no email provider, no Meet link and no reliable updates; per-user OAuth needs token plumbing for
+every person. A plain service account cannot invite attendees (Google answers 403), so delegation
+is required.
+
+**How it works.**
+- **Direction:** one way, app → Google. Only RSVPs are read back.
+- **Organizer:** the person who set the entry if their login is on the domain, else a configured
+  fallback organizer.
+- **Idempotent ids:** the Google event id is derived from the row id, so a push that runs twice can
+  never create two events.
+- **Sync marking:** the sync writes with `updatedAt` held, so pushing never re-dirties a row.
+- **When pushes happen:** tasks and meetings push from their own action. Everything else — deal
+  visits, retries, RSVPs — goes through the new `calendar_sync` job every 5 minutes.
+- **What does not sync:** history (never-pushed entries more than a day old). Cancelled entries are
+  deleted from Google; done entries are left in place.
+- **Failures:** a failure is shown on the entry with **Try again**, and the sweep gives up after 5
+  attempts.
+- **Where things live:**
+  - Pure rules: `src/lib/calendar-event.ts` (17 unit cases).
+  - Google client: `src/lib/google-calendar.ts` — hand-written JWT/RS256, no `googleapis`
+    dependency.
+  - DB side: `src/lib/calendar-sync.ts`.
+- **Migration:** `20260925160000_google_calendar` adds the sync columns on `scheduled_events`,
+  `scheduled_event_attendees`, `google_calendar_config`, `ScheduleKind.meeting` and
+  `job_type.calendar_sync`.
+
+**Screens.**
+- **Schedule tab:**
+  - **New meeting** — date, start, length, colleagues by typeahead, other people by email, agenda,
+    society, and Meet on by default.
+  - Each meeting shows **Join Google Meet**, **Open in Google Calendar**, and each invitee's answer.
+  - The host or operations can **Change** or **Cancel** a meeting.
+  - An invitee sees the meeting on their own schedule.
+  - A banner says when Google Calendar is not connected.
+- **Dashboard:** "Coming meetings" with Join.
+- **Tasks:** "on Google Calendar" and the Join link.
+- **Settings → Google Calendar:** operations only, save-and-test, key write-only, with the
+  Workspace-admin setup steps on the page.
+
+**Limits, stated.**
+- Google Meet cannot be embedded in another site, so Join opens Meet in a new tab.
+- Edits made in Google Calendar are not read back.
+
+**Verified** in a browser against the stand-in (`GOOGLE_CALENDAR_FAKE=1`), 24/24:
+- A bad address is refused by name.
+- A meeting is pushed with a Meet link and invitees (a colleague linked, an outsider by email).
+- Join appears for the host and the invitee.
+- The invitee cannot change the meeting. The server refusal was driven by moving ownership behind
+  the open dialog, and it logged `meeting.act_refused`.
+- Accepted reads back. A reschedule re-pushes.
+- A timed task is pushed with its creator as organizer.
+- The sweep pushes a survey visit booked elsewhere and never writes history.
+- Cancel deletes.
+
+The real signing path was checked against Google's token endpoint with a throwaway key: Google
+accepted the request's form and refused the unknown account. **Not yet run against the real
+account** — that needs the Workspace admin's service account and delegation grant.

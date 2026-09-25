@@ -12,6 +12,7 @@ import { logger } from "@/lib/logger";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { dueInstant, mayActOnTask, refuseTask } from "@/lib/tasks";
+import { syncCalendarEventQuietly } from "@/lib/calendar-sync";
 
 type Result = { error?: string };
 
@@ -53,6 +54,8 @@ export async function createTask(input: TaskInput): Promise<Result> {
     },
   });
   logger.info("task.created", { actorId: actor.id, taskId: t.id, assigneeId: input.assigneeId, due: input.due });
+  // Onto the assignee's Google calendar straight away; the sweep retries a failure.
+  await syncCalendarEventQuietly(t.id);
   refresh();
   return {};
 }
@@ -91,6 +94,7 @@ export async function reopenTask(id: string): Promise<Result> {
     data: { status: "scheduled", completedAt: null, completedById: null, completionNote: null, cancelledAt: null, cancelledReason: null },
   });
   logger.info("task.reopened", { actorId: r.actor.id, taskId: id });
+  await syncCalendarEventQuietly(id);
   refresh();
   return {};
 }
@@ -102,6 +106,7 @@ export async function cancelTask(id: string, reason: string): Promise<Result> {
   if (!reason.trim()) return { error: "Say why it is being cancelled." };
   await db.scheduledEvent.update({ where: { id }, data: { status: "cancelled", cancelledAt: new Date(), cancelledReason: reason.trim() } });
   logger.info("task.cancelled", { actorId: r.actor.id, taskId: id });
+  await syncCalendarEventQuietly(id);
   refresh();
   return {};
 }
@@ -126,6 +131,7 @@ export async function updateTask(id: string, input: TaskInput): Promise<Result> 
     },
   });
   logger.info("task.updated", { actorId: r.actor.id, taskId: id, assigneeId: input.assigneeId });
+  await syncCalendarEventQuietly(id);
   refresh();
   return {};
 }

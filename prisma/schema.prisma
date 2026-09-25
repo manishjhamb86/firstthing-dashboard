@@ -234,6 +234,8 @@ enum JobType {
   // backlog one file at a time on its own cadence, rather than an operator
   // clicking Read on every row (src/lib/invoice-intake-extract.ts).
   invoice_intake_sweep
+  // Google Calendar (2026-09-25): push changed events, read back RSVPs.
+  calendar_sync
 
   @@map("job_type")
 }
@@ -517,6 +519,8 @@ model AdminUser {
   documentExtractions         DocumentExtraction[]     @relation("DocumentExtractionConfirmedBy")
   ewelinkConfigsUpdated       EwelinkApiConfig[]       @relation("EwelinkApiConfigUpdatedBy")
   tankApiConfigUpdated        TankApiConfig[]          @relation("TankApiConfigUpdatedBy")
+  googleCalendarConfigUpdated GoogleCalendarConfig[]   @relation("GoogleCalendarConfigUpdatedBy")
+  meetingInvitations          ScheduledEventAttendee[] @relation("ScheduledEventAttendeeUser")
   circuitsReplacementAssigned Circuit[]                @relation("CircuitReplacementAssignedBy")
   scheduledEventsCreated      ScheduledEvent[]         @relation("ScheduledEventCreatedBy")
   pipelinesLogged             Pipeline[]               @relation("PipelineLoggedBy")
@@ -747,8 +751,25 @@ model ScheduledEvent {
   contactPhone String? @map("contact_phone")
   note         String?
 
+  /// Google Calendar (2026-09-25). The app is the source of truth and pushes
+  /// one way: a timed event is written to the organizer's Google calendar with
+  /// the assignee (and a meeting's invitees) as attendees. `calendarSyncedAt`
+  /// against `updatedAt` is what the sweep reads to know a row changed since
+  /// it was last pushed; the sync writes its own columns with `updatedAt`
+  /// held, so pushing never marks the row dirty again.
+  addMeet              Boolean   @default(false) @map("add_meet")
+  meetLink             String?   @map("meet_link")
+  googleEventId        String?   @map("google_event_id")
+  googleOrganizer      String?   @map("google_organizer")
+  googleHtmlLink       String?   @map("google_html_link")
+  calendarSyncedAt     DateTime? @map("calendar_synced_at")
+  calendarSyncError    String?   @map("calendar_sync_error")
+  calendarSyncAttempts Int       @default(0) @map("calendar_sync_attempts")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  attendees ScheduledEventAttendee[]
 
   assignee  AdminUser @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
   createdBy AdminUser @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
@@ -761,6 +782,47 @@ model ScheduledEvent {
   @@map("scheduled_events")
 }
 
+/// Who else is invited to a meeting (2026-09-25): a colleague (adminUserId
+/// set) or anyone by email. The response is read back from Google.
+model ScheduledEventAttendee {
+  id             String    @id @default(cuid())
+  eventId        String    @map("event_id")
+  adminUserId    String?   @map("admin_user_id")
+  email          String
+  /// needsAction | accepted | declined | tentative — as Google reports it.
+  responseStatus String?   @map("response_status")
+  respondedAt    DateTime? @map("responded_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  event     ScheduledEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  adminUser AdminUser?     @relation("ScheduledEventAttendeeUser", fields: [adminUserId], references: [id])
+
+  @@unique([eventId, email])
+  @@index([adminUserId])
+  @@map("scheduled_event_attendees")
+}
+
+/// The Google Workspace service account the calendar sync acts through
+/// (2026-09-25). Singleton; the private key is write-only on screen.
+model GoogleCalendarConfig {
+  id                String    @id @default("singleton")
+  clientEmail       String    @map("client_email")
+  privateKey        String    @map("private_key")
+  /// Accounts on this domain organize their own events; anyone else's are
+  /// organized by `fallbackOrganizer`.
+  workspaceDomain   String    @map("workspace_domain")
+  fallbackOrganizer String    @map("fallback_organizer")
+  enabled           Boolean   @default(true)
+  updatedById       String?   @map("updated_by_id")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  lastOkAt          DateTime? @map("last_ok_at")
+  lastError         String?   @map("last_error")
+
+  updatedBy AdminUser? @relation("GoogleCalendarConfigUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("google_calendar_config")
+}
+
 enum ScheduleKind {
   demo_meeting
   survey_visit
@@ -769,6 +831,8 @@ enum ScheduleKind {
   /// A task someone created and assigned (2026-09-25) — the same list the
   /// deal's own assignments land in, so a person has one place for their work.
   task
+  /// A meeting with invitees, usually with a Google Meet link (2026-09-25).
+  meeting
 }
 
 enum TaskPriority {

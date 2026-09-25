@@ -13,8 +13,12 @@ import {
   timeLabel,
   type CalendarEvent,
 } from "@/lib/schedule";
+import { RESPONSE_LABEL, type ResponseStatus } from "@/lib/calendar-event";
+import { resolveCalendarConfig } from "@/lib/google-calendar";
+import { MeetingActions, NewMeetingButton, RetrySyncButton, type MeetingEdit } from "./meeting-controls";
 
 export const metadata = { title: "Schedule" };
+export const dynamic = "force-dynamic";
 
 /**
  * Everyone's coming appointments, in one place.
@@ -31,14 +35,15 @@ export const metadata = { title: "Schedule" };
 export default async function SchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ who?: string }>;
+  searchParams: Promise<{ who?: string; open?: string }>;
 }) {
   await requireAdminPage();
   const actor = await resolveAdmin();
   if (!actor) redirect("/admin");
 
   const ops = isOperations(actor.team);
-  const everyone = ops && (await searchParams).who === "everyone";
+  const sp = await searchParams;
+  const everyone = ops && sp.who === "everyone";
 
   // Every OPEN appointment, however old. A fortnight's lookback silently hid
   // a visit booked for an earlier date — the assignee's own calendar said
@@ -49,14 +54,24 @@ export default async function SchedulePage({
   const rows = await db.scheduledEvent.findMany({
     where: {
       status: "scheduled",
-      ...(everyone ? {} : { assigneeId: actor.id }),
+      // Your own appointments, and meetings you are invited to (2026-09-25).
+      ...(everyone ? {} : { OR: [{ assigneeId: actor.id }, { attendees: { some: { adminUserId: actor.id } } }] }),
     },
     orderBy: { startAt: "asc" },
     include: {
       assignee: { select: { name: true, email: true } },
       society: { select: { name: true } },
+      attendees: { select: { email: true, adminUserId: true, responseStatus: true, adminUser: { select: { name: true } } } },
     },
   });
+  const [calendar, people, societies] = await Promise.all([
+    resolveCalendarConfig(),
+    db.adminUser.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true, name: true, email: true }, orderBy: { name: "asc" } }),
+    db.society.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const peopleDto = people.map((p) => ({ id: p.id, name: p.name ?? p.email, email: p.email }));
+  const iso = (d: Date) => d.toISOString();
 
   const events: CalendarEvent[] = rows.map((e) => ({
     id: e.id,
@@ -69,7 +84,9 @@ export default async function SchedulePage({
     contactName: e.contactName,
     contactPhone: e.contactPhone,
     note: e.note,
-    href: e.kind === "task"
+    href: e.kind === "meeting"
+      ? null
+      : e.kind === "task"
       ? `/admin/tasks?open=${e.id}`
       : e.pipelineId
       ? e.kind === "survey_visit"
@@ -101,16 +118,35 @@ export default async function SchedulePage({
           )
         }
         action={
-          ops ? (
-            <Link
-              href={everyone ? "/admin/schedule" : "/admin/schedule?who=everyone"}
-              className="btn-ghost btn-sm"
-            >
-              {everyone ? "Just mine" : "Everyone's"}
-            </Link>
-          ) : undefined
+          <div className="flex flex-wrap gap-2">
+            {ops && (
+              <Link
+                href={everyone ? "/admin/schedule" : "/admin/schedule?who=everyone"}
+                className="btn-ghost btn-sm"
+              >
+                {everyone ? "Just mine" : "Everyone's"}
+              </Link>
+            )}
+            <NewMeetingButton people={peopleDto} societies={societies} me={actor.id} today={iso(now).slice(0, 10)} />
+          </div>
         }
       />
+
+      {!calendar && (
+        <p className="mb-5 rounded-lg px-4 py-3 text-[13px]" style={{ background: "var(--warn-bg)", color: "var(--warn-fg)" }}>
+          Google Calendar is not connected, so nothing here reaches anyone&apos;s calendar and meetings get no Meet link.
+          {ops ? (
+            <>
+              {" "}
+              <Link href="/admin/settings/google-calendar" className="font-semibold underline">
+                Connect it
+              </Link>
+            </>
+          ) : (
+            " Operations can connect it under Settings."
+          )}
+        </p>
+      )}
 
       <StatRow>
         <Stat
@@ -158,10 +194,31 @@ export default async function SchedulePage({
                   )}
                 </div>
                 <ul className="space-y-3">
-                  {day.events.map((e) => (
+                  {day.events.map((e) => {
+                    const row = byId.get(e.id)!;
+                    const meeting = row.kind === "meeting";
+                    const canManage = meeting && (row.createdById === actor.id || ops);
+                    const edit: MeetingEdit = {
+                      id: row.id,
+                      input: {
+                        title: row.title,
+                        agenda: row.description ?? "",
+                        date: iso(row.startAt).slice(0, 10),
+                        time: iso(row.startAt).slice(11, 16),
+                        minutes: row.endAt ? Math.round((row.endAt.getTime() - row.startAt.getTime()) / 60_000) : 30,
+                        inviteeIds: row.attendees.filter((a) => a.adminUserId).map((a) => a.adminUserId!),
+                        otherEmails: row.attendees.filter((a) => !a.adminUserId).map((a) => a.email).join(", "),
+                        societyId: row.societyId ?? "",
+                        addMeet: row.addMeet,
+                      },
+                    };
+                    const tracked = row.googleEventId !== null || row.startAt.getTime() >= now.getTime() - 86_400_000;
+                    return (
                     <li
                       key={e.id}
+                      id={`ev-${e.id}`}
                       className="border-t border-[var(--border-subtle)] pt-3 first:border-t-0 first:pt-0"
+                      style={sp.open === e.id ? { background: "var(--accent-subtle)" } : undefined}
                     >
                       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                         <span className="font-medium">
@@ -183,8 +240,50 @@ export default async function SchedulePage({
                           : "no site contact recorded"}
                       </p>
                       {e.note && <p className="text-[13px] mt-1">{e.note}</p>}
+                      {meeting && row.description && <p className="whitespace-pre-line text-[13px] mt-1">{row.description}</p>}
+                      {meeting && row.attendees.length > 0 && (
+                        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                          {row.attendees.map((a) => (
+                            <span key={a.email}>
+                              {a.adminUser?.name ?? a.email}
+                              <span style={{ color: a.responseStatus === "declined" ? "var(--bad-fg)" : a.responseStatus === "accepted" ? "var(--ok-fg)" : "var(--text-subtle)" }}>
+                                {" "}
+                                · {RESPONSE_LABEL[(a.responseStatus ?? "needsAction") as ResponseStatus] ?? a.responseStatus}
+                              </span>
+                            </span>
+                          ))}
+                        </p>
+                      )}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {row.meetLink && (
+                          <a href={row.meetLink} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-sm">
+                            Join Google Meet
+                          </a>
+                        )}
+                        {calendar && tracked && (
+                          row.calendarSyncError ? (
+                            <>
+                              <StatusChip tone="bad">Not on Google Calendar</StatusChip>
+                              <span className="text-[12px]" style={{ color: "var(--bad-fg)" }}>{row.calendarSyncError}</span>
+                              <RetrySyncButton id={row.id} />
+                            </>
+                          ) : row.googleEventId ? (
+                            row.googleHtmlLink ? (
+                              <a href={row.googleHtmlLink} target="_blank" rel="noopener noreferrer" className="text-[12.5px] font-semibold">
+                                Open in Google Calendar ↗
+                              </a>
+                            ) : (
+                              <StatusChip tone="ok">On Google Calendar</StatusChip>
+                            )
+                          ) : (
+                            <StatusChip tone="neu">Adding to Google Calendar…</StatusChip>
+                          )
+                        )}
+                        <MeetingActions edit={edit} canManage={canManage} people={peopleDto} societies={societies} me={actor.id} />
+                      </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               </Card>
             );

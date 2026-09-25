@@ -145,6 +145,8 @@ export function AppShell({
       showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb },
       showUsers && { href: "/admin/users", label: "Admin users", icon: Users },
       (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
+      // Operations-only page; shown under the same broad flag, the page redirects anyone else.
+      showUsers && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },
     ]),
   ];
 

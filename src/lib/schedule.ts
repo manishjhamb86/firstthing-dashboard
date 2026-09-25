@@ -25,6 +25,7 @@ export const SCHEDULE_KIND: Record<ScheduleKind, { label: string; verb: string }
   installation_day: { label: "Installation", verb: "Installation day" },
   other: { label: "Appointment", verb: "Appointment" },
   task: { label: "Task", verb: "Task" },
+  meeting: { label: "Meeting", verb: "Meeting" },
 };
 
 export type CalendarEvent = {

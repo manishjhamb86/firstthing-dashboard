@@ -114,11 +114,15 @@ async function accessToken(cfg: CalendarConfig, subject: string): Promise<string
   return body.access_token;
 }
 
+type GoogleTime = { date?: string; dateTime?: string; timeZone?: string };
 type GoogleEvent = {
   id: string;
   htmlLink?: string;
   hangoutLink?: string;
   status?: string;
+  summary?: string;
+  start?: GoogleTime;
+  end?: GoogleTime;
   conferenceData?: { entryPoints?: Array<{ entryPointType?: string; uri?: string }> };
   attendees?: Array<{ email: string; responseStatus?: string }>;
 };
@@ -184,6 +188,31 @@ export async function deleteEvent(cfg: CalendarConfig, organizer: string, eventI
     await call(cfg, organizer, "DELETE", `/${eventId}?sendUpdates=all`);
   } catch (err) {
     if (err instanceof CalendarError && (err.status === 404 || err.status === 410)) return;
+    throw err;
+  }
+}
+
+/** The event as Google has it now, for the read-back; null when it is gone. */
+export async function readEvent(cfg: CalendarConfig, organizer: string, eventId: string): Promise<{
+  status: string;
+  summary: string | null;
+  start: GoogleTime | null;
+  end: GoogleTime | null;
+  attendees: Array<{ email: string; responseStatus: string }>;
+} | null> {
+  if (calendarFake()) return null;
+  try {
+    const e = await call(cfg, organizer, "GET", `/${eventId}`);
+    if (!e) return null;
+    return {
+      status: e.status ?? "confirmed",
+      summary: e.summary ?? null,
+      start: e.start ?? null,
+      end: e.end ?? null,
+      attendees: (e.attendees ?? []).map((a) => ({ email: a.email.toLowerCase(), responseStatus: a.responseStatus ?? "needsAction" })),
+    };
+  } catch (err) {
+    if (err instanceof CalendarError && (err.status === 404 || err.status === 410)) return { status: "cancelled", summary: null, start: null, end: null, attendees: [] };
     throw err;
   }
 }

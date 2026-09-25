@@ -8,8 +8,8 @@
 
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
-import { attendeeEmails, googleEventBody, googleEventIdFor, organizerFor, syncDecision } from "@/lib/calendar-event";
-import { CalendarError, deleteEvent, pushEvent, readResponses, resolveCalendarConfig, type CalendarConfig } from "@/lib/google-calendar";
+import { MAX_SYNC_ATTEMPTS, attendeeEmails, googleEventBody, googleEventIdFor, organizerFor, readBack, syncDecision } from "@/lib/calendar-event";
+import { CalendarError, deleteEvent, pushEvent, readEvent, resolveCalendarConfig, type CalendarConfig } from "@/lib/google-calendar";
 
 function appUrlFor(e: { id: string; kind: string; pipelineId: string | null }): string | null {
   const base = process.env.AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL;
@@ -139,28 +139,110 @@ export async function runCalendarSweep(limit = 50): Promise<{ pushed: number; fa
   return { pushed, failed, responses };
 }
 
-/** Read back who accepted or declined, for meetings in the coming week. */
+/**
+ * Read every clean, upcoming entry back from Google (2026-09-25, two-way
+ * sync): changes made there — a new time, a new title, guests added or
+ * removed, the event deleted — come into the app, and replies are recorded.
+ * "Clean" means pushed and not edited here since; an entry with an app edit
+ * still on its way out is left alone, so the app's change wins.
+ */
 async function refreshResponses(cfg: CalendarConfig): Promise<number> {
   const now = new Date();
-  const meetings = await db.scheduledEvent.findMany({
-    where: { kind: "meeting", status: "scheduled", googleEventId: { not: null }, startAt: { gte: new Date(now.getTime() - 86_400_000), lte: new Date(now.getTime() + 7 * 86_400_000) } },
-    select: { id: true, googleEventId: true, googleOrganizer: true, attendees: { select: { id: true, email: true, responseStatus: true } } },
-    take: 50,
-  });
+  const rows = await db.$queryRaw<Array<{ id: string }>>`
+    SELECT id FROM scheduled_events
+    WHERE status = 'scheduled' AND google_event_id IS NOT NULL
+      AND calendar_synced_at IS NOT NULL AND updated_at <= calendar_synced_at
+      AND start_at >= ${new Date(now.getTime() - 86_400_000)} AND start_at <= ${new Date(now.getTime() + 60 * 86_400_000)}
+    ORDER BY start_at ASC
+    LIMIT 100`;
   let changed = 0;
-  for (const m of meetings) {
+  for (const { id } of rows) {
     try {
-      const answers = new Map((await readResponses(cfg, m.googleOrganizer ?? cfg.fallbackOrganizer, m.googleEventId!)).map((a) => [a.email, a.responseStatus]));
-      for (const a of m.attendees) {
-        const r = answers.get(a.email.toLowerCase());
-        if (r && r !== a.responseStatus) {
-          await db.scheduledEventAttendee.update({ where: { id: a.id }, data: { responseStatus: r, respondedAt: new Date() } });
-          changed += 1;
-        }
-      }
+      if (await readBackOne(cfg, id)) changed += 1;
     } catch (err) {
-      logger.warn("calendar.responses_failed", { eventId: m.id, error: String(err) });
+      logger.warn("calendar.read_back_failed", { eventId: id, error: String(err) });
     }
   }
   return changed;
+}
+
+/** One entry's read-back; true when anything in the app changed. */
+export async function readBackOne(cfg: CalendarConfig, id: string): Promise<boolean> {
+  const e = await db.scheduledEvent.findUnique({
+    where: { id },
+    include: { assignee: { select: { email: true } }, attendees: { select: { id: true, email: true, responseStatus: true } } },
+  });
+  if (!e || !e.googleEventId || e.status !== "scheduled") return false;
+  const organizer = e.googleOrganizer ?? cfg.fallbackOrganizer;
+  const g = await readEvent(cfg, organizer, e.googleEventId);
+  if (!g) return false;
+  let changed = false;
+
+  // Replies first — they are recorded whatever else happened.
+  const answers = new Map(g.attendees.map((a) => [a.email, a.responseStatus]));
+  for (const a of e.attendees) {
+    const r = answers.get(a.email.toLowerCase());
+    if (r && r !== a.responseStatus) {
+      await db.scheduledEventAttendee.update({ where: { id: a.id }, data: { responseStatus: r, respondedAt: new Date() } });
+      changed = true;
+    }
+  }
+
+  const rb = readBack(
+    {
+      kind: e.kind,
+      title: e.title,
+      startAt: e.startAt,
+      endAt: e.endAt,
+      allDay: e.allDay,
+      attendeeEmails: e.attendees.map((a) => a.email),
+      organizer,
+      assigneeEmail: e.assignee.email,
+    },
+    g,
+  );
+  if (rb.kind === "none") return changed;
+  // The app now matches Google, so the row is clean at the same instant it changed.
+  const stamp = new Date();
+  if (rb.kind === "deleted") {
+    if (e.kind === "task" || e.kind === "meeting") {
+      await db.scheduledEvent.update({
+        where: { id },
+        data: { status: "cancelled", cancelledAt: stamp, cancelledReason: "Deleted in Google Calendar", updatedAt: stamp, calendarSyncedAt: stamp },
+      });
+      logger.info("calendar.read_back", { eventId: id, kind: e.kind, change: "deleted_in_google" });
+    } else {
+      // A deal appointment belongs to its deal step: deleting the calendar
+      // copy does not undo the booking. It is flagged, not cancelled.
+      await db.scheduledEvent.update({
+        where: { id },
+        data: { updatedAt: e.updatedAt, calendarSyncError: "Removed from Google Calendar — it is still booked here. Try again to put it back.", calendarSyncAttempts: MAX_SYNC_ATTEMPTS },
+      });
+      logger.info("calendar.read_back", { eventId: id, kind: e.kind, change: "removed_from_google_flagged" });
+    }
+    return true;
+  }
+  const people = rb.addEmails.length
+    ? await db.adminUser.findMany({ where: { email: { in: rb.addEmails, mode: "insensitive" }, deletedAt: null }, select: { id: true, email: true } })
+    : [];
+  const byEmail = new Map(people.map((p) => [p.email.toLowerCase(), p.id]));
+  await db.$transaction([
+    db.scheduledEvent.update({
+      where: { id },
+      data: {
+        ...(rb.startAt ? { startAt: rb.startAt } : {}),
+        ...(rb.endAt !== undefined ? { endAt: rb.endAt } : {}),
+        ...(rb.allDay !== undefined ? { allDay: rb.allDay } : {}),
+        ...(rb.title ? { title: rb.title } : {}),
+        updatedAt: stamp,
+        calendarSyncedAt: stamp,
+      },
+    }),
+    ...(rb.removeEmails.length ? [db.scheduledEventAttendee.deleteMany({ where: { eventId: id, email: { in: rb.removeEmails } } })] : []),
+    ...rb.addEmails.map((email) =>
+      db.scheduledEventAttendee.create({ data: { eventId: id, email, adminUserId: byEmail.get(email) ?? null, responseStatus: answers.get(email) ?? null } }),
+    ),
+  ]);
+  logger.info("calendar.read_back", { eventId: id, kind: e.kind, change: rb.what.join(","), added: rb.addEmails.length, removed: rb.removeEmails.length });
+  return true;
 }

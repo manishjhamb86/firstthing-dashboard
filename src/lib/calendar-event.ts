@@ -113,6 +113,18 @@ export type EventForGoogle = {
   appUrl: string | null;
 };
 
+/**
+ * Whether an entry is a whole-day one. Tasks and meetings say so themselves;
+ * a deal appointment recorded with only a date is stored at midnight with no
+ * end (the schedule already reads those as "All day"), and must not reach
+ * Google as a midnight-to-1am event.
+ */
+export function effectiveAllDay(e: { kind: ScheduleKind; startAt: Date; endAt: Date | null; allDay: boolean }): boolean {
+  if (e.allDay) return true;
+  if (e.kind === "task" || e.kind === "meeting") return false;
+  return !e.endAt && e.startAt.getUTCHours() === 0 && e.startAt.getUTCMinutes() === 0;
+}
+
 /** The body sent to Google (insert and patch alike). */
 export function googleEventBody(e: EventForGoogle, attendees: string[]) {
   const lines = [
@@ -124,7 +136,7 @@ export function googleEventBody(e: EventForGoogle, attendees: string[]) {
   ].filter((x): x is string => !!x && !!x.trim());
   let start: { date?: string; dateTime?: string; timeZone?: string };
   let end: { date?: string; dateTime?: string; timeZone?: string };
-  if (e.allDay) {
+  if (effectiveAllDay(e)) {
     const next = new Date(Date.UTC(e.startAt.getUTCFullYear(), e.startAt.getUTCMonth(), e.startAt.getUTCDate() + 1));
     start = { date: dayOf(e.startAt) };
     end = { date: dayOf(next) };
@@ -185,4 +197,83 @@ export function refuseMeeting(m: MeetingInput): string | null {
   if (bad.length) return `Not an email address: ${bad.join(", ")}`;
   if (m.inviteeIds.length === 0 && parseEmailList(m.otherEmails).length === 0) return "Invite at least one person.";
   return null;
+}
+
+// ---- the read-back (2026-09-25, user-asked two-way sync) -------------------
+// Changes made to an app entry inside Google Calendar come back: a new time,
+// a new title, guests added or removed on a meeting, the event deleted.
+// Replies are read as before. An entry edited in the app and not yet pushed is
+// not read back — the app's own change is on its way out and wins.
+
+/** Google's start/end, as the app's stored wall-clock (IST read as UTC). */
+export function wallClockFromGoogle(t: { date?: string; dateTime?: string } | null): { at: Date; allDay: boolean } | null {
+  if (!t) return null;
+  if (t.date) return { at: new Date(`${t.date}T00:00:00Z`), allDay: true };
+  if (!t.dateTime) return null;
+  const instant = new Date(t.dateTime);
+  if (Number.isNaN(instant.getTime())) return null;
+  // Shift the instant into India time, then keep its clock reading.
+  return { at: new Date(instant.getTime() + 330 * 60_000), allDay: false };
+}
+
+export type ReadBackRow = {
+  kind: ScheduleKind;
+  title: string;
+  startAt: Date;
+  endAt: Date | null;
+  allDay: boolean;
+  attendeeEmails: string[];
+  organizer: string;
+  assigneeEmail: string | null;
+};
+
+export type ReadBackGoogle = {
+  status: string;
+  summary: string | null;
+  start: { date?: string; dateTime?: string } | null;
+  end: { date?: string; dateTime?: string } | null;
+  attendees: Array<{ email: string }>;
+};
+
+export type ReadBack =
+  | { kind: "none" }
+  | { kind: "deleted" }
+  | { kind: "changed"; startAt?: Date; endAt?: Date | null; allDay?: boolean; title?: string; addEmails: string[]; removeEmails: string[]; what: string[] };
+
+/** What changed in Google, compared with what the app last pushed (a clean row IS what was pushed). */
+export function readBack(row: ReadBackRow, g: ReadBackGoogle): ReadBack {
+  if (g.status === "cancelled") return { kind: "deleted" };
+  const what: string[] = [];
+  const out: Extract<ReadBack, { kind: "changed" }> = { kind: "changed", addEmails: [], removeEmails: [], what };
+  const s = wallClockFromGoogle(g.start);
+  const e = wallClockFromGoogle(g.end);
+  if (s) {
+    if (s.allDay !== effectiveAllDay(row) || s.at.getTime() !== row.startAt.getTime()) {
+      out.startAt = s.at;
+      out.allDay = s.allDay;
+      what.push("time");
+    }
+    if (!s.allDay && e && row.endAt && e.at.getTime() !== row.endAt.getTime()) {
+      out.endAt = e.at;
+      if (!what.includes("time")) what.push("time");
+    } else if (!s.allDay && e && !row.endAt && out.startAt && row.kind === "meeting") {
+      out.endAt = e.at;
+    }
+  }
+  if (g.summary) {
+    const title = row.kind === "task" ? g.summary.replace(/^Task:\s*/, "") : g.summary;
+    if (title.trim() && title.trim() !== row.title) {
+      out.title = title.trim();
+      what.push("title");
+    }
+  }
+  if (row.kind === "meeting") {
+    const inGoogle = new Set(g.attendees.map((a) => a.email.toLowerCase()));
+    inGoogle.delete(row.organizer.toLowerCase());
+    const inApp = new Set(row.attendeeEmails.map((x) => x.toLowerCase()));
+    out.addEmails = [...inGoogle].filter((x) => !inApp.has(x) && x !== (row.assigneeEmail ?? "").toLowerCase());
+    out.removeEmails = [...inApp].filter((x) => !inGoogle.has(x));
+    if (out.addEmails.length || out.removeEmails.length) what.push("guests");
+  }
+  return what.length ? out : { kind: "none" };
 }

@@ -157,14 +157,28 @@ function ValidPeriod({ window: w }: { window: ReadingWindowDTO }) {
   );
 }
 
+type Kind = ReadingWindowDTO["kind"];
+const KIND_CHOICE: Record<Kind, string> = {
+  pre_install: "Before installation — the pre-installation (demo) readings",
+  post_install: "After installation — the post-installation (demo) readings",
+  monitoring: "Ongoing — monthly readings after the demo",
+};
+
 export function CircuitReadingPanel({
   circuitId,
-  window: windowInfo,
+  window: stepWindow,
+  windows,
   demoMode = false,
   resumeFile,
 }: {
   circuitId: string;
   window: ReadingWindowDTO | null;
+  /**
+   * The valid dates for each thing the readings could be for (2026-09-25).
+   * When there is more than one, the panel asks — a circuit whose benchmark is
+   * already confirmed still needs its demo readings uploaded.
+   */
+  windows?: Partial<Record<Kind, ReadingWindowDTO | null>> | null;
   demoMode?: boolean;
   /**
    * A file already waiting in the review queue — filed by the meter page's
@@ -175,6 +189,11 @@ export function CircuitReadingPanel({
   resumeFile?: { id: string; fileName: string; fromMeter: boolean } | null;
 }) {
   const router = useRouter();
+  const choices = (Object.keys(KIND_CHOICE) as Kind[]).filter((k) => windows?.[k]);
+  const [kind, setKind] = useState<Kind | null>(stepWindow?.kind ?? null);
+  const windowInfo: ReadingWindowDTO | null = (kind && windows?.[kind]) || stepWindow;
+  // Sent only when the operator chose something other than the circuit's own step.
+  const chosenKind = kind && kind !== stepWindow?.kind ? kind : undefined;
   const [stage, setStage] = useState<"idle" | "working" | "fill" | "sheet" | "review" | "done">("idle");
   const [sheets, setSheets] = useState<SheetChoice[]>([]);
   const [error, setError] = useState<string | undefined>();
@@ -304,7 +323,7 @@ export function CircuitReadingPanel({
     setError(undefined);
     setStage("working");
     startTransition(async () => {
-      const previewed = await previewCircuitReadings(rawFileId, "", name, rangeFrom, rangeTo);
+      const previewed = await previewCircuitReadings(rawFileId, "", name, rangeFrom, rangeTo, chosenKind);
       if ("error" in previewed) {
         setError(previewed.error);
         setStage("sheet");
@@ -338,7 +357,7 @@ export function CircuitReadingPanel({
     setFileName(resumeFile.fileName);
     startTransition(async () => {
       try {
-        const previewed = await previewCircuitReadings(resumeFile.id, "", undefined, rangeFrom, rangeTo);
+        const previewed = await previewCircuitReadings(resumeFile.id, "", undefined, rangeFrom, rangeTo, chosenKind);
         if ("error" in previewed) throw new Error(previewed.error);
         setRawFileId(resumeFile.id);
         setFileText(undefined);
@@ -387,7 +406,7 @@ export function CircuitReadingPanel({
           byteSize: file.size,
         });
         if ("error" in recorded) throw new Error(recorded.error);
-        const previewed = await previewCircuitReadings(recorded.rawFileId, text, undefined, rangeFrom, rangeTo);
+        const previewed = await previewCircuitReadings(recorded.rawFileId, text, undefined, rangeFrom, rangeTo, chosenKind);
         if ("error" in previewed) throw new Error(previewed.error);
         setRawFileId(recorded.rawFileId);
         setFileText(text);
@@ -418,7 +437,7 @@ export function CircuitReadingPanel({
           ? { countInAverage: !noAverage.has(r.date) && !r.partial }
           : {}),
       }));
-      const result = await commitCircuitReadings(rawFileId, fileText ?? "", decisions, rangeFrom, rangeTo);
+      const result = await commitCircuitReadings(rawFileId, fileText ?? "", decisions, rangeFrom, rangeTo, chosenKind);
       if ("error" in result) {
         setError(result.error);
       } else {
@@ -599,7 +618,40 @@ export function CircuitReadingPanel({
   if (stage !== "review" || !preview) {
     return (
       <Card className="p-5 space-y-4">
+        {choices.length > 1 && (
+          <div className="rounded-[var(--r-sm)] border p-3" style={{ borderColor: "var(--border)" }}>
+            <p className="lbl mb-2">What are these readings for?</p>
+            <div className="space-y-1.5 text-[13.5px]">
+              {choices.map((k) => (
+                <label key={k} className="flex items-center gap-2">
+                  <input
+                    type="radio"
+                    name={`reading-kind-${circuitId}`}
+                    checked={kind === k}
+                    onChange={() => {
+                      setKind(k);
+                      const w = windows?.[k];
+                      setRangeFrom(w?.from ?? "");
+                      setRangeTo(w?.to ?? "");
+                    }}
+                    disabled={pending}
+                  />
+                  <span>
+                    {KIND_CHOICE[k]}
+                    {k === stepWindow?.kind && <span style={{ color: "var(--text-subtle)" }}> · this circuit&apos;s current step</span>}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
         {windowInfo && <ValidPeriod window={windowInfo} />}
+        {windowInfo && windowInfo.kind !== "monitoring" && windowInfo.startBasis !== "the demo period set for this circuit" && (
+          <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+            No demo period is set, so every day in this range counts.{" "}
+            <a href="#demo-periods" className="font-semibold">Set the demo periods</a> to count exactly the demo days, before and after installation.
+          </p>
+        )}
 
         {windowInfo && !windowInfo.empty && (
           <div className="rounded-[var(--r-sm)] border p-3 text-sm" style={{ borderColor: "var(--border)" }}>

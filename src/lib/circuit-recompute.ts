@@ -50,7 +50,14 @@ export async function recomputeCircuitFigures(
   // the figures the demo produced even after they settled — the operator
   // changed the evidence on purpose. A benchmark that came from the circuit's
   // demos or an agreed override is not the window's to change.
-  const benchmarkFromWindow = circuit.demos.length === 0 && circuit.benchmarkOverridePct === null;
+  // Once demo periods are set and hold readings, THEY are the demo — the
+  // paper report's demos step aside (2026-09-25, user-asked). An agreed
+  // override always stands.
+  const postWindowHasReadings =
+    circuit.postDemoFrom !== null &&
+    circuit.postDemoTo !== null &&
+    circuit.meterReadings.some((r) => r.date >= circuit.postDemoFrom! && r.date <= circuit.postDemoTo!);
+  const benchmarkFromWindow = circuit.benchmarkOverridePct === null && (circuit.demos.length === 0 || postWindowHasReadings);
   const settledBaseline = circuit.preInstallBaseline;
   if (opts.force) {
     (circuit as { preInstallBaseline: number | null }).preInstallBaseline = null;

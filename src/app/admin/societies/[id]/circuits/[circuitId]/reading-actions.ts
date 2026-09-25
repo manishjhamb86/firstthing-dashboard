@@ -16,7 +16,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
-import { rederiveInvoiceMonthsForCircuit } from "@/lib/invoice-rederive";
+import { rederiveInvoiceMonthsAfterRescale, rederiveInvoiceMonthsForCircuit } from "@/lib/invoice-rederive";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -200,11 +200,17 @@ type Derived = {
 
 type Circuit = NonNullable<Awaited<ReturnType<typeof loadCircuitForReadings>>>;
 
+/** A kind from the client is honoured only if it is one of the three. */
+function validKind(k: unknown): UploadKind | undefined {
+  return k === "pre_install" || k === "post_install" || k === "monitoring" ? k : undefined;
+}
+
 function deriveReview(
   circuit: Circuit,
   fileText: string,
   demoWindow: boolean,
   chosenRange: { from: Date; to: Date } | null = null,
+  targetKind?: UploadKind,
 ): Derived | { error: string } {
   if (!circuit.meterInstalledAt) {
     return { error: "Install and validate the meter first — readings only mean something against a recorded install date." };
@@ -227,7 +233,10 @@ function deriveReview(
     };
   }
 
-  const kind = deriveUploadKind(circuit);
+  const kind = targetKind ?? deriveUploadKind(circuit);
+  if (targetKind && targetKind !== "pre_install" && !circuit.lightReplacementDate) {
+    return { error: "Record the light replacement first — readings after installation are measured from the day after it." };
+  }
   const stored = circuit.meterReadings.map((r) => ({
     date: r.date,
     kWh: r.kWh,
@@ -246,6 +255,11 @@ function deriveReview(
     benchmarkSavingsPct: circuit.benchmarkSavingsPct,
     lastStoredDate,
     demo: demoWindow,
+    kind,
+    preDemoFrom: circuit.preDemoFrom,
+    preDemoTo: circuit.preDemoTo,
+    postDemoFrom: circuit.postDemoFrom,
+    postDemoTo: circuit.postDemoTo,
   })!;
   const window = narrowToChosenRange({ from: resolved.from, to: resolved.to }, chosenRange);
 
@@ -453,6 +467,7 @@ export async function previewCircuitReadings(
   chosenSheet?: string,
   rangeFrom?: string,
   rangeTo?: string,
+  targetKind?: UploadKind,
 ): Promise<{ preview: CircuitPreviewDTO } | { chooseSheet: SheetChoice[] } | { error: string }> {
   const admin = await resolveAdmin();
   if (!admin || !(admin.permissions as string[]).includes("manage_survey")) {
@@ -482,6 +497,7 @@ export async function previewCircuitReadings(
     source.text,
     await demoBypass("reading_window_end", { circuitId: circuit.id }),
     chosenRange,
+    validKind(targetKind),
   );
   if ("error" in derived) {
     await db.rawReadingFile.update({
@@ -544,6 +560,7 @@ export async function commitCircuitReadings(
   decisions: RowDecision[],
   rangeFrom?: string,
   rangeTo?: string,
+  targetKind?: UploadKind,
 ): Promise<{ summary: CommitSummary } | { error: string }> {
   const chosenRange = parseChosenRange(rangeFrom, rangeTo);
   if (chosenRange && "error" in chosenRange) return chosenRange;
@@ -567,11 +584,13 @@ export async function commitCircuitReadings(
   }
   if ("error" in source) return { error: source.error };
 
+  const kindChosen = validKind(targetKind);
   const derived = deriveReview(
     circuit,
     source.text,
     await demoBypass("reading_window_end", { circuitId: circuit.id }),
     chosenRange,
+    kindChosen,
   );
   if ("error" in derived) return { error: derived.error };
 
@@ -690,7 +709,9 @@ export async function commitCircuitReadings(
       data: { status: "committed", rangeStart: derived.window.from, rangeEnd: derived.window.to },
     });
 
-    return recomputeCircuitFigures(tx, circuit.id);
+    // Demo readings chosen on purpose (2026-09-25) re-derive the figures
+    // they feed even when those had settled — that is why they were uploaded.
+    return recomputeCircuitFigures(tx, circuit.id, { force: kindChosen === "pre_install" || kindChosen === "post_install" });
   },
   // Even batched, a history upload does real work: a supersede is a lookup
   // and an update each, and the recompute reads every stored day. The
@@ -721,6 +742,13 @@ export async function commitCircuitReadings(
   // invoice-first month responds to a CSV/manual commit exactly as it does
   // to a meter-store projection.
   await rederiveInvoiceMonthsForCircuit(circuit.id, admin.id);
+  // Demo readings can move the baseline and the benchmark themselves; the
+  // published months follow, as they do after a light-count change.
+  if (kindChosen === "pre_install" || kindChosen === "post_install") {
+    await rederiveInvoiceMonthsAfterRescale(circuit.id, "0000-00", admin.id).catch((err) =>
+      logger.warn("billing.rederive_after_demo_readings_failed", { circuitId: circuit.id, error: String(err) }),
+    );
+  }
 
   logger.info("circuit_ingest.committed", {
     actorId: admin.id,

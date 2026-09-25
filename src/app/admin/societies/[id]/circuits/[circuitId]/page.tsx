@@ -383,6 +383,47 @@ export default async function CircuitDetailPage({
     demo: demoMode,
   });
   const day = (d: Date) => d.toISOString().slice(0, 10);
+  // The same window for each thing the readings could be for (2026-09-25):
+  // the upload asks, and holds the dates to the choice.
+  const windowFor = (kind: "pre_install" | "post_install" | "monitoring"): ReadingWindowDTO | null => {
+    const w = circuitReadingWindow({
+      meterInstalledAt: circuit.meterInstalledAt,
+      lightReplacementDate: circuit.lightReplacementDate,
+      preInstallBaseline: circuit.preInstallBaseline,
+      benchmarkSavingsPct: circuit.benchmarkSavingsPct,
+      lastStoredDate: lastStoredReadingDate,
+      demo: demoMode,
+      kind,
+      preDemoFrom: circuit.preDemoFrom,
+      preDemoTo: circuit.preDemoTo,
+      postDemoFrom: circuit.postDemoFrom,
+      postDemoTo: circuit.postDemoTo,
+    });
+    if (!w) return null;
+    const demoPeriod =
+      (kind === "pre_install" && circuit.preDemoFrom) || (kind === "post_install" && circuit.postDemoFrom);
+    return {
+      kind,
+      from: day(w.from),
+      to: day(w.to),
+      empty: w.empty,
+      demoExtended: w.demoExtended,
+      startBasis: demoPeriod
+        ? "the demo period set for this circuit"
+        : kind === "monitoring" && lastStoredReadingDate
+          ? `one day before the last stored reading (${day(lastStoredReadingDate)}), so a part-day at the end of the previous file is re-read in full`
+          : kind === "post_install" && circuit.lightReplacementDate
+            ? `the day after the lights were replaced (${day(circuit.lightReplacementDate)})`
+            : `the day after the meter was installed (${day(circuit.meterInstalledAt!)})`,
+    };
+  };
+  const readingWindows = circuit.meterInstalledAt
+    ? {
+        pre_install: windowFor("pre_install"),
+        post_install: circuit.lightReplacementDate ? windowFor("post_install") : null,
+        monitoring: circuit.lightReplacementDate ? windowFor("monitoring") : null,
+      }
+    : null;
   const readingWindowDTO: ReadingWindowDTO | null = readingWindow
     ? {
         kind: readingWindow.kind,
@@ -748,6 +789,7 @@ export default async function CircuitDetailPage({
                 <CircuitReadingPanel
                   circuitId={circuit.id}
                   window={readingWindowDTO}
+                  windows={readingWindows}
                   demoMode={demoMode}
                   resumeFile={resumeFile}
                 />
@@ -968,6 +1010,7 @@ export default async function CircuitDetailPage({
                   <CircuitReadingPanel
                     circuitId={circuit.id}
                     window={readingWindowDTO}
+                    windows={readingWindows}
                     demoMode={demoMode}
                     resumeFile={resumeFile}
                   />
@@ -999,6 +1042,7 @@ export default async function CircuitDetailPage({
                     <CircuitReadingPanel
                       circuitId={circuit.id}
                       window={readingWindowDTO}
+                      windows={readingWindows}
                       demoMode={demoMode}
                       resumeFile={resumeFile}
                     />
@@ -1294,6 +1338,7 @@ export default async function CircuitDetailPage({
                     <CircuitReadingPanel
                       circuitId={circuit.id}
                       window={readingWindowDTO}
+                      windows={readingWindows}
                       demoMode={demoMode}
                       resumeFile={resumeFile}
                     />
@@ -1375,7 +1420,7 @@ export default async function CircuitDetailPage({
             {demoGeneratedDays > 0 && demoMode && canEdit && (
               <DiscardDemoReadings circuitId={circuit.id} days={demoGeneratedDays} />
             )}
-            <div className="mt-3">
+            <div className="mt-3 scroll-mt-24" id="demo-periods">
               <DemoWindowsPanel
                 circuitId={circuit.id}
                 canEdit={canEdit}

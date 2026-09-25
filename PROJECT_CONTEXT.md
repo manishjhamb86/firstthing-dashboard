@@ -7540,3 +7540,40 @@ readings arrived and a line flipped agreed → measured.
   - when clearing the current company, it reads "<Company> stopped on", meaning their last day, and saving records that.
 
   Save stays disabled until there is a change.
+
+**Demo readings on a circuit already past its demo (2026-09-25, user-caught on French Apartment).**
+French Apartment was commissioned before the system: meter 04-11-2025, replacement 14-11-2025,
+benchmark 64.36% from its paper demo. The reading upload derived its step from the circuit's
+state, which was "benchmark confirmed", so it only offered dates from the last monthly reading
+onward (23-09-2026). With a single date range and no way to say which readings these are, the Nov
+2025 demo readings could not be entered.
+
+**The upload now asks what the readings are for:**
+- **Before installation** (demo): from the day after the meter to the day before the replacement.
+- **After installation** (demo): from the day after the replacement.
+- **Ongoing monthly readings.**
+
+The circuit's current step is marked as such. `circuitReadingWindow` takes an explicit `kind`.
+When a demo period is set, the before and after choices are held to exactly that period. The same
+window is enforced on the server in `deriveReview`, and `previewCircuitReadings` and
+`commitCircuitReadings` take `targetKind`.
+
+**Saving demo readings** re-derives the baseline and benchmark from them (a forced recompute), and
+the published months follow, as they do after a light-count change.
+
+**Which source wins**, decided here:
+- once demo periods are set and hold readings, those readings produce the benchmark and the paper
+  report's demos step aside;
+- an agreed override still wins over both.
+
+**Finding the periods.** When no demo period is set, the upload says so and links to the Demo
+periods box (`#demo-periods`).
+
+**Verified** 12/12 on a copy of French Apartment's situation:
+- the upload asks what the readings are for;
+- before installation is valid 05-11 → 13-11-2025, narrowing to exactly 06–12 Nov once the period
+  is set;
+- the review offered exactly the 7 days in the period;
+- the baseline became 24 and the benchmark 66.67% (1 − 8/24), from the readings instead of the
+  paper demo;
+- the 213 monthly readings were untouched.

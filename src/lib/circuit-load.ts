@@ -497,10 +497,25 @@ export function circuitReadingWindow(args: {
   lastStoredDate: Date | null;
   demo: boolean;
   now?: Date;
+  /** What the operator says the readings are for (2026-09-25); defaults to the circuit's current step. */
+  kind?: UploadKind;
+  /** The demo periods: an upload for the demo readings is held to exactly these days when set. */
+  preDemoFrom?: Date | null;
+  preDemoTo?: Date | null;
+  postDemoFrom?: Date | null;
+  postDemoTo?: Date | null;
 }): ReadingWindow | null {
   if (!args.meterInstalledAt) return null;
   const now = args.now ?? new Date();
-  const kind = deriveUploadKind(args);
+  const kind = args.kind ?? deriveUploadKind(args);
+  if (kind === "pre_install" && args.preDemoFrom && args.preDemoTo) {
+    const w = { from: args.preDemoFrom, to: args.preDemoTo };
+    return { kind, ...w, empty: windowIsEmpty(w), demoExtended: false };
+  }
+  if (kind === "post_install" && args.postDemoFrom && args.postDemoTo) {
+    const w = { from: args.postDemoFrom, to: args.postDemoTo };
+    return { kind, ...w, empty: windowIsEmpty(w), demoExtended: false };
+  }
   const w = extractionWindow({
     kind,
     meterInstalledAt: args.meterInstalledAt,

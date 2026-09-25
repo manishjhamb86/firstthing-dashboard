@@ -1,5 +1,6 @@
 "use server";
 
+import { servedUntil } from "@/lib/deal-close";
 import { revalidatePath } from "next/cache";
 import { formatDate } from "@/lib/format-date";
 import type { Prisma, ServiceLine } from "@prisma/client";
@@ -68,7 +69,9 @@ export async function runCalculation(input: {
   // user's own example: part A ₹2,000/mo from Sept, part B ₹3,000/mo from
   // Dec → ₹5,000 combined, dropping back to ₹3,000 when part A's term ends.
   const contracts = await db.contract.findMany({
-    where: { societyId: input.societyId, serviceLine: input.serviceLine, status: "active" },
+    // A terminated contract still bills its months up to its last served
+    // day (deal-close.ts); nothing after it.
+    where: { societyId: input.societyId, serviceLine: input.serviceLine, status: { in: ["active", "terminated"] } },
     include: {
       versions: { orderBy: { effectiveFrom: "asc" } },
       pipeline: { select: { id: true, dealScope: true } },
@@ -117,8 +120,13 @@ export async function runCalculation(input: {
       continue;
     }
     // The part's term is its own: a month after its end bills nothing for it.
-    if (contract.termEnd < from) {
-      windowNotes.push(`${label}: its term ended ${formatDate(contract.termEnd)}.`);
+    const lastDay = servedUntil(contract.termEnd, contract.terminatedOn);
+    if (lastDay < from) {
+      windowNotes.push(
+        contract.terminatedOn && lastDay.getTime() === contract.terminatedOn.getTime()
+          ? `${label}: its contract was terminated — last day billed ${formatDate(lastDay)}.`
+          : `${label}: its term ended ${formatDate(lastDay)}.`,
+      );
       continue;
     }
     // The terms in force during the month being billed — not today's terms.
@@ -140,7 +148,7 @@ export async function runCalculation(input: {
       // A term ending inside the month prorates that part to the days it
       // served — the mirror of CON-22's first month ("one mechanism, both
       // ends of the contract"; the user's call, 2026-08-31).
-      finalMonthEndsOn: contract.termEnd < to ? contract.termEnd : null,
+      finalMonthEndsOn: lastDay < to ? lastDay : null,
     });
   }
 

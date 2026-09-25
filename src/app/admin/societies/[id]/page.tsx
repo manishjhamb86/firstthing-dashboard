@@ -1,4 +1,6 @@
 import { notFound } from "next/navigation";
+import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
+import { closePreview } from "@/lib/deal-close-loader";
 import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -38,6 +40,9 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     viewer !== null && isOperations(viewer.team) && viewer.permissions.includes("manage_pipeline");
 
   const { id } = await params;
+  const isOps = !!viewer && viewer.permissions.includes("manage_pipeline") && viewer.permissions.includes("manage_survey");
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const closeDialog = isOps ? await closePreview({ societyId: id }, new Date(`${todayIso}T00:00:00Z`)) : null;
   const society = await db.society.findUnique({
     where: { id },
     include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } },
@@ -141,10 +146,32 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             <Link href={`/admin/societies/${society.id}/circuits`} className="btn-outline btn-sm">
               Circuit registry
             </Link>
-            <StatusControl societyId={society.id} status={society.status} />
+            {/* Terminated is set only by the recorded Reject action (with a
+                reason and a date), never by picking it in a list. */}
+            {!society.closedAt && <StatusControl societyId={society.id} status={society.status} />}
+            {isOps && !society.closedAt && closeDialog && (
+              <CloseDealDialog mode="society" id={society.id} today={todayIso} {...closeDialog} />
+            )}
           </div>
         }
       />
+
+      {society.closedAt && (
+        <div
+          className="mb-5 flex flex-wrap items-start justify-between gap-3 rounded-[var(--r-md)] border p-4 text-[13.5px]"
+          style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}
+        >
+          <div>
+            <p className="font-bold">Rejected / terminated {formatDate(society.closedAt)}</p>
+            {society.closedReason && <p className="mt-0.5">{society.closedReason}</p>}
+            <p className="mt-0.5">
+              Its deals are closed and any contract terminated. Invoices it still owes stay on record and are followed up;
+              its portal accounts keep read access.
+            </p>
+          </div>
+          {isOps && <ReopenButton mode="society" id={society.id} />}
+        </div>
+      )}
 
       {/* KYC documents the society still owes (kyc-society.ts): the number is
           on record so the deal moved on, but the paper has not been filed —

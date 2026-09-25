@@ -5,7 +5,9 @@ import { updateSocietyStatus } from "../actions";
 import { SOCIETY_STATUS } from "@/lib/status-maps";
 import type { ChipTone } from "@/components/ui";
 
-const STATUSES = ["prospect", "active", "suspended", "terminated"] as const;
+// "terminated" is deliberately absent — it is set by the recorded Reject
+// action (close-actions.ts) with a reason and a date, never picked here.
+const STATUSES = ["prospect", "active", "suspended"] as const;
 
 // The same status renders as a colored StatusChip on the societies LIST —
 // this is the one place it is also an editable control, and it had been
@@ -43,9 +45,9 @@ export function StatusControl({ societyId, status }: { societyId: string; status
       className="field field-auto font-semibold"
       style={{ background: tone.bg, color: tone.fg, borderColor: tone.line }}
     >
-      {STATUSES.map((s) => (
+      {(STATUSES.includes(status as never) ? STATUSES : [status, ...STATUSES]).map((s) => (
         <option key={s} value={s}>
-          {SOCIETY_STATUS[s].label}
+          {SOCIETY_STATUS[s]?.label ?? s}
         </option>
       ))}
     </select>

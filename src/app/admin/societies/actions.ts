@@ -83,6 +83,7 @@ export async function createSociety(input: {
 
 export async function updateSocietyStatus(id: string, status: SocietyStatus) {
   const session = await requireAdmin();
+  if (status === "terminated") return { error: "Use Reject / terminate — it records the reason and the date." };
   await db.society.update({ where: { id }, data: { status } });
   logger.info("society.status_changed", { actorId: session.user.id, societyId: id, status });
   revalidatePath(`/admin/societies/${id}`);

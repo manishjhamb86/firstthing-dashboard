@@ -13,6 +13,7 @@
 // `submitIntake` re-derives everything from that confirmed review inside
 // the transaction — the client's preview is never trusted.
 
+import { normaliseGstin, refuseRetailCustomer, retailNameKey } from "@/lib/retail-customer";
 import { bulkActionsFor } from "@/lib/intake-bulk";
 import { releaseCalculation } from "../[calculationId]/invoice-actions";
 import { duplicateRefuses, findDuplicateInvoice, type InvoiceDuplicate } from "@/lib/invoice-duplicate";
@@ -202,7 +203,7 @@ export async function extractIntake(intakeId: string): Promise<Result<{ status: 
 // ---------------------------------------------------------------------------
 
 async function duplicateFor(review: Review) {
-  return findDuplicateInvoice({ societyId: review.societyId, period: review.period, invoiceNumber: review.invoiceNumber, serviceLine: SERVICE_LINE });
+  return findDuplicateInvoice({ societyId: review.retailSale ? null : review.societyId, period: review.period, invoiceNumber: review.invoiceNumber, serviceLine: SERVICE_LINE });
 }
 
 export type IntakePreview = {
@@ -221,7 +222,7 @@ async function buildPreview(review: Review): Promise<IntakePreview> {
   let derived: DerivedMonth | null = null;
   let circuitOptions: CircuitOption[] = [];
   let contextNotes: string[] = [];
-  if (review.societyId) {
+  if (review.societyId && !review.retailSale) {
     const period = /^\d{4}-\d{2}$/.test(review.period) ? review.period : "2000-01";
     const ctx = await loadInvoiceMonthContext({ societyId: review.societyId, serviceLine: SERVICE_LINE, period });
     circuitOptions = ctx.circuitOptions;
@@ -366,7 +367,9 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
   // charge) is not competing for this month's savings figure — file it as a
   // document instead of forcing it through a pipeline that has nothing to
   // derive from an all-"other" invoice (user-caught 2026-09-24).
-  if (review.nonServiceInvoice) return fileNonServiceInvoice(intake, review, ops.actor.id);
+  if (review.nonServiceInvoice && !review.retailSale) return fileNonServiceInvoice(intake, review, ops.actor.id);
+  // A retail sale is billed to a retail customer, not a society's month.
+  if (review.retailSale) return fileRetailInvoice(intake, review, ops.actor.id);
 
   const derived = preview.derived!;
   const societyId = review.societyId!;
@@ -760,4 +763,113 @@ export async function releaseIntakesToSociety(intakeIds: string[]): Promise<Bulk
   logger.info("intake.bulk_release_completed", { actorId: acc.actor.id, requested: intakeIds.length, done, failed: failed.length });
   revalidatePath(INTAKE_PATH);
   return { done, failed };
+}
+
+// ---------------------------------------------------------------------------
+// 7. Retail sales (2026-09-25, user-asked) — an invoice billed to a retail
+// customer (a society or not) is filed as a RetailInvoice: kept, listed on
+// the customer, never a month of record or a savings figure (INV-02).
+// ---------------------------------------------------------------------------
+
+async function fileRetailInvoice(
+  intake: { id: string; s3Key: string; fileName: string },
+  review: Review,
+  actorId: string,
+): Promise<Result<{ calculationId: string | null }>> {
+  const customer = await db.retailCustomer.findUnique({ where: { id: review.retailCustomerId! }, select: { id: true, name: true } });
+  if (!customer) return { error: "That retail customer no longer exists." };
+
+  let bytes: Uint8Array;
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: intake.s3Key }));
+    bytes = await obj.Body!.transformToByteArray();
+  } catch {
+    return { error: "The uploaded file could not be read back from storage. Upload it again." };
+  }
+  const slug = customer.name.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Customer";
+  const ident = (review.invoiceNumber.trim() || intake.id).replace(/[^a-zA-Z0-9-]+/g, "_");
+  const key = `Documents/Retail/${slug}/${review.period}/${slug}_RetailInvoice_${ident}.pdf`;
+  await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: bytes, ContentType: "application/pdf" }));
+
+  const day = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00Z`) : null);
+  const retail = await db.$transaction(async (tx) => {
+    const inv = await tx.retailInvoice.create({
+      data: {
+        customerId: customer.id,
+        invoiceNumber: review.invoiceNumber.trim(),
+        invoiceDate: day(review.invoiceDate),
+        dueDate: day(review.dueDate),
+        period: review.period,
+        subtotal: review.subtotal,
+        taxAmount: review.taxAmount,
+        total: review.total ?? 0,
+        paid: review.paid === "paid",
+        paidOn: review.paid === "paid" ? day(review.paidOn) : null,
+        s3Key: key,
+        fileName: intake.fileName,
+        createdById: actorId,
+      },
+    });
+    await tx.invoiceIntake.update({
+      where: { id: intake.id },
+      data: {
+        status: "submitted",
+        review: review as unknown as Prisma.InputJsonValue,
+        societyId: null,
+        period: review.period,
+        submittedAt: new Date(),
+        retailInvoiceId: inv.id,
+      },
+    });
+    return inv;
+  });
+  logger.info("intake.filed_as_retail_sale", { actorId, intakeId: intake.id, retailInvoiceId: retail.id, customerId: customer.id, invoiceNumber: retail.invoiceNumber });
+  revalidatePath(INTAKE_PATH);
+  revalidatePath(`/admin/retail-customers/${customer.id}`);
+  return { calculationId: null };
+}
+
+/** Create a retail customer — from an invoice's own bill-to, or by hand. Duplicates are refused. */
+export async function createRetailCustomer(input: {
+  name: string;
+  gstin: string;
+  address: string;
+  phone: string;
+  email: string;
+  societyId: string | null;
+}): Promise<Result<{ id: string; name: string }>> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  const refusal = refuseRetailCustomer(input);
+  if (refusal) return { error: refusal };
+  const nameKey = retailNameKey(input.name);
+  const gstin = normaliseGstin(input.gstin);
+  const existing = await db.retailCustomer.findFirst({
+    where: { OR: [{ nameKey }, ...(gstin ? [{ gstin }] : [])] },
+    select: { name: true, gstin: true },
+  });
+  if (existing) {
+    return {
+      error:
+        gstin && existing.gstin === gstin
+          ? `A retail customer with GSTIN ${gstin} already exists (${existing.name}) — choose them instead.`
+          : `A retail customer named "${existing.name}" already exists — choose them instead.`,
+    };
+  }
+  const created = await db.retailCustomer.create({
+    data: {
+      name: input.name.trim(),
+      nameKey,
+      gstin,
+      address: input.address.trim() || null,
+      phone: input.phone.trim() || null,
+      email: input.email.trim() || null,
+      societyId: input.societyId || null,
+      createdById: ops.actor.id,
+    },
+    select: { id: true, name: true },
+  });
+  logger.info("retail_customer.created", { actorId: ops.actor.id, customerId: created.id, name: created.name });
+  revalidatePath("/admin/retail-customers");
+  return created;
 }

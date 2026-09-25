@@ -223,3 +223,13 @@ describe("openItems — the same invoice number already on record", () => {
     expect(items.some((i) => i.includes("second copy"))).toBe(true);
   });
 });
+
+describe("openItems — a retail sale", () => {
+  it("needs a retail customer instead of a society, and no circuit", () => {
+    const retail = { ...CLEAN, societyId: null, retailSale: true, retailCustomerId: null, lines: CLEAN.lines.map((l) => ({ ...l, circuitId: null })) };
+    const items = openItems(retail, { duplicateOf: null });
+    expect(items).toContain("Retail customer not chosen (step 1)");
+    expect(items.some((i) => /Society not confirmed|no circuit/.test(i))).toBe(false);
+    expect(openItems({ ...retail, retailCustomerId: "rc1" }, { duplicateOf: null })).toEqual([]);
+  });
+});

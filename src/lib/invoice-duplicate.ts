@@ -29,6 +29,12 @@ export async function findDuplicateInvoice(input: {
       select: { number: true, calculation: { select: { status: true } } },
     });
     if (same) return { number: same.number, released: same.calculation.status === "released", sameNumber: true };
+    // A retail sale carries an invoice number from the same Zoho series.
+    const retail = await db.retailInvoice.findFirst({
+      where: { invoiceNumber: { equals: number, mode: "insensitive" }, voidedAt: null },
+      select: { invoiceNumber: true },
+    });
+    if (retail) return { number: retail.invoiceNumber, released: false, sameNumber: true };
   }
   if (!input.societyId || !/^\d{4}-\d{2}$/.test(input.period)) return null;
   const calc = await db.monthlyCalculation.findFirst({

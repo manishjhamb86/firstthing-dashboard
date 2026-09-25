@@ -11,6 +11,7 @@ import type { LineSplitEntry, Review, ReviewLine } from "@/lib/invoice-intake";
 import { INTAKE_LIST_RETURN_KEY, intakeListReturnHref } from "@/lib/intake-list";
 import { READ_CUT_OFF_MESSAGE } from "@/lib/intake-read-error";
 import { discardIntake, extractIntake, previewIntake, saveIntakeReview, submitIntake, type IntakePreview } from "../actions";
+import { RetailCustomerCreate } from "./retail-customer-create";
 
 /**
  * SCR-094's form. Five cards in the order a person checks an invoice, each
@@ -67,6 +68,7 @@ export function ReviewForm({
   initialReview,
   initialPreview,
   societies,
+  retailCustomers: initialRetailCustomers,
 }: {
   intakeId: string;
   fileName: string;
@@ -76,9 +78,12 @@ export function ReviewForm({
   initialReview: Review;
   initialPreview: Preview | null;
   societies: { id: string; name: string; location: string }[];
+  /** Retail customers (2026-09-25) — the picker for a retail sale. */
+  retailCustomers: { id: string; name: string; gstin: string | null }[];
 }) {
   const router = useRouter();
   const [review, setReview] = useState<Review>(initialReview);
+  const [retailCustomers, setRetailCustomers] = useState(initialRetailCustomers);
   const [preview, setPreview] = useState<Preview | null>(initialPreview);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -136,8 +141,9 @@ export function ReviewForm({
   const derived = preview?.derived ?? null;
   const duplicate = preview?.duplicateOf ?? null;
 
+  const retail = !!review.retailSale;
   const step1Ok =
-    review.societyId &&
+    (retail ? review.retailCustomerId : review.societyId) &&
     /^\d{4}-\d{2}$/.test(review.period) &&
     review.invoiceNumber &&
     review.invoiceDate &&
@@ -270,7 +276,54 @@ export function ReviewForm({
               )
             }
           />
+          <label className="mb-3 flex items-start gap-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={retail}
+              onChange={(e) =>
+                setReview((r) => ({
+                  ...r,
+                  retailSale: e.target.checked,
+                  // Retail items are not circuits: clear any mapping.
+                  lines: e.target.checked ? r.lines.map((l) => ({ ...l, circuitId: null, split: undefined, applyCountForward: false })) : r.lines,
+                }))
+              }
+            />
+            <span>
+              This is a <strong>retail sale</strong> — items sold to a retail customer (a society or not), not a society&apos;s monthly
+              savings bill. It is filed against the customer and never feeds a savings figure.
+            </span>
+          </label>
           <div className="grid gap-4 sm:grid-cols-2">
+            {retail ? (
+              <div>
+                <Field label="Retail customer" htmlFor="rv-retail">
+                  <SearchSelect
+                    id="rv-retail"
+                    options={retailCustomers.map((c) => ({ id: c.id, label: c.name, sublabel: c.gstin ?? undefined }))}
+                    value={review.retailCustomerId ?? null}
+                    onCommit={(id) => setReview((r) => ({ ...r, retailCustomerId: id }))}
+                    placeholder="Search retail customers…"
+                  />
+                </Field>
+                <Verbatim>{proposedSociety}</Verbatim>
+                <div className="mt-2">
+                  <RetailCustomerCreate
+                    societies={societies}
+                    prefill={{
+                      name: extraction?.billToName.value ?? "",
+                      gstin: extraction?.billToGstin.value ?? "",
+                      address: extraction?.billToAddress.value ?? "",
+                    }}
+                    onCreated={(c) => {
+                      setRetailCustomers((cur) => [...cur, { id: c.id, name: c.name, gstin: null }].sort((a, b) => a.name.localeCompare(b.name)));
+                      setReview((r) => ({ ...r, retailCustomerId: c.id }));
+                    }}
+                  />
+                </div>
+              </div>
+            ) : (
             <div>
               <Field label="Society" htmlFor="rv-society">
                 <SearchSelect
@@ -288,6 +341,7 @@ export function ReviewForm({
                 </p>
               )}
             </div>
+            )}
             <div>
               <Field label="Month" htmlFor="rv-period" hint="The month this invoice is FOR — your selection, whatever the paper says.">
                 <input id="rv-period" type="month" className="field" value={review.period} onChange={(e) => set("period", e.target.value)} />
@@ -320,6 +374,7 @@ export function ReviewForm({
               </div>
             </div>
           </div>
+          {!retail && (
           <label className="mt-3 flex items-start gap-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
             <input
               type="checkbox"
@@ -332,13 +387,14 @@ export function ReviewForm({
               It will be filed as a document and excluded from every savings figure, not treated as a duplicate of the savings invoice.
             </span>
           </label>
+          )}
           {duplicate?.sameNumber && (
             <div className="mt-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}>
               Invoice {duplicate.number} is already on record{duplicate.released ? " and released" : ""} — this upload is a second copy of
               the same bill. Discard it below.
             </div>
           )}
-          {duplicate && !duplicate.sameNumber && !review.nonServiceInvoice && (
+          {duplicate && !duplicate.sameNumber && !review.nonServiceInvoice && !retail && (
             <div className="mt-3 rounded-[var(--r-sm)] border px-3.5 py-2.5 text-[13px]" style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}>
               A live invoice already exists for this society-month ({duplicate.number}
               {duplicate.released ? ", released" : ""}). Void it from the month first if it was filed in error — this one cannot be submitted over it.
@@ -356,7 +412,8 @@ export function ReviewForm({
         {/* Card 2 — lines */}
         <Card className="p-5">
           <CardHead step={2} title="Lines — what each one is, and which circuit it bills" chip={review.lines.length === 0 ? <StatusChip tone="bad">No lines</StatusChip> : step2Open > 0 ? <StatusChip tone="warn">{step2Open} to check</StatusChip> : <StatusChip tone="ok">Mapped</StatusChip>} />
-          {!review.societyId && <p className="mb-3 text-[12.5px]" style={{ color: "var(--text-muted)" }}>Confirm the society first — the circuits to map to come from it.</p>}
+          {retail && <p className="mb-3 text-[12.5px]" style={{ color: "var(--text-muted)" }}>A retail sale bills items, not circuits — check each line&apos;s figures.</p>}
+          {!retail && !review.societyId && <p className="mb-3 text-[12.5px]" style={{ color: "var(--text-muted)" }}>Confirm the society first — the circuits to map to come from it.</p>}
           <div className="space-y-3">
             {review.lines.map((l) => {
               const check = lineCheck(l.lineNo);
@@ -374,16 +431,16 @@ export function ReviewForm({
                         <p className="whitespace-pre-line text-[13px]">{l.description}</p>
                       )}
                     </div>
-                    <div className="inline-flex rounded-[10px] p-0.5" style={{ background: "var(--neu-bg)" }}>
+                    {!retail && <div className="inline-flex rounded-[10px] p-0.5" style={{ background: "var(--neu-bg)" }}>
                       {(["service", "other"] as const).map((k) => (
                         <button key={k} type="button" onClick={() => setLine(l.lineNo, { kind: k, circuitId: k === "other" ? null : l.circuitId })} className="rounded-[8px] px-2.5 py-1 text-[12px] font-semibold" style={l.kind === k ? { background: "var(--surface)", color: "var(--text)", boxShadow: "0 1px 2px rgba(20,30,70,0.08)" } : { color: "var(--text-subtle)" }}>
                           {k === "service" ? "Service" : "Other"}
                         </button>
                       ))}
-                    </div>
+                    </div>}
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {([["qty", l.kind === "service" ? "Qty (lights)" : "Qty"], ["rate", "Rate"], ["discount", "Discount"], ["amount", "Amount"]] as const).map(([k, label]) => (
+                    {([["qty", l.kind === "service" && !retail ? "Qty (lights)" : "Qty"], ["rate", "Rate"], ["discount", "Discount"], ["amount", "Amount"]] as const).map(([k, label]) => (
                       <label key={k} className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
                         {label}
                         <input type="number" step="any" inputMode="decimal" className="field num mt-1" value={k === "discount" ? String(l.discount) : numInput(l[k])} onChange={(e) => setLine(l.lineNo, k === "discount" ? { discount: parseNum(e.target.value) ?? 0 } : ({ [k]: parseNum(e.target.value) } as Partial<ReviewLine>))} />
@@ -392,7 +449,7 @@ export function ReviewForm({
                   </div>
                   {check && !check.ok && <p className="mt-2 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>{check.note}</p>}
                   {check && check.ok && check.rounded && <p className="mt-2 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>{check.note}</p>}
-                  {l.kind === "service" ? (
+                  {!retail && l.kind === "service" ? (
                     <div className="mt-2">
                       {isSplit ? (
                         // FEAT-109-AC-11 — one line, several circuits of one type.
@@ -621,6 +678,15 @@ export function ReviewForm({
         </Card>
 
         {/* Card 5 — what the society will see */}
+        {retail ? (
+        <Card className="p-5">
+          <CardHead step={5} title="Where this goes" chip={<span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>Retail sale</span>} />
+          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+            Filed against {retailCustomers.find((c) => c.id === review.retailCustomerId)?.name ?? "the retail customer"} as a retail
+            invoice. It is not a month of record: no circuit, no savings figure, nothing shown on any society&apos;s portal.
+          </p>
+        </Card>
+        ) : (
         <Card className="p-5">
           <CardHead step={5} title="What the society will see" chip={<span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>Recomputed from the lines above · not editable</span>} />
           {!derived || (derived.lines.length === 0 && derived.notDerivable.length === 0) ? (
@@ -697,6 +763,7 @@ export function ReviewForm({
             </ul>
           )}
         </Card>
+        )}
 
         {/* Submit bar */}
         <Card className="p-4" >

@@ -110,6 +110,7 @@ export function intakeViewOf(status: string): IntakeView | null {
     case "ready":
       return "ready";
     case "submitted_filed_document":
+    case "submitted_retail":
       return "filed";
     case "submitted":
     case "submitted_awaiting_release":

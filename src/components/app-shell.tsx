@@ -126,6 +126,8 @@ export function AppShell({
       // page doing its own tighter gate and redirect.
       showBilling && { href: "/admin/billing/release-queue", label: "Release queue", icon: Receipt },
       showBilling && { href: "/admin/billing/deviations", label: "Deviations", icon: Receipt },
+      // Retail sales (2026-09-25) — customers FirsThing sells items to directly.
+      showBilling && { href: "/admin/retail-customers", label: "Retail customers", icon: Receipt },
     ]),
     ...group("settings", "Settings", Settings, [
       showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb },

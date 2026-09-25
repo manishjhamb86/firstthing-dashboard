@@ -263,6 +263,14 @@ export type Review = {
    * filed as its own document, never fed into any month's savings figure.
    */
   nonServiceInvoice: boolean;
+  /**
+   * A retail sale (2026-09-25): billed to a retail customer — a society or
+   * not — rather than being a society's month of record. Filed as a
+   * RetailInvoice; no circuits, no savings figure. Optional so reviews saved
+   * before this existed still read as not-retail.
+   */
+  retailSale?: boolean;
+  retailCustomerId?: string | null;
 };
 
 export type ReviewContext = {
@@ -294,7 +302,9 @@ export function arithmeticReport(review: Review): ArithmeticReport {
  */
 export function openItems(review: Review, context: ReviewContext): string[] {
   const items: string[] = [];
-  if (!review.societyId) items.push("Society not confirmed (step 1)");
+  const retail = !!review.retailSale;
+  if (retail && !review.retailCustomerId) items.push("Retail customer not chosen (step 1)");
+  if (!retail && !review.societyId) items.push("Society not confirmed (step 1)");
   if (!/^\d{4}-\d{2}$/.test(review.period)) items.push("Month not confirmed (step 1)");
   if (!review.invoiceNumber.trim()) items.push("Invoice number missing (step 1)");
   if (!isIsoDate(review.invoiceDate)) items.push("Invoice date missing (step 1)");
@@ -303,13 +313,14 @@ export function openItems(review: Review, context: ReviewContext): string[] {
   // record — neither applies once the operator has said it is a separate,
   // non-service bill (a devices/hardware charge) instead.
   if (context.duplicateOf?.sameNumber) items.push(`Invoice ${context.duplicateOf.number} is already on record — this is a second copy of it; discard this upload`);
-  else if (context.duplicateOf && !review.nonServiceInvoice) items.push(`A live invoice already exists for this month (${context.duplicateOf.number}) — void it first`);
+  else if (context.duplicateOf && !review.nonServiceInvoice && !retail) items.push(`A live invoice already exists for this month (${context.duplicateOf.number}) — void it first`);
 
-  const service = review.lines.filter((l) => l.kind === "service");
+  // A retail sale bills items, not circuits: no service line, no circuit.
+  const service = retail ? [] : review.lines.filter((l) => l.kind === "service");
   if (review.lines.length === 0) items.push("No lines — enter the invoice's lines (step 2)");
-  if (review.lines.length > 0 && service.length === 0 && !review.nonServiceInvoice)
+  if (!retail && review.lines.length > 0 && service.length === 0 && !review.nonServiceInvoice)
     items.push("No service line — an invoice with no energy-saving line has nothing to derive (step 2)");
-  if (review.nonServiceInvoice && service.length > 0)
+  if (!retail && review.nonServiceInvoice && service.length > 0)
     items.push(`Line ${service[0].lineNo} is marked "Service" — mark every line "Other", or un-check "not an energy-savings invoice" (step 2)`);
   const seen = new Map<string, number>();
   for (const l of service) {

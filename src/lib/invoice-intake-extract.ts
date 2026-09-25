@@ -24,6 +24,7 @@ import {
 } from "@/lib/invoice-intake";
 import { loadInvoiceMonthContext } from "@/lib/invoice-month-loader";
 import { duplicateRefuses, findDuplicateInvoice } from "@/lib/invoice-duplicate";
+import { matchRetailCustomer } from "@/lib/retail-customer";
 
 /** Invoice-first months are lighting for now — every contract on record is. */
 export const INTAKE_SERVICE_LINE = "lighting" as const;
@@ -176,9 +177,19 @@ export async function runIntakeExtraction(intakeId: string, actorId: string): Pr
     const society = proposeSociety(extraction.billToName.value, await societyOptions());
     const circuits = society ? await circuitOptionsFor(society.id) : [];
     const review = proposeReview(extraction, society?.id ?? null, circuits);
+    // No society by that name, but a known retail customer? Propose the
+    // retail sale with the customer chosen — the operator still confirms.
+    if (!society) {
+      const customers = await db.retailCustomer.findMany({ select: { id: true, nameKey: true, gstin: true } });
+      const match = matchRetailCustomer({ name: extraction.billToName.value, gstin: extraction.billToGstin.value }, customers);
+      if (match) {
+        review.retailSale = true;
+        review.retailCustomerId = match;
+      }
+    }
     const readable = extraction.lines.length > 0;
     const duplicate = readable
-      ? await findDuplicateInvoice({ societyId: review.societyId, period: review.period, invoiceNumber: review.invoiceNumber, serviceLine: INTAKE_SERVICE_LINE })
+      ? await findDuplicateInvoice({ societyId: review.retailSale ? null : review.societyId, period: review.period, invoiceNumber: review.invoiceNumber, serviceLine: INTAKE_SERVICE_LINE })
       : null;
     const refused = duplicateRefuses(duplicate, review.nonServiceInvoice);
     const status = !readable ? "could_not_read" : refused ? "refused_duplicate" : "needs_review";

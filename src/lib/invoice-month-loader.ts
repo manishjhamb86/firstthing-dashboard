@@ -13,6 +13,7 @@
  * uploaded is itself the evidence that billing happened.
  */
 
+import { servedUntil } from "@/lib/deal-close";
 import { db } from "@/lib/db";
 import { effectiveBaselineAt, effectiveLightCountAt } from "@/lib/benchmark-rescale";
 import { circuitLabelOf } from "@/lib/circuit-label";
@@ -43,7 +44,9 @@ export async function loadInvoiceMonthContext(input: {
   const notes: string[] = [];
 
   const contracts = await db.contract.findMany({
-    where: { societyId: input.societyId, serviceLine: input.serviceLine, status: "active" },
+    // A terminated contract still bills its months up to its last served
+    // day (deal-close.ts); nothing after it.
+    where: { societyId: input.societyId, serviceLine: input.serviceLine, status: { in: ["active", "terminated"] } },
     include: {
       versions: { orderBy: { effectiveFrom: "asc" } },
       pipeline: {
@@ -87,8 +90,13 @@ export async function loadInvoiceMonthContext(input: {
       notes.push(`A contract's billing starts after ${input.period} — its circuits are not billed this month.`);
       continue;
     }
-    if (contract.termEnd < from) {
-      notes.push(`A contract's term ended before ${input.period} — its circuits are not billed this month.`);
+    const lastDay = servedUntil(contract.termEnd, contract.terminatedOn);
+    if (lastDay < from) {
+      notes.push(
+        contract.terminatedOn && lastDay.getTime() === contract.terminatedOn.getTime()
+          ? `A contract was terminated before ${input.period} — its circuits are not billed this month.`
+          : `A contract's term ended before ${input.period} — its circuits are not billed this month.`,
+      );
       continue;
     }
 
@@ -112,7 +120,7 @@ export async function loadInvoiceMonthContext(input: {
       societyRevenueSharePct: terms.pricingModel === "lump_sum" ? null : (terms.revenueSharePct ?? null),
       tolerancePct: terms.tolerancePct ?? null,
       firstMonthSignedAt: signedAt,
-      finalMonthEndsOn: contract.termEnd < to ? contract.termEnd : null,
+      finalMonthEndsOn: lastDay < to ? lastDay : null,
       circuits: own.map((c) => {
         const events = c.rescaleEvents.map((e) => ({
           id: e.id,

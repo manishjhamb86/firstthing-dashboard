@@ -1,4 +1,7 @@
 import { isDemoMode } from "@/lib/demo-mode";
+import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
+import { closePreview } from "@/lib/deal-close-loader";
+import { PIPELINE_STAGE } from "@/lib/status-maps";
 import { dealLabel } from "@/lib/deal-scope";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -81,6 +84,10 @@ export default async function PipelineDetailPage({
   // Who may confirm a lead logged on someone else's behalf, and whether doing
   // so is acting for them. Resolved from the row, like every other gate here.
   const actor = await resolveAdmin();
+  const isOps = !!actor && actor.permissions.includes("manage_pipeline") && actor.permissions.includes("manage_survey");
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const closeDialog = isOps ? await closePreview({ id }, new Date(`${todayIso}T00:00:00Z`)) : null;
+  const terminatedOn = (await db.contract.findUnique({ where: { pipelineId: id }, select: { terminatedOn: true } }))?.terminatedOn ?? null;
   const ownerName = pipeline.salesOwner.name ?? pipeline.salesOwner.email;
   // Who the field work is on, and whether the next step is this account's to
   // take at all.
@@ -158,7 +165,33 @@ export default async function PipelineDetailPage({
         // field in deal-progress.ts for why the two used to disagree.
         chip={<StatusChip tone={progress.phase.tone}>{progress.phase.label}</StatusChip>}
         subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${pipeline.society.location}`}
+        action={
+          isOps && pipeline.stage !== "closed_lost" && closeDialog ? (
+            <CloseDealDialog mode="deal" id={pipeline.id} today={todayIso} {...closeDialog} />
+          ) : undefined
+        }
       />
+
+      {/* A closed deal says so first — when, why, by whom, the stage it had
+          reached, and whether a contract was terminated with it (2026-09-25). */}
+      {pipeline.stage === "closed_lost" && (
+        <div
+          className="mb-5 flex flex-wrap items-start justify-between gap-3 rounded-[var(--r-md)] border p-4 text-[13.5px]"
+          style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}
+        >
+          <div>
+            <p className="font-bold">
+              Closed{pipeline.closedLostAt ? ` ${formatDate(pipeline.closedLostAt)}` : ""}
+              {pipeline.closedLostStage ? ` at ${PIPELINE_STAGE[pipeline.closedLostStage]?.label ?? pipeline.closedLostStage}` : ""}
+            </p>
+            {pipeline.closedLostReason && <p className="mt-0.5">{pipeline.closedLostReason}</p>}
+            {terminatedOn && (
+              <p className="mt-0.5">Contract terminated — last day billed {formatDate(terminatedOn)}.</p>
+            )}
+          </div>
+          {isOps && <ReopenButton mode="deal" id={pipeline.id} />}
+        </div>
+      )}
 
       {/* The one thing the operator came here to learn: what to do now — or,
           when the next step is somebody else's, who it is waiting on. A blue

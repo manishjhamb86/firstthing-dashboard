@@ -7076,3 +7076,43 @@ savings month. **Filing does not publish** — `StoredDocument.releasedToSociety
 `requireAccountant()` (CON-33), offered only to an account holding `release_billing`. A
 same-number duplicate is refused filing. Verified end to end on dev: 2 filed, invisible to the
 society's office-bearer, released, then both visible on the portal.
+
+## Rejecting a society, closing a deal, terminating a contract (2026-09-25) — user-asked
+
+"Give option to reject societies. before/after demo and even after billed... sometimes the contract
+gets terminated mid way or even at start without paying a single invoice." Before this, a deal
+could only be closed-lost at the demo-proposal decision; a society's status was a free dropdown
+with no reason or effect; `ContractStatus.terminated` existed and nothing set it.
+
+**One rule module, `src/lib/deal-close.ts`** (10 unit cases): a deal with no running contract is
+closed as lost at whatever stage it reached (the stage kept in `closedLostStage`); a deal with a
+contract is closed AND the contract terminated from a stated **last served day**
+(`Contract.terminatedOn`). Both billing paths bill a terminated contract up to that day —
+`servedUntil()` feeds the existing final-month proration ("one mechanism, both ends"), and nothing
+after it; terminating on the start date bills nothing. **Two decisions were the user's**: unpaid
+invoices **stay owed and keep being followed up** — only CON-13's automatic suspension stops
+(`suspensionApplies`, read in the arrears sweep) since there is no service left to suspend; and
+**portal accounts keep read access**. Society-level **Reject / terminate** (operations only)
+applies the plan to every deal in one act with one reason; `terminated` left the free status
+dropdown and the old action refuses it, so it is only ever set with a reason and a date.
+**Reopen** restores each deal's stage and its contract, and is refused once the termination
+month has been released (GATE-02). Nothing is deleted. Migration
+`20260925100000_close_deals_terminate_contracts` is additive. Verified 12/12 on dev against Ace
+City (real contract): preview, server-side refusal with the permission revoked behind the open
+dialog, reject, the database state, reopen, and a byte-identical restore.
+
+## Retail customers (2026-09-25) — user-asked
+
+"We also sell some items as retail product to some customers... linked to a customer that can be
+or not a society. Create a retail customer from the invoice itself... no portal access." New
+`RetailCustomer` (name with a normalised `nameKey`, GSTIN — both unique, duplicates refused;
+optional link to a society) and `RetailInvoice` (migration `20260925110000_retail_customers`).
+On the intake review, **"This is a retail sale"** swaps the society picker for a retail-customer
+picker, with **Create from this invoice** prefilled from the bill-to name, GSTIN and address; the
+reader proposes the retail sale itself when a bill-to matches no society but does match a
+customer (GSTIN first, then name). Submitting files a `RetailInvoice` under
+`Documents/Retail/{customer}/…` — never a month of record, a circuit or a savings figure
+(INV-02) — and the duplicate check now covers retail invoice numbers. `/admin/retail-customers`
+lists customers with billed and unpaid totals; each customer page lists its invoices. Verified on
+dev with an invoice shaped like INV80850065 (Park View Residency): customer created from the
+bill-to, a second create refused, submitted, listed, and a second copy caught as a duplicate.

@@ -676,6 +676,9 @@ export async function submitProposal(
         proposalDecidedAt: decided,
         stage: "closed_lost",
         closedLostReason: reason,
+        closedLostAt: decided,
+        closedLostById: session.user.id,
+        closedLostStage: pipeline.stage,
       },
     });
     logger.info("pipeline.closed_lost", { pipelineId, actorId: session.user.id, reason });

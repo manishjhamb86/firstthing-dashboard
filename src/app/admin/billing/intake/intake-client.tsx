@@ -56,6 +56,8 @@ export type IntakeRow = {
   calculationId: string | null;
   /** Set only for a non-service invoice's row — filed, not a calculation. */
   filedSocietyId: string | null;
+  /** Set only for a retail sale's row — the customer it was filed against. */
+  retailCustomerId: string | null;
   /** The review's own confirmed society and month — what filing is keyed on. */
   hasSociety: boolean;
   hasPeriod: boolean;
@@ -697,8 +699,12 @@ export function IntakeClient({
                           <Link href={`/admin/billing/${r.calculationId}`} className="btn-ghost btn-sm">
                             Open month
                           </Link>
-                        ) : r.status === "submitted_filed_document" && r.filedSocietyId ? (
-                          <Link href={`/admin/documents?societyId=${r.filedSocietyId}&type=nonServiceInvoice`} className="btn-ghost btn-sm">
+                        ) : r.status === "submitted_retail" && r.retailCustomerId ? (
+                          <Link href={`/admin/retail-customers/${r.retailCustomerId}`} className="btn-ghost btn-sm">
+                            View customer
+                          </Link>
+                        ) : (r.status === "submitted_filed_document" || r.status === "submitted_filed_released") && r.filedSocietyId ? (
+                          <Link href={`/admin/documents?societyId=${r.filedSocietyId}`} className="btn-ghost btn-sm">
                             View document
                           </Link>
                         ) : r.status === "reading" ? (

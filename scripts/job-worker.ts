@@ -1,4 +1,5 @@
 import "./load-env";
+import { suspensionApplies } from "../src/lib/deal-close";
 import { db } from "../src/lib/db";
 import { logger } from "../src/lib/logger";
 import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";
@@ -221,6 +222,7 @@ async function runArrearsSweep() {
       include: {
         payments: { select: { amount: true } },
         extensions: { select: { days: true } },
+        calculation: { select: { society: { select: { status: true } } } },
       },
     });
 
@@ -274,7 +276,10 @@ async function runArrearsSweep() {
         data.suspendDueAt = state.suspendDueAt;
       }
 
-      if (verdict.fire) {
+      // A terminated society is still followed up for what it owes, but there
+      // is no service left to suspend (deal-close.ts, the user's call 2026-09-25).
+      const canSuspend = suspensionApplies(inv.calculation.society.status);
+      if (verdict.fire && canSuspend) {
         data.status = "suspended";
         data.suspendedAt = now;
         suspensions++;

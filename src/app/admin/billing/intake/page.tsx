@@ -36,6 +36,8 @@ const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
   submitted_filed_document: { label: "Filed — not yet with the society", tone: "info" },
   // Filed, then released onto the society's portal (2026-09-25).
   submitted_filed_released: { label: "Filed · released to society", tone: "ok" },
+  // A retail sale (2026-09-25) — filed against a retail customer.
+  submitted_retail: { label: "Filed · retail sale", tone: "info" },
   refused_duplicate: { label: "Refused — duplicate", tone: "bad" },
   discarded: { label: "Discarded", tone: "neu" },
 };
@@ -69,6 +71,19 @@ export default async function IntakePage({
     ? await db.monthlyCalculation.findMany({ where: { id: { in: calcIds } }, select: { id: true, status: true } })
     : [];
   const calcStatusById = new Map(calcs.map((c) => [c.id, c.status]));
+  const retailIds = intakes.filter((i) => i.retailInvoiceId).map((i) => i.retailInvoiceId!);
+  const retailCustomerByInvoice = new Map(
+    (retailIds.length ? await db.retailInvoice.findMany({ where: { id: { in: retailIds } }, select: { id: true, customerId: true, customer: { select: { name: true } } } }) : []).map((r) => [
+      r.id,
+      r.customerId,
+    ]),
+  );
+  // A retail row shows its customer's name where a society would sit.
+  const retailNameByInvoice = new Map(
+    retailIds.length
+      ? (await db.retailInvoice.findMany({ where: { id: { in: retailIds } }, select: { id: true, customer: { select: { name: true } } } })).map((r) => [r.id, r.customer.name])
+      : [],
+  );
   const docIds = intakes.filter((i) => i.filedAsDocumentId).map((i) => i.filedAsDocumentId!);
   const releasedDocIds = new Set(
     docIds.length
@@ -89,7 +104,9 @@ export default async function IntakePage({
       period?: string;
     } | null;
     let status: string = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
-    if (status === "submitted" && i.filedAsDocumentId) {
+    if (status === "submitted" && i.retailInvoiceId) {
+      status = "submitted_retail";
+    } else if (status === "submitted" && i.filedAsDocumentId) {
       status = releasedDocIds.has(i.filedAsDocumentId) ? "submitted_filed_released" : "submitted_filed_document";
     } else if (status === "submitted") {
       const calcStatus = i.monthlyCalculationId ? calcStatusById.get(i.monthlyCalculationId) : undefined;
@@ -102,7 +119,7 @@ export default async function IntakePage({
       status,
       statusLabel: STATUS_META[status]?.label ?? status,
       statusTone: STATUS_META[status]?.tone ?? "neu",
-      society: i.society?.name ?? null,
+      society: i.society?.name ?? (i.retailInvoiceId ? `${retailNameByInvoice.get(i.retailInvoiceId) ?? "Retail customer"} (retail)` : null),
       periodKey: i.period ?? null,
       period: i.period ? monthLabel(i.period) : null,
       invoiceNumber: review?.invoiceNumber ?? null,
@@ -116,6 +133,7 @@ export default async function IntakePage({
       // Only set for a non-service invoice's row — where it was filed
       // instead of submitted as a calculation.
       filedSocietyId: i.filedAsDocumentId ? i.societyId : null,
+      retailCustomerId: i.retailInvoiceId ? (retailCustomerByInvoice.get(i.retailInvoiceId) ?? null) : null,
       // What the bulk bar's rule reads (src/lib/intake-bulk.ts) — the
       // review's own confirmed values, the same ones the server re-checks.
       hasSociety: !!review?.societyId,

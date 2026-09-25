@@ -32,9 +32,14 @@ export default async function IntakeReviewPage({ params }: { params: Promise<{ i
   // A non-service invoice (devices, a one-off charge) has no calculation to
   // land on — it was filed as a document instead. Back to the list rather
   // than re-rendering a review form for a row that is already committed.
+  if (intake.status === "submitted" && intake.retailInvoiceId) {
+    const inv = await db.retailInvoice.findUnique({ where: { id: intake.retailInvoiceId }, select: { customerId: true } });
+    if (inv) redirect(`/admin/retail-customers/${inv.customerId}`);
+  }
   if (intake.status === "submitted") redirect("/admin/billing/intake");
 
   const societies = await db.society.findMany({ select: { id: true, name: true, location: true }, orderBy: { name: "asc" } });
+  const retailCustomers = await db.retailCustomer.findMany({ select: { id: true, name: true, gstin: true }, orderBy: { name: "asc" } });
   const extraction = (intake.extraction ?? null) as ExtractedInvoice | null;
   const review: Review =
     (intake.review as Review | null) ?? {
@@ -97,6 +102,7 @@ export default async function IntakeReviewPage({ params }: { params: Promise<{ i
         initialReview={review}
         initialPreview={preview.error ? null : (preview as Exclude<typeof preview, { error: string }>)}
         societies={societies}
+        retailCustomers={retailCustomers}
       />
     </>
   );

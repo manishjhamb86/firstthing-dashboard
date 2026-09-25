@@ -343,6 +343,11 @@ model Society {
   latitude                      Float?
   longitude                     Float?
   status                        SocietyStatus @default(prospect)
+  /// Rejected / terminated as a whole (2026-09-25) — every open deal closed
+  /// and every running contract terminated in one act, with one reason.
+  closedAt                      DateTime?     @map("closed_at")
+  closedById                    String?       @map("closed_by_id")
+  closedReason                  String?       @map("closed_reason")
   nextElectionDate              DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
   /// KYC facts a deal can move forward on without the document in hand
   /// (user's call 2026-09-15): the GSTIN, and the tariff a recent bill would
@@ -373,6 +378,7 @@ model Society {
   // MS-08
   monthlyCalculations     MonthlyCalculation[]
   storedDocuments         StoredDocument[]
+  retailCustomers         RetailCustomer[]
   publishedSavingsReports PublishedSavingsReport[]
   tickets                 Ticket[]
   inspections             Inspection[]
@@ -640,10 +646,16 @@ model Pipeline {
   demoSkipDate       DateTime? @map("demo_skip_date")
 
   // FEAT-002 proposal fields
-  proposalSummary   String?   @map("proposal_summary")
-  proposalOutcome   String?   @map("proposal_outcome") // "agreed" | "declined" | "undecided"
-  proposalDecidedAt DateTime? @map("proposal_decided_at")
-  closedLostReason  String?   @map("closed_lost_reason")
+  proposalSummary   String?        @map("proposal_summary")
+  proposalOutcome   String?        @map("proposal_outcome") // "agreed" | "declined" | "undecided"
+  proposalDecidedAt DateTime?      @map("proposal_decided_at")
+  closedLostReason  String?        @map("closed_lost_reason")
+  /// When and by whom the deal was closed as lost, and the stage it had
+  /// reached — so a close at any stage (before/after the demo, after the
+  /// contract) is on record and a reopen can restore it (2026-09-25).
+  closedLostAt      DateTime?      @map("closed_lost_at")
+  closedLostById    String?        @map("closed_lost_by_id")
+  closedLostStage   PipelineStage? @map("closed_lost_stage")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1418,6 +1430,15 @@ model Contract {
 
   activatedAt   DateTime? @map("activated_at")
   activatedById String?   @map("activated_by_id")
+
+  /// A contract ended early (2026-09-25): terminatedOn is the LAST SERVED
+  /// DAY — billing prorates the final month to it (the same mechanism as a
+  /// term ending mid-month) and bills nothing after it. terminatedAt is when
+  /// it was recorded. Unpaid invoices stay owed (the user's call).
+  terminatedOn      DateTime? @map("terminated_on")
+  terminatedAt      DateTime? @map("terminated_at")
+  terminatedById    String?   @map("terminated_by_id")
+  terminationReason String?   @map("termination_reason")
 
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -2583,6 +2604,9 @@ model InvoiceIntake {
   // one-off charge that is not competing for this month's savings figure.
   // Filed as a StoredDocument, never fed into any calculation.
   filedAsDocumentId    String?   @map("filed_as_document_id")
+  /// Set when the invoice was a RETAIL sale (2026-09-25) — filed against a
+  /// retail customer instead of becoming a society's month of record.
+  retailInvoiceId      String?   @unique @map("retail_invoice_id")
 
   discardedAt   DateTime? @map("discarded_at")
   discardReason String?   @map("discard_reason")
@@ -3585,4 +3609,63 @@ model PublishedSavingsReport {
   @@unique([circuitId, period, version])
   @@index([societyId])
   @@map("published_savings_reports")
+}
+
+/// A customer FirsThing sells items to directly (2026-09-25, user-asked: "we
+/// also sell some items as retail product to some customers... linked to a
+/// customer that can be or not a society"). Back-office only: no portal
+/// access. Created from an invoice's own bill-to, or by hand.
+model RetailCustomer {
+  id        String  @id @default(cuid())
+  name      String
+  /// Normalised name — duplicates are refused, not flagged (the same rule as
+  /// societies: an override is how duplicate rows get created).
+  nameKey   String  @unique @map("name_key")
+  gstin     String? @unique
+  address   String?
+  phone     String?
+  email     String?
+  /// Optional: the society this customer is, or belongs to.
+  societyId String? @map("society_id")
+  notes     String?
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById String   @map("created_by_id")
+
+  society  Society?        @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  invoices RetailInvoice[]
+
+  @@map("retail_customers")
+}
+
+/// One retail sale's invoice, read back from the Zoho PDF through invoice
+/// intake. Never feeds a savings figure or society billing (INV-02).
+model RetailInvoice {
+  id            String    @id @default(cuid())
+  customerId    String    @map("customer_id")
+  invoiceNumber String    @map("invoice_number")
+  invoiceDate   DateTime? @map("invoice_date")
+  dueDate       DateTime? @map("due_date")
+  /// INV-04 — the month the operator confirmed, "YYYY-MM".
+  period        String
+  subtotal      Float?
+  taxAmount     Float?    @map("tax_amount")
+  total         Float
+  paid          Boolean   @default(false)
+  paidOn        DateTime? @map("paid_on")
+  s3Key         String    @map("s3_key")
+  fileName      String    @map("file_name")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById String   @map("created_by_id")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
+  customer RetailCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+
+  @@index([customerId])
+  @@index([invoiceNumber])
+  @@map("retail_invoices")
 }

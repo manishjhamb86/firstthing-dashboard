@@ -40,7 +40,7 @@ export default async function PreInstallReportPage({
   const { id, circuitId } = await params;
   const report = await loadCircuitReport(circuitId);
   if (!report || report.society.id !== id) notFound();
-  const { circuit, society, theoretical, preDays, preAverage, preIncludedCount, avgVariance, inventory } = report;
+  const { circuit, society, theoretical, preDays, preAverage, preIncludedCount, avgVariance, inventory, demoWindows } = report;
   const circuitHref = `/admin/societies/${id}/circuits/${circuitId}`;
 
   const excludedCount = preDays.length - preIncludedCount;
@@ -215,7 +215,9 @@ export default async function PreInstallReportPage({
 
           <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
             <h2 className="text-[15px] font-semibold">Recorded consumption, day by day</h2>
-            <p className="text-xs text-[var(--text-subtle)]">Excluded days are shown, never hidden</p>
+            <p className="text-xs text-[var(--text-subtle)]">
+              {demoWindows.pre ? `Demo period ${formatDate(demoWindows.pre.from)} to ${formatDate(demoWindows.pre.to)} · ` : ""}Excluded days are shown, never hidden
+            </p>
           </div>
           <DaysGrid days={preDays} mode="variance" />
           <ReportLegend days={preDays} mode="variance" />

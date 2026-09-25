@@ -39,7 +39,7 @@ export default async function PostInstallReportPage({
   const { id, circuitId } = await params;
   const report = await loadCircuitReport(circuitId);
   if (!report || report.society.id !== id) notFound();
-  const { circuit, society, preDays, postDays, preAverage, preIncludedCount, effBaselineNow, inventory } = report;
+  const { circuit, society, preDays, demoPostDays: postDays, demoWindows, preAverage, preIncludedCount, effBaselineNow, inventory } = report;
   if (!circuit.lightReplacementDate) notFound(); // no post phase yet — the report doesn't exist
   const circuitHref = `/admin/societies/${id}/circuits/${circuitId}`;
 
@@ -212,9 +212,25 @@ export default async function PostInstallReportPage({
             </>
           )}
 
+          {/* Both demo periods, and only them (2026-09-25, user-specified):
+              the days the baseline came from, then the days measured against it. */}
+          {preDays.length > 0 && (
+            <>
+              <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
+                <h2 className="text-[15px] font-semibold">Before installation, day by day</h2>
+                <p className="text-xs text-[var(--text-subtle)]">
+                  {demoWindows.pre ? `Demo period ${formatDate(demoWindows.pre.from)} to ${formatDate(demoWindows.pre.to)}` : "The days the baseline was averaged from"}
+                </p>
+              </div>
+              <DaysGrid days={preDays} mode="variance" />
+              <div className="mb-6" />
+            </>
+          )}
           <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
-            <h2 className="text-[15px] font-semibold">Consumption &amp; savings, day by day</h2>
-            <p className="text-xs text-[var(--text-subtle)]">Excluded days are shown, never hidden</p>
+            <h2 className="text-[15px] font-semibold">After installation — consumption &amp; savings, day by day</h2>
+            <p className="text-xs text-[var(--text-subtle)]">
+              {demoWindows.post ? `Demo period ${formatDate(demoWindows.post.from)} to ${formatDate(demoWindows.post.to)} · ` : ""}Excluded days are shown, never hidden
+            </p>
           </div>
           <DaysGrid days={postDays} mode="savings" />
           <ReportLegend days={postDays} mode="savings" />

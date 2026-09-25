@@ -7435,3 +7435,90 @@ Cost per piece or metre was already captured at receiving; now it values the sto
 build heap. The failed build left `.next` without a `BUILD_ID`, so the site ran on the old
 in-memory build until the next deploy succeeded. `deploy-stage.sh` now uses 1,600 MB, which fits
 the 1.9 GB box with its swap.
+
+## Batch of 2026-09-25 (evening) — user-listed, deployed together
+
+**Inspections reassigned (data, stage only).** All 32 stage inspections now read inspector
+"Yogendra", contact `yogendra@firsthing.earth`, filed by his account (`created_by_id`), at the
+user's instruction. The update was a direct SQL `UPDATE` on `firsthing_blueprint`, not a migration,
+because it is a correction of stage data rather than a rule.
+
+**A light-count change now moves the society's published months.** French Apartment was rescaled
+55 → 76 lights from 01-08-2026, and every screen showed the new baseline except the customer
+dashboard. That dashboard reads the published (invoice-first) months, which only re-derived when
+readings arrived and a line flipped agreed → measured.
+- Recording, correcting or voiding a light-count change now re-derives every released
+  invoice-sourced month from its effective month on, through `rederiveInvoiceMonthsAfterRescale`.
+- A correction starts from the earlier of the old and new effective dates.
+- A new version is written only when the figures actually moved (`linesMateriallyChanged`, pure,
+  3 cases). As always the invoice is untouched and only the stats version changes (ADR-011).
+- The derivation was already rescale-aware (`effectiveBaselineAt`); only the trigger was missing.
+- The rescale's own effective date was already 01-08; the "25-09-2026" in the table was its
+  recorded-at date.
+
+**Payments: method, UTR, cheque details and copies, TDS.** Migration
+`20260925170000_payment_details`.
+- **Method:** bank transfer, UPI, cheque, cash or other. A transfer or UPI payment needs its UTR; a
+  cheque needs its number, date and bank.
+- **TDS:** `tdsAmount` counts towards settling the invoice. An invoice is settled when received +
+  TDS covers it (₹1 tolerance), everywhere payments are added up: the invoice page, CON-13's
+  arrears sweep and the portal. TDS can be entered as a rate on the pre-GST subtotal, rounded to
+  the rupee (2% of ₹14,050 = ₹281).
+- **Copies:** cheque copies and TDS certificates are uploaded to the private `Payments/{invoiceId}/`
+  prefix, because they carry bank details, and are served by a short-lived signed link.
+- Rules are in `src/lib/payment.ts` (pure, 5 cases).
+- Verified 11/11. The UTR refusal comes from the server. The invoice reads "Paid" once
+  ₹16,298 + ₹281 TDS = ₹16,579. The cheque copy's link serves the file.
+
+**Demo periods.** The user specified this with a worked example. Migration
+`20260925180000_demo_windows` adds `pre/postDemoFrom/To` on the circuit.
+- **When a period is set,** only its days make the baseline (pre) and the benchmark (post):
+  - the pre-installation report shows exactly the pre period;
+  - the post-installation report shows the pre period and the post period, and nothing before,
+    between or after.
+- **When a period is unset,** the old rule stands for that phase.
+- The monthly report still reads every day after the replacement (`postDays`); the demo reports
+  read `preDays` / `demoPostDays`.
+- `demoPhase()` and `refuseDemoWindows()` in `src/lib/demo-window.ts` are pure, with 8 cases
+  including the user's own example.
+- **Setting the periods** re-derives with `recomputeCircuitFigures(tx, id, { force: true })`, then
+  re-derives published months. A forced re-derive:
+  - never clears an existing baseline because the new window has no readings yet;
+  - never touches a benchmark that came from demos or an agreed override;
+  - never pulls an `active_billing` circuit out of billing.
+- **Demo mode only:**
+  - a day's reading can be added or its value changed (`setDemoReading`). A changed day keeps its
+    replaced value; hand-entered days hang off one per-circuit file marked demo-generated;
+    billed days are refused.
+  - the meter-install and replacement date corrections no longer refuse once readings exist or
+    the figures have settled — the figures re-derive instead. Readings left before a moved install
+    date stay stored and simply stop counting.
+- The same fields apply to circuits whose demo was skipped and that were entered from their old
+  reports.
+- Verified 11/11 with the example: baseline 12 from 11–15 Aug, benchmark 66.67% from 18–24 Aug,
+  both reports holding exactly those periods, and a hand-changed day (12 → 17) re-deriving the
+  baseline to 13 and keeping 12 as the replaced value. The reading editor is absent outside demo
+  mode.
+
+**Facility management companies.** Migration `20260925190000_facility_management`.
+- **Companies:** `FacilityManagementCompany`, with a normalised `nameKey` so that "Sodexo
+  Facilities Management Services India Pvt. Ltd." and "sodexo facilities management" are one
+  company, and duplicates are refused.
+- **Who runs a society:** `SocietyFmEngagement`, one open row per society (partial unique index),
+  with a start and end date and an end reason.
+- **Who works for whom:** `FmEmployment`, with the person identified by their normalised mobile
+  across societies and one open row per mobile (partial unique index). It links to the society
+  member record it came from, so a person is tied to both the society and the company.
+- **Span rules** (`planSpanChange`, pure, 6 cases): a change closes the old span the day before;
+  the same company is no change; the same day as the span began is a correction, not a move.
+- **Screens:**
+  - Societies → Facility management (list; each company's page shows its societies and people,
+    now and past, including where a past employee went next);
+  - the new-society form (optional company + since, with a type-to-search picker that can add a
+    company inline);
+  - a Facility management card on the society page (current, past, change with a reason);
+  - "Employed by" on the member add and edit forms (the society's own company listed first), and
+    the employer shown on the member row.
+- Verified 8/8: duplicate refused; Sodexo 01-04 → JLL 01-09 with history and reason; a member
+  employed by the society's company is linked to both; moving employer closes the old span
+  "Moved to …" and JLL's page shows the person now at Sodexo.

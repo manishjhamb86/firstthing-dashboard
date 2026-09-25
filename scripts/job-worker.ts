@@ -7,6 +7,7 @@ import { pollMeters } from "../src/lib/meter-poll";
 import { arrearsStateOf, shouldFireSuspension } from "../src/lib/arrears";
 import { runIntakeExtraction } from "../src/lib/invoice-intake-extract";
 import { runCalendarSweep } from "../src/lib/calendar-sync";
+import { settledTotal } from "../src/lib/payment";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -232,7 +233,7 @@ async function runArrearsSweep() {
     const invoices = await db.billingInvoice.findMany({
       where: { voidedAt: null, releasedAt: { not: null }, status: { not: "paid" } },
       include: {
-        payments: { select: { amount: true } },
+        payments: { select: { amount: true, tdsAmount: true } },
         extensions: { select: { days: true } },
         calculation: { select: { society: { select: { status: true } } } },
       },
@@ -242,7 +243,7 @@ async function runArrearsSweep() {
     let suspensions = 0;
 
     for (const inv of invoices) {
-      const amountPaid = inv.payments.reduce((n, p) => n + p.amount, 0);
+      const amountPaid = settledTotal(inv.payments);
       const extensionDaysGranted = inv.extensions.reduce((n, e) => n + e.days, 0);
 
       const state = arrearsStateOf({

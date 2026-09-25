@@ -14,6 +14,9 @@ import { recomputeCircuitFigures } from "@/lib/circuit-recompute";
 import { isDemoMode } from "@/lib/demo-mode";
 import { refuseRepresentedCount } from "@/lib/light-type";
 import { baselineUnsettled } from "@/lib/circuit-load";
+import { refuseDemoWindows, windowDates, type DemoWindowInput } from "@/lib/demo-window";
+import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
+import { DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
 
 const LOAD_TOLERANCE_PCT = 10; // CON-17
 
@@ -132,12 +135,10 @@ export async function correctMeterInstallDate(
   if (!circuit.meterInstalledAt) {
     return { error: "This circuit has no install date yet — record it on the meter step." };
   }
-  if (!baselineUnsettled(circuit)) {
-    return {
-      error:
-        "The pre-install baseline is already settled, and it was computed from the window this date opens. Correcting it now would restate a figure the benchmark rests on.",
-    };
-  }
+  // Demo mode (2026-09-25, user-asked): every date the demo validates
+  // against can be moved, even after readings exist — the figures re-derive
+  // from the days that count after the move, rather than the move being
+  // refused. This action is demo-only, so real commissioning is unaffected.
 
   const surveyed = surveyHappenedAt({
     visitAt: circuit.siteSurvey?.pipeline?.scheduledEvents[0]?.startAt ?? null,
@@ -164,16 +165,9 @@ export async function correctMeterInstallDate(
   }
 
   const windowStart = nextDayUTC(at);
-  const stranded = await db.meterReading.findFirst({
-    where: { circuitId, date: { lt: windowStart } },
-    orderBy: { date: "asc" },
-    select: { date: true },
-  });
-  if (stranded) {
-    return {
-      error: `A reading is stored for ${formatDate(stranded.date)}, which is on or before that install day — the pre-install window opens the day after, so it would fall outside its own window. Remove that reading first, or pick an earlier install date.`,
-    };
-  }
+  // Readings on or before the new install day stay stored; they simply stop
+  // counting towards the baseline (they are before the meter).
+  const stranded = await db.meterReading.count({ where: { circuitId, date: { lt: windowStart } } });
 
   // Moving the install date moves the pre/post boundary, so the baseline
   // computed from the OLD split is a figure derived from a division that no
@@ -187,13 +181,14 @@ export async function correctMeterInstallDate(
       where: { id: circuitId },
       data: { meterInstalledAt: at, preInstallWindowStartAt: windowStart },
     });
-    await recomputeCircuitFigures(tx, circuitId);
+    await recomputeCircuitFigures(tx, circuitId, { force: true });
   });
   logger.info("circuit.install_date_corrected", {
     actorId: admin.id,
     circuitId,
     from: circuit.meterInstalledAt.toISOString().slice(0, 10),
     to: installedOn,
+    readingsNowBeforeMeter: stranded,
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   return { ok: true };
@@ -733,10 +728,11 @@ export async function correctLightReplacementDate(
     orderBy: { date: "desc" },
     select: { date: true },
   });
+  const demoMode = await isDemoMode();
   const dateRefusal = refuseReplacementDate({
     replacementDate: to,
     meterInstalledAt: circuit.meterInstalledAt,
-    lastPreInstallReading: lastPre?.date ?? null,
+    lastPreInstallReading: demoMode ? null : (lastPre?.date ?? null),
     now: new Date(),
   });
   if (dateRefusal) {
@@ -753,7 +749,8 @@ export async function correctLightReplacementDate(
     db.meterReading.count({ where: { circuitId, date: { gte: lo, lte: hi } } }),
     db.commissioningReading.count({ where: { circuitId, date: { gte: lo, lte: hi } } }),
   ]);
-  const moveRefusal = refuseReplacementMove({
+  const demo = demoMode;
+  const moveRefusal = demo ? null : refuseReplacementMove({
     readingsWhosePhaseChanges: stored + commissioning,
     baselineSettled: !baselineUnsettled(circuit),
     benchmarkFromWindow:
@@ -778,7 +775,8 @@ export async function correctLightReplacementDate(
       where: { circuitId, replacedAt: { not: null } },
       data: { replacedAt: to },
     });
-    await recomputeCircuitFigures(tx, circuitId);
+    // In demo mode the move is allowed after the figures settled — they re-derive.
+    await recomputeCircuitFigures(tx, circuitId, { force: demo });
   });
   logger.info("circuit.replacement_date_corrected", {
     actorId: admin.id,
@@ -1150,5 +1148,86 @@ export async function updateRepresentedLightCount(
   });
   revalidatePath(`/admin/societies`);
   revalidatePath(`/admin/pipeline`);
+  return {};
+}
+
+// ── Demo periods and demo-mode readings (2026-09-25, user-asked) ─────────
+
+/**
+ * Set (or clear) the demo periods. Only their days make the baseline and the
+ * benchmark and appear in the demo reports; the figures re-derive now, and
+ * the society's published months follow the new baseline.
+ */
+export async function setDemoWindows(
+  circuitId: string,
+  input: DemoWindowInput,
+): Promise<{ error?: string; baseline?: number | null; benchmark?: number | null }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!(admin.permissions as string[]).includes("manage_survey")) return { error: "Setting the demo periods is a field-survey action." };
+  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  const refusal = refuseDemoWindows(input, circuit);
+  if (refusal) {
+    logger.warn("circuit.demo_windows_refused", { actorId: admin.id, circuitId, reason: refusal });
+    return { error: refusal };
+  }
+  const dates = windowDates(input);
+  const after = await db.$transaction(async (tx) => {
+    await tx.circuit.update({ where: { id: circuitId }, data: dates });
+    await recomputeCircuitFigures(tx, circuitId, { force: true });
+    return tx.circuit.findUnique({ where: { id: circuitId }, select: { preInstallBaseline: true, benchmarkSavingsPct: true } });
+  });
+  logger.info("circuit.demo_windows_set", { actorId: admin.id, circuitId, ...input, baseline: after?.preInstallBaseline ?? null, benchmark: after?.benchmarkSavingsPct ?? null });
+  await rederiveInvoiceMonthsAfterRescale(circuitId, "0000-00", admin.id).catch((err) =>
+    logger.warn("billing.rederive_after_demo_windows_failed", { circuitId, error: String(err) }),
+  );
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  revalidatePath("/portal");
+  return { baseline: after?.preInstallBaseline ?? null, benchmark: after?.benchmarkSavingsPct ?? null };
+}
+
+/**
+ * Demo mode: add a day's reading by hand, or change a stored one. A changed
+ * value keeps the value it replaced (supersession, never overwrite), and a
+ * day billed on a released month is never touched.
+ */
+export async function setDemoReading(circuitId: string, date: string, kWh: number): Promise<{ error?: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!(admin.permissions as string[]).includes("manage_survey")) return { error: "Recording readings is a field-survey action." };
+  if (!(await isDemoMode())) return { error: "Adding or changing a reading by hand is a demo-mode action." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { error: "Pick the day." };
+  if (!Number.isFinite(kWh) || kWh < 0) return { error: "The reading must be zero or a positive number of kWh." };
+  const at = new Date(`${date}T00:00:00Z`);
+  const circuit = await db.circuit.findUnique({ where: { id: circuitId } });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  if (!circuit.meterInstalledAt) return { error: "Record the meter install first — readings count from the day after." };
+  if (at.getTime() <= new Date(circuit.meterInstalledAt.toISOString().slice(0, 10) + "T00:00:00Z").getTime())
+    return { error: "That day is on or before the meter went in." };
+  const existing = await db.meterReading.findFirst({ where: { circuitId, date: at, source: "csv" } });
+  if (existing?.usedInCalculationId) return { error: "That day is billed on a released month — it can't be changed." };
+
+  await db.$transaction(async (tx) => {
+    if (existing) {
+      await tx.meterReading.update({
+        where: { id: existing.id },
+        data: { kWh, supersededValue: existing.kWh, supersededAt: new Date(), supersededByUserId: admin.id },
+      });
+    } else {
+      // Every reading traces to a file (INV-02); hand-entered demo days
+      // share one per circuit, marked demo-generated.
+      const key = `${DEMO_RAW_KEY_PREFIX}${circuitId}/entered-by-hand.csv`;
+      const file =
+        (await tx.rawReadingFile.findFirst({ where: { circuitId, s3Key: key } })) ??
+        (await tx.rawReadingFile.create({
+          data: { circuitId, s3Key: key, fileName: "Entered by hand (demo mode)", contentType: "text/csv", byteSize: 0, status: "committed", uploadedById: admin.id },
+        }));
+      await tx.meterReading.create({ data: { circuitId, date: at, kWh, source: "csv", rawFileId: file.id, intervalCount: 24 } });
+    }
+    await recomputeCircuitFigures(tx, circuitId, { force: true });
+  });
+  logger.info("circuit.demo_reading_set", { actorId: admin.id, circuitId, date, kWh, replaced: existing?.kWh ?? null });
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   return {};
 }

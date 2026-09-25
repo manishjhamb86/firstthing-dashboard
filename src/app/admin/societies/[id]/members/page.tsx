@@ -31,6 +31,13 @@ export default async function SocietyMembersPage({ params }: { params: Promise<{
     db.profile.findMany({ where: { societyId: id }, select: { id: true, name: true, email: true, portalAuthority: true, isActive: true } }),
   ]);
   const profileById = new Map(profiles.map((p) => [p.id, p]));
+  // Each person's current employer, by mobile — the person across societies (2026-09-25).
+  const [employments, fmCompanies, societyFm] = await Promise.all([
+    db.fmEmployment.findMany({ where: { mobile: { in: members.map((m) => m.mobile) }, endedOn: null }, include: { company: { select: { name: true } } } }),
+    db.facilityManagementCompany.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+    db.societyFmEngagement.findFirst({ where: { societyId: id, endedOn: null }, include: { company: { select: { id: true, name: true } } } }),
+  ]);
+  const employerByMobile = new Map(employments.map((e) => [e.mobile, e]));
   const linked = new Set(members.map((m) => m.profileId).filter(Boolean));
   const AUTH: Record<string, string> = { office_bearer: "Office-bearer", committee: "Committee", manager: "Manager" };
 
@@ -55,6 +62,8 @@ export default async function SocietyMembersPage({ params }: { params: Promise<{
         replacedBy: m.replacedBy?.name ?? null,
         portal: p ? `${AUTH[p.portalAuthority ?? ""] ?? "Portal"}${p.isActive ? "" : " (deactivated)"}` : null,
         portalAuthority: p?.portalAuthority ?? null,
+        fmCompanyId: employerByMobile.get(m.mobile)?.companyId ?? "",
+        fmCompanyName: employerByMobile.get(m.mobile)?.company.name ?? null,
       };
     })
     .sort((a, b) => (a.current === b.current ? a.positionOrder - b.positionOrder : a.current ? -1 : 1));
@@ -76,6 +85,7 @@ export default async function SocietyMembersPage({ params }: { params: Promise<{
         grants={GRANT_META.map((g) => ({ id: g.id, label: g.label }))}
         canPortal={!!viewer?.permissions.includes("manage_users")}
         today={new Date().toISOString().slice(0, 10)}
+        fm={{ companies: fmCompanies, society: societyFm ? { id: societyFm.company.id, name: societyFm.company.name } : null }}
       />
     </>
   );

@@ -47,3 +47,15 @@ describe("anyLineImprovedToMeasured", () => {
     expect(anyLineImprovedToMeasured(old, [{ circuitId: "c9", basis: "measured" }])).toBe(false);
   });
 });
+
+import { linesMateriallyChanged } from "@/lib/invoice-rederive";
+
+describe("linesMateriallyChanged — a rescale moves a published month", () => {
+  const old = [{ circuitId: "c", basis: "measured" as const, baselineKwhPerDay: 25, measuredSavingsPct: 60.29, savedValue: 55691.97 }];
+  it("a new baseline from a light-count change is a change", () =>
+    expect(linesMateriallyChanged(old, [{ circuitId: "c", basis: "measured", baselineKwhPerDay: 34.545, savingsPct: 71.2, savedValue: 65000 }])).toBe(true));
+  it("the same figures are not — no version is written for nothing", () =>
+    expect(linesMateriallyChanged(old, [{ circuitId: "c", basis: "measured", baselineKwhPerDay: 25, savingsPct: 60.291, savedValue: 55692.1 }])).toBe(false));
+  it("a basis change either way is a change", () =>
+    expect(linesMateriallyChanged(old, [{ circuitId: "c", basis: "agreed", baselineKwhPerDay: 25, savingsPct: 60.29, savedValue: 55691.97 }])).toBe(true));
+});

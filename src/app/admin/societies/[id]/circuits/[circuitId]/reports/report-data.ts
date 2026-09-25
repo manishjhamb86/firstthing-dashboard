@@ -4,6 +4,7 @@
 // property the agreement print route (FEAT-029) was built on.
 
 import { db } from "@/lib/db";
+import { demoPhase, hasPostWindow, hasPreWindow } from "@/lib/demo-window";
 import {
   classifyDay,
   periodSavingsSummary,
@@ -109,12 +110,18 @@ export async function loadCircuitReport(circuitId: string) {
     };
   };
 
-  const preDays: ReportDay[] = [];
+  // Every day after the replacement — the monthly report's source.
   const postDays: ReportDay[] = [];
+  // The demo reports (2026-09-25): only the demo periods' days when they are
+  // set — "nothing before or after or in between" — else the old rule.
+  const preDays: ReportDay[] = [];
+  const demoPostDays: ReportDay[] = [];
   for (const r of circuit.meterReadings) {
     const phase = classifyDay(r.date, circuit.meterInstalledAt, circuit.lightReplacementDate);
-    if (phase === "pre_install") preDays.push(toDay(r, "pre"));
-    else if (phase === "post_install") postDays.push(toDay(r, "post"));
+    if (phase === "post_install") postDays.push(toDay(r, "post"));
+    const dp = demoPhase(r.date, circuit);
+    if (dp === "pre") preDays.push(toDay(r, "pre"));
+    else if (dp === "post") demoPostDays.push(toDay(r, "post"));
   }
 
   const preIncluded = preDays.filter((d) => !d.excluded);
@@ -133,6 +140,11 @@ export async function loadCircuitReport(circuitId: string) {
     theoretical,
     preDays,
     postDays,
+    demoPostDays,
+    demoWindows: {
+      pre: hasPreWindow(circuit) ? { from: circuit.preDemoFrom!, to: circuit.preDemoTo! } : null,
+      post: hasPostWindow(circuit) ? { from: circuit.postDemoFrom!, to: circuit.postDemoTo! } : null,
+    },
     preAverage,
     preIncludedCount: preIncluded.length,
     avgVariance,

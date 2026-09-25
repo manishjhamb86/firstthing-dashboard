@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { formatDate } from "@/lib/format-date";
+import { settledTotal } from "@/lib/payment";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -69,7 +70,7 @@ export default async function CalculationPage({
       ? arrearsStateOf({
           releasedAt: liveInvoice.releasedAt,
           dueDate: liveInvoice.dueDate,
-          amountPaid: liveInvoice.payments.reduce((n, p) => n + p.amount, 0),
+          amountPaid: settledTotal(liveInvoice.payments),
           invoiceAmount: liveInvoice.amount,
           extensionDaysGranted: liveInvoice.extensions.reduce((n, e) => n + e.days, 0),
           alreadySuspendedAt: liveInvoice.suspendedAt,
@@ -225,7 +226,21 @@ export default async function CalculationPage({
                   reconciliationStatus: liveInvoice.reconciliationStatus,
                   status: liveInvoice.status,
                   fileName: liveInvoice.fileName,
-                  paidTotal: liveInvoice.payments.reduce((n, p) => n + p.amount, 0),
+                  paidTotal: settledTotal(liveInvoice.payments),
+                  subtotal: liveInvoice.subtotal ?? null,
+                  payments: liveInvoice.payments.map((p) => ({
+                    id: p.id,
+                    amount: p.amount,
+                    tdsAmount: p.tdsAmount,
+                    method: p.method,
+                    utrNumber: p.utrNumber,
+                    chequeNumber: p.chequeNumber,
+                    chequeDate: p.chequeDate?.toISOString() ?? null,
+                    chequeBank: p.chequeBank,
+                    confirmedAsOf: p.confirmedAsOf.toISOString(),
+                    reference: p.reference,
+                    attachments: (p.attachments as { key: string; name: string; kind: string }[] | null) ?? [],
+                  })),
                   paymentStatusConfirmedAt: liveInvoice.paymentStatusConfirmedAt?.toISOString() ?? null,
                 }
               : null

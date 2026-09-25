@@ -4,6 +4,7 @@ import { baselineAverage, baselineUnsettled, periodSavingsSummary } from "@/lib/
 import { BENCHMARK_MAX_PCT, BENCHMARK_MIN_PCT } from "@/lib/commissioning-anomaly";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
+import { demoPhase } from "@/lib/demo-window";
 
 /**
  * Re-derive a circuit's baseline and benchmark from the readings it holds and
@@ -24,20 +25,37 @@ export type Tx = Parameters<Parameters<typeof db.$transaction>[0]>[0];
 export async function recomputeCircuitFigures(
   tx: Tx,
   circuitId: string,
+  opts: { force?: boolean } = {},
 ): Promise<{ baseline: number | null; benchmark: { pct: number; inBand: boolean } | null }> {
   const circuit = await tx.circuit.findUnique({
     where: { id: circuitId },
     include: {
       rescaleEvents: true,
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
+      demos: { where: { rejected: false }, select: { id: true } },
     },
   });
   if (!circuit || !circuit.meterInstalledAt) return { baseline: null, benchmark: null };
 
-  const phases = circuit.meterReadings.map((r) => ({
-    r,
-    phase: classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate),
-  }));
+  // Which day feeds which figure (2026-09-25): the demo periods when set,
+  // otherwise the old rule. "pre_install"/"post_install" below mean "counts
+  // towards the baseline / the benchmark", nothing wider.
+  const phases = circuit.meterReadings.map((r) => {
+    const dp = demoPhase(r.date, circuit);
+    const phase = dp === "pre" ? "pre_install" : dp === "post" ? "post_install" : classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate) === "before_meter" ? "before_meter" : "outside";
+    return { r, phase };
+  });
+
+  // A forced re-derive (the demo periods changed, or a demo-mode edit) opens
+  // the figures the demo produced even after they settled — the operator
+  // changed the evidence on purpose. A benchmark that came from the circuit's
+  // demos or an agreed override is not the window's to change.
+  const benchmarkFromWindow = circuit.demos.length === 0 && circuit.benchmarkOverridePct === null;
+  const settledBaseline = circuit.preInstallBaseline;
+  if (opts.force) {
+    (circuit as { preInstallBaseline: number | null }).preInstallBaseline = null;
+    if (benchmarkFromWindow) (circuit as { benchmarkSavingsPct: number | null }).benchmarkSavingsPct = null;
+  }
 
   let baseline = circuit.preInstallBaseline;
   const updates: Record<string, unknown> = {};
@@ -58,7 +76,13 @@ export async function recomputeCircuitFigures(
       .filter((p) => p.phase === "pre_install")
       .map((p) => ({ date: p.r.date, kWh: p.r.kWh, excluded: p.r.excludedAt !== null }));
     baseline = baselineAverage(preDays);
-    updates.preInstallBaseline = baseline;
+    if (opts.force && baseline === null && settledBaseline !== null) {
+      // A window with no readings in it yet is not evidence the old baseline
+      // was wrong — it stands until the window has days to average.
+      baseline = settledBaseline;
+    } else {
+      updates.preInstallBaseline = baseline;
+    }
     if (circuit.preInstallWindowStartAt === null && preDays.length > 0) {
       updates.preInstallWindowStartAt = addDays(circuit.meterInstalledAt, 1);
     }
@@ -91,7 +115,8 @@ export async function recomputeCircuitFigures(
         if (inBand) {
           // FEAT-014's semantics kept: the benchmark is a system computation.
           updates.benchmarkSavingsPct = pct;
-          updates.state = "benchmark_confirmed";
+          // A billing circuit stays billing; its benchmark is simply re-measured.
+          if (circuit.state !== "active_billing") updates.state = "benchmark_confirmed";
           // An out-of-band review raised earlier has had its question
           // answered: the measurement came back inside CON-20's band. Left
           // open it kept the circuit at the top of the monitoring queue
@@ -114,7 +139,11 @@ export async function recomputeCircuitFigures(
           // Outside CON-20's band no benchmark is written; the existing
           // FEAT-015 review queue takes over — same escalation the window
           // flow used, raised from the same computation.
-          if (circuit.state !== "benchmark_review") {
+          if (opts.force && circuit.state === "active_billing") {
+            // Never pull a billing circuit out of billing from a date edit;
+            // the out-of-band result is logged by the caller and nothing is written.
+          } else if (circuit.state !== "benchmark_review") {
+            updates.benchmarkSavingsPct = null;
             updates.state = "benchmark_review";
             const occurrence =
               (await tx.demoResultReview.count({ where: { circuitId: circuit.id } })) + 1;

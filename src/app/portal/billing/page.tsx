@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { settledTotal } from "@/lib/payment";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
@@ -38,7 +39,7 @@ export default async function PortalBillingPage() {
     // `status != attached` let it through (user-caught 2026-09-16: "bills
     // show up whether released to society or not").
     where: { calculation: { societyId: viewer.societyId, releasedAt: { not: null } }, voidedAt: null },
-    include: { calculation: { select: { period: true } }, payments: { select: { amount: true } } },
+    include: { calculation: { select: { period: true } }, payments: { select: { amount: true, tdsAmount: true } } },
     orderBy: { issueDate: "desc" },
   });
 
@@ -60,7 +61,7 @@ export default async function PortalBillingPage() {
               actually needs a decision (pay it, or note it's already
               paid). */}
           {(() => {
-            const paidTotal = latest.payments.reduce((n, p) => n + p.amount, 0);
+            const paidTotal = settledTotal(latest.payments);
             const meta = STATUS_META[latest.status] ?? { label: latest.status, tone: "warn" as const };
             return (
               <Card className="p-6">

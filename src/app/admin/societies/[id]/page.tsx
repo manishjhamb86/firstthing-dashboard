@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { SocietyFmCard } from "./fm-card";
 import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
 import { closePreview } from "@/lib/deal-close-loader";
 import { dealLabel } from "@/lib/deal-scope";
@@ -48,6 +49,13 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } },
   });
   if (!society) notFound();
+
+  // Facility management (2026-09-25): who runs it now and before.
+  const [fmSpans, fmCompanies] = await Promise.all([
+    db.societyFmEngagement.findMany({ where: { societyId: id }, orderBy: { startedOn: "desc" }, include: { company: { select: { name: true } } } }),
+    db.facilityManagementCompany.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
+  ]);
+  const fmCanEdit = !!viewer && (viewer.permissions.includes("manage_users") || viewer.permissions.includes("manage_pipeline"));
 
   const [accounts, engagements, pipelines, circuitCount, waterTanks] = await Promise.all([
     db.profile.findMany({ where: { societyId: id, isActive: true }, orderBy: { name: "asc" } }),
@@ -243,6 +251,20 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         {/* Everything about the ENGAGEMENT: what the society is signed up
             for, and every deal that has run on it. */}
         <div className="space-y-6 min-w-0">
+          <SocietyFmCard
+            societyId={society.id}
+            spans={fmSpans.map((e) => ({
+              id: e.id,
+              companyId: e.companyId,
+              companyName: e.company.name,
+              startedOn: e.startedOn.toISOString(),
+              endedOn: e.endedOn?.toISOString() ?? null,
+              endReason: e.endReason,
+            }))}
+            companies={fmCompanies}
+            canEdit={fmCanEdit}
+            today={new Date().toISOString().slice(0, 10)}
+          />
           <Card className="p-6 min-w-0">
             <CardTitle>Service lines</CardTitle>
 

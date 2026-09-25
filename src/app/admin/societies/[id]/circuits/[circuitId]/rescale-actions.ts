@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
+import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
 import { REFUSAL_MESSAGE, refuseRescale, refuseVoid, rescaleBaseline } from "@/lib/benchmark-rescale";
 import { startOfDayUTC } from "@/lib/monitoring-window";
@@ -104,6 +105,9 @@ export async function recordLightCountChange(
     effectiveDate: effectiveDate!.toISOString(),
   });
 
+  // The society's published months from the effective month on follow the
+  // new baseline — the dashboard reads those, not the circuit.
+  await rederiveAfter(circuitId, effectiveDate!, gate.actorId);
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits`);
   return {};
@@ -174,6 +178,7 @@ export async function voidRescaleEvent(eventId: string, reason: string): Promise
       : (circuit?.preInstallBaseline ?? null),
   });
 
+  await rederiveAfter(event.circuitId, event.effectiveDate, gate.actorId);
   revalidatePath(`/admin/societies/${event.circuit.societyId}/circuits/${event.circuitId}`);
   revalidatePath(`/admin/societies/${event.circuit.societyId}/circuits`);
   return {};
@@ -306,7 +311,22 @@ export async function correctRescaleEvent(
     nowBaseline: rescaledBaseline,
   });
 
+  // A correction can move the effective date either way — start from the earlier.
+  await rederiveAfter(event.circuitId, effectiveDate! < event.effectiveDate ? effectiveDate! : event.effectiveDate, gate.actorId);
   revalidatePath(`/admin/societies/${event.circuit.societyId}/circuits/${event.circuitId}`);
   revalidatePath(`/admin/societies/${event.circuit.societyId}/circuits`);
   return {};
+}
+
+/** Re-derive published months after a rescale; a failure is logged, never shown as the rescale failing. */
+async function rederiveAfter(circuitId: string, from: Date, actorId: string): Promise<void> {
+  try {
+    const earliest = from.toISOString().slice(0, 7);
+    await rederiveInvoiceMonthsAfterRescale(circuitId, earliest, actorId);
+    revalidatePath("/portal");
+    revalidatePath("/portal/electricity");
+    revalidatePath("/admin/billing");
+  } catch (err) {
+    logger.warn("billing.rederive_after_rescale_failed", { circuitId, error: String(err) });
+  }
 }

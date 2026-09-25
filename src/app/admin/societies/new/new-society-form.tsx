@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { createSociety } from "../actions";
 import { Card, Field } from "@/components/ui";
 import { BackdateField } from "@/components/backdate-field";
+import { FmCompanyPicker } from "@/components/fm-company-picker";
 
 type FormState = { error?: string; duplicateOf?: string } | undefined;
 
@@ -13,6 +14,8 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     location: formData.get("location") as string,
     flatCount: Number(formData.get("flatCount")),
     createdOn: (formData.get("createdOn") as string) || undefined,
+    fmCompanyId: (formData.get("fmCompanyId") as string) || undefined,
+    fmSince: (formData.get("fmSince") as string) || undefined,
   });
   // createSociety redirects on success, so reaching here means an error.
   return result;
@@ -22,12 +25,14 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
 // submission including a failed one, which would otherwise wipe everything
 // the operator typed right as the duplicate-review prompt appears (see
 // login-form.tsx's comment for the full finding).
-export function NewSocietyForm({ demoMode = false }: { demoMode?: boolean }) {
+export function NewSocietyForm({ demoMode = false, fmCompanies = [] }: { demoMode?: boolean; fmCompanies?: { id: string; name: string }[] }) {
   const [state, formAction, pending] = useActionState<FormState, FormData>(action, undefined);
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [flatCount, setFlatCount] = useState("");
   const [createdOn, setCreatedOn] = useState("");
+  const [fmCompanyId, setFmCompanyId] = useState<string | null>(null);
+  const [fmSince, setFmSince] = useState("");
 
   return (
     <Card className="max-w-md p-6">
@@ -64,6 +69,16 @@ export function NewSocietyForm({ demoMode = false }: { demoMode?: boolean }) {
             className="field"
           />
         </Field>
+
+        <Field label="Facility management company (optional)" htmlFor="fm-company" hint="The company that runs its facilities, if one does.">
+          <FmCompanyPicker id="fm-company" companies={fmCompanies} value={fmCompanyId} onChange={setFmCompanyId} />
+          <input type="hidden" name="fmCompanyId" value={fmCompanyId ?? ""} />
+        </Field>
+        {fmCompanyId && (
+          <Field label="Running it since" htmlFor="fmSince" hint="Leave blank for today.">
+            <input id="fmSince" name="fmSince" type="date" className="field" value={fmSince} onChange={(e) => setFmSince(e.target.value)} />
+          </Field>
+        )}
 
         {demoMode && (
           <BackdateField

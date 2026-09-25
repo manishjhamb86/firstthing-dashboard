@@ -32,8 +32,11 @@ export async function createSociety(input: {
   flatCount: number;
   /** DEMO_MODE only — backdate the record so a past deal can start here. */
   createdOn?: string;
+  /** The facility management company running it, and since when (2026-09-25). */
+  fmCompanyId?: string;
+  fmSince?: string;
 }) {
-  await requireAdmin();
+  const creator = await requireAdmin();
 
   const name = input.name.trim();
   const location = input.location.trim();
@@ -76,7 +79,12 @@ export async function createSociety(input: {
     },
   });
 
-  logger.info("society.created", { societyId: society.id, name, location, backdatedTo: createdAt ?? null });
+  if (input.fmCompanyId) {
+    const since = input.fmSince && /^\d{4}-\d{2}-\d{2}$/.test(input.fmSince) ? new Date(`${input.fmSince}T00:00:00Z`) : new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    const company = await db.facilityManagementCompany.findUnique({ where: { id: input.fmCompanyId }, select: { id: true } });
+    if (company) await db.societyFmEngagement.create({ data: { societyId: society.id, companyId: company.id, startedOn: since, recordedById: creator.user.id } });
+  }
+  logger.info("society.created", { societyId: society.id, name, location, backdatedTo: createdAt ?? null, fmCompanyId: input.fmCompanyId ?? null });
   revalidatePath("/admin/societies");
   redirect(`/admin/societies/${society.id}`);
 }

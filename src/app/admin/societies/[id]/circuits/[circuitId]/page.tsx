@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import { DemoWindowsPanel } from "./demo-windows-panel";
+import { demoPhase } from "@/lib/demo-window";
 import { DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
 import { DiscardDemoReadings } from "./discard-demo-readings";
 import { notFound, redirect } from "next/navigation";
@@ -1373,6 +1375,26 @@ export default async function CircuitDetailPage({
             {demoGeneratedDays > 0 && demoMode && canEdit && (
               <DiscardDemoReadings circuitId={circuit.id} days={demoGeneratedDays} />
             )}
+            <div className="mt-3">
+              <DemoWindowsPanel
+                circuitId={circuit.id}
+                canEdit={canEdit}
+                demoMode={demoMode}
+                meterInstalledOn={circuit.meterInstalledAt ? circuit.meterInstalledAt.toISOString().slice(0, 10) : null}
+                replacedOn={circuit.lightReplacementDate ? circuit.lightReplacementDate.toISOString().slice(0, 10) : null}
+                initial={{
+                  preFrom: circuit.preDemoFrom?.toISOString().slice(0, 10) ?? "",
+                  preTo: circuit.preDemoTo?.toISOString().slice(0, 10) ?? "",
+                  postFrom: circuit.postDemoFrom?.toISOString().slice(0, 10) ?? "",
+                  postTo: circuit.postDemoTo?.toISOString().slice(0, 10) ?? "",
+                }}
+                counts={(() => {
+                  const c = { pre: 0, post: 0, outside: 0 };
+                  for (const r of storedReadings) c[demoPhase(new Date(`${r.date}T00:00:00Z`), circuit)] += 1;
+                  return c;
+                })()}
+              />
+            </div>
             {/* CON-45 — the reports, each appearing once its phase has data.
                 Print-styled routes rendering straight from the store. */}
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">

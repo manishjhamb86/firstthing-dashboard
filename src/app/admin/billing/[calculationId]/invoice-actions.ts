@@ -15,6 +15,7 @@ import { buildInvoiceKey } from "@/lib/ingest-keys";
 import { reconcileInvoiceAmount, refuseInvoiceAttach, refuseRelease, refuseVoidInvoice } from "@/lib/invoice-reconciliation";
 import { requireAccountant, requireBillingOps } from "../access";
 import { logger } from "@/lib/logger";
+import { isSettled, refusePayment, settledTotal, type PaymentMethod } from "@/lib/payment";
 
 async function unresolvedDeviationCount(calculationId: string): Promise<number> {
   const lines = await db.circuitFeeLine.findMany({
@@ -239,51 +240,123 @@ export async function releaseCalculation(calculationId: string): Promise<{ error
   return {};
 }
 
+export type PaymentAttachment = { key: string; name: string; kind: "cheque" | "tds_certificate" | "other" };
+
 export async function recordPayment(input: {
   calculationId: string;
   amount: number;
   confirmedAsOf: string; // YYYY-MM-DD
   reference?: string;
+  method?: PaymentMethod;
+  utrNumber?: string;
+  chequeNumber?: string;
+  chequeDate?: string;
+  chequeBank?: string;
+  tdsAmount?: number;
+  tdsRatePct?: number | null;
+  attachments?: PaymentAttachment[];
 }): Promise<{ error?: string }> {
   const ops = await requireBillingOps();
   if (!ops.ok) return { error: ops.error };
-  if (!Number.isFinite(input.amount) || input.amount <= 0) return { error: "Payment amount must be a positive number." };
 
   const confirmedAsOf = new Date(`${input.confirmedAsOf}T00:00:00Z`);
-  if (Number.isNaN(confirmedAsOf.getTime())) return { error: "Confirmed-as-of must be a valid date." };
+  if (Number.isNaN(confirmedAsOf.getTime())) return { error: "Enter the date it was received." };
 
   const invoice = await liveInvoice(input.calculationId);
   if (!invoice) return { error: "No invoice is attached to this month yet." };
+  const prior = await db.payment.findMany({ where: { invoiceId: invoice.id }, select: { amount: true, tdsAmount: true } });
+  const outstanding = Math.max(0, Math.round((invoice.amount - settledTotal(prior)) * 100) / 100);
+
+  const p = {
+    amount: input.amount,
+    tdsAmount: input.tdsAmount ?? 0,
+    method: input.method ?? "bank_transfer",
+    utrNumber: input.utrNumber ?? "",
+    chequeNumber: input.chequeNumber ?? "",
+    chequeDate: input.chequeDate ?? "",
+    chequeBank: input.chequeBank ?? "",
+  };
+  const refusal = refusePayment(p, outstanding);
+  if (refusal) {
+    logger.warn("billing.payment_refused", { actorId: ops.actor.id, calculationId: input.calculationId, reason: refusal });
+    return { error: refusal };
+  }
+  // Only keys this invoice's own upload path could have produced are kept.
+  const attachments = (input.attachments ?? []).filter((a) => a.key.startsWith(`Payments/${invoice.id}/`));
 
   const now = new Date();
   await db.$transaction(async (tx) => {
     await tx.payment.create({
       data: {
         invoiceId: invoice.id,
-        amount: input.amount,
+        amount: p.amount,
         confirmedAsOf,
         reference: input.reference?.trim() || null,
+        method: p.method,
+        utrNumber: p.method === "bank_transfer" || p.method === "upi" ? p.utrNumber.trim().toUpperCase() || null : null,
+        chequeNumber: p.method === "cheque" ? p.chequeNumber.trim() : null,
+        chequeDate: p.method === "cheque" ? new Date(`${p.chequeDate}T00:00:00Z`) : null,
+        chequeBank: p.method === "cheque" ? p.chequeBank.trim() : null,
+        tdsAmount: p.tdsAmount,
+        tdsRatePct: p.tdsAmount > 0 ? (input.tdsRatePct ?? null) : null,
+        attachments: attachments.length ? attachments : undefined,
         recordedById: ops.actor.id,
       },
     });
-    const paid = await tx.payment.aggregate({ where: { invoiceId: invoice.id }, _sum: { amount: true } });
+    const all = await tx.payment.findMany({ where: { invoiceId: invoice.id }, select: { amount: true, tdsAmount: true } });
     // Recording a payment IS checking Zoho and confirming what is true
     // today (2026-09-12) — stamped in the same transaction so the
     // arrears_sweep job's same-day-confirmed safety rule (CON-13) never
     // has to be freshened by a separate click for the common case where
-    // ops already just looked.
+    // ops already just looked. TDS settles as surely as money (2026-09-25).
     await tx.billingInvoice.update({
       where: { id: invoice.id },
       data: {
         paymentStatusConfirmedAt: now,
         paymentStatusConfirmedById: ops.actor.id,
-        ...((paid._sum.amount ?? 0) >= invoice.amount ? { status: "paid" as const } : {}),
+        ...(isSettled(invoice.amount, all) ? { status: "paid" as const } : {}),
       },
     });
   });
-  logger.info("billing.payment_recorded", { actorId: ops.actor.id, calculationId: input.calculationId, amount: input.amount });
+  logger.info("billing.payment_recorded", {
+    actorId: ops.actor.id,
+    calculationId: input.calculationId,
+    amount: p.amount,
+    tds: p.tdsAmount,
+    method: p.method,
+    attachments: attachments.length,
+  });
   revalidatePath(`/admin/billing/${input.calculationId}`);
   return {};
+}
+
+/** A private upload slot for a cheque copy or TDS certificate — bank details never go in the public tree. */
+export async function getPaymentAttachmentUploadUrl(input: {
+  calculationId: string;
+  fileName: string;
+  contentType: string;
+}): Promise<{ uploadUrl: string; key: string } | { error: string }> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  if (!/^(image\/(jpeg|png|webp|heic)|application\/pdf)$/.test(input.contentType)) return { error: "Upload a photo or a PDF." };
+  const invoice = await liveInvoice(input.calculationId);
+  if (!invoice) return { error: "No invoice is attached to this month yet." };
+  const safe = input.fileName.replace(/[^A-Za-z0-9._-]+/g, "_").slice(-80);
+  const key = `Payments/${invoice.id}/${Date.now()}-${safe}`;
+  const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: input.contentType }), { expiresIn: 300 });
+  logger.info("billing.payment_attachment_presigned", { actorId: ops.actor.id, invoiceId: invoice.id, key });
+  return { uploadUrl, key };
+}
+
+/** A short-lived link to one of a payment's attachments. */
+export async function getPaymentAttachmentUrl(paymentId: string, key: string): Promise<{ url: string } | { error: string }> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  const pay = await db.payment.findUnique({ where: { id: paymentId }, select: { attachments: true } });
+  const list = (pay?.attachments as PaymentAttachment[] | null) ?? [];
+  if (!list.some((a) => a.key === key)) return { error: "That file is not on this payment." };
+  const url = await getSignedUrl(s3, new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }), { expiresIn: 300 });
+  return { url };
 }
 
 /**

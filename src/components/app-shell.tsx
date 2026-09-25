@@ -101,6 +101,8 @@ export function AppShell({
       // society surface, not a deal one.
       showPipeline && { href: "/admin/documents", label: "Documents", icon: FileText },
       showSupport && { href: "/admin/tickets", label: "Support tickets", icon: LifeBuoy },
+      // Facility management companies and their people (2026-09-25).
+      (showUsers || showPipeline) && { href: "/admin/facility-management", label: "Facility management", icon: Building2 },
     ]),
     // Two tabs, not one: a circuit chasing a benchmark and a society holding
     // one are different questions with different cadences (2026-08-21).

@@ -386,6 +386,7 @@ model Society {
   publishedSavingsReports PublishedSavingsReport[]
   tickets                 Ticket[]
   inspections             Inspection[]
+  fmEngagements           SocietyFmEngagement[]
 
   @@map("societies")
 }
@@ -499,31 +500,34 @@ model AdminUser {
   deletedBy AdminUser?  @relation("AdminDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   deleted   AdminUser[] @relation("AdminDeletedBy")
 
-  pipelinesOwned              Pipeline[]               @relation("PipelineSalesOwner")
-  pipelinesSurveying          Pipeline[]               @relation("PipelineSurveyOwner")
-  pipelinesSurveyAssigned     Pipeline[]               @relation("PipelineSurveyAssignedBy")
-  scheduledEvents             ScheduledEvent[]         @relation("ScheduledEventAssignee")
-  circuitsReplacing           Circuit[]                @relation("CircuitReplacementOwner")
-  waterTanksAssigned          WaterTank[]              @relation("WaterTankAssignedBy")
-  meterDevicesAssigned        MeterDevice[]            @relation("MeterDeviceAssignedBy")
-  meterInstallationsOpened    MeterInstallation[]      @relation("MeterInstalledBy")
-  meterInstallationsClosed    MeterInstallation[]      @relation("MeterRemovedBy")
-  meterDevicesOwned           MeterDevice[]            @relation("MeterDeviceOwner")
-  meterAlertsAcknowledged     MeterAlert[]             @relation("MeterAlertAcknowledgedBy")
-  meterCsvImports             MeterCsvImport[]         @relation("MeterCsvImportUploadedBy")
-  storedDocuments             StoredDocument[]         @relation("StoredDocumentUploadedBy")
-  ticketsTouched              Ticket[]                 @relation("TicketStatusByAdmin")
-  storedDocumentsVoided       StoredDocument[]         @relation("StoredDocumentVoidedBy")
-  savingsReportsPublished     PublishedSavingsReport[] @relation("SavingsReportPublishedBy")
-  savingsReportsVoided        PublishedSavingsReport[] @relation("SavingsReportVoidedBy")
-  documentExtractions         DocumentExtraction[]     @relation("DocumentExtractionConfirmedBy")
-  ewelinkConfigsUpdated       EwelinkApiConfig[]       @relation("EwelinkApiConfigUpdatedBy")
-  tankApiConfigUpdated        TankApiConfig[]          @relation("TankApiConfigUpdatedBy")
-  googleCalendarConfigUpdated GoogleCalendarConfig[]   @relation("GoogleCalendarConfigUpdatedBy")
-  meetingInvitations          ScheduledEventAttendee[] @relation("ScheduledEventAttendeeUser")
-  circuitsReplacementAssigned Circuit[]                @relation("CircuitReplacementAssignedBy")
-  scheduledEventsCreated      ScheduledEvent[]         @relation("ScheduledEventCreatedBy")
-  pipelinesLogged             Pipeline[]               @relation("PipelineLoggedBy")
+  pipelinesOwned              Pipeline[]                  @relation("PipelineSalesOwner")
+  pipelinesSurveying          Pipeline[]                  @relation("PipelineSurveyOwner")
+  pipelinesSurveyAssigned     Pipeline[]                  @relation("PipelineSurveyAssignedBy")
+  scheduledEvents             ScheduledEvent[]            @relation("ScheduledEventAssignee")
+  circuitsReplacing           Circuit[]                   @relation("CircuitReplacementOwner")
+  waterTanksAssigned          WaterTank[]                 @relation("WaterTankAssignedBy")
+  meterDevicesAssigned        MeterDevice[]               @relation("MeterDeviceAssignedBy")
+  meterInstallationsOpened    MeterInstallation[]         @relation("MeterInstalledBy")
+  meterInstallationsClosed    MeterInstallation[]         @relation("MeterRemovedBy")
+  meterDevicesOwned           MeterDevice[]               @relation("MeterDeviceOwner")
+  meterAlertsAcknowledged     MeterAlert[]                @relation("MeterAlertAcknowledgedBy")
+  meterCsvImports             MeterCsvImport[]            @relation("MeterCsvImportUploadedBy")
+  storedDocuments             StoredDocument[]            @relation("StoredDocumentUploadedBy")
+  ticketsTouched              Ticket[]                    @relation("TicketStatusByAdmin")
+  storedDocumentsVoided       StoredDocument[]            @relation("StoredDocumentVoidedBy")
+  savingsReportsPublished     PublishedSavingsReport[]    @relation("SavingsReportPublishedBy")
+  savingsReportsVoided        PublishedSavingsReport[]    @relation("SavingsReportVoidedBy")
+  documentExtractions         DocumentExtraction[]        @relation("DocumentExtractionConfirmedBy")
+  ewelinkConfigsUpdated       EwelinkApiConfig[]          @relation("EwelinkApiConfigUpdatedBy")
+  tankApiConfigUpdated        TankApiConfig[]             @relation("TankApiConfigUpdatedBy")
+  googleCalendarConfigUpdated GoogleCalendarConfig[]      @relation("GoogleCalendarConfigUpdatedBy")
+  fmCompaniesCreated          FacilityManagementCompany[] @relation("FmCompanyCreatedBy")
+  fmEngagementsRecorded       SocietyFmEngagement[]       @relation("FmEngagementRecordedBy")
+  fmEmploymentsRecorded       FmEmployment[]              @relation("FmEmploymentRecordedBy")
+  meetingInvitations          ScheduledEventAttendee[]    @relation("ScheduledEventAttendeeUser")
+  circuitsReplacementAssigned Circuit[]                   @relation("CircuitReplacementAssignedBy")
+  scheduledEventsCreated      ScheduledEvent[]            @relation("ScheduledEventCreatedBy")
+  pipelinesLogged             Pipeline[]                  @relation("PipelineLoggedBy")
 
   circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
   circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
@@ -933,6 +937,14 @@ model Circuit {
   replacementAssignedAt         DateTime?   @map("replacement_assigned_at")
   replacementAssignedById       String?     @map("replacement_assigned_by_id")
   lightReplacementDate          DateTime?   @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
+  /// The demo periods (2026-09-25, user-set): when set, ONLY these days make
+  /// the baseline (pre) and the benchmark (post) and appear in the demo
+  /// reports — nothing before, between or after. Unset keeps the old rule
+  /// (pre = after the meter until the replacement, post = after it).
+  preDemoFrom                   DateTime?   @map("pre_demo_from")
+  preDemoTo                     DateTime?   @map("pre_demo_to")
+  postDemoFrom                  DateTime?   @map("post_demo_from")
+  postDemoTo                    DateTime?   @map("post_demo_to")
   postInstallWindowStartAt      DateTime?   @map("post_install_window_start_at")
   postInstallBaseline           Float?      @map("post_install_baseline")
   // FEAT-014 — the number the contract prices against (CON-20's 60-80%
@@ -2739,9 +2751,26 @@ model Payment {
   id        String @id @default(cuid())
   invoiceId String @map("invoice_id")
 
+  /// Money actually received.
   amount        Float
   confirmedAsOf DateTime @map("confirmed_as_of")
   reference     String?
+
+  /// How it came (2026-09-25): a transfer or UPI carries its UTR; a cheque
+  /// its number, date and bank, and copies of the cheque.
+  method       PaymentMethod @default(bank_transfer)
+  utrNumber    String?       @map("utr_number")
+  chequeNumber String?       @map("cheque_number")
+  chequeDate   DateTime?     @map("cheque_date")
+  chequeBank   String?       @map("cheque_bank")
+  /// Tax the society deducted at source instead of paying it to us. It
+  /// settles the invoice as surely as money does, so an invoice is settled
+  /// when received + TDS covers it; the rate is kept when it was entered as one.
+  tdsAmount    Float         @default(0) @map("tds_amount")
+  tdsRatePct   Float?        @map("tds_rate_pct")
+  /// Cheque copies and TDS certificates: [{ key, name, kind }] under the
+  /// private Payments/ prefix — they carry bank details.
+  attachments  Json?
 
   recordedById String   @map("recorded_by_id")
   recordedAt   DateTime @default(now()) @map("recorded_at")
@@ -2751,6 +2780,14 @@ model Payment {
 
   @@index([invoiceId])
   @@map("payments")
+}
+
+enum PaymentMethod {
+  bank_transfer
+  upi
+  cheque
+  cash
+  other
 }
 
 // CON-13 — granted in increments of up to 5 days per request. Rows rather
@@ -4032,11 +4069,91 @@ model SocietyMember {
   createdAt   DateTime @default(now()) @map("created_at")
   createdById String   @map("created_by_id")
 
-  society    Society        @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  position   MemberPosition @relation(fields: [positionId], references: [id], onDelete: Restrict)
-  replacedBy SocietyMember? @relation("MemberSuccession", fields: [replacedById], references: [id], onDelete: SetNull)
-  replaced   SocietyMember? @relation("MemberSuccession")
+  society       Society        @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  position      MemberPosition @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  replacedBy    SocietyMember? @relation("MemberSuccession", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaced      SocietyMember? @relation("MemberSuccession")
+  fmEmployments FmEmployment[]
 
   @@index([societyId, endedOn])
   @@map("society_members")
+}
+
+// ── Facility management companies (2026-09-25, user-asked) ─────────────────
+// The companies that run societies' facilities, the societies each serves
+// (with history), and their employees (with history) — a person is known by
+// their mobile across societies, and has one current employer at a time.
+
+/// A facility management company we deal with directly or through a society.
+model FacilityManagementCompany {
+  id          String   @id @default(cuid())
+  name        String
+  /// Case- and space-insensitive name; duplicates are refused.
+  nameKey     String   @unique @map("name_key")
+  gstin       String?
+  contact     String?
+  phone       String?
+  email       String?
+  address     String?
+  notes       String?
+  active      Boolean  @default(true)
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  engagements SocietyFmEngagement[]
+  employees   FmEmployment[]
+  createdBy   AdminUser             @relation("FmCompanyCreatedBy", fields: [createdById], references: [id])
+
+  @@map("facility_management_companies")
+}
+
+/// Which company runs a society's facilities, from when to when. The open
+/// row (endedOn null) is the current one; a partial unique index keeps it single.
+model SocietyFmEngagement {
+  id           String    @id @default(cuid())
+  societyId    String    @map("society_id")
+  companyId    String    @map("company_id")
+  startedOn    DateTime  @map("started_on")
+  endedOn      DateTime? @map("ended_on")
+  endReason    String?   @map("end_reason")
+  recordedById String    @map("recorded_by_id")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  society    Society                   @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  company    FacilityManagementCompany @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  recordedBy AdminUser                 @relation("FmEngagementRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([societyId])
+  @@index([companyId])
+  @@map("society_fm_engagements")
+}
+
+/// One person's employment at one company, from when to when. The person is
+/// identified by their mobile across societies; one open row per mobile
+/// (a partial unique index). Linked to the society member record it came
+/// from, when there is one — so a person is tied to the society AND the company.
+model FmEmployment {
+  id              String    @id @default(cuid())
+  companyId       String    @map("company_id")
+  personName      String    @map("person_name")
+  /// Normalised 10-digit mobile — the person's identity across societies.
+  mobile          String
+  email           String?
+  designation     String?
+  startedOn       DateTime  @map("started_on")
+  endedOn         DateTime? @map("ended_on")
+  endReason       String?   @map("end_reason")
+  societyMemberId String?   @map("society_member_id")
+  recordedById    String    @map("recorded_by_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  company       FacilityManagementCompany @relation(fields: [companyId], references: [id], onDelete: Restrict)
+  societyMember SocietyMember?            @relation(fields: [societyMemberId], references: [id], onDelete: SetNull)
+  recordedBy    AdminUser                 @relation("FmEmploymentRecordedBy", fields: [recordedById], references: [id])
+
+  @@index([companyId])
+  @@index([mobile])
+  @@index([societyMemberId])
+  @@map("fm_employments")
 }

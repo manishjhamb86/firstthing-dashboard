@@ -6,6 +6,7 @@
 // giving someone a portal login stays manage_users, as it always was.
 
 import bcrypt from "bcryptjs";
+import { setMemberEmployment } from "@/app/admin/facility-management/actions";
 import { revalidatePath } from "next/cache";
 import type { PortalAuthority } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -50,7 +51,7 @@ async function sameMobile(societyId: string, mobile: string, exceptId?: string) 
   });
 }
 
-export async function addMember(societyId: string, input: MemberInput & { startedOn: string; notes: string; profileId?: string }): Promise<Result<{ id: string }>> {
+export async function addMember(societyId: string, input: MemberInput & { startedOn: string; notes: string; profileId?: string; fmCompanyId?: string }): Promise<Result<{ id: string }>> {
   const admin = await requireMembersStaff();
   if (!admin) return { error: REFUSED };
   const refusal = refuseMember(input);
@@ -79,12 +80,19 @@ export async function addMember(societyId: string, input: MemberInput & { starte
     },
   });
   logger.info("society_member.added", { actorId: admin.id, societyId, memberId: m.id, positionId });
+  if (input.fmCompanyId) {
+    const r = await setMemberEmployment(m.id, input.fmCompanyId, input.startedOn || new Date().toISOString().slice(0, 10));
+    if (r.error) {
+      refresh(societyId);
+      return { error: `Added, but the employer was not recorded: ${r.error}`, id: m.id };
+    }
+  }
   refresh(societyId);
   return { id: m.id };
 }
 
 /** Correct what a member's record says — a correction, not a change of person. */
-export async function updateMember(memberId: string, input: MemberInput & { startedOn: string; notes: string }): Promise<Result> {
+export async function updateMember(memberId: string, input: MemberInput & { startedOn: string; notes: string; fmCompanyId?: string }): Promise<Result> {
   const admin = await requireMembersStaff();
   if (!admin) return { error: REFUSED };
   const m = await db.societyMember.findUnique({ where: { id: memberId } });
@@ -102,6 +110,15 @@ export async function updateMember(memberId: string, input: MemberInput & { star
     data: { name: input.name.trim(), mobile, email: input.email.trim().toLowerCase() || null, positionId, startedOn: day(input.startedOn), notes: input.notes.trim() || null },
   });
   logger.info("society_member.corrected", { actorId: admin.id, memberId });
+  if (input.fmCompanyId !== undefined) {
+    // A change of employer is dated today (the move is happening now); the
+    // same employer keeps its span untouched.
+    const r = await setMemberEmployment(memberId, input.fmCompanyId || null, new Date().toISOString().slice(0, 10));
+    if (r.error) {
+      refresh(m.societyId);
+      return { error: `Saved, but the employer was not changed: ${r.error}` };
+    }
+  }
   refresh(m.societyId);
   return {};
 }

@@ -24,14 +24,18 @@ export type MemberRow = {
   replacedBy: string | null;
   portal: string | null;
   portalAuthority: string | null;
+  /** Their current employer, when a facility management company (2026-09-25). */
+  fmCompanyId: string;
+  fmCompanyName: string | null;
 };
 
-type Person = { name: string; mobile: string; email: string; positionId: string; newPosition: string; startedOn: string; notes: string };
+type Person = { name: string; mobile: string; email: string; positionId: string; newPosition: string; startedOn: string; notes: string; fmCompanyId: string };
+type Fm = { companies: { id: string; name: string }[]; society: { id: string; name: string } | null };
 const NEW = "__new__";
-const blank = (today: string): Person => ({ name: "", mobile: "", email: "", positionId: "", newPosition: "", startedOn: today, notes: "" });
+const blank = (today: string): Person => ({ name: "", mobile: "", email: "", positionId: "", newPosition: "", startedOn: today, notes: "", fmCompanyId: "" });
 
 /** The person fields, shared by add, edit and the successor in a replace. */
-function PersonFields({ v, set, positions, idPrefix, showStarted = true }: { v: Person; set: (p: Partial<Person>) => void; positions: { id: string; name: string }[]; idPrefix: string; showStarted?: boolean }) {
+function PersonFields({ v, set, positions, idPrefix, showStarted = true, fm }: { v: Person; set: (p: Partial<Person>) => void; positions: { id: string; name: string }[]; idPrefix: string; showStarted?: boolean; fm?: Fm }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <Field label="Name" htmlFor={`${idPrefix}-name`}>
@@ -72,6 +76,21 @@ function PersonFields({ v, set, positions, idPrefix, showStarted = true }: { v: 
       <Field label="Notes (optional)" htmlFor={`${idPrefix}-notes`}>
         <input id={`${idPrefix}-notes`} className="field" value={v.notes} onChange={(e) => set({ notes: e.target.value })} />
       </Field>
+      {fm && (fm.companies.length > 0 || fm.society) && (
+        <Field label="Employed by" htmlFor={`${idPrefix}-fm`} hint="For facility management staff — a maintenance manager, a technician. Their employer is tracked across societies and moves.">
+          <select id={`${idPrefix}-fm`} className="field" value={v.fmCompanyId} onChange={(e) => set({ fmCompanyId: e.target.value })}>
+            <option value="">Not employed by a facility management company</option>
+            {fm.society && <option value={fm.society.id}>{fm.society.name} — runs this society</option>}
+            {fm.companies
+              .filter((c) => c.id !== fm.society?.id)
+              .map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+      )}
     </div>
   );
 }
@@ -92,6 +111,7 @@ export function MembersClient({
   grants,
   canPortal,
   today,
+  fm,
 }: {
   societyId: string;
   rows: MemberRow[];
@@ -100,6 +120,7 @@ export function MembersClient({
   grants: { id: string; label: string }[];
   canPortal: boolean;
   today: string;
+  fm: Fm;
 }) {
   const router = useRouter();
   const [showPast, setShowPast] = useState(false);
@@ -118,7 +139,7 @@ export function MembersClient({
       setD(r.password && r.email ? { kind: "password", email: r.email, password: r.password } : null);
     });
   }
-  const toPerson = (r: MemberRow): Person => ({ name: r.name, mobile: r.mobileLabel, email: r.email, positionId: r.positionId, newPosition: "", startedOn: r.startedOn, notes: r.notes });
+  const toPerson = (r: MemberRow): Person => ({ name: r.name, mobile: r.mobileLabel, email: r.email, positionId: r.positionId, newPosition: "", startedOn: r.startedOn, notes: r.notes, fmCompanyId: r.fmCompanyId });
 
   return (
     <div className="space-y-5">
@@ -152,7 +173,10 @@ export function MembersClient({
                       {r.name}
                       {r.notes && <p className="text-[12px] font-normal" style={{ color: "var(--text-subtle)" }}>{r.notes}</p>}
                     </td>
-                    <td>{r.position}</td>
+                    <td>
+                      {r.position}
+                      {r.fmCompanyName && <span className="block text-[12px]" style={{ color: "var(--text-subtle)" }}>Employed by {r.fmCompanyName}</span>}
+                    </td>
                     <td className="num whitespace-nowrap">
                       <a href={`tel:+91${r.mobile}`}>{r.mobileLabel}</a>
                     </td>
@@ -289,7 +313,7 @@ export function MembersClient({
       >
         {(d?.kind === "add" || d?.kind === "edit") && (
           <div className="space-y-3">
-            <PersonFields v={d.v} set={(p) => setD((x) => (x && (x.kind === "add" || x.kind === "edit") ? { ...x, v: { ...x.v, ...p } } : x))} positions={positions} idPrefix="mb" />
+            <PersonFields v={d.v} set={(p) => setD((x) => (x && (x.kind === "add" || x.kind === "edit") ? { ...x, v: { ...x.v, ...p } } : x))} positions={positions} idPrefix="mb" fm={fm} />
             {error && <ErrorText>{error}</ErrorText>}
           </div>
         )}

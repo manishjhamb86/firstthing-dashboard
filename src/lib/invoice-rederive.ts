@@ -47,7 +47,33 @@ export function anyLineImprovedToMeasured(
   return newLines.some((l) => oldBasisByCircuit.get(l.circuitId) === "agreed" && l.basis === "measured");
 }
 
-async function rederiveOneMonth(calculationId: string, actorId: string): Promise<string | null> {
+/**
+ * Pure: after a light-count change (a baseline rescale), did the month's
+ * figures actually move? A rescale changes the baseline the measured saving
+ * is judged against (INV-07, forward from its effective date), so a
+ * published month's saving % and ₹ move with it — the user's report
+ * (2026-09-25): French Apartment was rescaled from 1 August and every screen
+ * showed the new figure except the society's own dashboard, which reads the
+ * published months. The invoice never changes; only the stats version does.
+ */
+export function linesMateriallyChanged(
+  oldLines: { circuitId: string; basis: SavingsBasis; baselineKwhPerDay: number; measuredSavingsPct: number; savedValue: number }[],
+  newLines: { circuitId: string; basis: SavingsBasis; baselineKwhPerDay: number; savingsPct: number; savedValue: number }[],
+): boolean {
+  const old = new Map(oldLines.map((l) => [l.circuitId, l]));
+  return newLines.some((n) => {
+    const o = old.get(n.circuitId);
+    if (!o) return true;
+    return (
+      o.basis !== n.basis ||
+      Math.abs(o.baselineKwhPerDay - n.baselineKwhPerDay) > 1e-6 ||
+      Math.abs(o.measuredSavingsPct - n.savingsPct) > 0.005 ||
+      Math.abs(o.savedValue - n.savedValue) > 0.5
+    );
+  });
+}
+
+async function rederiveOneMonth(calculationId: string, actorId: string, trigger: "readings" | "rescale" = "readings"): Promise<string | null> {
   const calc = await db.monthlyCalculation.findUnique({
     where: { id: calculationId },
     include: { feeLines: true, society: { select: { name: true } } },
@@ -67,7 +93,7 @@ async function rederiveOneMonth(calculationId: string, actorId: string): Promise
   const ctx = await loadInvoiceMonthContext({ societyId: calc.societyId, serviceLine: calc.serviceLine, period: calc.period });
   const derived = deriveInvoiceMonth({ period: calc.period, parts: ctx.parts, lines: serviceLines, readingsByCircuit: ctx.readingsByCircuit });
 
-  if (!anyLineImprovedToMeasured(oldBasisByCircuit, derived.lines)) return null;
+  if (trigger === "readings" ? !anyLineImprovedToMeasured(oldBasisByCircuit, derived.lines) : !linesMateriallyChanged(calc.feeLines, derived.lines)) return null;
 
   const invoice = await db.billingInvoice.findFirst({ where: { monthlyCalculationId: calc.id, voidedAt: null } });
   // Nothing to re-point a live figure onto — the same fact the release
@@ -191,6 +217,7 @@ async function rederiveOneMonth(calculationId: string, actorId: string): Promise
       period: calc.period,
       fromCalculationId: calc.id,
       toCalculationId: newCalcId,
+      trigger,
       flippedCircuits: derived.lines.filter((l) => oldBasisByCircuit.get(l.circuitId) === "agreed" && l.basis === "measured").map((l) => l.circuitId),
     });
     return newCalcId;
@@ -214,6 +241,25 @@ export async function rederiveInvoiceMonthsForCircuit(circuitId: string, actorId
   const rederivedCalculationIds: string[] = [];
   for (const c of candidates) {
     const newId = await rederiveOneMonth(c.monthlyCalculationId, actorId);
+    if (newId) rederivedCalculationIds.push(newId);
+  }
+  return { rederivedCalculationIds };
+}
+
+/**
+ * Called after a light-count change is recorded, corrected or voided on
+ * `circuitId`: every live, released, invoice-sourced month from the change's
+ * effective month on is re-derived, and versioned only if its figures moved.
+ */
+export async function rederiveInvoiceMonthsAfterRescale(circuitId: string, fromPeriod: string, actorId: string): Promise<{ rederivedCalculationIds: string[] }> {
+  const candidates = await db.circuitFeeLine.findMany({
+    where: { circuitId, calculation: { source: "invoice", status: "released", supersededById: null, period: { gte: fromPeriod } } },
+    select: { monthlyCalculationId: true },
+    distinct: ["monthlyCalculationId"],
+  });
+  const rederivedCalculationIds: string[] = [];
+  for (const c of candidates) {
+    const newId = await rederiveOneMonth(c.monthlyCalculationId, actorId, "rescale");
     if (newId) rederivedCalculationIds.push(newId);
   }
   return { rederivedCalculationIds };

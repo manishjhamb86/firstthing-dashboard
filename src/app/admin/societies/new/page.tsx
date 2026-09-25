@@ -1,3 +1,4 @@
+import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/demo-mode";
 import { PageHeader } from "@/components/ui";
 import { NewSocietyForm } from "./new-society-form";
@@ -13,7 +14,10 @@ export default async function NewSocietyPage() {
         title="New society"
         subtitle="Created as a prospect — minimal data, from a lead."
       />
-      <NewSocietyForm demoMode={await isDemoMode()} />
+      <NewSocietyForm
+        demoMode={await isDemoMode()}
+        fmCompanies={await db.facilityManagementCompany.findMany({ where: { active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } })}
+      />
     </>
   );
 }

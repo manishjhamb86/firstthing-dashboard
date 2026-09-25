@@ -26,7 +26,6 @@ export function Letterhead({ children }: { children: ReactNode }) {
       <div className="lh-id">
         <p className="lh-brand">{COMPANY.brand}</p>
         <p>{COMPANY.legalName}</p>
-        {COMPANY.address && <p>{COMPANY.address}</p>}
         {COMPANY.gstin && <p>GSTIN {COMPANY.gstin}</p>}
       </div>
     </div>
@@ -34,6 +33,9 @@ export function Letterhead({ children }: { children: ReactNode }) {
   const foot = (
     <div className="lh-foot">
       <p className="lh-foot-line">{[COMPANY.brand, COMPANY.legalName, COMPANY.website, COMPANY.email].join(" | ")}</p>
+      {/* On the footer's second line rather than under the name at the head:
+          a long line there wraps and costs every page its height. */}
+      {COMPANY.address && <p className="lh-foot-address">{COMPANY.address}</p>}
       {COMPANY.footnote && <p className="lh-foot-note">{COMPANY.footnote}</p>}
     </div>
   );

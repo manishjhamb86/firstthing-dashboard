@@ -7,8 +7,8 @@ export const COMPANY = {
   legalName: "BlueStonez Trailblazzer Pvt. Ltd.",
   website: "www.firsthing.earth",
   email: "info@firsthing.earth",
-  /** Registered office — to be confirmed by the user before it is printed. */
-  address: "",
+  /** The Noida office — the address for all communications (the user's call, 2026-09-25). */
+  address: "Office Number 724, 7th Floor, Office Building Galaxy Diamond Plaza, Sector 4, Gautam Buddha Nagar, Uttar Pradesh 201318",
   gstin: "",
   footnote: "",
 };

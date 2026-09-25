@@ -7314,3 +7314,44 @@ margins:
 | Monthly | 1 |
 | Agreement | 1 |
 | Post-installation | 4 (was 5) |
+
+**Letterhead address (2026-09-25, the user's call):** the Noida office — "Office Number 724, 7th
+Floor, Office Building Galaxy Diamond Plaza, Sector 4, Gautam Buddha Nagar, Uttar Pradesh 201318"
+— is the address for all communications. It is printed as the footer's second line
+(`COMPANY.address`), rather than under the name in the header, because a long line there would
+wrap and cost every page its height. The monthly report still fits one A4 page with Safari-like
+margins, with about 20px to spare.
+
+## Two-way Google Calendar sync (2026-09-25) — user-asked
+
+The 5-minute `calendar_sync` sweep now reads every clean, upcoming app entry back from Google,
+from a day ago to 60 days ahead, up to 100 per pass.
+
+**What comes back** (`readBack()` in `calendar-event.ts`, pure, 7 cases):
+- a new time — Google's instant is converted to the app's IST wall-clock;
+- a new title — a task's "Task:" prefix is stripped;
+- guests added or removed on a meeting — never the organizer;
+- the event deleted — a task or meeting is cancelled in the app with the reason "Deleted in
+  Google Calendar".
+
+A deal appointment deleted in Google is **flagged, not cancelled**: the booking belongs to its
+deal step. It shows "Removed from Google Calendar — still booked here", with Try again.
+
+**Who wins a conflict.** An entry edited in the app and not yet pushed is not read back, so the
+app's change wins. A read-back marks the row clean at the instant it changes it, so it is never
+pushed straight back.
+
+**Also fixed:**
+- A date-only deal appointment now goes to Google as all-day (`effectiveAllDay`), not
+  midnight–1 am.
+- Two overlapping pushes can no longer let a late failure overwrite a success: the write-back is
+  conditional, and the sweep skips rows saved in the last 30 s. This was seen on stage, where
+  Google rate-limited the second push.
+
+**Verified against real Google on stage** with a throwaway task on the organizer's own calendar,
+with no guests so no invitations went out:
+- the push created the event;
+- moving and renaming it in Google came back into the app;
+- a second read changed nothing;
+- deleting it in Google cancelled it in the app;
+- the test row was removed afterwards.

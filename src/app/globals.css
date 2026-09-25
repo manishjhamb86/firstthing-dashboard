@@ -1587,6 +1587,9 @@ textarea.field {
 .lh-foot-line {
   font-weight: 600;
 }
+.lh-foot-address {
+  margin-top: 2px;
+}
 @media (max-width: 640px) {
   .lh-head {
     padding: 18px 16px 14px;
@@ -1667,8 +1670,8 @@ textarea.field {
     padding: 12px 0 2px !important;
   }
   .letterhead .report-result {
-    margin-top: 10px;
-    padding: 10px 14px !important;
+    margin-top: 8px;
+    padding: 8px 14px !important;
   }
   .letterhead .report-footer {
     padding-top: 6px;
@@ -1690,7 +1693,15 @@ textarea.field {
     line-height: 1.35;
   }
   .letterhead .report-masthead {
-    padding-bottom: 10px;
+    padding-bottom: 8px;
+    gap: 12px;
+  }
+  .lh-foot-address {
+    font-size: 7.5pt;
+    margin-top: 1px;
+  }
+  .lh-foot-line {
+    font-size: 7.5pt;
   }
   .letterhead .report-band {
     padding-top: 0 !important;
@@ -1700,6 +1711,10 @@ textarea.field {
   .letterhead .report-facts > div,
   .letterhead .report-facts > div:first-child {
     padding: 6px 10px;
+  }
+  .letterhead .report-facts .lbl {
+    font-size: 7pt;
+    white-space: nowrap;
   }
   .letterhead .report-result {
     gap: 6px 20px;

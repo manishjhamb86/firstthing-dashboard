@@ -51,9 +51,11 @@ pnpm install --frozen-lockfile
 pnpm prisma migrate deploy
 pnpm prisma generate
 # The box has 1.9 GB of RAM total; an unbounded build heap intermittently
-# OOM-kills the build worker (twice on 2026-08-31). A bounded old-space makes
+# OOM-kills the build worker (twice on 2026-08-31). 1200 MB was enough until the
+# codebase outgrew it on 2026-09-25 (type check ran out); 1600 fits with swap.
+# A bounded old-space makes
 # V8 collect harder instead of aborting.
-NODE_OPTIONS=--max-old-space-size=1200 pnpm build
+NODE_OPTIONS=--max-old-space-size=1600 pnpm build
 
 # Stamp the release onto both processes. instrumentation-node.ts and
 # job-worker.ts read GIT_COMMIT and put it on every startup line, so a

@@ -28,7 +28,11 @@ export type DocType =
   // recurring energy-savings share (2026-09-24) — devices, installation, a
   // one-off charge. Filed by `fileNonServiceInvoice`, never by the Documents
   // tab directly.
-  | "nonServiceInvoice";
+  | "nonServiceInvoice"
+  // An invoice filed as a document instead of becoming a month of record
+  // (2026-09-25) — e.g. a society with no contract or circuit on record, whose
+  // bills are kept and shown but have nothing to derive a savings month from.
+  | "invoiceCopy";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
@@ -43,6 +47,7 @@ const DOC_TYPE_FOLDER: Record<DocType, string> = {
   inspectionReport: "Reports",
   inspectionEvidence: "Inspections",
   nonServiceInvoice: "Invoices",
+  invoiceCopy: "Invoices",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -58,6 +63,7 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
   inspectionReport: "InspectionReport",
   inspectionEvidence: "SignedChecklist",
   nonServiceInvoice: "OtherInvoice",
+  invoiceCopy: "Invoice",
 };
 
 function slugifySociety(name: string): string {

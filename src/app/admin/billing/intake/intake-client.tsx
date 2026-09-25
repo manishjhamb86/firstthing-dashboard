@@ -23,7 +23,17 @@ import {
   type IntakeView,
 } from "@/lib/intake-list";
 import { READ_CUT_OFF_MESSAGE } from "@/lib/intake-read-error";
-import { checkIntakeDuplicates, createIntakeUpload, extractIntake, retryIntake, submitReadyBatch, type IntakeDuplicate } from "./actions";
+import { BULK_LABEL, bulkActionsFor, type BulkAction } from "@/lib/intake-bulk";
+import {
+  checkIntakeDuplicates,
+  createIntakeUpload,
+  extractIntake,
+  fileIntakesAsDocuments,
+  releaseIntakesToSociety,
+  retryIntake,
+  submitReadyBatch,
+  type IntakeDuplicate,
+} from "./actions";
 
 export type IntakeRow = {
   id: string;
@@ -46,6 +56,9 @@ export type IntakeRow = {
   calculationId: string | null;
   /** Set only for a non-service invoice's row — filed, not a calculation. */
   filedSocietyId: string | null;
+  /** The review's own confirmed society and month — what filing is keyed on. */
+  hasSociety: boolean;
+  hasPeriod: boolean;
 };
 
 type View = IntakeView | "all";
@@ -63,7 +76,16 @@ function inr(n: number): string {
  * sniffs again and is the one that decides. Extraction is kicked off per
  * file and the list refreshes as each completes.
  */
-export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; initialFilters: IntakeFilters }) {
+export function IntakeClient({
+  rows,
+  initialFilters,
+  canRelease,
+}: {
+  rows: IntakeRow[];
+  initialFilters: IntakeFilters;
+  /** Holds release_billing — the accountant's act (CON-33). */
+  canRelease: boolean;
+}) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   // All, by default (2026-09-24, user-asked) — with seven chips now naming
@@ -102,7 +124,7 @@ export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; init
   // SCR-093's bulk bar — only `ready` rows are ever selectable.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
-  const [batchResult, setBatchResult] = useState<{ submitted: number; failed: { fileName: string; error: string }[] } | null>(null);
+  const [batchResult, setBatchResult] = useState<{ verb: string; done: number; failed: { fileName: string; error: string }[] } | null>(null);
 
   // The background sweep (job-worker.ts) reads a row on its own timer,
   // independent of any open tab — without this, a row it just started
@@ -296,14 +318,32 @@ export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; init
     });
   }
 
-  async function submitReady() {
+  // Which bulk actions this viewer may take on a row: release is the
+  // accountant's alone, so it is not offered to anyone else.
+  const actionsOf = (r: IntakeRow): BulkAction[] =>
+    bulkActionsFor(r).filter((a) => a !== "release" || canRelease);
+
+  async function runBulk(action: BulkAction) {
+    const ids = rows.filter((r) => selected.has(r.id) && actionsOf(r).includes(action)).map((r) => r.id);
+    if (ids.length === 0) return;
     setSubmitting(true);
     setBatchResult(null);
     try {
-      const r = await submitReadyBatch([...selected]);
-      setBatchResult({ submitted: r.submitted.length, failed: r.failed.map((f) => ({ fileName: f.fileName || "—", error: f.error })) });
+      if (action === "submit") {
+        const r = await submitReadyBatch(ids);
+        setBatchResult({ verb: "submitted", done: r.submitted.length, failed: r.failed.map((f) => ({ fileName: f.fileName || "—", error: f.error })) });
+      } else {
+        const r = action === "file" ? await fileIntakesAsDocuments(ids) : await releaseIntakesToSociety(ids);
+        setBatchResult({
+          verb: action === "file" ? "filed as documents" : "released to the society",
+          done: r.done,
+          failed: r.failed.map((f) => ({ fileName: f.fileName || "—", error: f.error })),
+        });
+      }
       setSelected(new Set());
       router.refresh();
+    } catch {
+      setBatchResult({ verb: "done", done: 0, failed: [{ fileName: "—", error: "The request did not complete — refresh to see what was done before retrying." }] });
     } finally {
       setSubmitting(false);
     }
@@ -357,14 +397,16 @@ export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; init
   );
   const filtering = query.trim() !== "" || societyFilter !== "" || monthFilter !== "";
 
-  // Only `ready` rows are ever bulk-selectable (SCR-093: "a Needs review row
-  // has no checkbox") — scoped to what's currently visible, so "select all"
-  // matches what's on screen rather than every ready row in the system.
-  const readyVisible = useMemo(() => visible.filter((r) => r.status === "ready"), [visible]);
-  const allReadySelected = readyVisible.length > 0 && readyVisible.every((r) => selected.has(r.id));
-  function toggleAllReady() {
-    setSelected(allReadySelected ? new Set() : new Set(readyVisible.map((r) => r.id)));
+  // A row is selectable when it can take at least one bulk action; "select
+  // all" means the actionable rows currently on screen, not every row in
+  // the system (2026-09-25: file as document / release to society in bulk).
+  const selectableVisible = visible.filter((r) => actionsOf(r).length > 0);
+  const allSelected = selectableVisible.length > 0 && selectableVisible.every((r) => selected.has(r.id));
+  function toggleAll() {
+    setSelected(allSelected ? new Set() : new Set(selectableVisible.map((r) => r.id)));
   }
+  const selectedRows = rows.filter((r) => selected.has(r.id));
+  const countFor = (a: BulkAction) => selectedRows.filter((r) => actionsOf(r).includes(a)).length;
 
   // Clicking the sorted column reverses it; another column starts at its own natural end.
   function sortBy(key: IntakeSortKey) {
@@ -510,7 +552,7 @@ export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; init
           }
         >
           <p className="font-semibold">
-            {batchResult.submitted} submitted{batchResult.failed.length > 0 ? `, ${batchResult.failed.length} refused` : ""}.
+            {batchResult.done} {batchResult.verb}{batchResult.failed.length > 0 ? `, ${batchResult.failed.length} refused` : ""}.
           </p>
           {batchResult.failed.length > 0 && (
             <ul className="mt-1 list-disc pl-5">
@@ -524,16 +566,33 @@ export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; init
         </div>
       )}
 
-      {readyVisible.length > 0 && (
+      {selectableVisible.length > 0 && (
         <div className="mb-3.5 flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" checked={allReadySelected} onChange={toggleAllReady} />
-            Select all ready ({readyVisible.length})
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+            Select all on screen ({selectableVisible.length})
           </label>
           {selected.size > 0 && (
-            <button type="button" className="btn-primary btn-sm" disabled={submitting} onClick={() => void submitReady()}>
-              {submitting ? "Submitting…" : `Submit ${selected.size} ready`}
-            </button>
+            <>
+              {(["file", "release", "submit"] as BulkAction[]).map((a) => {
+                const n = countFor(a);
+                if (n === 0) return null;
+                return (
+                  <button
+                    key={a}
+                    type="button"
+                    className={a === "release" ? "btn-primary btn-sm" : "btn-secondary btn-sm"}
+                    disabled={submitting}
+                    onClick={() => void runBulk(a)}
+                  >
+                    {BULK_LABEL[a](n)}
+                  </button>
+                );
+              })}
+              <span className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                {selected.size} selected{submitting ? " · working…" : ""}
+              </span>
+            </>
           )}
         </div>
       )}
@@ -594,7 +653,7 @@ export function IntakeClient({ rows, initialFilters }: { rows: IntakeRow[]; init
                   return (
                     <tr key={r.id}>
                       <td>
-                        {r.status === "ready" && (
+                        {actionsOf(r).length > 0 && (
                           <input
                             type="checkbox"
                             checked={selected.has(r.id)}

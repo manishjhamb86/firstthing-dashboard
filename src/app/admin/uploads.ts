@@ -41,6 +41,7 @@ const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline" | "manage_survey"> 
   // derives its permission from the catalog rather than this map — listed
   // here only so DocType stays exhaustive.
   nonServiceInvoice: "manage_pipeline",
+  invoiceCopy: "manage_pipeline",
 };
 
 export async function getUploadUrl(input: {

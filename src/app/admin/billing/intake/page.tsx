@@ -33,7 +33,9 @@ const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
   submitted: { label: "Submitted", tone: "neu" },
   // A real, separate non-service bill (2026-09-24) — filed as a document,
   // never a month of record, so it has no calculation to read a status from.
-  submitted_filed_document: { label: "Filed as document", tone: "info" },
+  submitted_filed_document: { label: "Filed — not yet with the society", tone: "info" },
+  // Filed, then released onto the society's portal (2026-09-25).
+  submitted_filed_released: { label: "Filed · released to society", tone: "ok" },
   refused_duplicate: { label: "Refused — duplicate", tone: "bad" },
   discarded: { label: "Discarded", tone: "neu" },
 };
@@ -67,16 +69,28 @@ export default async function IntakePage({
     ? await db.monthlyCalculation.findMany({ where: { id: { in: calcIds } }, select: { id: true, status: true } })
     : [];
   const calcStatusById = new Map(calcs.map((c) => [c.id, c.status]));
+  const docIds = intakes.filter((i) => i.filedAsDocumentId).map((i) => i.filedAsDocumentId!);
+  const releasedDocIds = new Set(
+    docIds.length
+      ? (await db.storedDocument.findMany({ where: { id: { in: docIds }, releasedToSocietyAt: { not: null } }, select: { id: true } })).map((d) => d.id)
+      : [],
+  );
 
   // A read that started more than a few minutes ago and never finished has no
   // process behind it any more (the tab moved on, or the reader refused) — it
   // is unread, and the row says so rather than "Reading…" forever.
   const staleBefore = staleReadCutoff();
   const rows: IntakeRow[] = intakes.map((i) => {
-    const review = (i.review ?? null) as { total?: number | null; invoiceNumber?: string; paid?: string | null } | null;
+    const review = (i.review ?? null) as {
+      total?: number | null;
+      invoiceNumber?: string;
+      paid?: string | null;
+      societyId?: string | null;
+      period?: string;
+    } | null;
     let status: string = i.status === "reading" && i.uploadedAt < staleBefore ? "uploaded" : i.status;
     if (status === "submitted" && i.filedAsDocumentId) {
-      status = "submitted_filed_document";
+      status = releasedDocIds.has(i.filedAsDocumentId) ? "submitted_filed_released" : "submitted_filed_document";
     } else if (status === "submitted") {
       const calcStatus = i.monthlyCalculationId ? calcStatusById.get(i.monthlyCalculationId) : undefined;
       status = submittedDisplayStatus(calcStatus);
@@ -102,6 +116,10 @@ export default async function IntakePage({
       // Only set for a non-service invoice's row — where it was filed
       // instead of submitted as a calculation.
       filedSocietyId: i.filedAsDocumentId ? i.societyId : null,
+      // What the bulk bar's rule reads (src/lib/intake-bulk.ts) — the
+      // review's own confirmed values, the same ones the server re-checks.
+      hasSociety: !!review?.societyId,
+      hasPeriod: !!review?.period && /^\d{4}-\d{2}$/.test(review.period),
     };
   });
 
@@ -120,7 +138,7 @@ export default async function IntakePage({
           </Link>
         }
       />
-      <IntakeClient rows={rows} initialFilters={filters} />
+      <IntakeClient rows={rows} initialFilters={filters} canRelease={gate.actor.permissions.includes("release_billing")} />
       <Card className="mt-5 p-5 text-[12.5px]" >
         <p style={{ color: "var(--text-muted)" }}>
           The society and the month are always yours to confirm on the review, whatever the invoice

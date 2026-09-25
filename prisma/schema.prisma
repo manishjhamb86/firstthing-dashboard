@@ -3390,6 +3390,14 @@ model StoredDocument {
   voidedBy   AdminUser?          @relation("StoredDocumentVoidedBy", fields: [voidedById], references: [id])
   extraction DocumentExtraction?
 
+  /// When an invoice filed from intake (invoiceCopy / nonServiceInvoice) was
+  /// released to the society's portal, and by whom (2026-09-25). Filing does
+  /// not publish: an invoice reaches the society only once released — the
+  /// accountant's act, as for a month of record (CON-33). Other document
+  /// types ignore these.
+  releasedToSocietyAt   DateTime? @map("released_to_society_at")
+  releasedToSocietyById String?   @map("released_to_society_by_id")
+
   /// A version number is used once per slot — the structural guarantee that
   /// two concurrent uploads cannot both become "version 3".
   @@unique([societyId, docType, period, version])

@@ -117,6 +117,7 @@ export function intakeViewOf(status: string): IntakeView | null {
     case "submitted_sent_back":
       return "sent_back";
     case "submitted_released":
+    case "submitted_filed_released":
       return "released";
     case "submitted_superseded":
       return "superseded";

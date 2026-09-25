@@ -13,6 +13,8 @@
 // `submitIntake` re-derives everything from that confirmed review inside
 // the transaction — the client's preview is never trusted.
 
+import { bulkActionsFor } from "@/lib/intake-bulk";
+import { releaseCalculation } from "../[calculationId]/invoice-actions";
 import { duplicateRefuses, findDuplicateInvoice, type InvoiceDuplicate } from "@/lib/invoice-duplicate";
 import { revalidatePath } from "next/cache";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -37,7 +39,7 @@ import {
 import { deriveInvoiceMonth, type DerivedMonth } from "@/lib/invoice-month";
 import { loadInvoiceMonthContext } from "@/lib/invoice-month-loader";
 import { daysInPeriod } from "@/lib/reading-normalize";
-import { requireBillingOps } from "../access";
+import { requireAccountant, requireBillingOps } from "../access";
 
 const INTAKE_PATH = "/admin/billing/intake";
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -283,6 +285,7 @@ async function fileNonServiceInvoice(
   intake: { id: string; s3Key: string; fileName: string },
   review: Review,
   actorId: string,
+  docType: "nonServiceInvoice" | "invoiceCopy" = "nonServiceInvoice",
 ): Promise<Result<{ calculationId: string | null }>> {
   const societyId = review.societyId!;
   const period = review.period;
@@ -300,16 +303,16 @@ async function fileNonServiceInvoice(
   const key = buildDocumentKey({
     society: society.name,
     month: period,
-    docType: "nonServiceInvoice",
+    docType,
     dateLabel: review.invoiceDate || period,
-    identifier: review.invoiceNumber.trim(),
+    identifier: review.invoiceNumber.trim() || intake.id,
     extension: "pdf",
   });
   await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: bytes, ContentType: "application/pdf" }));
 
   const filed = await fileStoredDocumentForSociety({
     societyId,
-    docType: "nonServiceInvoice",
+    docType,
     s3Key: key,
     fileName: intake.fileName,
     contentType: "application/pdf",
@@ -330,7 +333,7 @@ async function fileNonServiceInvoice(
       filedAsDocumentId: filed.documentId,
     },
   });
-  logger.info("intake.filed_as_non_service_document", {
+  logger.info(docType === "invoiceCopy" ? "intake.filed_as_document" : "intake.filed_as_non_service_document", {
     actorId,
     intakeId: intake.id,
     documentId: filed.documentId,
@@ -667,4 +670,94 @@ export async function discardIntake(intakeId: string, reason: string): Promise<R
   logger.info("intake.discarded", { actorId: ops.actor.id, intakeId, reason: reason.trim() });
   revalidatePath(INTAKE_PATH);
   return {};
+}
+
+// ---------------------------------------------------------------------------
+// 6. Bulk — file as document, release to society (2026-09-25, user-asked).
+// Each row re-checks its own eligibility here with the same rule the list
+// uses (src/lib/intake-bulk.ts); a row that fails is named, never rolled
+// back silently, and the rows that succeeded stay done.
+// ---------------------------------------------------------------------------
+
+export type BulkResult = { done: number; failed: { fileName: string; error: string }[] };
+
+/** File each row's PDF against its society and month instead of submitting it as a month of record. */
+export async function fileIntakesAsDocuments(intakeIds: string[]): Promise<BulkResult> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { done: 0, failed: [{ fileName: "", error: ops.error }] };
+  let done = 0;
+  const failed: BulkResult["failed"] = [];
+  for (const id of [...new Set(intakeIds)]) {
+    const intake = await db.invoiceIntake.findUnique({ where: { id } });
+    if (!intake) {
+      failed.push({ fileName: "", error: "This upload no longer exists." });
+      continue;
+    }
+    const review = intake.review as unknown as Review | null;
+    const eligible = bulkActionsFor({
+      status: intake.status,
+      hasSociety: !!review?.societyId,
+      hasPeriod: !!review && /^\d{4}-\d{2}$/.test(review.period),
+    }).includes("file");
+    if (!review || !eligible) {
+      failed.push({ fileName: intake.fileName, error: "Needs a confirmed society and month, and must not be submitted already — open it to check." });
+      continue;
+    }
+    const dup = await duplicateFor(review);
+    if (dup?.sameNumber) {
+      failed.push({ fileName: intake.fileName, error: `Invoice ${dup.number} is already on record — this is a second copy.` });
+      continue;
+    }
+    try {
+      const r = await fileNonServiceInvoice(intake, review, ops.actor.id, review.nonServiceInvoice ? "nonServiceInvoice" : "invoiceCopy");
+      if (r.error) failed.push({ fileName: intake.fileName, error: r.error });
+      else done += 1;
+    } catch (err) {
+      logger.error("intake.bulk_file_failed", { intakeId: id, error: err instanceof Error ? err.message : String(err) });
+      failed.push({ fileName: intake.fileName, error: "Could not be filed — try this one on its own." });
+    }
+  }
+  logger.info("intake.bulk_file_completed", { actorId: ops.actor.id, requested: intakeIds.length, done, failed: failed.length });
+  revalidatePath(INTAKE_PATH);
+  return { done, failed };
+}
+
+/**
+ * Put rows in front of the society: a filed invoice goes onto its portal
+ * Documents page; a submitted month is released through the accountant's
+ * own release (CON-33). Both are the accountant's act.
+ */
+export async function releaseIntakesToSociety(intakeIds: string[]): Promise<BulkResult> {
+  const acc = await requireAccountant();
+  if (!acc.ok) return { done: 0, failed: [{ fileName: "", error: acc.error }] };
+  let done = 0;
+  const failed: BulkResult["failed"] = [];
+  for (const id of [...new Set(intakeIds)]) {
+    const intake = await db.invoiceIntake.findUnique({ where: { id } });
+    if (!intake || intake.status !== "submitted") {
+      failed.push({ fileName: intake?.fileName ?? "", error: "Not filed or submitted — nothing to release." });
+      continue;
+    }
+    if (intake.filedAsDocumentId) {
+      const updated = await db.storedDocument.updateMany({
+        where: { id: intake.filedAsDocumentId, voidedAt: null, releasedToSocietyAt: null },
+        data: { releasedToSocietyAt: new Date(), releasedToSocietyById: acc.actor.id },
+      });
+      if (updated.count === 1) {
+        done += 1;
+        logger.info("intake.filed_document_released", { actorId: acc.actor.id, intakeId: id, documentId: intake.filedAsDocumentId });
+      } else failed.push({ fileName: intake.fileName, error: "Already released, or the filed document was withdrawn." });
+      continue;
+    }
+    if (!intake.monthlyCalculationId) {
+      failed.push({ fileName: intake.fileName, error: "No month is linked to this row." });
+      continue;
+    }
+    const r = await releaseCalculation(intake.monthlyCalculationId);
+    if (r.error) failed.push({ fileName: intake.fileName, error: r.error });
+    else done += 1;
+  }
+  logger.info("intake.bulk_release_completed", { actorId: acc.actor.id, requested: intakeIds.length, done, failed: failed.length });
+  revalidatePath(INTAKE_PATH);
+  return { done, failed };
 }

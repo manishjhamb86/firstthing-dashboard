@@ -33,7 +33,13 @@ const VISIBLE: Record<string, { label: string; tone: ChipTone }> = {
   preDemoReport: { label: "Demo report (before)", tone: "neu" },
   postDemoReport: { label: "Demo report (after)", tone: "neu" },
   inspectionReport: { label: "Inspection report", tone: "ok" },
+  // Invoices filed from intake (2026-09-25) — only once released to the
+  // society; filing alone does not publish (see RELEASE_GATED below).
+  invoiceCopy: { label: "Invoice", tone: "warn" },
+  nonServiceInvoice: { label: "Invoice (other charges)", tone: "warn" },
 };
+/** Types that reach the society only once FirsThing has released them. */
+const RELEASE_GATED = ["invoiceCopy", "nonServiceInvoice"];
 
 // The icon bubble each document row wears — the design canvas's own row
 // anatomy (Documents.dc.html: a colored icon circle, then title/subtitle,
@@ -81,7 +87,14 @@ export default async function PortalDocumentsPage({
   });
 
   const docs = await db.storedDocument.findMany({
-    where: { societyId, voidedAt: null, docType: { in: Object.keys(VISIBLE) } },
+    where: {
+      societyId,
+      voidedAt: null,
+      OR: [
+        { docType: { in: Object.keys(VISIBLE).filter((t) => !RELEASE_GATED.includes(t)) } },
+        { docType: { in: RELEASE_GATED }, releasedToSocietyAt: { not: null } },
+      ],
+    },
     orderBy: [{ period: "desc" }, { uploadedAt: "desc" }],
     select: {
       id: true,

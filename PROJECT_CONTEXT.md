@@ -7061,3 +7061,18 @@ Full Supabase cutover plan (2026-08-05), phases 4-6 in this order, Phase 7 delib
 - **Phase 5 — S3 storage: code-complete, blocked on AWS provisioning** — see the immediate action above.
 - **Phase 6 — `energy-chart.tsx`'s Supabase Realtime → polling**, same pattern as `water-tanks`' existing `setInterval` poll; also fixes its `society_name`-string scoping (inconsistent with every other page's `societyId`).
 - **Phase 7 — one-time data copy from the legacy Supabase project**, table by table, explicit confirmation before each run. Decision (2026-08-05): stays last, after Phases 2-6 are built and verified against seed data — lower blast radius against real customer data. Consider enriching `prisma/seed.ts` with a few extra synthetic societies/tanks/invoices along the way so list/empty-state UI paths get exercised before real data lands. **Blocked on the user supplying the legacy Supabase project's direct Postgres connection credentials** (`.env.local` today only has the anon key, which can't do a bulk table copy).
+
+## Invoice intake: bulk file as document, bulk release to society (2026-09-25) — user-asked
+
+Rows on the intake list can be selected in bulk (`src/lib/intake-bulk.ts` decides which rows take
+which action — the checkbox, the bar's counts and the server's per-row re-check all read it):
+**File as document** (a needs-review or ready row with a confirmed society and month; the PDF is
+filed as a new `invoiceCopy` StoredDocument, or `nonServiceInvoice` when so flagged — never a
+month of record, INV-02) and **Release to society** (a filed invoice goes onto the portal's
+Documents page; a submitted month goes through the existing `releaseCalculation`). Prompted by
+Mapsko Casa Bella: 11 invoices, but no circuit or contract on record, so none can ever be a
+savings month. **Filing does not publish** — `StoredDocument.releasedToSocietyAt/ById`
+(migration `20260925090000`) gates the two invoice types on the portal, and release is
+`requireAccountant()` (CON-33), offered only to an account holding `release_billing`. A
+same-number duplicate is refused filing. Verified end to end on dev: 2 filed, invisible to the
+society's office-bearer, released, then both visible on the portal.

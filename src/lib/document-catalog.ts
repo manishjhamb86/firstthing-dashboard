@@ -21,7 +21,8 @@ export type DocumentTypeId =
   | "savingsReport"
   | "gatePass"
   | "inspectionReport"
-  | "nonServiceInvoice";
+  | "nonServiceInvoice"
+  | "invoiceCopy";
 
 export type DocumentTypeSpec = {
   id: DocumentTypeId;
@@ -142,6 +143,23 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     maxBytes: 25 * MB,
     permission: "manage_pipeline",
     uploadHere: true,
+  },
+  {
+    id: "invoiceCopy",
+    label: "Invoice (filed copy)",
+    // 2026-09-25 — filed in bulk from invoice intake, e.g. a society with no
+    // contract or circuit on record: kept, and shown to the society once
+    // released, but never a month of record (INV-02 — nothing to trace to).
+    operation: "Filed against the society with its period, from invoice intake. Not fed into any month's savings figure.",
+    context: "society",
+    needsPeriod: true,
+    periodHint: "The month the bill is for.",
+    acceptedKinds: ["pdf"],
+    acceptedExtensions: ["pdf"],
+    maxBytes: 25 * MB,
+    permission: "manage_pipeline",
+    uploadHere: false,
+    handledAt: "Invoice intake — select the rows and choose File as document.",
   },
   {
     id: "nonServiceInvoice",

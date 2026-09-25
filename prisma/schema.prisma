@@ -379,6 +379,7 @@ model Society {
   monthlyCalculations     MonthlyCalculation[]
   storedDocuments         StoredDocument[]
   retailCustomers         RetailCustomer[]
+  stockLocations          StockLocation[]
   publishedSavingsReports PublishedSavingsReport[]
   tickets                 Ticket[]
   inspections             Inspection[]
@@ -3668,4 +3669,223 @@ model RetailInvoice {
   @@index([customerId])
   @@index([invoiceNumber])
   @@map("retail_invoices")
+}
+
+// ---------------------------------------------------------------------------
+// Inventory & device lifecycle (2026-09-25) — docs/engineering/17-inventory-lifecycle.md
+// ---------------------------------------------------------------------------
+
+enum InventoryTracking {
+  serial // one unit, one code: lights, meters, routers, SIM cards…
+  length // metres: LAN wire
+  quantity // a count: everything else
+
+  @@map("inventory_tracking")
+}
+
+enum WarrantyBasis {
+  purchase // runs from the supplier invoice date
+  install // runs from the day the unit is deployed
+
+  @@map("warranty_basis")
+}
+
+enum StockLocationKind {
+  office
+  site // a society's premises — one per society, created on first deployment
+
+  @@map("stock_location_kind")
+}
+
+enum InventoryUnitStatus {
+  in_stock
+  deployed
+  faulty
+  returned_to_supplier
+  scrapped
+  lost
+
+  @@map("inventory_unit_status")
+}
+
+enum StockMovementKind {
+  receive
+  transfer
+  deploy
+  return_to_office   @map("return")
+  mark_faulty        @map("fault")
+  repair
+  return_to_supplier
+  scrap
+  lost
+  adjust
+
+  @@map("stock_movement_kind")
+}
+
+/// What can be stocked — a light model, a meter, a router, LAN wire, clamps.
+model InventoryItemType {
+  id                    String            @id @default(cuid())
+  name                  String            @unique
+  category              String
+  tracking              InventoryTracking
+  /// "pcs" or "m".
+  unit                  String            @default("pcs")
+  make                  String?
+  model                 String?
+  /// The light catalog entry this is, when it is a light (optional).
+  deviceTypeId          String?           @map("device_type_id")
+  defaultWarrantyMonths Int?              @map("default_warranty_months")
+  active                Boolean           @default(true)
+  createdAt             DateTime          @default(now()) @map("created_at")
+
+  batches   InventoryBatch[]
+  units     InventoryUnit[]
+  movements StockMovement[]
+
+  @@map("inventory_item_types")
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  nameKey   String   @unique @map("name_key")
+  gstin     String?
+  contact   String?
+  phone     String?
+  email     String?
+  address   String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  purchases InventoryPurchase[]
+
+  @@map("suppliers")
+}
+
+/// Where stock can be: an office, or a society's site.
+model StockLocation {
+  id        String            @id @default(cuid())
+  kind      StockLocationKind
+  name      String
+  address   String?
+  societyId String?           @unique @map("society_id")
+  active    Boolean           @default(true)
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  society       Society?         @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  units         InventoryUnit[]
+  batchesHere   InventoryBatch[]
+  movementsFrom StockMovement[]  @relation("MovementFrom")
+  movementsTo   StockMovement[]  @relation("MovementTo")
+
+  @@map("stock_locations")
+}
+
+/// The supplier's invoice for a delivery — the PDF kept, its lines are batches.
+model InventoryPurchase {
+  id              String   @id @default(cuid())
+  supplierId      String   @map("supplier_id")
+  invoiceNumber   String   @map("invoice_number")
+  invoiceDate     DateTime @map("invoice_date")
+  total           Float?
+  invoiceS3Key    String?  @map("invoice_s3_key")
+  invoiceFileName String?  @map("invoice_file_name")
+  notes           String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  createdById     String   @map("created_by_id")
+
+  supplier Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  batches  InventoryBatch[]
+
+  @@unique([supplierId, invoiceNumber])
+  @@map("inventory_purchases")
+}
+
+/// One line of a delivery — a lot with its own printed code.
+model InventoryBatch {
+  id                   String        @id @default(cuid())
+  /// Printed on every unit: B{YYMM}-{nnn}.
+  code                 String        @unique
+  itemTypeId           String        @map("item_type_id")
+  purchaseId           String        @map("purchase_id")
+  /// The office it arrived at.
+  receivedAtLocationId String        @map("received_at_location_id")
+  receivedOn           DateTime      @map("received_on")
+  /// Units, metres or pieces received.
+  quantity             Float
+  unitCost             Float?        @map("unit_cost")
+  /// The manufacturer's own lot / batch reference, if printed.
+  supplierLot          String?       @map("supplier_lot")
+  manufacturedOn       DateTime?     @map("manufactured_on")
+  warrantyMonths       Int?          @map("warranty_months")
+  warrantyBasis        WarrantyBasis @default(purchase) @map("warranty_basis")
+  notes                String?
+  createdAt            DateTime      @default(now()) @map("created_at")
+  createdById          String        @map("created_by_id")
+
+  itemType   InventoryItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+  purchase   InventoryPurchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  receivedAt StockLocation     @relation(fields: [receivedAtLocationId], references: [id], onDelete: Restrict)
+  units      InventoryUnit[]
+  movements  StockMovement[]
+
+  @@map("inventory_batches")
+}
+
+/// One serialized item — a single light, meter, SIM card. Its current status
+/// and location are written with the movement that changed them.
+model InventoryUnit {
+  id           String              @id @default(cuid())
+  /// Printed on the unit: {batch code}-{nnnnn}.
+  code         String              @unique
+  batchId      String              @map("batch_id")
+  itemTypeId   String              @map("item_type_id")
+  /// The manufacturer's own serial — a SIM's ICCID, a meter's device id.
+  serialNumber String?             @map("serial_number")
+  status       InventoryUnitStatus @default(in_stock)
+  locationId   String?             @map("location_id")
+  circuitId    String?             @map("circuit_id")
+  deployedOn   DateTime?           @map("deployed_on")
+  notes        String?
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  batch     InventoryBatch    @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  itemType  InventoryItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+  location  StockLocation?    @relation(fields: [locationId], references: [id], onDelete: SetNull)
+  movements StockMovement[]
+
+  @@index([batchId])
+  @@index([locationId, status])
+  @@map("inventory_units")
+}
+
+/// The ledger. Never edited — a correction is a new movement.
+model StockMovement {
+  id             String            @id @default(cuid())
+  kind           StockMovementKind
+  /// When it happened (typed by a person — UTC midnight).
+  on             DateTime
+  itemTypeId     String            @map("item_type_id")
+  batchId        String?           @map("batch_id")
+  unitId         String?           @map("unit_id")
+  /// Units, metres or pieces moved (1 for a serial unit).
+  quantity       Float
+  fromLocationId String?           @map("from_location_id")
+  toLocationId   String?           @map("to_location_id")
+  circuitId      String?           @map("circuit_id")
+  reason         String?
+  recordedAt     DateTime          @default(now()) @map("recorded_at")
+  recordedById   String            @map("recorded_by_id")
+
+  itemType InventoryItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+  batch    InventoryBatch?   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  unit     InventoryUnit?    @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  from     StockLocation?    @relation("MovementFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  to       StockLocation?    @relation("MovementTo", fields: [toLocationId], references: [id], onDelete: Restrict)
+
+  @@index([unitId])
+  @@index([batchId])
+  @@index([toLocationId])
+  @@index([fromLocationId])
+  @@map("stock_movements")
 }

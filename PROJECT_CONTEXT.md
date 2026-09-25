@@ -7116,3 +7116,24 @@ customer (GSTIN first, then name). Submitting files a `RetailInvoice` under
 lists customers with billed and unpaid totals; each customer page lists its invoices. Verified on
 dev with an invoice shaped like INV80850065 (Park View Residency): customer created from the
 bill-to, a second create refused, submitted, listed, and a second copy caught as a duplicate.
+
+## Inventory & device lifecycle (2026-09-25) — user-asked, researched, three choices the user's
+
+Design and decisions: `docs/engineering/17-inventory-lifecycle.md`. Supplier → purchase (the
+supplier's invoice, PDF kept privately under `Inventory/`) → batch (one delivery line, code
+`B{YYMM}-{nnn}`) → unit (`{batch}-{nnnnn}`, printed with a QR code). The user chose a **unique
+code per light**, **no backfill** of the ~19 running installations, and which items are tracked
+one by one (lights, meters, WiFi routers/extenders, SIM cards, tank monitors, actuator valves and
+their controllers, float switches), **LAN wire by the metre**, the rest by quantity — seeded by
+migration `20260925120000_inventory_lifecycle` (light item types join the catalog by name).
+**Stock movements are an append-only ledger**; a serial unit's status/location is written in the
+same transaction as the movement. `src/lib/inventory.ts` (10 unit cases) owns codes, allowed
+lifecycle moves (a faulty unit cannot be deployed; a deployed one must come back before scrap or
+return to supplier; scrapped/lost/returned are final), computed warranty expiry (from invoice or
+installation), and ledger balances. Societies become stock sites on first deployment. Pages:
+`/admin/inventory` (find by code, what is where, warranty ending ≤60 days, recent batches),
+`/receive`, `/setup`, `/batches/[id]` (+ `/labels`, a printable QR sheet), `/units/[code]` (its
+whole life). New dependency `qrcode` (server-side SVG). Verified 17 checks on dev: receive, 20
+coded units, labels, range deploy, faulty-without-reason and faulty-deploy refused, return keeps
+it faulty, timeline, 500 m of 300 m refused, 120 m moved, code search. One defect found by the
+check: the "N recorded" message vanished with the form after a bulk move — now kept on the table.

@@ -19,6 +19,7 @@ import {
   LifeBuoy,
   ClipboardCheck,
   Settings,
+  Package,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -113,6 +114,13 @@ export function AppShell({
     // society-management's to run. Its own service line, its own group.
     ...group("water", "Water", Droplets, [
       showTanks && { href: "/admin/water-tanks", label: "Water tanks", icon: Droplets },
+    ]),
+    // Inventory & device lifecycle (2026-09-25) — stock is received and moved
+    // by the field and pipeline teams.
+    ...group("inventory", "Inventory", Package, [
+      (showField || showPipeline) && { href: "/admin/inventory", label: "Stock", icon: Package, exact: true },
+      (showField || showPipeline) && { href: "/admin/inventory/receive", label: "Receive stock", icon: Package },
+      (showField || showPipeline) && { href: "/admin/inventory/setup", label: "Offices, suppliers & items", icon: Package },
     ]),
     ...group("billing", "Billing", Receipt, [
       // Intake FIRST (2026-09-20): CON-47 made invoice-first the primary

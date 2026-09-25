@@ -21,7 +21,17 @@ export default async function InventorySetupPage() {
   const stocked = new Set(items.map((i) => i.name.toLowerCase()));
   return (
     <>
-      <PageHeader backHref="/admin/inventory" title="Offices, suppliers & items" subtitle="What stock can be, where it can be kept, and who it comes from." />
+      <PageHeader
+        backHref="/admin/inventory"
+        title="Offices, suppliers & items"
+        subtitle="What stock can be, where it can be kept, and who it comes from."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <SetupForm kind="office" />
+            <SetupForm kind="supplier" />
+          </div>
+        }
+      />
       <div className="grid gap-5 xl:grid-cols-2">
         <Card className="p-5">
           <CardTitle>Offices</CardTitle>
@@ -29,9 +39,9 @@ export default async function InventorySetupPage() {
             Where stock arrives and comes back to. Societies become sites automatically the first time something is deployed there.
           </p>
           {offices.length === 0 ? (
-            <p className="mb-3 text-[13px]" style={{ color: "var(--warn-fg)" }}>No office yet — add one before receiving stock.</p>
+            <p className="mb-3 text-[13px]" style={{ color: "var(--warn-fg)" }}>No office yet — use Add office above before receiving stock.</p>
           ) : (
-            <ul className="mb-4 space-y-1 text-[13.5px]">
+            <ul className="space-y-1 text-[13.5px]">
               {offices.map((o) => (
                 <li key={o.id}>
                   <span className="font-semibold">{o.name}</span>
@@ -40,12 +50,13 @@ export default async function InventorySetupPage() {
               ))}
             </ul>
           )}
-          <SetupForm kind="office" />
         </Card>
         <Card className="p-5">
           <CardTitle>Suppliers</CardTitle>
-          {suppliers.length > 0 && (
-            <ul className="mb-4 space-y-1 text-[13.5px]">
+          {suppliers.length === 0 ? (
+            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>No supplier yet — use Add supplier above.</p>
+          ) : (
+            <ul className="space-y-1 text-[13.5px]">
               {suppliers.map((s) => (
                 <li key={s.id}>
                   <span className="font-semibold">{s.name}</span>
@@ -54,7 +65,6 @@ export default async function InventorySetupPage() {
               ))}
             </ul>
           )}
-          <SetupForm kind="supplier" />
         </Card>
         <Card className="p-5 xl:col-span-2">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

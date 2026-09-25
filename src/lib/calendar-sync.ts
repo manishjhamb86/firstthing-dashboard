@@ -38,10 +38,16 @@ export async function syncCalendarEvent(id: string, cfgIn?: CalendarConfig | nul
 
   const organizer = e.googleOrganizer ?? organizerFor(e.createdBy.email, cfg.workspaceDomain, cfg.fallbackOrganizer);
   const hold = { updatedAt: e.updatedAt };
+  // Write the outcome back only if nobody else synced this row since we read
+  // it. Two pushes can overlap (the action's own and the sweep's); without
+  // this, the loser's failure — Google rate-limits rapid edits to one event —
+  // overwrote the winner's success, and a meeting that was on Google Calendar
+  // read "not on Google Calendar" (seen on stage, 2026-09-25).
+  const unchanged = { id, calendarSyncedAt: e.calendarSyncedAt };
   try {
     if (decision === "delete") {
       await deleteEvent(cfg, organizer, e.googleEventId!);
-      await db.scheduledEvent.update({ where: { id }, data: { ...hold, calendarSyncedAt: new Date(), calendarSyncError: null, calendarSyncAttempts: 0 } });
+      await db.scheduledEvent.updateMany({ where: unchanged, data: { ...hold, calendarSyncedAt: new Date(), calendarSyncError: null, calendarSyncAttempts: 0 } });
       logger.info("calendar.event_deleted", { eventId: id, organizer });
       return "deleted";
     }
@@ -63,8 +69,8 @@ export async function syncCalendarEvent(id: string, cfgIn?: CalendarConfig | nul
       attendees,
     );
     const r = await pushEvent(cfg, organizer, e.googleEventId ?? googleEventIdFor(e.id), body, { wantMeet: e.addMeet, hasMeet: !!e.meetLink });
-    await db.scheduledEvent.update({
-      where: { id },
+    await db.scheduledEvent.updateMany({
+      where: unchanged,
       data: {
         ...hold,
         googleEventId: r.googleEventId,
@@ -80,10 +86,14 @@ export async function syncCalendarEvent(id: string, cfgIn?: CalendarConfig | nul
     return "pushed";
   } catch (err) {
     const message = err instanceof CalendarError || err instanceof Error ? err.message : String(err);
-    await db.scheduledEvent.update({
-      where: { id },
+    const wrote = await db.scheduledEvent.updateMany({
+      where: unchanged,
       data: { ...hold, calendarSyncError: message.slice(0, 500), calendarSyncAttempts: { increment: 1 } },
     });
+    if (wrote.count === 0) {
+      logger.info("calendar.push_superseded", { eventId: id, error: message });
+      return "skipped";
+    }
     logger.warn("calendar.push_failed", { eventId: id, organizer, error: message });
     return "failed";
   }
@@ -111,6 +121,9 @@ export async function runCalendarSweep(limit = 50): Promise<{ pushed: number; fa
   const candidates = await db.$queryRaw<Array<{ id: string }>>`
     SELECT id FROM scheduled_events
     WHERE (calendar_synced_at IS NULL OR updated_at > calendar_synced_at)
+      -- A row saved in the last 30 seconds is being pushed by the action
+      -- that saved it; the sweep picks it up next pass if that push failed.
+      AND updated_at < now() - interval '30 seconds'
       AND (status = 'scheduled' AND (google_event_id IS NOT NULL OR start_at >= ${since})
            OR status = 'cancelled' AND google_event_id IS NOT NULL)
     ORDER BY start_at ASC

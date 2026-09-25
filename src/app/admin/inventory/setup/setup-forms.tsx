@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorText, Field } from "@/components/ui";
-import { createItemType, createOffice, createSupplier } from "../actions";
+import { createOffice, createSupplier } from "../actions";
 
-type Kind = "office" | "supplier" | "item";
+type Kind = "office" | "supplier";
 
 const FIELDS: Record<Kind, Array<{ k: string; label: string; hint?: string }>> = {
   office: [
@@ -19,13 +19,6 @@ const FIELDS: Record<Kind, Array<{ k: string; label: string; hint?: string }>> =
     { k: "phone", label: "Phone" },
     { k: "email", label: "Email" },
     { k: "address", label: "Address" },
-  ],
-  item: [
-    { k: "name", label: "Item name", hint: "e.g. Motion-enabled batten 20W, LAN wire Cat6" },
-    { k: "category", label: "Category", hint: "light, meter, network, water, cable, consumable…" },
-    { k: "make", label: "Make" },
-    { k: "model", label: "Model" },
-    { k: "defaultWarrantyMonths", label: "Default warranty (months)" },
   ],
 };
 
@@ -43,16 +36,7 @@ export function SetupForm({ kind }: { kind: Kind }) {
       const r =
         kind === "office"
           ? await createOffice({ name: g("name"), address: g("address") })
-          : kind === "supplier"
-            ? await createSupplier({ name: g("name"), gstin: g("gstin"), contact: g("contact"), phone: g("phone"), email: g("email"), address: g("address") })
-            : await createItemType({
-                name: g("name"),
-                category: g("category"),
-                tracking: (g("tracking") || "quantity") as "serial" | "length" | "quantity",
-                make: g("make"),
-                model: g("model"),
-                defaultWarrantyMonths: g("defaultWarrantyMonths") ? Number(g("defaultWarrantyMonths")) : null,
-              });
+          : await createSupplier({ name: g("name"), gstin: g("gstin"), contact: g("contact"), phone: g("phone"), email: g("email"), address: g("address") });
       if (r.error) setError(r.error);
       else {
         setV({ tracking: "quantity" });
@@ -69,19 +53,10 @@ export function SetupForm({ kind }: { kind: Kind }) {
             <input id={`${kind}-${f.k}`} className="field" value={v[f.k] ?? ""} onChange={(e) => setV((x) => ({ ...x, [f.k]: e.target.value }))} />
           </Field>
         ))}
-        {kind === "item" && (
-          <Field label="Tracked" htmlFor="item-tracking" hint="One by one gets a printed code per unit.">
-            <select id="item-tracking" className="field" value={v.tracking} onChange={(e) => setV((x) => ({ ...x, tracking: e.target.value }))}>
-              <option value="serial">One by one (printed code per unit)</option>
-              <option value="length">By length (metres)</option>
-              <option value="quantity">By quantity</option>
-            </select>
-          </Field>
-        )}
       </div>
       {error && <ErrorText>{error}</ErrorText>}
       <button type="button" className="btn-secondary btn-sm" disabled={pending || !(v.name ?? "").trim()} onClick={save}>
-        {pending ? "Saving…" : kind === "office" ? "Add office" : kind === "supplier" ? "Add supplier" : "Add item type"}
+        {pending ? "Saving…" : kind === "office" ? "Add office" : "Add supplier"}
       </button>
     </div>
   );

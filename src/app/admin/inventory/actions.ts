@@ -94,6 +94,14 @@ export async function createItemType(input: {
   if (!input.name.trim()) return { error: "Name the item." };
   const exists = await db.inventoryItemType.findFirst({ where: { name: { equals: input.name.trim(), mode: "insensitive" } } });
   if (exists) return { error: `"${exists.name}" is already an item type.` };
+  // The category comes from the managed list; a new one is added to it —
+  // matched case-insensitively so "Light" and "light" stay one category.
+  const catName = input.category.trim().toLowerCase();
+  if (!catName) return { error: "Choose a category." };
+  await db.inventoryCategory.upsert({ where: { name: catName }, create: { name: catName }, update: {} });
+  input = { ...input, category: catName };
+  // An item named after a light in the catalog is linked to it.
+  const catalog = await db.deviceType.findFirst({ where: { name: { equals: input.name.trim(), mode: "insensitive" } }, select: { id: true } });
   await db.inventoryItemType.create({
     data: {
       name: input.name.trim(),
@@ -103,6 +111,7 @@ export async function createItemType(input: {
       make: input.make.trim() || null,
       model: input.model.trim() || null,
       defaultWarrantyMonths: input.defaultWarrantyMonths,
+      deviceTypeId: catalog?.id ?? null,
     },
   });
   logger.info("inventory.item_type_created", { actorId: admin.id, name: input.name.trim(), tracking: input.tracking });

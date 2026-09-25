@@ -24,6 +24,7 @@ export const SCHEDULE_KIND: Record<ScheduleKind, { label: string; verb: string }
   survey_visit: { label: "Survey visit", verb: "Site survey" },
   installation_day: { label: "Installation", verb: "Installation day" },
   other: { label: "Appointment", verb: "Appointment" },
+  task: { label: "Task", verb: "Task" },
 };
 
 export type CalendarEvent = {
@@ -33,7 +34,8 @@ export type CalendarEvent = {
   startAt: Date;
   endAt: Date | null;
   assigneeName: string;
-  societyName: string;
+  /** Null for a task that is not about a society. */
+  societyName: string | null;
   contactName: string | null;
   contactPhone: string | null;
   note: string | null;

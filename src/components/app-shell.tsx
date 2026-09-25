@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   Settings,
   Package,
+  ListChecks,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -81,6 +82,9 @@ export function AppShell({
     // so this is not permission-gated (the user's call, 2026-08-25: one
     // schedule module, visible to everyone as their own calendar).
     { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
+    // Tasks (2026-09-25): everyone's own work as line items — tasks set for
+    // each other plus the deal's own assignments. Not permission-gated.
+    { href: "/admin/tasks", label: "Tasks", icon: ListChecks },
     ...group("deals", "Deals", Target, [
       showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
       // The field team's own list — they do not get the deal (2026-08-24).

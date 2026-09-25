@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { requireInventoryPage } from "../access";
 import { SetupForm } from "./setup-forms";
+import { AddItemType } from "./item-type-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventory set-up" };
@@ -10,11 +11,14 @@ const TRACKING: Record<string, string> = { serial: "One by one", length: "By len
 
 export default async function InventorySetupPage() {
   await requireInventoryPage();
-  const [offices, suppliers, items] = await Promise.all([
+  const [offices, suppliers, items, categories, catalog] = await Promise.all([
     db.stockLocation.findMany({ where: { kind: "office" }, orderBy: { name: "asc" } }),
     db.supplier.findMany({ orderBy: { name: "asc" } }),
     db.inventoryItemType.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }] }),
+    db.inventoryCategory.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    db.deviceType.findMany({ where: { role: "replacement", active: true }, select: { name: true }, orderBy: { name: "asc" } }),
   ]);
+  const stocked = new Set(items.map((i) => i.name.toLowerCase()));
   return (
     <>
       <PageHeader backHref="/admin/inventory" title="Offices, suppliers & items" subtitle="What stock can be, where it can be kept, and who it comes from." />
@@ -53,7 +57,10 @@ export default async function InventorySetupPage() {
           <SetupForm kind="supplier" />
         </Card>
         <Card className="p-5 xl:col-span-2">
-          <CardTitle>Item types</CardTitle>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="mb-0">Item types</CardTitle>
+            <AddItemType categories={categories.map((c) => c.name)} catalogNames={catalog.map((c) => c.name).filter((n) => !stocked.has(n.toLowerCase()))} />
+          </div>
           <div className="mb-4 overflow-x-auto">
             <table className="tbl tbl-compact">
               <thead>
@@ -80,7 +87,6 @@ export default async function InventorySetupPage() {
               </tbody>
             </table>
           </div>
-          <SetupForm kind="item" />
         </Card>
       </div>
     </>

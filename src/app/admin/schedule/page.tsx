@@ -65,11 +65,13 @@ export default async function SchedulePage({
     startAt: e.startAt,
     endAt: e.endAt,
     assigneeName: e.assignee.name ?? e.assignee.email,
-    societyName: e.society.name,
+    societyName: e.society?.name ?? null,
     contactName: e.contactName,
     contactPhone: e.contactPhone,
     note: e.note,
-    href: e.pipelineId
+    href: e.kind === "task"
+      ? `/admin/tasks?open=${e.id}`
+      : e.pipelineId
       ? e.kind === "survey_visit"
         ? `/admin/pipeline/${e.pipelineId}/survey`
         : `/admin/pipeline/${e.pipelineId}`

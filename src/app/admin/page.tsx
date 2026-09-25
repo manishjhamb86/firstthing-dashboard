@@ -3,6 +3,7 @@ import { formatDate, longDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { YourTasks } from "./your-tasks";
 import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
 import { PIPELINE_STAGE, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
@@ -197,6 +198,11 @@ export default async function AdminHomePage() {
       <PageHeader
         title="Portfolio"
         subtitle={today}
+        action={
+          <Link href="/admin/societies" className="btn-secondary btn-sm">
+            Societies
+          </Link>
+        }
         chip={
           decisionCount > 0 ? (
             <a href="#needs-decision" aria-label="Jump to what is waiting on you">
@@ -207,6 +213,8 @@ export default async function AdminHomePage() {
           ) : undefined
         }
       />
+
+      <YourTasks userId={session.user.id} />
 
       <StatRow>
         <Stat

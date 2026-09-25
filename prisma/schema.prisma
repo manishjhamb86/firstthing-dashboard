@@ -726,9 +726,19 @@ model ScheduledEvent {
   /// What it is about. A society is always known; the pipeline is set for
   /// anything on the deal spine, the circuit for commissioning work that
   /// happens on one metered circuit (the light replacement day).
-  societyId  String  @map("society_id")
+  /// Optional since tasks (2026-09-25): an office task need not be about a society.
+  societyId  String? @map("society_id")
   pipelineId String? @map("pipeline_id")
   circuitId  String? @map("circuit_id")
+
+  /// Tasks (2026-09-25): what is to be done, how urgent, and how it ended.
+  description    String?
+  priority       TaskPriority @default(normal)
+  /// True when only the day matters (a due date), false for a set time.
+  allDay         Boolean      @default(false) @map("all_day")
+  completedAt    DateTime?    @map("completed_at")
+  completedById  String?      @map("completed_by_id")
+  completionNote String?      @map("completion_note")
 
   /// Who to ask for on arrival, and anything the visitor needs to know. This
   /// is the coordination that used to live in one person's phone.
@@ -741,7 +751,7 @@ model ScheduledEvent {
 
   assignee  AdminUser @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
   createdBy AdminUser @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
-  society   Society   @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  society   Society?  @relation(fields: [societyId], references: [id], onDelete: Cascade)
   pipeline  Pipeline? @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
   circuit   Circuit?  @relation(fields: [circuitId], references: [id], onDelete: Cascade)
 
@@ -755,6 +765,15 @@ enum ScheduleKind {
   survey_visit
   installation_day
   other
+  /// A task someone created and assigned (2026-09-25) — the same list the
+  /// deal's own assignments land in, so a person has one place for their work.
+  task
+}
+
+enum TaskPriority {
+  low
+  normal
+  high
 }
 
 enum ScheduleStatus {
@@ -3888,4 +3907,14 @@ model StockMovement {
   @@index([toLocationId])
   @@index([fromLocationId])
   @@map("stock_movements")
+}
+
+/// The list an item's category is chosen from (2026-09-25, user-asked: pick
+/// it from a dropdown, add a new one only when it is genuinely missing).
+model InventoryCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("inventory_categories")
 }

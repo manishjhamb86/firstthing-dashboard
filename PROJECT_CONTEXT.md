@@ -7137,3 +7137,25 @@ whole life). New dependency `qrcode` (server-side SVG). Verified 17 checks on de
 coded units, labels, range deploy, faulty-without-reason and faulty-deploy refused, return keeps
 it faulty, timeline, 500 m of 300 m refused, 120 m moved, code search. One defect found by the
 check: the "N recorded" message vanished with the form after a bulk move — now kept on the table.
+
+## Tasks (2026-09-25) — user-asked
+
+"A user should be able to create a task and assign it to someone; the auto-assignments from the
+deal will work as usual and be part of the same flow; everyone sees a task summary on their
+dashboard; a Tasks tab with pending and completed as line items, incomplete by default, all on
+selecting All." Built as an extension of the existing **schedule module** rather than a second
+system: `ScheduledEvent` gained kind `task`, `description`, `priority`, `allDay`, completion
+(`completedAt/ById/Note`), and `societyId` became optional (migration `20260925130000_tasks`).
+So the deal's survey visits, replacement days and demo meetings are the same rows and sit in the
+same list, and a task with a date appears on the Schedule calendar. `src/lib/tasks.ts` (5 unit
+cases): state by calendar day (due later today is not overdue), the dashboard summary, who may
+act (assignee, creator, or operations). `/admin/tasks`: Open by default · Completed · All;
+Assigned to me · Set by me · Everyone's (operations); create/edit/cancel for tasks, Mark done
+(with a note) and Reopen for any. A deal-step entry can be marked done but not edited or
+cancelled here — its deal owns it. The Portfolio opens with "Your tasks". Verified 16 checks
+across three accounts on dev.
+
+Also (user-asked, same day): an inventory item's **category comes from a managed list**
+(`InventoryCategory`, migration `20260925131000_inventory_categories`, seeded from use) with "Add a
+new category…" in the dropdown, the item name is picked from the light catalog (or typed), and the
+item list and its add form are separate.

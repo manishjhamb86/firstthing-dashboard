@@ -150,7 +150,9 @@ export function ReviewForm({
     review.dueDate &&
     (!duplicate || (review.nonServiceInvoice && !duplicate.sameNumber));
   const step2Open = open.filter((o) => o.includes("(step 2)")).length;
-  const step4Ok = review.paid === "unpaid" || (review.paid === "paid" && review.paidOn);
+  const step4Ok =
+    (review.paid === "unpaid" && (!retail || review.advanceAmount == null || (review.advanceAmount > 0 && !!review.advanceOn))) ||
+    (review.paid === "paid" && review.paidOn);
 
   const proposedSociety = extraction?.billToName.value ?? "";
   const proposedMonth = extraction?.invoiceForMonth.value ?? "";
@@ -654,27 +656,80 @@ export function ReviewForm({
 
         {/* Card 4 — payment */}
         <Card className="p-5">
-          <CardHead step={4} title="Payment" chip={step4Ok ? <StatusChip tone="ok">{review.paid === "paid" ? "Paid" : "Unpaid"}</StatusChip> : <StatusChip tone="warn">Not chosen</StatusChip>} />
-          <div className="grid gap-3 sm:grid-cols-2">
-            {(["paid", "unpaid"] as const).map((v) => (
-              <label key={v} className="flex cursor-pointer items-start gap-3 rounded-[var(--r-sm)] border p-3" style={{ borderColor: review.paid === v ? "var(--accent-line)" : "var(--border)", background: review.paid === v ? "var(--accent-subtle)" : "transparent" }}>
-                <input type="radio" name="rv-paid" className="mt-1" checked={review.paid === v} onChange={() => set("paid", v)} />
-                <span className="text-[13.5px]">
-                  <b>{v === "paid" ? "Paid" : "Unpaid"}</b>
-                  <span className="block text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                    {v === "paid" ? "You will be asked the date it was paid." : `The overdue clock starts from ${review.dueDate ? formatDate(review.dueDate) : "the due date"} the moment the accountant publishes.`}
-                  </span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {review.paid === "paid" && (
-            <div className="mt-3 max-w-xs">
-              <Field label="Paid on" htmlFor="rv-paid-on">
-                <input id="rv-paid-on" type="date" className="field" value={review.paidOn} onChange={(e) => set("paidOn", e.target.value)} />
-              </Field>
-            </div>
-          )}
+          {(() => {
+            // A retail sale can be part-paid by an advance (2026-09-25):
+            // Advance = unpaid with an advance amount; Unpaid = no advance.
+            const choice = review.paid === "paid" ? "paid" : review.paid === "unpaid" ? (retail && review.advanceAmount != null ? "advance" : "unpaid") : null;
+            const options = (retail ? ["paid", "advance", "unpaid"] : ["paid", "unpaid"]) as Array<"paid" | "advance" | "unpaid">;
+            const balance = review.total !== null && review.advanceAmount != null ? Math.round((review.total - review.advanceAmount) * 100) / 100 : null;
+            return (
+              <>
+                <CardHead
+                  step={4}
+                  title="Payment"
+                  chip={
+                    step4Ok ? (
+                      <StatusChip tone="ok">{choice === "paid" ? "Paid" : choice === "advance" ? "Advance received" : "Unpaid"}</StatusChip>
+                    ) : (
+                      <StatusChip tone="warn">Not chosen</StatusChip>
+                    )
+                  }
+                />
+                <div className={`grid gap-3 ${retail ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+                  {options.map((v) => (
+                    <label key={v} className="flex cursor-pointer items-start gap-3 rounded-[var(--r-sm)] border p-3" style={{ borderColor: choice === v ? "var(--accent-line)" : "var(--border)", background: choice === v ? "var(--accent-subtle)" : "transparent" }}>
+                      <input
+                        type="radio"
+                        name="rv-paid"
+                        className="mt-1"
+                        checked={choice === v}
+                        onChange={() =>
+                          setReview((r) => ({
+                            ...r,
+                            paid: v === "paid" ? "paid" : "unpaid",
+                            advanceAmount: v === "advance" ? (r.advanceAmount ?? null) ?? 0 : v === "unpaid" ? null : r.advanceAmount,
+                          }))
+                        }
+                      />
+                      <span className="text-[13.5px]">
+                        <b>{v === "paid" ? "Paid" : v === "advance" ? "Advance received" : "Unpaid"}</b>
+                        <span className="block text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                          {v === "paid"
+                            ? "You will be asked the date it was paid."
+                            : v === "advance"
+                              ? "Part of it was paid up front — the rest is still owed."
+                              : retail
+                                ? "Nothing received yet."
+                                : `The overdue clock starts from ${review.dueDate ? formatDate(review.dueDate) : "the due date"} the moment the accountant publishes.`}
+                        </span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {review.paid === "paid" && (
+                  <div className="mt-3 max-w-xs">
+                    <Field label="Paid on" htmlFor="rv-paid-on">
+                      <input id="rv-paid-on" type="date" className="field" value={review.paidOn} onChange={(e) => set("paidOn", e.target.value)} />
+                    </Field>
+                  </div>
+                )}
+                {choice === "advance" && (
+                  <div className="mt-3 grid max-w-xl gap-3 sm:grid-cols-3">
+                    <Field label="Advance (₹)" htmlFor="rv-advance">
+                      <input id="rv-advance" type="number" step="any" className="field num" value={review.advanceAmount ? String(review.advanceAmount) : ""} onChange={(e) => setReview((r) => ({ ...r, advanceAmount: e.target.value === "" ? 0 : Number(e.target.value) }))} />
+                    </Field>
+                    <Field label="Received on" htmlFor="rv-advance-on">
+                      <input id="rv-advance-on" type="date" className="field" value={review.advanceOn ?? ""} onChange={(e) => setReview((r) => ({ ...r, advanceOn: e.target.value }))} />
+                    </Field>
+                    <div>
+                      <p className="lbl mb-1.5">Still owed</p>
+                      <p className="num text-[15px] font-semibold">{balance !== null ? `₹${balance.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"}</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </Card>
 
         {/* Card 5 — what the society will see */}

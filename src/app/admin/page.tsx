@@ -199,9 +199,18 @@ export default async function AdminHomePage() {
         title="Portfolio"
         subtitle={today}
         action={
-          <Link href="/admin/societies" className="btn-secondary btn-sm">
-            Societies
-          </Link>
+          // Quick access (user-asked 2026-09-25): the three places most days start.
+          <nav aria-label="Quick access" className="flex flex-wrap gap-2">
+            <Link href="/admin/societies" className="btn-secondary btn-sm">
+              Societies
+            </Link>
+            <Link href="/admin/live-monitoring" className="btn-secondary btn-sm">
+              Live monitoring
+            </Link>
+            <Link href="/admin/inventory/receive" className="btn-secondary btn-sm">
+              Add stock
+            </Link>
+          </nav>
         }
         chip={
           decisionCount > 0 ? (

@@ -143,6 +143,9 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
               location={society.location}
               flatCount={society.flatCount}
             />
+            <Link href={`/admin/societies/${society.id}/members`} className="btn-outline btn-sm">
+              Members
+            </Link>
             <Link href={`/admin/societies/${society.id}/circuits`} className="btn-outline btn-sm">
               Circuit registry
             </Link>

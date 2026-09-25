@@ -805,6 +805,8 @@ async function fileRetailInvoice(
         total: review.total ?? 0,
         paid: review.paid === "paid",
         paidOn: review.paid === "paid" ? day(review.paidOn) : null,
+        advanceAmount: review.paid === "unpaid" && review.advanceAmount ? review.advanceAmount : null,
+        advanceOn: review.paid === "unpaid" && review.advanceAmount ? day(review.advanceOn ?? "") : null,
         s3Key: key,
         fileName: intake.fileName,
         createdById: actorId,

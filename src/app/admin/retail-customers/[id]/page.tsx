@@ -62,6 +62,14 @@ export default async function RetailCustomerPage({ params }: { params: Promise<{
                       <td>
                         {i.paid ? (
                           <StatusChip tone="ok">Paid{i.paidOn ? ` ${formatDate(i.paidOn)}` : ""}</StatusChip>
+                        ) : i.advanceAmount ? (
+                          <span className="flex flex-col gap-0.5">
+                            <StatusChip tone="warn">Advance {rupees(i.advanceAmount)}</StatusChip>
+                            <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                              {i.advanceOn ? `on ${formatDate(i.advanceOn)} · ` : ""}
+                              {rupees(i.total - i.advanceAmount)} still owed
+                            </span>
+                          </span>
                         ) : (
                           <StatusChip tone="warn">Unpaid</StatusChip>
                         )}

@@ -7159,3 +7159,29 @@ Also (user-asked, same day): an inventory item's **category comes from a managed
 (`InventoryCategory`, migration `20260925131000_inventory_categories`, seeded from use) with "Add a
 new category…" in the dropdown, the item name is picked from the light catalog (or typed), and the
 item list and its add form are separate.
+
+## Society members & positions (2026-09-25) — user-asked, researched
+
+A member register per society, separate from portal accounts (`SocietyMember`, `MemberPosition`,
+migration `20260925140000_society_members`; the MS-01 `SocietyContact` table was empty and never
+used, so it was left alone rather than bent). Name, **mobile required** (normalised to 10 digits,
+Indian mobile checked), email optional, position, since, notes. **Positions are a managed list**
+(seeded: President, Vice-president, Secretary, Treasurer, AOA member, Technical manager, Facility
+manager, Operator; `/admin/settings/positions` adds and hides) and the member form's dropdown ends
+in "Add a new position…". **Lifecycle, never deleted**: *End* (date + reason) and *Replace* (the
+old member ended and linked by `replacedById` to the successor in the same position); current
+members show by default, past ones on request; *Edit* is for correcting a record, and says so.
+The same mobile twice among a society's current members is refused. **Portal access from a
+member with an email**: authority + the modules they may see, a temporary password shown once;
+a second office-bearer is refused (the designation moves by transfer); ending a member offers to
+deactivate their login but never deactivates the office-bearer's. The society's existing portal
+accounts are offered as "Add as member" suggestions, linked — not imported. Rules in
+`src/lib/society-members.ts` (8 unit cases). Verified 13 checks on dev, including signing in to
+the portal with the temporary password. **A real defect the check found**: closing one native
+dialog fires its own close handler, which wiped the password dialog that had just opened — the
+password was never shown. Each dialog's close now clears only its own state.
+
+Also the same day: a **quick-access bar** on the Portfolio (Societies · Live monitoring · Add
+stock), and **advances on retail invoices** — a retail sale's payment is Paid / Advance received
+/ Unpaid; the advance is prefilled from the paper's own Total − Balance Due, "still owed" is
+total − advance, and the customer pages show both (migration `20260925150000_retail_advance`).

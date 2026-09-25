@@ -144,6 +144,7 @@ export function AppShell({
     ...group("settings", "Settings", Settings, [
       showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb },
       showUsers && { href: "/admin/users", label: "Admin users", icon: Users },
+      (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
     ]),
   ];
 

@@ -380,6 +380,7 @@ model Society {
   storedDocuments         StoredDocument[]
   retailCustomers         RetailCustomer[]
   stockLocations          StockLocation[]
+  members                 SocietyMember[]
   publishedSavingsReports PublishedSavingsReport[]
   tickets                 Ticket[]
   inspections             Inspection[]
@@ -3673,6 +3674,10 @@ model RetailInvoice {
   total         Float
   paid          Boolean   @default(false)
   paidOn        DateTime? @map("paid_on")
+  /// An advance taken from the customer before or with the invoice
+  /// (2026-09-25); what is still owed is total − advance.
+  advanceAmount Float?    @map("advance_amount")
+  advanceOn     DateTime? @map("advance_on")
   s3Key         String    @map("s3_key")
   fileName      String    @map("file_name")
 
@@ -3917,4 +3922,57 @@ model InventoryCategory {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("inventory_categories")
+}
+
+/// A position someone can hold at a society — President, Treasurer, AOA
+/// member, Technical manager, Operator… (2026-09-25). A managed list: chosen
+/// from a dropdown, added to when a society has a post nobody listed yet.
+model MemberPosition {
+  id        String   @id @default(cuid())
+  name      String
+  /// Normalised name — "treasurer" and "Treasurer " are one position.
+  nameKey   String   @unique @map("name_key")
+  sortOrder Int      @default(100) @map("sort_order")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  members SocietyMember[]
+
+  @@map("member_positions")
+}
+
+/// A person at a society — its committee, its staff — with their position
+/// and contact (2026-09-25). Never deleted: a member who leaves is ENDED with
+/// a date and a reason, and a successor links back to whoever they replaced,
+/// so the society's history of who held which post survives.
+model SocietyMember {
+  id         String    @id @default(cuid())
+  societyId  String    @map("society_id")
+  name       String
+  /// 10 digits, normalised (the +91/0 prefix and spacing stripped).
+  mobile     String
+  email      String?
+  positionId String    @map("position_id")
+  startedOn  DateTime? @map("started_on")
+  notes      String?
+
+  endedOn      DateTime? @map("ended_on")
+  endReason    String?   @map("end_reason")
+  endedById    String?   @map("ended_by_id")
+  /// The member who took over from this one, when they were replaced.
+  replacedById String?   @unique @map("replaced_by_id")
+
+  /// Their portal login, when one was created from this record.
+  profileId String? @unique @map("profile_id")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  createdById String   @map("created_by_id")
+
+  society    Society        @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  position   MemberPosition @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  replacedBy SocietyMember? @relation("MemberSuccession", fields: [replacedById], references: [id], onDelete: SetNull)
+  replaced   SocietyMember? @relation("MemberSuccession")
+
+  @@index([societyId, endedOn])
+  @@map("society_members")
 }

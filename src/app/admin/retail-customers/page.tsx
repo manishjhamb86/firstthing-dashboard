@@ -21,7 +21,7 @@ export default async function RetailCustomersPage() {
       orderBy: { name: "asc" },
       include: {
         society: { select: { name: true } },
-        invoices: { where: { voidedAt: null }, select: { total: true, paid: true } },
+        invoices: { where: { voidedAt: null }, select: { total: true, paid: true, advanceAmount: true } },
       },
     }),
     db.society.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -50,13 +50,13 @@ export default async function RetailCustomersPage() {
                   <th>Society</th>
                   <th className="text-right">Invoices</th>
                   <th className="text-right">Billed</th>
-                  <th className="text-right">Unpaid</th>
+                  <th className="text-right">Still owed</th>
                 </tr>
               </thead>
               <tbody>
                 {customers.map((c) => {
                   const billed = c.invoices.reduce((n, i) => n + i.total, 0);
-                  const unpaid = c.invoices.filter((i) => !i.paid).reduce((n, i) => n + i.total, 0);
+                  const unpaid = c.invoices.filter((i) => !i.paid).reduce((n, i) => n + i.total - (i.advanceAmount ?? 0), 0);
                   return (
                     <tr key={c.id}>
                       <td>

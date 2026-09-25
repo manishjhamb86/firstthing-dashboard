@@ -79,6 +79,12 @@ function proposeReview(x: ExtractedInvoice, societyId: string | null, circuits: 
     taxAmount: x.taxAmount.value,
     taxPct: x.taxPct.value,
     total: x.total.value,
+    // A part-paid invoice (a retail advance) prints Balance Due below Total.
+    advanceAmount:
+      x.total.value !== null && x.balanceDue.value !== null && x.balanceDue.value > 0 && x.balanceDue.value < x.total.value
+        ? Math.round((x.total.value - x.balanceDue.value) * 100) / 100
+        : null,
+    advanceOn: "",
     paid: null,
     paidOn: "",
     arithmeticAcknowledgement: "",

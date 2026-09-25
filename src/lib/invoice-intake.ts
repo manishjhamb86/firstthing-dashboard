@@ -271,6 +271,13 @@ export type Review = {
    */
   retailSale?: boolean;
   retailCustomerId?: string | null;
+  /**
+   * A retail sale's advance (2026-09-25): taken before or with the invoice,
+   * so the invoice is part-paid. Prefilled from the paper's own "Payment
+   * Made" / "Balance Due" when it shows one; ignored for a savings invoice.
+   */
+  advanceAmount?: number | null;
+  advanceOn?: string;
 };
 
 export type ReviewContext = {
@@ -348,6 +355,11 @@ export function openItems(review: Review, context: ReviewContext): string[] {
   }
   if (review.total === null) items.push("Invoice total missing (step 3)");
 
+  if (retail && review.paid === "unpaid" && review.advanceAmount != null) {
+    if (!(review.advanceAmount > 0)) items.push("The advance must be more than zero (step 4)");
+    else if (review.total !== null && review.advanceAmount >= review.total) items.push("The advance covers the whole invoice — choose Paid instead (step 4)");
+    if (!isIsoDate(review.advanceOn ?? "")) items.push("Date the advance was received missing (step 4)");
+  }
   if (review.paid === null) items.push("Payment status not chosen (step 4)");
   if (review.paid === "paid" && !isIsoDate(review.paidOn)) items.push("Paid-on date missing (step 4)");
 

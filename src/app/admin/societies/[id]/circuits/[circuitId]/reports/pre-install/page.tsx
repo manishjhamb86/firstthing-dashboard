@@ -1,3 +1,4 @@
+import { Letterhead } from "@/components/letterhead";
 import { notFound, redirect } from "next/navigation";
 import { formatDate, shortDate } from "@/lib/format-date";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -43,6 +44,7 @@ export default async function PreInstallReportPage({
         <PrintButton />
       </div>
 
+      <Letterhead>
       <article className="report-sheet">
         <header className="report-masthead">
           <div className="min-w-0 flex-1">
@@ -219,6 +221,7 @@ export default async function PreInstallReportPage({
           </span>
         </footer>
       </article>
+      </Letterhead>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { Letterhead } from "@/components/letterhead";
 import { monthLabel, shortDate } from "@/lib/format-date";
 import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
 import { StatusChip } from "@/components/ui";
@@ -22,6 +23,7 @@ export function MonthlySavingsSheet({ s }: { s: SavingsReportSnapshot }) {
   const generated = shortDate(new Date(s.generatedAt));
   // The report is a sheet: it is a document, and it prints.
   return (
+  <Letterhead>
   <article className="report-sheet">
     <header className="report-masthead">
       <div className="min-w-0 flex-1">
@@ -200,7 +202,8 @@ export function MonthlySavingsSheet({ s }: { s: SavingsReportSnapshot }) {
 
       <ExclusionNotes days={s.days} />
 
-      <p className="mt-4 text-xs leading-relaxed text-[var(--text-subtle)]">
+      {/* How the figure is sourced — for the reader on screen; the paper copy keeps to the figures. */}
+      <p className="no-print mt-4 text-xs leading-relaxed text-[var(--text-subtle)]">
         The rupee figure above is read from the released monthly calculation, never computed on
         this page — extrapolation across the represented lights, the invoice, every other billing
         figure lives there too. This report states the measured circuit, and the two can never
@@ -220,5 +223,6 @@ export function MonthlySavingsSheet({ s }: { s: SavingsReportSnapshot }) {
       </span>
     </footer>
   </article>
+  </Letterhead>
   );
 }

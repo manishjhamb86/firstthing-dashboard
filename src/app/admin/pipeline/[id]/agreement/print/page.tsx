@@ -1,4 +1,5 @@
 import { formatDate } from "@/lib/format-date";
+import { Letterhead } from "@/components/letterhead";
 import { describePricing } from "@/lib/offer";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -29,11 +30,13 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
   const amc = offer.amcTerms as { summary?: string } | null;
 
   return (
-    <main className="print-doc mx-auto max-w-[820px] p-10">
+    <main className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
       {/* A printed page never carries it — .no-print. */}
       <div className="no-print mb-6">
         <BackButton fallbackHref={`/admin/pipeline/${pipeline.id}/agreement`} />
       </div>
+      <Letterhead>
+      <div className="p-6 sm:p-8 print:p-0">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold">Energy savings agreement</h1>
         <p className="text-sm mt-1">
@@ -142,6 +145,8 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
           </div>
         </div>
       </section>
+      </div>
+      </Letterhead>
     </main>
   );
 }

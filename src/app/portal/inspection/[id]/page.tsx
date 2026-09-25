@@ -1,3 +1,4 @@
+import { Letterhead } from "@/components/letterhead";
 import { notFound, redirect } from "next/navigation";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
@@ -50,6 +51,7 @@ export default async function PortalInspectionReportPage({ params }: { params: P
         <PrintInspectionButton />
       </div>
 
+      <Letterhead>
       <article className="report-sheet">
         <header className="report-masthead">
           <div className="min-w-0 flex-1">
@@ -180,6 +182,7 @@ export default async function PortalInspectionReportPage({ params }: { params: P
           </span>
         </footer>
       </article>
+      </Letterhead>
     </div>
   );
 }

@@ -7252,3 +7252,41 @@ is required.
 The real signing path was checked against Google's token endpoint with a throwaway key: Google
 accepted the request's form and refused the unknown account. **Not yet run against the real
 account** — that needs the Workspace admin's service account and delegation grant.
+
+## Every generated document on company letterhead (2026-09-25) — user-asked
+
+Every system-generated document now wears the company letterhead, modelled on the investor term
+sheet: the FirsThing logo top-left, "FirsThing.earth / BlueStonez Trailblazzer Pvt. Ltd."
+top-right, and the contact line "FirsThing.earth | BlueStonez Trailblazzer Pvt. Ltd. |
+www.firsthing.earth | info@firsthing.earth" as the footer. It appears on screen as the sheet and
+on every printed page.
+
+**Where it applies.** One component, `src/components/letterhead.tsx`, used by:
+- the pre-installation report;
+- the post-installation report;
+- the monthly savings report (the same sheet serves the admin page and the portal's savings
+  report);
+- the printable agreement;
+- the portal inspection report.
+
+The company details live in `src/lib/company.ts`. Address and GSTIN are empty until the user
+confirms them, and an empty field is not printed.
+
+**No browser header or footer.** The browser's own date, time, title and URL are removed with a
+named `@page letterhead { margin: 0 }`. Browsers draw those lines in the page margin, so with no
+margin there is nowhere to put them. The page is named so that a label sheet or a list printed
+from the app keeps normal margins.
+
+**Rebuilding the margin.** The margin is rebuilt inside the document instead:
+- the head and foot are `position: fixed`, which Chrome repeats on every printed page;
+- `<thead>`/`<tfoot>` spacers stop content running under them.
+
+**Keeping the monthly report on one page.** The letterhead costs each page about 40 mm, which
+pushed the monthly report onto a second sheet. It fits one A4 again because on paper:
+- the day rows are tighter;
+- the "how the ₹ figure is sourced" note is screen-only;
+- the report's own footer is smaller.
+
+**Verified** by printing to PDF at a wide viewport and rasterising every page. The pre-install,
+monthly and agreement documents are each one page, the header and footer repeat on page 2 of the
+5-page post-install report, and there were no console errors.

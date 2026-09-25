@@ -1525,3 +1525,195 @@ textarea.field {
 .tank-offline .tank-wave { background: var(--neu-fg); }
 .tank-offline .tank-wave { animation-play-state: paused; }
 .tank-offline .tank-wave-2 { background: var(--neu-line); }
+
+/* ---- the letterhead (2026-09-25) ----------------------------------------
+ * Every system-generated document is printed on company paper: logo and
+ * name at the head, the contact line at the foot, on every page — and
+ * NOTHING of the browser's own (no date, time, title or URL). See
+ * src/components/letterhead.tsx for why each rule below is load-bearing.
+ */
+.letterhead {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--r-md);
+  box-shadow: var(--e1);
+  overflow: hidden;
+}
+/* The report inside is no longer its own sheet: the letterhead is the sheet. */
+.letterhead .report-sheet {
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+.lh-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 24px 32px 18px;
+  border-bottom: 2px solid var(--text);
+}
+.lh-logo {
+  height: 34px;
+}
+.lh-id {
+  text-align: right;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.lh-brand {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+.lh-foot {
+  padding: 12px 32px 16px;
+  border-top: 1px solid var(--border);
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.lh-foot-line {
+  font-weight: 600;
+}
+.lh-frame,
+.lh-frame > tbody,
+.lh-frame > tbody > tr,
+.lh-frame > tbody > tr > td {
+  display: block;
+  width: 100%;
+}
+.lh-frame > thead,
+.lh-frame > tfoot {
+  display: none;
+}
+@media (max-width: 640px) {
+  .lh-head {
+    padding: 18px 16px 14px;
+  }
+  .lh-id {
+    text-align: left;
+  }
+  .lh-foot {
+    padding: 10px 16px 14px;
+  }
+}
+
+/* A named page, so only documents on letterhead lose the browser's margin —
+   a label sheet or a list printed from the app keeps the browser's defaults. */
+@page letterhead {
+  size: A4;
+  margin: 0;
+}
+@media print {
+  .letterhead {
+    page: letterhead;
+    border: none !important;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+    background: #fff !important;
+  }
+  .lh-head,
+  .lh-foot {
+    position: fixed;
+    left: 0;
+    right: 0;
+    background: #fff;
+    color: #000;
+  }
+  .lh-head {
+    top: 0;
+    height: 24mm;
+    padding: 8mm 14mm 0;
+    border-bottom: none;
+    flex-wrap: nowrap;
+  }
+  .lh-head::after {
+    content: "";
+    position: absolute;
+    left: 14mm;
+    right: 14mm;
+    bottom: 2mm;
+    border-bottom: 1.5px solid #000;
+  }
+  .lh-id,
+  .lh-brand {
+    color: #000 !important;
+    text-align: right;
+  }
+  .lh-foot {
+    bottom: 0;
+    height: 13mm;
+    padding: 3mm 14mm 0;
+    border-top: none;
+    font-size: 8.5pt;
+  }
+  .lh-foot::before {
+    content: "";
+    position: absolute;
+    left: 14mm;
+    right: 14mm;
+    top: 0;
+    border-top: 1px solid #999;
+  }
+  .lh-frame {
+    display: table;
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .lh-frame > thead {
+    display: table-header-group;
+  }
+  .lh-frame > tfoot {
+    display: table-footer-group;
+  }
+  .lh-frame > tbody {
+    display: table-row-group;
+  }
+  .lh-frame > tbody > tr {
+    display: table-row;
+  }
+  .lh-frame > tbody > tr > td {
+    display: table-cell;
+  }
+  .lh-space-top {
+    height: 27mm;
+  }
+  .lh-space-bottom {
+    height: 15mm;
+  }
+  .lh-body {
+    padding: 0 14mm;
+  }
+  .lh-logo {
+    height: 9mm;
+  }
+  .lh-id {
+    font-size: 9pt;
+  }
+  .lh-brand {
+    font-size: 11pt;
+  }
+  .letterhead .report-sheet > section:not(.report-result) {
+    padding: 14px 0 4px !important;
+  }
+  .letterhead .report-result {
+    margin-top: 12px;
+    padding: 10px 14px !important;
+  }
+  .letterhead .report-footer {
+    padding-top: 8px;
+    font-size: 8pt;
+    gap: 4px 12px;
+  }
+  /* The letterhead costs each page about 40mm; the day tables give some of
+     it back so a month still fits one sheet. */
+  .letterhead .report-daily .tbl td,
+  .letterhead .report-daily .tbl thead th {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+}

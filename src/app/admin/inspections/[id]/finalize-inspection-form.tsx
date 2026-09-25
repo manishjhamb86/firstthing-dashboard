@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field } from "@/components/ui";
@@ -254,14 +255,7 @@ export function FinalizeInspectionForm({
                 : "One photo covering both signature blocks and the stamp — optional, but the only proof kept that the visit was signed off."
             }
           >
-            <input
-              id="evidencePhoto"
-              type="file"
-              accept="image/*"
-              className="field"
-              onChange={(e) => setEvidencePhoto(e.target.files?.[0] ?? null)}
-              disabled={pending}
-            />
+            <FileDrop id="evidencePhoto" accept="image/*" files={evidencePhoto ? [evidencePhoto] : []} onFiles={(f) => setEvidencePhoto(f[0] ?? null)} disabled={pending} />
           </Field>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">

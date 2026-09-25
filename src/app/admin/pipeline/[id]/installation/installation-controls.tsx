@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { formatDate } from "@/lib/format-date";
 import { useState, useTransition } from "react";
 import type { BlockerType } from "@prisma/client";
@@ -338,14 +339,7 @@ export function BatchCaptureForm({
 
       {!noPhotos && (
         <Field label="Photos" htmlFor="batch-photos" hint={isOldRecord ? "Without them a dispute is one person's word against another's." : "Required. Without them a dispute is one person's word against another's."}>
-          <input
-            id="batch-photos"
-            className="field"
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-          />
+          <FileDrop id="batch-photos" accept="image/*" multiple files={files} onFiles={setFiles} hint="Photos of the day's work" />
         </Field>
       )}
       {isOldRecord && (

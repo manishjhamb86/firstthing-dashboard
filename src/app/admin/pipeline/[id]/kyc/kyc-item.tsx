@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import type { KycDocumentType, KycRequirementStatus, ReceiptChannel } from "@prisma/client";
 import { ErrorText, Field } from "@/components/ui";
@@ -126,14 +127,7 @@ export function KycItem({
       {formsOpen && status !== "not_applicable" && (
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Document file" htmlFor={`kyc-file-${type}`}>
-            <input
-              id={`kyc-file-${type}`}
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              disabled={busy}
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="field"
-            />
+            <FileDrop id={`kyc-file-${type}`} accept=".pdf,.png,.jpg,.jpeg" disabled={busy} files={file ? [file] : []} onFiles={(f) => setFile(f[0] ?? null)} compact />
           </Field>
           <Field label="Received via" htmlFor={`kyc-ch-${type}`}>
             <select

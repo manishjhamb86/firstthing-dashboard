@@ -68,8 +68,15 @@ export function SocietyFmCard({
           <Field label="Company" htmlFor="sfm-company">
             <FmCompanyPicker id="sfm-company" companies={companies} value={companyId} onChange={setCompanyId} />
           </Field>
+          {/* A date only means something once there is a change to date:
+              a company picked, or the current one being cleared. */}
+          {(companyId || current) && (
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label={companyId ? "Running it since" : "No company since"} htmlFor="sfm-since">
+            <Field
+              label={companyId ? "Running it since" : `${current!.companyName} stopped on`}
+              htmlFor="sfm-since"
+              hint={companyId ? undefined : "The last day they ran this society."}
+            >
               <input id="sfm-since" type="date" className="field" max={today} value={since} onChange={(e) => setSince(e.target.value)} />
             </Field>
             {current && (
@@ -78,18 +85,23 @@ export function SocietyFmCard({
               </Field>
             )}
           </div>
+          )}
           {companyId === null && current && (
-            <p className="text-[12.5px]" style={{ color: "var(--warn-fg)" }}>Saving with no company ends {current.companyName}&apos;s time here.</p>
+            <p className="text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
+              No company picked — saving records that {current.companyName} no longer runs this society. Their time here stays in the history.
+            </p>
           )}
           <div className="flex gap-2">
             <button
               type="button"
               className="btn-secondary btn-sm"
-              disabled={pending}
+              disabled={pending || (!companyId && !current)}
               onClick={() =>
                 startTransition(async () => {
                   setError(null);
-                  const r = await setSocietyFmCompany(societyId, companyId, since, reason);
+                  // Clearing: the date typed is their LAST day, so the change takes effect the day after.
+                  const effective = companyId ? since : new Date(Date.parse(`${since}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+                  const r = await setSocietyFmCompany(societyId, companyId, effective, reason);
                   if (r.error) return setError(r.error);
                   setOpen(false);
                   setReason("");

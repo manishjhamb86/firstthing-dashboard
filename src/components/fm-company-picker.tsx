@@ -32,7 +32,7 @@ export function FmCompanyPicker({
         emptyLabel="Not on the list — add it below"
       />
       <FmCompanyButton
-        className="text-[12.5px] font-semibold"
+        className="text-[12.5px] font-semibold text-[var(--accent)]"
         label="+ Add a new company"
         onCreated={(c) => {
           setExtra((x) => [...x, c]);

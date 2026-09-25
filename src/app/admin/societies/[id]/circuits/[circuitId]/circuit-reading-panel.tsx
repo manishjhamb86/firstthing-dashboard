@@ -1,10 +1,11 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 // CON-45 — upload a meter CSV against THIS circuit, review every produced
 // day row by row, and save only what you accepted. The system derives the
 // phase and the window; every judgment stays with the operator.
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip } from "@/components/ui";
@@ -201,7 +202,6 @@ export function CircuitReadingPanel({
   const [demoDays, setDemoDays] = useState("7");
   const [demoSavings, setDemoSavings] = useState("68");
   const [pending, startTransition] = useTransition();
-  const inputRef = useRef<HTMLInputElement>(null);
 
   const actionable = useMemo(
     () => (preview?.rows ?? []).filter((r) => r.disposition === "new" || r.disposition === "supersede"),
@@ -237,7 +237,6 @@ export function CircuitReadingPanel({
     setSummary(undefined);
     setDraft(undefined);
     setDraftBasis(undefined);
-    if (inputRef.current) inputRef.current.value = "";
   }
 
   // ── DEMO_MODE: one click fills the form ────────────────────────────────
@@ -356,8 +355,7 @@ export function CircuitReadingPanel({
     });
   }
 
-  function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  function onFileSelected(file: File | undefined) {
     if (!file) return;
     setError(undefined);
     setStage("working");
@@ -685,14 +683,13 @@ export function CircuitReadingPanel({
             belong to this circuit&apos;s current step, and shows every one for review before anything
             is saved.
           </p>
-          <input
-            ref={inputRef}
-            type="file"
+          <FileDrop
             accept=".csv,.txt,.xlsx"
-            onChange={onFileSelected}
+            files={[]}
+            onFiles={(f) => onFileSelected(f[0])}
             disabled={pending}
-            aria-label="Meter readings CSV"
-            className="block w-full text-xs text-[var(--text-muted)] file:mr-3 file:rounded-[var(--r-sm)] file:border file:border-[var(--field-border)] file:bg-[var(--surface)] file:px-3 file:py-1.5 file:text-xs file:font-semibold file:text-[var(--text)] hover:file:bg-[var(--surface-hover)]"
+            ariaLabel="Meter readings CSV"
+            hint="The meter's export — CSV or an Excel workbook (.xlsx)"
           />
         </div>
 

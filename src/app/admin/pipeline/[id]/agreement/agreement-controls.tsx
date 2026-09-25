@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { ErrorText, Field } from "@/components/ui";
 import { uploadFileToS3 } from "@/lib/upload-to-s3";
@@ -122,14 +123,7 @@ export function ExecutedUploadForm({
     <div className="space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Executed (signed) scan" htmlFor="ag-file">
-          <input
-            id="ag-file"
-            type="file"
-            accept=".pdf,.png,.jpg,.jpeg"
-            disabled={busy}
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="field"
-          />
+          <FileDrop id="ag-file" accept=".pdf,.png,.jpg,.jpeg" disabled={busy} files={file ? [file] : []} onFiles={(f) => setFile(f[0] ?? null)} compact />
         </Field>
         <Field label="Document period" htmlFor="ag-period" hint="An explicit choice.">
           <input

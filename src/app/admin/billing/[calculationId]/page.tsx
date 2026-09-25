@@ -185,7 +185,7 @@ export default async function CalculationPage({
       {/* CON-22 / FEAT-051 — a partial month says so in words, not just by
           being a smaller number than last month's. */}
       {calc.proratedDays !== null && calc.daysInMonth !== null && (
-        <Card className="mb-6">
+        <Card className="mb-6 p-6">
           <CardTitle>Prorated month</CardTitle>
           <p className="text-sm text-[var(--text-muted)]">
             This month bills <strong className="num">{calc.proratedDays}</strong> of{" "}
@@ -258,7 +258,7 @@ export default async function CalculationPage({
       )}
 
       {calc.status === "held" ? (
-        <Card>
+        <Card className="p-6">
           <CardTitle>Why it is held</CardTitle>
           <p className="text-sm">{calc.heldReason}</p>
           <p className="text-sm text-[var(--text-muted)] mt-2">
@@ -268,13 +268,17 @@ export default async function CalculationPage({
         </Card>
       ) : (
         <>
-          <Card className="overflow-x-auto mb-6">
-            <CardTitle>
-              Fee lines, per circuit
-              {!sumMatches && (
-                <StatusChip tone="bad">Lines do not sum to the subtotal</StatusChip>
-              )}
-            </CardTitle>
+          {/* The title keeps the card's padding; the table runs edge to edge in its own scroll box. */}
+          <Card className="mb-6 overflow-hidden">
+            <div className="px-6 pb-2 pt-6">
+              <CardTitle className="mb-0 flex flex-wrap items-center gap-2">
+                Fee lines, per circuit
+                {!sumMatches && (
+                  <StatusChip tone="bad">Lines do not sum to the subtotal</StatusChip>
+                )}
+              </CardTitle>
+            </div>
+            <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
                 <tr>
@@ -367,10 +371,11 @@ export default async function CalculationPage({
                 )}
               </tfoot>
             </table>
+            </div>
           </Card>
 
           {outOfBand.length > 0 && (
-            <Card className="mb-6">
+            <Card className="mb-6 p-6">
               <CardTitle>Deviations raised</CardTitle>
               <p className="text-sm text-[var(--text-muted)] mb-3">
                 A circuit measuring outside its contracted band raises exactly one review, and only
@@ -407,7 +412,7 @@ export default async function CalculationPage({
 
       {/* GATE-01 — provenance. Not decoration: it is the only thing that makes
           a disputed figure answerable. */}
-      <Card>
+      <Card className="p-6">
         <CardTitle>What produced these figures</CardTitle>
         <dl className="grid gap-x-8 gap-y-2 sm:grid-cols-2 text-sm">
           <div>

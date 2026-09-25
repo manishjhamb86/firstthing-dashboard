@@ -7522,3 +7522,21 @@ readings arrived and a line flipped agreed → measured.
 - Verified 8/8: duplicate refused; Sodexo 01-04 → JLL 01-09 with history and reason; a member
   employed by the society's company is linked to both; moving employer closes the old span
   "Moved to …" and JLL's page shows the person now at Sodexo.
+
+**UI fixes, same evening (user-caught):**
+- **One upload box.** `src/components/file-drop.tsx` replaces the browser's bare "Choose Files" control everywhere it was shown:
+  - billing: the Zoho PDF, and payment cheque copies and TDS certificates;
+  - deals: KYC files, installation photos, the signed agreement;
+  - the inspection photo;
+  - readings: monthly, circuit, and commissioning CSVs;
+  - documents;
+  - the supplier invoice;
+  - the portal dispute photo.
+
+  It is a dashed box with an upload icon, "Choose a file or drop it here", and the accepted types. It takes a click or a drop, and lists the chosen file with its size and a remove button. The real input stays in the page (visually hidden) for keyboard use and tests. The meter and intake screens already had their own designed buttons.
+- **Billing month page.** Its cards had no inner padding, so text sat against the edge. A padding audit now covers 38 admin pages plus the billing month page. It flags any card with text within 6px of its edge. It caught the old page and passes the fixed one.
+- **Facility management date field.** The society's facility management change form showed "No company since" before any company was picked. The date now appears only when there is something to date:
+  - with a company picked, it reads "Running it since";
+  - when clearing the current company, it reads "<Company> stopped on", meaning their last day, and saving records that.
+
+  Save stays disabled until there is a change.

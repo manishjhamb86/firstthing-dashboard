@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -223,14 +224,13 @@ export function DocumentUploadClient({
           )}
 
           <Field label="File" htmlFor="doc-file">
-            <input
+            <FileDrop
               id="doc-file"
-              type="file"
-              className="field"
               accept={spec.acceptedExtensions.map((e) => `.${e}`).join(",")}
-              onChange={async (e) => {
+              files={file ? [file] : []}
+              onFiles={async (picked) => {
                 setDone(null);
-                const f = e.target.files?.[0] ?? null;
+                const f = picked[0] ?? null;
                 setFile(f);
                 if (!f) return setError(null);
                 // The same rule the server will apply, run here only so the

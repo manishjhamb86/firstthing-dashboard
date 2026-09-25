@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { formatDate } from "@/lib/format-date";
 import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
@@ -179,14 +180,7 @@ export function BatchReviewCard({
             <input id="dispute-location" className="field" value={location} onChange={(e) => setLocation(e.target.value)} required />
           </Field>
           <Field label="Photo" htmlFor="dispute-photo" hint="Required.">
-            <input
-              id="dispute-photo"
-              className="field"
-              type="file"
-              accept="image/*"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              required
-            />
+            <FileDrop id="dispute-photo" accept="image/*" files={file ? [file] : []} onFiles={(f) => setFile(f[0] ?? null)} compact />
           </Field>
           <div className="flex flex-wrap gap-2">
             <button type="submit" className="btn-tone-bad" disabled={busy}>

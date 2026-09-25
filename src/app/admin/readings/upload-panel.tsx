@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
@@ -246,14 +247,7 @@ export function UploadPanel({ period, circuits }: { period: string; circuits: Ci
           />
         </Field>
         <Field label="Export file" htmlFor="rd-file" hint="CSV from the meter vendor's app.">
-          <input
-            id="rd-file"
-            className="field"
-            type="file"
-            accept=".csv,.txt,text/csv"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            disabled={working || !!rawFileId}
-          />
+          <FileDrop id="rd-file" accept=".csv,.txt,text/csv" files={file ? [file] : []} onFiles={(f) => setFile(f[0] ?? null)} disabled={working || !!rawFileId} compact />
         </Field>
       </div>
 

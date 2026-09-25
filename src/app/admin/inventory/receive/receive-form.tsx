@@ -1,5 +1,6 @@
 "use client";
 
+import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
@@ -96,7 +97,7 @@ export function ReceiveForm({
             <input id="rc-total" type="number" step="any" className="field num" value={head.total} onChange={(e) => setHead((h) => ({ ...h, total: e.target.value }))} />
           </Field>
           <Field label="Invoice PDF" htmlFor="rc-file" hint="Kept privately with the purchase.">
-            <input id="rc-file" type="file" accept="application/pdf" className="field" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <FileDrop id="rc-file" accept="application/pdf" files={file ? [file] : []} onFiles={(f) => setFile(f[0] ?? null)} compact />
           </Field>
         </div>
       </Card>

@@ -17,6 +17,7 @@ import {
   voidInvoiceAttachment,
 } from "./invoice-actions";
 import { METHOD_LABEL, tdsFromRate, type PaymentMethod } from "@/lib/payment";
+import { FileDrop } from "@/components/file-drop";
 
 export type InvoiceState = {
   id: string;
@@ -348,17 +349,12 @@ export function InvoicePanel({
                 disabled={pending}
               />
             </label>
-            <label className="block sm:col-span-2" htmlFor="inv-file">
+            <div className="block sm:col-span-2">
               <span className="lbl">The PDF, as generated in Zoho</span>
-              <input
-                id="inv-file"
-                type="file"
-                accept="application/pdf"
-                className="field mt-1"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                disabled={pending}
-              />
-            </label>
+              <div className="mt-1">
+                <FileDrop id="inv-file" accept="application/pdf" files={file ? [file] : []} onFiles={(f) => setFile(f[0] ?? null)} disabled={pending} />
+              </div>
+            </div>
             <div className="sm:col-span-2">
               <button type="button" className="btn-primary" disabled={pending} onClick={submitAttach}>
                 {pending ? "Attaching…" : "Attach invoice"}
@@ -649,17 +645,16 @@ export function InvoicePanel({
 
               <div className="mt-3">
                 <span className="lbl">Cheque copy or TDS certificate (optional)</span>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <input
-                    type="file"
+                <div className="mt-1">
+                  <FileDrop
                     accept="image/*,application/pdf"
                     multiple
-                    aria-label="Attach files"
-                    onChange={(e) => {
-                      const picked = Array.from(e.target.files ?? []);
-                      setFiles((f) => [...f, ...picked.map((file) => ({ file, kind: payMethod === "cheque" ? ("cheque" as const) : tdsOn ? ("tds_certificate" as const) : ("other" as const) }))]);
-                      e.target.value = "";
-                    }}
+                    ariaLabel="Attach files"
+                    hint="A photo or PDF of the cheque, or the TDS certificate"
+                    files={[]}
+                    onFiles={(picked) =>
+                      setFiles((f) => [...f, ...picked.map((file) => ({ file, kind: payMethod === "cheque" ? ("cheque" as const) : tdsOn ? ("tds_certificate" as const) : ("other" as const) }))])
+                    }
                     disabled={pending}
                   />
                 </div>

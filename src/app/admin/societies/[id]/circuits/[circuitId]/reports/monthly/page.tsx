@@ -1,4 +1,7 @@
 import Link from "next/link";
+import { monthLabel } from "@/lib/format-date";
+import { resolveAdmin } from "@/lib/admin-permissions";
+import { reportTitle } from "@/lib/report-title";
 import { monthShort } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -19,6 +22,23 @@ import { BackButton } from "@/components/back-button";
 // (`circuitFeeLineFor`), which this report never duplicates the arithmetic
 // of — two independently-computed money figures for one month is how they
 // end up disagreeing.
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string; circuitId: string }>;
+  searchParams: Promise<{ month?: string }>;
+}) {
+  if (!(await resolveAdmin())) return { title: "FirsThing" };
+  const { id, circuitId } = await params;
+  const { month: monthParam } = await searchParams;
+  const report = await loadCircuitReport(circuitId);
+  if (!report || report.society.id !== id) return { title: "FirsThing" };
+  const months = monthsWithData(report);
+  const month = monthParam && months.includes(monthParam) ? monthParam : months[months.length - 1];
+  return { title: reportTitle("Monthly savings report", report.society.name, month ? monthLabel(month) : null) };
+}
 
 export default async function MonthlyReportPage({
   params,

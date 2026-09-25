@@ -1,4 +1,6 @@
 import { Letterhead } from "@/components/letterhead";
+import { monthLabel } from "@/lib/format-date";
+import { reportTitle } from "@/lib/report-title";
 import { notFound, redirect } from "next/navigation";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
@@ -12,7 +14,6 @@ import { inspectionSummary, SENSOR_STATUS_META } from "@/lib/inspection";
 import { PrintInspectionButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Inspection report" };
 
 /**
  * A downloadable, printable record of one inspection (user-asked
@@ -22,6 +23,15 @@ export const metadata = { title: "Inspection report" };
  * dependency. INV-05 scoped by the viewer's own societyId in the query, the
  * same as every other portal detail page.
  */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  // Scoped to the viewer's own society, like the page (INV-05).
+  const viewer = await resolvePortalViewer();
+  if (!viewer?.societyId) return { title: "FirsThing" };
+  const { id } = await params;
+  const i = await db.inspection.findFirst({ where: { id, societyId: viewer.societyId, voidedAt: null }, select: { period: true, society: { select: { name: true } } } });
+  return { title: reportTitle("Inspection report", i?.society.name, i ? monthLabel(i.period) : null) };
+}
+
 export default async function PortalInspectionReportPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);

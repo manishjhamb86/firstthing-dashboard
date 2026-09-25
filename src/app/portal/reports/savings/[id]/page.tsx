@@ -1,4 +1,6 @@
 import { notFound, redirect } from "next/navigation";
+import { monthLabel } from "@/lib/format-date";
+import { reportTitle } from "@/lib/report-title";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
@@ -9,7 +11,6 @@ import type { SavingsReportSnapshot } from "@/app/admin/societies/[id]/circuits/
 import { PrintInspectionButton as PrintButton } from "@/app/portal/inspection/[id]/print-button";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Savings report" };
 
 /**
  * A published monthly savings report, exactly as FirsThing published it —
@@ -17,6 +18,15 @@ export const metadata = { title: "Savings report" };
  * reads and saves as PDF is what was published. INV-05: scoped by the
  * viewer's own societyId in the query.
  */
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  const viewer = await resolvePortalViewer();
+  if (!viewer?.societyId) return { title: "FirsThing" };
+  const { id } = await params;
+  const r = await db.publishedSavingsReport.findFirst({ where: { id, societyId: viewer.societyId, voidedAt: null }, select: { snapshot: true } });
+  const s = r?.snapshot as { societyName?: string; month?: string } | undefined;
+  return { title: reportTitle("Monthly savings report", s?.societyName, s?.month ? monthLabel(s.month) : null) };
+}
+
 export default async function PortalSavingsReportPage({ params }: { params: Promise<{ id: string }> }) {
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);

@@ -1,4 +1,6 @@
 import { formatDate } from "@/lib/format-date";
+import { resolveAdmin } from "@/lib/admin-permissions";
+import { reportTitle } from "@/lib/report-title";
 import { Letterhead } from "@/components/letterhead";
 import { describePricing } from "@/lib/offer";
 import { notFound, redirect } from "next/navigation";
@@ -13,6 +15,13 @@ import { BackButton } from "@/components/back-button";
 // server-generated PDF). It renders straight from the accepted offer, so the
 // printed paper and the record can never disagree — which is the property
 // that actually matters here, more than the file format.
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
+  if (!(await resolveAdmin())) return { title: "FirsThing" };
+  const { id } = await params;
+  const p = await db.pipeline.findUnique({ where: { id }, select: { society: { select: { name: true } } } });
+  return { title: reportTitle("Energy savings agreement", p?.society.name) };
+}
+
 export default async function AgreementPrintPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await requireAdminPage();
   if (!session.user.adminPermissions?.includes("manage_pipeline")) redirect("/admin/pipeline");

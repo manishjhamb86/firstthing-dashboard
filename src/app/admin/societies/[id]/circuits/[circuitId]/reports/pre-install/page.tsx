@@ -1,4 +1,7 @@
 import { Letterhead } from "@/components/letterhead";
+import { db } from "@/lib/db";
+import { resolveAdmin } from "@/lib/admin-permissions";
+import { reportTitle } from "@/lib/report-title";
 import { notFound, redirect } from "next/navigation";
 import { formatDate, shortDate } from "@/lib/format-date";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -17,6 +20,14 @@ export const dynamic = "force-dynamic";
 // the database cannot disagree. Formatted on the shared report system
 // (2026-08-31) — sheet, result first, columned days, a legend that states
 // each band's numeric range.
+export async function generateMetadata({ params }: { params: Promise<{ id: string; circuitId: string }> }) {
+  // Titles only for a signed-in admin; the page itself does the real gating.
+  if (!(await resolveAdmin())) return { title: "FirsThing" };
+  const { id, circuitId } = await params;
+  const c = await db.circuit.findFirst({ where: { id: circuitId, societyId: id }, select: { society: { select: { name: true } } } });
+  return { title: reportTitle("Pre-installation consumption report", c?.society.name) };
+}
+
 export default async function PreInstallReportPage({
   params,
 }: {

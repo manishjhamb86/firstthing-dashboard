@@ -7355,3 +7355,50 @@ with no guests so no invitations went out:
 - a second read changed nothing;
 - deleting it in Google cancelled it in the app;
 - the test row was removed afterwards.
+
+## Phone scanning for stock (2026-09-25) — user-asked
+
+**Labels.** A label's QR now holds a link, `…/i/{code}`, so any phone's own camera opens the unit
+(through sign-in if needed). Labels printed earlier hold the bare code and still work in the
+scanner. Set `LABEL_BASE_URL` to the production domain before printing labels that go on lights;
+otherwise the link uses this deployment's own address.
+
+**Screen.** `/admin/inventory/scan` (Inventory → Scan) uses the phone camera:
+- It reads through the browser's own barcode reader (Chrome on Android), or through `jsqr`
+  (Apache-2.0, no dependencies, about 280 KB) loaded only on that screen and only on phones
+  without a built-in reader (iPhone).
+- Two modes: **Open each unit**, or **Collect for a move** — a list of scanned units, looked up as
+  they arrive, then one move recorded for all of them.
+- A sticker still in view is counted once. Unknown codes are marked. A code can also be typed, or
+  typed by a USB scanner.
+- `codeFromScan()` (pure, 3 unit cases) reads a label link, an old bare-code label and a typed code
+  alike.
+
+**Verified** with a simulated camera pointed at a printed label, 12/12:
+- the printed QR decodes to the unit's link;
+- the link opens the unit;
+- the camera read the label and looked it up;
+- a second scan of the same sticker was not added again;
+- two scanned units were deployed in one move;
+- open mode navigates to the unit;
+- there is no sideways scroll at phone width.
+
+**Defect found by the test:** a successful move emptied the list, which unmounted the form and
+took its "N recorded" confirmation with it. The scan screen now keeps the confirmation itself.
+
+## Internal codes removed from everything people read (2026-09-25) — user-asked
+
+"(INV-02)", "CON-20's band", "PER-04's action" and the like no longer appear in any screen text,
+hint, message or printed report: 183 strings in 81 files.
+- A code that stood for a meaning was reworded to that meaning: "the 60–80% band",
+  "the field team's action", "Only one is allowed per project".
+- A code that was only a citation was dropped.
+- The admin-users team picker no longer shows the persona code.
+
+Code comments and log lines keep their codes, because they are the developer's cross-reference to
+the blueprint.
+
+The edit was made with a TypeScript-AST pass over JSX text and string literals only, so comments
+could not be touched. `tests/no-internal-codes.test.ts` walks every source file the same way and
+fails if a code reaches user-facing text again. Text already stored in the database from before —
+for example an old review's closing note — keeps its wording.

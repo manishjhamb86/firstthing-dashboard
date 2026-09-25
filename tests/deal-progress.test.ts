@@ -331,7 +331,7 @@ describe("circuitSteps — the map one level down", () => {
     });
     const cur = steps.find((s) => s.status === "current");
     expect(cur?.key).toBe("benchmark");
-    expect(cur?.summary).toMatch(/outside CON-20/i);
+    expect(cur?.summary).toMatch(/outside the band/i);
   });
 
   it("ineligible collapses to the one step that matters", () => {
@@ -847,7 +847,7 @@ describe("a deal whose every candidate was ruled out", () => {
     expect(next?.label).toMatch(/resolve the candidate's eligibility/i);
     expect(next?.detail).toMatch(/corrects the answers, approves an exception, or records a different circuit/i);
     expect(next?.href).toBe("/admin/pipeline/p1/survey");
-    expect(steps.find((s) => s.key === "survey")!.summary).toMatch(/failed CON-16/i);
+    expect(steps.find((s) => s.key === "survey")!.summary).toMatch(/failed the eligibility checklist/i);
   });
 
   it("a live candidate alongside a ruled-out one still drives the step", () => {

@@ -117,8 +117,8 @@ export default async function ReadingsPage({
             name="period"
             type="month"
             defaultValue={period}
-            aria-label="Reading period — an explicit choice, never read from the file's own dates (INV-04)"
-            title="An explicit choice, never read from the file's own dates (INV-04)."
+            aria-label="Reading period — an explicit choice, never read from the file's own dates"
+            title="An explicit choice, never read from the file's own dates."
             className="field field-auto"
           />
           <button type="submit" className="btn-secondary">

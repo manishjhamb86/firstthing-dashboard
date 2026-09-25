@@ -252,7 +252,7 @@ export default async function TankStatusPage({
               ))}
             </dl>
             <p className="mt-auto pt-3 text-xs" style={{ color: "var(--text-muted)" }}>
-              Only the assigned society&apos;s portal shows this tank (INV-05).
+              Only the assigned society&apos;s portal shows this tank.
             </p>
           </Card>
       </div>
@@ -286,7 +286,7 @@ export default async function TankStatusPage({
                   societies={societies}
                 />
                 <p className="mt-auto pt-3 text-xs" style={{ color: "var(--text-muted)" }}>
-                  Portal accounts of the assigned society see this tank — nobody else does (INV-05).
+                  Portal accounts of the assigned society see this tank — nobody else does.
                 </p>
               </>
             ) : (

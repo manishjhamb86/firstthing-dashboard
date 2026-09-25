@@ -126,7 +126,7 @@ export function refuseOverlap(input: {
     return {
       at: "circuit",
       message:
-        "Another meter is already recorded on this circuit over that period. A circuit is measured by one meter at a time, because its billed figure has to trace to one source (CON-11, INV-02).",
+        "Another meter is already recorded on this circuit over that period. A circuit is measured by one meter at a time, because its billed figure has to trace to one source.",
     };
   }
   return null;

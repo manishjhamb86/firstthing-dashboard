@@ -164,7 +164,7 @@ export function LightReplacementForm({
       <Field
         label="Date the last light was replaced"
         htmlFor="lr-date"
-        hint="CON-19 — this pivot day is excluded; the post-install window starts the next midnight. The inventory and the pre-install baseline freeze with it."
+        hint="This pivot day is excluded; the post-install window starts the next midnight. The inventory and the pre-install baseline freeze with it."
       >
         <input
           id="lr-date"
@@ -190,7 +190,7 @@ export function LightReplacementForm({
       </button>
       <p className="mt-2 text-[13px] text-[var(--text-muted)]">
         The circuit moves to post-install monitoring once the completion gate pass is submitted —
-        CON-18 requires it before the crew leaves site.
+        it is required before the crew leaves site.
       </p>
     </Card>
   );

@@ -79,7 +79,7 @@ export function judgePostInstallDay(
     savingsPct,
     detail:
       `${consumptionKwh} kWh against a ${round2(baselineKwhPerDay)} kWh/day baseline is ` +
-      `${round1(savingsPct)}% savings — ${direction} CON-20's ${BENCHMARK_MIN_PCT}-${BENCHMARK_MAX_PCT}% band`,
+      `${round1(savingsPct)}% savings — ${direction} the ${BENCHMARK_MIN_PCT}-${BENCHMARK_MAX_PCT}% band`,
   };
 }
 

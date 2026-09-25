@@ -170,7 +170,7 @@ export type SkipRefusal = "already-used" | "no-reason" | "not-blocked";
 
 export const SKIP_REFUSAL_MESSAGE: Record<SkipRefusal, string> = {
   "already-used":
-    "This project has already used its one review-gate skip. CON-21 allows exactly one per project — a second is not available at any authority level.",
+    "This project has already used its one review-gate skip. Only one is allowed per project — a second is not available at any authority level.",
   "no-reason": "A skip needs a recorded reason. It is an explicit backend decision, not a default.",
   "not-blocked": "Nothing is blocked. A skip is only available against a gate that is actually holding work up.",
 };

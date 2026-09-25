@@ -78,7 +78,7 @@ export const CONTRACT_STATUS: Record<string, StatusMeta> = {
 
 export const BENCHMARK_SOURCE_LABEL: Record<string, string> = {
   measured: "Measured from the demo",
-  negotiated_fixed: "Negotiated fixed (CON-25)",
+  negotiated_fixed: "Negotiated fixed",
 };
 
 export const CIRCUIT_STATE: Record<string, StatusMeta> = {

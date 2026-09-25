@@ -178,7 +178,7 @@ export function LeadDetailsForm({
         <Field
           label="Which part does this deal cover?"
           htmlFor="ld-scope"
-          hint="Naming the parts is what lets two deals on one service line be told apart (CON-24)."
+          hint="Naming the parts is what lets two deals on one service line be told apart."
         >
           <input
             id="ld-scope"

@@ -48,12 +48,12 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
   "extrapolation-measured": {
     label: "Extrapolated from the measured demo",
     what: "The contracted monthly consumption scales the demo's MEASURED daily figure up to the contracted light count.",
-    standard: "CON-11 extrapolates the measured circuit, so this one matches what the product now does.",
+    standard: "The product extrapolates the measured circuit, so this one matches what the product now does.",
   },
   "extrapolation-theoretical": {
     label: "Extrapolated from the theoretical load",
     what: "The contracted monthly consumption is count × wattage × hours, not the demo's measured figure — a lower number, so a lower fee.",
-    standard: "CON-11 extrapolates the MEASURED circuit. This agreement did not.",
+    standard: "The product extrapolates the MEASURED circuit. This agreement did not.",
   },
   "benchmark-single-demo": {
     label: "Benchmark from one demo",
@@ -63,12 +63,12 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
   "benchmark-mean-of-demo-percentages": {
     label: "Benchmark is the mean of two demos' percentages",
     what: "Two demos over different sets of lights; the benchmark is the simple average of their savings percentages, not the ratio of their summed totals.",
-    standard: "FEAT-014-AC-7 now defines this as the rule for multiple counting demos.",
+    standard: "The product now defines this as the rule for multiple counting demos.",
   },
   "benchmark-adjusted-for-excluded-devices": {
     label: "Benchmark adjusted for fittings that were not replaced",
     what: "A fitting sharing the circuit is not part of the solution, so its theoretical load comes off both sides of the savings figure — the benchmark is higher than the raw meter ratio.",
-    standard: "CON-16's amendment defines this, so it matches what the product now does.",
+    standard: "The amendment defines this, so it matches what the product now does.",
   },
   "benchmark-from-superseded-annexure": {
     label: "Benchmark from an annexure that was never updated",
@@ -103,7 +103,7 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
   "billing-starts-on-completion-day": {
     label: "Billing began the day installation completed",
     what: "The first invoice's period starts on the completion day itself.",
-    standard: "CON-22 starts billing the day AFTER completion.",
+    standard: "Billing starts the day AFTER completion.",
   },
   "dates-inferred-from-readings": {
     label: "Commissioning dates inferred, not stated",
@@ -113,12 +113,12 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
   "represented-count-from-invoice": {
     label: "Represented light count taken from the invoice",
     what: "The society-wide count comes from the first invoice's own quantity rather than a walked inventory.",
-    standard: "FEAT-006's inventory is walked at survey time.",
+    standard: "The inventory is walked at survey time.",
   },
   "eligibility-never-assessed": {
-    label: "CON-16 eligibility was never assessed",
+    label: "eligibility was never assessed",
     what: "The circuit was already in service when it was recorded, so the eligibility checklist was never run against it.",
-    standard: "FEAT-007 assesses eligibility before a circuit is selected.",
+    standard: "Eligibility is assessed before a circuit is selected.",
   },
   "billing-predates-agreement-execution": {
     label: "Billing began before the agreement was executed",
@@ -138,17 +138,17 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
   "excluded-share-prorated-from-measured": {
     label: "Unreplaced fittings deducted pro-rata, not by their theoretical load",
     what: "The fittings sharing the circuit that are not replaced are taken out by their share of the MEASURED total (count ÷ total count × measured), not by count × wattage × hours.",
-    standard: "CON-16's amendment deducts the excluded fittings' theoretical load, as Aditya Mega City and Arihant Arden do.",
+    standard: "The amendment deducts the excluded fittings' theoretical load, as Aditya Mega City and Arihant Arden do.",
   },
   "represented-count-mixes-fixture-types": {
     label: "The represented count is not one kind of fitting",
     what: "The contracted population includes fittings that behave differently from the demonstrated ones — always-on inverter lights alongside motion-sensor ones — so the demo does not represent all of it equally.",
-    standard: "CON-11 extrapolates a circuit to every light OF ITS TYPE.",
+    standard: "The product extrapolates a circuit to every light OF ITS TYPE.",
   },
   "proration-on-a-30-day-month": {
     label: "Opening month prorated on a 30-day month",
     what: "The first invoice divides the monthly charge by 30 rather than by the days the month actually has.",
-    standard: "CON-22 prorates by the real remaining days of the calendar month.",
+    standard: "Billing prorates by the real remaining days of the calendar month.",
   },
   "additional-light-clause-not-applied": {
     label: "Lights beyond the minimum billed at the base rate",
@@ -163,7 +163,7 @@ export const DEVIATIONS: Record<DeviationCode, Meta> = {
   "two-versions-of-the-demo-report": {
     label: "Two versions of the demo report exist",
     what: "The same report circulates in more than one revision, stating different savings. The copy attached to the signed agreement is the one on record here.",
-    standard: "A regenerated report is a new version and the shared one still stands (FEAT-020-AC-5).",
+    standard: "A regenerated report is a new version and the shared one still stands.",
   },
   "minimum-light-clause-not-enforced": {
     label: "Fewer lights installed than the agreement's minimum",

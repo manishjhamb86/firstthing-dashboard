@@ -401,7 +401,7 @@ export function InvoicePanel({
                 )
               ) : (
                 <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                  Releasing a month is the accountant&apos;s act (CON-33) — ops permissions do not confer it.
+                  Releasing a month is the accountant&apos;s act — ops permissions do not confer it.
                 </p>
               )}
             </div>
@@ -441,7 +441,7 @@ export function InvoicePanel({
 
           {invoice.status !== "attached" && invoice.status !== "paid" && arrears && (
             <div className="border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
-              <p className="lbl mb-1">Following up (CON-13)</p>
+              <p className="lbl mb-1">Following up</p>
               <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                 {arrears.phase === "suspended"
                   ? "Suspended — field servicing is paused until this is paid."

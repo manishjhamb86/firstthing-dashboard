@@ -59,7 +59,7 @@ export function DemoReviewPanel({
           </span>{" "}
           savings — <span className="num">{postInstallAverage.toFixed(2)}</span> kWh/day against a{" "}
           <span className="num">{preInstallBaseline.toFixed(2)}</span> kWh/day baseline — which is outside
-          CON-20&apos;s 60–80% band, so it was <strong>not</strong> written as the benchmark.
+          the 60–80% band, so it was <strong>not</strong> written as the benchmark.
         </p>
 
         {/* FEAT-015-AC-5 — a second failure is not a first one repeated. */}

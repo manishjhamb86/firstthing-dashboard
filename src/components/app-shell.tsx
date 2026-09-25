@@ -123,6 +123,7 @@ export function AppShell({
     // by the field and pipeline teams.
     ...group("inventory", "Inventory", Package, [
       (showField || showPipeline) && { href: "/admin/inventory", label: "Stock", icon: Package, exact: true },
+      (showField || showPipeline) && { href: "/admin/inventory/scan", label: "Scan", icon: Package },
       (showField || showPipeline) && { href: "/admin/inventory/receive", label: "Receive stock", icon: Package },
       (showField || showPipeline) && { href: "/admin/inventory/setup", label: "Offices, suppliers & items", icon: Package },
     ]),

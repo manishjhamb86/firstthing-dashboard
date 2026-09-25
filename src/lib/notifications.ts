@@ -67,7 +67,7 @@ type InvoiceRow = Awaited<
 
 const INVOICE_PHASE_MESSAGE: Record<string, string> = {
   overdue: "is overdue",
-  warning: "is overdue and approaching suspension (CON-13)",
+  warning: "is overdue and approaching suspension",
   suspended: "is suspended — field servicing is paused",
 };
 

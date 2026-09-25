@@ -343,7 +343,7 @@ export function dealProgress(f: DealFacts): DealProgress {
           ? f.candidates.length === 0
             ? "Record the lighting inventory by area, then pick the demo circuit"
             : allCandidatesRuledOut
-              ? "Every candidate so far failed CON-16 — correct it, approve an exception, or record a different circuit"
+              ? "Every candidate so far failed the eligibility checklist — correct it, approve an exception, or record a different circuit"
               : "Candidate recorded — awaiting the eligibility decision"
           : "Unlocks when the demo proposal is agreed",
       href: f.surveyExists ? `${base}/survey` : undefined,
@@ -363,7 +363,7 @@ export function dealProgress(f: DealFacts): DealProgress {
               ? `${unconfirmed.length} circuits still commissioning — ${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
               : `${candidateLabel(holdout)}: ${circuitNextLabel(holdout)}`
             : allCandidatesRuledOut
-              ? "Unlocks once a candidate clears CON-16 — every one so far was ruled out by it"
+              ? "Unlocks once a candidate clears the eligibility checklist — every one so far was ruled out by it"
               : "Unlocks when the survey selects a demo circuit — meter, baseline window, light replacement and benchmark all happen on the circuit page",
       href: circuitHref,
     },
@@ -432,7 +432,7 @@ export function dealProgress(f: DealFacts): DealProgress {
         : currentIdx === 6
           ? kycDone
             ? "Prepare, execute and activate the agreement"
-            : "Offer accepted — but KYC must be complete first (GATE-01)"
+            : "Offer accepted — but KYC must be complete first"
           : "Unlocks when the society accepts the offer",
       href: `${base}/agreement`,
     },
@@ -456,7 +456,7 @@ export function dealProgress(f: DealFacts): DealProgress {
       title: "Monthly billing",
       status: billingLive ? "done" : "locked",
       summary: billingLive
-        ? "Billing started the day after the certificate was signed (CON-22)"
+        ? "Billing started the day after the certificate was signed"
         : "Starts automatically the day after the completion certificate is signed",
     },
   ];
@@ -486,7 +486,7 @@ export function dealProgress(f: DealFacts): DealProgress {
             ? {
                 label: "Resolve the candidate's eligibility",
                 detail:
-                  "Every candidate recorded so far failed one of CON-16's criteria. The survey page names which, and is where operations corrects the answers, approves an exception, or records a different circuit.",
+                  "Every candidate recorded so far failed one of the criteria. The survey page names which, and is where operations corrects the answers, approves an exception, or records a different circuit.",
                 href: `${base}/survey`,
                 owner: "field",
               }
@@ -524,7 +524,7 @@ export function dealProgress(f: DealFacts): DealProgress {
     } else if (!contractDone) {
       next = kycDone
         ? { label: "Execute the agreement", detail: "Prepare, print, sign and activate the contract.", href: `${base}/agreement`, owner: "sales" }
-        : { label: "Complete KYC first", detail: "GATE-01 — the agreement can't proceed until every document is verified or waived.", href: `${base}/kyc`, owner: "sales" };
+        : { label: "Complete KYC first", detail: "The agreement can't proceed until every document is verified or waived.", href: `${base}/kyc`, owner: "sales" };
     } else if (!installDone) {
       next = {
         label: f.installationState == null ? "Set up the installation project" : "Run the installation",
@@ -606,7 +606,7 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
     return annotateBlockers([
       {
         key: "eligibility",
-        title: "Eligibility (CON-16)",
+        title: "Eligibility",
         status: "done",
         summary: "Not assessed — already in service when it was recorded",
       },
@@ -631,10 +631,10 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
     return [
       {
         key: "eligibility",
-        title: "Eligibility (CON-16)",
+        title: "Eligibility",
         status: "current",
         summary:
-          "Failed one of CON-16's hard criteria. Operations can correct the recorded answers or approve an exception on the survey page — or a different candidate can be picked.",
+          "Failed one of the hard criteria. Operations can correct the recorded answers or approve an exception on the survey page — or a different candidate can be picked.",
       },
     ];
   }
@@ -690,12 +690,12 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
   const cur = flags.findIndex((d) => !d);
 
   return annotateBlockers([
-    mk("eligibility", "Eligibility (CON-16)", eligibilityDone, cur === 0,
+    mk("eligibility", "Eligibility", eligibilityDone, cur === 0,
       "Passed the eligibility checklist",
       "Awaiting the light-count exception decision on the survey page",
       ""),
     mk("meter", "Meter install & load validation", meterDone, cur === 1,
-      "Load validated within CON-17's ±10%",
+      "Load validated within the ±10%",
       "Install the meter and validate its displayed load below",
       "Unlocks once the circuit is eligible"),
     mk("install-gate", "Install gate pass", installGateDone, cur === 2,
@@ -720,12 +720,12 @@ export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {
       "Unlocks once the replacement is scheduled with a named crew"),
     mk("completion-gate", "Completion gate pass", completionGateDone, cur === 6,
       "Submitted",
-      "Itemize what was installed and removed, get it signed, and submit it — CON-18 requires it before the crew may leave site",
+      "Itemize what was installed and removed, get it signed, and submit it — it is required before the crew may leave site",
       "Unlocks once the replacement is recorded"),
     mk("benchmark", "Post-install window → benchmark", benchmarkDone, cur === 7,
-      "Benchmark confirmed in CON-20's 60-80% band",
+      "Benchmark confirmed in the 60-80% band",
       c.state === "benchmark_review"
-        ? "The measured result fell outside CON-20's band — resolve the review below"
+        ? "The measured result fell outside the band — resolve the review below"
         : c.benchmarkSavingsPct != null
           ? `The benchmark is already fixed at ${c.benchmarkSavingsPct.toFixed(
               1,

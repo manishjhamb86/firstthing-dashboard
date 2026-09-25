@@ -164,7 +164,7 @@ export function shouldFireSuspension(input: {
 export function refuseExtension(days: number): string | null {
   if (!Number.isInteger(days) || days <= 0) return "An extension is a whole number of days.";
   if (days > MAX_EXTENSION_DAYS) {
-    return `An extension is granted in increments of up to ${MAX_EXTENSION_DAYS} days per request (CON-13).`;
+    return `An extension is granted in increments of up to ${MAX_EXTENSION_DAYS} days per request.`;
   }
   return null;
 }

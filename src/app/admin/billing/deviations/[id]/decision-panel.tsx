@@ -163,7 +163,7 @@ export function DecisionPanel({
         Save findings
       </button>
 
-      <Field label="Root cause" htmlFor="dev-cause" hint="INV-03 — a classification, not a flag.">
+      <Field label="Root cause" htmlFor="dev-cause" hint="A classification, not a flag.">
         <select
           id="dev-cause"
           className="field"
@@ -174,7 +174,7 @@ export function DecisionPanel({
           {ROOT_CAUSES.map((r) => (
             <option key={r.id} value={r.id}>
               {r.label}
-              {r.countsAgainstGuarantee ? " — ours" : " — excluded (CON-01b)"}
+              {r.countsAgainstGuarantee ? " — ours" : " — excluded"}
             </option>
           ))}
         </select>
@@ -191,7 +191,7 @@ export function DecisionPanel({
           <span>
             Corrected within a month at no cost to the society.
             <span className="block text-[var(--text-muted)]">
-              CON-01b&apos;s own wording — corrected, there is nothing to adjust.
+              The contract&apos;s own wording — corrected, there is nothing to adjust.
             </span>
           </span>
         </label>
@@ -201,7 +201,7 @@ export function DecisionPanel({
         <Field
           label="What the society is told"
           htmlFor="dev-explanation"
-          hint="An excluded cause leaves their bill unchanged, so they are owed the reason (OQ-09)."
+          hint="An excluded cause leaves their bill unchanged, so they are owed the reason."
         >
           <textarea
             id="dev-explanation"

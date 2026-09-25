@@ -70,7 +70,7 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
 
       {circuits.length === 0 ? (
         <EmptyState title="No circuits yet">
-          Circuits are registered by selecting a demo-circuit candidate on a site survey (CON-16&apos;s
+          Circuits are registered by selecting a demo-circuit candidate on a site survey (the
           eligibility checklist runs there), never created directly here.{" "}
           {withSurvey ? (
             <>

@@ -96,7 +96,7 @@ export const BLOCKER_MESSAGE: Record<DemoReportBlocker, string> = {
   "circuits-still-commissioning":
     "Some circuits are still mid-commissioning. The report covers the whole demo, so it waits for every circuit to reach a confirmed benchmark.",
   "no-lighting-inventory":
-    "The whole-society light count is missing (FEAT-006's lighting inventory) — the extrapolation can't be computed without it.",
+    "The whole-society light count is missing (the lighting inventory) — the extrapolation can't be computed without it.",
   "no-post-install-readings": "A benchmarked circuit has no post-install readings to average.",
 };
 

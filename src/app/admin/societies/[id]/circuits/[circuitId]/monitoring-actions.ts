@@ -231,7 +231,7 @@ async function applyCommissioningReading(
             resolution: "rerun_window",
             resolutionNote: `Superseded by a re-measured result of ${savingsPct.toFixed(
               2,
-            )}%, inside CON-20's ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band. Closed by the system when the benchmark confirmed.`,
+            )}%, inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band. Closed by the system when the benchmark confirmed.`,
             resolvedAt: new Date(),
           },
         });

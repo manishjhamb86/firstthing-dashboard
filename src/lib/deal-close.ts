@@ -69,7 +69,7 @@ export function refuseReopen(input: { terminatedOn: Date | null; releasedPeriods
   const month = input.terminatedOn.toISOString().slice(0, 7);
   const released = input.releasedPeriods.filter((p) => p >= month).sort();
   if (released.length === 0) return null;
-  return `The month ${released[0]} was billed and released on this termination — it cannot be restated (GATE-02). Record a new deal instead.`;
+  return `The month ${released[0]} was billed and released on this termination — it cannot be restated. Record a new deal instead.`;
 }
 
 /** CON-13's suspension only applies to a society still being served. */

@@ -43,7 +43,7 @@ describe("refuseReopen", () => {
     expect(refuseReopen({ terminatedOn: d("2026-09-10"), releasedPeriods: ["2026-07", "2026-08"] })).toBeNull();
   });
   it("refuses once the termination month has been released", () => {
-    expect(refuseReopen({ terminatedOn: d("2026-09-10"), releasedPeriods: ["2026-09"] })).toMatch(/2026-09.*GATE-02/);
+    expect(refuseReopen({ terminatedOn: d("2026-09-10"), releasedPeriods: ["2026-09"] })).toMatch(/2026-09.*released.*cannot be restated/);
   });
 });
 

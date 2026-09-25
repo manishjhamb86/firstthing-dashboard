@@ -334,7 +334,7 @@ export function StoredReadingsPanel({
                     {summary.averageKwh.toFixed(2)}
                   </span>{" "}
                   because days were added or excluded after that. Changing the list does not move the
-                  baseline (ADR-005).
+                  baseline.
                 </p>
               )}
 

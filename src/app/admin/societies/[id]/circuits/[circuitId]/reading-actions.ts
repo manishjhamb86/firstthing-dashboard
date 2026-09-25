@@ -914,7 +914,7 @@ export async function deleteStoredReading(readingId: string, reason: string): Pr
   });
   if (!reading || reading.circuit.voidedAt) return { error: "That reading no longer exists." };
   if (reading.usedInCalculationId !== null) {
-    return { error: "Billed on a released calculation — it can't be removed (INV-03)." };
+    return { error: "Billed on a released calculation — it can't be removed." };
   }
 
   let phase: ReturnType<typeof classifyDay> | "monitoring" | null = reading.circuit.meterInstalledAt
@@ -1010,7 +1010,7 @@ export async function discardStoredReadings(
     return {
       error: `${billed.length} of these days ${
         billed.length === 1 ? "is" : "are"
-      } billed on a released calculation and cannot be removed (INV-03). Issue a correction there instead.`,
+      } billed on a released calculation and cannot be removed. Issue a correction there instead.`,
     };
   }
 
@@ -1273,7 +1273,7 @@ export async function discardDemoReadings(circuitId: string): Promise<Outcome> {
     return {
       error: `${billed.length} of these days ${
         billed.length === 1 ? "is" : "are"
-      } billed on a released calculation and cannot be removed (INV-03). Issue a correction there instead.`,
+      } billed on a released calculation and cannot be removed. Issue a correction there instead.`,
     };
   }
 

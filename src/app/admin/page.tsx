@@ -171,7 +171,7 @@ export default async function AdminHomePage() {
           detail:
             c.state === "surveyed"
               ? "Awaiting a light-count exception decision before it can be commissioned."
-              : "The measured result fell outside CON-20's band — the review is open.",
+              : "The measured result fell outside the band — the review is open.",
           href: `/admin/societies/${c.societyId}/circuits/${c.id}`,
           tone: "warn" as const,
         }))
@@ -249,7 +249,7 @@ export default async function AdminHomePage() {
           <Stat
             label="Benchmarks confirmed"
             value={benchmarkConfirmedCount}
-            detail="Inside CON-20's 60-80% band"
+            detail="Inside the 60-80% band"
           />
         )}
       </StatRow>
@@ -373,7 +373,7 @@ export default async function AdminHomePage() {
               </div>
               <p className="mb-3 text-[13px] text-[var(--text-muted)]">
                 Measured savings short of the benchmark by more than the contract&rsquo;s own
-                tolerance (CON-01a). Each stays here until it recovers.
+                tolerance. Each stays here until it recovers.
               </p>
               <ul className="space-y-2">
                 {belowBand.map((a) => {

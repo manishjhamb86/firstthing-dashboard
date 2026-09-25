@@ -98,7 +98,7 @@ export default async function LiveMonitoringPage() {
         <Stat label="Societies billing" value={societies.length} detail={societies.length === 0 ? "none live yet" : "signed off and invoicing"} />
         <Stat label="Circuits live" value={liveCircuits} detail={`${serviceLines.length} service line${serviceLines.length === 1 ? "" : "s"}`} />
         <Stat label="Measured this month" value={measured} detail={measured === liveCircuits ? "every circuit reported" : `${liveCircuits - measured} awaiting readings`} />
-        <Stat label="Below band" value={belowBand} tone={belowBand > 0 ? "warn" : "ok"} detail={belowBand === 0 ? "all inside CON-20" : "societies under 60%"} />
+        <Stat label="Below band" value={belowBand} tone={belowBand > 0 ? "warn" : "ok"} detail={belowBand === 0 ? "all inside the band" : "societies under 60%"} />
       </StatRow>
 
       <LiveList societies={societies} serviceLines={serviceLines} />

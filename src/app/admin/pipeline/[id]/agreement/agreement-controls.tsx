@@ -131,7 +131,7 @@ export function ExecutedUploadForm({
             className="field"
           />
         </Field>
-        <Field label="Document period" htmlFor="ag-period" hint="An explicit choice (INV-04).">
+        <Field label="Document period" htmlFor="ag-period" hint="An explicit choice.">
           <input
             id="ag-period"
             type="month"

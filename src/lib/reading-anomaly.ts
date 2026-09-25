@@ -157,7 +157,7 @@ export function detectAnomalies(
       findings.push({
         kind: "missing_days",
         date: null,
-        detail: `${missing.length} of ${total} days have no reading (${missing.join(", ")}). Missing days are excluded from the calculation and never estimated (CON-12).`,
+        detail: `${missing.length} of ${total} days have no reading (${missing.join(", ")}). Missing days are excluded from the calculation and never estimated.`,
         observedValue: live.length,
         expectedValue: total,
         deviationPct: null,

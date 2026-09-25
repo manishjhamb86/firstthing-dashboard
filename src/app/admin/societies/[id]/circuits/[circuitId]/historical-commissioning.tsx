@@ -51,7 +51,7 @@ export function HistoricalCommissioning({
         <Field
           label="Lights replaced on"
           htmlFor="hc-replaced"
-          hint="The last light replaced — CON-19 excludes that day"
+          hint="The last light replaced — that day is left out of both windows"
         >
           <input
             id="hc-replaced"

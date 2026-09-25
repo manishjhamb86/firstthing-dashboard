@@ -132,7 +132,7 @@ function AdminForm({
         >
           {TEAMS.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.label} ({t.persona})
+              {t.label}
             </option>
           ))}
         </select>

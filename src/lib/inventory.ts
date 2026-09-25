@@ -129,3 +129,29 @@ export function refuseQuantityMove(available: number, quantity: number, unit: st
   if (quantity > available + 1e-9) return `Only ${available} ${unit} of this batch is there.`;
   return null;
 }
+
+// ---- scanning (2026-09-25) ------------------------------------------------
+const UNIT_OR_BATCH = /^B\d{4}-\d{3}(-\d{5})?$/;
+
+/**
+ * The code a scan carries. A label's QR is a link (`…/i/B2609-001-00042`) so a
+ * phone's own camera opens the unit; older labels carry the bare code; a USB
+ * scanner types whatever is on the label. All three give the same code.
+ * Anything else is passed back trimmed — it may be a maker's serial.
+ */
+export function codeFromScan(text: string): string {
+  const t = text.trim();
+  const m = t.match(/\/(?:i|units)\/([A-Za-z0-9-]+)\/?(?:[?#].*)?$/);
+  const candidate = (m ? decodeURIComponent(m[1]) : t).toUpperCase();
+  return UNIT_OR_BATCH.test(candidate) ? candidate : t;
+}
+
+/** Whether a scanned code is one of ours (a unit or a batch). */
+export function isStockCode(code: string): boolean {
+  return UNIT_OR_BATCH.test(code);
+}
+
+/** The link printed in a label's QR code. */
+export function labelLink(base: string, code: string): string {
+  return `${base.replace(/\/$/, "")}/i/${code}`;
+}

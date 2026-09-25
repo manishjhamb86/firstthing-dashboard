@@ -269,7 +269,7 @@ export function AgreementTerms({
         {/* Beside the saving it bounds, not the share — it is a tolerance on
             the SAVING (CON-01a), and sitting next to the share read as a
             tolerance on that (user-reported 2026-08-26). */}
-        <Field label="± on that saving %" htmlFor="at-tol" hint="CON-01a — how far a month may drift before it is a deviation">
+        <Field label="± on that saving %" htmlFor="at-tol" hint="How far a month may drift before it is a deviation">
           <input id="at-tol" type="number" className="field field-auto w-24" value={tolerance} onChange={(e) => setTolerance(e.target.value)} />
         </Field>
         <Field

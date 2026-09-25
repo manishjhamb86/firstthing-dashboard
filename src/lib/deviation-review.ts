@@ -37,37 +37,37 @@ export const ROOT_CAUSES: RootCauseMeta[] = [
     label: "FirsThing-attributable",
     countsAgainstGuarantee: true,
     consequence:
-      "Ours to fix. Corrected within a month at no cost, the bill is unchanged; uncorrected, the next out-of-band month bills on actual metered savings (CON-01b/c).",
+      "Ours to fix. Corrected within a month at no cost, the bill is unchanged; uncorrected, the next out-of-band month bills on actual metered savings.",
   },
   {
     id: "lighting_layout_change",
     label: "Lighting layout changed",
     countsAgainstGuarantee: false,
-    consequence: "On CON-01b's exclusion list — the bill stays at the contracted amount.",
+    consequence: "On the exclusion list — the bill stays at the contracted amount.",
   },
   {
     id: "blocked_sensors",
     label: "Blocked sensors",
     countsAgainstGuarantee: false,
-    consequence: "On CON-01b's exclusion list — the bill stays at the contracted amount.",
+    consequence: "On the exclusion list — the bill stays at the contracted amount.",
   },
   {
     id: "usage_pattern_change",
     label: "Usage pattern changed",
     countsAgainstGuarantee: false,
-    consequence: "On CON-01b's exclusion list — the bill stays at the contracted amount.",
+    consequence: "On the exclusion list — the bill stays at the contracted amount.",
   },
   {
     id: "external_electrical",
     label: "External electrical issue",
     countsAgainstGuarantee: false,
-    consequence: "On CON-01b's exclusion list — the bill stays at the contracted amount.",
+    consequence: "On the exclusion list — the bill stays at the contracted amount.",
   },
   {
     id: "society_maintenance",
     label: "Society-side maintenance",
     countsAgainstGuarantee: false,
-    consequence: "On CON-01b's exclusion list — the bill stays at the contracted amount.",
+    consequence: "On the exclusion list — the bill stays at the contracted amount.",
   },
 ];
 
@@ -91,12 +91,12 @@ export type DecisionInput = {
 
 export const DECISION_REFUSALS = {
   noRootCause:
-    "A deviation decision needs a root-cause classification, not just a note — INV-03.",
-  noOwner: "A deviation decision needs a named owner — INV-03.",
+    "A deviation decision needs a root-cause classification, not just a note.",
+  noOwner: "A deviation decision needs a named owner.",
   noReasoning:
-    "Record what the investigation found. A classification with no reasoning behind it is the flag INV-03 exists to forbid.",
+    "Record what the investigation found. A classification with no reasoning behind it is exactly what the rule forbids.",
   noSocietyExplanation:
-    "An excluded cause leaves the society's bill unchanged, so the society is owed the reason (CON-01b / OQ-09). Write what they will be told.",
+    "An excluded cause leaves the society's bill unchanged, so the society is owed the reason. Write what they will be told.",
 } as const;
 
 /** Returns null when the decision may be recorded. */
@@ -135,7 +135,7 @@ export function billingConsequence(input: {
       exposesNextMonth: false,
       headline: "The bill stays at the contracted amount.",
       detail:
-        "This cause is on CON-01b's exclusion list, so the shortfall does not count against the performance guarantee — this month and every following month bill as contracted. The society is told why.",
+        "This cause is on the exclusion list, so the shortfall does not count against the performance guarantee — this month and every following month bill as contracted. The society is told why.",
     };
   }
   if (input.correctedAtNoCost) {
@@ -143,14 +143,14 @@ export function billingConsequence(input: {
       exposesNextMonth: false,
       headline: "Corrected at no cost — the bill stays at the contracted amount.",
       detail:
-        "CON-01b allows a FirsThing-attributable shortfall to be corrected within a month at no cost. Recorded as corrected, it cannot carry into next month's pricing.",
+        "The contract allows a FirsThing-attributable shortfall to be corrected within a month at no cost. Recorded as corrected, it cannot carry into next month's pricing.",
     };
   }
   return {
     exposesNextMonth: true,
     headline: "If next month is also out of band, it bills on actual metered savings.",
     detail:
-      "A FirsThing-attributable shortfall left uncorrected is what CON-01c calls sustained. This month still bills as contracted — month 1 never adjusts — but a second consecutive out-of-band month flips to actual-metered pricing through CON-11.",
+      "A FirsThing-attributable shortfall left uncorrected is what counts as sustained. This month still bills as contracted — month 1 never adjusts — but a second consecutive out-of-band month flips to actual-metered pricing.",
   };
 }
 

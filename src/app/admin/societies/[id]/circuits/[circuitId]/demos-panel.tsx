@@ -89,7 +89,7 @@ export function DemosPanel({
         </span>
         {derived.raw !== null && !derived.inBand && (
           <StatusChip tone="warn">
-            Measured {derived.raw.toFixed(2)}% — outside CON-20&apos;s 60–80% band
+            Measured {derived.raw.toFixed(2)}% — outside the 60–80% band
           </StatusChip>
         )}
       </div>
@@ -227,7 +227,7 @@ export function DemosPanel({
           The agreed figure is what the society is billed against, and it does not always equal what
           the demos measured. Rounding counts as an override too — nothing here is rounded
           automatically. What the demos measured stays on record either way, and an override never
-          moves a circuit into CON-20&apos;s band.
+          moves a circuit into the band.
         </p>
         {overridePct !== null && !overriding ? (
           <p className="text-sm">

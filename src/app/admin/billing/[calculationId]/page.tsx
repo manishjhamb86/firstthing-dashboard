@@ -128,7 +128,7 @@ export default async function CalculationPage({
           <Link href={`/admin/billing/${calc.supersededBy.id}`} className="underline font-medium">
             version {calc.supersededBy.version}
           </Link>
-          . It is kept as the record of what this month once computed to (GATE-02); the newer
+          . It is kept as the record of what this month once computed to; the newer
           version is the one that bills.
         </PageRibbon>
       )}
@@ -189,7 +189,7 @@ export default async function CalculationPage({
           <p className="text-sm text-[var(--text-muted)]">
             This month bills <strong className="num">{calc.proratedDays}</strong> of{" "}
             <strong className="num">{calc.daysInMonth}</strong> days — billing starts the day after
-            the completion certificate was signed (CON-22). Every fee line below is scaled by{" "}
+            the completion certificate was signed. Every fee line below is scaled by{" "}
             <span className="num">
               {calc.proratedDays}/{calc.daysInMonth}
             </span>
@@ -248,14 +248,14 @@ export default async function CalculationPage({
           <p className="text-sm">{calc.heldReason}</p>
           <p className="text-sm text-[var(--text-muted)] mt-2">
             Fix the inputs — resolve the reading flags, accept the coverage, or record the missing
-            readings — then run the month again. Figures are never hand-corrected (FEAT-048-AC-4).
+            readings — then run the month again. Figures are never hand-corrected.
           </p>
         </Card>
       ) : (
         <>
           <Card className="overflow-x-auto mb-6">
             <CardTitle>
-              Fee lines · CON-11, per circuit
+              Fee lines, per circuit
               {!sumMatches && (
                 <StatusChip tone="bad">Lines do not sum to the subtotal</StatusChip>
               )}
@@ -359,8 +359,8 @@ export default async function CalculationPage({
               <CardTitle>Deviations raised</CardTitle>
               <p className="text-sm text-[var(--text-muted)] mb-3">
                 A circuit measuring outside its contracted band raises exactly one review, and only
-                that circuit&apos;s fee line is at risk (FEAT-049-AC-5). A review needs an owner and
-                a root cause before it can close — INV-03.
+                that circuit&apos;s fee line is at risk. A review needs an owner and
+                a root cause before it can close.
               </p>
               <ul className="space-y-2">
                 {outOfBand.map((l) => (

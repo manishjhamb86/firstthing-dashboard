@@ -387,7 +387,7 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
     orderBy: { version: "desc" },
   });
   if (existing.some((e) => e.status === "released")) {
-    return { error: "This month is already released — it cannot be replaced from intake (GATE-02)." };
+    return { error: "This month is already released — it cannot be replaced from intake." };
   }
   const version = (existing[0]?.version ?? 0) + 1;
   const daysInMonth = daysInPeriod(period);

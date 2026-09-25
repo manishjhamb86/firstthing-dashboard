@@ -486,7 +486,7 @@ export default async function SiteSurveyPage({
         {circuits.length === 0 ? (
           <div className="mb-4">
             <EmptyState title="No candidate circuits yet">
-              Pick a candidate circuit from the site and record it against CON-16&apos;s eligibility checklist.
+              Pick a candidate circuit from the site and record it against the eligibility checklist.
             </EmptyState>
           </div>
         ) : (
@@ -531,7 +531,7 @@ export default async function SiteSurveyPage({
                         {outstanding.get(c.id)!.map((k) => criterionLabel(k)).join(" · ")}.
                         {c.state === "ineligible"
                           ? " A hard criterion decides the circuit, so it cannot be commissioned as it stands."
-                          : ` Below CON-16's ${MIN_METERED_LIGHTS}-light minimum.`}
+                          : ` Below the ${MIN_METERED_LIGHTS}-light minimum.`}
                       </p>
                       {canApproveException ? (
                         <EligibilityControls

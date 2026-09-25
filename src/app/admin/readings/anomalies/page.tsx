@@ -67,7 +67,7 @@ export default async function AnomalyReviewPage({
       <PageHeader
         backHref="/admin/readings"
         title="Anomaly &amp; coverage review"
-        subtitle={`${period} — every flag has to be resolved or explicitly accepted before this month can be billed (INV-09).`}
+        subtitle={`${period} — every flag has to be resolved or explicitly accepted before this month can be billed.`}
         chip={
           unresolved > 0 ? (
             <StatusChip tone="bad">{unresolved} unresolved</StatusChip>

@@ -479,8 +479,8 @@ export function CircuitReadingPanel({
             <li>
               Measured savings <span className="num font-semibold">{summary.benchmark.pct.toFixed(1)}%</span>{" "}
               {summary.benchmark.inBand
-                ? "— inside CON-20's 60–80% band; benchmark confirmed"
-                : "— outside CON-20's 60–80% band; routed to review, no benchmark written"}
+                ? "— inside the 60–80% band; benchmark confirmed"
+                : "— outside the 60–80% band; routed to review, no benchmark written"}
             </li>
           )}
         </ul>
@@ -802,7 +802,7 @@ export function CircuitReadingPanel({
       {preview.released > 0 && (
         <p className="text-xs text-[var(--text-muted)]">
           {preview.released} day{preview.released === 1 ? " is" : "s are"} locked — already billed on
-          a released calculation (INV-03).
+          a released calculation.
         </p>
       )}
 
@@ -878,7 +878,7 @@ export function CircuitReadingPanel({
                     {row.disposition === "stored_match" && "Already in system — unchanged"}
                     {row.disposition === "stored_changed" &&
                       `Sheet says ${row.kWh.toFixed(2)}, keeping stored ${row.storedKwh?.toFixed(2)}`}
-                    {row.disposition === "released" && "Billed — locked (INV-03)"}
+                    {row.disposition === "released" && "Billed — locked"}
                     {row.disposition === "out_of_window" && "Outside this step's window"}
                   </td>
                   {isPre && (

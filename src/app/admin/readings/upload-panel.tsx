@@ -495,7 +495,7 @@ export function UploadPanel({ period, circuits }: { period: string; circuits: Ci
 
           {preview.coverage.belowFloor && (
             <p className="mb-4 text-sm" style={{ color: "var(--warn-fg)" }}>
-              Below CON-12&apos;s 20-day floor. The month will not produce a billing-grade figure
+              Below the 20-day floor. The month will not produce a billing-grade figure
               unless it is explicitly accepted in Anomaly review.
             </p>
           )}

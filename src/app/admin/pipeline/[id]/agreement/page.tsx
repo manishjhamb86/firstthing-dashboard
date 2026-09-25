@@ -101,7 +101,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
                 )}
               </li>
               <li>
-                {kycDone ? "✓" : "•"} KYC is settled (GATE-01)
+                {kycDone ? "✓" : "•"} KYC is settled
                 {!kycDone && (
                   <>
                     {kycTotal > 0 ? ` — ${kycSettled} of ${kycTotal} settled. ` : " — nothing collected yet. "}

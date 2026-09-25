@@ -21,7 +21,7 @@ export type ExclusionContext = {
 /** Null when the day can be excluded or re-included; otherwise the reason. */
 export function exclusionRefusal(c: ExclusionContext): string | null {
   if (c.billed) {
-    return "Billed on a released calculation — it can't be changed (INV-03).";
+    return "Billed on a released calculation — it can't be changed.";
   }
   // Changing an input after its output is in force would silently restate a
   // figure someone has already been shown.

@@ -508,13 +508,13 @@ export async function createCircuitFromDocument(input: {
   if (!doc || doc.voidedAt) return { error: "That document is no longer on record." };
 
   const lightType = input.lightType.trim();
-  if (!lightType) return { error: "Say which light type this circuit represents (CON-11)." };
+  if (!lightType) return { error: "Say which light type this circuit represents." };
   const usable = input.fixtures.filter((f) => f.count > 0 && f.watts > 0 && f.hoursPerDay > 0);
   if (usable.length === 0) return { error: "Record at least one fixture line — the inventory is what everything downstream compares against." };
   const metered = usable.filter((f) => f.retrofitted).reduce((n, f) => n + f.count, 0);
   if (metered === 0) return { error: "At least one fixture has to be the one being retrofitted." };
   if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < metered) {
-    return { error: `Represented count must be at least the ${metered} lights on this circuit (CON-11).` };
+    return { error: `Represented count must be at least the ${metered} lights on this circuit.` };
   }
 
   // A second report of a circuit the society already has (2026-08-26). Checked
@@ -665,7 +665,7 @@ export async function createCircuitFromDocument(input: {
           // The month the source document was filed under, so a later report
           // of the same circuit can say the two describe the same period.
           period: doc.period,
-          note: "Commissioned before this system existed — CON-16 eligibility was never assessed, and is not re-assessed for a circuit already in service.",
+          note: "Commissioned before this system existed — eligibility was never assessed, and is not re-assessed for a circuit already in service.",
         },
         state: "eligible",
         createdById: actor.id,

@@ -192,7 +192,7 @@ export function CircuitEligibilityForm({
           <Field
             label="Light type / operating profile"
             htmlFor="cand-lightType"
-            hint="Basement parking, staircase, lift lobby… — the profile this circuit represents (CON-11)"
+            hint="Basement parking, staircase, lift lobby… — the profile this circuit represents"
           >
             <input
               id="cand-lightType"
@@ -229,7 +229,7 @@ export function CircuitEligibilityForm({
             htmlFor="cand-represented"
             hint={
               inventoryCount === null
-                ? "Every light of this type across the society — the population this circuit's benchmark is extrapolated to (CON-11)"
+                ? "Every light of this type across the society — the population this circuit's benchmark is extrapolated to"
                 : `The inventory above counted ${inventoryCount.toLocaleString("en-IN")} of this type across the society`
             }
           >
@@ -483,7 +483,7 @@ export function CircuitEligibilityForm({
               <span className="num">{connectedLoadW.toFixed(0)}</span> W connected load ·{" "}
               <span className="num font-semibold">{theoreticalKwh.toFixed(2)}</span> kWh/day theoretical
               {meteredCount > 0 && meteredCount < 50 && (
-                <span style={{ color: "var(--warn-fg)" }}> — below the 50-light minimum (CON-16)</span>
+                <span style={{ color: "var(--warn-fg)" }}> — below the 50-light minimum</span>
               )}
               {excludedKwh > 0 && (
                 <span className="mt-1 block text-[13px]" style={{ color: "var(--text-muted)" }}>
@@ -508,7 +508,7 @@ export function CircuitEligibilityForm({
         <Field
           label="Working hours / day (optional)"
           htmlFor="cand-hours"
-          hint="Circuit-level metadata (CON-10) — the per-line hours above drive the theoretical figure"
+          hint="Circuit-level metadata — the per-line hours above drive the theoretical figure"
         >
           <input
             id="cand-hours"
@@ -523,7 +523,7 @@ export function CircuitEligibilityForm({
         </Field>
 
         <fieldset className="space-y-2.5">
-          <legend className="lbl mb-2">CON-16 eligibility checklist</legend>
+          <legend className="lbl mb-2">Eligibility checklist</legend>
           {/* Three unticked boxes and an enabled Submit produced a candidate
               that is ineligible the moment it is created, with no exception
               path and no way back but Remove — and nothing on the way in said
@@ -560,7 +560,7 @@ export function CircuitEligibilityForm({
               across the society.
             </p>
             <p className="mt-1">
-              The monthly fee is computed on the represented count (CON-11), not on the lights
+              The monthly fee is computed on the represented count, not on the lights
               actually metered — so this is the figure the society is billed against. Deliberate
               when this deal covers only part of the society&apos;s lighting; otherwise use the
               inventory&apos;s figure.
@@ -589,7 +589,7 @@ export function CircuitEligibilityForm({
         {exceptionable && (
           <div className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
             <p>
-              <span className="num">{meteredCount}</span> metered lights is below CON-16&apos;s
+              <span className="num">{meteredCount}</span> metered lights is below the
               minimum of <span className="num">{MIN_METERED_LIGHTS}</span>. Recorded as it stands,
               this candidate <strong>waits for an operations exception</strong> before it can be
               commissioned — every other criterion is confirmed.

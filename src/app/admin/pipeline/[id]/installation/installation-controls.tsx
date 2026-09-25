@@ -93,7 +93,7 @@ export function ProjectSetupForm({
         <Field
           label="Society onlooker"
           htmlFor="onlooker-select"
-          hint="Reviews each day's work. CON-21's gate cannot run without one."
+          hint="Reviews each day's work. The gate cannot run without one."
         >
           <select id="onlooker-select" className="field" value={onlookerId} onChange={(e) => setOnlookerId(e.target.value)} required>
             <option value="">Choose an account…</option>
@@ -440,7 +440,7 @@ export function SkipGateForm({ pipelineId, plannedDayId }: { pipelineId: string;
       <Field
         label="Why this project is spending its one skip"
         htmlFor="skip-reason"
-        hint="CON-21 allows exactly one per project. There is no second."
+        hint="Only one is allowed per project. There is no second."
       >
         <textarea id="skip-reason" className="field" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} required />
       </Field>

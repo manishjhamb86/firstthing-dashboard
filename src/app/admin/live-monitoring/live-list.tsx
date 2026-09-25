@@ -146,7 +146,7 @@ export function LiveList({
             ? onlyWarn
               ? "Every live circuit is inside its band."
               : "Clear the filter to see every live circuit."
-            : "A circuit arrives here once its benchmark is confirmed and its installation is signed off — billing starts the day after the completion certificate (CON-22)."}
+            : "A circuit arrives here once its benchmark is confirmed and its installation is signed off — billing starts the day after the completion certificate."}
         </EmptyState>
       ) : (
         <div className="space-y-4">

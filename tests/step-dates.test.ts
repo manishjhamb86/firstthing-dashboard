@@ -177,6 +177,6 @@ describe("refuseReplacementMove — the pivot can move while the sets it divides
     expect(refuseReplacementMove({ readingsWhosePhaseChanges: 1, baselineSettled: true, benchmarkFromWindow: false })).toMatch(/1 stored reading would move.*baseline/);
   });
   it("refuses, naming the benchmark, once it was computed from the post-install set", () => {
-    expect(refuseReplacementMove({ readingsWhosePhaseChanges: 4, baselineSettled: true, benchmarkFromWindow: true })).toMatch(/4 stored readings would move.*benchmark.*CON-20/);
+    expect(refuseReplacementMove({ readingsWhosePhaseChanges: 4, baselineSettled: true, benchmarkFromWindow: true })).toMatch(/4 stored readings would move.*benchmark.*fixed for the term/);
   });
 });

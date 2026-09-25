@@ -86,7 +86,7 @@ export function monthlyFigure(
 export function describeCoverage(c: Coverage): string {
   if (c.complete) return `${c.coverageDays} / ${c.daysInMonth} days — complete`;
   if (c.belowFloor) {
-    return `${c.coverageDays} / ${c.daysInMonth} days — below CON-12's ${COVERAGE_FLOOR_DAYS}-day floor`;
+    return `${c.coverageDays} / ${c.daysInMonth} days — below the ${COVERAGE_FLOOR_DAYS}-day floor`;
   }
   return `${c.coverageDays} / ${c.daysInMonth} days`;
 }

@@ -53,7 +53,7 @@ export const TEAMS: TeamMeta[] = [
     id: "finance",
     label: "Finance / Accounts",
     persona: "PER-08",
-    scope: "Releases billing (CON-33). Deliberately separate from the team that runs the month.",
+    scope: "Releases billing. Deliberately separate from the team that runs the month.",
   },
 ];
 

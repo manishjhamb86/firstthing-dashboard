@@ -172,7 +172,7 @@ export type WorksheetBlocker =
 export const WORKSHEET_BLOCKER_MESSAGE: Record<WorksheetBlocker, string> = {
   "no-circuits": "There is no circuit to price this offer on.",
   "invalid-light-count": "Every light type needs the number of lights the agreement installs — a whole number above zero.",
-  "invalid-benchmark": "The agreed savings percentage has to sit inside CON-20's 60–80% band on every light type.",
+  "invalid-benchmark": "The agreed savings percentage has to sit inside the 60–80% band on every light type.",
   "not-derivable":
     "A light type has no pre-installation consumption on the basis chosen — pick the demo's figure, give the wattage and hours for the theoretical one, or type a value.",
   "invalid-unit-rate": "Set the unit electricity rate — the saving cannot be turned into rupees without it.",

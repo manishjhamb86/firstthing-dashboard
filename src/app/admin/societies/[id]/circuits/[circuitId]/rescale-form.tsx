@@ -54,7 +54,7 @@ export function RescaleForm({
   return (
     <Card className="p-5 space-y-4">
       <p className="text-sm text-[var(--text-muted)]">
-        A verified light-count change rescales the baseline proportionally (CON-10) — deterministic math, not a
+        A verified light-count change rescales the baseline proportionally — deterministic math, not a
         renegotiation. The savings percentage itself is unchanged.
       </p>
 

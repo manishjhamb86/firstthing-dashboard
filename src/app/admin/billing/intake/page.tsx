@@ -160,7 +160,7 @@ export default async function IntakePage({
       <Card className="mt-5 p-5 text-[12.5px]" >
         <p style={{ color: "var(--text-muted)" }}>
           The society and the month are always yours to confirm on the review, whatever the invoice
-          says (INV-04). A submitted month reaches the society only once the accountant publishes it.
+          says. A submitted month reaches the society only once the accountant publishes it.
         </p>
       </Card>
     </>

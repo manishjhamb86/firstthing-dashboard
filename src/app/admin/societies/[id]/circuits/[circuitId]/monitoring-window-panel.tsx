@@ -293,7 +293,7 @@ export function MonitoringWindowPanel({
       )}
 
       {!canEdit && !complete && (
-        <p className="text-sm text-[var(--text-muted)]">Only PER-04/PER-01 can record days on this window.</p>
+        <p className="text-sm text-[var(--text-muted)]">Only the field team/operations can record days on this window.</p>
       )}
 
       {canClear && !frozen && (readings.length > 0 || hasStalledReview) && (

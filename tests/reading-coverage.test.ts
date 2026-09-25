@@ -97,6 +97,6 @@ describe("describeCoverage", () => {
   it("says which of the three things it is", () => {
     expect(describeCoverage(coverageOf(month(31), "2026-07"))).toContain("complete");
     expect(describeCoverage(coverageOf(month(25), "2026-07"))).toBe("25 / 31 days");
-    expect(describeCoverage(coverageOf(month(14), "2026-07"))).toContain("below CON-12's 20-day floor");
+    expect(describeCoverage(coverageOf(month(14), "2026-07"))).toContain("below the 20-day floor");
   });
 });

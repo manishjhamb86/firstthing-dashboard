@@ -224,8 +224,7 @@ export default async function PreInstallReportPage({
 
         <footer className="report-footer">
           <span>
-            FirsThing · every figure traces to stored daily readings and the recorded inventory
-            (INV-02).
+            FirsThing · every figure traces to stored daily readings and the recorded inventory.
           </span>
           <span className="num report-colophon">
             {society.name} · {circuit.location || circuit.lightType} · pre-installation

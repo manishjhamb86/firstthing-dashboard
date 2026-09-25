@@ -78,7 +78,7 @@ export function AssignControl({
         save(societyId);
       }}
     >
-      <Field label="Society" htmlFor="tank-society" hint="Type to search. Only this society's portal will show the tank (INV-05).">
+      <Field label="Society" htmlFor="tank-society" hint="Type to search. Only this society's portal will show the tank.">
         <SearchSelect
           id="tank-society"
           options={societies.map((s) => ({ id: s.id, label: s.name, sublabel: s.location }))}

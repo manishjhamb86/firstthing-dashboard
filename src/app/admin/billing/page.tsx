@@ -144,8 +144,8 @@ export default async function BillingPage({
             name="period"
             type="month"
             defaultValue={period}
-            aria-label="Billing period — an explicit choice, never inferred (INV-04)"
-            title="An explicit choice, never inferred from the readings (INV-04)."
+            aria-label="Billing period — an explicit choice, never inferred"
+            title="An explicit choice, never inferred from the readings."
             className="field field-auto"
           />
           <button type="submit" className="btn-secondary">

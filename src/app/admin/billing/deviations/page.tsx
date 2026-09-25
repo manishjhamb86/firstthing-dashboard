@@ -174,7 +174,7 @@ export default async function DeviationsPage() {
       )}
 
       <p className="mt-4 text-[13px] text-[var(--text-muted)]">
-        A decision never changes the month it is about — CON-01c is explicit that month 1 never
+        A decision never changes the month it is about — month 1 never
         adjusts. It sets what the <Link href="/admin/billing" className="underline">next month&apos;s run</Link>{" "}
         reads.
       </p>

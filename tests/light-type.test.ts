@@ -28,7 +28,7 @@ describe("CON-11's extrapolation base", () => {
     // ₹1,297.30 on 50 of 50 when the survey had counted 2,000.
     const r = refuseRepresentedCount(50, 50);
     expect(r).toMatch(/always more/i);
-    expect(r).toMatch(/CON-11/);
+    expect(r).toMatch(/extrapolating/);
   });
 
   it("still refuses a factor below 1", () => {

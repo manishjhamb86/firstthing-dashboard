@@ -150,7 +150,7 @@ export function KycItem({
               ))}
             </select>
           </Field>
-          <Field label="Document period" htmlFor={`kyc-p-${type}`} hint="An explicit choice (INV-04).">
+          <Field label="Document period" htmlFor={`kyc-p-${type}`} hint="An explicit choice.">
             <input
               id={`kyc-p-${type}`}
               type="month"
@@ -238,7 +238,7 @@ export function KycItem({
       {formsOpen && (
       <div className="flex flex-wrap items-end gap-2">
         <div className="grow">
-          <Field label="Record a follow-up" htmlFor={`kyc-fu-${type}`} hint="Counts toward this step's stall signal (CON-23).">
+          <Field label="Record a follow-up" htmlFor={`kyc-fu-${type}`} hint="Counts toward this step's stall signal.">
             <input
               id={`kyc-fu-${type}`}
               value={followUp}

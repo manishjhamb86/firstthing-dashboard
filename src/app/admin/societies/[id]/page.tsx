@@ -439,7 +439,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             // FEAT-108-AC-8: empty state explains the consequence and offers
             // to create the first one.
             <EmptyState title="No portal accounts yet">
-              This society has no one who can sign in, view its data, or accept binding acts (GATE-04).
+              This society has no one who can sign in, view its data, or accept binding acts.
               Add the first account — usually the office-bearer.
             </EmptyState>
           ) : (

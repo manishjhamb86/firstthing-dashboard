@@ -146,7 +146,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
               {
                 label: "A named society onlooker",
                 done: accounts.length > 0,
-                detail: "This society has no active portal account, so nobody can approve a day's work (CON-21).",
+                detail: "This society has no active portal account, so nobody can approve a day's work.",
                 href: `/admin/societies/${pipeline.societyId}`,
                 cta: "Add a portal account",
                 inline: true,
@@ -285,7 +285,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
               project.certificate?.billingStartDate
                 ? `, and billing started ${project.certificate.billingStartDate
                     .toISOString()
-                    .slice(0, 10)}, the day after (CON-22).`
+                    .slice(0, 10)}, the day after.`
                 : "."
             }`
           : undefined;

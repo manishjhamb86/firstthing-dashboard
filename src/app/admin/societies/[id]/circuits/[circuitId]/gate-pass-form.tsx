@@ -27,7 +27,7 @@ export function GatePassForm({
   return (
     <Card className="p-5 space-y-4">
       <p className="text-sm text-[var(--text-muted)]">
-        List every item left on site, one per line (CON-18) — the meter, its mounting hardware, wiring, etc.
+        List every item left on site, one per line — the meter, its mounting hardware, wiring, etc.
       </p>
       <Field label="Items" htmlFor={`gp-items-${kind}`}>
         <textarea

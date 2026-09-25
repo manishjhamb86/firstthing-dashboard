@@ -39,7 +39,7 @@ export function liveMonitoringBlocker(c: {
     return "Monthly readings start once the demo benchmark is confirmed — the savings on every month are measured against it.";
   }
   if (!c.installationCertificateSigned) {
-    return "Monthly readings start after the full installation is signed off. Billing begins the day after the completion certificate (CON-22), so there is nothing to bill a month against yet.";
+    return "Monthly readings start after the full installation is signed off. Billing begins the day after the completion certificate, so there is nothing to bill a month against yet.";
   }
   return null;
 }

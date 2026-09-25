@@ -42,7 +42,7 @@ export function RunMonthButton({
           if (
             rerun &&
             !window.confirm(
-              `Re-run ${period}? The figures on screen are superseded by a new version — both are kept (GATE-02).`,
+              `Re-run ${period}? The figures on screen are superseded by a new version — both are kept.`,
             )
           ) {
             return;

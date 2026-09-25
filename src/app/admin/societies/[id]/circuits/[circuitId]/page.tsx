@@ -664,7 +664,7 @@ export default async function CircuitDetailPage({
                   : " Contact an administrator if it has to change.")
               : canEdit
                 ? null
-                : "Recording the load inventory is PER-04\u2019s action."
+                : "Recording the load inventory is the field team\u2019s action."
           }
           // Backfilling a past record is a DEMO-mode affordance now. In normal
           // operation a locked inventory stays locked and the change goes
@@ -724,7 +724,7 @@ export default async function CircuitDetailPage({
                 />
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">
-                  Recording the commissioning dates is PER-04&apos;s action.
+                  Recording the commissioning dates is the field team&apos;s action.
                 </p>
               );
               if (step.status === "done") {
@@ -751,7 +751,7 @@ export default async function CircuitDetailPage({
                 />
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">
-                  Awaiting PER-04 to upload the meter&apos;s readings.
+                  Awaiting the field team to upload the meter&apos;s readings.
                 </p>
               );
               break;
@@ -839,7 +839,7 @@ export default async function CircuitDetailPage({
                   />
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">
-                    Meter installation and load validation is PER-04&apos;s action — you can read this
+                    Meter installation and load validation is the field team&apos;s action — you can read this
                     circuit&apos;s record but not edit it.
                   </p>
                 );
@@ -917,7 +917,7 @@ export default async function CircuitDetailPage({
                   />
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">
-                    Awaiting PER-04 to submit the gate pass on site.
+                    Awaiting the field team to submit the gate pass on site.
                   </p>
                 );
               }
@@ -971,7 +971,7 @@ export default async function CircuitDetailPage({
                   />
                 ) : (
                   <p className="text-sm text-[var(--text-muted)]">
-                    Awaiting PER-04 to upload the meter&apos;s readings.
+                    Awaiting the field team to upload the meter&apos;s readings.
                   </p>
                 );
               } else if (step.status === "done" && circuit.preInstallBaseline == null) {
@@ -1156,7 +1156,7 @@ export default async function CircuitDetailPage({
                   <p className="text-sm text-[var(--text-muted)]">
                     {replacementOwnerName
                       ? `Awaiting ${replacementOwnerName} to record the replacement.`
-                      : "Awaiting PER-04 to record the replacement date."}
+                      : "Awaiting the field team to record the replacement date."}
                   </p>
                 );
               } else if (step.status === "done") {
@@ -1212,7 +1212,7 @@ export default async function CircuitDetailPage({
                   body = (
                     <div className="space-y-4">
                       <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
-                        The measured result fell outside CON-20&apos;s 60-80% band, and the review was
+                        The measured result fell outside the 60-80% band, and the review was
                         escalated for a manual benchmark decision — so it is not written by this screen.
                       </p>
                       {circuit.postInstallWindowStartAt && (
@@ -1297,7 +1297,7 @@ export default async function CircuitDetailPage({
                     />
                   ) : (
                     <p className="text-sm text-[var(--text-muted)]">
-                      Awaiting PER-04 to upload the post-installation readings.
+                      Awaiting the field team to upload the post-installation readings.
                     </p>
                   );
                 }
@@ -1594,7 +1594,7 @@ export default async function CircuitDetailPage({
           ) : (
             // FEAT-041-AC-4 — PER-04 reads this history but cannot record one.
             <p className="text-sm text-[var(--text-muted)]">
-              Recording a verified light-count change is PER-01&apos;s action.
+              Recording a verified light-count change is an operations action.
             </p>
           )}
         </section>

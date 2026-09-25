@@ -557,7 +557,7 @@ export async function recordLightReplacement(
   if (!bookedDay) {
     logger.warn("circuit.replacement_record_refused", { circuitId, reason: "unscheduled" });
     return {
-      error: "Book the replacement day with the society first — the date recorded here is the pivot CON-19 excludes.",
+      error: "Book the replacement day with the society first — the date recorded here is the pivot day, which is left out of both windows.",
     };
   }
 

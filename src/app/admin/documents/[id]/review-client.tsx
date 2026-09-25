@@ -386,7 +386,7 @@ export function ExtractionReview({
         )}
 
         <div className="mt-4 flex flex-wrap items-end gap-4">
-          <Field label="Light type" htmlFor="fx-type" hint="What this circuit represents (CON-11)">
+          <Field label="Light type" htmlFor="fx-type" hint="What this circuit represents">
             <select
               id="fx-type"
               className="field field-auto"

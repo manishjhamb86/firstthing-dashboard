@@ -64,3 +64,20 @@ describe("quantities", () => {
     expect(refuseQuantityMove(100, 100, "m")).toBeNull();
   });
 });
+
+import { codeFromScan, isStockCode, labelLink } from "@/lib/inventory";
+
+describe("scanning", () => {
+  it("a label link, an old bare-code label and a typed code give the same code", () => {
+    expect(codeFromScan("https://stage.firsthing.earth/i/B2609-001-00042")).toBe("B2609-001-00042");
+    expect(codeFromScan("b2609-001-00042 ")).toBe("B2609-001-00042");
+    expect(codeFromScan("https://x.firsthing.earth/admin/inventory/units/B2609-001-00042?x=1")).toBe("B2609-001-00042");
+  });
+  it("a batch code is recognised; anything else is returned as typed (a maker's serial)", () => {
+    expect(codeFromScan("B2609-001")).toBe("B2609-001");
+    expect(isStockCode("B2609-001")).toBe(true);
+    expect(codeFromScan("8991234567890123456")).toBe("8991234567890123456");
+    expect(isStockCode("8991234567890123456")).toBe(false);
+  });
+  it("builds the printed link", () => expect(labelLink("https://firsthing.earth/", "B2609-001-00042")).toBe("https://firsthing.earth/i/B2609-001-00042"));
+});

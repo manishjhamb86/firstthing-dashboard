@@ -42,6 +42,6 @@ describe("exclusionRefusal", () => {
   });
 
   it("INV-03 outranks everything: billed is billed", () => {
-    expect(exclusionRefusal({ ...base, phase: "monitoring", billed: true })).toContain("INV-03");
+    expect(exclusionRefusal({ ...base, phase: "monitoring", billed: true })).toContain("Billed on a released calculation");
   });
 });

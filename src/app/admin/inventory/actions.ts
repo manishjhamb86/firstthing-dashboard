@@ -427,3 +427,19 @@ export async function moveQuantity(input: {
   revalidatePath("/admin/inventory");
   return {};
 }
+
+/** What a list of scanned codes are, for the scan screen's running list. */
+export async function lookupScanned(codes: string[]): Promise<Array<{ code: string; found: boolean; item?: string; status?: string; location?: string | null }>> {
+  const admin = await requireStockStaff();
+  if (!admin) return [];
+  const wanted = [...new Set(codes.map((c) => c.trim().toUpperCase()).filter(Boolean))].slice(0, 500);
+  const units = await db.inventoryUnit.findMany({
+    where: { code: { in: wanted } },
+    select: { code: true, status: true, itemType: { select: { name: true } }, location: { select: { name: true } } },
+  });
+  const by = new Map(units.map((u) => [u.code, u]));
+  return wanted.map((code) => {
+    const u = by.get(code);
+    return u ? { code, found: true, item: u.itemType.name, status: u.status, location: u.location?.name ?? null } : { code, found: false };
+  });
+}

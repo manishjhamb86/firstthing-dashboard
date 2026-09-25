@@ -215,10 +215,10 @@ export function OfferForm({
               <option value="measured" disabled={!hasDemoReport}>
                 Measured from the demo
               </option>
-              <option value="negotiated_fixed">Negotiated fixed — demo skipped (CON-25)</option>
+              <option value="negotiated_fixed">Negotiated fixed — demo skipped</option>
             </select>
           </Field>
-          <Field label="Tolerance band" htmlFor="of-tol" hint="CON-01a — one value per contract, applied per circuit.">
+          <Field label="Tolerance band" htmlFor="of-tol" hint="One value per contract, applied per circuit.">
             <select id="of-tol" value={tolerancePct} onChange={(e) => setTolerancePct(e.target.value)} disabled={pending} className="field">
               {ALLOWED_TOLERANCE_PCT.map((v) => (
                 <option key={v} value={v}>
@@ -295,7 +295,7 @@ export function OfferForm({
                           ? c.benchmarkNegotiated
                             ? `Differs from the demo's ${c.demoBenchmarkSavingsPct.toFixed(2)}% — recorded as negotiated.`
                             : "The demo's figure. Change it only if the agreement says otherwise."
-                          : "CON-20's 60–80% band."
+                          : "The 60–80% band."
                       }
                     >
                       <input
@@ -436,8 +436,8 @@ export function OfferForm({
           htmlFor="of-model"
           hint={
             lumpSum
-              ? "A flat amount every month regardless of what the meter measures. A short month is still billed in proportion (CON-01c)."
-              : "As FirsThing's share of the saving the meter measures (CON-11) — the amount above is what that share comes to at the agreed benchmark."
+              ? "A flat amount every month regardless of what the meter measures. A short month is still billed in proportion."
+              : "As FirsThing's share of the saving the meter measures — the amount above is what that share comes to at the agreed benchmark."
           }
         >
           <select id="of-model" value={pricingModel} onChange={(e) => setPricingModel(e.target.value as PricingModel)} disabled={pending} className="field">
@@ -454,11 +454,11 @@ export function OfferForm({
           <Field label="Term (months)" htmlFor="of-term">
             <input id="of-term" type="number" inputMode="numeric" min="1" step="1" value={termMonths} onChange={(e) => setTermMonths(e.target.value)} disabled={pending} className="field" />
           </Field>
-          <Field label="Spare lights as per agreement" htmlFor="of-spare" hint="CON-15 — no default, agreed per society.">
+          <Field label="Spare lights as per agreement" htmlFor="of-spare" hint="No default, agreed per society.">
             <input id="of-spare" type="number" inputMode="numeric" min="0" step="1" value={spareStock} onChange={(e) => setSpareStock(e.target.value)} disabled={pending} className="field" />
           </Field>
         </div>
-        <Field label="Exclusions (one per line)" htmlFor="of-excl" hint="CON-01b's list, in this contract's wording.">
+        <Field label="Exclusions (one per line)" htmlFor="of-excl" hint="The standard exclusions, in this contract's wording.">
           <textarea
             id="of-excl"
             rows={3}

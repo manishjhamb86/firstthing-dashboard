@@ -102,7 +102,7 @@ export async function setUpInstallationProject(
   // FEAT-033-AC-3 — the daily review gate has no meaning without a named
   // reviewer, so setup cannot complete without one.
   if (!input.onlookerId) {
-    return { error: "Name the society's onlooker. CON-21's daily review gate cannot run without one, and a day nobody reviews is a day that cannot complete." };
+    return { error: "Name the society's onlooker. The daily review gate cannot run without one, and a day nobody reviews is a day that cannot complete." };
   }
   const onlooker = await db.profile.findUnique({ where: { id: input.onlookerId } });
   if (!onlooker || onlooker.societyId !== pipeline.societyId) {

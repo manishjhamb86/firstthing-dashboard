@@ -86,7 +86,7 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
 
       {!canEdit && (
         <p className="max-w-2xl mb-6 text-sm text-[var(--text-muted)]">
-          Read-only — recording, verifying and following up on KYC documents is PER-01&apos;s action.
+          Read-only — recording, verifying and following up on KYC documents is an operations action.
         </p>
       )}
 
@@ -99,12 +99,12 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
       {progress?.next ? (
         <NextStepCallout
           next={progress.next}
-          done={allSettled ? "KYC complete — every item is verified, recorded, or not applicable, so GATE-01 no longer holds the agreement." : undefined}
+          done={allSettled ? "KYC complete — every item is verified, recorded, or not applicable, so KYC no longer holds up the agreement." : undefined}
         />
       ) : (
         allSettled && (
           <StepComplete title="KYC complete — this step is done.">
-            Every document is verified or recorded as not applicable, so GATE-01 no longer holds the
+            Every document is verified or recorded as not applicable, so KYC no longer holds up the
             agreement.
           </StepComplete>
         )

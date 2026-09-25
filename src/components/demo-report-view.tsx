@@ -89,7 +89,7 @@ export function DemoReportView({
       <Card className="p-5">
         <CardTitle>Per circuit</CardTitle>
         <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
-          Each metered circuit carries its own benchmark and stands in for every light of its type (CON-11).
+          Each metered circuit carries its own benchmark and stands in for every light of its type.
         </p>
         <div className="-mx-3 overflow-x-auto">
           <table className="tbl tbl-compact">

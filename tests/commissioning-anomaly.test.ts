@@ -25,13 +25,13 @@ describe("CON-20 as the post-install day rule", () => {
   it("flags a day that underperforms the band", () => {
     const v = judgePostInstallDay(12, baseline); // 50.8% savings
     expect(v.anomaly).toBe(true);
-    expect(v).toHaveProperty("detail", expect.stringMatching(/below CON-20's 60-80% band/));
+    expect(v).toHaveProperty("detail", expect.stringMatching(/below the 60-80% band/));
   });
 
   it("flags a day that is implausibly good", () => {
     const v = judgePostInstallDay(2, baseline); // 91.8% savings
     expect(v.anomaly).toBe(true);
-    expect(v).toHaveProperty("detail", expect.stringMatching(/above CON-20's 60-80% band/));
+    expect(v).toHaveProperty("detail", expect.stringMatching(/above the 60-80% band/));
   });
 
   it("subsumes the data-quality cases the ±5% rule used to catch", () => {

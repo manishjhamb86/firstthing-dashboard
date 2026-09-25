@@ -119,7 +119,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
         backHref={`/admin/pipeline/${pipeline.id}`}
         title="Offer"
         chip={status ? <StatusChip tone={status.tone}>{status.label}</StatusChip> : undefined}
-        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · priced from the demo numbers (CON-11)`}
+        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · priced from the demo numbers`}
       />
 
       {!current ? (
@@ -128,7 +128,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           <EmptyState title="No offer yet">
             {demoReport
               ? "Generate one from the confirmed demo numbers — the commercial terms stay editable."
-              : "There's no demo report yet. You can still issue an offer on the demo-skip path with a negotiated benchmark (CON-25)."}
+              : "There's no demo report yet. You can still issue an offer on the demo-skip path with a negotiated benchmark."}
           </EmptyState>
           <Card className="p-6">
             <CardTitle>Generate an offer</CardTitle>
@@ -266,9 +266,9 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 className="mt-4 rounded-[var(--r-md)] border p-3 text-sm"
                 style={{ borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" }}
               >
-                Demo-skip path (CON-25): the savings <strong>percentage</strong> is agreement-derived, not
+                Demo-skip path: the savings <strong>percentage</strong> is agreement-derived, not
                 measured. Consumption is still metered and monitored against the first post-install month —
-                INV-02&apos;s narrowed exception, stated on the offer itself.
+                the narrowed exception, stated on the offer itself.
               </p>
             )}
 
@@ -383,7 +383,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                         </span>{" "}
                         represented lights, but the site survey counted{" "}
                         <span className="num">{inv!.toLocaleString("en-IN")}</span> of this type
-                        across the society. The fee is computed on the represented figure (CON-11).
+                        across the society. The fee is computed on the represented figure.
                       </p>
                     )}
                     {mayCorrect && live && !corrected && (
@@ -415,7 +415,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 <CardTitle>Record the society&apos;s response</CardTitle>
                 <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
                   For a decision relayed by phone. The society can also accept in its own portal, where only the
-                  office-bearer may do so (GATE-04).
+                  office-bearer may do so.
                 </p>
                 <RecordOutcomeControls pipelineId={pipeline.id} offerId={current.id} />
               </Card>

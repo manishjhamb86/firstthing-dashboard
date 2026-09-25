@@ -67,7 +67,7 @@ export function refuseRepresentedCount(
     return `Represented count cannot be below the ${metered} lights actually on the circuit.`;
   }
   if (represented === metered) {
-    return `The represented count is every light of this type across the society, so it is always more than the ${metered} on the metered circuit — the fee is computed by extrapolating from this circuit to that population (CON-11). Equal figures would price the offer as though the demo circuit were the whole society.`;
+    return `The represented count is every light of this type across the society, so it is always more than the ${metered} on the metered circuit — the fee is computed by extrapolating from this circuit to that population. Equal figures would price the offer as though the demo circuit were the whole society.`;
   }
   return null;
 }

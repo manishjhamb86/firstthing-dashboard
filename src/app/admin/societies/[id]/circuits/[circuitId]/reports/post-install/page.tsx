@@ -54,10 +54,10 @@ export default async function PostInstallReportPage({
     summary.savingsPct === null
       ? "No savings figure can be computed yet."
       : circuit.benchmarkSavingsPct !== null
-        ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in (CON-20). The confirmed benchmark of ${circuit.benchmarkSavingsPct.toFixed(1)}% is fixed for the contract term.`
+        ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in. The confirmed benchmark of ${circuit.benchmarkSavingsPct.toFixed(1)}% is fixed for the contract term.`
         : summary.savingsPct >= BENCHMARK_MIN_PCT && summary.savingsPct <= BENCHMARK_MAX_PCT
-          ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in (CON-20).`
-          : `Outside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in (CON-20) — routed to review rather than confirmed; no benchmark is written until that review resolves.`;
+          ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in.`
+          : `Outside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in — routed to review rather than confirmed; no benchmark is written until that review resolves.`;
 
   return (
     <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
@@ -175,7 +175,7 @@ export default async function PostInstallReportPage({
                 {" "}
                 After recorded light-count changes, the baseline in force is{" "}
                 <strong className="num text-[var(--text)]">{effBaselineNow.toFixed(2)}</strong> kWh/day —
-                each day below is judged against the baseline in force on that day (INV-07).
+                each day below is judged against the baseline in force on that day.
               </>
             )}
           </p>
@@ -224,7 +224,7 @@ export default async function PostInstallReportPage({
         <footer className="report-footer">
           <span>
             FirsThing · every figure traces to stored daily readings, the recorded inventory, and
-            the baseline in force on each day (INV-02, INV-07).
+            the baseline in force on each day.
           </span>
           <span className="num report-colophon">
             {society.name} · {circuit.location || circuit.lightType} · post-installation

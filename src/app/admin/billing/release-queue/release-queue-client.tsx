@@ -174,7 +174,7 @@ export function ReleaseQueueClient({ rows }: { rows: QueueRow[] }) {
       >
         <p className="text-sm text-[var(--text-muted)]">
           Each month becomes visible to its society, with its invoice, immediately. A month already
-          paid starts no arrears clock; an unpaid one keys CON-13 off its own due date from now.
+          paid starts no arrears clock; an unpaid one starts its overdue clock from its own due date.
         </p>
       </Modal>
     </>

@@ -89,7 +89,7 @@ export default async function MonthlyReportPage({
             <p className="text-sm">
               No monitoring month has been recorded for this circuit yet. Monthly readings start
               after the installation is signed off — billing begins the day after the completion
-              certificate (CON-22), so there is nothing to report against until then.
+              certificate, so there is nothing to report against until then.
             </p>
             <p className="mt-4 text-sm no-print">
               <Link href={circuitHref} className="underline">

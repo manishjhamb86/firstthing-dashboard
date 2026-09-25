@@ -99,7 +99,7 @@ export function LoadValidationForm({
       {failed && canOverride && (
         <div className="pt-4 border-t border-[var(--border-subtle)] space-y-3">
           <p className="text-xs text-[var(--text-muted)]">
-            PER-01 override (e.g. a known meter-display quirk) — recorded on the circuit&apos;s record, not
+            Operations override (e.g. a known meter-display quirk) — recorded on the circuit&apos;s record, not
             silently accepted as a normal pass.
           </p>
           <Field label="Override reason" htmlFor="lv-override">
@@ -122,7 +122,7 @@ export function LoadValidationForm({
         </div>
       )}
       {failed && !canOverride && (
-        <p className="text-xs text-[var(--text-muted)]">Only PER-01 can override a persistently failed validation.</p>
+        <p className="text-xs text-[var(--text-muted)]">Only operations can override a persistently failed validation.</p>
       )}
     </Card>
   );

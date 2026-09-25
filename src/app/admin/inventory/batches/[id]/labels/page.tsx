@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import QRCode from "qrcode";
+import { labelLink } from "@/lib/inventory";
+
+/**
+ * The QR holds a link, so any phone's camera opens the unit (2026-09-25).
+ * Labels are physical and outlive a deployment, so the link's base is its own
+ * setting — set LABEL_BASE_URL to the production domain before printing
+ * labels that go on lights; it falls back to this deployment's own address.
+ */
+const LABEL_BASE = process.env.LABEL_BASE_URL ?? process.env.AUTH_URL ?? "https://stage.firsthing.earth";
 import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
@@ -29,7 +38,7 @@ export default async function LabelsPage({ params, searchParams }: { params: Pro
   const to = Math.min(total, Number(sp.to) || Math.min(total, from + PAGE - 1));
   const units = await db.inventoryUnit.findMany({ where: { batchId: id }, orderBy: { code: "asc" }, skip: from - 1, take: Math.max(0, to - from + 1), select: { code: true } });
   const labels = await Promise.all(
-    units.map(async (u) => ({ code: u.code, svg: await QRCode.toString(u.code, { type: "svg", errorCorrectionLevel: "M", margin: 0 }) })),
+    units.map(async (u) => ({ code: u.code, svg: await QRCode.toString(labelLink(LABEL_BASE, u.code), { type: "svg", errorCorrectionLevel: "M", margin: 0 }) })),
   );
 
   return (

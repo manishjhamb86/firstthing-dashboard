@@ -48,7 +48,7 @@ export function RepresentedCountForm({
     <div className="space-y-2.5 text-sm max-w-md">
       <p className="text-xs text-[var(--text-muted)]">
         Every light of this type across the society — the population this circuit&apos;s benchmark is
-        extrapolated to. The monthly fee is computed on this figure (CON-11), not on the{" "}
+        extrapolated to. The monthly fee is computed on this figure, not on the{" "}
         <span className="num">{meteredLightCount.toLocaleString("en-IN")}</span> lights actually
         metered.
         {inventoryCount !== null && (

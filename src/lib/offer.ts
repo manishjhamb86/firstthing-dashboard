@@ -90,10 +90,10 @@ export type OfferBlocker =
 
 export const OFFER_BLOCKER_MESSAGE: Record<OfferBlocker, string> = {
   "no-demo-report":
-    "There's no confirmed demo report to price this offer from. Generate it first, or use the demo-skip path with a negotiated benchmark (CON-25).",
+    "There's no confirmed demo report to price this offer from. Generate it first, or use the demo-skip path with a negotiated benchmark.",
   "no-benchmark-pct":
-    "A negotiated-fixed offer needs the agreed benchmark percentage, and CON-20 puts it between 60% and 80%.",
-  "invalid-tolerance": "Set a tolerance band — CON-01a allows ±5% or ±10%.",
+    "A negotiated-fixed offer needs the agreed benchmark percentage, and it must be between 60% and 80%.",
+  "invalid-tolerance": "Set a tolerance band — the choices are ±5% or ±10%.",
   "invalid-revenue-share": "Set the revenue-share split as the society's share, between 1% and 99%.",
   "invalid-lump-sum":
     "Set the flat monthly fee this offer is priced at — a lump-sum deal is billed on that figure, so it cannot be left open.",

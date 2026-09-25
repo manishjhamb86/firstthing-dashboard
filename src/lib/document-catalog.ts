@@ -71,7 +71,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     id: "meterReadings",
     label: "Meter reading export",
     operation:
-      "Parsed into daily readings and opened for row-by-row review against the circuit — nothing is stored until you accept it (CON-45).",
+      "Parsed into daily readings and opened for row-by-row review against the circuit — nothing is stored until you accept it.",
     context: "circuit",
     needsPeriod: true,
     periodHint: "The month these readings start.",
@@ -194,7 +194,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     id: id as DocumentTypeId,
     label,
     operation:
-      "Filed against the society with its period, and retrievable from the society's documents. Not fed into any calculation — a scanned report is not evidence a figure can be recomputed from (INV-02).",
+      "Filed against the society with its period, and retrievable from the society's documents. Not fed into any calculation — a scanned report is not evidence a figure can be recomputed from.",
     context: "society" as const,
     needsPeriod: true,
     periodHint: HISTORICAL_PERIOD_HINT[id as DocumentTypeId] ?? "The month this document belongs to.",

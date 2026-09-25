@@ -184,7 +184,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
           value={line.pricingBasis === "fixed" ? "As contracted" : "Actual metered"}
           detail={
             line.pricingBasis === "fixed"
-              ? "month 1 never adjusts (CON-01c)"
+              ? "month 1 never adjusts"
               : "a sustained, uncorrected breach"
           }
         />
@@ -289,8 +289,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
           )}
           <p className="text-[13px] text-[var(--text-muted)] mt-3">
             Owner: {review.owner?.name ?? review.owner?.email ?? "—"} ·{" "}
-            {formatDate(review.decidedAt)} — INV-03 requires both an owner and a
-            classification on any bill-changing decision.
+            {formatDate(review.decidedAt)} — both an owner and a classification are required on any bill-changing decision.
           </p>
         </Card>
       )}

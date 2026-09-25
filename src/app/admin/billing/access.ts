@@ -69,7 +69,7 @@ export async function requireAccountant(): Promise<AccessGate> {
   if (!actor) return refuse("Your session is no longer valid. Sign in again.", null, "accountant");
   if (!actor.permissions.includes("release_billing")) {
     return refuse(
-      "Releasing a month to a society is the accountant's act (CON-33). Ops permissions do not confer it.",
+      "Releasing a month to a society is the accountant's act. Ops permissions do not confer it.",
       actor,
       "accountant",
     );

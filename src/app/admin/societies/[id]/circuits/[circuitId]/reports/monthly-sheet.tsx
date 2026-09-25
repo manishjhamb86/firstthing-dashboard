@@ -214,7 +214,7 @@ export function MonthlySavingsSheet({ s }: { s: SavingsReportSnapshot }) {
     <footer className="report-footer">
       <span>
         FirsThing · every figure traces to stored daily readings and the baseline in force on
-        each day (INV-02, INV-07).
+        each day.
       </span>
       {/* Only on paper: a printed page has left the screen that knew
           which circuit it was. */}

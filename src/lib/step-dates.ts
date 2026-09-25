@@ -86,7 +86,7 @@ export function refuseReplacementMove(input: {
   if (n === 0) return null;
   const days = `${n} stored reading${n === 1 ? "" : "s"} would move between the pre- and post-install sets`;
   if (input.benchmarkFromWindow) {
-    return `${days}, and the benchmark was computed from those sets — it is fixed for the term (CON-20). Pick a date on the same side of every stored reading.`;
+    return `${days}, and the benchmark was computed from those sets — it is fixed for the term. Pick a date on the same side of every stored reading.`;
   }
   if (input.baselineSettled) {
     return `${days}, and the baseline was averaged from the pre-install set. Pick a date on the same side of every stored reading.`;

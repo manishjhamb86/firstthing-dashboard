@@ -523,7 +523,7 @@ describe("live monitoring is gated on the installation, not the benchmark", () =
       installationCertificateSigned: false,
     });
     expect(why).toContain("full installation");
-    expect(why).toContain("CON-22");
+    expect(why).toContain("completion certificate");
   });
 
   it("is live only when both hold", () => {

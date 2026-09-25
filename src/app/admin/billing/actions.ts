@@ -108,7 +108,7 @@ export async function runCalculation(input: {
     });
     const certificate = project?.certificate ?? null;
     if (!certificate) {
-      windowNotes.push(`${label}: no completion certificate — its billing has not started (CON-22).`);
+      windowNotes.push(`${label}: no completion certificate — its billing has not started.`);
       continue;
     }
     // FEAT-051-AC-2 — before a part's billing starts it contributes nothing,
@@ -213,7 +213,7 @@ export async function runCalculation(input: {
   // which is a deliberate act, not something a routine re-run does silently.
   if (existing?.status === "released") {
     return {
-      error: "This month is released and cannot be recalculated. Issue a correction version instead (GATE-02).",
+      error: "This month is released and cannot be recalculated. Issue a correction version instead.",
     };
   }
 
@@ -245,7 +245,7 @@ export async function runCalculation(input: {
     });
     if (openAnomalies > 0) {
       blockers.push(
-        `${circuit.lightType} has ${openAnomalies} unresolved reading flag${openAnomalies === 1 ? "" : "s"} (INV-09).`,
+        `${circuit.lightType} has ${openAnomalies} unresolved reading flag${openAnomalies === 1 ? "" : "s"}.`,
       );
       continue;
     }
@@ -270,7 +270,7 @@ export async function runCalculation(input: {
       });
       if (!accepted) {
         blockers.push(
-          `${circuit.lightType} has ${readings.length} of ${daysInMonth} days — below CON-12's ${COVERAGE_FLOOR_DAYS}-day floor and not yet accepted.`,
+          `${circuit.lightType} has ${readings.length} of ${daysInMonth} days — below the ${COVERAGE_FLOOR_DAYS}-day floor and not yet accepted.`,
         );
         continue;
       }

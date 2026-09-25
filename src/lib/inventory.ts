@@ -155,3 +155,34 @@ export function isStockCode(code: string): boolean {
 export function labelLink(base: string, code: string): string {
   return `${base.replace(/\/$/, "")}/i/${code}`;
 }
+
+// ---- stock value (2026-09-25) -----------------------------------------------
+export type Holding = { locationId: string; quantity: number; unitCost: number | null };
+export type LocationValue = { value: number; uncosted: number };
+
+/**
+ * What each location holds, valued at the cost it was bought at (the batch's
+ * cost per piece or metre, before GST). A holding whose batch has no cost is
+ * counted in `uncosted`, never valued at zero — a total that silently treats
+ * unknown stock as free understates what is on the shelves.
+ */
+export function valueHoldings(rows: Holding[]): Map<string, LocationValue> {
+  const out = new Map<string, LocationValue>();
+  for (const r of rows) {
+    if (!(r.quantity > 0)) continue;
+    const v = out.get(r.locationId) ?? { value: 0, uncosted: 0 };
+    if (r.unitCost === null) v.uncosted += r.quantity;
+    else v.value += r.quantity * r.unitCost;
+    out.set(r.locationId, v);
+  }
+  for (const v of out.values()) v.value = Math.round(v.value * 100) / 100;
+  return out;
+}
+
+/** Why a cost cannot be stored as entered, or null. Empty means "not known". */
+export function refuseUnitCost(cost: number | null): string | null {
+  if (cost === null) return null;
+  if (!Number.isFinite(cost) || cost < 0) return "The cost must be a positive amount in rupees.";
+  if (cost > 10_000_000) return "That cost looks wrong — it is per piece or per metre, not for the whole delivery.";
+  return null;
+}

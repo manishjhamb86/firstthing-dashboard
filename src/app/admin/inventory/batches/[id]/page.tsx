@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BatchCost } from "./batch-cost";
 import { notFound } from "next/navigation";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -138,20 +139,21 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
           <Card className="p-5 text-[13.5px]">
             <CardTitle>Batch details</CardTitle>
             <dl className="space-y-2">
-              {[
+              {([
                 ["Supplier", batch.purchase.supplier.name],
                 ["Supplier invoice", `${batch.purchase.invoiceNumber} · ${formatDate(batch.purchase.invoiceDate)}`],
                 ["Supplier's lot", batch.supplierLot ?? "—"],
                 ["Manufactured", batch.manufacturedOn ? formatDate(batch.manufacturedOn) : "—"],
-                ["Cost", batch.unitCost !== null ? `₹${batch.unitCost} per ${batch.itemType.unit === "m" ? "metre" : "piece"}` : "—"],
+                ["Cost", <BatchCost key="cost" batchId={batch.id} unitCost={batch.unitCost} unit={batch.itemType.unit} />],
+                ["Value of the batch", batch.unitCost !== null ? `₹${(batch.unitCost * batch.quantity).toLocaleString("en-IN", { maximumFractionDigits: 2 })} for ${batch.quantity.toLocaleString("en-IN")} received` : "—"],
                 [
                   "Warranty",
                   batch.warrantyMonths
                     ? `${batch.warrantyMonths} months from ${batch.warrantyBasis === "install" ? "installation" : "the invoice date"}`
                     : "None stated",
                 ],
-              ].map(([k, v]) => (
-                <div key={k}>
+              ] as Array<[string, React.ReactNode]>).map(([k, v]) => (
+                <div key={String(k)}>
                   <dt className="lbl">{k}</dt>
                   <dd>{v}</dd>
                 </div>

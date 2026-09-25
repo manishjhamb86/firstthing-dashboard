@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
+import { valueHoldings } from "@/lib/inventory";
 import { warrantyView } from "@/lib/inventory-warranty-view";
 import { requireInventoryPage } from "./access";
 
@@ -27,8 +28,8 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const [items, locations, unitGroups, qtyMoves, batches, statusCounts] = await Promise.all([
     db.inventoryItemType.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }], select: { id: true, name: true, unit: true, tracking: true } }),
     db.stockLocation.findMany({ where: { active: true }, orderBy: [{ kind: "asc" }, { name: "asc" }], select: { id: true, name: true, kind: true } }),
-    db.inventoryUnit.groupBy({ by: ["locationId", "itemTypeId"], where: { locationId: { not: null } }, _count: { _all: true } }),
-    db.stockMovement.findMany({ where: { unitId: null }, select: { itemTypeId: true, quantity: true, fromLocationId: true, toLocationId: true } }),
+    db.inventoryUnit.groupBy({ by: ["locationId", "itemTypeId", "batchId"], where: { locationId: { not: null } }, _count: { _all: true } }),
+    db.stockMovement.findMany({ where: { unitId: null }, select: { itemTypeId: true, batchId: true, quantity: true, fromLocationId: true, toLocationId: true } }),
     db.inventoryBatch.findMany({
       orderBy: { createdAt: "desc" },
       take: 12,
@@ -39,11 +40,36 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
 
   // What is where: serial units counted, quantities summed from the ledger.
   const cell = new Map<string, number>();
-  for (const g of unitGroups) cell.set(`${g.locationId}|${g.itemTypeId}`, g._count._all);
+  for (const g of unitGroups) cell.set(`${g.locationId}|${g.itemTypeId}`, (cell.get(`${g.locationId}|${g.itemTypeId}`) ?? 0) + g._count._all);
   for (const m of qtyMoves) {
     if (m.toLocationId) cell.set(`${m.toLocationId}|${m.itemTypeId}`, (cell.get(`${m.toLocationId}|${m.itemTypeId}`) ?? 0) + m.quantity);
     if (m.fromLocationId) cell.set(`${m.fromLocationId}|${m.itemTypeId}`, (cell.get(`${m.fromLocationId}|${m.itemTypeId}`) ?? 0) - m.quantity);
   }
+  // Stock value at cost (2026-09-25): the same holdings, per batch, priced at
+  // the batch's cost. Units that left (scrapped, lost, returned to supplier)
+  // have no location and so carry no value.
+  const costs = new Map(
+    (await db.inventoryBatch.findMany({ select: { id: true, unitCost: true } })).map((b) => [b.id, b.unitCost]),
+  );
+  const perBatch = new Map<string, number>();
+  for (const g of unitGroups) perBatch.set(`${g.locationId}|${g.batchId}`, g._count._all);
+  for (const m of qtyMoves) {
+    if (!m.batchId) continue;
+    if (m.toLocationId) perBatch.set(`${m.toLocationId}|${m.batchId}`, (perBatch.get(`${m.toLocationId}|${m.batchId}`) ?? 0) + m.quantity);
+    if (m.fromLocationId) perBatch.set(`${m.fromLocationId}|${m.batchId}`, (perBatch.get(`${m.fromLocationId}|${m.batchId}`) ?? 0) - m.quantity);
+  }
+  const values = valueHoldings(
+    [...perBatch.entries()].map(([k, quantity]) => {
+      const [locationId, batchId] = k.split("|");
+      return { locationId, quantity, unitCost: costs.get(batchId) ?? null };
+    }),
+  );
+  const officeIds = new Set(locations.filter((l) => l.kind === "office").map((l) => l.id));
+  const officeValue = [...values.entries()].filter(([id]) => officeIds.has(id)).reduce((n, [, v]) => n + v.value, 0);
+  const totalValue = [...values.values()].reduce((n, v) => n + v.value, 0);
+  const uncosted = [...values.values()].reduce((n, v) => n + v.uncosted, 0);
+  const rupees = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+
   const usedItems = items.filter((i) => locations.some((l) => (cell.get(`${l.id}|${i.id}`) ?? 0) > 0));
   const usedLocations = locations.filter((l) => usedItems.some((i) => (cell.get(`${l.id}|${i.id}`) ?? 0) > 0));
   const count = (s: string) => statusCounts.find((x) => x.status === s)?._count._all ?? 0;
@@ -84,6 +110,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <Stat label="In stock" value={count("in_stock").toLocaleString("en-IN")} detail="units at offices" />
         <Stat label="Deployed" value={count("deployed").toLocaleString("en-IN")} detail="units at societies" />
         <Stat label="Faulty" value={count("faulty").toLocaleString("en-IN")} detail="awaiting repair or return" />
+        <Stat label="Stock value" value={rupees(officeValue)} detail={uncosted > 0 ? `at cost, held at offices · ${uncosted.toLocaleString("en-IN")} without a cost` : "at cost, held at offices"} />
         <Stat label="Warranty ending ≤ 60 days" value={expiring.reduce((n, e) => n + e.b._count.units, 0).toLocaleString("en-IN")} detail="units still in use" />
       </StatRow>
 
@@ -107,6 +134,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         {i.name}
                       </th>
                     ))}
+                    <th className="text-right">Value at cost</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -123,8 +151,23 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                           </td>
                         );
                       })}
+                      <td className="num text-right font-semibold">
+                        {rupees(values.get(l.id)?.value ?? 0)}
+                        {(values.get(l.id)?.uncosted ?? 0) > 0 && (
+                          <span className="block text-[11px] font-normal" style={{ color: "var(--warn-fg)" }}>
+                            + {values.get(l.id)!.uncosted.toLocaleString("en-IN")} without a cost
+                          </span>
+                        )}
+                      </td>
                     </tr>
                   ))}
+                  <tr>
+                    <td className="font-semibold">Total</td>
+                    {usedItems.map((i) => (
+                      <td key={i.id} />
+                    ))}
+                    <td className="num text-right font-bold">{rupees(totalValue)}</td>
+                  </tr>
                 </tbody>
               </table>
             </div>

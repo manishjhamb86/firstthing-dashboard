@@ -151,7 +151,7 @@ export function ReceiveForm({
                   <Field label={`Quantity${item ? ` (${item.unit})` : ""}`} htmlFor={`rl-qty-${i}`}>
                     <input id={`rl-qty-${i}`} type="number" step={item?.tracking === "length" ? "any" : "1"} className="field num" value={l.quantity} onChange={(e) => setLine(i, { quantity: e.target.value })} />
                   </Field>
-                  <Field label={`Cost per ${item?.unit === "m" ? "metre" : "piece"} (₹)`} htmlFor={`rl-cost-${i}`}>
+                  <Field label={`Cost per ${item?.unit === "m" ? "metre" : "piece"} (₹)`} htmlFor={`rl-cost-${i}`} hint="As on the supplier's invoice, before GST. Values the stock.">
                     <input id={`rl-cost-${i}`} type="number" step="any" className="field num" value={l.unitCost} onChange={(e) => setLine(i, { unitCost: e.target.value })} />
                   </Field>
                   <Field label="Supplier's lot / batch no." htmlFor={`rl-lot-${i}`}>

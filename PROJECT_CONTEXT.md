@@ -7402,3 +7402,36 @@ The edit was made with a TypeScript-AST pass over JSX text and string literals o
 could not be touched. `tests/no-internal-codes.test.ts` walks every source file the same way and
 fails if a code reaches user-facing text again. Text already stored in the database from before —
 for example an old review's closing note — keeps its wording.
+
+## Stock value at cost (2026-09-25) — user-asked
+
+Cost per piece or metre was already captured at receiving; now it values the stock.
+
+**Where the value appears:**
+- The Stock overview's "What is where" table has a **Value at cost** column for each office and
+  site, plus a total row.
+- A **Stock value** tile shows what is held at offices.
+- Stock from a batch with no cost is counted and named ("4 without a cost"), never valued at zero.
+- A batch's cost can be added or corrected on its page (`setBatchCost`, logged). The batch page
+  also shows the batch's total value.
+
+**Rules.** `valueHoldings()` and `refuseUnitCost()` in `src/lib/inventory.ts` are pure, with
+2 unit cases.
+- The cost is before GST, as on the supplier's invoice; the field's hint says so.
+- A negative or absurd cost is refused on the server.
+- Units that left — scrapped, lost, or returned to the supplier — have no location and carry no
+  value.
+
+**Verified** in the browser, 9/9, against hand-worked figures:
+
+| Check | Result |
+| --- | --- |
+| Office | ₹6,383 = 15 × ₹185.50 + 300 m × ₹12, with 4 SIMs named as without a cost |
+| Ace City | ₹928 = 5 deployed × ₹185.50 |
+| After adding the SIM cost | ₹7,383 |
+| Negative cost at receiving | refused, nothing written |
+
+**Deploy note, same day:** the stage build ran out of memory type-checking under the 1,200 MB
+build heap. The failed build left `.next` without a `BUILD_ID`, so the site ran on the old
+in-memory build until the next deploy succeeded. `deploy-stage.sh` now uses 1,600 MB, which fits
+the 1.9 GB box with its swap.

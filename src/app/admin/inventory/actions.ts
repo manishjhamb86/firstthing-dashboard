@@ -23,6 +23,7 @@ import {
   unitCode,
   type MoveKind,
   type UnitStatus,
+  refuseUnitCost,
 } from "@/lib/inventory";
 
 type Result<T = object> = ({ error: string } & Partial<T>) | ({ error?: undefined } & T);
@@ -182,6 +183,8 @@ export async function receiveDelivery(input: {
     if (!t) return { error: `Line ${i + 1}: choose the item.` };
     if (!(l.quantity > 0)) return { error: `Line ${i + 1}: enter how many ${t.unit} arrived.` };
     if (t.tracking !== "length" && !Number.isInteger(l.quantity)) return { error: `Line ${i + 1}: ${t.name} is counted in whole pieces.` };
+    const costRefusal = refuseUnitCost(l.unitCost);
+    if (costRefusal) return { error: `Line ${i + 1}: ${costRefusal}` };
     if (t.tracking === "serial" && l.quantity > 5000) return { error: `Line ${i + 1}: split a delivery of more than 5,000 units into batches.` };
     const serials = l.serialNumbers.map((s) => s.trim()).filter(Boolean);
     if (serials.length > 0 && serials.length !== l.quantity)
@@ -442,4 +445,23 @@ export async function lookupScanned(codes: string[]): Promise<Array<{ code: stri
     const u = by.get(code);
     return u ? { code, found: true, item: u.itemType.name, status: u.status, location: u.location?.name ?? null } : { code, found: false };
   });
+}
+
+/**
+ * Add or correct a batch's cost per piece or metre (2026-09-25) — for stock
+ * received before cost was known, or a mistyped rate. The cost is what values
+ * the stock; it never changes a count or a movement.
+ */
+export async function setBatchCost(batchId: string, unitCost: number | null): Promise<Result> {
+  const admin = await requireStockStaff();
+  if (!admin) return { error: REFUSED };
+  const refusal = refuseUnitCost(unitCost);
+  if (refusal) return { error: refusal };
+  const b = await db.inventoryBatch.findUnique({ where: { id: batchId }, select: { unitCost: true, code: true } });
+  if (!b) return { error: "That batch no longer exists." };
+  await db.inventoryBatch.update({ where: { id: batchId }, data: { unitCost } });
+  logger.info("inventory.batch_cost_set", { actorId: admin.id, batchId, code: b.code, from: b.unitCost, to: unitCost });
+  revalidatePath("/admin/inventory");
+  revalidatePath(`/admin/inventory/batches/${batchId}`);
+  return {};
 }

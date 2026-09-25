@@ -81,3 +81,26 @@ describe("scanning", () => {
   });
   it("builds the printed link", () => expect(labelLink("https://firsthing.earth/", "B2609-001-00042")).toBe("https://firsthing.earth/i/B2609-001-00042"));
 });
+
+import { refuseUnitCost, valueHoldings } from "@/lib/inventory";
+
+describe("stock value", () => {
+  it("values each location at cost, and counts what has no cost instead of treating it as free", () => {
+    const v = valueHoldings([
+      { locationId: "off", quantity: 20, unitCost: 185.5 },
+      { locationId: "off", quantity: 120, unitCost: 12 },
+      { locationId: "off", quantity: 5, unitCost: null },
+      { locationId: "ace", quantity: 5, unitCost: 185.5 },
+      { locationId: "ace", quantity: 0, unitCost: 99 },
+    ]);
+    expect(v.get("off")).toEqual({ value: 20 * 185.5 + 120 * 12, uncosted: 5 });
+    expect(v.get("ace")).toEqual({ value: 927.5, uncosted: 0 });
+  });
+  it("refuses a negative or absurd cost; empty means not known", () => {
+    expect(refuseUnitCost(null)).toBeNull();
+    expect(refuseUnitCost(0)).toBeNull();
+    expect(refuseUnitCost(-1)).toMatch(/positive/);
+    expect(refuseUnitCost(Number.NaN)).toMatch(/positive/);
+    expect(refuseUnitCost(2e7)).toMatch(/per piece/);
+  });
+});

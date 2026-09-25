@@ -1528,9 +1528,9 @@ textarea.field {
 
 /* ---- the letterhead (2026-09-25) ----------------------------------------
  * Every system-generated document is printed on company paper: logo and
- * name at the head, the contact line at the foot, on every page — and
- * NOTHING of the browser's own (no date, time, title or URL). See
- * src/components/letterhead.tsx for why each rule below is load-bearing.
+ * name at the head, the contact line at the foot — and NOTHING of the
+ * browser's own (no date, time, title or URL). See
+ * src/components/letterhead.tsx for why the head and foot are in flow.
  */
 .letterhead {
   background: var(--surface);
@@ -1544,6 +1544,15 @@ textarea.field {
   border: none;
   border-radius: 0;
   box-shadow: none;
+}
+.lh-frame,
+.lh-frame > thead,
+.lh-frame > tbody,
+.lh-frame > tfoot,
+.lh-frame tr,
+.lh-frame > * > tr > td {
+  display: block;
+  width: 100%;
 }
 .lh-head {
   display: flex;
@@ -1578,17 +1587,6 @@ textarea.field {
 .lh-foot-line {
   font-weight: 600;
 }
-.lh-frame,
-.lh-frame > tbody,
-.lh-frame > tbody > tr,
-.lh-frame > tbody > tr > td {
-  display: block;
-  width: 100%;
-}
-.lh-frame > thead,
-.lh-frame > tfoot {
-  display: none;
-}
 @media (max-width: 640px) {
   .lh-head {
     padding: 18px 16px 14px;
@@ -1616,49 +1614,6 @@ textarea.field {
     overflow: visible;
     background: #fff !important;
   }
-  .lh-head,
-  .lh-foot {
-    position: fixed;
-    left: 0;
-    right: 0;
-    background: #fff;
-    color: #000;
-  }
-  .lh-head {
-    top: 0;
-    height: 24mm;
-    padding: 8mm 14mm 0;
-    border-bottom: none;
-    flex-wrap: nowrap;
-  }
-  .lh-head::after {
-    content: "";
-    position: absolute;
-    left: 14mm;
-    right: 14mm;
-    bottom: 2mm;
-    border-bottom: 1.5px solid #000;
-  }
-  .lh-id,
-  .lh-brand {
-    color: #000 !important;
-    text-align: right;
-  }
-  .lh-foot {
-    bottom: 0;
-    height: 13mm;
-    padding: 3mm 14mm 0;
-    border-top: none;
-    font-size: 8.5pt;
-  }
-  .lh-foot::before {
-    content: "";
-    position: absolute;
-    left: 14mm;
-    right: 14mm;
-    top: 0;
-    border-top: 1px solid #999;
-  }
   .lh-frame {
     display: table;
     width: 100%;
@@ -1673,47 +1628,80 @@ textarea.field {
   .lh-frame > tbody {
     display: table-row-group;
   }
-  .lh-frame > tbody > tr {
+  .lh-frame tr {
     display: table-row;
+    break-inside: auto;
   }
-  .lh-frame > tbody > tr > td {
+  .lh-frame > * > tr > td {
     display: table-cell;
+    padding: 0 12mm;
   }
-  .lh-space-top {
-    height: 27mm;
+  .lh-head {
+    padding: 7mm 0 2.5mm;
+    margin-bottom: 3mm;
+    border-bottom: 1.5px solid #000;
+    flex-wrap: nowrap;
   }
-  .lh-space-bottom {
-    height: 15mm;
-  }
-  .lh-body {
-    padding: 0 14mm;
+  .lh-foot {
+    padding: 2mm 0 5mm;
+    margin-top: 2mm;
+    border-top: 1px solid #999;
+    color: #000;
+    font-size: 8pt;
   }
   .lh-logo {
-    height: 9mm;
+    height: 8mm;
+  }
+  .lh-id,
+  .lh-brand {
+    color: #000 !important;
+    text-align: right;
   }
   .lh-id {
-    font-size: 9pt;
+    font-size: 8.5pt;
   }
   .lh-brand {
-    font-size: 11pt;
+    font-size: 10.5pt;
   }
   .letterhead .report-sheet > section:not(.report-result) {
-    padding: 14px 0 4px !important;
+    padding: 12px 0 2px !important;
   }
   .letterhead .report-result {
-    margin-top: 12px;
+    margin-top: 10px;
     padding: 10px 14px !important;
   }
   .letterhead .report-footer {
-    padding-top: 8px;
+    padding-top: 6px;
     font-size: 8pt;
-    gap: 4px 12px;
+    gap: 2px 12px;
   }
-  /* The letterhead costs each page about 40mm; the day tables give some of
-     it back so a month still fits one sheet. */
+  /* The letterhead costs each page room; the day tables give some of it
+     back so a month still fits one sheet. */
   .letterhead .report-daily .tbl td,
-  .letterhead .report-daily .tbl thead th {
-    padding-top: 4px;
-    padding-bottom: 4px;
+  .letterhead .report-daily .tbl thead th,
+  .letterhead .report-sheet .tbl td,
+  .letterhead .report-sheet .tbl thead th {
+    padding-top: 3px;
+    padding-bottom: 3px;
+  }
+  .letterhead .report-sheet .tbl .chip {
+    padding-top: 0;
+    padding-bottom: 0;
+    line-height: 1.35;
+  }
+  .letterhead .report-masthead {
+    padding-bottom: 10px;
+  }
+  .letterhead .report-band {
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    line-height: 1.3;
+  }
+  .letterhead .report-facts > div,
+  .letterhead .report-facts > div:first-child {
+    padding: 6px 10px;
+  }
+  .letterhead .report-result {
+    gap: 6px 20px;
   }
 }

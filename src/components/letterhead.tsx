@@ -8,13 +8,15 @@ import { COMPANY } from "@/lib/company";
  * on screen as a sheet, and on EVERY printed page.
  *
  * Print mechanics, because each one is load-bearing:
- * - `@page { margin: 0 }` (globals.css) is what stops the browser printing its
- *   own header and footer — the date, the page title and the URL. Browsers
- *   draw those in the page margin, so with no margin there is nowhere to put them.
- * - The page margin is therefore rebuilt inside the document: the head and
- *   foot are `position: fixed`, which the browser repeats on every printed
- *   page, and the frame's <thead>/<tfoot> spacers (repeated per page by the
- *   table model) keep the content from running underneath them.
+ * - `@page letterhead { margin: 0 }` (globals.css) is what stops Chrome
+ *   printing its own date, title and URL — it draws them in the page margin,
+ *   so with no margin there is nowhere to put them.
+ * - The head and foot are the frame table's <thead>/<tfoot>, IN FLOW. A
+ *   `position: fixed` head/foot was tried first (2026-09-25) and Safari does
+ *   not repeat fixed elements on paper — the footer landed on a page of its
+ *   own (user-reported). A table header repeats on every page in Chrome and
+ *   Safari alike; Chrome repeats the footer too, Safari prints it once after
+ *   the content. Either way a one-page report is one page.
  */
 export function Letterhead({ children }: { children: ReactNode }) {
   const head = (
@@ -37,13 +39,10 @@ export function Letterhead({ children }: { children: ReactNode }) {
   );
   return (
     <div className="letterhead">
-      {head}
       <table className="lh-frame">
-        <thead aria-hidden>
+        <thead>
           <tr>
-            <td>
-              <div className="lh-space-top" />
-            </td>
+            <td>{head}</td>
           </tr>
         </thead>
         <tbody>
@@ -51,15 +50,12 @@ export function Letterhead({ children }: { children: ReactNode }) {
             <td className="lh-body">{children}</td>
           </tr>
         </tbody>
-        <tfoot aria-hidden>
+        <tfoot>
           <tr>
-            <td>
-              <div className="lh-space-bottom" />
-            </td>
+            <td>{foot}</td>
           </tr>
         </tfoot>
       </table>
-      {foot}
     </div>
   );
 }

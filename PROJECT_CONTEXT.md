@@ -7290,3 +7290,27 @@ pushed the monthly report onto a second sheet. It fits one A4 again because on p
 **Verified** by printing to PDF at a wide viewport and rasterising every page. The pre-install,
 monthly and agreement documents are each one page, the header and footer repeat on page 2 of the
 5-page post-install report, and there were no console errors.
+
+**Fix, same day (user-caught, Safari's print preview): a one-page report printed on two pages.**
+The first version made the head and foot `position: fixed`. Safari does not repeat fixed elements
+on paper, and it keeps its own page margins, so the footer landed on a page of its own.
+
+The head and foot are now the frame table's own `<thead>`/`<tfoot>`, in flow:
+- **Chrome** repeats both on every page.
+- **Safari** repeats the head and prints the foot once, after the content.
+
+The print spacing was also tightened so that every report still fits one A4 page even when the
+browser keeps a 12.7 mm margin on all sides:
+- the letterhead's own padding;
+- the band pills;
+- the fact tiles.
+
+**Verified** by printing each report twice, once with zero margins and once with Safari-like
+margins:
+
+| Report | Pages, both ways |
+| --- | --- |
+| Pre-installation | 1 |
+| Monthly | 1 |
+| Agreement | 1 |
+| Post-installation | 4 (was 5) |

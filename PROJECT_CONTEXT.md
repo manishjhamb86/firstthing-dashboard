@@ -7577,3 +7577,18 @@ periods box (`#demo-periods`).
 - the baseline became 24 and the benchmark 66.67% (1 − 8/24), from the readings instead of the
   paper demo;
 - the 213 monthly readings were untouched.
+
+## Stored readings are listed by demo period (2026-09-25) — user-asked
+
+"As the post installation period is clearly mentioned, the system should show only that period's
+readings in the post installation section, and similarly a pre installation section." The circuit
+page's stored-readings list still sorted days by the old rule (everything after the replacement =
+post-installation), so a set post period was ignored there while the figures honoured it.
+`readingSection()` (`src/lib/demo-window.ts`, 3 new unit cases on the user's own example) now
+decides the section: a set period is the only source of its section; everything else is listed
+under "Other readings — outside the demo periods"; the install and replacement days are listed
+nowhere. Without periods the old rule stands (and post-replacement days are monthly readings when
+the benchmark came from the demos or an override). "Clear & start over" reads the same rule, so it
+clears exactly what its section shows. The other-readings average carries no savings figure when
+it spans both sides of the replacement. Verified 8/8 in a browser: 5 / 7 / 13 days under pre /
+post / other for 11–15 and 18–24 Aug, the old rule back once periods are cleared.

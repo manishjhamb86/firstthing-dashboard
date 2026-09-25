@@ -83,3 +83,37 @@ export function windowDates(w: DemoWindowInput) {
     postDemoTo: w.postTo ? parse(w.postTo) : null,
   };
 }
+
+export type ReadingSection = "pre_install" | "post_install" | "monitoring";
+
+/**
+ * Which section of the circuit page's stored readings a day is listed under
+ * (2026-09-25, user-asked: "as the post installation period is clearly
+ * mentioned, the system should show only that period's readings in the post
+ * installation section, and similarly a pre installation section").
+ *
+ * A demo period, once set, is the ONLY source of its section — the same rule
+ * `demoPhase` applies to the figures, so the list and the baseline/benchmark
+ * cannot disagree. Everything else is "monitoring" (other readings). Null for
+ * the days no section shows: before the meter, and the replacement day itself.
+ *
+ * Without a post period, post-replacement days are the post-installation
+ * readings — unless the benchmark came from the demos or an agreed override,
+ * in which case they never fed it and are monthly readings. The page and
+ * "Clear & start over" both read this, so the button clears what it shows.
+ */
+export function readingSection(
+  date: Date,
+  c: DemoWindowFields & { benchmarkSavingsPct: number | null; benchmarkFromDemos: boolean },
+): ReadingSection | null {
+  if (!c.meterInstalledAt) return null;
+  const p = classifyDay(date, c.meterInstalledAt, c.lightReplacementDate);
+  if (p === "before_meter" || p === "replacement_day") return null;
+  const dp = demoPhase(date, c);
+  if (dp === "pre") return "pre_install";
+  if (dp === "post") {
+    if (!hasPostWindow(c) && c.benchmarkSavingsPct !== null && c.benchmarkFromDemos) return "monitoring";
+    return "post_install";
+  }
+  return "monitoring";
+}

@@ -10,6 +10,7 @@
 // renders is presentation, and the commit recomputes every row from the raw
 // file plus the stored mapping before writing a thing.
 
+import { readingSection } from "@/lib/demo-window";
 import { revalidatePath } from "next/cache";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -1026,11 +1027,10 @@ export async function discardStoredReadings(
   if (!circuit.meterInstalledAt) return { error: "That circuit has no recorded install date." };
 
   const benchmarkFromDemos = circuit.demos.length > 0 || circuit.benchmarkOverridePct !== null;
-  const matching = circuit.meterReadings.filter((r) => {
-    let p: string = classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate);
-    if (p === "post_install" && circuit.benchmarkSavingsPct !== null && benchmarkFromDemos) p = "monitoring";
-    return p === phase;
-  });
+  // The same rule the page lists them by, so the button clears what it shows.
+  const matching = circuit.meterReadings.filter(
+    (r) => readingSection(r.date, { ...circuit, benchmarkFromDemos }) === phase,
+  );
   if (matching.length === 0) return { error: "This circuit holds no readings in that phase." };
 
   const billed = matching.filter((r) => r.usedInCalculationId !== null);

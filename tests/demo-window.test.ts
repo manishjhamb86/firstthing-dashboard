@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { demoPhase, refuseDemoWindows, windowDates, type DemoWindowFields } from "@/lib/demo-window";
+import { demoPhase, readingSection, refuseDemoWindows, windowDates, type DemoWindowFields } from "@/lib/demo-window";
 
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
 const c: DemoWindowFields = {
@@ -46,4 +46,24 @@ describe("refuseDemoWindows", () => {
     expect(refuseDemoWindows({ preFrom: "", preTo: "", postFrom: "2026-09-20", postTo: "2026-09-30" }, cc, now)).toMatch(/future/);
   });
   it("clearing both windows is allowed", () => expect(refuseDemoWindows({ preFrom: "", preTo: "", postFrom: "", postTo: "" }, cc, now)).toBeNull());
+});
+
+describe("readingSection — which list a stored day is shown under", () => {
+  const f = { ...c, benchmarkSavingsPct: 66.67, benchmarkFromDemos: false };
+  it("with both periods set, only their days are pre/post; the rest are other readings", () => {
+    expect(readingSection(d("2026-08-11"), f)).toBe("pre_install");
+    expect(readingSection(d("2026-08-16"), f)).toBe("monitoring");
+    expect(readingSection(d("2026-08-18"), f)).toBe("post_install");
+    expect(readingSection(d("2026-08-24"), f)).toBe("post_install");
+    expect(readingSection(d("2026-08-25"), f)).toBe("monitoring");
+  });
+  it("the install day and the replacement day are listed nowhere", () => {
+    expect(readingSection(d("2026-08-10"), f)).toBeNull();
+    expect(readingSection(d("2026-08-17"), f)).toBeNull();
+  });
+  it("no post period and a benchmark from the demos: later days are monthly readings", () => {
+    const g = { ...f, postDemoFrom: null, postDemoTo: null, benchmarkFromDemos: true };
+    expect(readingSection(d("2026-08-25"), g)).toBe("monitoring");
+    expect(readingSection(d("2026-08-25"), { ...g, benchmarkFromDemos: false })).toBe("post_install");
+  });
 });

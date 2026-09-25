@@ -184,6 +184,7 @@ export function StoredReadingsPanel({
   commissionedBaseline = null,
   demoDayCount = 0,
   fromDemoReport = false,
+  monitoringLabel,
 }: {
   circuitId: string;
   readings: StoredReadingDTO[];
@@ -198,6 +199,8 @@ export function StoredReadingsPanel({
    * "the window states 12.47 but the readings show 12.59").
    */
   commissionedBaseline?: number | null;
+  /** The monitoring section's heading, when it holds more than monthly days. */
+  monitoringLabel?: string;
   /**
    * Days held against this circuit's demos rather than in this store.
    *
@@ -278,7 +281,9 @@ export function StoredReadingsPanel({
                   })
                 }
               >
-                <span className="font-medium text-sm">{PHASE_LABEL[phase]}</span>
+                <span className="font-medium text-sm">
+                  {phase === "monitoring" && monitoringLabel ? monitoringLabel : PHASE_LABEL[phase]}
+                </span>
                 <span className="text-xs text-[var(--text-muted)]">
                   {rows.length} day{rows.length === 1 ? "" : "s"}
                   {excludedCount > 0 && ` · ${excludedCount} excluded`}

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { DemoWindowsPanel } from "./demo-windows-panel";
-import { demoPhase } from "@/lib/demo-window";
+import { demoPhase, hasPostWindow, hasPreWindow, readingSection } from "@/lib/demo-window";
 import { DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
 import { DiscardDemoReadings } from "./discard-demo-readings";
 import { notFound, redirect } from "next/navigation";
@@ -234,11 +234,18 @@ export default async function CircuitDetailPage({
   const demoGeneratedDays = circuit.meterReadings.filter((r) =>
     r.rawFile?.s3Key?.startsWith(DEMO_RAW_KEY_PREFIX),
   ).length;
+  const sectionFacts = {
+    ...circuit,
+    benchmarkFromDemos:
+      circuit.benchmarkOverridePct !== null || circuit.demos.some((d) => !d.rejected),
+  };
+  const demoPeriodsSet = hasPreWindow(circuit) || hasPostWindow(circuit);
   const storedReadings: StoredReadingDTO[] = circuit.meterInstalledAt
     ? circuit.meterReadings
         .map((r) => {
           const phase = classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate);
-          if (phase === "before_meter" || phase === "replacement_day") return null;
+          const section = readingSection(r.date, sectionFacts);
+          if (section === null) return null;
           const isPre = phase === "pre_install";
           const effB = isPre
             ? null
@@ -256,7 +263,9 @@ export default async function CircuitDetailPage({
             // Labelling them "Monthly monitoring" the moment a benchmark
             // existed named the evidence after the thing it produced. The
             // monthly record lives on the Live monitoring screen.
-            phase: isPre ? ("pre_install" as const) : ("post_install" as const),
+            // Which section: a set demo period is the only source of its
+            // section; everything else is listed as other readings.
+            phase: section,
             excluded: r.excludedAt !== null,
             excludedReason: r.excludedReason,
             released: r.usedInCalculationId !== null,
@@ -266,7 +275,7 @@ export default async function CircuitDetailPage({
             savingsPct: sPct,
             savingsBand: sPct === null ? null : savingsBand(sPct),
             frozenReason: exclusionRefusal({
-              phase: isPre ? "pre_install" : "post_install",
+              phase: section,
               replacementRecorded: circuit.lightReplacementDate !== null,
               benchmarkConfirmed: circuit.benchmarkSavingsPct !== null,
               billed: r.usedInCalculationId !== null,
@@ -339,7 +348,13 @@ export default async function CircuitDetailPage({
     const rows = displayReadings.filter((r) => r.phase === phase);
     if (rows.length === 0) return [];
     const days = rows.map((r) => ({ kWh: r.kWh, excluded: r.excluded }));
-    const summary = periodSavingsSummary(phase === "pre_install" ? null : effBaselineNow, days);
+    // Other readings can sit on both sides of the replacement once demo
+    // periods are set; a savings figure only means something after it.
+    const allAfter = rows.every((r) => r.savingsPct !== null || r.phase === "post_install");
+    const summary = periodSavingsSummary(
+      phase === "pre_install" || (phase === "monitoring" && !allAfter) ? null : effBaselineNow,
+      days,
+    );
     return [
       {
         phase,
@@ -1397,6 +1412,7 @@ export default async function CircuitDetailPage({
             summaries={phaseSummaries}
             allComplete={allStepsComplete}
             commissionedBaseline={circuit.preInstallBaseline}
+            monitoringLabel={demoPeriodsSet ? "Other readings — outside the demo periods" : undefined}
           />
 
           <div className="pt-2 border-t border-[var(--border-subtle)]">

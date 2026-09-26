@@ -7829,3 +7829,13 @@ admins see them on `/admin/tickets` and in the notification bell. Details:
 **Dashboard.** It shows a short teaser linking to the water page for a society with no tanks.
 
 **Verified** 11/11 on dev, and the test enquiry was removed afterwards.
+
+## Two portal touches (2026-09-26) — user-caught
+
+**Demo report legend.** In print, the readings table moves below the chart. The "Before replacement / After replacement" legend used to stay in the heading's right corner, away from the chart it describes. It now sits directly on top of the chart as two columns, each over its own half. It shows only the sides that have days.
+
+**The water enquiry fills in the member's mobile.** Portal logins store no phone number; the society's member register does. The form is prefilled from one of two records:
+- the current member record linked to the login;
+- otherwise, a current member of the same society with the login's email.
+
+An ended member's number is never used. The field stays editable, and a line under it says where the number came from. Verified 7/7 on dev.

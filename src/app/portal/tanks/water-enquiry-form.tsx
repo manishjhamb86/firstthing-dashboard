@@ -9,9 +9,11 @@ import { WATER_PLAN_LABEL, type WaterPlan } from "./water-plans";
  * action resets uncontrolled fields, and a refused request must keep what
  * was typed (this repo's recorded form-reset lesson).
  */
-export function WaterEnquiryForm({ sentOn }: { sentOn: string | null }) {
+export function WaterEnquiryForm({ sentOn, mobileOnRecord }: { sentOn: string | null; mobileOnRecord: string | null }) {
   const [plan, setPlan] = useState<WaterPlan>("automation");
-  const [phone, setPhone] = useState("");
+  // Prefilled from the member register when the login has a mobile on record;
+  // still editable, since the best number to call may be another one.
+  const [phone, setPhone] = useState(mobileOnRecord ?? "");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<string | null>(sentOn);
@@ -73,6 +75,11 @@ export function WaterEnquiryForm({ sentOn }: { sentOn: string | null }) {
           value={phone}
           onChange={(e) => setPhone(e.target.value)}
         />
+        {mobileOnRecord && phone === mobileOnRecord && (
+          <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+            The number on your society&apos;s member record — change it if we should call another.
+          </p>
+        )}
       </div>
       <div>
         <label htmlFor="we-note" className="lbl mb-1.5 block">

@@ -15,7 +15,15 @@ import { WaterEnquiryForm } from "./water-enquiry-form";
  * and the lighting figure is the society's own published total. Automation
  * runs on the controller on site; this portal only ever shows it (INV-08).
  */
-export function WaterPitch({ lightingSaved, sentOn }: { lightingSaved: number | null; sentOn: string | null }) {
+export function WaterPitch({
+  lightingSaved,
+  sentOn,
+  mobileOnRecord,
+}: {
+  lightingSaved: number | null;
+  sentOn: string | null;
+  mobileOnRecord: string | null;
+}) {
   return (
     <div className="flex flex-col gap-6">
       {/* The hook */}
@@ -140,7 +148,7 @@ export function WaterPitch({ lightingSaved, sentOn }: { lightingSaved: number | 
           <p className="mb-4 text-[13.5px]" style={{ color: "var(--text-muted)" }}>
             Tell us which option interests you and where to reach you. Our team will call you back.
           </p>
-          <WaterEnquiryForm sentOn={sentOn} />
+          <WaterEnquiryForm sentOn={sentOn} mobileOnRecord={mobileOnRecord} />
         </Card>
         <Card className="p-6">
           <h3 className="mb-1 text-[17px] font-bold">Rather talk to someone?</h3>

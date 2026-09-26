@@ -34,6 +34,22 @@ function requestNow(): number {
 // The society's own tanks, and nobody else's: the query is scoped to the
 // viewer's societyId server-side (INV-05) — the assignment made in the back
 // office is the only thing that puts a tank on this page.
+/** The signed-in member's mobile, from the society's member register — the
+ *  record linked to their login, else a current member with their email.
+ *  Only a current (not ended) member of their own society counts. */
+async function mobileOnRecord(profileId: string, societyId: string, email: string | null): Promise<string | null> {
+  const current = { societyId, endedOn: null };
+  const linked = await db.societyMember.findFirst({ where: { ...current, profileId }, select: { mobile: true } });
+  if (linked) return linked.mobile;
+  if (!email) return null;
+  const byEmail = await db.societyMember.findFirst({
+    where: { ...current, email: { equals: email, mode: "insensitive" } },
+    orderBy: { createdAt: "desc" },
+    select: { mobile: true },
+  });
+  return byEmail?.mobile ?? null;
+}
+
 export default async function PortalTanksPage() {
   const viewer = await resolvePortalViewer();
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
@@ -206,7 +222,11 @@ export default async function PortalTanksPage() {
       />
 
       {tanks.length === 0 ? (
-        <WaterPitch lightingSaved={lightingSaved} sentOn={enquiry ? formatDate(enquiry.createdAt) : null} />
+        <WaterPitch
+          lightingSaved={lightingSaved}
+          sentOn={enquiry ? formatDate(enquiry.createdAt) : null}
+          mobileOnRecord={tanks.length === 0 ? await mobileOnRecord(viewer.id, viewer.societyId, viewer.email) : null}
+        />
       ) : (
         <>
           {/* auto-FILL, not auto-fit (user-caught 2026-09-15): a tank alone in

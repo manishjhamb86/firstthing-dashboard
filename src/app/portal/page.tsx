@@ -21,6 +21,7 @@ import { reviewDeadlineFor } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
 import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
+import { LightCountHistory } from "./light-count-history";
 import { PORTAL_NAV_ICONS, portalNavEntries } from "./portal-nav-entries";
 import { ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap } from "lucide-react";
 import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkRow, type HealthIssue } from "./kpi-tiles";
@@ -581,22 +582,25 @@ export default async function PortalHomePage() {
                 {energy.circuits.map((c) => (
                   <div
                     key={c.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-[var(--r-sm)] border px-3.5 py-3"
+                    className="rounded-[var(--r-sm)] border px-3.5 py-3"
                     style={{ borderColor: "var(--border-subtle)" }}
                   >
-                    <div>
-                      <p className="text-[13.5px] font-semibold">
-                        {c.label} · {c.lightCount} LED lights
-                      </p>
-                      <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                        {c.monthDailyAvg !== null
-                          ? `${c.monthDailyAvg.toFixed(1)} kWh/day over ${c.monthDays} recorded day${c.monthDays === 1 ? "" : "s"}`
-                          : "no readings this month yet"}
-                      </p>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[13.5px] font-semibold">
+                          {c.label} · {c.lightCount} LED lights
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                          {c.monthDailyAvg !== null
+                            ? `${c.monthDailyAvg.toFixed(1)} kWh/day over ${c.monthDays} recorded day${c.monthDays === 1 ? "" : "s"}${energy.month ? ` in ${monthName(energy.month)}` : ""}`
+                            : "no readings this month yet"}
+                        </p>
+                      </div>
+                      {c.savingsPct !== null && c.band && (
+                        <StatusChip tone={BAND_TONE[c.band]}>{c.savingsPct.toFixed(1)}% saved</StatusChip>
+                      )}
                     </div>
-                    {c.savingsPct !== null && c.band && (
-                      <StatusChip tone={BAND_TONE[c.band]}>{c.savingsPct.toFixed(1)}% saved</StatusChip>
-                    )}
+                    <LightCountHistory stages={c.lightHistory} />
                   </div>
                 ))}
               </div>

@@ -1549,7 +1549,7 @@ textarea.field {
 .lh-frame > thead,
 .lh-frame > tbody,
 .lh-frame > tfoot,
-.lh-frame tr,
+.lh-frame > * > tr,
 .lh-frame > * > tr > td {
   display: block;
   width: 100%;

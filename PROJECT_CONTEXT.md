@@ -7653,3 +7653,39 @@ periods, the report auto-generated with the demo's id, locked once shared, the l
 server behind an open form and logged, unlock logged); 12/12 on the meter history editor (a split
 around an open entry, the last day inclusive, a correction logged with its reason, unassigned days
 counted); 18/18 smoke across the admin and portal screens it touches.
+
+## A circuit's light-count history, and a demo report that is only the demo (2026-09-26) — user-asked
+
+**Light-count history.** The portal's "Your circuits" card and the Electricity page now show each
+circuit's count as stages. The first stage is the count at the demo, running from the demo's
+start until the day before the first change, with the demo's own period named inside it. Each
+later stage is one light-count change, with its own from/to dates, and the last stage is marked
+**Current**. Each stage also states:
+- the baseline for that many lights (the rescaled figure, INV-07);
+- the benchmark;
+- the most the circuit may draw and still meet the benchmark, which is baseline × (1 − benchmark).
+
+The stages are built by `lightCountStages()` in `src/lib/light-count-history.ts` (pure, 6 cases),
+which follows the same replay rules as `benchmark-rescale`: voided events never count, and events
+apply in date order. French Apartment reads 55 lights 04-11-2025 → 31-07-2026, then 76 lights
+from 01-08-2026, current.
+
+**The demo report is the demo.** `DemoReportView` now shows the demo's own light count and only
+the demo's days. The layout was rebuilt because it wasted space:
+- one headline band with the agreed saving, a before/after bar on the demo lights, and the
+  society-wide figure;
+- the demo's before and after periods with their day counts;
+- a chart of the demo days beside the table behind it.
+
+The per-circuit table now appears only when a report has more than one circuit.
+
+A report generated before 2026-09-26 still carries whatever count it was generated with
+(French Apartment's shared v4 says 76), because reports are versioned. Regenerating gives the
+demo's count.
+
+**Fixed in passing: letterhead tables.** The letterhead's screen rule `.lh-frame tr { display:
+block }` matched every table row inside a letterhead document, which misaligned headers and
+columns in reports. It is now scoped to the frame's own rows (`.lh-frame > * > tr`).
+
+Verified in a browser, 12/12, on a fixture shaped like French Apartment, and the fixture was
+removed afterwards.

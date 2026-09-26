@@ -11,6 +11,7 @@ import { SAVINGS_BAND_META } from "@/lib/circuit-load";
 import { formatDate } from "@/lib/format-date";
 import { Card, CardTitle, ChartPending, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { BAND_TONE, monthName } from "../portal-widgets";
+import { LightCountHistory } from "../light-count-history";
 import { ConsumptionChart } from "../consumption-chart";
 import { KpiBubble } from "../kpi-tiles";
 import { Gauge, IndianRupee, Leaf, Zap } from "lucide-react";
@@ -270,11 +271,7 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
                               </>
                             )}
                           </span>
-                          {c.lastVerifiedAt && (
-                            <span className="block text-[11px]" style={{ color: "var(--text-subtle)" }}>
-                              Fixture count last verified {formatDate(c.lastVerifiedAt)}
-                            </span>
-                          )}
+                          <LightCountHistory stages={c.lightHistory} />
                         </td>
                         <td className="num text-right">
                           {c.monthDailyAvg !== null ? c.monthDailyAvg.toFixed(1) : "—"}

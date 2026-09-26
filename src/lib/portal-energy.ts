@@ -2,6 +2,7 @@ import { cache } from "react";
 import { db } from "@/lib/db";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
+import { lightCountStages, type LightStage } from "@/lib/light-count-history";
 import { periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
 
@@ -90,6 +91,8 @@ export type PortalCircuit = {
    * that way rather than assumed.
    */
   lastVerifiedAt: string | null;
+  /** The count at the demo, then each change, the last one current. */
+  lightHistory: LightStage[];
   /** Days recorded in the headline month (excluded days not counted). */
   monthDays: number;
   monthKwh: number | null;
@@ -123,6 +126,19 @@ export type PortalEnergy = {
   daily: { date: string; kWh: number; baseline: number | null }[];
 };
 
+/** The demo's span: its first meter day to its last post-install day. */
+function demoPeriod(
+  demos: { meterInstalledAt: Date | null; preFrom: Date | null; postTo: Date | null }[],
+): { from: Date; to: Date | null } | null {
+  const starts = demos.map((d) => d.meterInstalledAt ?? d.preFrom).filter((d): d is Date => d !== null);
+  if (starts.length === 0) return null;
+  const ends = demos.map((d) => d.postTo).filter((d): d is Date => d !== null);
+  return {
+    from: new Date(Math.min(...starts.map((d) => d.getTime()))),
+    to: ends.length > 0 ? new Date(Math.max(...ends.map((d) => d.getTime()))) : null,
+  };
+}
+
 export const societyEnergy = cache(async (societyId: string): Promise<PortalEnergy> => {
   const circuits = await db.circuit.findMany({
     where: { societyId, voidedAt: null },
@@ -136,10 +152,9 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       preInstallBaseline: true,
       rescaleEvents: true,
       demos: {
-        where: { voidedAt: null, rejected: false, lightReplacementDate: { not: null } },
-        orderBy: { lightReplacementDate: "desc" },
-        take: 1,
-        select: { lightReplacementDate: true },
+        where: { voidedAt: null, rejected: false },
+        orderBy: { sequence: "asc" },
+        select: { lightReplacementDate: true, meterInstalledAt: true, preFrom: true, postTo: true },
       },
       meterReadings: {
         // NO supersededAt filter: supersession updates the row IN PLACE, so
@@ -159,7 +174,11 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   // monitoring rows from the billing start (2026-09-26); before a billing
   // start is known, the days after the lights went in.
   const installed = circuits.flatMap((c) => {
-    const replaced = c.demos[0]?.lightReplacementDate ?? null;
+    const replaced =
+      c.demos
+        .map((d) => d.lightReplacementDate)
+        .filter((d): d is Date => d !== null)
+        .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
     return replaced || c.benchmarkSavingsPct !== null ? [{ ...c, lightReplacementDate: replaced }] : [];
   });
   const starts = new Map(
@@ -209,6 +228,15 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       band: s.band,
       benchmarkPct: c.benchmarkSavingsPct,
       baselineNow,
+      lightHistory: lightCountStages({
+        currentLightCount: c.meteredLightCount,
+        commissionedBaseline: c.preInstallBaseline,
+        benchmarkPct: c.benchmarkSavingsPct,
+        demo: demoPeriod(c.demos),
+        fallbackStart: c.lightReplacementDate,
+        events: c.rescaleEvents,
+        today,
+      }),
       lastVerifiedAt: (lastVerifiedAt(c.rescaleEvents, c.lightReplacementDate, today) ?? null)
         ?.toISOString()
         .slice(0, 10) ?? null,

@@ -8170,3 +8170,35 @@ past day. Fixture removed and confirmed by count. 1,102 unit tests, `tsc`/`lint`
 
 **Hyde Park on stage is not corrected by this deploy** — its certificate still says 26-09-2026
 until someone uses the control (or supplies the date).
+
+## Every printed document is one page unless approved (2026-09-27) — user's rule
+
+**Reported**: Hyde Park's demo savings report printed on two pages again. The kept-lights note (added
+2026-09-26) took room on page 1, and the "Demo days" block — which must not split — jumped whole to
+page 2. The fix before it held only until the report's data changed.
+
+**The rule, in the user's words**: "the savings report will always be a single page report unless
+approved to be more than that." Applied to every letterhead document:
+- `Letterhead` prints on one A4 page by default. `OnePageFit` (client, hook in the letterhead)
+  measures the sheet while print media is active and scales it with CSS `zoom` until it fits both
+  Chrome's margin-free page (794 × 1123px) and Safari's margined one (698 × 1027px). It iterates,
+  because under zoom the content lays out wider and full-width charts grow taller as the scale
+  drops — one measurement under-shrinks (found by the check: 0.446 still printed two pages).
+- A document may run longer only when approved: `<Letterhead multiPage>` with the reason in a
+  comment beside it. None is approved yet. Written into `CLAUDE.md` so future work follows it.
+- Layout comes first; the guard is the backstop. The demo report's print CSS was tightened (note,
+  headline, table, chart, letterhead head) so Hyde Park's report fits at full size.
+
+**Verified**: 9/9 on a Hyde Park-shaped fixture — the report fits unscaled at 1,009 of 1,015px, one
+page with and without Safari-like margins; the same report made four times longer is scaled to
+0.36 and still prints on one page at both margins; screen view unscaled afterwards. The other
+documents under the guard: agreement 747px (untouched), pre-installation 0.89, post-installation
+0.70 — both one page. 1,102 unit tests, `tsc`/`lint`/`build` clean.
+
+**An incident on the shared dev database, mine**: cleaning up after the portal-reports check
+(2026-09-27) I deleted "the fixture's society" by looking it up from the test circuit — which was
+attached to Ace City — so `soc-ace-city` and everything cascading from it (its deal, circuits,
+contract, demos, readings, invoices) is gone from `firsthing_dev`. Stage and production were never
+touched. The two `@ace-city.test` portal logins survive with no society. Restoring is the user's
+call. **The lesson**: a fixture cleanup deletes only rows it created, by their own ids — never a
+parent looked up from a fixture row.

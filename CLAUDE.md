@@ -121,7 +121,10 @@ driven by `src/lib/deal-progress.ts` (one module decides "you are here, do this 
 Theme (`light|dark|slate`) is stored on the account row and stamped server-side via
 `resolveTheme()` — no `prefers-color-scheme`, by product rule. Forms that can fail and be
 resubmitted must use controlled inputs (React 19 `useActionState` resets uncontrolled fields).
-Use the existing `Modal` (`src/components/modal.tsx`), not a hand-rolled `<dialog>`. One solid
+Use the existing `Modal` (`src/components/modal.tsx`), not a hand-rolled `<dialog>`. **Every printed
+document is ONE A4 page** (the user's rule): `Letterhead` scales its sheet to fit via `OnePageFit`;
+a document may run longer only when the user approved it — pass `multiPage` with that reason in a
+comment beside it. Lay a document out to fit at full size first; the guard is the backstop. One solid
 button per page; secondary actions are `btn-secondary`, not outline.
 
 **Demo mode** (`src/lib/demo-mode.ts`): `DEMO_MODE=true` env AND the admin's own `demoMode`

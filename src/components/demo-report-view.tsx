@@ -226,7 +226,7 @@ export function DemoReportView({
                     <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
                   </div>
                   <div className="hidden print:block">
-                    <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} width={720} height={130} />
+                    <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} width={720} height={92} />
                   </div>
                 </div>
                 <DaysTable pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />

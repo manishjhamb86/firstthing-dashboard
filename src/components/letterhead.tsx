@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { COMPANY } from "@/lib/company";
+import { OnePageFit } from "@/components/one-page-fit";
 
 /**
  * The company letterhead every system-generated document wears (2026-09-25,
@@ -18,7 +19,13 @@ import { COMPANY } from "@/lib/company";
  *   Safari alike; Chrome repeats the footer too, Safari prints it once after
  *   the content. Either way a one-page report is one page.
  */
-export function Letterhead({ children }: { children: ReactNode }) {
+/**
+ * ONE PAGE IS THE RULE (2026-09-27, user's rule). Every letterhead document
+ * prints on a single A4 page — OnePageFit scales it down if its data makes it
+ * taller. A document may run to more pages only when approved: pass
+ * `multiPage` with the reason in a comment beside it, where a reviewer sees it.
+ */
+export function Letterhead({ children, multiPage = false }: { children: ReactNode; multiPage?: boolean }) {
   const head = (
     <div className="lh-head">
       {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
@@ -41,6 +48,7 @@ export function Letterhead({ children }: { children: ReactNode }) {
   );
   return (
     <div className="letterhead">
+      {!multiPage && <OnePageFit />}
       <table className="lh-frame">
         <thead>
           <tr>

@@ -1668,7 +1668,7 @@ textarea.field {
     padding: 0 12mm;
   }
   .lh-head {
-    padding: 7mm 0 2.5mm;
+    padding: 5mm 0 2.5mm;
     margin-bottom: 3mm;
     border-bottom: 1.5px solid #000;
     flex-wrap: nowrap;
@@ -1789,5 +1789,46 @@ textarea.field {
   .report-sheet .demo-report .tbl thead th {
     padding: 5px 10px;
     font-size: 10px;
+  }
+  /* Room for the kept-lights note (2026-09-27, user-caught: it pushed the
+     demo days onto page 2). The note, the headline and the table give back
+     height on paper so one demo reads on one sheet at full size — OnePageFit
+     only scales what still does not fit. */
+  .report-sheet .demo-report .dr-big {
+    font-size: 24px;
+  }
+  .report-sheet .demo-report .dr-headline > div {
+    padding: 6px 14px;
+  }
+  .report-sheet .demo-report .dr-headline .lbl {
+    margin-bottom: 4px;
+  }
+  .report-sheet .demo-report .tbl {
+    font-size: 11.5px;
+  }
+  .report-sheet .demo-report .tbl td {
+    padding: 2px 10px;
+  }
+  .report-sheet .demo-report .excl-note {
+    padding: 6px 12px;
+    font-size: 11px;
+    line-height: 1.4;
+  }
+  .report-sheet .demo-report .excl-note p + p {
+    margin-top: 2px;
+  }
+  .report-sheet .demo-report {
+    row-gap: 0;
+  }
+  .report-sheet .demo-report > * + * {
+    margin-top: 8px !important;
+  }
+  .report-sheet .demo-report .tbl td {
+    padding: 1px 10px;
+    font-size: 11px;
+  }
+  .letterhead .report-sheet .report-masthead h1 {
+    font-size: 21px;
+    margin-top: 2px;
   }
 }

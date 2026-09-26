@@ -22,7 +22,7 @@ export function ExclusionNote({
   const d = describeExclusion(exclusion, before, after);
   return (
     <div
-      className={`break-inside-avoid rounded-[var(--r-md)] border px-4 py-3 text-[13.5px] leading-relaxed ${className}`}
+      className={`excl-note break-inside-avoid rounded-[var(--r-md)] border px-4 py-3 text-[13.5px] leading-relaxed ${className}`}
       style={{ borderColor: "var(--info-line, var(--border-subtle))", background: "var(--info-bg, transparent)" }}
     >
       <p className="font-semibold" style={{ color: "var(--text)" }}>

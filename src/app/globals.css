@@ -1608,6 +1608,34 @@ textarea.field {
   size: A4;
   margin: 0;
 }
+/* A printout that holds a letterhead is on the letterhead page from its
+   first box to its last (2026-09-26, user-caught: Safari printed a blank
+   second page). With the name on the letterhead alone, the wrappers around
+   it sat on the default page, and a change of page name is a forced break —
+   the empty tail after the report became page 2. */
+@media print {
+  html:has(.letterhead),
+  html:has(.letterhead) body {
+    page: letterhead;
+    height: auto !important;
+    min-height: 0 !important;
+  }
+  /* Nothing after the document may take space on paper. */
+  .print-doc:has(.letterhead) > :not(.letterhead) {
+    display: none !important;
+  }
+  .letterhead {
+    break-after: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    /* Paper is read at arm's length, often printed in black and white: the
+       screen's pale secondary greys wash out to nothing (user-caught,
+       2026-09-26). On paper every secondary text is a near-black grey. */
+    --text-muted: #1f1f1f;
+    --text-subtle: #3a3a3a;
+    --chart-rule: #6b6b6b;
+  }
+}
 @media print {
   .letterhead {
     page: letterhead;
@@ -1742,7 +1770,7 @@ textarea.field {
     font-size: 30px;
   }
   .report-sheet .demo-report .dr-headline > div {
-    padding: 12px 16px;
+    padding: 10px 16px;
   }
   .report-sheet .demo-report .dr-days {
     grid-template-columns: 1fr;
@@ -1751,8 +1779,12 @@ textarea.field {
   .report-sheet .demo-report .tbl {
     font-size: 12.5px;
   }
+  /* The period line's two halves start where the table's two halves do. */
+  .report-sheet .demo-report .dr-periods > div {
+    padding-left: 10px;
+  }
   .report-sheet .demo-report .tbl td {
-    padding: 4px 10px;
+    padding: 3px 10px;
   }
   .report-sheet .demo-report .tbl thead th {
     padding: 5px 10px;

@@ -7778,3 +7778,19 @@ user-caught).**
   short chart. A 0 kWh day is the vendor's mark for an offline meter, so it shows as
   "no reading" and is left out of the average. Averaged in, a dead month read as "100% saved"
   (CON-45's check-the-meter rule).
+- **Safari printed a blank second page, and the print was pale and misaligned (user-caught).**
+  - **Blank page.** Only the letterhead element carried the named `letterhead` print page, so
+    the wrappers around it sat on the default page. A change of page name forces a page break,
+    and the empty tail after the report became page 2. A printout that holds a letterhead is now
+    on the letterhead page throughout (`html:has(.letterhead)`), and nothing beside the
+    letterhead takes space on paper. On every letterhead page that neighbour was already only the
+    toolbar, which never prints.
+  - **Slack.** The page measures 969px of A4's 1123px. It stays one page in Chromium with
+    20 mm margins on every side and backgrounds off.
+  - **Colours.** The letterhead asks browsers to print its colours, so Safari keeps the
+    before/after bars and the legend.
+  - **Pale text.** Secondary text washed out on paper, so inside the letterhead the muted and
+    subtle greys print near-black. The result was checked in greyscale.
+  - **Alignment.** The period line, the chart and the day table share one before/after split:
+    before in the left half, after from the midpoint, marked by a dashed divider in the chart.
+    The table uses fixed 30/20/30/20 columns, and the period labels are inset to match its cells.

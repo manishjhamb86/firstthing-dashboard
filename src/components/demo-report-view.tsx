@@ -113,7 +113,7 @@ export function DemoReportView({
 
       {/* The demo's own period, so a reader knows which days are behind it. */}
       {(allPre.length > 0 || allPost.length > 0) && (
-        <dl className="flex flex-wrap gap-x-10 gap-y-2 text-[13px] print:flex-nowrap">
+        <dl className="dr-periods grid grid-cols-2 gap-y-2 text-[13px]">
           <PeriodFact label="Before period" days={allPre} />
           <PeriodFact label="After period" days={allPost} />
         </dl>
@@ -188,7 +188,7 @@ export function DemoReportView({
                   <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
                 </div>
                 <div className="hidden print:block">
-                  <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} width={720} height={165} />
+                  <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} width={720} height={130} />
                 </div>
                 <DaysTable pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
               </div>
@@ -271,31 +271,32 @@ function DemoDaysChart({
   const top = 24;
   const bottom = 26;
   const padX = 6;
-  const gap = pre.length > 0 && post.length > 0 ? 1.4 : 0;
-  const slots = pre.length + post.length + gap;
-  const unit = (W - padX * 2) / Math.max(slots, 1);
+  // Before on the left half, after from the midpoint — the same split as the
+  // period line above and the table below, so the three read as one column
+  // each (user-caught 2026-09-26: they sat at three different offsets).
+  const both = pre.length > 0 && post.length > 0;
+  const inner = W - padX * 2;
+  const half = both ? inner / 2 : inner;
+  const unit = half / Math.max(pre.length, post.length, 1);
   const barW = Math.min(unit * 0.72, 38);
   const max = Math.max(preAvg, ...pre.map((r) => r.consumptionKwh), ...post.map((r) => r.consumptionKwh), 1) * 1.12;
   const y = (v: number) => top + (H - top - bottom) * (1 - v / max);
-  const xAt = (i: number) => padX + unit * i + unit / 2;
-  const labelEvery = Math.max(1, Math.ceil((pre.length + post.length) / 12));
+  const preX = (i: number) => padX + unit * i + unit / 2;
+  const postX = (i: number) => padX + (both ? half : 0) + unit * i + unit / 2;
+  const labelEvery = Math.max(1, Math.ceil(Math.max(pre.length, post.length) / 7));
 
   const bars = [
-    ...pre.map((r, i) => ({ r, x: xAt(i), fill: "var(--chart-mark-inert)", i })),
-    ...post.map((r, i) => ({ r, x: xAt(pre.length + gap + i), fill: "var(--chart-mark)", i: pre.length + i })),
+    ...pre.map((r, i) => ({ r, x: preX(i), fill: "var(--chart-mark-inert)", i })),
+    ...post.map((r, i) => ({ r, x: postX(i), fill: "var(--chart-mark)", i })),
   ];
-  const avgLine = (from: number, to: number, v: number, label: string) => {
-    const x1 = xAt(from) - unit / 2 + 2;
-    const x2 = xAt(to) + unit / 2 - 2;
-    return (
-      <g>
-        <line x1={x1} x2={x2} y1={y(v)} y2={y(v)} stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="4 3" />
-        <text x={x1} y={y(v) - 5} textAnchor="start" fontSize={10.5} fontWeight={600} fill="var(--text-muted)" className="num">
-          {label} {kwh(v)} kWh
-        </text>
-      </g>
-    );
-  };
+  const avgLine = (x1: number, x2: number, v: number) => (
+    <g>
+      <line x1={x1} x2={x2} y1={y(v)} y2={y(v)} stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="4 3" />
+      <text x={x1} y={y(v) - 5} textAnchor="start" fontSize={10.5} fontWeight={600} fill="var(--text-muted)" className="num">
+        avg {kwh(v)} kWh
+      </text>
+    </g>
+  );
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Daily consumption during the demo, before and after the replacement">
@@ -311,8 +312,11 @@ function DemoDaysChart({
           )}
         </g>
       ))}
-      {pre.length > 0 && avgLine(0, pre.length - 1, preAvg, "avg")}
-      {post.length > 0 && avgLine(pre.length + gap, pre.length + gap + post.length - 1, postAvg, "avg")}
+      {both && (
+        <line x1={padX + half} x2={padX + half} y1={top - 6} y2={H - bottom} stroke="var(--chart-rule)" strokeDasharray="2 3" />
+      )}
+      {pre.length > 0 && avgLine(padX + 2, preX(pre.length - 1) + unit / 2 - 2, preAvg)}
+      {post.length > 0 && avgLine(postX(0) - unit / 2 + 2, postX(post.length - 1) + unit / 2 - 2, postAvg)}
     </svg>
   );
 }
@@ -331,7 +335,13 @@ function DaysTable({
 }) {
   const rows = Math.max(pre.length, post.length);
   return (
-    <table className="tbl tbl-compact w-full self-start [&_td]:py-1.5">
+    <table className="dr-days-table tbl tbl-compact w-full table-fixed self-start [&_td]:py-1.5">
+      <colgroup>
+        <col className="w-[30%]" />
+        <col className="w-[20%]" />
+        <col className="w-[30%]" />
+        <col className="w-[20%]" />
+      </colgroup>
       <thead>
         <tr>
           <th>Before</th>

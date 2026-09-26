@@ -1,3 +1,4 @@
+import { SurveyDateControl } from "@/components/survey-date-control";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -201,6 +202,17 @@ export default async function SiteSurveyPage({
         title="Site survey"
         subtitle={pipeline.society.location}
       />
+
+      {pipeline.siteSurvey && (
+        <div className="mb-5">
+          <SurveyDateControl
+            pipelineId={pipeline.id}
+            surveyDate={(visit?.startAt ?? pipeline.siteSurvey.createdAt).toISOString().slice(0, 10)}
+            label={visit ? "the site survey visit" : "the site survey"}
+            canCorrect={canApproveException}
+          />
+        </div>
+      )}
 
       {/* The survey is somebody's job once it has been handed to them. Anyone
           else recording it — operations especially, which is never blocked —

@@ -14,6 +14,7 @@ import { resolveBackdate } from "@/lib/backdate";
 import { isDemoMode } from "@/lib/demo-mode";
 import { formatDate } from "@/lib/format-date";
 import { eventTitle } from "@/lib/schedule";
+import { logChange } from "@/lib/change-log";
 
 const SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"] as const;
 
@@ -911,4 +912,139 @@ export async function assignSurveyOwner(input: { pipelineId: string; toId: strin
   });
   revalidatePath(`/admin/pipeline/${input.pipelineId}`);
   return {};
+}
+
+/**
+ * Correct when the site survey happened (2026-09-26, user-asked). A deal typed
+ * up after the fact — every imported society — carries the day it was entered
+ * as its survey date, and every later date (the meter install first) is
+ * ordered against it, so a real meter date is refused.
+ *
+ * Operations only, with a reason; not demo-gated, because a pre-system deal is
+ * the production case. The survey row and any booked survey visit move
+ * together (the visit is what "when the survey happened" reads first). The
+ * order still holds both ways: never after a meter already recorded on the
+ * survey's circuits, and never before the meeting, the lead or the proposal
+ * decision — unless `moveEarlier` is set, which moves those to the same day
+ * rather than leaving them out of order. Every old value goes to the change log.
+ */
+export async function correctSurveyDate(input: {
+  pipelineId: string;
+  on: string;
+  reason: string;
+  moveEarlier: boolean;
+}): Promise<{ error?: string; ok?: true; needsEarlier?: string[] }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team) || !actor.permissions.includes("manage_pipeline")) {
+    logger.warn("pipeline.survey_date_refused", { actorId: actor.id, pipelineId: input.pipelineId, reason: "not_operations" });
+    return { error: "Correcting a deal's recorded dates is an operations action." };
+  }
+  if (!input.reason.trim()) return { error: "Say why the survey date is being corrected." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.on)) return { error: "Pick the day the survey happened." };
+  const on = new Date(`${input.on}T00:00:00.000Z`);
+  if (Number.isNaN(on.getTime())) return { error: "Pick the day the survey happened." };
+  if (on.getTime() > Date.now()) return { error: "The survey cannot be dated in the future." };
+
+  const pipeline = await db.pipeline.findUnique({
+    where: { id: input.pipelineId },
+    select: {
+      id: true,
+      createdAt: true,
+      meetingDate: true,
+      proposalDecidedAt: true,
+      scheduledEvents: {
+        where: { kind: { in: ["survey_visit", "demo_meeting"] }, status: { not: "cancelled" } },
+        select: { id: true, kind: true, startAt: true },
+      },
+      siteSurvey: {
+        select: {
+          id: true,
+          createdAt: true,
+          circuits: {
+            where: { voidedAt: null },
+            select: { lightType: true, demos: { where: { voidedAt: null }, select: { meterInstalledAt: true } } },
+          },
+        },
+      },
+    },
+  });
+  if (!pipeline?.siteSurvey) return { error: "This deal has no site survey to date." };
+  const survey = pipeline.siteSurvey;
+
+  // The other direction: a meter already recorded cannot end up before the survey.
+  const meters = survey.circuits
+    .flatMap((c) => c.demos.map((d) => ({ lightType: c.lightType, at: d.meterInstalledAt })))
+    .filter((m): m is { lightType: string; at: Date } => m.at !== null)
+    .sort((a, b) => a.at.getTime() - b.at.getTime());
+  if (meters[0] && meters[0].at.getTime() < on.getTime()) {
+    return {
+      error: `${meters[0].lightType}'s meter is recorded as installed ${formatDate(meters[0].at)}, and the survey cannot come after it. Pick a day on or before that.`,
+    };
+  }
+
+  const later: { key: "lead" | "meeting" | "decision"; label: string; date: Date }[] = [];
+  if (pipeline.createdAt.getTime() > on.getTime()) later.push({ key: "lead", label: "the lead", date: pipeline.createdAt });
+  if (pipeline.meetingDate && pipeline.meetingDate.getTime() > on.getTime())
+    later.push({ key: "meeting", label: "the first meeting", date: pipeline.meetingDate });
+  if (pipeline.proposalDecidedAt && pipeline.proposalDecidedAt.getTime() > on.getTime())
+    later.push({ key: "decision", label: "the proposal decision", date: pipeline.proposalDecidedAt });
+  if (later.length > 0 && !input.moveEarlier) {
+    return {
+      error: `The survey cannot come before ${later.map((l) => `${l.label} (${formatDate(l.date)})`).join(", ")}. Tick "move them too" to date ${later.length === 1 ? "it" : "them"} to the same day.`,
+      needsEarlier: later.map((l) => `${l.label} · ${formatDate(l.date)}`),
+    };
+  }
+
+  const visit = pipeline.scheduledEvents.find((e) => e.kind === "survey_visit") ?? null;
+  const meeting = pipeline.scheduledEvents.find((e) => e.kind === "demo_meeting") ?? null;
+  // A visit keeps its time of day; only the day moves.
+  const sameTimeOn = (d: Date) => new Date(on.getTime() + (d.getTime() % 86_400_000));
+
+  await db.$transaction(async (tx) => {
+    const log = (field: string, oldValue: Date | null, newValue: Date) =>
+      logChange(tx, {
+        entity: "pipeline",
+        entityId: pipeline.id,
+        kind: "edit",
+        field,
+        oldValue: oldValue ? oldValue.toISOString() : null,
+        newValue: newValue.toISOString(),
+        reason: input.reason.trim(),
+        actorId: actor.id,
+      });
+    await tx.siteSurvey.update({ where: { id: survey.id }, data: { createdAt: on } });
+    await log("surveyDate", survey.createdAt, on);
+    if (visit) {
+      await tx.scheduledEvent.update({ where: { id: visit.id }, data: { startAt: sameTimeOn(visit.startAt) } });
+      await log("surveyVisit", visit.startAt, sameTimeOn(visit.startAt));
+    }
+    for (const l of later) {
+      if (l.key === "lead") {
+        await tx.pipeline.update({ where: { id: pipeline.id }, data: { createdAt: on } });
+        await log("leadLoggedAt", pipeline.createdAt, on);
+      }
+      if (l.key === "meeting") {
+        await tx.pipeline.update({ where: { id: pipeline.id }, data: { meetingDate: on } });
+        await log("meetingDate", pipeline.meetingDate, on);
+        if (meeting) await tx.scheduledEvent.update({ where: { id: meeting.id }, data: { startAt: sameTimeOn(meeting.startAt) } });
+      }
+      if (l.key === "decision") {
+        await tx.pipeline.update({ where: { id: pipeline.id }, data: { proposalDecidedAt: on } });
+        await log("proposalDecidedAt", pipeline.proposalDecidedAt, on);
+      }
+    }
+  });
+  logger.info("pipeline.survey_date_corrected", {
+    actorId: actor.id,
+    pipelineId: pipeline.id,
+    from: survey.createdAt.toISOString().slice(0, 10),
+    to: input.on,
+    movedEarlier: later.map((l) => l.key),
+    visitMoved: visit !== null,
+  });
+  revalidatePath(`/admin/pipeline/${pipeline.id}`);
+  revalidatePath(`/admin/pipeline/${pipeline.id}/survey`);
+  revalidatePath("/admin/societies", "layout");
+  return { ok: true };
 }

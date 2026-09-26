@@ -26,6 +26,8 @@ import { StepSection } from "@/components/step-section";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
 import { DemosPanel, type DemoDTO } from "./demos-panel";
 import { DemoMeterForm } from "./demo-meter-form";
+import { SurveyDateControl } from "@/components/survey-date-control";
+import { surveyHappenedAt } from "@/lib/step-dates";
 import { DemoReadingsPanel, type DemoDayDTO } from "./demo-readings-panel";
 import { DemoLockBar } from "./demo-lock-bar";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
@@ -100,7 +102,18 @@ export default async function CircuitDetailPage({
       siteSurvey: {
         select: {
           pipelineId: true,
-          pipeline: { select: { surveyOwnerId: true } },
+          createdAt: true,
+          pipeline: {
+            select: {
+              surveyOwnerId: true,
+              scheduledEvents: {
+                where: { kind: "survey_visit", status: { not: "cancelled" } },
+                orderBy: { startAt: "asc" },
+                take: 1,
+                select: { startAt: true },
+              },
+            },
+          },
           areas: { select: { lightType: true, count: true } },
         },
       },
@@ -470,7 +483,22 @@ export default async function CircuitDetailPage({
                 break;
               case "meter": {
                 const failed = demo.loadDiscrepancyPct !== null && demo.loadDiscrepancyPct > LOAD_TOLERANCE_PCT && !demo.loadValidationOverrideById ? demo.loadDiscrepancyPct : null;
+                const surveyed = circuit.siteSurvey
+                  ? surveyHappenedAt({
+                      visitAt: circuit.siteSurvey.pipeline?.scheduledEvents[0]?.startAt ?? null,
+                      rowCreatedAt: circuit.siteSurvey.createdAt,
+                    })
+                  : null;
                 const form = editable ? (
+                  <div className="space-y-3">
+                  {surveyed && circuit.siteSurvey && (
+                    <SurveyDateControl
+                      pipelineId={circuit.siteSurvey.pipelineId}
+                      surveyDate={surveyed.date ? iso(surveyed.date) : null}
+                      label={surveyed.label}
+                      canCorrect={canOverride}
+                    />
+                  )}
                   <DemoMeterForm
                     demoId={demo.id}
                     meters={meterOptions}
@@ -485,6 +513,7 @@ export default async function CircuitDetailPage({
                       skipped: demo.meterSkipped,
                     }}
                   />
+                  </div>
                 ) : null;
                 const record = demo.meterInstalledAt ? (
                   <div className="text-sm space-y-1">

@@ -3551,6 +3551,10 @@ enum TicketType {
   device_replacement
   /// Removed or spare material waiting to be collected.
   pickup
+  /// The society asking FirsThing about a service it does not have yet —
+  /// raised from the portal's water page when no tanks are connected
+  /// (2026-09-26). Lands on the same desk so operations sees it.
+  enquiry
 
   @@map("ticket_type")
 }

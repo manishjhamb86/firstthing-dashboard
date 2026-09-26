@@ -2,8 +2,11 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, PageHeader, StatusChip } from "@/components/ui";
 import { hasGrant } from "@/lib/portal-access";
+import { publishedMonthsFor } from "@/lib/published-months-loader";
+import { formatDate } from "@/lib/format-date";
+import { WaterPitch } from "./water-pitch";
 import { TankVisual } from "@/components/tank-visual";
 import { TankHistory, type LevelPoint } from "./tank-history";
 import { formatInstant, timeAgo } from "@/lib/format-date";
@@ -42,6 +45,21 @@ export default async function PortalTanksPage() {
     where: { societyId, hasLevelSignal: true },
     orderBy: { name: "asc" },
   });
+
+  // With no tanks connected the page is a pitch (water-pitch.tsx): its proof
+  // is the society's own published lighting saving, and it remembers a
+  // request already sent rather than inviting a second one.
+  const [lightingSaved, enquiry] =
+    tanks.length === 0
+      ? await Promise.all([
+          publishedMonthsFor(societyId).then((p) => p.sinceStart?.savedValue ?? null),
+          db.ticket.findFirst({
+            where: { societyId, type: "enquiry", status: { not: "resolved" }, subject: { startsWith: "Water" } },
+            orderBy: { createdAt: "desc" },
+            select: { createdAt: true },
+          }),
+        ])
+      : [null, null];
 
   // Live refresh, best-effort and bounded: the page renders from the mirror
   // when Tuya is slow or down — residents get the last sample, honestly
@@ -177,15 +195,18 @@ export default async function PortalTanksPage() {
     <>
       <PageHeader
         title="Water tanks"
-        subtitle={flat ? "Live levels — each tank says which supply and tower it serves." : "Live levels, grouped by what each setup supplies."}
+        subtitle={
+          tanks.length === 0
+            ? "Your society's tanks and pump room"
+            : flat
+              ? "Live levels — each tank says which supply and tower it serves."
+              : "Live levels, grouped by what each setup supplies."
+        }
         chip={headerChip}
       />
 
       {tanks.length === 0 ? (
-        <EmptyState title="No tanks connected yet">
-          When FirsThing installs water-level sensors on your society&apos;s tanks, their live levels
-          appear here.
-        </EmptyState>
+        <WaterPitch lightingSaved={lightingSaved} sentOn={enquiry ? formatDate(enquiry.createdAt) : null} />
       ) : (
         <>
           {/* auto-FILL, not auto-fit (user-caught 2026-09-15): a tank alone in

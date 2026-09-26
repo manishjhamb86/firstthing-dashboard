@@ -12,6 +12,7 @@ const TYPE_LABEL: Record<string, string> = {
   complaint: "Complaint",
   device_replacement: "Replacement",
   pickup: "Pickup",
+  enquiry: "Sales enquiry",
 };
 
 // The desk behind the portal's Support tab (customer portal, 2026-08-31):

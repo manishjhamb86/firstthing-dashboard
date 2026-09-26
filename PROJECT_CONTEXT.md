@@ -7794,3 +7794,38 @@ user-caught).**
   - **Alignment.** The period line, the chart and the day table share one before/after split:
     before in the left half, after from the midpoint, marked by a dashed divider in the chart.
     The table uses fixed 30/20/30/20 columns, and the period labels are inset to match its cells.
+
+## A society with no tanks sees what it is missing, and can contact us (2026-09-26) — user-asked
+
+The portal's water page used to show "No tanks connected yet". For a society with no tanks it is
+now a short pitch (`src/app/portal/tanks/water-pitch.tsx`), laid out in the order a committee
+decides:
+1. **The problem they already have:** overflow wastes water and the electricity used to pump
+   it, pumps run dry, and pumps are switched by hand.
+2. **Proof from their own account:** the society's own published lighting saving, where there is
+   one.
+3. **The two offers:**
+   - tank monitoring with automatic flow-control valves, for zero overflow;
+   - complete pump-room automation, which is option 1 plus an automatic pump controller,
+     dry-run protection, and VFDs where the pumps need them. This one is marked recommended.
+4. **How it works:** ask → we visit → you decide → we install.
+5. **A contact form, plus tap-to-call and tap-to-email links.** Manish Jhamb 9811322159 and
+   Gomti Mishra 8510869322; info@ and gomti.mishra@firsthing.earth. The contacts live in
+   `SALES_CONTACTS` in `src/lib/company.ts`.
+
+**Claims.** The copy makes no claim the product cannot back: no invented percentage and no
+"free survey". The automation runs on the controller on site, and the portal only shows it
+(INV-08).
+
+**The contact form lands in the back office.** Messages go on the existing request desk as a new
+ticket type, `enquiry`, shown as "Sales enquiry" (migration `20260926140000_ticket_enquiry`). So
+admins see them on `/admin/tickets` and in the notification bell. Details:
+- Any member who can see the water page may send one, because an enquiry binds the society to
+  nothing.
+- A 10-digit mobile number is required, and it is checked on the server.
+- A society cannot open a second water enquiry while one is open. The page then says the message
+  was sent, and when.
+
+**Dashboard.** It shows a short teaser linking to the water page for a society with no tanks.
+
+**Verified** 11/11 on dev, and the test enquiry was removed afterwards.

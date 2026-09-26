@@ -576,6 +576,21 @@ export default async function PortalHomePage() {
               )}
             </Card>
           )}
+          {grants.has("water_tanks") && tanks.length === 0 && (
+            // No tanks connected: a short pitch that leads to the water page.
+            <Card className="p-6">
+              <p className="lbl mb-2" style={{ color: "var(--accent)" }}>
+                Water &amp; pump systems
+              </p>
+              <p className="text-[16px] font-bold leading-snug">Stop paying to pump water that overflows</p>
+              <p className="mt-1.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
+                Tank levels live here, automatic overflow control, and pumps that run themselves.
+              </p>
+              <Link href="/portal/tanks" className="mt-3 inline-block text-[13.5px] font-semibold">
+                See how →
+              </Link>
+            </Card>
+          )}
           {grants.has("water_tanks") && tanks.length > 0 && (
             <Card className="p-6">
               <CardTitle>Water tank status</CardTitle>

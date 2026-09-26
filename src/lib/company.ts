@@ -12,3 +12,15 @@ export const COMPANY = {
   gstin: "",
   footnote: "",
 };
+
+/**
+ * Who a society talks to about a new service (the user's call, 2026-09-26).
+ * Shown as tap-to-call / tap-to-email links on the portal's offer pages.
+ */
+export const SALES_CONTACTS = {
+  calls: [
+    { name: "Manish Jhamb", phone: "9811322159" },
+    { name: "Gomti Mishra", phone: "8510869322" },
+  ],
+  emails: ["info@firsthing.earth", "gomti.mishra@firsthing.earth"],
+};

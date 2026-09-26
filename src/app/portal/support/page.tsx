@@ -16,6 +16,7 @@ const TYPE_LABEL: Record<string, string> = {
   complaint: "Complaint",
   device_replacement: "Replacement",
   pickup: "Pickup",
+  enquiry: "Sales enquiry",
 };
 
 // Raise it here, track it here. tickets_view sees the desk; tickets_manage

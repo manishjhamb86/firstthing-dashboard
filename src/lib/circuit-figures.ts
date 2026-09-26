@@ -13,6 +13,7 @@
  */
 import type { Tx } from "@/lib/tx";
 import { logger } from "@/lib/logger";
+import { reconcileOfferWithDemos } from "@/lib/offer-demo-reconcile";
 import { deriveCircuitFigures, BAND_MAX_PCT, BAND_MIN_PCT } from "@/lib/circuit-demos";
 import { demoCircuitState, type DemoStepFacts } from "@/lib/demo-steps";
 import { changedSince, type AcceptanceDay } from "@/lib/demo-acceptance";
@@ -175,6 +176,9 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
     await tx.circuit.update({ where: { id: circuitId }, data: data as never });
     logger.info("circuit.figures_resynced", { circuitId, actorId, ...data });
   }
+
+  // An offer priced before the demo existed records what the demo measured.
+  await reconcileOfferWithDemos(tx, circuitId, actorId);
 
   // An out-of-band demo raises its review; a demo back in band resolves it.
   for (const d of circuit.demos) {

@@ -261,16 +261,43 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
               </div>
             )}
 
-            {current.benchmarkSource === "negotiated_fixed" && (
-              <p
-                className="mt-4 rounded-[var(--r-md)] border p-3 text-sm"
-                style={{ borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" }}
-              >
-                Demo-skip path: the savings <strong>percentage</strong> is agreement-derived, not
-                measured. Consumption is still metered and monitored against the first post-install month —
-                the narrowed exception, stated on the offer itself.
-              </p>
-            )}
+            {(() => {
+              // An offer priced before its demo existed catches up once the
+              // demo is done (offer-demo-reconcile.ts, 2026-09-26).
+              const terms = (current.circuitTerms as (OfferCircuitTerm & { reconciledFromDemo?: boolean })[]) ?? [];
+              const measured = terms.filter((t) => t.reconciledFromDemo && t.demoBenchmarkSavingsPct != null);
+              const box = { borderColor: "var(--info-line)", background: "var(--info-bg)", color: "var(--info-fg)" };
+              const list = measured
+                .map((t) => `${t.location || t.lightType}: measured ${t.demoBenchmarkSavingsPct!.toFixed(2)}%, agreed ${t.benchmarkSavingsPct.toFixed(2)}%`)
+                .join(" · ");
+              if (current.benchmarkSource === "measured" && measured.length > 0) {
+                return (
+                  <p className="mt-4 rounded-[var(--r-md)] border p-3 text-sm" style={box}>
+                    The demo has measured the agreed figure — {list}. They agree to rounding, so the benchmark is
+                    measured. The price and terms are unchanged.
+                  </p>
+                );
+              }
+              if (current.benchmarkSource === "negotiated_fixed" && measured.length > 0) {
+                return (
+                  <p className="mt-4 rounded-[var(--r-md)] border p-3 text-sm" style={{ ...box, borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}>
+                    The demo has run — {list}. They differ by more than rounding, so the agreed figure stands as
+                    negotiated. Record an agreed benchmark on the circuit, or correct the demo, if they should match.
+                  </p>
+                );
+              }
+              if (current.benchmarkSource === "negotiated_fixed") {
+                return (
+                  <p className="mt-4 rounded-[var(--r-md)] border p-3 text-sm" style={box}>
+                    Demo-skip path: the savings <strong>percentage</strong> is agreement-derived, not measured.
+                    Consumption is still metered and monitored against the first post-install month — the narrowed
+                    exception, stated on the offer itself. Once a demo is completed and matches the agreed figure,
+                    this offer records it as measured.
+                  </p>
+                );
+              }
+              return null;
+            })()}
 
             {/* FEAT-028-AC-2 — "awaiting response" with elapsed time, the
                 primary stall signal FEAT-031 reads. */}

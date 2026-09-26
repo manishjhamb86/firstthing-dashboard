@@ -19,13 +19,14 @@ import { DeactivatePortalButton } from "./deactivate-portal-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
-import { formatDate, formatInstant } from "@/lib/format-date";
+import { formatDate, formatInstant, monthLabel } from "@/lib/format-date";
 import { TankLevelBar } from "@/components/tank-visual";
 import { EditSocietyForm } from "./edit-society-form";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { NextStepCallout } from "@/components/deal-stepper";
 import type { NextAction } from "@/lib/deal-progress";
 import { bestKycAcross, kycDocumentsWanted } from "@/lib/kyc-society";
+import { SOCIETY_DOC_TYPES, societyDocuments } from "@/lib/society-documents";
 
 const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 
@@ -131,6 +132,9 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             owner: "sales" as const,
           }
       : null;
+
+  const sharedDocs = await societyDocuments(society.id);
+  const docCount = sharedDocs.rows.length + (sharedDocs.agreement ? 1 : 0);
 
   return (
     <>
@@ -485,6 +489,63 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         </Card>
       </div>
 
+      {/* What the society sees under Documents in its portal — the same set,
+          from the same loader, so "shared with the society" means the same
+          thing on both sides (2026-09-26, user-asked). */}
+      <Card className="mt-6 p-6 min-w-0">
+        <div className="flex flex-wrap items-baseline justify-between gap-3 mb-1">
+          <CardTitle className="mb-0">Documents shared with the society</CardTitle>
+          <span className="text-xs text-[var(--text-subtle)]">
+            {docCount} document{docCount === 1 ? "" : "s"} · what the society sees under Documents
+          </span>
+        </div>
+        {docCount === 0 ? (
+          <EmptyState title="Nothing shared yet">
+            Shared demo reports, published savings reports, finalised inspections, the signed agreement and released
+            invoices appear here, exactly as the society sees them.
+          </EmptyState>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="tbl tbl-compact mt-3">
+              <thead>
+                <tr>
+                  <th>Month</th>
+                  <th>Document</th>
+                  <th>Type</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {[...(sharedDocs.agreement ? [sharedDocs.agreement] : []), ...sharedDocs.rows].map((d) => (
+                  <tr key={`${d.docType}-${d.id}`}>
+                    <td className="num whitespace-nowrap">{monthLabel(d.period)}</td>
+                    <td>
+                      <span className="font-medium">{d.title}</span>
+                      <span className="block text-xs text-[var(--text-subtle)]">{d.detail}</span>
+                    </td>
+                    <td>
+                      <StatusChip tone={SOCIETY_DOC_TYPES[d.docType]?.tone ?? "neu"}>
+                        {SOCIETY_DOC_TYPES[d.docType]?.label ?? d.docType}
+                      </StatusChip>
+                    </td>
+                    <td className="text-right whitespace-nowrap">
+                      {d.external ? (
+                        <a href={d.adminHref} target="_blank" rel="noreferrer" className="btn-secondary btn-sm">
+                          Download
+                        </a>
+                      ) : (
+                        <Link href={d.adminHref} className="btn-secondary btn-sm">
+                          Open
+                        </Link>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
   );
 }

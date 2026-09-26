@@ -81,7 +81,11 @@ export async function collectDemoReportInput(pipelineId: string) {
       id: c.id,
       lightType: c.lightType,
       location: c.location,
-      meteredLightCount: c.meteredLightCount,
+      // The lights the demos measured — the before and after figures are
+      // theirs, so the extrapolation must divide by the same count. A later
+      // light-count change on the circuit (French Apartment: 55 -> 76 from
+      // 01-08-2026) does not reach back into a demo run before it.
+      meteredLightCount: counted.length > 0 && (figures.meteredLightCount ?? 0) > 0 ? figures.meteredLightCount! : c.meteredLightCount,
       representedLightCount: c.representedLightCount,
       wattage: c.wattage,
       preInstallBaseline: counted.length > 0 ? figures.baseline : c.preInstallBaseline,

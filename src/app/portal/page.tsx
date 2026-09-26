@@ -565,6 +565,11 @@ export default async function PortalHomePage() {
                 Measured on the metered demo circuits, with the daily readings behind every figure.
               </p>
               <DemoReportView report={report} />
+              <p className="mt-4">
+                <Link href={`/portal/reports/demo/${report.id}`} className="btn-secondary">
+                  Open &amp; download
+                </Link>
+              </p>
             </Card>
           ))}
         </div>

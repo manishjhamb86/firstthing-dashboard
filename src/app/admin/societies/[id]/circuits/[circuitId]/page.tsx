@@ -461,6 +461,7 @@ export default async function CircuitDetailPage({
         overrideReason={circuit.benchmarkOverrideReason}
         canStart={canEdit && !circuit.voidedAt && eligible}
         canDecide={canOverride && !circuit.voidedAt}
+        canChangeLights={demoMode && canEdit && !circuit.voidedAt}
         maxDemos={MAX_DEMOS_PER_CIRCUIT}
         agreedPending={agreedPending}
         removed={removedDemos.map((d) => ({

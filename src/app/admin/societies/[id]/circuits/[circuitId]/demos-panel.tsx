@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
-import { removeDemo, setBenchmarkOverride, setDemoRejected, startDemo } from "./demo-step-actions";
+import { removeDemo, setBenchmarkOverride, setDemoLightCount, setDemoRejected, startDemo } from "./demo-step-actions";
 
 export type DemoDTO = {
   id: string;
@@ -41,6 +41,7 @@ export function DemosPanel({
   maxDemos,
   agreedPending,
   removed = [],
+  canChangeLights = false,
 }: {
   circuitId: string;
   demos: DemoDTO[];
@@ -56,6 +57,8 @@ export function DemosPanel({
   agreedPending: boolean;
   /** Demos removed as duplicates or mistakes — kept on record, listed here. */
   removed?: { sequence: number; reason: string; on: string; by: string | null }[];
+  /** Demo mode: a demo's light count can be changed from the table. */
+  canChangeLights?: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -122,7 +125,24 @@ export function DemosPanel({
                       <span className="block text-xs text-[var(--text-muted)]">{d.combine === "batch" ? "different lights — adds" : "same lights — averages"}</span>
                     )}
                   </td>
-                  <td className="num text-right">{d.meteredLightCount}</td>
+                  <td className="num text-right">
+                    {d.meteredLightCount}
+                    {canChangeLights && (
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm ml-1"
+                        disabled={pending}
+                        aria-label={`Change the light count of demo ${d.sequence}`}
+                        onClick={() => {
+                          const v = window.prompt(`Lights on demo ${d.sequence}'s meter (now ${d.meteredLightCount}):`, String(d.meteredLightCount));
+                          if (v === null || v.trim() === "" || Number(v) === d.meteredLightCount) return;
+                          run(() => setDemoLightCount({ demoId: d.id, count: Number(v) }));
+                        }}
+                      >
+                        Change
+                      </button>
+                    )}
+                  </td>
                   <td className="num text-right">{d.preAverage?.toFixed(2) ?? "—"}</td>
                   <td className="num text-right">{d.postAverage?.toFixed(2) ?? "—"}</td>
                   <td className="num text-right">{d.savingsPct === null ? "—" : `${d.savingsPct.toFixed(2)}%`}</td>

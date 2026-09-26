@@ -868,6 +868,35 @@ export async function relockDemo(demoId: string): Promise<Outcome> {
 }
 
 /**
+ * Change the number of lights a demo meters — demo mode only (2026-09-26,
+ * user-asked). Outside demo mode the count a demo ran on is fixed with the
+ * demo; a count typed wrong on a locked circuit goes through "Correct count"
+ * on the inventory instead. The demo's figures re-derive, and the old value
+ * is kept in the change log.
+ */
+export async function setDemoLightCount(input: { demoId: string; count: number; reason?: string }): Promise<Outcome> {
+  const a = await actor("field");
+  if ("error" in a) return { error: a.error };
+  if (!(await isDemoMode())) {
+    logger.warn("demo.light_count_refused", { actorId: a.admin.id, demoId: input.demoId, reason: "not_demo_mode" });
+    return { error: "Changing a demo's light count is only available in demo mode. A count typed wrong can be corrected on the load inventory." };
+  }
+  if (!Number.isInteger(input.count) || input.count < 1 || input.count > 5000) return { error: "The light count must be a whole number between 1 and 5000." };
+  const g = await editableDemo(input.demoId, a.admin.id, "light_count");
+  if ("error" in g) return { error: g.error };
+  const demo = g.demo;
+  if (demo.meteredLightCount === input.count) return { error: "That is already the demo's light count." };
+  await db.$transaction(async (tx) => {
+    await tx.circuitDemo.update({ where: { id: demo.id }, data: { meteredLightCount: input.count } });
+    await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "meteredLightCount", circuitId: demo.circuitId, demoId: demo.id, oldValue: demo.meteredLightCount, newValue: input.count, reason: input.reason?.trim() || null, actorId: a.admin.id });
+    await finish(tx, demo.circuitId, a.admin.id);
+  });
+  logger.info("demo.light_count_changed", { actorId: a.admin.id, demoId: demo.id, from: demo.meteredLightCount, to: input.count });
+  revalidatePath(pathOf(demo));
+  return { ok: true };
+}
+
+/**
  * Remove a demo started by mistake — a duplicate (2026-09-26, user-asked).
  * Rejecting keeps a demo on the table as one that does not count; removing
  * takes it off the table. Never deleted: the row stays with who removed it,

@@ -7956,3 +7956,15 @@ inventory:
 - a non-operations remove was refused on the server and logged.
 
 The greeting check passed 2/2.
+
+**Same day — a demo's light count can be changed in demo mode (user-asked).** Every demo row on
+the demos table now has a **Change** control beside its light count, but only in demo mode
+(`setDemoLightCount`). It writes the old value to the change log and re-derives the figures.
+
+The demo-mode rule is enforced on the server. Switching demo mode off behind the open page makes
+the click fail with a stated refusal, and nothing is written.
+
+Outside demo mode a demo's count stays fixed; a count typed wrong goes through "Correct count" on
+the inventory.
+
+Verified 7/7 in a browser.

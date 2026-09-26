@@ -7689,3 +7689,32 @@ columns in reports. It is now scoped to the frame's own rows (`.lh-frame > * > t
 
 Verified in a browser, 12/12, on a fixture shaped like French Apartment, and the fixture was
 removed afterwards.
+
+**Same day, two follow-ups (user-caught):**
+
+- **The portal showed the oldest shared report.** The dashboard picked one report per deal by
+  building a `Map` from a list sorted newest-first. A Map keeps the last value written for a key,
+  so it kept the oldest version. French Apartment's society was being shown v2: 212 monitoring
+  days, 9.30 kWh/day, 76 lights. The dashboard now keeps the first report it sees for each deal,
+  which is the newest.
+- **The readings are one list, a month at a time.** The before figure is a single number and
+  stays in the report's headline. The readings are one list with year tabs and then month tabs
+  (`src/components/demo-days.tsx`). The list opens on the current month when it has readings,
+  otherwise on the latest month that has any. A day is labelled Before or After only when the
+  report holds both kinds. A printed report prints every day, because paper has no tabs.
+
+**The deploy runs on the server.** Three deploys in a row lost their SSH connection during
+`next build`, which killed the build and left stage with no build. The deploy is now split:
+- **`scripts/stage-deploy-remote.sh` does the work, on the server:**
+  - takes a size-checked backup;
+  - installs, migrates, generates and builds, then restarts both processes;
+  - refuses to run if another deploy is already running (flock);
+  - checks that the build left a `BUILD_ID` and that login answers 200;
+  - ends its log with `DEPLOY_DONE <commit>` or `DEPLOY_FAILED <reason>`.
+- **`scripts/deploy-stage.sh` only triggers it, from the laptop:**
+  - pushes the branch;
+  - has the server check out that commit, so the server runs that commit's copy of the script;
+  - starts the server script with `setsid nohup`, so it keeps running when the connection drops;
+  - follows the log, reconnecting until it sees the done or failed line.
+
+  `--follow` reattaches to the latest deploy's log.

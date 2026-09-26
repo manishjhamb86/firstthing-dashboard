@@ -26,7 +26,8 @@ pnpm vitest run tests/arrears.test.ts          # one file
 pnpm vitest run tests/arrears.test.ts -t "stale" # one case by name
 pnpm prisma migrate dev --name <slug>          # new migration (writes to the SHARED remote dev DB)
 pnpm prisma migrate deploy / generate / db seed / studio
-./scripts/deploy-stage.sh [branch]             # push + git-based deploy to stage.firsthing.earth
+./scripts/deploy-stage.sh [branch]             # push, then deploy ON the server (detached) and follow its log
+./scripts/deploy-stage.sh --follow             # reattach to the latest deploy's log
 ```
 
 - Validation set for a change, smallest first: `tsc` → `lint` → `build` (structural changes) →

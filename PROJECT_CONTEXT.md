@@ -7742,3 +7742,33 @@ removed afterwards.
   readings moved to page 2. Print now forces both side by side, and the spacing is tighter.
   Verified one A4 page from both the portal and the back office, with zero margins and with
   Safari-like 12.7 mm margins.
+
+**Demo report fills a portrait A4; the portal dashboard is laid out mobile first (same day,
+user-caught).**
+
+- **Print layout.** The report's screen layout shrunk onto paper read as landscape and left half
+  the sheet empty. On paper it now runs top to bottom:
+  - the two headline figures side by side;
+  - the before/after comparison full width;
+  - the before and after periods;
+  - a full-width chart (a separate print-sized SVG);
+  - the day table at a readable size.
+
+  The print rules are under `.report-sheet .demo-report` in `globals.css`. They are specific
+  enough to beat the container-query columns, which still match at print width. Measured at
+  1025px against A4's 1123px, so it stays one page even with Safari's 12.7 mm margins.
+- **Dashboard.** Every card is in one column on a phone, in reading order:
+  1. the savings trend
+  2. your circuits
+  3. billing
+  4. the monitoring readings
+  5. the inspection and tanks
+  6. recent activity
+  7. the demo report
+
+  From xl the cards split into a main column (the two charts) beside a side column of compact
+  cards, with the demo report full width underneath. The column wrappers are `display: contents`
+  below xl, which lets one `order` sequence interleave the two columns on a phone.
+
+  The "Quick actions" card is gone. It repeated the sidebar's links, was already hidden on
+  phones, and was the tall card that left the trend card half empty.

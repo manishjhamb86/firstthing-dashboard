@@ -23,7 +23,6 @@ import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
 import { LightCountHistory } from "./light-count-history";
 import { MonitoringReadings } from "@/components/monitoring-readings";
-import { PORTAL_NAV_ICONS, portalNavEntries } from "./portal-nav-entries";
 import { ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap } from "lucide-react";
 import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkRow, type HealthIssue } from "./kpi-tiles";
 
@@ -43,7 +42,6 @@ export default async function PortalHomePage() {
   if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
   const societyId = viewer.societyId;
   const grants = effectiveGrants(viewer.role, viewer.grants);
-  const quickActions = portalNavEntries(grants);
 
   const [society, sharedReports, openOffers, tanks, installations] = await Promise.all([
     db.society.findUnique({ where: { id: societyId } }),
@@ -363,53 +361,6 @@ export default async function PortalHomePage() {
                 </p>
               )}
 
-              <div className="mb-6 grid items-stretch gap-5 xl:grid-cols-[1fr_300px]">
-                <Card className="p-6">
-                  <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
-                    <CardTitle className="mb-0">Live savings trend</CardTitle>
-                    <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                      all circuits
-                    </p>
-                  </div>
-                  {energy.daily.length === 0 ? (
-                    <ChartPending
-                      title="Your consumption appears here"
-                      note="once the first readings are on record"
-                      height={170}
-                    />
-                  ) : (
-                    <ConsumptionChart days={energy.daily} height={170} />
-                  )}
-                </Card>
-
-                {quickActions.length > 0 && (
-                  <Card className="hidden p-6 lg:block">
-                    <CardTitle>Quick actions</CardTitle>
-                    <div className="flex flex-col gap-2">
-                      {quickActions.map((e) => {
-                        const Icon = PORTAL_NAV_ICONS[e.key];
-                        return (
-                          <Link
-                            key={e.href}
-                            href={e.href}
-                            className="flex items-center gap-3 rounded-[var(--r-md)] border px-3.5 py-3 text-[13.5px] font-semibold"
-                            style={{ borderColor: "var(--border-subtle)", background: "var(--surface-sunken)" }}
-                          >
-                            <span
-                              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                              style={{ background: "var(--info-bg)", color: "var(--info-fg)" }}
-                            >
-                              <Icon size={15} strokeWidth={2.2} aria-hidden />
-                            </span>
-                            <span className="flex-1">{e.label}</span>
-                            <ChevronRight size={17} style={{ color: "var(--text-subtle)" }} aria-hidden />
-                          </Link>
-                        );
-                      })}
-                    </div>
-                  </Card>
-                )}
-              </div>
             </>
           );
         })()}
@@ -445,78 +396,82 @@ export default async function PortalHomePage() {
         </Card>
       )}
 
-      {(grants.has("documents") || (grants.has("water_tanks") && tanks.length > 0) || billedInvoice) && (
-        <div className="mb-6 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {grants.has("documents") && (
-            <Card className="p-6">
-              <CardTitle>Latest inspection</CardTitle>
-              {latestInspection ? (
-                (() => {
-                  const summary = inspectionSummary({
-                    totalLightsChecked: latestInspection.totalLightsChecked ?? 0,
-                    findingsCount: latestInspection.findings.length,
-                  });
-                  return (
-                    <div className="flex flex-col gap-2">
-                      <p className="num text-[15px] font-bold">{formatDate(latestInspection.inspectedAt)}</p>
-                      <StatusChip tone={summary.faultyLightsCount === 0 ? "ok" : "warn"}>
-                        {summary.faultyLightsCount === 0
-                          ? "No issues noted"
-                          : `${summary.faultyLightsCount} noted`}
-                      </StatusChip>
-                      <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                        {summary.faultyLightsCount} of {summary.totalLightsChecked} fixtures noted
-                      </p>
-                      <Link href="/portal/documents" className="text-[13px] font-semibold">
-                        View report →
-                      </Link>
-                    </div>
-                  );
-                })()
-              ) : (
-                <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-                  Your first monthly inspection appears here once one is filed.
-                </p>
-              )}
-            </Card>
-          )}
-
-          {grants.has("water_tanks") && tanks.length > 0 && (
-            <Card className="p-6">
-              <CardTitle>Water tank status</CardTitle>
-              <p
-                className="mb-3 text-[13.5px] font-bold"
-                style={{ color: reporting === tanks.length ? "var(--ok-fg)" : "var(--warn-fg)" }}
-              >
-                {reporting === tanks.length ? "All tanks reporting" : `${reporting} of ${tanks.length} reporting`}
-              </p>
-              <div className="flex flex-col gap-2.5">
-                {tanks.slice(0, 4).map((t) => (
-                  <div key={t.id} className="flex items-center gap-3 text-[13.5px]">
-                    <span className="w-20 shrink-0 truncate font-medium" title={t.name}>
-                      {t.name}
-                    </span>
-                    <span
-                      className="h-2 flex-1 overflow-hidden rounded-full"
-                      style={{ background: "var(--surface-active)" }}
-                    >
-                      <span
-                        className="block h-full rounded-full"
-                        style={{
-                          width: `${t.lastLevelPercent ?? 0}%`,
-                          background: t.lastOnline ? "var(--ok-fg)" : "var(--warn-fg)",
-                        }}
-                      />
-                    </span>
-                    <span className="num w-9 shrink-0 text-right font-semibold">
-                      {t.lastLevelPercent !== null ? `${t.lastLevelPercent}%` : "—"}
-                    </span>
+      {/* Mobile first (2026-09-26, user-caught: "very awkward arrangement").
+          On a phone every card is one column, in the order a resident reads
+          it: the trend, their circuits, the bill, this month's readings, the
+          inspection, tanks, activity. From xl the same cards split into a
+          main column (the two charts) and a side column of compact cards,
+          so no column runs long beside an empty one. The column wrappers are
+          display:contents below xl, which is what lets one `order` sequence
+          interleave cards from both columns on a phone. */}
+      <div className="mb-6 flex flex-col gap-5 xl:grid xl:grid-cols-12 xl:items-start">
+        <div className="contents xl:col-span-8 xl:flex xl:min-w-0 xl:flex-col xl:gap-5">
+          {energy && (
+            <div className="order-1 min-w-0 xl:order-none">
+                <Card className="p-6">
+                  <div className="mb-1 flex flex-wrap items-baseline justify-between gap-3">
+                    <CardTitle className="mb-0">Live savings trend</CardTitle>
+                    <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                      all circuits
+                    </p>
                   </div>
-                ))}
-              </div>
-            </Card>
+                  {energy.daily.length === 0 ? (
+                    <ChartPending
+                      title="Your consumption appears here"
+                      note="once the first readings are on record"
+                      height={170}
+                    />
+                  ) : (
+                    <ConsumptionChart days={energy.daily} height={170} />
+                  )}
+                </Card>
+            </div>
           )}
-
+          <div className="order-4 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
+          {/* The monitoring period — after full installation, from the billing
+              start. Separate from the demo report above, which is the demo's
+              own before/after days only. */}
+          {energy?.circuits
+            .filter((c) => c.monitoring.length > 0)
+            .map((c, _i, all) => (
+              <Card key={`mon-${c.id}`} className="p-6">
+                <CardTitle>Readings since billing started{all.length > 1 ? ` — ${c.label}` : ""}</CardTitle>
+                <MonitoringReadings
+                  days={c.monitoring}
+                  benchmarkPct={c.benchmarkPct}
+                  monitoringFrom={c.monitoringFrom}
+                  stages={c.lightHistory}
+                  currentMonth={new Date().toISOString().slice(0, 7)}
+                />
+              </Card>
+            ))}
+          </div>
+        </div>
+        <div className="contents xl:col-span-4 xl:flex xl:min-w-0 xl:flex-col xl:gap-5">
+          <div className="order-2 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
+          {/* One progress card per running installation with nothing to
+              review — a gated one already has its BatchReviewCard above. */}
+          {installations
+            .filter((inst) => !gates.some((g) => g.installation.id === inst.id))
+            .map((inst) => (
+              <Card className="p-6" key={inst.id}>
+                <CardTitle>
+                  Installation
+                  {installations.length > 1
+                    ? ` — ${dealLabel(inst.pipeline.serviceLine, inst.pipeline.dealScope)}`
+                    : ""}
+                </CardTitle>
+                <p className="text-sm">
+                  Nothing to review right now —{" "}
+                  {inst.batches.filter((b) => b.state === "approved").length} of{" "}
+                  {new Set(inst.plannedDays.map((d) => d.day)).size} days approved,{" "}
+                  <span className="num">{inst.batches.reduce((n, b) => n + b.installedCount, 0)}</span> of{" "}
+                  <span className="num">{inst.contractedLightCount}</span> fittings installed.
+                </p>
+              </Card>
+            ))}
+          </div>
+          <div className="order-3 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
           {billedInvoice && (
             <Card className="p-6">
               <CardTitle>Billing</CardTitle>
@@ -548,54 +503,8 @@ export default async function PortalHomePage() {
               </Link>
             </Card>
           )}
-        </div>
-      )}
-
-      <div className="mb-6 grid items-start gap-5 lg:grid-cols-12">
-        <div className="lg:col-span-7 min-w-0 flex flex-col gap-5">
-          {/* One card per DEAL's latest shared report (CON-24 as amended:
-              a line delivered in parts has one report per part, and showing
-              only the newest hid the sibling's). The query is version-desc,
-              so first-seen per pipeline is that deal's latest version — kept
-              with findIndex, not a Map: a Map keeps the LAST value written
-              for a key, which showed the society its oldest shared version
-              (2026-09-26, user-caught). */}
-          {sharedReports.filter((r, i) => sharedReports.findIndex((x) => x.pipelineId === r.pipelineId) === i).map((report, i, all) => (
-            <Card key={report.id} className="p-6">
-              <CardTitle>
-                Your demo savings report
-                {all.length > 1 ? ` — ${dealLabel(report.pipeline.serviceLine, report.pipeline.dealScope)}` : ""}
-              </CardTitle>
-              <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
-                Measured on the metered demo circuits, with the daily readings behind every figure.
-              </p>
-              <DemoReportView report={report} />
-              <p className="mt-4">
-                <Link href={`/portal/reports/demo/${report.id}`} className="btn-secondary">
-                  Open &amp; download
-                </Link>
-              </p>
-            </Card>
-          ))}
-          {/* The monitoring period — after full installation, from the billing
-              start. Separate from the demo report above, which is the demo's
-              own before/after days only. */}
-          {energy?.circuits
-            .filter((c) => c.monitoring.length > 0)
-            .map((c, _i, all) => (
-              <Card key={`mon-${c.id}`} className="p-6">
-                <CardTitle>Readings since billing started{all.length > 1 ? ` — ${c.label}` : ""}</CardTitle>
-                <MonitoringReadings
-                  days={c.monitoring}
-                  benchmarkPct={c.benchmarkPct}
-                  monitoringFrom={c.monitoringFrom}
-                  stages={c.lightHistory}
-                  currentMonth={new Date().toISOString().slice(0, 7)}
-                />
-              </Card>
-            ))}
-        </div>
-        <div className="lg:col-span-5 min-w-0 flex flex-col gap-5">
+          </div>
+          <div className="order-2 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
           {energy && energy.circuits.length > 0 && (
             <Card className="p-6">
               <CardTitle>Your circuits</CardTitle>
@@ -632,27 +541,78 @@ export default async function PortalHomePage() {
               </p>
             </Card>
           )}
-          {/* One progress card per running installation with nothing to
-              review — a gated one already has its BatchReviewCard above. */}
-          {installations
-            .filter((inst) => !gates.some((g) => g.installation.id === inst.id))
-            .map((inst) => (
-              <Card className="p-6" key={inst.id}>
-                <CardTitle>
-                  Installation
-                  {installations.length > 1
-                    ? ` — ${dealLabel(inst.pipeline.serviceLine, inst.pipeline.dealScope)}`
-                    : ""}
-                </CardTitle>
-                <p className="text-sm">
-                  Nothing to review right now —{" "}
-                  {inst.batches.filter((b) => b.state === "approved").length} of{" "}
-                  {new Set(inst.plannedDays.map((d) => d.day)).size} days approved,{" "}
-                  <span className="num">{inst.batches.reduce((n, b) => n + b.installedCount, 0)}</span> of{" "}
-                  <span className="num">{inst.contractedLightCount}</span> fittings installed.
+          </div>
+          <div className="order-5 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
+          {grants.has("documents") && (
+            <Card className="p-6">
+              <CardTitle>Latest inspection</CardTitle>
+              {latestInspection ? (
+                (() => {
+                  const summary = inspectionSummary({
+                    totalLightsChecked: latestInspection.totalLightsChecked ?? 0,
+                    findingsCount: latestInspection.findings.length,
+                  });
+                  return (
+                    <div className="flex flex-col gap-2">
+                      <p className="num text-[15px] font-bold">{formatDate(latestInspection.inspectedAt)}</p>
+                      <StatusChip tone={summary.faultyLightsCount === 0 ? "ok" : "warn"}>
+                        {summary.faultyLightsCount === 0
+                          ? "No issues noted"
+                          : `${summary.faultyLightsCount} noted`}
+                      </StatusChip>
+                      <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                        {summary.faultyLightsCount} of {summary.totalLightsChecked} fixtures noted
+                      </p>
+                      <Link href="/portal/documents" className="text-[13px] font-semibold">
+                        View report →
+                      </Link>
+                    </div>
+                  );
+                })()
+              ) : (
+                <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                  Your first monthly inspection appears here once one is filed.
                 </p>
-              </Card>
-            ))}
+              )}
+            </Card>
+          )}
+          {grants.has("water_tanks") && tanks.length > 0 && (
+            <Card className="p-6">
+              <CardTitle>Water tank status</CardTitle>
+              <p
+                className="mb-3 text-[13.5px] font-bold"
+                style={{ color: reporting === tanks.length ? "var(--ok-fg)" : "var(--warn-fg)" }}
+              >
+                {reporting === tanks.length ? "All tanks reporting" : `${reporting} of ${tanks.length} reporting`}
+              </p>
+              <div className="flex flex-col gap-2.5">
+                {tanks.slice(0, 4).map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 text-[13.5px]">
+                    <span className="w-20 shrink-0 truncate font-medium" title={t.name}>
+                      {t.name}
+                    </span>
+                    <span
+                      className="h-2 flex-1 overflow-hidden rounded-full"
+                      style={{ background: "var(--surface-active)" }}
+                    >
+                      <span
+                        className="block h-full rounded-full"
+                        style={{
+                          width: `${t.lastLevelPercent ?? 0}%`,
+                          background: t.lastOnline ? "var(--ok-fg)" : "var(--warn-fg)",
+                        }}
+                      />
+                    </span>
+                    <span className="num w-9 shrink-0 text-right font-semibold">
+                      {t.lastLevelPercent !== null ? `${t.lastLevelPercent}%` : "—"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+          </div>
+          <div className="order-7 min-w-0 xl:order-none">
           <Card className="p-6">
             <div className="mb-3 flex items-center justify-between gap-3">
               <CardTitle className="mb-0">Recent activity</CardTitle>
@@ -697,7 +657,36 @@ export default async function PortalHomePage() {
               </div>
             )}
           </Card>
+          </div>
         </div>
+      </div>
+
+      {/* Full width: the report lays itself out across the space it has. */}
+      <div className="mb-6 flex flex-col gap-5 empty:hidden">
+          {/* One card per DEAL's latest shared report (CON-24 as amended:
+              a line delivered in parts has one report per part, and showing
+              only the newest hid the sibling's). The query is version-desc,
+              so first-seen per pipeline is that deal's latest version — kept
+              with findIndex, not a Map: a Map keeps the LAST value written
+              for a key, which showed the society its oldest shared version
+              (2026-09-26, user-caught). */}
+          {sharedReports.filter((r, i) => sharedReports.findIndex((x) => x.pipelineId === r.pipelineId) === i).map((report, i, all) => (
+            <Card key={report.id} className="p-6">
+              <CardTitle>
+                Your demo savings report
+                {all.length > 1 ? ` — ${dealLabel(report.pipeline.serviceLine, report.pipeline.dealScope)}` : ""}
+              </CardTitle>
+              <p className="mb-4 text-sm" style={{ color: "var(--text-muted)" }}>
+                Measured on the metered demo circuits, with the daily readings behind every figure.
+              </p>
+              <DemoReportView report={report} />
+              <p className="mt-4">
+                <Link href={`/portal/reports/demo/${report.id}`} className="btn-secondary">
+                  Open &amp; download
+                </Link>
+              </p>
+            </Card>
+          ))}
       </div>
     </>
   );

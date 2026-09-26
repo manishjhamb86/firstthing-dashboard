@@ -63,15 +63,15 @@ export function DemoReportView({
   const allPost = circuits.flatMap((c) => c.postInstallReadings ?? []);
 
   return (
-    <div className="@container space-y-6 print:space-y-3">
+    <div className="demo-report @container space-y-6 print:space-y-3">
       {/* The headline band: three cells divided by hairlines, not three cards. */}
       <section
-        className="grid gap-px overflow-hidden rounded-[var(--r-md)] border @2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)_minmax(0,1fr)] break-inside-avoid print:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)_minmax(0,1fr)]"
+        className="grid gap-px overflow-hidden rounded-[var(--r-md)] border @2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)_minmax(0,1fr)] break-inside-avoid dr-headline"
         style={{ borderColor: "var(--border-subtle)", background: "var(--border-subtle)" }}
       >
-        <div className="p-5 print:p-3" style={{ background: "var(--surface)" }}>
+        <div className="p-5 print:p-4" style={{ background: "var(--surface)" }}>
           <p className="lbl mb-2">Agreed savings</p>
-          <p className="num text-[34px] font-bold leading-none print:text-[26px]" style={{ color: "var(--ok-fg)" }}>
+          <p className="dr-big num text-[34px] font-bold leading-none" style={{ color: "var(--ok-fg)" }}>
             {agreedSavingsPct.toFixed(2)}%
           </p>
           <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>
@@ -81,7 +81,7 @@ export function DemoReportView({
           </p>
         </div>
 
-        <div className="p-5 print:p-3" style={{ background: "var(--surface)" }}>
+        <div className="dr-compare p-5 print:p-4" style={{ background: "var(--surface)" }}>
           <p className="lbl mb-3">
             On the {report.meteredLightCount.toLocaleString("en-IN")} demo light{report.meteredLightCount === 1 ? "" : "s"}
           </p>
@@ -93,9 +93,9 @@ export function DemoReportView({
           </p>
         </div>
 
-        <div className="p-5 print:p-3" style={{ background: "var(--surface)" }}>
+        <div className="p-5 print:p-4" style={{ background: "var(--surface)" }}>
           <p className="lbl mb-2">Across your society</p>
-          <p className="num text-[24px] font-bold leading-none print:text-[20px]">
+          <p className="dr-big num text-[24px] font-bold leading-none">
             {kwh(report.projectedSavingsKwhPerDay)}
             <span className="ml-1 text-[13px] font-semibold" style={{ color: "var(--text-muted)" }}>
               kWh/day
@@ -113,7 +113,7 @@ export function DemoReportView({
 
       {/* The demo's own period, so a reader knows which days are behind it. */}
       {(allPre.length > 0 || allPost.length > 0) && (
-        <dl className="flex flex-wrap gap-x-8 gap-y-2 text-[13px] print:flex-nowrap print:text-[12px]">
+        <dl className="flex flex-wrap gap-x-10 gap-y-2 text-[13px] print:flex-nowrap">
           <PeriodFact label="Before period" days={allPre} />
           <PeriodFact label="After period" days={allPost} />
         </dl>
@@ -175,15 +175,21 @@ export function DemoReportView({
           const post = c.postInstallReadings ?? [];
           if (pre.length === 0 && post.length === 0) return null;
           return (
-            <section key={c.circuitId} className="break-inside-avoid border-t pt-5" style={{ borderColor: "var(--border-subtle)" }}>
+            <section key={c.circuitId} className="break-inside-avoid border-t pt-5 print:pt-3" style={{ borderColor: "var(--border-subtle)" }}>
               <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
                 <h3 className="text-[15px] font-semibold">
                   Demo days{circuits.length > 1 ? ` — ${circuitLabelOf(c.location ?? null, c.lightType)}` : ""}
                 </h3>
                 <Legend />
               </div>
-              <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] print:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] print:gap-4">
-                <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
+              <div className="dr-days grid gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                {/* On paper the chart runs the full width, taller: a portrait page has the height. */}
+                <div className="print:hidden">
+                  <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
+                </div>
+                <div className="hidden print:block">
+                  <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} width={720} height={165} />
+                </div>
                 <DaysTable pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
               </div>
             </section>
@@ -250,14 +256,18 @@ function DemoDaysChart({
   post,
   preAvg,
   postAvg,
+  width = 560,
+  height = 190,
 }: {
   pre: DemoReportReading[];
   post: DemoReportReading[];
   preAvg: number;
   postAvg: number;
+  width?: number;
+  height?: number;
 }) {
-  const W = 560;
-  const H = 190;
+  const W = width;
+  const H = height;
   const top = 24;
   const bottom = 26;
   const padX = 6;

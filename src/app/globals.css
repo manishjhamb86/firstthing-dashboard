@@ -1720,3 +1720,42 @@ textarea.field {
     gap: 6px 20px;
   }
 }
+
+/* The demo savings report on paper (2026-09-26, user-caught: "looks like
+   landscape even in print"). The screen layout is three panels across and
+   the readings beside their chart — shrunk onto portrait A4 that left half
+   the sheet empty and wrapped every panel. On paper it is laid out for a
+   portrait page instead: the two headline figures side by side, the
+   before/after comparison full width beneath them, then the chart full width
+   and taller, then the day table full width at a readable size. Specific
+   enough to beat the container-query columns, which still match at print
+   width. */
+@media print {
+  .report-sheet .demo-report .dr-headline {
+    grid-template-columns: 1fr 1fr;
+  }
+  .report-sheet .demo-report .dr-compare {
+    grid-column: 1 / -1;
+    order: 3;
+  }
+  .report-sheet .demo-report .dr-big {
+    font-size: 30px;
+  }
+  .report-sheet .demo-report .dr-headline > div {
+    padding: 12px 16px;
+  }
+  .report-sheet .demo-report .dr-days {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .report-sheet .demo-report .tbl {
+    font-size: 12.5px;
+  }
+  .report-sheet .demo-report .tbl td {
+    padding: 4px 10px;
+  }
+  .report-sheet .demo-report .tbl thead th {
+    padding: 5px 10px;
+    font-size: 10px;
+  }
+}

@@ -897,12 +897,33 @@ export async function setDemoLightCount(input: { demoId: string; count: number; 
 }
 
 /**
+ * Delete a demo completely — until go-live (2026-09-26, the user's call:
+ * "when user deletes a demo it should get deleted completely, no history, no
+ * record remains"). Demo mode is the pre-go-live switch (production runs
+ * without DEMO_MODE), so there the demo, its days, accepted sets, gate
+ * passes, booked visits, reviews and every change-log line about it are
+ * removed, and its id is taken out of any demo report. Figures re-derive.
+ *
+ * The meter's own installation history is left alone: it records where a
+ * physical meter was, which stays true whichever demo recorded it.
+ */
+async function purgeDemo(tx: Tx, demo: { id: string; circuitId: string }) {
+  await tx.changeLog.deleteMany({ where: { demoId: demo.id } });
+  await tx.changeLog.deleteMany({ where: { entity: "circuit_demo", entityId: demo.id } });
+  const reports = await tx.demoReport.findMany({ where: { demoIds: { has: demo.id } }, select: { id: true, demoIds: true } });
+  for (const r of reports) {
+    await tx.demoReport.update({ where: { id: r.id }, data: { demoIds: r.demoIds.filter((x) => x !== demo.id) } });
+  }
+  // Readings, acceptances, gate passes, scheduled visits and reviews cascade.
+  await tx.circuitDemo.delete({ where: { id: demo.id } });
+}
+
+/**
  * Remove a demo started by mistake — a duplicate (2026-09-26, user-asked).
- * Rejecting keeps a demo on the table as one that does not count; removing
- * takes it off the table. Never deleted: the row stays with who removed it,
- * when and why, its days and change log intact, listed under "removed".
- * Operations only; a demo in a report shared with the society has to be
- * unlocked first, as for any edit, because the society has seen it.
+ * In demo mode (before go-live) it is deleted completely (purgeDemo). In
+ * normal operation it is soft-removed: the row stays with who removed it,
+ * when and why, listed under "removed". Operations only; a demo in a report
+ * shared with the society has to be unlocked first, as for any edit.
  */
 export async function removeDemo(input: { demoId: string; reason: string }): Promise<Outcome> {
   const a = await actor("ops");
@@ -910,27 +931,48 @@ export async function removeDemo(input: { demoId: string; reason: string }): Pro
     logger.warn("demo.remove_refused", { demoId: input.demoId, reason: "not_ops" });
     return { error: "Removing a demo is an operations lead action." };
   }
+  const whitewash = await isDemoMode();
   const reason = input.reason?.trim() ?? "";
-  if (!reason) return { error: "Say why the demo is being removed — for example that it duplicates another." };
+  if (!reason && !whitewash) return { error: "Say why the demo is being removed — for example that it duplicates another." };
   const g = await editableDemo(input.demoId, a.admin.id, "remove");
   if ("error" in g) return { error: g.error };
   const demo = g.demo;
   await db.$transaction(async (tx) => {
-    await tx.circuitDemo.update({ where: { id: demo.id }, data: { voidedAt: new Date(), voidedById: a.admin.id, voidReason: reason } });
-    // A booked replacement day for a demo that no longer exists is a visit
-    // nobody should make.
-    await tx.scheduledEvent.updateMany({
-      where: { demoId: demo.id, status: "scheduled" },
-      data: { status: "cancelled", cancelledAt: new Date(), cancelledReason: `Demo ${demo.sequence} removed: ${reason}` },
-    });
-    await tx.demoResultReview.updateMany({
-      where: { demoId: demo.id, state: "open" },
-      data: { state: "resolved", resolvedAt: new Date(), resolvedById: a.admin.id, resolutionNote: `Demo removed: ${reason}` },
-    });
-    await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "removed", circuitId: demo.circuitId, demoId: demo.id, oldValue: { sequence: demo.sequence }, newValue: null, reason, actorId: a.admin.id });
+    if (whitewash) {
+      await purgeDemo(tx, demo);
+    } else {
+      await tx.circuitDemo.update({ where: { id: demo.id }, data: { voidedAt: new Date(), voidedById: a.admin.id, voidReason: reason } });
+      // A booked replacement day for a demo that no longer exists is a visit
+      // nobody should make.
+      await tx.scheduledEvent.updateMany({
+        where: { demoId: demo.id, status: "scheduled" },
+        data: { status: "cancelled", cancelledAt: new Date(), cancelledReason: `Demo ${demo.sequence} removed: ${reason}` },
+      });
+      await tx.demoResultReview.updateMany({
+        where: { demoId: demo.id, state: "open" },
+        data: { state: "resolved", resolvedAt: new Date(), resolvedById: a.admin.id, resolutionNote: `Demo removed: ${reason}` },
+      });
+      await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "removed", circuitId: demo.circuitId, demoId: demo.id, oldValue: { sequence: demo.sequence }, newValue: null, reason, actorId: a.admin.id });
+    }
     await finish(tx, demo.circuitId, a.admin.id);
   });
-  logger.info("demo.removed", { actorId: a.admin.id, demoId: demo.id, circuitId: demo.circuitId, sequence: demo.sequence, reason });
+  logger.info(whitewash ? "demo.deleted" : "demo.removed", { actorId: a.admin.id, circuitId: demo.circuitId, sequence: demo.sequence });
+  revalidatePath(pathOf(demo));
+  return { ok: true };
+}
+
+/** Demo mode: delete a demo that was soft-removed earlier, completely. */
+export async function purgeRemovedDemo(input: { demoId: string }): Promise<Outcome> {
+  const a = await actor("ops");
+  if ("error" in a) return { error: "Deleting a demo is an operations lead action." };
+  if (!(await isDemoMode())) return { error: "Deleting a demo completely is only available in demo mode, before go-live." };
+  const demo = await db.circuitDemo.findUnique({ where: { id: input.demoId }, select: { id: true, circuitId: true, voidedAt: true, sequence: true, circuit: { select: { societyId: true } } } });
+  if (!demo || !demo.voidedAt) return { error: "That removed demo is no longer on record." };
+  await db.$transaction(async (tx) => {
+    await purgeDemo(tx, demo);
+    await finish(tx, demo.circuitId, a.admin.id);
+  });
+  logger.info("demo.deleted", { actorId: a.admin.id, circuitId: demo.circuitId, sequence: demo.sequence });
   revalidatePath(pathOf(demo));
   return { ok: true };
 }

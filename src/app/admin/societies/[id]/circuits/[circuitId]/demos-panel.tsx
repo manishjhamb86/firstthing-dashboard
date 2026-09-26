@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
-import { removeDemo, setBenchmarkOverride, setDemoLightCount, setDemoRejected, startDemo } from "./demo-step-actions";
+import { purgeRemovedDemo, removeDemo, setBenchmarkOverride, setDemoLightCount, setDemoRejected, startDemo } from "./demo-step-actions";
 
 export type DemoDTO = {
   id: string;
@@ -56,7 +56,7 @@ export function DemosPanel({
   /** An imported circuit whose figures stand until a redone demo is accepted. */
   agreedPending: boolean;
   /** Demos removed as duplicates or mistakes — kept on record, listed here. */
-  removed?: { sequence: number; reason: string; on: string; by: string | null }[];
+  removed?: { id: string; sequence: number; reason: string; on: string; by: string | null }[];
   /** Demo mode: a demo's light count can be changed from the table. */
   canChangeLights?: boolean;
 }) {
@@ -180,6 +180,13 @@ export function DemosPanel({
                         className="btn-ghost btn-sm"
                         disabled={pending}
                         onClick={() => {
+                          // Before go-live (demo mode) a delete leaves nothing behind.
+                          if (canChangeLights) {
+                            if (window.confirm(`Delete demo ${d.sequence} completely? Its days, gate passes and history are removed and cannot be recovered.`)) {
+                              run(() => removeDemo({ demoId: d.id, reason: "" }));
+                            }
+                            return;
+                          }
                           const why = window.prompt(
                             `Remove demo ${d.sequence}? Use this for a demo started by mistake or duplicating another — it is taken off this table, kept on record as removed, and the figures re-derive without it. Why is it being removed?`,
                           );
@@ -207,6 +214,18 @@ export function DemosPanel({
               <li key={r.sequence}>
                 Demo {r.sequence} · removed <span className="num">{r.on}</span>
                 {r.by ? ` by ${r.by}` : ""} — {r.reason}
+                {canChangeLights && canDecide && (
+                  <button
+                    type="button"
+                    className="btn-ghost btn-sm ml-2"
+                    disabled={pending}
+                    onClick={() => {
+                      if (window.confirm(`Delete demo ${r.sequence} completely? Nothing about it remains.`)) run(() => purgeRemovedDemo({ demoId: r.id }));
+                    }}
+                  >
+                    Delete completely
+                  </button>
+                )}
               </li>
             ))}
           </ul>

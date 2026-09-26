@@ -7968,3 +7968,17 @@ Outside demo mode a demo's count stays fixed; a count typed wrong goes through "
 the inventory.
 
 Verified 7/7 in a browser.
+
+**Same day — before go-live, deleting a demo leaves nothing behind (the user's call).**
+- **In demo mode:** Remove deletes a demo completely (`purgeDemo`). This removes:
+  - the demo's days, accepted sets, gate passes, booked visits and reviews (by cascade);
+  - every change-log line about it;
+  - its id from any demo report.
+
+  Figures re-derive. A demo removed earlier gets **Delete completely** in the removed list.
+- **Why demo mode:** production runs without `DEMO_MODE`, so there Remove stays the soft,
+  recorded removal above.
+- **One deliberate exception:** the meter's own installation history is left alone. It records
+  where a physical meter was, which stays true whichever demo recorded it.
+
+Verified 8/8 in a browser.

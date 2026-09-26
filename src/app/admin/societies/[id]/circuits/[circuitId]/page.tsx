@@ -161,7 +161,7 @@ export default async function CircuitDetailPage({
   const removedDemos = await db.circuitDemo.findMany({
     where: { circuitId: circuit.id, voidedAt: { not: null } },
     orderBy: { sequence: "asc" },
-    select: { sequence: true, voidReason: true, voidedAt: true, voidedById: true },
+    select: { id: true, sequence: true, voidReason: true, voidedAt: true, voidedById: true },
   });
   const removers = new Map(
     (
@@ -465,6 +465,7 @@ export default async function CircuitDetailPage({
         maxDemos={MAX_DEMOS_PER_CIRCUIT}
         agreedPending={agreedPending}
         removed={removedDemos.map((d) => ({
+          id: d.id,
           sequence: d.sequence,
           reason: d.voidReason ?? "",
           on: formatDate(d.voidedAt!),

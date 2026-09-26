@@ -7729,3 +7729,16 @@ removed afterwards.
   - follows the log, reconnecting until it sees the done or failed line.
 
   `--follow` reattaches to the latest deploy's log.
+
+**Demo report: printable from the back office, and one page on paper (same day, user-caught).**
+- **Back office.** The back office's report screen had no way to print or download the report.
+  It now has "Print / save as PDF" on the current version and a print link on each earlier
+  version. Both open `/admin/pipeline/[id]/report/[reportId]`, which is any version, draft or
+  shared, on the letterhead.
+- **One document component.** The society's portal and the back office both render the same
+  `DemoReportDocument` component, so the two printouts cannot drift apart.
+- **Single page.** The report printed on two pages. On paper the report column is narrower than
+  the width at which the headline band and the readings sit side by side, so both stacked and the
+  readings moved to page 2. Print now forces both side by side, and the spacing is tighter.
+  Verified one A4 page from both the portal and the back office, with zero margins and with
+  Safari-like 12.7 mm margins.

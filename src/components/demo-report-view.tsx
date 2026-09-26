@@ -63,15 +63,15 @@ export function DemoReportView({
   const allPost = circuits.flatMap((c) => c.postInstallReadings ?? []);
 
   return (
-    <div className="@container space-y-6">
+    <div className="@container space-y-6 print:space-y-3">
       {/* The headline band: three cells divided by hairlines, not three cards. */}
       <section
-        className="grid gap-px overflow-hidden rounded-[var(--r-md)] border @2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)_minmax(0,1fr)] break-inside-avoid"
+        className="grid gap-px overflow-hidden rounded-[var(--r-md)] border @2xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)_minmax(0,1fr)] break-inside-avoid print:grid-cols-[minmax(0,0.9fr)_minmax(0,1.5fr)_minmax(0,1fr)]"
         style={{ borderColor: "var(--border-subtle)", background: "var(--border-subtle)" }}
       >
-        <div className="p-5" style={{ background: "var(--surface)" }}>
+        <div className="p-5 print:p-3" style={{ background: "var(--surface)" }}>
           <p className="lbl mb-2">Agreed savings</p>
-          <p className="num text-[34px] font-bold leading-none" style={{ color: "var(--ok-fg)" }}>
+          <p className="num text-[34px] font-bold leading-none print:text-[26px]" style={{ color: "var(--ok-fg)" }}>
             {agreedSavingsPct.toFixed(2)}%
           </p>
           <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>
@@ -81,7 +81,7 @@ export function DemoReportView({
           </p>
         </div>
 
-        <div className="p-5" style={{ background: "var(--surface)" }}>
+        <div className="p-5 print:p-3" style={{ background: "var(--surface)" }}>
           <p className="lbl mb-3">
             On the {report.meteredLightCount.toLocaleString("en-IN")} demo light{report.meteredLightCount === 1 ? "" : "s"}
           </p>
@@ -93,9 +93,9 @@ export function DemoReportView({
           </p>
         </div>
 
-        <div className="p-5" style={{ background: "var(--surface)" }}>
+        <div className="p-5 print:p-3" style={{ background: "var(--surface)" }}>
           <p className="lbl mb-2">Across your society</p>
-          <p className="num text-[24px] font-bold leading-none">
+          <p className="num text-[24px] font-bold leading-none print:text-[20px]">
             {kwh(report.projectedSavingsKwhPerDay)}
             <span className="ml-1 text-[13px] font-semibold" style={{ color: "var(--text-muted)" }}>
               kWh/day
@@ -113,7 +113,7 @@ export function DemoReportView({
 
       {/* The demo's own period, so a reader knows which days are behind it. */}
       {(allPre.length > 0 || allPost.length > 0) && (
-        <dl className="flex flex-wrap gap-x-8 gap-y-2 text-[13px]">
+        <dl className="flex flex-wrap gap-x-8 gap-y-2 text-[13px] print:flex-nowrap print:text-[12px]">
           <PeriodFact label="Before period" days={allPre} />
           <PeriodFact label="After period" days={allPost} />
         </dl>
@@ -182,7 +182,7 @@ export function DemoReportView({
                 </h3>
                 <Legend />
               </div>
-              <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+              <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)] print:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)] print:gap-4">
                 <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
                 <DaysTable pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
               </div>

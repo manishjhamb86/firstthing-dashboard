@@ -138,9 +138,14 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
                   )}
                 </p>
               </div>
-              {canEdit && latest.status === "draft" && (
-                <ShareReportButton pipelineId={pipeline.id} reportId={latest.id} />
-              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Link href={`/admin/pipeline/${pipeline.id}/report/${latest.id}`} className="btn-tone-info">
+                  Print / save as PDF
+                </Link>
+                {canEdit && latest.status === "draft" && (
+                  <ShareReportButton pipelineId={pipeline.id} reportId={latest.id} />
+                )}
+              </div>
             </div>
             {latest.status === "draft" && (
               <p className="text-sm mt-3 text-[var(--text-muted)]">
@@ -162,7 +167,10 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
                     <span className="num">v{r.version}</span> ·{" "}
                     <span className="num">{r.measuredSavingsPct.toFixed(2)}%</span> measured ·{" "}
                     generated {formatDate(r.generatedAt)}
-                    {r.sharedAt ? " · was shared" : ""}
+                    {r.sharedAt ? " · was shared" : ""} ·{" "}
+                    <Link href={`/admin/pipeline/${pipeline.id}/report/${r.id}`} className="underline">
+                      print
+                    </Link>
                   </li>
                 ))}
               </ul>

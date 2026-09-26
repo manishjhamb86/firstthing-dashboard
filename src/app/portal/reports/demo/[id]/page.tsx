@@ -3,12 +3,9 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
-import { Letterhead } from "@/components/letterhead";
 import { BackButton } from "@/components/back-button";
-import { DemoReportView } from "@/components/demo-report-view";
-import { formatDate } from "@/lib/format-date";
+import { DemoReportDocument } from "@/components/demo-report-document";
 import { reportTitle } from "@/lib/report-title";
-import { dealLabel } from "@/lib/deal-scope";
 import { PrintInspectionButton } from "../../../inspection/[id]/print-button";
 
 export const dynamic = "force-dynamic";
@@ -50,32 +47,7 @@ export default async function PortalDemoReportPage({ params }: { params: Promise
         <div className="flex-1" />
         <PrintInspectionButton />
       </div>
-      <Letterhead>
-        <article className="report-sheet">
-          <header className="report-masthead">
-            <div className="min-w-0 flex-1">
-              <p className="lbl" style={{ color: "var(--accent)" }}>
-                FirsThing · Demo savings report
-              </p>
-              <h1 className="mt-2 text-[26px] font-extrabold leading-tight tracking-[-0.02em]">{report.pipeline.society.name}</h1>
-              <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
-                {report.pipeline.society.location}
-                <br />
-                {dealLabel(report.pipeline.serviceLine, report.pipeline.dealScope)} · measured on the demo circuits, extrapolated society-wide
-              </p>
-            </div>
-            <div className="report-period">
-              <p className="text-[20px] font-bold tracking-[-0.01em]">Version {report.version}</p>
-              <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                Shared <span className="num">{formatDate(report.sharedAt ?? report.generatedAt)}</span>
-              </p>
-            </div>
-          </header>
-          <div className="px-6 pb-8 pt-6 sm:px-8">
-            <DemoReportView report={report} />
-          </div>
-        </article>
-      </Letterhead>
+      <DemoReportDocument report={report} />
     </div>
   );
 }

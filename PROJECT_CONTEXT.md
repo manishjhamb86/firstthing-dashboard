@@ -7982,3 +7982,25 @@ Verified 7/7 in a browser.
   where a physical meter was, which stays true whichever demo recorded it.
 
 Verified 8/8 in a browser.
+
+## Societies list: filters as you type, sorts by any header (2026-09-26) — user-asked
+
+- **Loading.** The page loads every society once. `SocietiesTable` filters as the user types:
+  every word must appear in the name or location, in any order. There is no Search button any
+  more.
+- **Status chips.** They filter without a reload and count what matches the search. The search
+  and status are written to the address with `replaceState`, so a filtered view is still a link
+  that can be shared.
+- **Sorting.** Every header sorts on click. Text starts A–Z; figures and dates start from the far
+  end. A row with nothing in the sorted column sinks in both directions.
+- **Default order.** Newest first by the new **Billing from** column. That column is the earliest
+  billing start of a contract that has run (the completion certificate's date, else the
+  contract's term start — the same rule invoices bill from). Where billing has not started, it is
+  the date the agreement was signed, marked "agreement signed · not billing yet". Societies with
+  neither date come last.
+- **Where the rules live.** `src/lib/society-list.ts` (4 cases).
+- **Verified 11/11** in a browser, including the default order against an independent SQL of the
+  same rule.
+
+**Also:** the removed Hyde Park demo 3 ("Duplicate") was deleted from stage at the user's request,
+with its two change-log lines. It was the only removed demo on stage.

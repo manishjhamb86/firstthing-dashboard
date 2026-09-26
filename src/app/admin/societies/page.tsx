@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import { SearchInput } from "@/components/search-input";
-import { ClickableRow } from "@/components/clickable-row";
-import { Card, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
-import { SOCIETY_STATUS, SERVICE_LINE_LABEL, statusMeta } from "@/lib/status-maps";
+import { PageHeader, Stat, StatRow } from "@/components/ui";
+import { monitoringStart } from "@/lib/monitoring";
+import type { SocietyRow } from "@/lib/society-list";
+import { SocietiesTable } from "./societies-table";
 import { requireAdminPage } from "@/lib/admin-permissions";
 
 // FEAT-085: society record & lifecycle list. proxy.ts's own matcher is
@@ -19,8 +19,6 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 // how many circuits are metered — all read from one live-circuit array, so
 // no two columns on this page can disagree about what still exists.
 
-const STATUS_TABS = ["all", "prospect", "active", "suspended", "terminated"] as const;
-
 export default async function SocietiesPage({
   searchParams,
 }: {
@@ -29,71 +27,67 @@ export default async function SocietiesPage({
   await requireAdminPage();
   const { status, q } = await searchParams;
 
-  const activeTab = STATUS_TABS.includes((status ?? "all") as (typeof STATUS_TABS)[number])
-    ? (status ?? "all")
-    : "all";
-  const query = (q ?? "").trim();
-
-  const [societies, statusGroups] = await Promise.all([
-    db.society.findMany({
-      where: {
-        ...(activeTab === "all" ? {} : { status: activeTab as never }),
-        ...(query
-          ? {
-              OR: [
-                { name: { contains: query, mode: "insensitive" as const } },
-                { location: { contains: query, mode: "insensitive" as const } },
-              ],
-            }
-          : {}),
-      },
-      orderBy: { createdAt: "desc" },
-      include: {
-        engagements: { select: { serviceLine: true, status: true } },
-        // What each society's live circuits stand in for. The Flats column is
-        // empty for exactly the societies we know most about — their imported
-        // flat counts turned out to be light counts and were cleared — so the
-        // list was blankest where there is most on record. This is the figure
-        // that actually matters for these: what they are billed against.
-        //
-        // The Circuits column counts THIS array rather than carrying its own
-        // `_count: { circuits: true }`, which had no `voidedAt` filter: a
-        // removed circuit was still counted there while the Lights column
-        // beside it (and the "No circuit yet" stat, and "Circuits metered")
-        // all excluded it, so one row could read "2 circuits · — lights". A
-        // soft delete is only as good as the reads that honour it, and two
-        // reads of one fact is how they stop agreeing.
-        circuits: {
-          where: { voidedAt: null },
-          select: { representedLightCount: true },
+  // Every society, once: the table filters as you type and sorts by any
+  // header in the browser (2026-09-26, user-asked), so there is no search
+  // round trip. At the 200-society target this is a few kilobytes.
+  const societies = await db.society.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      engagements: { select: { serviceLine: true, status: true } },
+      // What each society's live circuits stand in for, and how many there
+      // are — one live-circuit array, so the two columns cannot disagree
+      // about what still exists (a removed circuit is in neither).
+      circuits: { where: { voidedAt: null }, select: { representedLightCount: true } },
+      // When billing started: the completion certificate's billing start,
+      // else the contract's term start — the rule invoices bill from. Only a
+      // contract that has actually run (active, or terminated after running).
+      contracts: {
+        where: { status: { in: ["active", "terminated"] } },
+        select: {
+          termStart: true,
+          pipeline: { select: { installationProject: { select: { certificate: { select: { billingStartDate: true } } } } } },
         },
       },
-    }),
-    db.society.groupBy({ by: ["status"], _count: { _all: true } }),
-  ]);
+      pipelines: { select: { agreement: { select: { signedAt: true } } } },
+    },
+  });
 
-  const countFor = (tab: string) =>
-    tab === "all"
-      ? statusGroups.reduce((n, g) => n + g._count._all, 0)
-      : (statusGroups.find((g) => g.status === tab)?._count._all ?? 0);
+  const day = (d: Date | null | undefined) => (d ? d.toISOString().slice(0, 10) : null);
+  const earliest = (ds: (string | null)[]) => ds.filter((d): d is string => d !== null).sort()[0] ?? null;
+  const rows: SocietyRow[] = societies.map((s) => ({
+    id: s.id,
+    name: s.name,
+    location: s.location,
+    flatCount: s.flatCount,
+    lights: s.circuits.length === 0 ? null : s.circuits.reduce((n, c) => n + c.representedLightCount, 0),
+    circuits: s.circuits.length,
+    serviceLines: s.engagements.map((e) => `${e.serviceLine}:${e.status}`),
+    status: s.status,
+    billingStart: earliest(
+      s.contracts.map((c) =>
+        day(
+          monitoringStart({
+            certificateBillingStart: c.pipeline?.installationProject?.certificate?.billingStartDate ?? null,
+            contractTermStart: c.termStart,
+          }),
+        ),
+      ),
+    ),
+    signedOn: earliest(s.pipelines.map((p) => day(p.agreement?.signedAt))),
+  }));
 
-  const filtered = activeTab !== "all" || query !== "";
-
-  // Deliberately NOT the per-status counts — those are the filter tabs'
-  // own, sitting a few pixels below, and repeating them is the duplication
-  // reported on 2026-08-21. These say what the portfolio holds.
-  const totalSocieties = statusGroups.reduce((n, g) => n + g._count._all, 0);
-  const meteredCircuits = societies.reduce((n, s) => n + s.circuits.length, 0);
+  const count = (st: string) => societies.filter((s) => s.status === st).length;
+  const meteredCircuits = rows.reduce((n, r) => n + r.circuits, 0);
   const linesLive = new Set(
     societies.flatMap((s) => s.engagements.filter((e) => e.status === "active").map((e) => e.serviceLine)),
   ).size;
-  const withoutCircuits = societies.filter((s) => s.circuits.length === 0).length;
+  const withoutCircuits = rows.filter((r) => r.circuits === 0).length;
 
   return (
     <>
       <PageHeader
         title="Societies"
-        subtitle="Every society on record, newest first."
+        subtitle="Every society on record, newest billing start first. Click a heading to sort by it."
         action={
           <Link href="/admin/societies/new" className="btn-primary">
             New society
@@ -102,176 +96,13 @@ export default async function SocietiesPage({
       />
 
       <StatRow>
-        <Stat label="Societies" value={totalSocieties} detail={`${countFor("active")} active · ${countFor("prospect")} prospect`} />
-        <Stat label="Circuits metered" value={meteredCircuits} detail={meteredCircuits === 0 ? "none registered yet" : "across the shown societies"} />
+        <Stat label="Societies" value={societies.length} detail={`${count("active")} active · ${count("prospect")} prospect`} />
+        <Stat label="Circuits metered" value={meteredCircuits} detail={meteredCircuits === 0 ? "none registered yet" : "across all societies"} />
         <Stat label="Service lines live" value={linesLive} detail={linesLive === 0 ? "nothing enrolled" : "at least one active engagement"} />
         <Stat label="No circuit yet" value={withoutCircuits} detail={withoutCircuits === 0 ? "every society has one" : "nothing to bill against"} />
       </StatRow>
 
-      {/* A GET form, so a filtered view is a shareable URL and the back
-          button behaves — the one justified difference from the other
-          listings, which filter a list already on the page. The ORDER and
-          the controls match them: search first, filters after. */}
-      <form method="get" className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
-        {activeTab !== "all" && <input type="hidden" name="status" value={activeTab} />}
-        <SearchInput
-          name="q"
-          defaultValue={query}
-          placeholder="Search name or location"
-          label="Search societies"
-          className="w-full sm:w-72"
-        />
-        <button type="submit" className="btn-secondary">
-          Search
-        </button>
-        <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filter by status">
-          {STATUS_TABS.map((tab) => {
-            const isActive = tab === activeTab;
-            const label = tab === "all" ? "All" : statusMeta(SOCIETY_STATUS, tab).label;
-            const href = tab === "all" ? "/admin/societies" : `/admin/societies?status=${tab}`;
-            return (
-              <Link
-                key={tab}
-                href={query ? `${href}${tab === "all" ? "?" : "&"}q=${encodeURIComponent(query)}` : href}
-                aria-current={isActive ? "true" : undefined}
-                className="rounded-[var(--r-pill)] border px-3 py-1.5 text-[13px] font-medium transition-colors"
-                style={{
-                  background: isActive ? "var(--accent)" : "var(--surface)",
-                  borderColor: isActive ? "var(--accent)" : "var(--border)",
-                  color: isActive ? "var(--text-on-accent)" : "var(--text-muted)",
-                }}
-              >
-                {label}
-                <span className="num ml-1.5 opacity-70">{countFor(tab)}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </form>
-
-      {societies.length === 0 ? (
-        // FEAT-085-AC-2 / INV-06: every list surface defines an empty state —
-        // and a filtered-to-nothing list is a different state from an empty
-        // system, so it says so and offers a way back.
-        filtered ? (
-          <EmptyState
-            title="No societies match"
-            action={
-              <Link href="/admin/societies" className="btn-ghost btn-sm">
-                Clear filters →
-              </Link>
-            }
-          >
-            Nothing on record matches {query ? <strong>“{query}”</strong> : "this status"}.
-          </EmptyState>
-        ) : (
-          <EmptyState
-            title="No societies yet"
-            action={
-              <Link href="/admin/societies/new" className="btn-ghost btn-sm">
-                New society →
-              </Link>
-            }
-          >
-            Create one from a lead to get started.
-          </EmptyState>
-        )
-      ) : (
-        <Card className="overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Society</th>
-                <th className="hidden md:table-cell">Flats</th>
-                <th className="hidden md:table-cell">Lights</th>
-                <th className="hidden lg:table-cell">Service lines</th>
-                <th className="hidden md:table-cell">Circuits</th>
-                <th>Status</th>
-                <th className="hidden sm:table-cell" />
-              </tr>
-            </thead>
-            <tbody>
-              {societies.map((s) => {
-                const st = statusMeta(SOCIETY_STATUS, s.status);
-                return (
-                  <ClickableRow key={s.id} href={`/admin/societies/${s.id}`}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <span
-                          aria-hidden
-                          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-[13px] font-bold"
-                          style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-                        >
-                          {s.name.slice(0, 2).toUpperCase()}
-                        </span>
-                        <div className="min-w-0">
-                          <Link
-                            href={`/admin/societies/${s.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {s.name}
-                          </Link>
-                          <p className="text-[13px] text-[var(--text-muted)]">{s.location}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="num hidden md:table-cell">
-                      {s.flatCount === null ? (
-                        <span style={{ color: "var(--text-subtle)" }}>—</span>
-                      ) : (
-                        s.flatCount.toLocaleString("en-IN")
-                      )}
-                    </td>
-                    <td className="num hidden md:table-cell">
-                      {s.circuits.length === 0 ? (
-                        <span style={{ color: "var(--text-subtle)" }}>—</span>
-                      ) : (
-                        s.circuits
-                          .reduce((n, c) => n + c.representedLightCount, 0)
-                          .toLocaleString("en-IN")
-                      )}
-                    </td>
-                    <td className="hidden lg:table-cell">
-                      {s.engagements.length === 0 ? (
-                        <span className="text-[13px] text-[var(--text-subtle)]">None enrolled</span>
-                      ) : (
-                        <span className="flex flex-wrap gap-1">
-                          {s.engagements.map((e) => (
-                            <span
-                              key={e.serviceLine}
-                              className="rounded-[var(--r-pill)] px-2 py-0.5 text-[11px] font-semibold"
-                              style={{
-                                background: e.status === "active" ? "var(--ok-bg)" : "var(--neu-bg)",
-                                color: e.status === "active" ? "var(--ok-fg)" : "var(--neu-fg)",
-                              }}
-                            >
-                              {SERVICE_LINE_LABEL[e.serviceLine] ?? e.serviceLine}
-                            </span>
-                          ))}
-                        </span>
-                      )}
-                    </td>
-                    <td className="num hidden md:table-cell">
-                      {s.circuits.length === 0 ? (
-                        <span className="text-[var(--text-subtle)]">—</span>
-                      ) : (
-                        s.circuits.length
-                      )}
-                    </td>
-                    <td>
-                      <StatusChip tone={st.tone}>{st.label}</StatusChip>
-                    </td>
-                    {/* Decoration only — the whole row is the link. */}
-                    <td className="hidden sm:table-cell text-right whitespace-nowrap" aria-hidden>
-                      <span className="row-link-cue text-sm font-semibold">Open →</span>
-                    </td>
-                  </ClickableRow>
-                );
-              })}
-            </tbody>
-          </table>
-        </Card>
-      )}
+      <SocietiesTable rows={rows} initialQuery={(q ?? "").trim()} initialTab={status ?? "all"} />
     </>
   );
 }

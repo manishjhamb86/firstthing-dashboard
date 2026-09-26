@@ -93,6 +93,14 @@ export type PortalCircuit = {
   lastVerifiedAt: string | null;
   /** The count at the demo, then each change, the last one current. */
   lightHistory: LightStage[];
+  /** YYYY-MM-DD: the first day of the monitoring period (the billing start). */
+  monitoringFrom: string | null;
+  /**
+   * Every monitoring day, from the billing start — the period after full
+   * installation, not the demo. `baseline` is the one in force that day, so a
+   * light-count change moves it from its own date (INV-07).
+   */
+  monitoring: { date: string; kWh: number; excluded: boolean; baseline: number | null }[];
   /** Days recorded in the headline month (excluded days not counted). */
   monthDays: number;
   monthKwh: number | null;
@@ -237,6 +245,11 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         events: c.rescaleEvents,
         today,
       }),
+      monitoringFrom: (starts.get(c.id) ?? null)?.toISOString().slice(0, 10) ?? null,
+      monitoring: monitoring.map((d) => ({
+        ...d,
+        baseline: effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, new Date(`${d.date}T00:00:00Z`)),
+      })),
       lastVerifiedAt: (lastVerifiedAt(c.rescaleEvents, c.lightReplacementDate, today) ?? null)
         ?.toISOString()
         .slice(0, 10) ?? null,

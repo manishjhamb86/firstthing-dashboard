@@ -22,6 +22,7 @@ import { publicS3Url } from "@/lib/s3";
 import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
 import { LightCountHistory } from "./light-count-history";
+import { MonitoringReadings } from "@/components/monitoring-readings";
 import { PORTAL_NAV_ICONS, portalNavEntries } from "./portal-nav-entries";
 import { ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap } from "lucide-react";
 import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkRow, type HealthIssue } from "./kpi-tiles";
@@ -576,6 +577,23 @@ export default async function PortalHomePage() {
               </p>
             </Card>
           ))}
+          {/* The monitoring period — after full installation, from the billing
+              start. Separate from the demo report above, which is the demo's
+              own before/after days only. */}
+          {energy?.circuits
+            .filter((c) => c.monitoring.length > 0)
+            .map((c, _i, all) => (
+              <Card key={`mon-${c.id}`} className="p-6">
+                <CardTitle>Readings since billing started{all.length > 1 ? ` — ${c.label}` : ""}</CardTitle>
+                <MonitoringReadings
+                  days={c.monitoring}
+                  benchmarkPct={c.benchmarkPct}
+                  monitoringFrom={c.monitoringFrom}
+                  stages={c.lightHistory}
+                  currentMonth={new Date().toISOString().slice(0, 7)}
+                />
+              </Card>
+            ))}
         </div>
         <div className="lg:col-span-5 min-w-0 flex flex-col gap-5">
           {energy && energy.circuits.length > 0 && (

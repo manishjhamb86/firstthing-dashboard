@@ -7697,11 +7697,22 @@ removed afterwards.
   so it kept the oldest version. French Apartment's society was being shown v2: 212 monitoring
   days, 9.30 kWh/day, 76 lights. The dashboard now keeps the first report it sees for each deal,
   which is the newest.
-- **The readings are one list, a month at a time.** The before figure is a single number and
-  stays in the report's headline. The readings are one list with year tabs and then month tabs
-  (`src/components/demo-days.tsx`). The list opens on the current month when it has readings,
-  otherwise on the latest month that has any. A day is labelled Before or After only when the
-  report holds both kinds. A printed report prints every day, because paper has no tabs.
+- **Readings for the monitoring period, not the demo (corrected the same day).** A first cut put
+  year → month tabs on the demo report's own days. That was a misreading, and it was reverted:
+  the demo report keeps its before and after days side by side.
+
+  What was asked for is a separate "Readings since billing started" section on the portal
+  dashboard (`src/components/monitoring-readings.tsx`). It covers the period after full
+  installation, from the billing start. Its main section holds:
+  - "Before FirsThing", as one figure: the baseline in force, for the light count in force that
+    month;
+  - the month's average;
+  - the saving against the agreed figure.
+
+  Below that the readings are one list with no before/after split, picked by year and then by
+  month, with the benchmark ceiling drawn on the chart. The current year and month always exist
+  as tabs and open active. When the current month has no readings yet, the section says so and
+  offers the latest month that has them.
 
 **The deploy runs on the server.** Three deploys in a row lost their SSH connection during
 `next build`, which killed the build and left stage with no build. The deploy is now split:

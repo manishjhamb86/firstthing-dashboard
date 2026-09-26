@@ -1,6 +1,5 @@
 import type { DemoReportCircuit, DemoReportReading } from "@/lib/demo-report";
-import { formatDate } from "@/lib/format-date";
-import { DemoDays } from "@/components/demo-days";
+import { dayAxis, formatDate } from "@/lib/format-date";
 import { circuitLabelOf } from "@/lib/meter-view";
 
 // Shared by the back-office report screen and the society portal, so the two
@@ -175,38 +174,18 @@ export function DemoReportView({
           const pre = c.preInstallReadings ?? [];
           const post = c.postInstallReadings ?? [];
           if (pre.length === 0 && post.length === 0) return null;
-          const days = [
-            ...pre.map((r) => ({ date: r.date, kWh: r.consumptionKwh, phase: "pre" as const })),
-            ...post.map((r) => ({ date: r.date, kWh: r.consumptionKwh, phase: "post" as const })),
-          ];
           return (
-            <section key={c.circuitId} className="border-t pt-5" style={{ borderColor: "var(--border-subtle)" }}>
-              <h3 className="mb-3 text-[15px] font-semibold">
-                Readings{circuits.length > 1 ? ` — ${circuitLabelOf(c.location ?? null, c.lightType)}` : ""}
-              </h3>
-              {/* On screen: a year, then a month, at a time. On paper every
-                  day is printed, since a printed report has no tabs. */}
-              <div className="print:hidden">
-                <DemoDays days={days} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
+            <section key={c.circuitId} className="break-inside-avoid border-t pt-5" style={{ borderColor: "var(--border-subtle)" }}>
+              <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                <h3 className="text-[15px] font-semibold">
+                  Demo days{circuits.length > 1 ? ` — ${circuitLabelOf(c.location ?? null, c.lightType)}` : ""}
+                </h3>
+                <Legend />
               </div>
-              <table className="tbl tbl-compact hidden w-full print:table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    {pre.length > 0 && post.length > 0 && <th>Side</th>}
-                    <th className="text-right">kWh</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {[...days].sort((a, b) => (a.date < b.date ? -1 : 1)).map((d) => (
-                    <tr key={d.date + d.phase}>
-                      <td className="num">{formatDate(d.date)}</td>
-                      {pre.length > 0 && post.length > 0 && <td>{d.phase === "pre" ? "Before" : "After"}</td>}
-                      <td className="num text-right">{kwh(d.kWh)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+                <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
+                <DaysTable pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
+              </div>
             </section>
           );
         })}
@@ -243,5 +222,132 @@ function PeriodFact({ label, days }: { label: string; days: DemoReportReading[] 
         </span>
       </dd>
     </div>
+  );
+}
+
+function Legend() {
+  return (
+    <p className="flex gap-4 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--chart-mark-inert)" }} />
+        Before replacement
+      </span>
+      <span className="flex items-center gap-1.5">
+        <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--chart-mark)" }} />
+        After replacement
+      </span>
+    </p>
+  );
+}
+
+/**
+ * The demo's days as bars, before and after the replacement side by side,
+ * with each period's average drawn across its own bars. Server-rendered SVG,
+ * so it prints with the report.
+ */
+function DemoDaysChart({
+  pre,
+  post,
+  preAvg,
+  postAvg,
+}: {
+  pre: DemoReportReading[];
+  post: DemoReportReading[];
+  preAvg: number;
+  postAvg: number;
+}) {
+  const W = 560;
+  const H = 190;
+  const top = 24;
+  const bottom = 26;
+  const padX = 6;
+  const gap = pre.length > 0 && post.length > 0 ? 1.4 : 0;
+  const slots = pre.length + post.length + gap;
+  const unit = (W - padX * 2) / Math.max(slots, 1);
+  const barW = Math.min(unit * 0.72, 38);
+  const max = Math.max(preAvg, ...pre.map((r) => r.consumptionKwh), ...post.map((r) => r.consumptionKwh), 1) * 1.12;
+  const y = (v: number) => top + (H - top - bottom) * (1 - v / max);
+  const xAt = (i: number) => padX + unit * i + unit / 2;
+  const labelEvery = Math.max(1, Math.ceil((pre.length + post.length) / 12));
+
+  const bars = [
+    ...pre.map((r, i) => ({ r, x: xAt(i), fill: "var(--chart-mark-inert)", i })),
+    ...post.map((r, i) => ({ r, x: xAt(pre.length + gap + i), fill: "var(--chart-mark)", i: pre.length + i })),
+  ];
+  const avgLine = (from: number, to: number, v: number, label: string) => {
+    const x1 = xAt(from) - unit / 2 + 2;
+    const x2 = xAt(to) + unit / 2 - 2;
+    return (
+      <g>
+        <line x1={x1} x2={x2} y1={y(v)} y2={y(v)} stroke="var(--text-muted)" strokeWidth={1} strokeDasharray="4 3" />
+        <text x={x1} y={y(v) - 5} textAnchor="start" fontSize={10.5} fontWeight={600} fill="var(--text-muted)" className="num">
+          {label} {kwh(v)} kWh
+        </text>
+      </g>
+    );
+  };
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full" role="img" aria-label="Daily consumption during the demo, before and after the replacement">
+      <line x1={padX} x2={W - padX} y1={H - bottom} y2={H - bottom} stroke="var(--chart-rule)" />
+      {bars.map(({ r, x, fill, i }) => (
+        <g key={`${r.date}-${i}`}>
+          <title>{`${formatDate(r.date)} · ${kwh(r.consumptionKwh)} kWh`}</title>
+          <rect x={x - barW / 2} y={y(r.consumptionKwh)} width={barW} height={Math.max(0, H - bottom - y(r.consumptionKwh))} rx={2} fill={fill} />
+          {i % labelEvery === 0 && (
+            <text x={x} y={H - bottom + 14} textAnchor="middle" fontSize={9.5} fill="var(--text-subtle)">
+              {dayAxis(r.date)}
+            </text>
+          )}
+        </g>
+      ))}
+      {pre.length > 0 && avgLine(0, pre.length - 1, preAvg, "avg")}
+      {post.length > 0 && avgLine(pre.length + gap, pre.length + gap + post.length - 1, postAvg, "avg")}
+    </svg>
+  );
+}
+
+/** The same days as figures: before and after side by side, averages below. */
+function DaysTable({
+  pre,
+  post,
+  preAvg,
+  postAvg,
+}: {
+  pre: DemoReportReading[];
+  post: DemoReportReading[];
+  preAvg: number;
+  postAvg: number;
+}) {
+  const rows = Math.max(pre.length, post.length);
+  return (
+    <table className="tbl tbl-compact w-full self-start [&_td]:py-1.5">
+      <thead>
+        <tr>
+          <th>Before</th>
+          <th className="text-right">kWh</th>
+          <th>After</th>
+          <th className="text-right">kWh</th>
+        </tr>
+      </thead>
+      <tbody>
+        {Array.from({ length: rows }, (_, i) => (
+          <tr key={i}>
+            <td className="num" style={{ color: "var(--text-muted)" }}>{pre[i] ? formatDate(pre[i].date) : ""}</td>
+            <td className="num text-right">{pre[i] ? kwh(pre[i].consumptionKwh) : ""}</td>
+            <td className="num" style={{ color: "var(--text-muted)" }}>{post[i] ? formatDate(post[i].date) : ""}</td>
+            <td className="num text-right">{post[i] ? kwh(post[i].consumptionKwh) : ""}</td>
+          </tr>
+        ))}
+      </tbody>
+      <tfoot>
+        <tr className="border-t" style={{ borderColor: "var(--border)" }}>
+          <td className="font-semibold">Average</td>
+          <td className="num text-right font-semibold">{kwh(preAvg)}</td>
+          <td />
+          <td className="num text-right font-semibold">{kwh(postAvg)}</td>
+        </tr>
+      </tfoot>
+    </table>
   );
 }

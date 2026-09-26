@@ -10,6 +10,10 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { isDemoMode } from "@/lib/demo-mode";
 import { resolveAdmin } from "@/lib/admin-permissions";
+import { logChange } from "@/lib/change-log";
+import { demoLockState } from "@/lib/demo-lock";
+import { planCountCorrection } from "@/lib/count-correction";
+import { resyncCircuitFigures } from "@/lib/circuit-figures";
 
 type Outcome = { error: string } | { ok: true };
 
@@ -55,7 +59,7 @@ async function editableCircuit(circuitId: string, historical = false): Promise<E
   if (circuit.demos.length > 0 && !historical && !(await isDemoMode())) {
     return {
       error:
-        "The meter is installed — the load inventory is locked, because the pre-install readings are judged against it. Contact an administrator if it has to change.",
+        "The meter is installed — the load inventory is locked, because the pre-install readings are judged against it. An operations lead can correct a count that was typed wrong.",
     };
   }
   // The freeze still holds for ordinary edits — after replacement the
@@ -68,7 +72,7 @@ async function editableCircuit(circuitId: string, historical = false): Promise<E
   if (historical && !(await isDemoMode())) {
     return {
       error:
-        "Backfilling a past record is only available in demo mode. Contact an administrator to change a locked inventory.",
+        "Backfilling a past record is only available in demo mode. An operations lead can correct a count that was typed wrong.",
     };
   }
   return { circuit: { id: circuit.id, societyId: circuit.societyId } };
@@ -187,5 +191,96 @@ export async function removeCircuitDevice(lineId: string): Promise<Outcome> {
   await db.circuitDevice.delete({ where: { id: line.id } });
   logger.info("inventory.line_removed", { actorId: admin.id, lineId, circuitId: line.circuitId });
   revalidatePath(circuitPath(gate.circuit.societyId, gate.circuit.id));
+  return { ok: true };
+}
+
+/**
+ * Correct a count that was typed wrong on a LOCKED inventory (2026-09-26,
+ * user-asked). The lock stops the inventory being edited as though the
+ * lights changed; a typo is not a change in the lights, and the locked
+ * notice used to send the operator to "an administrator" with no route to
+ * one. Operations only, a reason required, every value it moves recorded
+ * with its old figure. A real change in lights is still a light-count change.
+ */
+export async function correctLockedCount(input: { lineId: string; count: number; reason: string }): Promise<Outcome> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  const p = admin.permissions as string[];
+  if (!(p.includes("manage_survey") && p.includes("manage_pipeline"))) {
+    logger.warn("inventory.count_correction_refused", { actorId: admin.id, lineId: input.lineId, reason: "not_ops" });
+    return { error: "Correcting a locked count is an operations lead action." };
+  }
+  const reason = input.reason?.trim() ?? "";
+  if (!reason) return { error: "Say what was wrong — a correction with no stated reason cannot be reviewed later." };
+
+  const line = await db.circuitDevice.findUnique({ where: { id: input.lineId }, select: { circuitId: true } });
+  if (!line) return { error: "That inventory line is no longer on record." };
+  const circuit = await db.circuit.findUnique({
+    where: { id: line.circuitId },
+    select: {
+      id: true,
+      societyId: true,
+      voidedAt: true,
+      meteredLightCount: true,
+      siteSurvey: { select: { pipelineId: true } },
+      devices: { select: { id: true, count: true, replacementCount: true } },
+      demos: { where: { voidedAt: null }, select: { id: true, sequence: true, meteredLightCount: true, unlockedUntil: true } },
+    },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+
+  const plan = planCountCorrection({
+    lines: circuit.devices,
+    lineId: input.lineId,
+    newCount: input.count,
+    circuitMeteredCount: circuit.meteredLightCount,
+    demos: circuit.demos,
+  });
+  if ("error" in plan) return { error: plan.error };
+
+  // A demo the society has seen in a shared report is locked: correcting it
+  // changes what they were shown, so it is unlocked first, as for any edit.
+  const pipelineId = circuit.siteSurvey?.pipelineId;
+  const demoMode = await isDemoMode();
+  if (pipelineId && !demoMode) {
+    const shared = new Set(
+      (await db.demoReport.findMany({ where: { pipelineId, status: "shared" }, select: { demoIds: true } })).flatMap((r) => r.demoIds),
+    );
+    const locked = circuit.demos.filter(
+      (d) => plan.demoIds.includes(d.id) && !demoLockState({ sharedInReport: shared.has(d.id), unlockedUntil: d.unlockedUntil, demoMode, now: new Date() }).editable,
+    );
+    if (locked.length > 0) {
+      logger.warn("inventory.count_correction_refused", { actorId: admin.id, lineId: input.lineId, reason: "demo_locked" });
+      return { error: `Demo ${locked.map((d) => d.sequence).join(", ")} carries this count and is in a report shared with the society — unlock it for correction first.` };
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.circuitDevice.update({
+      where: { id: input.lineId },
+      data: { count: plan.newCount, ...(plan.replacementCount !== "unchanged" ? { replacementCount: plan.replacementCount } : {}) },
+    });
+    await logChange(tx, { entity: "circuit_device", entityId: input.lineId, kind: "edit", field: "count", circuitId: circuit.id, oldValue: plan.oldCount, newValue: plan.newCount, reason, actorId: admin.id });
+    if (plan.circuitMeteredCount !== null) {
+      await tx.circuit.update({ where: { id: circuit.id }, data: { meteredLightCount: plan.circuitMeteredCount } });
+      await logChange(tx, { entity: "circuit", entityId: circuit.id, kind: "edit", field: "meteredLightCount", circuitId: circuit.id, oldValue: plan.totalOld, newValue: plan.circuitMeteredCount, reason, actorId: admin.id });
+    }
+    for (const demoId of plan.demoIds) {
+      await tx.circuitDemo.update({ where: { id: demoId }, data: { meteredLightCount: plan.totalNew } });
+      await logChange(tx, { entity: "circuit_demo", entityId: demoId, kind: "edit", field: "meteredLightCount", circuitId: circuit.id, demoId, oldValue: plan.totalOld, newValue: plan.totalNew, reason, actorId: admin.id });
+    }
+    await resyncCircuitFigures(tx, circuit.id, admin.id);
+  });
+  logger.info("inventory.count_corrected", {
+    actorId: admin.id,
+    circuitId: circuit.id,
+    lineId: input.lineId,
+    from: plan.oldCount,
+    to: plan.newCount,
+    circuitMetered: plan.circuitMeteredCount,
+    demos: plan.demoIds.length,
+    reason,
+  });
+  revalidatePath(circuitPath(circuit.societyId, circuit.id));
   return { ok: true };
 }

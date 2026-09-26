@@ -142,8 +142,11 @@ export async function startDemo(input: { circuitId: string; combine: "batch" | "
   if (circuit.state === "surveyed" || circuit.state === "ineligible") {
     return { error: "The circuit has to pass its eligibility checklist on the survey page first." };
   }
+  // Numbers are never reused (a removed demo keeps its number on record), but
+  // a removed duplicate frees its slot: the cap counts demos still on record.
   const last = circuit.demos.reduce((m, d) => Math.max(m, d.sequence), 0);
-  if (last >= MAX_DEMOS_PER_CIRCUIT) {
+  const live = circuit.demos.filter((d) => !d.voidedAt).length;
+  if (live >= MAX_DEMOS_PER_CIRCUIT) {
     logger.warn("demo.cap_refused", { actorId: a.admin.id, circuitId: circuit.id });
     return { error: `This circuit already has ${MAX_DEMOS_PER_CIRCUIT} demos on record — the maximum. Reject the one that should not count, or record an agreed benchmark instead.` };
   }
@@ -860,6 +863,45 @@ export async function relockDemo(demoId: string): Promise<Outcome> {
     await logChange(tx, { entity: "circuit_demo", entityId: demoId, kind: "relock", circuitId: demo.circuitId, demoId, actorId: a.admin.id });
   });
   logger.info("demo.relocked", { actorId: a.admin.id, demoId });
+  revalidatePath(pathOf(demo));
+  return { ok: true };
+}
+
+/**
+ * Remove a demo started by mistake — a duplicate (2026-09-26, user-asked).
+ * Rejecting keeps a demo on the table as one that does not count; removing
+ * takes it off the table. Never deleted: the row stays with who removed it,
+ * when and why, its days and change log intact, listed under "removed".
+ * Operations only; a demo in a report shared with the society has to be
+ * unlocked first, as for any edit, because the society has seen it.
+ */
+export async function removeDemo(input: { demoId: string; reason: string }): Promise<Outcome> {
+  const a = await actor("ops");
+  if ("error" in a) {
+    logger.warn("demo.remove_refused", { demoId: input.demoId, reason: "not_ops" });
+    return { error: "Removing a demo is an operations lead action." };
+  }
+  const reason = input.reason?.trim() ?? "";
+  if (!reason) return { error: "Say why the demo is being removed — for example that it duplicates another." };
+  const g = await editableDemo(input.demoId, a.admin.id, "remove");
+  if ("error" in g) return { error: g.error };
+  const demo = g.demo;
+  await db.$transaction(async (tx) => {
+    await tx.circuitDemo.update({ where: { id: demo.id }, data: { voidedAt: new Date(), voidedById: a.admin.id, voidReason: reason } });
+    // A booked replacement day for a demo that no longer exists is a visit
+    // nobody should make.
+    await tx.scheduledEvent.updateMany({
+      where: { demoId: demo.id, status: "scheduled" },
+      data: { status: "cancelled", cancelledAt: new Date(), cancelledReason: `Demo ${demo.sequence} removed: ${reason}` },
+    });
+    await tx.demoResultReview.updateMany({
+      where: { demoId: demo.id, state: "open" },
+      data: { state: "resolved", resolvedAt: new Date(), resolvedById: a.admin.id, resolutionNote: `Demo removed: ${reason}` },
+    });
+    await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "removed", circuitId: demo.circuitId, demoId: demo.id, oldValue: { sequence: demo.sequence }, newValue: null, reason, actorId: a.admin.id });
+    await finish(tx, demo.circuitId, a.admin.id);
+  });
+  logger.info("demo.removed", { actorId: a.admin.id, demoId: demo.id, circuitId: demo.circuitId, sequence: demo.sequence, reason });
   revalidatePath(pathOf(demo));
   return { ok: true };
 }

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
-import { setBenchmarkOverride, setDemoRejected, startDemo } from "./demo-step-actions";
+import { removeDemo, setBenchmarkOverride, setDemoRejected, startDemo } from "./demo-step-actions";
 
 export type DemoDTO = {
   id: string;
@@ -40,6 +40,7 @@ export function DemosPanel({
   canDecide,
   maxDemos,
   agreedPending,
+  removed = [],
 }: {
   circuitId: string;
   demos: DemoDTO[];
@@ -53,6 +54,8 @@ export function DemosPanel({
   maxDemos: number;
   /** An imported circuit whose figures stand until a redone demo is accepted. */
   agreedPending: boolean;
+  /** Demos removed as duplicates or mistakes — kept on record, listed here. */
+  removed?: { sequence: number; reason: string; on: string; by: string | null }[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -152,6 +155,19 @@ export function DemosPanel({
                           Reject
                         </button>
                       )}
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={pending}
+                        onClick={() => {
+                          const why = window.prompt(
+                            `Remove demo ${d.sequence}? Use this for a demo started by mistake or duplicating another — it is taken off this table, kept on record as removed, and the figures re-derive without it. Why is it being removed?`,
+                          );
+                          if (why) run(() => removeDemo({ demoId: d.id, reason: why }));
+                        }}
+                      >
+                        Remove
+                      </button>
                     </td>
                   )}
                 </tr>
@@ -159,6 +175,22 @@ export function DemosPanel({
             </tbody>
           </table>
         </div>
+      )}
+
+      {removed.length > 0 && (
+        <details className="text-[13px] text-[var(--text-muted)]">
+          <summary className="cursor-pointer">
+            {removed.length} removed demo{removed.length === 1 ? "" : "s"} — kept on record
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {removed.map((r) => (
+              <li key={r.sequence}>
+                Demo {r.sequence} · removed <span className="num">{r.on}</span>
+                {r.by ? ` by ${r.by}` : ""} — {r.reason}
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       {canStart && demos.length < maxDemos && (

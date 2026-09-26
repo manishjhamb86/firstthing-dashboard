@@ -157,6 +157,20 @@ export default async function CircuitDetailPage({
   const lockOf = (d: { id: string; unlockedUntil: Date | null }) =>
     demoLockState({ sharedInReport: sharedIds.has(d.id), unlockedUntil: d.unlockedUntil, demoMode, now });
 
+  // Demos removed as duplicates stay on record, listed under the table.
+  const removedDemos = await db.circuitDemo.findMany({
+    where: { circuitId: circuit.id, voidedAt: { not: null } },
+    orderBy: { sequence: "asc" },
+    select: { sequence: true, voidReason: true, voidedAt: true, voidedById: true },
+  });
+  const removers = new Map(
+    (
+      await db.adminUser.findMany({
+        where: { id: { in: removedDemos.map((d) => d.voidedById).filter((x): x is string => !!x) } },
+        select: { id: true, name: true, email: true },
+      })
+    ).map((u) => [u.id, u.name ?? u.email]),
+  );
   const demo = circuit.demos.find((d) => d.id === sp.demo) ?? currentDemoOf(circuit.demos);
   const excludedKwh = excludedDailyKwh(circuit.devices);
   const facts = demo ? demoFacts(demo, eligible, excludedKwh) : null;
@@ -421,7 +435,9 @@ export default async function CircuitDetailPage({
                 // the locked notice contradicts the notice.
                 (demoMode && inventoryLines.length === 0
                   ? " Demo mode allows the past record to be added below; normal operation does not."
-                  : " Contact an administrator if it has to change.")
+                  : canOverride
+                    ? " A count that was typed wrong can be corrected on its line."
+                    : " An operations lead can correct a count that was typed wrong.")
               : canEdit
                 ? null
                 : "Recording the load inventory is the field team\u2019s action."
@@ -430,6 +446,7 @@ export default async function CircuitDetailPage({
           // operation a locked inventory stays locked and the change goes
           // through an administrator, which is what the frozen message says.
           canRecordHistorical={canEdit && !circuit.voidedAt && demoMode}
+          canCorrectCount={canOverride && anyMeterInstalled && !circuit.voidedAt}
         />
       </section>
 
@@ -446,6 +463,12 @@ export default async function CircuitDetailPage({
         canDecide={canOverride && !circuit.voidedAt}
         maxDemos={MAX_DEMOS_PER_CIRCUIT}
         agreedPending={agreedPending}
+        removed={removedDemos.map((d) => ({
+          sequence: d.sequence,
+          reason: d.voidReason ?? "",
+          on: formatDate(d.voidedAt!),
+          by: d.voidedById ? (removers.get(d.voidedById) ?? null) : null,
+        }))}
       />
 
       {!eligible && (

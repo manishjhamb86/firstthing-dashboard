@@ -7908,3 +7908,50 @@ greeted an article. `greetingName()` in `src/lib/greeting.ts` (4 cases):
 - a title or article ("The", "Dr.", an initial) is never used on its own.
 
 Verified in a browser.
+
+## A duplicate demo can be removed; a mistyped count corrected on a locked inventory (2026-09-26) — user-asked
+
+**Removing a demo.** On the demos table, operations get **Remove** beside Reject, and must give a
+reason (`removeDemo`).
+- **Reject vs Remove.** Rejecting keeps a demo on the table as one that does not count. Removing
+  takes a demo started by mistake or duplicating another off the table.
+- **The record stays.** Nothing is deleted: the row is soft-voided with who, when and why, and
+  its days and change log stay. It is listed under "N removed demos — kept on record".
+- **What else moves.** Its booked replacement day is cancelled, any open out-of-band review is
+  resolved, and the figures re-derive without it.
+- **Shared reports.** A demo in a report shared with the society has to be unlocked first, as for
+  any edit.
+- **Freeing a slot.** Demo numbers are never reused, but the three-demo cap now counts demos still
+  on record, so removing a duplicate frees its slot.
+
+**Correcting a count that was typed wrong.** The locked inventory used to say "Contact an
+administrator", and no route to one existed. Operations now get **Correct count** on each locked
+line (`correctLockedCount`), with a reason required.
+- **What follows the correction.** The plan is `planCountCorrection` in
+  `src/lib/count-correction.ts` (3 cases). The wrong figure is fixed everywhere it was carried:
+  the line, the replaced count on that line, the circuit's metered count, and each demo that
+  metered that total. A figure that merely coincides is left alone.
+- **The record.** Every old value goes to the change log.
+- **Shared reports.** A carrying demo in a shared report must be unlocked first. The refusal names
+  it.
+- **Distinct from a light-count change.** A real change in the lights is still recorded as a
+  rescale, which keeps the old count for the time before it. The dialog says so.
+
+**Transactions: one default.** Removing a demo failed on dev with "expired transaction": the
+figures resync ran 8 seconds against Prisma's 5-second default. `db.ts` now sets a 60-second
+timeout and 20-second maxWait for every interactive transaction, instead of a timeout remembered
+at each call site. Several demo actions had the same exposure.
+
+**The portal greeting's second line** now names who is signed in: "Signed in as <name> · you are
+committee". When the login is named after the society, it shows the account's email instead.
+
+**Verified:** 18/18 in a browser on a fixture with demos at 55, 63 and 63 over a 63-light
+inventory:
+- the correction was refused while demo 2 was in a shared report, with nothing written;
+- once allowed, the count went 63 → 55 on the line, the circuit and demos 2 and 3, with four
+  change-log rows;
+- demo 3 was removed with its reason, its day cancelled, it is listed as removed, and a new demo
+  can start;
+- a non-operations remove was refused on the server and logged.
+
+The greeting check passed 2/2.

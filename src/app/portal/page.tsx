@@ -151,12 +151,16 @@ export default async function PortalHomePage() {
   ].filter((c) => c.avg !== null);
 
   const first = greetingName(viewer.name, society.name);
+  // Who is signed in (2026-09-26, user-asked). A login named after the society
+  // greets the society, so its line names the account by email instead —
+  // "Signed in as The Hyde Park" under "Good day, The Hyde Park" says nothing.
+  const signedInAs = first === society.name || !viewer.name?.trim() ? viewer.email : viewer.name.trim();
 
   return (
     <>
       <PageHeader
         title={`Good day, ${first}`}
-        subtitle={`${society.name} · you are ${PORTAL_AUTHORITY_LABEL[viewer.role].toLowerCase()}`}
+        subtitle={`Signed in as ${signedInAs} · you are ${PORTAL_AUTHORITY_LABEL[viewer.role].toLowerCase()}`}
         chip={
           pendingActions.length > 0 ? (
             <StatusChip tone="warn">{pendingActions.length} awaiting you</StatusChip>

@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Card, EmptyState, ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { StepMarker } from "@/components/deal-stepper";
-import { addCircuitDevice, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
+import { addCircuitDevice, correctLockedCount, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
 
 export type InventoryLine = {
   id: string;
@@ -291,7 +291,7 @@ function AddLineForm({
   );
 }
 
-function LineRow({ line, editable }: { line: InventoryLine; editable: boolean }) {
+function LineRow({ line, editable, canCorrect = false }: { line: InventoryLine; editable: boolean; canCorrect?: boolean }) {
   const [editing, setEditing] = useState(false);
   const [count, setCount] = useState(String(line.count));
   const [wattage, setWattage] = useState(String(line.wattage));
@@ -364,6 +364,11 @@ function LineRow({ line, editable }: { line: InventoryLine; editable: boolean })
           ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}`
           : line.note ?? "—"}
       </td>
+      {canCorrect && (
+        <td>
+          <CorrectCount line={line} />
+        </td>
+      )}
       {editable && (
         <td>
           <span className="inline-flex gap-1">
@@ -449,6 +454,7 @@ export function LoadInventoryPanel({
   editable,
   frozenReason,
   canRecordHistorical,
+  canCorrectCount = false,
 }: {
   circuitId: string;
   lines: InventoryLine[];
@@ -456,6 +462,8 @@ export function LoadInventoryPanel({
   editable: boolean;
   frozenReason: string | null;
   canRecordHistorical: boolean;
+  /** Operations may correct a mistyped count on a locked inventory. */
+  canCorrectCount?: boolean;
 }) {
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
   const anyReplacement = lines.some((l) => l.replacementName || l.excluded);
@@ -527,12 +535,12 @@ export function LoadInventoryPanel({
                 <th>Runs</th>
                 <th>kWh/day</th>
                 <th>{anyReplacement ? "Replaced with" : "Note"}</th>
-                {editable && <th>{""}</th>}
+                {(editable || canCorrectCount) && <th>{""}</th>}
               </tr>
             </thead>
             <tbody>
               {lines.map((l) => (
-                <LineRow key={l.id} line={l} editable={editable} />
+                <LineRow key={l.id} line={l} editable={editable} canCorrect={canCorrectCount && !editable} />
               ))}
             </tbody>
             <tfoot>
@@ -541,7 +549,7 @@ export function LoadInventoryPanel({
                   Theoretical daily consumption
                 </td>
                 <td className="num font-semibold">{theoretical.toFixed(2)}</td>
-                <td colSpan={editable ? 2 : 1} className="text-[var(--text-muted)]">
+                <td colSpan={editable || canCorrectCount ? 2 : 1} className="text-[var(--text-muted)]">
                   Σ count × W × hours ÷ 1000
                 </td>
               </tr>
@@ -578,5 +586,69 @@ export function LoadInventoryPanel({
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * A count typed wrong on a locked inventory (2026-09-26). Not a change in the
+ * lights — that is a light-count change — so it says so before it asks.
+ */
+function CorrectCount({ line }: { line: InventoryLine }) {
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(String(line.count));
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, start] = useTransition();
+  function save() {
+    start(async () => {
+      const r = await correctLockedCount({ lineId: line.id, count: Number(count), reason });
+      if ("error" in r) setError(r.error);
+      else {
+        setError(undefined);
+        setOpen(false);
+      }
+    });
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-ghost text-xs"
+        onClick={() => {
+          setCount(String(line.count));
+          setReason("");
+          setError(undefined);
+          setOpen(true);
+        }}
+      >
+        Correct count
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={`Correct the count — ${line.deviceTypeName}`}
+        description="For a count that was typed wrong. If the lights on the circuit really changed, record a light-count change instead — that keeps the old count for the time before it."
+        footer={
+          <>
+            <button type="button" onClick={save} disabled={pending || reason.trim() === ""} className="btn-primary">
+              {pending ? "Saving…" : "Save the correction"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} disabled={pending} className="btn-ghost">
+              Cancel
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Correct count" htmlFor={`cc-${line.id}`} hint={`On record: ${line.count}. The circuit's metered count and every demo that carried the same figure follow; the old values are kept in the change log.`}>
+            <input id={`cc-${line.id}`} type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} disabled={pending} className="field" />
+          </Field>
+          <Field label="What was wrong" htmlFor={`cr-${line.id}`}>
+            <input id={`cr-${line.id}`} value={reason} onChange={(e) => setReason(e.target.value)} disabled={pending} className="field" placeholder="e.g. 63 typed instead of 55" />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+        </div>
+      </Modal>
+    </>
   );
 }

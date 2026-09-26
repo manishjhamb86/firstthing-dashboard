@@ -17,7 +17,7 @@ import type { Tx } from "@/lib/tx";
 import { logger } from "@/lib/logger";
 import { logChange } from "@/lib/change-log";
 import { deriveCircuitFigures } from "@/lib/circuit-demos";
-import { excludedDailyKwh } from "@/lib/circuit-load";
+import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices } from "@/lib/circuit-load";
 import type { OfferCircuitTerm } from "@/lib/offer";
 
 /** "Matches to rounded figures": the two agree within half a percentage point. */
@@ -53,7 +53,7 @@ export async function reconcileOfferWithDemos(tx: Tx, circuitId: string, actorId
         where: { voidedAt: null },
         select: { id: true, sequence: true, rejected: true, combine: true, meteredLightCount: true, preInstallBaseline: true, postInstallAverage: true },
       },
-      devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
+      devices: { select: EXCLUSION_DEVICE_SELECT },
     },
   });
   const measuredOf = new Map(
@@ -70,7 +70,7 @@ export async function reconcileOfferWithDemos(tx: Tx, circuitId: string, actorId
           postAverage: d.postInstallAverage,
         })),
         null,
-        excludedDailyKwh(ci.devices),
+        exclusionFromDevices(ci.devices),
       );
       return [ci.id, { pct: f.benchmark.raw, baseline: f.baseline, lights: f.meteredLightCount }] as const;
     }),

@@ -1,3 +1,4 @@
+import { ExclusionNote } from "@/components/exclusion-note";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -7,7 +8,7 @@ import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { formatDate } from "@/lib/format-date";
 import {
-  excludedDailyKwh,
+  EXCLUSION_DEVICE_SELECT, exclusionFromDevices,
   periodSavingsSummary,
   savingsBand,
   savingsPct,
@@ -46,7 +47,7 @@ export default async function LiveMonitoringCircuitPage({
       society: { select: { id: true, name: true } },
       siteSurvey: { select: { pipelineId: true } },
       rescaleEvents: true,
-      devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
+      devices: { select: EXCLUSION_DEVICE_SELECT },
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
       demos: {
         orderBy: { sequence: "asc" },
@@ -108,6 +109,8 @@ export default async function LiveMonitoringCircuitPage({
 
   const circuitHref = `/admin/societies/${circuit.societyId}/circuits/${circuit.id}`;
   const baselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
+  // What stayed on the circuit unreplaced — off both sides of every saving here.
+  const exclusion = exclusionFromDevices(circuit.devices);
 
   // Monitoring days only, from the billing start (2026-09-26): the demo's
   // days live on the demo itself, and a day between the demo's post period
@@ -117,7 +120,7 @@ export default async function LiveMonitoringCircuitPage({
           .filter((r) => monitoringStart === null || r.date.getTime() >= monitoringStart.getTime())
           .map((r) => {
             const b = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, r.date);
-            const pct = b === null ? null : savingsPct(b, r.kWh);
+            const pct = b === null ? null : savingsPct(b, r.kWh, exclusion);
             return {
               id: r.id,
               date: r.date.toISOString().slice(0, 10),
@@ -155,7 +158,7 @@ export default async function LiveMonitoringCircuitPage({
   const lastMonth = monthOf(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)).toISOString());
   const thisYear = nowIso.slice(0, 4);
   const periodPct = (days: StoredReadingDTO[]) => {
-    const s = periodSavingsSummary(baselineNow, days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })), excludedDailyKwh(circuit.devices));
+    const s = periodSavingsSummary(baselineNow, days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })), exclusion);
     return s.savingsPct === null ? null : { pct: s.savingsPct, band: s.band, days: days.filter((d) => !d.excluded).length };
   };
   const savingsRows = [
@@ -344,6 +347,14 @@ export default async function LiveMonitoringCircuitPage({
               )}
             </Card>
           </div>
+
+          <ExclusionNote
+            exclusion={exclusion}
+            before={baselineNow}
+            after={null}
+            title="Savings here are on the replaced lights"
+            className="mb-5"
+          />
 
           <section className="max-w-none">
             {/* The readings are what this screen is FOR — they open at the

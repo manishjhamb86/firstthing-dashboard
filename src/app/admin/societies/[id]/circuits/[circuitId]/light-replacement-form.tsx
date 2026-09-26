@@ -15,6 +15,8 @@ export type ReplacementFormLine = {
   count: number;
   wattage: number;
   hoursPerDay: number;
+  /** The fixture type — a kept line of a type being replaced is "the same item". */
+  deviceTypeId: string;
   /** Already marked at the survey as not part of the retrofit. */
   excluded: boolean;
   options: { id: string; name: string; defaultWattage: number | null }[];
@@ -77,7 +79,15 @@ export function LightReplacementForm({
   });
   const excludedLines = lines.filter(isExcluded);
   const allExcluded = lines.length > 0 && excludedLines.length === lines.length;
-  const excludedKwh = excludedLines.reduce((n, l) => n + kwhPerDay(l), 0);
+  // Kept lights of a type that is being replaced elsewhere on the circuit are
+  // "the same item": their share of the MEASURED figure comes off. Anything
+  // else comes off at its rated draw (2026-09-26, the user's rules).
+  const replacedTypes = new Set(lines.filter((l) => !isExcluded(l)).map((l) => l.deviceTypeId));
+  const sameItem = (l: ReplacementFormLine) => replacedTypes.has(l.deviceTypeId);
+  const keptLike = excludedLines.filter(sameItem);
+  const keptOther = excludedLines.filter((l) => !sameItem(l));
+  const likeTotal = lines.filter(sameItem).reduce((n, l) => n + l.count, 0);
+  const otherKwh = keptOther.reduce((n, l) => n + kwhPerDay(l), 0);
 
   function submit() {
     // A count that differs from the original is real (a broken fitting left
@@ -155,8 +165,13 @@ export function LightReplacementForm({
                     </td>
                     {isExcluded(l) ? (
                       <td colSpan={2} className="text-[13px] text-[var(--text-muted)]">
-                        Stays on the circuit ·{" "}
-                        <span className="num">{kwhPerDay(l).toFixed(2)}</span> kWh/day subtracted
+                        {sameItem(l) ? (
+                          <>Kept — same kind as the replaced lights, so its share of the measured figure comes off</>
+                        ) : (
+                          <>
+                            Stays on the circuit · rated draw <span className="num">{kwhPerDay(l).toFixed(2)}</span> kWh/day comes off
+                          </>
+                        )}
                       </td>
                     ) : (
                     <>
@@ -198,10 +213,20 @@ export function LightReplacementForm({
                 </strong>
               ) : (
                 <>
-                  Excluded from the benchmark:{" "}
-                  {excludedLines.map((l) => `${l.count} × ${l.deviceName}`).join(", ")} ·{" "}
-                  <span className="num">{excludedKwh.toFixed(2)}</span> kWh/day comes off both the before and after
-                  daily averages before the saving is worked out.
+                  The saving will be measured on the lights that are replaced.{" "}
+                  {keptLike.length > 0 && (
+                    <>
+                      {keptLike.map((l) => `${l.count} × ${l.deviceName}`).join(", ")} kept: the same kind as the replaced
+                      lights, so their share of what the meter measured comes off both the before and after figures —
+                      before ÷ {likeTotal} × {keptLike.reduce((n, l) => n + l.count, 0)}.{" "}
+                    </>
+                  )}
+                  {keptOther.length > 0 && (
+                    <>
+                      {keptOther.map((l) => `${l.count} × ${l.deviceName}`).join(", ")}: a different item, so its rated
+                      draw of <span className="num">{otherKwh.toFixed(2)}</span> kWh/day comes off both.
+                    </>
+                  )}
                 </>
               )}
             </p>

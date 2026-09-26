@@ -1,3 +1,4 @@
+import { excludedKwhAt, type Exclusion } from "@/lib/circuit-load";
 /**
  * A circuit's benchmark, derived from the demos that count.
  *
@@ -140,14 +141,14 @@ export type CircuitFigures = {
 };
 
 /**
- * A demo's saving on the lights it replaced. `excludedKwh` is the daily draw
- * of fixtures on the circuit that were NOT replaced (marked "exclude from the
- * benchmark" at the replacement): it is subtracted from both the before and
- * after averages, so the saving is (pre − post) / (pre − excluded).
+ * A demo's saving on the lights it replaced. `ex` describes what stayed on
+ * the circuit unreplaced (exclusionOf): its draw X at this before-average
+ * comes off both the before and after averages, so the saving is
+ * (pre − post) / (pre − X).
  */
-export function demoSavingsPct(pre: number | null, post: number | null, excludedKwh = 0): number | null {
+export function demoSavingsPct(pre: number | null, post: number | null, ex?: Exclusion): number | null {
   if (pre === null || post === null) return null;
-  const replacedPre = pre - excludedKwh;
+  const replacedPre = pre - excludedKwhAt(pre, ex);
   if (replacedPre <= 0) return null;
   return ((pre - post) / replacedPre) * 100;
 }
@@ -164,8 +165,8 @@ export function demoSavingsPct(pre: number | null, post: number | null, excluded
 export function deriveCircuitFigures(
   demos: readonly DemoFiguresInput[],
   override: BenchmarkOverride = null,
-  /** Daily draw of the circuit's fixtures excluded from the benchmark. */
-  excludedKwh = 0,
+  /** What stayed on the circuit unreplaced (exclusionOf). */
+  ex?: Exclusion,
 ): CircuitFigures {
   const live = demos.filter((d) => !d.rejected && !d.voided).sort((a, b) => a.sequence - b.sequence);
   const groups: Array<{ pre: number[]; post: number[]; lights: number }> = [];
@@ -181,7 +182,7 @@ export function deriveCircuitFigures(
   const baseline = groups.length === 0 ? null : groups.reduce((s, g) => s + g.pre.reduce((a, b) => a + b, 0) / g.pre.length, 0);
   const meteredLightCount = groups.length === 0 ? null : groups.reduce((s, g) => s + g.lights, 0);
 
-  const perDemo = live.map((d) => ({ id: d.id, savingsPct: demoSavingsPct(d.preAverage, d.postAverage, excludedKwh) }));
+  const perDemo = live.map((d) => ({ id: d.id, savingsPct: demoSavingsPct(d.preAverage, d.postAverage, ex) }));
   const measured = perDemo
     .map((p, i) => ({ id: p.id, sequence: live[i].sequence, savingsPct: p.savingsPct, rejected: false }))
     .filter((p): p is { id: string; sequence: number; savingsPct: number; rejected: boolean } => p.savingsPct !== null);

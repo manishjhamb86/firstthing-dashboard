@@ -12,6 +12,7 @@ import { formatDate } from "@/lib/format-date";
 import { Card, CardTitle, ChartPending, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { BAND_TONE, monthName } from "../portal-widgets";
 import { LightCountHistory } from "../light-count-history";
+import { ExclusionNote } from "@/components/exclusion-note";
 import { ConsumptionChart } from "../consumption-chart";
 import { KpiBubble } from "../kpi-tiles";
 import { Gauge, IndianRupee, Leaf, Zap } from "lucide-react";
@@ -272,6 +273,13 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
                             )}
                           </span>
                           <LightCountHistory stages={c.lightHistory} />
+                          <ExclusionNote
+                            exclusion={c.exclusion}
+                            before={c.baselineNow}
+                            after={c.monthDailyAvg}
+                            title="Why the saving leaves some lights out"
+                            className="mt-2"
+                          />
                         </td>
                         <td className="num text-right">
                           {c.monthDailyAvg !== null ? c.monthDailyAvg.toFixed(1) : "—"}

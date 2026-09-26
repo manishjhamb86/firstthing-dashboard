@@ -359,7 +359,7 @@ function LineRow({ line, editable, canCorrect = false }: { line: InventoryLine; 
       <td className="num">{lineKwh(line).toFixed(2)}</td>
       <td className="text-[var(--text-muted)]">
         {line.excluded
-          ? "Not replaced — excluded from the benchmark"
+          ? "Kept — not replaced; left out of the saving"
           : line.replacementName
           ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}`
           : line.note ?? "—"}
@@ -467,7 +467,7 @@ export function LoadInventoryPanel({
 }) {
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
   const anyReplacement = lines.some((l) => l.replacementName || l.excluded);
-  const excludedKwh = lines.filter((l) => l.excluded).reduce((s, l) => s + lineKwh(l), 0);
+  const keptCount = lines.filter((l) => l.excluded).reduce((n, l) => n + l.count, 0);
 
   // A locked inventory is a finished record, so it folds like every other
   // finished thing on this page — header, figure, done (user-reported
@@ -494,9 +494,9 @@ export function LoadInventoryPanel({
               <span className="chip-dot" aria-hidden />
               {theoretical.toFixed(2)} kWh/day theoretical
             </span>
-            {excludedKwh > 0 && (
+            {keptCount > 0 && (
               <span className="text-xs text-[var(--text-muted)]">
-                <span className="num">{excludedKwh.toFixed(2)}</span> kWh/day not replaced — excluded from the benchmark
+                <span className="num">{keptCount}</span> fixture{keptCount === 1 ? "" : "s"} kept, not replaced — left out of the saving
               </span>
             )}
           </span>

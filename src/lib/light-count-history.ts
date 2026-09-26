@@ -1,3 +1,4 @@
+import { benchmarkCeiling, type Exclusion } from "@/lib/circuit-load";
 /**
  * A circuit's light count over time, told as stages (2026-09-26, user-asked).
  *
@@ -46,12 +47,14 @@ export function lightCountStages(input: {
   fallbackStart: Date | null;
   events: RescaleEvent[];
   today: Date;
+  /** What stayed on the circuit unreplaced — the ceiling allows for it. */
+  exclusion?: Exclusion;
 }): LightStage[] {
   const live = input.events
     .filter((e) => !e.voidedAt)
     .sort((a, b) => a.effectiveDate.getTime() - b.effectiveDate.getTime());
   const ceiling = (baseline: number | null) =>
-    baseline !== null && input.benchmarkPct !== null ? baseline * (1 - input.benchmarkPct / 100) : null;
+    baseline !== null && input.benchmarkPct !== null ? benchmarkCeiling(baseline, input.benchmarkPct, input.exclusion) : null;
 
   const start = input.demo?.from ?? input.fallbackStart;
   const stages: LightStage[] = [

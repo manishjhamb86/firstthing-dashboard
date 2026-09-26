@@ -29,7 +29,219 @@ export type LoadItem = {
    * functions rather than one with a flag.
    */
   excludedFromCalculation?: boolean;
+  /** The fixture type — decides whether a kept fixture is "the same item" as a replaced one. */
+  deviceTypeId?: string;
+  /** Recorded at the replacement: lights on this line actually replaced (the rest stayed). */
+  replacementCount?: number | null;
+  /** For explanations. */
+  name?: string;
 };
+
+/**
+ * What comes off the meter's figures before a saving is taken (2026-09-26,
+ * the user's rules):
+ *
+ *  - lights kept on the circuit that are THE SAME ITEM as the replaced ones
+ *    come off as their share of what the meter MEASURED — the Hyde Park demo:
+ *    63 tubes, 55 replaced, 8 kept, so 28.66 ÷ 63 × 8 = 3.64 kWh/day. The
+ *    meter saw what they really drew, which a rated figure only estimates.
+ *  - anything DIFFERENT left on the circuit (a street light, a fan, a TV)
+ *    comes off at its theoretical draw, count × W × h ÷ 1000 — there is no
+ *    measured figure to take a share of.
+ *
+ * With both on one circuit, the different items' theoretical draw comes off
+ * first and the kept like-lights take their share of what remains:
+ *     X(B) = fixed + (B − fixed) × share
+ * where B is the before figure (or the baseline in force). "Share" is by
+ * rated load within the like group, which for identical fixtures is exactly
+ * kept ÷ total lights.
+ *
+ * Kept lights are an excluded line, or the part of a line not replaced when
+ * the replacement recorded fewer lights than the line holds. "The same item"
+ * means the same fixture type as a line being replaced.
+ */
+export type Exclusion = {
+  /** kWh/day of kept items unlike anything replaced — theoretical. */
+  fixedKwh: number;
+  /** Share (0..1) of the rest that kept like-lights account for. */
+  share: number;
+  keptLike: { name: string; count: number }[];
+  keptOther: { name: string; count: number; kWhPerDay: number }[];
+  /** Lights of the replaced kind on the circuit, kept or replaced. */
+  likeLights: number;
+  /** Every like line has the same wattage and hours — the share is then exactly kept ÷ lights. */
+  likeUniform: boolean;
+  /** Every fixture on the inventory, kept or replaced. */
+  inventoryCount: number;
+};
+
+export const NO_EXCLUSION: Exclusion = { fixedKwh: 0, share: 0, keptLike: [], keptOther: [], likeLights: 0, likeUniform: true, inventoryCount: 0 };
+
+export function exclusionOf(items: LoadItem[]): Exclusion {
+  const kwh = (count: number, i: LoadItem) => (count * i.wattage * i.hoursPerDay) / 1000;
+  const kept = (i: LoadItem) =>
+    i.excludedFromCalculation
+      ? i.count
+      : i.replacementCount != null && i.replacementCount < i.count
+        ? i.count - i.replacementCount
+        : 0;
+  const typeOf = (i: LoadItem, n: number) => i.deviceTypeId ?? `line-${n}`;
+  const likeTypes = new Set(items.map((i, n) => (i.excludedFromCalculation ? null : typeOf(i, n))).filter((t): t is string => t !== null));
+  let fixedKwh = 0;
+  let likeLoad = 0;
+  let keptLikeLoad = 0;
+  let likeLights = 0;
+  const likeProfiles = new Set<string>();
+  const keptLike = new Map<string, { name: string; count: number }>();
+  const keptOther: Exclusion["keptOther"] = [];
+  items.forEach((i, n) => {
+    const k = kept(i);
+    const name = i.name ?? "Fixture";
+    if (likeTypes.has(typeOf(i, n))) {
+      likeLoad += kwh(i.count, i);
+      likeLights += i.count;
+      likeProfiles.add(`${i.wattage}|${i.hoursPerDay}`);
+      if (k > 0) {
+        keptLikeLoad += kwh(k, i);
+        const prev = keptLike.get(name);
+        keptLike.set(name, { name, count: (prev?.count ?? 0) + k });
+      }
+    } else if (k > 0) {
+      fixedKwh += kwh(k, i);
+      keptOther.push({ name, count: k, kWhPerDay: kwh(k, i) });
+    }
+  });
+  return {
+    fixedKwh,
+    share: likeLoad > 0 ? keptLikeLoad / likeLoad : 0,
+    keptLike: [...keptLike.values()],
+    keptOther,
+    likeLights,
+    likeUniform: likeProfiles.size <= 1,
+    inventoryCount: items.reduce((n, i) => n + i.count, 0),
+  };
+}
+
+/**
+ * The lights a saving is extrapolated from — the ones actually replaced.
+ * When the inventory is the demo's lights (its count is the metered count),
+ * every kept fixture comes off; otherwise only kept lights of the replaced
+ * kind are known to be among the metered ones.
+ */
+export function replacedLightCount(metered: number, ex: Exclusion | undefined): number {
+  if (!ex) return metered;
+  const keptLike = ex.keptLike.reduce((n, k) => n + k.count, 0);
+  const keptOther = ex.keptOther.reduce((n, k) => n + k.count, 0);
+  const kept = ex.inventoryCount === metered ? keptLike + keptOther : keptLike;
+  return metered - kept > 0 ? metered - kept : metered;
+}
+
+/** Lights of the replaced kind that were actually replaced. */
+export function replacedLikeLights(ex: Exclusion): number {
+  return ex.likeLights - ex.keptLike.reduce((n, k) => n + k.count, 0);
+}
+
+const f2 = (n: number) => n.toFixed(2);
+
+/**
+ * The calculation in words, for every screen and report that shows a saving
+ * on a circuit with fixtures left unreplaced — the same sentences in the
+ * back office, the reports and the society's portal, so nobody reads two
+ * explanations of one figure. `before`/`after` are the figures the meter
+ * gave (kWh/day); either may be null when not measured yet.
+ */
+export function describeExclusion(
+  ex: Exclusion,
+  before: number | null,
+  after: number | null,
+): { lines: string[]; formula: string | null; excludedKwh: number | null; savingPct: number | null } {
+  const lines: string[] = [];
+  const keptLikeCount = ex.keptLike.reduce((n, k) => n + k.count, 0);
+  if (ex.keptOther.length > 0) {
+    const what = ex.keptOther.map((k) => `${k.count} × ${k.name}`).join(", ");
+    lines.push(
+      `${what} ${ex.keptOther.length === 1 && ex.keptOther[0].count === 1 ? "stays" : "stay"} on the circuit and ${ex.keptOther.length === 1 && ex.keptOther[0].count === 1 ? "is" : "are"} not what was replaced, so ${ex.keptOther.length === 1 && ex.keptOther[0].count === 1 ? "its" : "their"} rated draw comes off: ${f2(ex.fixedKwh)} kWh/day (count × watts × hours).`,
+    );
+  }
+  if (keptLikeCount > 0) {
+    const names = ex.keptLike.map((k) => k.name).join(", ");
+    const base = before === null ? null : before - ex.fixedKwh;
+    const likeTerm = ex.likeUniform
+      ? `÷ ${ex.likeLights} × ${keptLikeCount}`
+      : `× ${(ex.share * 100).toFixed(1)}% (their share of the like lights' rated load)`;
+    lines.push(
+      `${keptLikeCount} of the ${ex.likeLights} ${names} ${keptLikeCount === 1 ? "was" : "were"} kept, not replaced. ${keptLikeCount === 1 ? "It is" : "They are"} the same kind as the lights that were replaced, so ${keptLikeCount === 1 ? "its" : "their"} share of what the meter measured comes off` +
+        (base === null
+          ? `: the before figure ${ex.fixedKwh > 0 ? "less the item above " : ""}${likeTerm}.`
+          : `: ${f2(base)} ${likeTerm} = ${f2(base * ex.share)} kWh/day.`),
+    );
+  }
+  if (lines.length === 0) return { lines, formula: null, excludedKwh: null, savingPct: null };
+  const x = before === null ? null : excludedKwhAt(before, ex);
+  lines.push("The same amount comes off the after figure, because those fixtures drew the same before and after.");
+  const pct = before !== null && after !== null && x !== null && before - x > 0 ? ((before - after) / (before - x)) * 100 : null;
+  const formula =
+    before !== null && x !== null
+      ? after !== null
+        ? `Saving = (${f2(before)} − ${f2(after)}) ÷ (${f2(before)} − ${f2(x)}) = ${pct === null ? "—" : `${pct.toFixed(1)}%`} — the saving on the ${replacedLikeLights(ex)} lights that were replaced.`
+        : `Saving = (before − after) ÷ (${f2(before)} − ${f2(x)}) — measured on the ${replacedLikeLights(ex)} lights that were replaced.`
+      : null;
+  return { lines, formula, excludedKwh: x, savingPct: pct };
+}
+
+/** The device columns exclusionOf needs — one select every reader shares. */
+export const EXCLUSION_DEVICE_SELECT = {
+  count: true,
+  wattage: true,
+  hoursPerDay: true,
+  excludedFromCalculation: true,
+  deviceTypeId: true,
+  replacementCount: true,
+  deviceType: { select: { name: true } },
+} as const;
+
+export function exclusionFromDevices(
+  rows: readonly {
+    count: number;
+    wattage: number;
+    hoursPerDay: number;
+    excludedFromCalculation: boolean;
+    deviceTypeId: string;
+    replacementCount: number | null;
+    deviceType?: { name: string } | null;
+  }[],
+): Exclusion {
+  return exclusionOf(
+    rows.map((r) => ({
+      count: r.count,
+      wattage: r.wattage,
+      hoursPerDay: r.hoursPerDay,
+      excludedFromCalculation: r.excludedFromCalculation,
+      deviceTypeId: r.deviceTypeId,
+      replacementCount: r.replacementCount,
+      name: r.deviceType?.name,
+    })),
+  );
+}
+
+/** kWh/day that comes off a before figure (or baseline) of `beforeKwh`. */
+export function excludedKwhAt(beforeKwh: number, ex: Exclusion | undefined): number {
+  if (!ex) return 0;
+  return ex.fixedKwh + Math.max(0, beforeKwh - ex.fixedKwh) * ex.share;
+}
+
+/**
+ * The most a circuit may draw in a day and still meet a benchmark of `pct`
+ * against baseline B: the replaced lights must save pct of THEIR share, so
+ * the ceiling is B − pct × (B − X(B)). Without exclusions, B × (1 − pct).
+ */
+export function benchmarkCeiling(baseline: number, pct: number, ex?: Exclusion): number {
+  return baseline - (pct / 100) * (baseline - excludedKwhAt(baseline, ex));
+}
+
+export function hasExclusion(ex: Exclusion | undefined): boolean {
+  return !!ex && (ex.fixedKwh > 0 || ex.share > 0);
+}
 
 /**
  * Σ(count × wattage × hoursPerDay) ÷ 1000 — kWh per day, for the WHOLE
@@ -106,16 +318,15 @@ export const SAVINGS_ORANGE_MIN = 55;
 export const SAVINGS_SUSPECT_ABOVE = 80;
 
 /**
- * The saving on the lights that were replaced. `excludedKwh` is the daily
- * draw of the fixtures left on the circuit unreplaced (excludedDailyKwh): the
- * meter sees them before and after alike, so they come off BOTH sides —
- * (baseline − E) − (day − E) over (baseline − E), i.e. (baseline − day) over
- * (baseline − E). Without it a circuit carrying lights nobody replaced
+ * The saving on the lights that were replaced. `ex` describes what was left
+ * on the circuit unreplaced (exclusionOf); its draw X at this baseline comes
+ * off BOTH sides — the meter sees it before and after alike — so the saving
+ * is (baseline − day) over (baseline − X). Without it a circuit carrying lights nobody replaced
  * reports a saving lower than the retrofit actually achieved (2026-09-26,
  * user-specified).
  */
-export function savingsPct(baselineKwh: number, dayKwh: number, excludedKwh = 0): number | null {
-  const replacedBaseline = baselineKwh - excludedKwh;
+export function savingsPct(baselineKwh: number, dayKwh: number, ex?: Exclusion): number | null {
+  const replacedBaseline = baselineKwh - excludedKwhAt(baselineKwh, ex);
   if (replacedBaseline <= 0) return null;
   return ((baselineKwh - dayKwh) / replacedBaseline) * 100;
 }
@@ -482,12 +693,12 @@ export const SAVINGS_WARN_BELOW = 60;
 export function periodSavingsSummary(
   baseline: number | null,
   days: { kWh: number; excluded?: boolean }[],
-  /** Daily draw of fixtures left unreplaced — off both sides (savingsPct). */
-  excludedKwh = 0,
+  /** What was left on the circuit unreplaced — off both sides (savingsPct). */
+  ex?: Exclusion,
 ): { averageKwh: number | null; savingsPct: number | null; band: SavingsBand | null; warn: boolean } {
   const live = days.filter((d) => !d.excluded);
   const avg = averageKwh(live);
-  const pct = avg === null || baseline === null ? null : savingsPct(baseline, avg, excludedKwh);
+  const pct = avg === null || baseline === null ? null : savingsPct(baseline, avg, ex);
   if (pct === null) {
     return { averageKwh: avg, savingsPct: null, band: null, warn: false };
   }

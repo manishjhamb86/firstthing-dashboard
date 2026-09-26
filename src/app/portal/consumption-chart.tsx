@@ -26,7 +26,13 @@ import { dayAxis, monthAxis } from "@/lib/format-date";
  * Bucketing sums both kWh and the per-day baselines in force, so a bucket
  * always compares like with like even across an INV-07 rescale.
  */
-export type DailyPoint = { date: string; kWh: number; baseline: number | null };
+export type DailyPoint = {
+  date: string;
+  kWh: number;
+  baseline: number | null;
+  /** The baseline of the lights actually replaced — what a saving is a share of. */
+  replacedBaseline?: number | null;
+};
 
 type Bucket = "daily" | "weekly" | "monthly" | "yearly" | "overall";
 
@@ -56,7 +62,7 @@ function labelFor(key: string, bucket: Bucket): string {
   return dayAxis(d);
 }
 
-type Bar = { key: string; label: string; kWh: number; baseline: number | null; days: number };
+type Bar = { key: string; label: string; kWh: number; baseline: number | null; replacedBaseline: number | null; days: number };
 
 function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: string } {
   if (days.length === 0) return { bars: [], note: "" };
@@ -77,13 +83,16 @@ function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: str
           ? d.date.slice(0, 7)
           : d.date.slice(0, 4);
 
-  const groups = new Map<string, { kWh: number; baseline: number; anyNull: boolean; days: number }>();
+  const groups = new Map<string, { kWh: number; baseline: number; replaced: number; anyNull: boolean; days: number }>();
   for (const d of days) {
     const k = keyOf(d);
-    const g = groups.get(k) ?? { kWh: 0, baseline: 0, anyNull: false, days: 0 };
+    const g = groups.get(k) ?? { kWh: 0, baseline: 0, replaced: 0, anyNull: false, days: 0 };
     g.kWh += d.kWh;
     if (d.baseline === null) g.anyNull = true;
-    else g.baseline += d.baseline;
+    else {
+      g.baseline += d.baseline;
+      g.replaced += d.replacedBaseline ?? d.baseline;
+    }
     g.days += 1;
     groups.set(k, g);
   }
@@ -95,6 +104,7 @@ function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: str
       label: labelFor(key, effective),
       kWh: g.kWh,
       baseline: g.anyNull ? null : g.baseline,
+      replacedBaseline: g.anyNull ? null : g.replaced,
       days: g.days,
     }));
 
@@ -306,8 +316,8 @@ export function ConsumptionChart({
           const barTopY = height - bh;
           const cx = padLeft + hover * (bw + gap) + bw / 2;
           const savedPct =
-            active.baseline !== null && active.baseline > 0
-              ? ((active.baseline - active.kWh) / active.baseline) * 100
+            active.baseline !== null && (active.replacedBaseline ?? active.baseline) > 0
+              ? ((active.baseline - active.kWh) / (active.replacedBaseline ?? active.baseline)) * 100
               : null;
           const text =
             savedPct !== null

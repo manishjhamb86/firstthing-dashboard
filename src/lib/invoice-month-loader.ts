@@ -1,3 +1,4 @@
+import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices } from "@/lib/circuit-load";
 /**
  * CON-47 / ADR-011 — everything `deriveInvoiceMonth` needs about one
  * society-month, read from the database. Server-only (imports `db`).
@@ -62,6 +63,7 @@ export async function loadInvoiceMonthContext(input: {
     where: { societyId: input.societyId, serviceLine: input.serviceLine, voidedAt: null },
     include: {
       rescaleEvents: { orderBy: { effectiveDate: "asc" } },
+      devices: { select: EXCLUSION_DEVICE_SELECT },
       siteSurvey: { select: { pipelineId: true } },
       meterDevice: { select: { id: true } },
     },
@@ -142,6 +144,7 @@ export async function loadInvoiceMonthContext(input: {
           baselineKwhPerDay: effectiveBaselineAt(c.preInstallBaseline, events, to),
           benchmarkSavingsPct: override ?? c.benchmarkSavingsPct,
           benchmarkSource: override !== null ? "override" : c.benchmarkSavingsPct !== null ? "demo" : "none",
+          exclusion: exclusionFromDevices(c.devices),
         };
       }),
     });

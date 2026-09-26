@@ -10,7 +10,8 @@ import {
   periodSavingsSummary,
   savingsBand,
   savingsPct,
-  excludedDailyKwh,
+  exclusionFromDevices,
+  type Exclusion,
   theoreticalDailyKwh,
   varianceAgainstTheoretical,
   type SavingsBand,
@@ -95,7 +96,7 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
   // Fixtures left on the circuit unreplaced: their draw comes off both the
   // before and after figures before any saving is stated (2026-09-26).
-  const excludedKwh = excludedDailyKwh(circuit.devices);
+  const exclusion = exclusionFromDevices(circuit.devices);
 
   type Row = {
     date: Date;
@@ -117,7 +118,7 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
       vBand = v.band;
     } else if (phase === "post") {
       const b = baselineFor(r.date);
-      sPct = b === null ? null : savingsPct(b, r.kWh, excludedKwh);
+      sPct = b === null ? null : savingsPct(b, r.kWh, exclusion);
       sBand = sPct === null ? null : savingsBand(sPct);
     }
     return {
@@ -175,7 +176,7 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
     preIncludedCount: preIncluded.length,
     avgVariance,
     effBaselineNow,
-    excludedKwh,
+    exclusion,
     inventory: circuit.devices.map((l) => ({
       id: l.id,
       name: l.deviceType.name,
@@ -205,11 +206,11 @@ export function monthsWithData(
   return [...new Set(report.postDays.map((d) => d.date.slice(0, 7)))].sort();
 }
 
-export function summarize(baseline: number | null, days: ReportDay[], excludedKwh = 0) {
+export function summarize(baseline: number | null, days: ReportDay[], ex?: Exclusion) {
   return periodSavingsSummary(
     baseline,
     days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })),
-    excludedKwh,
+    ex,
   );
 }
 
@@ -251,7 +252,7 @@ export async function buildMonthlySnapshot(
     month,
     baselineKwhPerDay: report.effBaselineNow,
     days,
-    summary: summarize(report.effBaselineNow, days, report.excludedKwh),
+    summary: summarize(report.effBaselineNow, days, report.exclusion),
     fee: await circuitFeeLineFor(report.circuit.id, month),
     generatedAt: new Date().toISOString(),
   };

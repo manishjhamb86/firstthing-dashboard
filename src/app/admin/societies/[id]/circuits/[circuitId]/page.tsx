@@ -31,7 +31,7 @@ import { surveyHappenedAt } from "@/lib/step-dates";
 import { DemoReadingsPanel, type DemoDayDTO } from "./demo-readings-panel";
 import { DemoLockBar } from "./demo-lock-bar";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
-import { excludedDailyKwh, theoreticalDailyKwh } from "@/lib/circuit-load";
+import { exclusionFromDevices, theoreticalDailyKwh } from "@/lib/circuit-load";
 import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
 import { currentDemoOf, demoFacts, demoFactsInclude, latestAcceptance, LOAD_TOLERANCE_PCT } from "@/lib/circuit-figures";
 import { demoComplete, demoSteps } from "@/lib/demo-steps";
@@ -172,14 +172,14 @@ export default async function CircuitDetailPage({
     ).map((u) => [u.id, u.name ?? u.email]),
   );
   const demo = circuit.demos.find((d) => d.id === sp.demo) ?? currentDemoOf(circuit.demos);
-  const excludedKwh = excludedDailyKwh(circuit.devices);
-  const facts = demo ? demoFacts(demo, eligible, excludedKwh) : null;
+  const exclusion = exclusionFromDevices(circuit.devices);
+  const facts = demo ? demoFacts(demo, eligible, exclusion) : null;
   const lock = demo ? lockOf(demo) : null;
   const editable = canEdit && !circuit.voidedAt && (lock?.editable ?? false);
   const base = `/admin/societies/${id}/circuits/${circuit.id}`;
 
   const demoDTOs: DemoDTO[] = circuit.demos.map((d) => {
-    const f = demoFacts(d, eligible, excludedKwh);
+    const f = demoFacts(d, eligible, exclusion);
     return {
       id: d.id,
       sequence: d.sequence,
@@ -214,6 +214,7 @@ export default async function CircuitDetailPage({
     count: l.count,
     wattage: l.wattage,
     hoursPerDay: l.hoursPerDay,
+    deviceTypeId: l.deviceTypeId,
     // Marked at the survey as not part of the retrofit: opens as excluded.
     excluded: l.excludedFromCalculation,
     options: replacementOptionRows
@@ -462,6 +463,7 @@ export default async function CircuitDetailPage({
         canStart={canEdit && !circuit.voidedAt && eligible}
         canDecide={canOverride && !circuit.voidedAt}
         canChangeLights={demoMode && canEdit && !circuit.voidedAt}
+        exclusion={exclusion}
         maxDemos={MAX_DEMOS_PER_CIRCUIT}
         agreedPending={agreedPending}
         removed={removedDemos.map((d) => ({
@@ -609,6 +611,7 @@ export default async function CircuitDetailPage({
                         accepted={r.accepted}
                         theoretical={theoretical}
                         baseline={facts.preAverage}
+                        exclusion={exclusion}
                       />
                       {r.accepted && (
                         <Link href={`${base}/reports/${phase === "pre" ? "pre-install" : "post-install"}?demo=${demo.id}`} className="text-sm underline">

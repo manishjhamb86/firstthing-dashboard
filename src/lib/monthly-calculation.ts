@@ -1,3 +1,4 @@
+import { savingsPct, type Exclusion } from "@/lib/circuit-load";
 // CON-11 / CON-01 / CON-01c / CON-22 — the month's money, as a pure module.
 //
 // Every figure a society is billed on is computed here and nowhere else, for
@@ -120,10 +121,12 @@ export function measuredSavingsPct(input: {
   meteredKwh: number;
   coverageDays: number;
   baselineKwhPerDay: number;
+  /** What stayed on the circuit unreplaced — off both sides (2026-09-26). */
+  exclusion?: Exclusion;
 }): number {
   if (input.coverageDays <= 0 || input.baselineKwhPerDay <= 0) return 0;
   const actualPerDay = input.meteredKwh / input.coverageDays;
-  return ((input.baselineKwhPerDay - actualPerDay) / input.baselineKwhPerDay) * 100;
+  return savingsPct(input.baselineKwhPerDay, actualPerDay, input.exclusion) ?? 0;
 }
 
 /**

@@ -14,7 +14,7 @@ import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildMeterImportKey } from "@/lib/ingest-keys";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
-import { savingsPct, SAVINGS_SUSPECT_ABOVE } from "@/lib/circuit-load";
+import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, savingsPct, SAVINGS_SUSPECT_ABOVE } from "@/lib/circuit-load";
 import { mergeMonitoringDay, monitoringStart, type Origin } from "@/lib/monitoring";
 import { dayMs } from "@/lib/demo-periods";
 
@@ -129,6 +129,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       voidedAt: true,
       preInstallBaseline: true,
       rescaleEvents: true,
+      devices: { select: EXCLUSION_DEVICE_SELECT },
       meterInstallations: {
         orderBy: { installedAt: "asc" },
         select: { meterId: true, installedAt: true, removedAt: true },
@@ -191,6 +192,8 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
   const existingByDay = new Map(existing.map((r) => [dayMs(r.date), r]));
   const now = new Date();
   const baseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, now);
+  // Judged on the replaced lights: what stayed unreplaced comes off both sides.
+  const exclusion = exclusionFromDevices(circuit.devices);
   const rawFiles = new Map<string, string>();
   const rawFile = async (importId: string | null) => {
     if (!importId) throw new Error("an hourly row with no import cannot be projected");
@@ -203,7 +206,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
     const date = new Date(t);
     const kWh = Math.round(d.kWh * 1e6) / 1e6;
     const partial = d.hours < 24;
-    const pct = !partial && baseline !== null ? savingsPct(baseline, kWh) : null;
+    const pct = !partial && baseline !== null ? savingsPct(baseline, kWh, exclusion) : null;
     const anomalyFlag = pct !== null && (pct > SAVINGS_SUSPECT_ABOVE || pct < 0);
     if (anomalyFlag) summary.flagged++;
     const prior = existingByDay.get(t);

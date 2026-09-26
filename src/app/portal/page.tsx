@@ -446,6 +446,7 @@ export default async function PortalHomePage() {
                   monitoringFrom={c.monitoringFrom}
                   stages={c.lightHistory}
                   currentMonth={new Date().toISOString().slice(0, 7)}
+                  exclusion={c.exclusion}
                 />
               </Card>
             ))}

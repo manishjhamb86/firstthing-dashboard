@@ -1,3 +1,4 @@
+import { excludedKwhAt, hasExclusion, replacedLightCount, type Exclusion } from "@/lib/circuit-load";
 // FEAT-020 — the demo savings report's arithmetic and its refusal rules,
 // as a pure module. Same convention as portal-authority.ts and
 // benchmark-rescale.ts: the real decision is unit-testable without a live
@@ -36,6 +37,8 @@ export type DemoReportCircuitInput = {
    * saving is extrapolated from.
    */
   excludedDevices?: DemoReportExcludedDevice[];
+  /** What stayed on the circuit unreplaced (exclusionOf) — supersedes excludedDevices. */
+  exclusion?: Exclusion;
 };
 
 export type DemoReportExcludedDevice = { name: string; count: number; wattage: number; kWhPerDay: number };
@@ -69,6 +72,8 @@ export type DemoReportCircuit = {
   /** Unreplaced fixtures excluded from the benchmark, and their daily draw. */
   excludedDevices?: DemoReportExcludedDevice[];
   excludedKwhPerDay?: number;
+  /** Kept like-lights by measured share, other items by rated draw (2026-09-26). */
+  exclusion?: Exclusion;
   benchmarkSavingsPct: number;
   projectedSavedKwhPerDay: number;
   // INV-02 — the days behind both figures travel with the report, so a
@@ -183,13 +188,22 @@ export function buildDemoReport(input: {
     const preInstallBaseline = c.preInstallBaseline!;
     const postInstallAverage = c.postInstallAverage ?? averageOf(c.postInstallReadings);
     const savedKwhPerDay = preInstallBaseline - postInstallAverage;
-    const excludedDevices = c.excludedDevices ?? [];
-    const excludedKwhPerDay = excludedDevices.reduce((n, d) => n + d.kWhPerDay, 0);
-    const excludedLights = excludedDevices.reduce((n, d) => n + d.count, 0);
+    // Kept like-lights come off as their share of the measured before figure,
+    // anything different at its rated draw (2026-09-26, the user's rules).
+    const exclusion = c.exclusion && hasExclusion(c.exclusion) ? c.exclusion : undefined;
+    const excludedDevices = exclusion ? [] : (c.excludedDevices ?? []);
+    const excludedKwhPerDay = exclusion
+      ? excludedKwhAt(preInstallBaseline, exclusion)
+      : excludedDevices.reduce((n, d) => n + d.kWhPerDay, 0);
     // The saving belongs to the lights that were replaced, so it is scaled
-    // by them — an unreplaced street light is not one of the population the
-    // metered tubes stand in for.
-    const replacedLights = c.meteredLightCount - excludedLights > 0 ? c.meteredLightCount - excludedLights : c.meteredLightCount;
+    // by them — a kept tube or an unreplaced street light is not one of the
+    // population the replaced lights stand in for.
+    const legacyKept = excludedDevices.reduce((n, d) => n + d.count, 0);
+    const replacedLights = exclusion
+      ? replacedLightCount(c.meteredLightCount, exclusion)
+      : c.meteredLightCount - legacyKept > 0
+        ? c.meteredLightCount - legacyKept
+        : c.meteredLightCount;
     const extrapolationFactor = c.representedLightCount / replacedLights;
     // CON-11's extrapolation scales the AGREED saving, so the projected
     // figure — which feeds the offer's fee and from there a rupee amount a
@@ -209,7 +223,7 @@ export function buildDemoReport(input: {
       postInstallAverage,
       savedKwhPerDay,
       agreedSavedKwhPerDay,
-      ...(excludedDevices.length > 0 ? { excludedDevices, excludedKwhPerDay } : {}),
+      ...(exclusion ? { exclusion, excludedKwhPerDay } : excludedDevices.length > 0 ? { excludedDevices, excludedKwhPerDay } : {}),
       benchmarkSavingsPct: c.benchmarkSavingsPct!,
       projectedSavedKwhPerDay: agreedSavedKwhPerDay * extrapolationFactor,
       preInstallReadings: c.preInstallReadings,

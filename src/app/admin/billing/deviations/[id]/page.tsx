@@ -1,3 +1,4 @@
+import { benchmarkCeiling, EXCLUSION_DEVICE_SELECT, excludedKwhAt, exclusionFromDevices } from "@/lib/circuit-load";
 import Link from "next/link";
 import { formatDate } from "@/lib/format-date";
 import { notFound, redirect } from "next/navigation";
@@ -40,6 +41,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
               location: true,
               preInstallBaseline: true,
               rescaleEvents: { orderBy: { effectiveDate: "asc" } },
+              devices: { select: EXCLUSION_DEVICE_SELECT },
               // The circuit's own deal's terms (CON-24 as amended): with a
               // line delivered in parts, the calculation's single term-version
               // pointer is null and each circuit answers to its own contract.
@@ -106,7 +108,9 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
   const baseline =
     effectiveBaselineAt(line.circuit.preInstallBaseline, line.circuit.rescaleEvents, to) ??
     line.baselineKwhPerDay;
-  const benchmarkKwh = baseline * (1 - line.benchmarkSavingsPct / 100);
+  // What stayed on the circuit unreplaced comes off both sides (2026-09-26).
+  const exclusion = exclusionFromDevices(line.circuit.devices);
+  const benchmarkKwh = benchmarkCeiling(baseline, line.benchmarkSavingsPct, exclusion);
   // Resolution order matters: the circuit's own contract first (correct in
   // every case, including multi-part months where calc.contractTermVersion
   // is null), then the calculation's pointer. The old `?? 10` default would
@@ -117,7 +121,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
     10;
   // The band is a band on the SAVINGS percentage, so its width in kWh is the
   // baseline scaled by that many points — not a percentage of the benchmark.
-  const toleranceKwh = baseline * (tolerancePct / 100);
+  const toleranceKwh = (baseline - excludedKwhAt(baseline, exclusion)) * (tolerancePct / 100);
 
   const byDate = new Map(readings.map((r) => [r.date.toISOString().slice(0, 10), r]));
   const days: ChartDay[] = [];

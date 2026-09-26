@@ -4,6 +4,8 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
+import { hasExclusion, savingsPct, type Exclusion } from "@/lib/circuit-load";
+import { ExclusionNote } from "@/components/exclusion-note";
 import { acceptDemoPhase, deleteDemoDay, refreshDemoReadings, revertDemoDayToMeter, saveDemoDays, setDemoDay, setDemoDayExclusion, setDemoPeriods } from "./demo-step-actions";
 
 export type DemoDayDTO = {
@@ -42,6 +44,7 @@ export function DemoReadingsPanel({
   accepted,
   theoretical,
   baseline,
+  exclusion,
 }: {
   demoId: string;
   phase: "pre" | "post";
@@ -56,6 +59,12 @@ export function DemoReadingsPanel({
   theoretical: number | null;
   /** Post: the accepted pre average, to show each day's saving. */
   baseline: number | null;
+  /**
+   * Post: what stayed on the circuit unreplaced. Its share comes off both the
+   * before and after figures, so each day's saving is on the replaced lights
+   * (2026-09-26, user-specified).
+   */
+  exclusion?: Exclusion;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -176,6 +185,14 @@ export function DemoReadingsPanel({
                   · average <span className="num">{average.toFixed(2)}</span> kWh/day
                 </>
               )}
+              {phase === "post" && average !== null && baseline && (
+                <>
+                  {" "}
+                  · saving{" "}
+                  <span className="num">{savingsPct(baseline, average, exclusion)?.toFixed(1) ?? "—"}%</span>
+                  {hasExclusion(exclusion) ? " on the replaced lights" : ""}
+                </>
+              )}
             </span>
             {accepted && (
               <StatusChip tone={changed ? "warn" : "ok"}>
@@ -188,6 +205,7 @@ export function DemoReadingsPanel({
               </button>
             )}
           </div>
+          {phase === "post" && <ExclusionNote exclusion={exclusion} before={baseline} after={average} />}
           {accepted && changed && (
             <p className="text-xs" style={{ color: "var(--warn-fg)" }}>
               The accepted figure ({accepted.averageKwh?.toFixed(2) ?? "—"} kWh/day from {accepted.countedDays} days) stays in force
@@ -208,7 +226,9 @@ export function DemoReadingsPanel({
                     <th className="text-right">kWh</th>
                     <th>Source</th>
                     <th className="text-right">Hours</th>
-                    <th className="text-right">{phase === "pre" ? "vs theoretical" : "Saving"}</th>
+                    <th className="text-right">
+                      {phase === "pre" ? "vs theoretical" : hasExclusion(exclusion) ? "Saving · replaced lights" : "Saving"}
+                    </th>
                     <th>Counted</th>
                     {editable && <th />}
                   </tr>
@@ -262,7 +282,7 @@ export function DemoReadingsPanel({
                           ? `${(((d.kWh - theoretical) / theoretical) * 100).toFixed(1)}%`
                           : "—"
                         : baseline
-                          ? `${((1 - d.kWh / baseline) * 100).toFixed(1)}%`
+                          ? `${savingsPct(baseline, d.kWh, exclusion)?.toFixed(1) ?? "—"}%`
                           : "—";
                     return (
                       <tr key={d.id} style={d.excluded ? { opacity: 0.6 } : undefined}>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { dayAxis, formatDate, monthLabel, monthShort } from "@/lib/format-date";
 import type { LightStage } from "@/lib/light-count-history";
+import { benchmarkCeiling, savingsPct, type Exclusion } from "@/lib/circuit-load";
 
 export type MonitoringDay = { date: string; kWh: number; excluded: boolean; baseline: number | null };
 
@@ -26,6 +27,7 @@ export function MonitoringReadings({
   monitoringFrom,
   stages,
   currentMonth,
+  exclusion,
 }: {
   days: MonitoringDay[];
   benchmarkPct: number | null;
@@ -34,6 +36,8 @@ export function MonitoringReadings({
   stages: LightStage[];
   /** YYYY-MM, from the server, so the server and browser render agree. */
   currentMonth: string;
+  /** What stayed on the circuit unreplaced — off both sides of the saving. */
+  exclusion?: Exclusion;
 }) {
   const sorted = useMemo(() => [...days].sort((a, b) => (a.date < b.date ? -1 : 1)), [days]);
   const withData = useMemo(() => [...new Set(sorted.map((d) => d.date.slice(0, 7)))], [sorted]);
@@ -60,8 +64,8 @@ export function MonitoringReadings({
     counted.length > 0 && counted.every((d) => d.baseline !== null)
       ? counted.reduce((n, d) => n + (d.baseline ?? 0), 0) / counted.length
       : null;
-  const saved = avg !== null && baselineAvg ? ((baselineAvg - avg) / baselineAvg) * 100 : null;
-  const ceiling = (b: number | null) => (b !== null && benchmarkPct !== null ? b * (1 - benchmarkPct / 100) : null);
+  const saved = avg !== null && baselineAvg ? savingsPct(baselineAvg, avg, exclusion) : null;
+  const ceiling = (b: number | null) => (b !== null && benchmarkPct !== null ? benchmarkCeiling(b, benchmarkPct, exclusion) : null);
 
   if (sorted.length === 0) {
     return (

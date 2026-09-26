@@ -7,7 +7,7 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
 import { demoFacts, demoFactsInclude } from "@/lib/circuit-figures";
 import { excludedDevicesSelect } from "@/lib/circuit-figures";
-import { excludedDailyKwh, savingsPct } from "@/lib/circuit-load";
+import { exclusionFromDevices, savingsPct } from "@/lib/circuit-load";
 import { demoComplete, demoNextLabel, demoSteps } from "@/lib/demo-steps";
 import { BAND_MAX_PCT, BAND_MIN_PCT } from "@/lib/circuit-demos";
 
@@ -57,8 +57,8 @@ export default async function MonitoringDashboardPage() {
     .filter((d) => !liveIds.has(d.circuitId) && !reviewedDemoIds.has(d.id))
     .map((d) => {
       const eligible = !["surveyed", "ineligible"].includes(d.circuit.state);
-      const excludedKwh = excludedDailyKwh(d.circuit.devices);
-      const f = demoFacts(d, eligible, excludedKwh);
+      const exclusion = exclusionFromDevices(d.circuit.devices);
+      const f = demoFacts(d, eligible, exclusion);
       const current = demoSteps(f).find((s) => s.status === "current") ?? null;
       const inPeriod = (phase: "pre" | "post") => d.readings.filter((r) => r.phase === phase && r.excludedAt === null);
       const avg = (rows: { kWh: number }[]) => (rows.length ? rows.reduce((n, r) => n + r.kWh, 0) / rows.length : null);
@@ -66,7 +66,7 @@ export default async function MonitoringDashboardPage() {
       const post = inPeriod("post");
       const baseline = f.preAverage ?? avg(pre);
       const postAvg = avg(post);
-      const projected = baseline && postAvg !== null ? savingsPct(baseline, postAvg, excludedKwh) : null;
+      const projected = baseline && postAvg !== null ? savingsPct(baseline, postAvg, exclusion) : null;
       return { d, f, current, pre, post, projected, complete: demoComplete(f) };
     });
 

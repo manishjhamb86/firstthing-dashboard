@@ -1,5 +1,6 @@
 import type { DemoReportCircuit, DemoReportReading } from "@/lib/demo-report";
 import { dayAxis, formatDate } from "@/lib/format-date";
+import { ExclusionNote } from "@/components/exclusion-note";
 import { circuitLabelOf } from "@/lib/meter-view";
 
 // Shared by the back-office report screen and the society portal, so the two
@@ -57,7 +58,7 @@ export function DemoReportView({
           baselineTotal) *
         100
       : report.measuredSavingsPct;
-  const withExcluded = circuits.filter((c) => (c.excludedDevices?.length ?? 0) > 0);
+  const withExcluded = circuits.filter((c) => (c.excludedKwhPerDay ?? 0) > 0 && (c.exclusion || (c.excludedDevices?.length ?? 0) > 0));
 
   const before = report.preInstallBaselineTotal;
   const after = report.postInstallAverageTotal;
@@ -176,27 +177,28 @@ export function DemoReportView({
           user-specified): named, with the draw subtracted, so the saving is
           visibly the saving of the lights that were replaced. */}
       {withExcluded.length > 0 && (
-        <section className="break-inside-avoid rounded-[var(--r-md)] border px-4 py-3 text-[13.5px] leading-relaxed" style={{ borderColor: "var(--border-subtle)" }}>
-          <p className="font-semibold">Lights on the circuit that were not replaced</p>
-          {withExcluded.map((c) => (
-            <p key={c.circuitId} className="mt-1" style={{ color: "var(--text-muted)" }}>
-              {circuits.length > 1 ? `${circuitLabelOf(c.location ?? null, c.lightType)}: ` : ""}
-              {c.excludedDevices!.map((d) => `${d.count} × ${d.name} (${d.wattage}W)`).join(", ")} stay on the circuit and are
-              excluded from the benchmark. Their{" "}
-              <span className="num font-semibold" style={{ color: "var(--text)" }}>
-                {(c.excludedKwhPerDay ?? 0).toFixed(2)} kWh/day
-              </span>{" "}
-              is subtracted from both the before and after averages, so the saving is measured on the replaced lights only: (
-              <span className="num">{c.preInstallBaseline.toFixed(2)}</span> −{" "}
-              <span className="num">{c.postInstallAverage.toFixed(2)}</span>) ÷ (
-              <span className="num">{c.preInstallBaseline.toFixed(2)}</span> −{" "}
-              <span className="num">{(c.excludedKwhPerDay ?? 0).toFixed(2)}</span>) ={" "}
-              <span className="num font-semibold" style={{ color: "var(--text)" }}>
-                {(((c.preInstallBaseline - c.postInstallAverage) / (c.preInstallBaseline - (c.excludedKwhPerDay ?? 0))) * 100).toFixed(1)}%
-              </span>
-              .
-            </p>
-          ))}
+        <section className="break-inside-avoid space-y-2">
+          {withExcluded.map((c) =>
+            c.exclusion ? (
+              <ExclusionNote
+                key={c.circuitId}
+                exclusion={c.exclusion}
+                before={c.preInstallBaseline}
+                after={c.postInstallAverage}
+                title={`${circuits.length > 1 ? `${circuitLabelOf(c.location ?? null, c.lightType)}: ` : ""}lights on the circuit that were not replaced`}
+              />
+            ) : (
+              <div key={c.circuitId} className="rounded-[var(--r-md)] border px-4 py-3 text-[13.5px] leading-relaxed" style={{ borderColor: "var(--border-subtle)" }}>
+                <p className="font-semibold">Lights on the circuit that were not replaced</p>
+                <p className="mt-1" style={{ color: "var(--text-muted)" }}>
+                  {circuits.length > 1 ? `${circuitLabelOf(c.location ?? null, c.lightType)}: ` : ""}
+                  {c.excludedDevices!.map((d) => `${d.count} × ${d.name} (${d.wattage}W)`).join(", ")} stay on the circuit and are
+                  excluded from the benchmark: their <span className="num">{(c.excludedKwhPerDay ?? 0).toFixed(2)} kWh/day</span> is
+                  subtracted from both the before and after averages.
+                </p>
+              </div>
+            ),
+          )}
         </section>
       )}
 

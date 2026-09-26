@@ -39,7 +39,7 @@
 
 import { prorateFinalMonth, prorateFirstMonth, type Proration } from "./billing-start";
 import { measuredSavingsPct } from "./monthly-calculation";
-import { SAVINGS_SUSPECT_ABOVE } from "./circuit-load";
+import { excludedKwhAt, replacedLightCount, SAVINGS_SUSPECT_ABOVE, savingsPct, type Exclusion } from "./circuit-load";
 import { daysInPeriod } from "./reading-normalize";
 
 export type SavingsBasis = "measured" | "agreed";
@@ -65,6 +65,12 @@ export type InvoiceMonthCircuit = {
   baselineKwhPerDay: number | null;
   benchmarkSavingsPct: number | null;
   benchmarkSource: BenchmarkSource;
+  /**
+   * What stayed on the circuit unreplaced (2026-09-26): its share comes off
+   * both the baseline and each day before a saving is measured, and the
+   * per-light baseline a line is extrapolated from is the REPLACED lights'.
+   */
+  exclusion?: Exclusion;
 };
 
 /** One deal's contract terms and the circuits billing under it (CON-24 as amended). */
@@ -115,11 +121,11 @@ export const FULL_DAY_HOURS = 24;
 /** Complete days needed before a month's saving is called measured — the user's own example uses 4. */
 export const MIN_COMPLETE_DAYS_FOR_MEASURED = 4;
 
-export function classifyDay(day: DayReading, baselineKwhPerDay: number): DayClass {
+export function classifyDay(day: DayReading, baselineKwhPerDay: number, ex?: Exclusion): DayClass {
   if (!(day.kWh > 0)) return "offline";
   const hours = day.dataHours ?? day.intervalCount;
   if (hours !== null && hours < FULL_DAY_HOURS) return "partial";
-  const savings = baselineKwhPerDay > 0 ? (1 - day.kWh / baselineKwhPerDay) * 100 : 0;
+  const savings = baselineKwhPerDay > 0 ? (savingsPct(baselineKwhPerDay, day.kWh, ex) ?? 0) : 0;
   if (savings > SAVINGS_SUSPECT_ABOVE) return "suspect";
   return "complete";
 }
@@ -136,10 +142,10 @@ export type DayTally = {
   completeKwh: number;
 };
 
-export function tallyDays(days: DayReading[], baselineKwhPerDay: number, daysInMonth: number): DayTally {
+export function tallyDays(days: DayReading[], baselineKwhPerDay: number, daysInMonth: number, ex?: Exclusion): DayTally {
   const t: DayTally = { complete: 0, partial: 0, offline: 0, suspect: 0, missing: 0, daysInMonth, completeKwh: 0 };
   for (const d of days) {
-    const c = classifyDay(d, baselineKwhPerDay);
+    const c = classifyDay(d, baselineKwhPerDay, ex);
     t[c] += 1;
     if (c === "complete") t.completeKwh += d.kWh;
   }
@@ -281,13 +287,14 @@ export function deriveInvoiceMonth(input: {
     let dayTally: DayTally | null = null;
     let note: string | null = null;
     if (readings && readings.days.length > 0) {
-      dayTally = tallyDays(readings.days, circuit.baselineKwhPerDay, daysInMonth);
+      dayTally = tallyDays(readings.days, circuit.baselineKwhPerDay, daysInMonth, circuit.exclusion);
       note = readingsNote(dayTally);
       if (dayTally.complete >= minComplete) {
         const pct = measuredSavingsPct({
           meteredKwh: dayTally.completeKwh,
           coverageDays: dayTally.complete,
           baselineKwhPerDay: circuit.baselineKwhPerDay,
+          exclusion: circuit.exclusion,
         });
         if (pct > SAVINGS_SUSPECT_ABOVE) {
           fallbackReason = `Even the complete days show a ${pct.toFixed(1)}% saving — above the ${SAVINGS_SUSPECT_ABOVE}% bound a working meter can produce. Check the meter; the agreed figure is used.`;
@@ -301,7 +308,12 @@ export function deriveInvoiceMonth(input: {
       fallbackReason = "No readings for this month.";
     }
 
-    const baselineConsumptionKwh = (circuit.baselineKwhPerDay / circuit.meteredLightCount) * line.lightsBilled * billedDays;
+    // Per light of the lights actually replaced: the kept fixtures' share comes
+    // off the baseline and their count off the lights it is divided by, so a
+    // line billing replaced lights is extrapolated from what those drew.
+    const replacedBaseline = circuit.baselineKwhPerDay - excludedKwhAt(circuit.baselineKwhPerDay, circuit.exclusion);
+    const replacedLights = replacedLightCount(circuit.meteredLightCount, circuit.exclusion);
+    const baselineConsumptionKwh = (replacedBaseline / replacedLights) * line.lightsBilled * billedDays;
 
     let basis: SavingsBasis;
     let savingsPct: number;

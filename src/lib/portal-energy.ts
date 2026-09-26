@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { lightCountStages, type LightStage } from "@/lib/light-count-history";
-import { excludedDailyKwh, periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
+import { EXCLUSION_DEVICE_SELECT, excludedKwhAt, exclusionFromDevices, type Exclusion, periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
 
 export type MonthTotal = {
@@ -93,6 +93,8 @@ export type PortalCircuit = {
   lastVerifiedAt: string | null;
   /** The count at the demo, then each change, the last one current. */
   lightHistory: LightStage[];
+  /** What stayed on the circuit unreplaced — off both sides of every saving. */
+  exclusion: Exclusion;
   /** YYYY-MM-DD: the first day of the monitoring period (the billing start). */
   monitoringFrom: string | null;
   /**
@@ -159,7 +161,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       benchmarkSavingsPct: true,
       preInstallBaseline: true,
       rescaleEvents: true,
-      devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
+      devices: { select: EXCLUSION_DEVICE_SELECT },
       demos: {
         where: { voidedAt: null, rejected: false },
         orderBy: { sequence: "asc" },
@@ -214,16 +216,20 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
 
   let totalConsumed = 0;
   let totalBaseline = 0;
+  // The baseline of the lights actually replaced — what a saving is a share of.
+  let totalReplacedBaseline = 0;
   let anyMonth = false;
 
   const rows: PortalCircuit[] = perCircuit.map(({ c, monitoring, baselineNow }) => {
     const monthDaysAll = month ? monitoring.filter((d) => d.date.startsWith(month)) : [];
-    const s = periodSavingsSummary(baselineNow, monthDaysAll, excludedDailyKwh(c.devices));
+    const exclusion = exclusionFromDevices(c.devices);
+    const s = periodSavingsSummary(baselineNow, monthDaysAll, exclusion);
     const counted = monthDaysAll.filter((d) => !d.excluded).length;
     if (s.averageKwh !== null && baselineNow !== null && counted > 0) {
       anyMonth = true;
       totalConsumed += s.averageKwh * counted;
       totalBaseline += baselineNow * counted;
+      totalReplacedBaseline += (baselineNow - excludedKwhAt(baselineNow, exclusion)) * counted;
     }
     return {
       id: c.id,
@@ -245,7 +251,9 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         fallbackStart: c.lightReplacementDate,
         events: c.rescaleEvents,
         today,
+        exclusion,
       }),
+      exclusion,
       monitoringFrom: (starts.get(c.id) ?? null)?.toISOString().slice(0, 10) ?? null,
       monitoring: monitoring.map((d) => ({
         ...d,
@@ -257,13 +265,14 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
     };
   });
 
-  const totalPct = anyMonth && totalBaseline > 0 ? ((totalBaseline - totalConsumed) / totalBaseline) * 100 : null;
+  const totalPct = anyMonth && totalReplacedBaseline > 0 ? ((totalBaseline - totalConsumed) / totalReplacedBaseline) * 100 : null;
 
   // Society-wide daily series: for each recorded day, sum the kWh AND the
   // baselines of the circuits that reported it, so every bucket compares
   // like with like.
-  const byDate = new Map<string, { kWh: number; baseline: number; missingBaseline: boolean }>();
+  const byDate = new Map<string, { kWh: number; baseline: number; replacedBaseline: number; missingBaseline: boolean }>();
   for (const p of perCircuit) {
+    const ex = exclusionFromDevices(p.c.devices);
     for (const d of p.monitoring) {
       if (d.excluded) continue;
       const dayBaseline = effectiveBaselineAt(
@@ -271,10 +280,13 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         p.c.rescaleEvents,
         new Date(`${d.date}T00:00:00Z`),
       );
-      const cur = byDate.get(d.date) ?? { kWh: 0, baseline: 0, missingBaseline: false };
+      const cur = byDate.get(d.date) ?? { kWh: 0, baseline: 0, replacedBaseline: 0, missingBaseline: false };
       cur.kWh += d.kWh;
       if (dayBaseline === null) cur.missingBaseline = true;
-      else cur.baseline += dayBaseline;
+      else {
+        cur.baseline += dayBaseline;
+        cur.replacedBaseline += dayBaseline - excludedKwhAt(dayBaseline, ex);
+      }
       byDate.set(d.date, cur);
     }
   }
@@ -284,6 +296,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       date,
       kWh: v.kWh,
       baseline: v.missingBaseline ? null : v.baseline,
+      replacedBaseline: v.missingBaseline ? null : v.replacedBaseline,
     }));
 
   // ₹ is FEAT-111's (published-months.ts): the society's rupee figures come

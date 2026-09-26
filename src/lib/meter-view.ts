@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
-import { savingsBand, savingsPct, theoreticalDailyKwh, type SavingsBand } from "@/lib/circuit-load";
+import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, savingsBand, savingsPct, theoreticalDailyKwh, type Exclusion, type SavingsBand } from "@/lib/circuit-load";
 import { effectiveBaselineAt, lastVerifiedAt, type RescaleEvent } from "@/lib/benchmark-rescale";
 import { evaluateMeterHealth, outageMessage, outageMinutes, type MeterState } from "@/lib/meter-health";
 import { freshnessLabel, isStale } from "@/lib/meter-live";
@@ -367,9 +367,12 @@ function compare(
   days: number,
   baseline: number | null,
   note: string,
+  ex?: Exclusion,
 ): MeterPeriodComparison {
   const expectedKwh = kWh !== null && baseline !== null && days > 0 ? baseline * days : null;
-  const pct = expectedKwh !== null && expectedKwh > 0 ? savingsPct(expectedKwh, kWh!) : null;
+  // Judged per day, so the unreplaced fixtures' share comes off the day's
+  // baseline exactly as it does everywhere else.
+  const pct = expectedKwh !== null && expectedKwh > 0 && baseline !== null ? savingsPct(baseline, kWh! / days, ex) : null;
   return { key, label, kWh, days, expectedKwh, savingsPct: pct, band: pct !== null ? savingsBand(pct) : null, note };
 }
 
@@ -396,6 +399,7 @@ export function periodComparisons(
   baseline: number | null,
   live: { dayKwh: number | null; monthKwh: number | null; readAt: Date | null },
   now: Date,
+  ex?: Exclusion,
 ): MeterPeriodComparison[] {
   const today = istDay(now);
   const byDay = new Map(hourly.map((h) => [h.day, h]));
@@ -403,13 +407,15 @@ export function periodComparisons(
   const historyNote = lastHistory ? `uploaded history ends ${lastHistory.split("-").reverse().join("-")}` : "no hourly history uploaded yet";
 
   const out: MeterPeriodComparison[] = [];
+  const cmp = (key: MeterPeriodComparison["key"], label: string, kWh: number | null, days: number, b: number | null, note: string) =>
+    compare(key, label, kWh, days, b, note, ex);
 
   // Today — the meter's own day counter, if it was read today.
   const readToday = live.readAt !== null && istDay(live.readAt) === today;
   out.push(
     readToday && live.dayKwh !== null
-      ? compare("today", "Today so far", live.dayKwh, istHoursIntoDay(live.readAt!) / 24, baseline, "the meter's own counter")
-      : compare("today", "Today so far", null, 0, baseline, live.readAt ? "not read yet today" : "never read"),
+      ? cmp("today", "Today so far", live.dayKwh, istHoursIntoDay(live.readAt!) / 24, baseline, "the meter's own counter")
+      : cmp("today", "Today so far", null, 0, baseline, live.readAt ? "not read yet today" : "never read"),
   );
 
   // Yesterday — from history, only if history holds that exact day.
@@ -417,8 +423,8 @@ export function periodComparisons(
   const y = byDay.get(yKey);
   out.push(
     y
-      ? compare("yesterday", "Yesterday", y.total, y.intervalCount / 24, baseline, `${y.intervalCount} of 24 hours recorded`)
-      : compare("yesterday", "Yesterday", null, 0, baseline, historyNote),
+      ? cmp("yesterday", "Yesterday", y.total, y.intervalCount / 24, baseline, `${y.intervalCount} of 24 hours recorded`)
+      : cmp("yesterday", "Yesterday", null, 0, baseline, historyNote),
   );
 
   // Last 7 days — the seven days before today, from history.
@@ -426,7 +432,7 @@ export function periodComparisons(
   const week = weekKeys.map((k) => byDay.get(k)).filter((d): d is NonNullable<typeof d> => !!d);
   out.push(
     week.length > 0
-      ? compare(
+      ? cmp(
           "week",
           "Last 7 days",
           week.reduce((s, d) => s + d.total, 0),
@@ -434,7 +440,7 @@ export function periodComparisons(
           baseline,
           week.length === 7 ? "all 7 days recorded" : `${week.length} of 7 days recorded — ${historyNote}`,
         )
-      : compare("week", "Last 7 days", null, 0, baseline, historyNote),
+      : cmp("week", "Last 7 days", null, 0, baseline, historyNote),
   );
 
   // This month — the meter's own month counter, if read this month.
@@ -442,8 +448,8 @@ export function periodComparisons(
   const monthDaysElapsed = readThisMonth ? Number(istDay(live.readAt!).slice(8, 10)) - 1 + istHoursIntoDay(live.readAt!) / 24 : 0;
   out.push(
     readThisMonth && live.monthKwh !== null
-      ? compare("month", monthLabel(today.slice(0, 7)), live.monthKwh, monthDaysElapsed, baseline, "the meter's own counter")
-      : compare("month", monthLabel(today.slice(0, 7)), null, 0, baseline, "not read yet this month"),
+      ? cmp("month", monthLabel(today.slice(0, 7)), live.monthKwh, monthDaysElapsed, baseline, "the meter's own counter")
+      : cmp("month", monthLabel(today.slice(0, 7)), null, 0, baseline, "not read yet this month"),
   );
 
   return out;
@@ -470,6 +476,7 @@ export async function meterDemoContext(meterId: string, societyId?: string): Pro
           preInstallBaseline: true,
           benchmarkSavingsPct: true,
           rescaleEvents: true,
+          devices: { select: EXCLUSION_DEVICE_SELECT },
           demos: {
             where: { voidedAt: null },
             orderBy: { sequence: "asc" },
@@ -520,6 +527,6 @@ export async function meterDemoContext(meterId: string, societyId?: string): Pro
       rejected: d.rejected,
       rejectionReason: d.rejectionReason,
     })),
-    periods: periodComparisons(hourly, currentBaseline, { dayKwh: m.lastDayKwh, monthKwh: m.lastMonthKwh, readAt: m.lastReadAt }, now),
+    periods: periodComparisons(hourly, currentBaseline, { dayKwh: m.lastDayKwh, monthKwh: m.lastMonthKwh, readAt: m.lastReadAt }, now, exclusionFromDevices(c.devices)),
   };
 }

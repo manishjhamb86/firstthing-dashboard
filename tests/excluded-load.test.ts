@@ -1,104 +1,162 @@
 import { describe, expect, it } from "vitest";
-import { excludedDailyKwh, expectedDisplayedLoadW, periodSavingsSummary, savingsPct } from "@/lib/circuit-load";
+import {
+  benchmarkCeiling,
+  describeExclusion,
+  excludedKwhAt,
+  exclusionOf,
+  expectedDisplayedLoadW,
+  periodSavingsSummary,
+  replacedLightCount,
+  savingsPct,
+} from "@/lib/circuit-load";
 import { demoSavingsPct, deriveCircuitFigures } from "@/lib/circuit-demos";
 import { buildDemoReport, type DemoReportCircuitInput } from "@/lib/demo-report";
 
-// Fixtures left on a circuit unreplaced (2026-09-26, user-specified): their
-// draw comes off BOTH the before and after averages before a saving is taken.
-// Worked example: the meter reads 100 kWh/day before and 40 after; 20 of each
-// is street lights nobody replaced. The replaced lights went 80 → 20: 75%.
+// The user's rules (2026-09-26):
+//  - kept lights that are the SAME item as the replaced ones come off as their
+//    share of what the meter measured: X = before ÷ lights × kept;
+//  - anything different left on the circuit (street light, fan, TV) comes off
+//    at its theoretical draw, count × W × h.
 
-describe("the excluded load comes off both sides", () => {
-  it("a day's saving is on the replaced lights only", () => {
-    expect(savingsPct(100, 40, 20)).toBe(75);
-    // Without exclusions, unchanged.
-    expect(savingsPct(100, 40)).toBe(60);
+const tube = { deviceTypeId: "tube", name: "Tube light 20W", wattage: 20, hoursPerDay: 24 };
+
+// The Hyde Park demo circuit: 63 tubes, 55 replaced, 8 kept as they were.
+const hydePark = exclusionOf([
+  { ...tube, count: 55 },
+  { ...tube, count: 8, excludedFromCalculation: true },
+]);
+
+describe("kept lights of the same kind — share of the measured figure", () => {
+  it("X = before ÷ 63 × 8", () => {
+    expect(hydePark.share).toBeCloseTo(8 / 63, 12);
+    expect(hydePark.fixedKwh).toBe(0);
+    expect(excludedKwhAt(28.6633, hydePark)).toBeCloseTo((28.6633 / 63) * 8, 10);
   });
 
-  it("refuses a figure when the excluded load is all the baseline", () => {
-    expect(savingsPct(20, 20, 20)).toBeNull();
-    expect(demoSavingsPct(20, 20, 25)).toBeNull();
+  it("the saving is (before − after) ÷ (before − X)", () => {
+    const x = (28.6633 / 63) * 8;
+    expect(savingsPct(28.6633, 12.53, hydePark)).toBeCloseTo(((28.6633 - 12.53) / (28.6633 - x)) * 100, 10);
+    // 64.47% on the replaced lights, where the gross figure would be 56.28%.
+    expect(savingsPct(28.6633, 12.53, hydePark)!.toFixed(2)).toBe("64.47");
+    expect(savingsPct(28.6633, 12.53)!.toFixed(2)).toBe("56.29");
   });
 
-  it("a demo's saving uses the same rule", () => {
-    expect(demoSavingsPct(100, 40, 20)).toBe(75);
-    expect(demoSavingsPct(100, 40)).toBe(60);
+  it("a line only partly replaced keeps the rest", () => {
+    const partly = exclusionOf([{ ...tube, count: 63, replacementCount: 55 }]);
+    expect(partly.share).toBeCloseTo(8 / 63, 12);
+    expect(partly.keptLike).toEqual([{ name: "Tube light 20W", count: 8 }]);
   });
 
-  it("the circuit benchmark follows", () => {
+  it("demo and circuit figures follow", () => {
+    expect(demoSavingsPct(28.6633, 12.53, hydePark)!.toFixed(2)).toBe("64.47");
     const f = deriveCircuitFigures(
-      [{ id: "d1", sequence: 1, rejected: false, voided: false, combine: "batch", meteredLightCount: 100, preAverage: 100, postAverage: 40 }],
+      [{ id: "d1", sequence: 1, rejected: false, voided: false, combine: "batch", meteredLightCount: 63, preAverage: 28.6633, postAverage: 12.53 }],
       null,
-      20,
+      hydePark,
     );
-    expect(f.benchmark.pct).toBe(75);
-    // The baseline stays what the meter measured: monitoring days are read
-    // by the same meter, and they subtract the same load.
-    expect(f.baseline).toBe(100);
-  });
-
-  it("a monitoring period is judged the same way", () => {
-    const s = periodSavingsSummary(100, [{ kWh: 40 }, { kWh: 40 }], 20);
-    expect(s.savingsPct).toBe(75);
-  });
-
-  it("the excluded load is Σ count × W × h of the excluded lines only", () => {
-    expect(
-      excludedDailyKwh([
-        { count: 7, wattage: 50, hoursPerDay: 12, excludedFromCalculation: true },
-        { count: 93, wattage: 20, hoursPerDay: 24 },
-      ]),
-    ).toBeCloseTo(4.2, 10);
+    expect(f.benchmark.pct!.toFixed(2)).toBe("64.47");
+    expect(f.baseline).toBe(28.6633);
   });
 });
 
-describe("the demo report states and uses the excluded load", () => {
+describe("different items — theoretical draw", () => {
+  const street = exclusionOf([
+    { ...tube, count: 93 },
+    { deviceTypeId: "street", name: "Street light 50W", count: 7, wattage: 50, hoursPerDay: 12, excludedFromCalculation: true },
+  ]);
+
+  it("the saving is extrapolated from the 93 tubes actually replaced", () => {
+    expect(replacedLightCount(100, street)).toBe(93);
+    expect(replacedLightCount(63, hydePark)).toBe(55);
+    // An inventory that is not the metered lights: only kept like-lights come off.
+    expect(replacedLightCount(50, street)).toBe(50);
+  });
+
+  it("7 street lights at 50 W for 12 h = 4.2 kWh/day, whatever the before figure", () => {
+    expect(street.fixedKwh).toBeCloseTo(4.2, 10);
+    expect(street.share).toBe(0);
+    expect(savingsPct(24, 12, street)).toBeCloseTo((12 / (24 - 4.2)) * 100, 10);
+  });
+
+  it("both on one circuit: the item first, then the kept lights' share of the rest", () => {
+    const both = exclusionOf([
+      { ...tube, count: 55 },
+      { ...tube, count: 8, excludedFromCalculation: true },
+      { deviceTypeId: "fan", name: "Fan", count: 1, wattage: 60, hoursPerDay: 12, excludedFromCalculation: true },
+    ]);
+    expect(both.fixedKwh).toBeCloseTo(0.72, 10);
+    expect(excludedKwhAt(30, both)).toBeCloseTo(0.72 + (30 - 0.72) * (8 / 63), 10);
+  });
+});
+
+describe("everything else reads the same rule", () => {
+  it("a monitoring month", () => {
+    expect(periodSavingsSummary(28.6633, [{ kWh: 12.53 }, { kWh: 12.53 }], hydePark).savingsPct!.toFixed(2)).toBe("64.47");
+  });
+  it("the ceiling a day must stay under to meet the benchmark", () => {
+    const b = 28.6633;
+    const x = excludedKwhAt(b, hydePark);
+    expect(benchmarkCeiling(b, 64.47, hydePark)).toBeCloseTo(b - 0.6447 * (b - x), 10);
+    expect(benchmarkCeiling(100, 60)).toBeCloseTo(40, 10);
+  });
+  it("no exclusion changes nothing", () => {
+    expect(savingsPct(100, 40)).toBe(60);
+    // Nothing left to have saved on: the kept load is the whole baseline.
+    expect(savingsPct(0.4, 0.4, exclusionOf([{ ...tube, count: 1, excludedFromCalculation: true }]))).toBeNull();
+  });
+});
+
+describe("the explanation says what was done, with the figures", () => {
+  it("Hyde Park", () => {
+    const d = describeExclusion(hydePark, 28.6633, 12.53);
+    expect(d.lines[0]).toMatch(/8 of the 63 Tube light 20W were kept, not replaced/);
+    expect(d.lines[0]).toMatch(/28\.66 ÷ 63 × 8 = 3\.64 kWh\/day/);
+    expect(d.formula).toMatch(/\(28\.66 − 12\.53\) ÷ \(28\.66 − 3\.64\) = 64\.5%/);
+    expect(d.formula).toMatch(/55 lights that were replaced/);
+  });
+  it("a different item names its rated draw", () => {
+    const d = describeExclusion(exclusionOf([{ ...tube, count: 10 }, { deviceTypeId: "tv", name: "TV", count: 1, wattage: 100, hoursPerDay: 10, excludedFromCalculation: true }]), 10, 4);
+    expect(d.lines[0]).toMatch(/1 × TV stays on the circuit .* rated draw comes off: 1\.00 kWh\/day/);
+  });
+});
+
+describe("the demo report deducts and extrapolates the same way", () => {
   const circuit = (over: Partial<DemoReportCircuitInput> = {}): DemoReportCircuitInput => ({
     id: "c1",
     lightType: "tube",
     location: "Basement",
-    meteredLightCount: 100,
-    representedLightCount: 930,
+    meteredLightCount: 63,
+    representedLightCount: 1600,
     wattage: 20,
-    preInstallBaseline: 100,
-    benchmarkSavingsPct: 75,
+    preInstallBaseline: 28.6633,
+    benchmarkSavingsPct: 64.47,
     state: "benchmark_confirmed",
-    preInstallReadings: [{ date: "2026-09-01", consumptionKwh: 100 }],
-    postInstallReadings: [{ date: "2026-09-10", consumptionKwh: 40 }],
-    excludedDevices: [{ name: "Street light 50W", count: 7, wattage: 50, kWhPerDay: 20 }],
+    preInstallReadings: [{ date: "2025-03-10", consumptionKwh: 28.6633 }],
+    postInstallReadings: [{ date: "2025-03-24", consumptionKwh: 12.53 }],
+    exclusion: hydePark,
     ...over,
   });
 
-  it("measures and agrees on the replaced lights", () => {
-    const r = buildDemoReport({ circuits: [circuit()], societyLightCount: 930 });
+  it("measures on the replaced lights and scales by them", () => {
+    const r = buildDemoReport({ circuits: [circuit()], societyLightCount: 1600 });
     if (!r.ok) throw new Error(r.blocker);
-    expect(r.figures.measuredSavingsPct).toBe(75);
-    expect(r.figures.agreedSavingsPct).toBe(75);
+    expect(r.figures.measuredSavingsPct.toFixed(2)).toBe("64.47");
     const c = r.figures.circuits[0];
-    expect(c.excludedKwhPerDay).toBe(20);
-    // 80 kWh/day of replaced lights × 75% = 60 saved on the demo lights.
-    expect(c.agreedSavedKwhPerDay).toBe(60);
-    // Scaled by the 93 lights replaced, not the 100 on the circuit.
-    expect(c.extrapolationFactor).toBe(930 / 93);
+    expect(c.excludedKwhPerDay).toBeCloseTo((28.6633 / 63) * 8, 10);
+    expect(c.extrapolationFactor).toBeCloseTo(1600 / 55, 10);
   });
 
-  it("a circuit with nothing excluded is unchanged", () => {
-    const r = buildDemoReport({ circuits: [circuit({ excludedDevices: [], benchmarkSavingsPct: 60 })], societyLightCount: 930 });
+  it("a circuit with nothing kept is unchanged", () => {
+    const r = buildDemoReport({ circuits: [circuit({ exclusion: undefined, benchmarkSavingsPct: 56 })], societyLightCount: 1600 });
     if (!r.ok) throw new Error(r.blocker);
-    expect(r.figures.measuredSavingsPct).toBe(60);
-    expect(r.figures.circuits[0].extrapolationFactor).toBe(9.3);
-    expect(r.figures.circuits[0].excludedDevices).toBeUndefined();
+    expect(r.figures.circuits[0].extrapolationFactor).toBeCloseTo(1600 / 63, 10);
+    expect(r.figures.circuits[0].exclusion).toBeUndefined();
   });
 });
-
 
 describe("the meter load test counts every fixture on the circuit", () => {
   it("mixed fixtures add up from the inventory", () => {
     const r = expectedDisplayedLoadW({ meteredLightCount: 100, wattage: 20, devices: [{ count: 93, wattage: 20 }, { count: 7, wattage: 50 }] });
     expect(r).toEqual({ watts: 2210, fromInventory: true });
-  });
-  it("an inventory that is not the demo's lights falls back to lights × wattage", () => {
-    expect(expectedDisplayedLoadW({ meteredLightCount: 50, wattage: 20, devices: [{ count: 93, wattage: 20 }] })).toEqual({ watts: 1000, fromInventory: false });
-    expect(expectedDisplayedLoadW({ meteredLightCount: 50, wattage: 20, devices: [] }).watts).toBe(1000);
   });
 });

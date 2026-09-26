@@ -8019,3 +8019,70 @@ has chips All · Prospect · Active · Paying · Suspended · Terminated, and it
 loader.
 
 Verified on dev (14 active, 0 paying, 8 prospect, each matching independent SQL).
+
+## Kept fixtures come off the saving by the right rule, and every screen says how (2026-09-26/27) — user-specified
+
+**The report.** On the Hyde Park demo circuit, 55 of 63 tubes were replaced and 8 kept. The
+post-install step still showed 57.6% for a 12.14 kWh day against a 28.66 baseline. That is the
+gross figure, as if all 63 had been replaced.
+
+**The rule, in the user's words:** X = before ÷ 63 × 8, and the saving is
+(before − after) ÷ (before − X). The user wrote "÷66"; the circuit has 63 lights, and 63 is used.
+A follow-up message added: when the kept item is not the same kind (a street light, fan or TV),
+its theoretical draw is what comes off.
+
+**Two defects fixed:**
+1. The day-by-day Saving column, and every other day-level figure, ignored the kept lights.
+2. The deduction built the day before took the kept lights' rated draw (8 × 20 W × 24 h = 3.84).
+   The user's rule takes their share of what the meter measured (28.66 ÷ 63 × 8 = 3.64). The
+   meter saw what they really drew, so the measured share is the better figure.
+
+**The model** (`exclusionOf` / `excludedKwhAt` in `src/lib/circuit-load.ts`):
+- **Kept like-lights:** fixtures of a type that is being replaced elsewhere on the circuit. They
+  come off as a share of the measured figure.
+- **Different items:** everything else comes off at its rated draw.
+- **With both on one circuit:** X(B) = fixed + (B − fixed) × share, where B is the before figure
+  or the baseline in force. The share is by rated load within the like group, which for identical
+  fixtures is exactly kept ÷ lights.
+- **What counts as kept:** an excluded line, or the part of a line not replaced when the
+  replacement recorded fewer lights than the line holds.
+- **The stored baseline stays what the meter measured.** The deduction is applied wherever a
+  saving is taken.
+- **Extrapolation:** the saving is extrapolated from the lights actually replaced
+  (`replacedLightCount`). Every kept fixture comes off when the inventory is the metered lights;
+  otherwise only kept like-lights do.
+
+**Where it applies** — every figure that takes a saving:
+- demo figures, the circuit benchmark and the out-of-band review;
+- the demo readings table's per-day Saving column and its summary;
+- the pre-/post-installation and monthly reports, and the demo report (its agreed saving and its
+  extrapolation);
+- offer reconciliation;
+- demo monitoring, live monitoring (list, circuit page, each day), the meter page's period
+  comparisons, and monitoring projection flags;
+- band alerts;
+- the portal's month, society total, daily chart "% saved", monitoring readings, and light-count
+  history ceiling (`benchmarkCeiling`);
+- invoice-month stats: day classification, measured %, and the per-light baseline, which is now
+  the replaced lights' baseline;
+- the deviation review, which is phase two.
+
+**Explanations.** `describeExclusion()` and `<ExclusionNote>` give the same sentences everywhere:
+the post-install step, the demos table, both reports, the demo report, live monitoring and the
+portal's Electricity page. The Hyde Park wording reads: "8 of the 63 Tube light 20W were kept,
+not replaced … 28.66 ÷ 63 × 8 = 3.64 kWh/day" and "Saving = (28.66 − 12.53) ÷ (28.66 − 3.64) =
+64.5% — the saving on the 55 lights that were replaced". The replacement form says which of the
+two rules applies to each kept line.
+
+**Verified:**
+- 15 unit cases on the user's own numbers: 28.6633 / 12.53 gives 64.47% on the replaced lights,
+  against a gross 56.29%.
+- Two full browser walks. The Hyde Park shape gave a benchmark of 74.45% against a gross 65%, with
+  the explanation, the per-day figures and both reports checked. The street-light shape gave
+  60.61%, with extrapolation by 93. Fixtures were removed.
+- Total: 1,095 unit tests.
+
+**On stage.** Hyde Park's demo has its post days typed but not yet accepted. The readings table
+shows the net figures at once, and accepting records the net benchmark. Its agreed override
+(64.47%) still governs billing. Published invoice months keep the figures they were released with
+until they are re-derived.

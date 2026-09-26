@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
+import { ExclusionNote } from "@/components/exclusion-note";
+import { hasExclusion, type Exclusion } from "@/lib/circuit-load";
 import { purgeRemovedDemo, removeDemo, setBenchmarkOverride, setDemoLightCount, setDemoRejected, startDemo } from "./demo-step-actions";
 
 export type DemoDTO = {
@@ -42,6 +44,7 @@ export function DemosPanel({
   agreedPending,
   removed = [],
   canChangeLights = false,
+  exclusion,
 }: {
   circuitId: string;
   demos: DemoDTO[];
@@ -59,6 +62,8 @@ export function DemosPanel({
   removed?: { id: string; sequence: number; reason: string; on: string; by: string | null }[];
   /** Demo mode: a demo's light count can be changed from the table. */
   canChangeLights?: boolean;
+  /** What stayed on the circuit unreplaced — the savings here leave it out. */
+  exclusion?: Exclusion;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -202,6 +207,10 @@ export function DemosPanel({
             </tbody>
           </table>
         </div>
+      )}
+
+      {hasExclusion(exclusion) && (
+        <ExclusionNote exclusion={exclusion} before={null} after={null} title="Savings on this table are on the replaced lights" />
       )}
 
       {removed.length > 0 && (

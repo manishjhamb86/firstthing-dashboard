@@ -12,6 +12,7 @@ import { monthName } from "../portal-widgets";
 import { inspectionSummary } from "@/lib/inspection";
 import { InspectionFindingsSummary } from "./inspection-findings";
 import { FileText } from "lucide-react";
+import { circuitLabelOf } from "@/lib/circuit-label";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents" };
@@ -86,12 +87,63 @@ export default async function PortalDocumentsPage({
     byPeriod.get(d.period)!.push(d);
   }
 
+  // Demo reports FirsThing has shared, and each demo's pre-/post-installation
+  // report (2026-09-27, user-asked) — built from the accepted days each time
+  // they open, so they are always current.
+  const sharedReports = await db.demoReport.findMany({
+    where: { status: "shared", pipeline: { societyId } },
+    orderBy: { version: "desc" },
+    select: { id: true, pipelineId: true, version: true, sharedAt: true, demoIds: true },
+  });
+  const latestShared = sharedReports.filter((r, i) => sharedReports.findIndex((x) => x.pipelineId === r.pipelineId) === i);
+  const demos = await db.circuitDemo.findMany({
+    where: { id: { in: [...new Set(latestShared.flatMap((r) => r.demoIds))] }, voidedAt: null, circuit: { societyId, voidedAt: null } },
+    orderBy: { sequence: "asc" },
+    select: { id: true, sequence: true, lightReplacementDate: true, circuit: { select: { location: true, lightType: true } } },
+  });
+
   return (
     <>
       <PageHeader
         title="Documents"
         subtitle="Everything on record for your society, ready to download."
       />
+
+      {latestShared.length > 0 && (
+        <Card className="mb-6 p-5">
+          <p className="text-sm font-bold">Demo reports</p>
+          <p className="mb-3 text-xs" style={{ color: "var(--text-subtle)" }}>
+            The demo savings report, and for each demo the readings before and after the lights were replaced. They are built
+            from the accepted readings each time you open them.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {latestShared.map((r) => (
+              <li key={r.id} className="flex flex-wrap gap-2">
+                <Link href={`/portal/reports/demo/${r.id}`} className="btn-secondary btn-sm">
+                  Demo savings report
+                </Link>
+                {demos
+                  .filter((d) => r.demoIds.includes(d.id))
+                  .map((d, _j, ds) => {
+                    const which = ds.length > 1 ? ` — ${circuitLabelOf(d.circuit.location, d.circuit.lightType)}, demo ${d.sequence}` : "";
+                    return (
+                      <span key={d.id} className="contents">
+                        <Link href={`/portal/reports/pre-install/${d.id}`} className="btn-secondary btn-sm">
+                          Pre-installation report{which}
+                        </Link>
+                        {d.lightReplacementDate && (
+                          <Link href={`/portal/reports/post-install/${d.id}`} className="btn-secondary btn-sm">
+                            Post-installation savings report{which}
+                          </Link>
+                        )}
+                      </span>
+                    );
+                  })}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {latestInspection && (
         <Card className="mb-6 p-5">

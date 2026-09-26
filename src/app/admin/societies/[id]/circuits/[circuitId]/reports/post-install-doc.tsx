@@ -1,0 +1,240 @@
+import { ExclusionNote } from "@/components/exclusion-note";
+import { Letterhead } from "@/components/letterhead";
+import { formatDate, shortDate } from "@/lib/format-date";
+import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
+import { BENCHMARK_MIN_PCT, BENCHMARK_MAX_PCT } from "@/lib/commissioning-anomaly";
+import { loadCircuitReport, summarize } from "./report-data";
+import { PrintButton } from "./report-shared";
+import { BackButton } from "@/components/back-button";
+import { StatusChip } from "@/components/ui";
+import { BAND_TONE, DaysGrid, ExclusionNotes, ReportLegend, pct } from "./report-format";
+
+
+type Report = NonNullable<Awaited<ReturnType<typeof loadCircuitReport>>>;
+
+/**
+ * The post installation report as a document (2026-09-27): the admin page and the
+ * society's portal render the same thing, so the two cannot differ. What
+ * differs is only around it — where Back goes, and whether the back-office
+ * investigate action is offered.
+ */
+export function PostInstallDoc({ report, backHref }: { report: Report; backHref: string }) {
+  const { circuit, society, preDays, demoPostDays: postDays, demoWindows, preAverage, preIncludedCount, demoBaseline: effBaselineNow, inventory, exclusion } = report;
+  const replacedOn = report.demo?.lightReplacementDate;
+  if (!replacedOn) return null; // no post phase yet — the report doesn't exist
+
+  const summary = summarize(effBaselineNow, postDays, exclusion);
+  const excludedPre = preDays.length - preIncludedCount;
+  const excludedPost = postDays.filter((d) => d.excluded).length;
+  const countedPost = postDays.length - excludedPost;
+  const replaced = inventory.filter((l) => l.replacementName || l.excluded);
+  const generated = shortDate(new Date());
+
+  const verdict =
+    summary.savingsPct === null
+      ? "No savings figure can be computed yet."
+      : circuit.benchmarkSavingsPct !== null
+        ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in. The confirmed benchmark of ${circuit.benchmarkSavingsPct.toFixed(1)}% is fixed for the contract term.`
+        : summary.savingsPct >= BENCHMARK_MIN_PCT && summary.savingsPct <= BENCHMARK_MAX_PCT
+          ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in.`
+          : `Outside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in — routed to review rather than confirmed; no benchmark is written until that review resolves.`;
+
+  return (
+    <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
+      <div className="no-print mb-5 flex flex-wrap items-center gap-3">
+        <BackButton fallbackHref={backHref} />
+        <div className="flex-1" />
+        <PrintButton />
+      </div>
+
+      <Letterhead>
+      <article className="report-sheet">
+        <header className="report-masthead">
+          <div className="min-w-0 flex-1">
+            <p className="lbl" style={{ color: "var(--accent)" }}>
+              FirsThing · Post-installation savings report
+            </p>
+            <h1 className="mt-2 text-[26px] font-extrabold leading-tight tracking-[-0.02em]">
+              {society.name}
+            </h1>
+            <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
+              {society.location}
+              <br />
+              {circuit.location || circuit.lightType} circuit ·{" "}
+              {(report.demo?.meteredLightCount ?? circuit.meteredLightCount).toLocaleString("en-IN")} metered lights of{" "}
+              {circuit.representedLightCount.toLocaleString("en-IN")} represented
+            </p>
+          </div>
+          <div className="report-period">
+            <p className="text-[20px] font-bold tracking-[-0.01em]">After installation</p>
+            <p className="mt-1 text-xs text-[var(--text-subtle)]">
+              Lights replaced{" "}
+              <span className="num">{formatDate(replacedOn)}</span>
+              <br />
+              Generated <span className="num">{generated}</span>
+            </p>
+          </div>
+        </header>
+
+        <section className="report-result">
+          <div className="shrink-0">
+            <p className="lbl" style={{ color: "var(--info-fg)" }}>
+              Measured savings
+            </p>
+            <p className="mt-1.5 flex flex-wrap items-baseline gap-2.5">
+              <span
+                className="num text-[46px] font-bold leading-none tracking-[-0.02em]"
+                title={summary.savingsPct !== null ? `${summary.savingsPct.toFixed(2)}%` : undefined}
+              >
+                {summary.savingsPct === null ? "—" : pct(summary.savingsPct)}
+              </span>
+              {summary.band && (
+                <StatusChip tone={BAND_TONE[summary.band]}>
+                  {SAVINGS_BAND_META[summary.band].label}
+                </StatusChip>
+              )}
+            </p>
+          </div>
+          <p className="min-w-0 flex-1 basis-64 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
+            {countedPost} counted day{countedPost === 1 ? "" : "s"} averaged{" "}
+            <strong className="num text-[var(--text)]">{summary.averageKwh?.toFixed(2) ?? "—"}</strong>{" "}
+            kWh/day against the{" "}
+            <strong className="num text-[var(--text)]">{effBaselineNow?.toFixed(2) ?? "—"}</strong>{" "}
+            kWh/day baseline.{" "}
+            {verdict}
+            {summary.warn &&
+              summary.savingsPct !== null &&
+              summary.savingsPct < SAVINGS_WARN_BELOW && (
+                <strong className="text-[var(--text)]">
+                  {" "}
+                  Savings below {SAVINGS_WARN_BELOW}% are below the level the commercial model is
+                  built on.
+                </strong>
+              )}
+          </p>
+        </section>
+
+        <ExclusionNote exclusion={exclusion} before={effBaselineNow} after={summary.averageKwh} className="mb-5" />
+
+        <section className="report-facts">
+          <div>
+            <p className="lbl">Baseline in force</p>
+            <p className="mt-1.5">
+              <span className="num text-[17px] font-bold">{effBaselineNow?.toFixed(2) ?? "—"}</span>{" "}
+              <span className="text-xs text-[var(--text-subtle)]">kWh/day</span>
+            </p>
+          </div>
+          <div>
+            <p className="lbl">After, average</p>
+            <p className="mt-1.5">
+              <span className="num text-[17px] font-bold">{summary.averageKwh?.toFixed(2) ?? "—"}</span>{" "}
+              <span className="text-xs text-[var(--text-subtle)]">kWh/day</span>
+            </p>
+          </div>
+          <div>
+            <p className="lbl">Days counted</p>
+            <p className="mt-1.5">
+              <span className="num text-[17px] font-bold">{countedPost}</span>{" "}
+              <span className="text-xs text-[var(--text-subtle)]">of {postDays.length} recorded</span>
+            </p>
+          </div>
+          <div>
+            <p className="lbl">Excluded</p>
+            <p className="mt-1.5">
+              <span className="num text-[17px] font-bold">{excludedPost}</span>{" "}
+              <span className="text-xs text-[var(--text-subtle)]">{excludedPost === 1 ? "day" : "days"}</span>
+            </p>
+          </div>
+        </section>
+
+        <section className="px-8 pb-8 pt-7">
+          <p className="mb-6 text-[13px] leading-relaxed text-[var(--text-muted)]">
+            The baseline: {preIncludedCount} pre-installation day{preIncludedCount === 1 ? "" : "s"}
+            {excludedPre > 0 && ` (${excludedPre} excluded, with reasons on the pre-installation report)`}{" "}
+            averaged <strong className="num text-[var(--text)]">{preAverage?.toFixed(2) ?? "—"}</strong>{" "}
+            kWh/day.
+            {effBaselineNow !== null && preAverage !== null && Math.abs(effBaselineNow - preAverage) > 1e-9 && (
+              <>
+                {" "}
+                The accepted baseline is{" "}
+                <strong className="num text-[var(--text)]">{effBaselineNow.toFixed(2)}</strong> kWh/day — the
+                figure accepted for this demo, and the one each day below is judged against.
+              </>
+            )}
+          </p>
+
+          {replaced.length > 0 && (
+            <>
+              <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
+                <h2 className="text-[15px] font-semibold">What was installed</h2>
+              </div>
+              <div className="print-table-scroll mb-7 overflow-hidden rounded-[var(--r-sm)] border border-[var(--border-subtle)]">
+                <table className="tbl w-full">
+                  <thead>
+                    <tr>
+                      <th>Was</th>
+                      <th>Installed</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {inventory.map((l) => (
+                      <tr key={l.id}>
+                        <td>
+                          {l.count} × {l.name} ({l.wattage}W, {l.hoursPerDay} h/day)
+                        </td>
+                        <td>
+                          {l.excluded
+                            ? "Kept — not replaced"
+                            : l.replacementName
+                              ? `${l.replacementCount ?? l.count} × ${l.replacementName}${l.replacementWattage ? ` (${l.replacementWattage}W)` : ""}${
+                                  l.replacementCount != null && l.replacementCount < l.count ? ` · ${l.count - l.replacementCount} kept, not replaced` : ""
+                                }`
+                              : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+
+          {/* Both demo periods, and only them (2026-09-25, user-specified):
+              the days the baseline came from, then the days measured against it. */}
+          {preDays.length > 0 && (
+            <>
+              <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
+                <h2 className="text-[15px] font-semibold">Before installation, day by day</h2>
+                <p className="text-xs text-[var(--text-subtle)]">
+                  {demoWindows.pre ? `Demo period ${formatDate(demoWindows.pre.from)} to ${formatDate(demoWindows.pre.to)}` : "The days the baseline was averaged from"}
+                </p>
+              </div>
+              <DaysGrid days={preDays} mode="variance" />
+              <div className="mb-6" />
+            </>
+          )}
+          <div className="mb-3.5 flex flex-wrap items-baseline justify-between gap-3">
+            <h2 className="text-[15px] font-semibold">After installation — consumption &amp; savings, day by day</h2>
+            <p className="text-xs text-[var(--text-subtle)]">
+              {demoWindows.post ? `Demo period ${formatDate(demoWindows.post.from)} to ${formatDate(demoWindows.post.to)} · ` : ""}Excluded days are shown, never hidden
+            </p>
+          </div>
+          <DaysGrid days={postDays} mode="savings" />
+          <ReportLegend days={postDays} mode="savings" />
+          <ExclusionNotes days={postDays} />
+        </section>
+
+        <footer className="report-footer">
+          <span>
+            FirsThing · every figure traces to stored daily readings, the recorded inventory, and
+            the baseline in force on each day.
+          </span>
+          <span className="num report-colophon">
+            {society.name} · {circuit.location || circuit.lightType} · post-installation
+          </span>
+        </footer>
+      </article>
+      </Letterhead>
+    </div>
+  );
+}

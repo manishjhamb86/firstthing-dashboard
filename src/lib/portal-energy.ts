@@ -208,8 +208,13 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
     return { c, monitoring, baselineNow };
   });
 
+  // The headline month is the newest month with a COUNTED day. An excluded
+  // day (a partial export, an offline meter) says nothing, and taking the
+  // month from it blanked every figure on the page (Hyde Park, 2026-09-27:
+  // 1 September was a 10-of-24-hour day, so the page headlined a September
+  // with nothing in it).
   const latest = perCircuit
-    .flatMap((p) => p.monitoring.map((d) => d.date))
+    .flatMap((p) => p.monitoring.filter((d) => !d.excluded).map((d) => d.date))
     .sort()
     .at(-1);
   const month = latest ? latest.slice(0, 7) : null;

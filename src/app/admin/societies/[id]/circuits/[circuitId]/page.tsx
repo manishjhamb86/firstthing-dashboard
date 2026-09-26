@@ -853,6 +853,7 @@ export default async function CircuitDetailPage({
                             previousBaseline={e.previousBaseline}
                             effectiveDate={e.effectiveDate.toISOString().slice(0, 10)}
                             verificationNote={e.verificationNote}
+                            canRemove={demoMode}
                           />
                         </td>
                       )}
@@ -882,6 +883,7 @@ export default async function CircuitDetailPage({
                       <th>Lights</th>
                       <th>Baseline (kWh/day)</th>
                       <th>Why it was voided</th>
+                      {canOverride && demoMode && <th />}
                     </tr>
                   </thead>
                   <tbody>
@@ -898,6 +900,20 @@ export default async function CircuitDetailPage({
                           {e.correctedByEventId ? "Corrected" : "Voided"} by{" "}
                           {e.voidedBy?.name ?? e.voidedBy?.email ?? "—"} — {e.voidReason}
                         </td>
+                        {canOverride && demoMode && (
+                          <td>
+                            <RescaleRowActions
+                              eventId={e.id}
+                              previousLightCount={e.previousLightCount}
+                              newLightCount={e.newLightCount}
+                              previousBaseline={e.previousBaseline}
+                              effectiveDate={e.effectiveDate.toISOString().slice(0, 10)}
+                              verificationNote={e.verificationNote}
+                              canRemove
+                              voided
+                            />
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>

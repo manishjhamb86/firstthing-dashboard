@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
+import { isDemoMode } from "@/lib/demo-mode";
 import { REFUSAL_MESSAGE, refuseRescale, refuseVoid, rescaleBaseline } from "@/lib/benchmark-rescale";
 import { utcMidnight as startOfDayUTC } from "@/lib/circuit-load";
 
@@ -329,4 +330,62 @@ async function rederiveAfter(circuitId: string, from: Date, actorId: string): Pr
   } catch (err) {
     logger.warn("billing.rederive_after_rescale_failed", { circuitId, error: String(err) });
   }
+}
+
+/**
+ * Remove a light-count change completely — before go-live (demo mode), the
+ * user's rule for records entered by mistake (2026-09-27: "give option to
+ * remove this record, and make sure removing it reflects everywhere its value
+ * is used").
+ *
+ * Everything that reads a rescale replays the surviving entries — the baseline
+ * in force on any date, the light-count history, the portal, monitoring, band
+ * alerts and the invoice stats — so a removed entry stops counting the moment
+ * it is gone. The two stored consequences are re-derived here, as voiding
+ * does: the circuit's metered count (from the entries that remain) and the
+ * released invoice months from its effective month on. Outside demo mode,
+ * Void is the way to take an entry out and keep the record.
+ */
+export async function removeRescaleEvent(eventId: string): Promise<RescaleResult> {
+  const gate = await requireRescaleOps();
+  if ("error" in gate) return gate;
+  if (!(await isDemoMode())) {
+    logger.warn("circuit.rescale_remove_refused", { actorId: gate.actorId, eventId, reason: "not_demo_mode" });
+    return { error: "Removing an entry completely is only available in demo mode, before go-live. Void it instead — it stops counting and stays on record." };
+  }
+  const event = await db.benchmarkRescaleEvent.findUnique({
+    where: { id: eventId },
+    include: { circuit: { select: { id: true, societyId: true } } },
+  });
+  if (!event) return { error: "That entry no longer exists." };
+
+  const survivors = await db.benchmarkRescaleEvent.findMany({
+    where: { circuitId: event.circuitId, voidedAt: null, id: { not: eventId } },
+    orderBy: { effectiveDate: "asc" },
+  });
+  // The count as the surviving entries leave it; with none, as commissioned —
+  // the earliest entry's own "previous" count.
+  const earliest = await db.benchmarkRescaleEvent.findFirst({
+    where: { circuitId: event.circuitId },
+    orderBy: { effectiveDate: "asc" },
+    select: { previousLightCount: true },
+  });
+  const restoredCount = survivors.length
+    ? survivors[survivors.length - 1].newLightCount
+    : (earliest?.previousLightCount ?? event.previousLightCount);
+
+  await db.$transaction([
+    // An entry this one corrected (or that corrected it) points at it; the
+    // link goes with it.
+    db.benchmarkRescaleEvent.updateMany({ where: { correctedByEventId: eventId }, data: { correctedByEventId: null } }),
+    db.benchmarkRescaleEvent.delete({ where: { id: eventId } }),
+    db.circuit.update({ where: { id: event.circuitId }, data: { meteredLightCount: restoredCount } }),
+  ]);
+  logger.info("circuit.rescale_removed", { actorId: gate.actorId, circuitId: event.circuitId, restoredCount });
+
+  await rederiveAfter(event.circuitId, event.effectiveDate, gate.actorId);
+  revalidatePath(`/admin/societies/${event.circuit.societyId}/circuits/${event.circuitId}`);
+  revalidatePath(`/admin/societies/${event.circuit.societyId}/circuits`);
+  revalidatePath(`/admin/live-monitoring/${event.circuitId}`);
+  return {};
 }

@@ -8106,3 +8106,30 @@ What was missing was any way to see or change that:
 
 Verified in a browser: kept 8 → 9 on the Hyde Park shape re-derived the benchmark to 75.83%, and
 every explanation said 9 of 63.
+
+## A rescale entry can be removed before go-live; the society gets both installation reports (2026-09-27) — user-asked
+
+**Removing a light-count change.** `removeRescaleEvent` (operations, **demo mode only** — outside it
+the answer is "void it instead", the soft path that keeps the record) deletes the entry outright,
+restores the circuit's metered count from the entries that survive (or the removed entry's own
+"previous" count when none do), clears any correction link pointing at it, and re-derives every
+published month from its effective date — the same trigger a record or void runs, so every figure
+that read the rescaled baseline (live monitoring, the portal, invoice-month stats) follows.
+Verified in a browser: refused outside demo mode; in demo mode removed, count back to 55.
+
+**The society sees the pre- and post-installation reports.** The two report bodies became shared
+documents (`reports/pre-install-doc.tsx`, `post-install-doc.tsx`) rendered by both the admin pages
+and new portal pages `/portal/reports/{pre,post}-install/[demoId]`. The portal may open a demo's
+reports only when that demo is in a **shared** demo report of the viewer's own society
+(`src/lib/portal-demo-reports.ts`, INV-05), under the `documents` grant. Linked from the dashboard's
+demo-report card and a "Demo reports" card on Documents. These reports are live — built from the
+accepted days on every open — so there is nothing to regenerate. Verified 8/8: not openable before
+sharing, both links present, both open with their figures, listed on Documents, another society
+gets not-found.
+
+**The Electricity page blanked on Hyde Park (user-caught).** Two causes. (1) The headline month was
+taken from the newest stored day even when excluded — 1 September was a 10-of-24-hour partial, so
+the page headlined an empty September; it now takes the newest *counted* day. (2) A completion
+certificate recorded on 26-09-2026 (signed-on defaulting to today) set billing start 27-09-2026,
+which outranks the contract's 06-07-2025 term start, so monitoring starts today and none of the 190
+days count. A certificate cannot be corrected in the app; the date is the user's to supply.

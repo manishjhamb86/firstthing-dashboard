@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { correctRescaleEvent, voidRescaleEvent } from "./rescale-actions";
+import { correctRescaleEvent, removeRescaleEvent, voidRescaleEvent } from "./rescale-actions";
 import { ErrorText, Field } from "@/components/ui";
 
 type Props = {
@@ -12,6 +12,10 @@ type Props = {
   previousBaseline: number;
   effectiveDate: string;
   verificationNote: string;
+  /** Demo mode (before go-live): the entry can be removed completely. */
+  canRemove?: boolean;
+  /** Already voided: only removal is offered. */
+  voided?: boolean;
 };
 
 /**
@@ -67,15 +71,40 @@ export function RescaleRowActions(props: Props) {
     });
   }
 
+  function remove() {
+    if (
+      !window.confirm(
+        "Remove this light-count change completely? The circuit's light count, its baseline from that date, the light-count history, monitoring and the published months all go back to what they are without it. This cannot be undone.",
+      )
+    )
+      return;
+    setError(null);
+    startTransition(async () => {
+      const result = await removeRescaleEvent(props.eventId);
+      if (result?.error) setError(result.error);
+      else router.refresh();
+    });
+  }
+
   if (!mode) {
     return (
-      <div className="flex gap-2">
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setMode("correct")}>
-          Correct
-        </button>
-        <button type="button" className="btn-ghost btn-sm" onClick={() => setMode("void")}>
-          Void
-        </button>
+      <div className="flex flex-wrap gap-2">
+        {!props.voided && (
+          <>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setMode("correct")}>
+              Correct
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setMode("void")}>
+              Void
+            </button>
+          </>
+        )}
+        {props.canRemove && (
+          <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={remove} style={{ color: "var(--bad-fg)" }}>
+            Remove
+          </button>
+        )}
+        {error && <ErrorText>{error}</ErrorText>}
       </div>
     );
   }

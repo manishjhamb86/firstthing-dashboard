@@ -1,4 +1,5 @@
 import { greetingName } from "@/lib/greeting";
+import { circuitLabelOf } from "@/lib/circuit-label";
 import { redirect } from "next/navigation";
 import { dealLabel } from "@/lib/deal-scope";
 import { oldRecordReviewer } from "@/lib/onlooker";
@@ -150,6 +151,13 @@ export default async function PortalHomePage() {
     { label: "STP", avg: setupAvg("stp") },
   ].filter((c) => c.avg !== null);
 
+  // The demos each shared report covers — their pre-/post-installation
+  // reports are the society's too (2026-09-27, user-asked).
+  const reportDemos = await db.circuitDemo.findMany({
+    where: { id: { in: [...new Set(sharedReports.flatMap((r) => r.demoIds))] }, voidedAt: null, circuit: { societyId, voidedAt: null } },
+    orderBy: { sequence: "asc" },
+    select: { id: true, sequence: true, lightReplacementDate: true, circuit: { select: { location: true, lightType: true } } },
+  });
   const first = greetingName(viewer.name, society.name);
   // Who is signed in (2026-09-26, user-asked): the name, with the email the
   // account signs in with in brackets — the email alone read as a stranger.
@@ -700,11 +708,28 @@ export default async function PortalHomePage() {
                 Measured on the metered demo circuits, with the daily readings behind every figure.
               </p>
               <DemoReportView report={report} />
-              <p className="mt-4">
+              <div className="mt-4 flex flex-wrap gap-2">
                 <Link href={`/portal/reports/demo/${report.id}`} className="btn-secondary">
                   Open &amp; download
                 </Link>
-              </p>
+                {reportDemos
+                  .filter((d) => report.demoIds.includes(d.id))
+                  .map((d, _j, ds) => {
+                    const which = ds.length > 1 ? ` — ${circuitLabelOf(d.circuit.location, d.circuit.lightType)}, demo ${d.sequence}` : "";
+                    return (
+                      <span key={d.id} className="contents">
+                        <Link href={`/portal/reports/pre-install/${d.id}`} className="btn-secondary">
+                          Pre-installation report{which}
+                        </Link>
+                        {d.lightReplacementDate && (
+                          <Link href={`/portal/reports/post-install/${d.id}`} className="btn-secondary">
+                            Post-installation savings report{which}
+                          </Link>
+                        )}
+                      </span>
+                    );
+                  })}
+              </div>
             </Card>
           ))}
       </div>

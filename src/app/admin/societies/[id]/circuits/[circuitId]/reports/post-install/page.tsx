@@ -84,7 +84,7 @@ export default async function PostInstallReportPage({
               {society.location}
               <br />
               {circuit.location || circuit.lightType} circuit ·{" "}
-              {circuit.meteredLightCount.toLocaleString("en-IN")} metered lights of{" "}
+              {(report.demo?.meteredLightCount ?? circuit.meteredLightCount).toLocaleString("en-IN")} metered lights of{" "}
               {circuit.representedLightCount.toLocaleString("en-IN")} represented
             </p>
           </div>

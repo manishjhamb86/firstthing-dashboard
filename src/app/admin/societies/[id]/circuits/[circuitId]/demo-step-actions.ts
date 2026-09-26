@@ -50,6 +50,7 @@ const demoSelect = {
   id: true,
   circuitId: true,
   sequence: true,
+  meteredLightCount: true,
   meterId: true,
   meterInstallationId: true,
   meterSkipped: true,
@@ -199,10 +200,16 @@ export async function recordDemoMeter(input: {
     if (input.displayedLoad === null || !Number.isFinite(input.displayedLoad) || input.displayedLoad <= 0) {
       return { error: "Enter the load the meter displays, in watts — it is checked against the circuit's lights." };
     }
-    const theoretical = demo.circuit.meteredLightCount * demo.circuit.wattage;
+    // The lights on THIS demo's meter — the same figure the form states. The
+    // circuit's own count can have moved since (a verified light-count
+    // change), and a demo is measured on the lights it was run on.
+    const theoretical = demo.meteredLightCount * demo.circuit.wattage;
     discrepancyPct = (Math.abs(input.displayedLoad - theoretical) / theoretical) * 100;
   } else if (input.displayedLoad !== null && Number.isFinite(input.displayedLoad) && input.displayedLoad > 0) {
-    const theoretical = demo.circuit.meteredLightCount * demo.circuit.wattage;
+    // The lights on THIS demo's meter — the same figure the form states. The
+    // circuit's own count can have moved since (a verified light-count
+    // change), and a demo is measured on the lights it was run on.
+    const theoretical = demo.meteredLightCount * demo.circuit.wattage;
     discrepancyPct = (Math.abs(input.displayedLoad - theoretical) / theoretical) * 100;
   }
 

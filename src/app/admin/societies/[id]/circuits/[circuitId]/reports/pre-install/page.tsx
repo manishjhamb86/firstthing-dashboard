@@ -72,7 +72,7 @@ export default async function PreInstallReportPage({
               {society.location}
               <br />
               {circuit.location || circuit.lightType} circuit ·{" "}
-              {circuit.meteredLightCount.toLocaleString("en-IN")} metered lights of{" "}
+              {(report.demo?.meteredLightCount ?? circuit.meteredLightCount).toLocaleString("en-IN")} metered lights of{" "}
               {circuit.representedLightCount.toLocaleString("en-IN")} represented
             </p>
           </div>

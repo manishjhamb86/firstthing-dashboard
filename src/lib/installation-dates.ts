@@ -35,7 +35,7 @@ export function refuseInstallationDates(s: InstallationDates): string | null {
     for (const b of s.batches) {
       const last = [b.submittedOn, b.reviewedOn].filter((x): x is Date => x !== null).sort((a, b2) => d(b2) - d(a))[0];
       if (last && d(last) > d(s.signedOn)) {
-        return `The certificate (${formatDate(s.signedOn)}) cannot be signed before day ${b.day}'s work was done and approved (${formatDate(last)}). Correct that day's dates first.`;
+        return `The certificate (${formatDate(s.signedOn)}) cannot be signed before day ${b.day}'s work was done and approved (${formatDate(last)}). Change them together under Completion & billing start → Correct the dates.`;
       }
     }
   }

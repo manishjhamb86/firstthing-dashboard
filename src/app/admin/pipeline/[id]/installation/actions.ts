@@ -784,7 +784,18 @@ export async function correctBatchDates(
   return { ok: true as const };
 }
 
-export async function correctCertificateDate(pipelineId: string, input: { signedOn: string; reason: string }) {
+/**
+ * Correct the certificate's signature date together with any day's work and
+ * approval dates, checked ONCE against the result (2026-09-27, user-caught on
+ * Arihant Arden). Correcting them one at a time deadlocked: a certificate
+ * recorded before the ordering rule existed sat before its own day, so the day
+ * could not move past the certificate and the certificate could not move past
+ * the day. Saved in one transaction; the billing start follows the signature.
+ */
+export async function correctCertificateDate(
+  pipelineId: string,
+  input: { signedOn: string; reason: string; batches?: { batchId: string; workedOn?: string; approvedOn?: string }[] },
+) {
   const who = await dateCorrector(input.reason, pipelineId, "certificate");
   if ("error" in who) return who;
 
@@ -795,11 +806,37 @@ export async function correctCertificateDate(pipelineId: string, input: { signed
   const signed = parseDay(input.signedOn, "signature date");
   if (!signed) return { error: "Choose the date the certificate was signed." };
   if ("error" in signed) return signed;
-  if (signed.getTime() === startOfDayUTC(cert.signedAt).getTime()) return { error: "That is already the signature date." };
+
+  // The days as they will be after this correction.
+  const edits = new Map((input.batches ?? []).map((b) => [b.batchId, b]));
+  const next: { id: string; day: number; reviewId: string | null; submittedOn: Date | null; reviewedOn: Date | null; oldSubmitted: Date | null; oldReviewed: Date | null }[] = [];
+  for (const b of project.batches) {
+    const e = edits.get(b.id);
+    const worked = e ? parseDay(e.workedOn, `day ${b.day}'s work date`) : undefined;
+    const approved = e ? parseDay(e.approvedOn, `day ${b.day}'s approval date`) : undefined;
+    if (worked && "error" in worked) return worked;
+    if (approved && "error" in approved) return approved;
+    if (worked && !b.submittedAt) return { error: `Day ${b.day} has not been submitted yet — its date is set when it is.` };
+    if (approved && !b.review) return { error: `Day ${b.day} has not been reviewed by the society yet.` };
+    next.push({
+      id: b.id,
+      day: b.day,
+      reviewId: b.review?.id ?? null,
+      submittedOn: worked ?? b.submittedAt,
+      reviewedOn: approved ?? b.review?.reviewedAt ?? null,
+      oldSubmitted: b.submittedAt,
+      oldReviewed: b.review?.reviewedAt ?? null,
+    });
+  }
+  const certMoves = signed.getTime() !== startOfDayUTC(cert.signedAt).getTime();
+  const dayMoves = next.some(
+    (b) => b.submittedOn?.getTime() !== b.oldSubmitted?.getTime() || b.reviewedOn?.getTime() !== b.oldReviewed?.getTime(),
+  );
+  if (!certMoves && !dayMoves) return { error: "Nothing has changed." };
 
   const refusal = refuseInstallationDates({
     today: new Date(),
-    batches: project.batches.map((b) => ({ day: b.day, submittedOn: b.submittedAt, reviewedOn: b.review?.reviewedAt ?? null })),
+    batches: next.map((b) => ({ day: b.day, submittedOn: b.submittedOn, reviewedOn: b.reviewedOn })),
     signedOn: signed,
   });
   if (refusal) {
@@ -819,7 +856,7 @@ export async function correctCertificateDate(pipelineId: string, input: { signed
   // Moving billing start LATER would unbill months already released to the
   // society (GATE-02). Moving it earlier never touches a released figure: the
   // months it adds are re-derived as new versions, not rewritten.
-  if (proration.billingStart.getTime() > oldStart.getTime() && circuits.length > 0) {
+  if (certMoves && proration.billingStart.getTime() > oldStart.getTime() && circuits.length > 0) {
     const released = await db.circuitFeeLine.findFirst({
       where: {
         circuitId: { in: circuits.map((c) => c.id) },
@@ -834,40 +871,50 @@ export async function correctCertificateDate(pipelineId: string, input: { signed
     }
   }
 
+  const reason = input.reason.trim() || null;
   await db.$transaction(async (tx) => {
-    await tx.completionCertificate.update({
-      where: { id: cert.id },
-      data: {
-        signedAt: signed,
-        billingStartDate: proration.billingStart,
-        proratedDays: proration.proratedDays,
-        daysInMonth: proration.daysInMonth,
-      },
-    });
-    await logChange(tx, {
-      entity: "completion_certificate", entityId: cert.id, kind: "edit", field: "signedAt",
-      oldValue: { signedAt: cert.signedAt, billingStartDate: oldStart },
-      newValue: { signedAt: signed, billingStartDate: proration.billingStart },
-      reason: input.reason.trim() || null, actorId: who.actorId,
-    });
+    for (const b of next) {
+      if (b.submittedOn && b.submittedOn.getTime() !== b.oldSubmitted?.getTime()) {
+        await tx.installationBatch.update({ where: { id: b.id }, data: { submittedAt: b.submittedOn } });
+        await logChange(tx, { entity: "installation_batch", entityId: b.id, kind: "edit", field: "submittedAt", oldValue: b.oldSubmitted, newValue: b.submittedOn, reason, actorId: who.actorId });
+      }
+      if (b.reviewId && b.reviewedOn && b.reviewedOn.getTime() !== b.oldReviewed?.getTime()) {
+        await tx.batchReview.update({ where: { id: b.reviewId }, data: { reviewedAt: b.reviewedOn } });
+        await logChange(tx, { entity: "batch_review", entityId: b.reviewId, kind: "edit", field: "reviewedAt", oldValue: b.oldReviewed, newValue: b.reviewedOn, reason, actorId: who.actorId });
+      }
+    }
+    if (certMoves) {
+      await tx.completionCertificate.update({
+        where: { id: cert.id },
+        data: { signedAt: signed, billingStartDate: proration.billingStart, proratedDays: proration.proratedDays, daysInMonth: proration.daysInMonth },
+      });
+      await logChange(tx, {
+        entity: "completion_certificate", entityId: cert.id, kind: "edit", field: "signedAt",
+        oldValue: { signedAt: cert.signedAt, billingStartDate: oldStart },
+        newValue: { signedAt: signed, billingStartDate: proration.billingStart },
+        reason, actorId: who.actorId,
+      });
+    }
   });
 
   // Monitoring runs from the billing start, and published months prorate on
   // it — both follow the corrected date.
-  const fromPeriod = month(oldStart < proration.billingStart ? oldStart : proration.billingStart);
-  for (const c of circuits) {
-    try {
-      await projectCircuitMonitoring(c.id, who.actorId);
-      await rederiveInvoiceMonthsAfterRescale(c.id, fromPeriod, who.actorId);
-    } catch (err) {
-      logger.error("installation.certificate_followup_failed", { pipelineId, circuitId: c.id, error: String(err) });
+  if (certMoves) {
+    const fromPeriod = month(oldStart < proration.billingStart ? oldStart : proration.billingStart);
+    for (const c of circuits) {
+      try {
+        await projectCircuitMonitoring(c.id, who.actorId);
+        await rederiveInvoiceMonthsAfterRescale(c.id, fromPeriod, who.actorId);
+      } catch (err) {
+        logger.error("installation.certificate_followup_failed", { pipelineId, circuitId: c.id, error: String(err) });
+      }
     }
   }
 
-  logger.info("installation.certificate_date_corrected", {
+  logger.info("installation.dates_corrected", {
     actorId: who.actorId, pipelineId,
-    from: cert.signedAt.toISOString(), to: signed.toISOString(),
-    billingStartDate: proration.billingStart.toISOString(),
+    certificate: certMoves ? { from: cert.signedAt.toISOString(), to: signed.toISOString(), billingStartDate: proration.billingStart.toISOString() } : null,
+    days: next.filter((b) => b.submittedOn?.getTime() !== b.oldSubmitted?.getTime() || b.reviewedOn?.getTime() !== b.oldReviewed?.getTime()).map((b) => b.day),
   });
   revalidatePath(pathFor(pipelineId));
   revalidatePath(`/admin/pipeline/${pipelineId}`);

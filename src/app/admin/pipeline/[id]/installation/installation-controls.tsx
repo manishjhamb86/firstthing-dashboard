@@ -712,12 +712,25 @@ export function CompletionForm({ pipelineId }: { pipelineId: string }) {
 export function CorrectDatesControl(
   props:
     | { kind: "batch"; pipelineId: string; batchId: string; workedOn: string; approvedOn: string | null; today: string; live: boolean }
-    | { kind: "certificate"; pipelineId: string; signedOn: string; today: string; live: boolean },
+    | {
+        kind: "certificate";
+        pipelineId: string;
+        signedOn: string;
+        /** Every submitted day, corrected alongside the signature and checked with it. */
+        days: { batchId: string; day: number; workedOn: string; approvedOn: string | null }[];
+        today: string;
+        live: boolean;
+      },
 ) {
   const [open, setOpen] = useState(false);
   const [worked, setWorked] = useState(props.kind === "batch" ? props.workedOn : "");
   const [approved, setApproved] = useState(props.kind === "batch" ? props.approvedOn ?? "" : "");
   const [signed, setSigned] = useState(props.kind === "certificate" ? props.signedOn : "");
+  const [days, setDays] = useState<Record<string, { workedOn: string; approvedOn: string }>>(() =>
+    props.kind === "certificate"
+      ? Object.fromEntries(props.days.map((d) => [d.batchId, { workedOn: d.workedOn, approvedOn: d.approvedOn ?? "" }]))
+      : {},
+  );
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
@@ -725,7 +738,7 @@ export function CorrectDatesControl(
   if (!open) {
     return (
       <button type="button" className="btn-ghost btn-sm mt-2" onClick={() => setOpen(true)}>
-        {props.kind === "batch" ? "Correct the dates" : "Correct the signature date"}
+        Correct the dates
       </button>
     );
   }
@@ -746,7 +759,15 @@ export function CorrectDatesControl(
                   approvedOn: props.approvedOn ? approved : undefined,
                   reason,
                 })
-              : await correctCertificateDate(props.pipelineId, { signedOn: signed, reason });
+              : await correctCertificateDate(props.pipelineId, {
+                  signedOn: signed,
+                  reason,
+                  batches: props.days.map((d) => ({
+                    batchId: d.batchId,
+                    workedOn: days[d.batchId]?.workedOn,
+                    approvedOn: d.approvedOn ? days[d.batchId]?.approvedOn : undefined,
+                  })),
+                });
           if (r && "error" in r) setError(r.error);
           else setOpen(false);
         });
@@ -764,13 +785,46 @@ export function CorrectDatesControl(
           )}
         </div>
       ) : (
-        <Field
-          label="Certificate signed on"
-          htmlFor="fix-signed-on"
-          hint={preview ? `Billing then starts ${formatDate(preview.billingStart)} — first month ${preview.proratedDays} of ${preview.daysInMonth} days. Monitoring and published months follow.` : undefined}
-        >
-          <input id="fix-signed-on" className="field field-auto" type="date" max={props.today} value={signed} onChange={(e) => setSigned(e.target.value)} required />
-        </Field>
+        <>
+          {/* Corrected together and checked once against the result — one at
+              a time, a certificate dated before its own day could not move
+              past the day, nor the day past the certificate (2026-09-27). */}
+          {props.days.map((d) => (
+            <div key={d.batchId} className="grid gap-3 sm:grid-cols-2">
+              <Field label={`Day ${d.day} — date of the work`} htmlFor={`fix-worked-${d.batchId}`}>
+                <input
+                  id={`fix-worked-${d.batchId}`}
+                  className="field"
+                  type="date"
+                  max={props.today}
+                  value={days[d.batchId]?.workedOn ?? ""}
+                  onChange={(e) => setDays((cur) => ({ ...cur, [d.batchId]: { ...cur[d.batchId], workedOn: e.target.value } }))}
+                  required
+                />
+              </Field>
+              {d.approvedOn && (
+                <Field label={`Day ${d.day} — approved by the society on`} htmlFor={`fix-approved-${d.batchId}`}>
+                  <input
+                    id={`fix-approved-${d.batchId}`}
+                    className="field"
+                    type="date"
+                    max={props.today}
+                    value={days[d.batchId]?.approvedOn ?? ""}
+                    onChange={(e) => setDays((cur) => ({ ...cur, [d.batchId]: { ...cur[d.batchId], approvedOn: e.target.value } }))}
+                    required
+                  />
+                </Field>
+              )}
+            </div>
+          ))}
+          <Field
+            label="Certificate signed on"
+            htmlFor="fix-signed-on"
+            hint={preview ? `Billing then starts ${formatDate(preview.billingStart)} — first month ${preview.proratedDays} of ${preview.daysInMonth} days. Monitoring and published months follow.` : undefined}
+          >
+            <input id="fix-signed-on" className="field field-auto" type="date" max={props.today} value={signed} onChange={(e) => setSigned(e.target.value)} required />
+          </Field>
+        </>
       )}
       <Field
         label={props.live ? "Why it is being corrected" : "Why (optional in demo mode)"}

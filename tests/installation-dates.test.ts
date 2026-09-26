@@ -26,14 +26,14 @@ describe("refuseInstallationDates", () => {
     ).toMatch(/before the work/);
   });
 
-  it("refuses a certificate signed before a day was done and approved, and says to correct that day first", () => {
+  it("refuses a certificate signed before a day was done and approved, and says where to correct them together", () => {
     const r = refuseInstallationDates({
       today,
       batches: [{ day: 1, submittedOn: D("2026-09-26"), reviewedOn: D("2026-09-26") }],
       signedOn: D("2025-07-05"),
     });
     expect(r).toMatch(/day 1/);
-    expect(r).toMatch(/Correct that day's dates first/);
+    expect(r).toMatch(/Change them together/);
   });
 
   it("allows the certificate on the same day as the last approval", () => {

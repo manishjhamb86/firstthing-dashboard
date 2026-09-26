@@ -513,7 +513,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       {b.state === "disputed" && isField && (
                         <ReopenBatchControl pipelineId={pipeline.id} batchId={b.id} />
                       )}
-                      {canCorrectDates && b.submittedAt && (
+                      {canCorrectDates && b.submittedAt && !project.certificate && (
                         <CorrectDatesControl
                           kind="batch"
                           pipelineId={pipeline.id}
@@ -642,6 +642,15 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   kind="certificate"
                   pipelineId={pipeline.id}
                   signedOn={project.certificate.signedAt.toISOString().slice(0, 10)}
+                  days={project.batches
+                    .filter((b) => b.submittedAt)
+                    .sort((a, b) => a.day - b.day)
+                    .map((b) => ({
+                      batchId: b.id,
+                      day: b.day,
+                      workedOn: b.submittedAt!.toISOString().slice(0, 10),
+                      approvedOn: b.review?.reviewedAt.toISOString().slice(0, 10) ?? null,
+                    }))}
                   today={todayIso}
                   live={!demoMode}
                 />

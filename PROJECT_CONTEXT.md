@@ -7772,3 +7772,9 @@ user-caught).**
 
   The "Quick actions" card is gone. It repeated the sidebar's links, was already hidden on
   phones, and was the tall card that left the trend card half empty.
+- **Monitoring readings made compact, and offline days kept out.** In the monitoring card the
+  chart now runs full width, and the month's days sit below it in columns: two on a phone, up to
+  four on a wide screen, reading down each column. The old layout put a 31-row table beside a
+  short chart. A 0 kWh day is the vendor's mark for an offline meter, so it shows as
+  "no reading" and is left out of the average. Averaged in, a dead month read as "100% saved"
+  (CON-45's check-the-meter rule).

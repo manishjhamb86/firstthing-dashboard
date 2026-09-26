@@ -44,7 +44,11 @@ export function MonitoringReadings({
   const latestWithData = withData.at(-1) ?? null;
   const year = month.slice(0, 4);
   const shown = sorted.filter((d) => d.date.startsWith(month));
-  const counted = shown.filter((d) => !d.excluded);
+  // A 0 kWh day is the vendor's mark for a meter that was offline, not a day
+  // of zero use: counting it would read as "100% saved" (CON-45's check-the-
+  // meter rule). Shown, but never averaged.
+  const offline = (d: MonitoringDay) => d.kWh === 0;
+  const counted = shown.filter((d) => !d.excluded && !offline(d));
   const avg = counted.length > 0 ? counted.reduce((n, d) => n + d.kWh, 0) / counted.length : null;
   const baseline = shown.at(-1)?.baseline ?? sorted.at(-1)?.baseline ?? null;
   const lastDay = shown.at(-1)?.date ?? `${month}-28`;
@@ -152,27 +156,41 @@ export function MonitoringReadings({
           )}
         </div>
       ) : (
-      <div className="grid gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
+      <div className="flex flex-col gap-4">
         <DaysChart days={shown} ceilingOf={ceiling} />
-        <table className="tbl tbl-compact w-full self-start [&_td]:py-1.5">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th className="text-right">kWh</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shown.map((d) => (
-              <tr key={d.date} style={d.excluded ? { color: "var(--text-subtle)" } : undefined}>
-                <td className="num">
-                  {formatDate(d.date)}
-                  {d.excluded && <span className="ml-2 text-[11px]">not counted</span>}
-                </td>
-                <td className={`num text-right ${d.excluded ? "line-through" : ""}`}>{kwh(d.kWh)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {/* A month is up to 31 rows: read down columns rather than one long
+            table beside a short chart, which left half the card empty. */}
+        <ul className="columns-2 gap-x-6 @xl:columns-3 @3xl:columns-4">
+          {shown.map((d) => (
+            <li
+              key={d.date}
+              className="flex break-inside-avoid items-baseline justify-between gap-3 border-b py-1.5 text-[13px]"
+              style={{ borderColor: "var(--border-subtle)", color: d.excluded ? "var(--text-subtle)" : undefined }}
+              title={d.excluded ? "Not counted in the month's average" : undefined}
+            >
+              <span className="num" style={{ color: "var(--text-muted)" }}>
+                {formatDate(d.date)}
+              </span>
+              {offline(d) ? (
+                <span className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                  no reading
+                </span>
+              ) : (
+                <span className={`num font-semibold ${d.excluded ? "font-normal line-through" : ""}`}>{kwh(d.kWh)}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+        {shown.some(offline) && (
+          <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+            &ldquo;No reading&rdquo; marks a day the meter reported nothing; it is left out of the average.
+          </p>
+        )}
+        {shown.some((d) => d.excluded) && (
+          <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+            Struck-through days are not counted in the month&apos;s average.
+          </p>
+        )}
       </div>
       )}
       {monitoringFrom && (

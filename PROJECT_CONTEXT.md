@@ -8086,3 +8086,23 @@ two rules applies to each kept line.
 shows the net figures at once, and accepting records the net benchmark. Its agreed override
 (64.47%) still governs billing. Published invoice months keep the figures they were released with
 until they are re-derived.
+
+**Same day — the kept lights can be seen and changed (user-asked: "I don't want hardcoded values").**
+Nothing was ever fixed at 8. The kept lights are whatever the replacement recorded, line by line.
+What was missing was any way to see or change that:
+- **The done Light replacement step** now shows each inventory line with Replaced and Kept, and
+  has **Correct what was replaced and kept**. It reopens the replacement form prefilled.
+  - "Replaced" is a count up to the line's size, and anything fewer is shown as "N kept".
+  - A whole line can be marked kept.
+  - Saving re-derives the figures, and each changed count is logged with its old value.
+- **The load inventory** explains why a kept line exists and where to change it, and marks
+  partly replaced lines "· N kept".
+- **The agreed-override line** now shows the live measured figure next to the recorded reason.
+  That reason is text written when the override was set; Hyde Park's still quoted the deleted
+  paper demos' 56.28%.
+- **The pre-/post-installation reports** are buttons, stating that they are built from the
+  accepted days each time they open, so there is never anything to regenerate. Before the days
+  are accepted, the step says the report opens once they are.
+
+Verified in a browser: kept 8 → 9 on the Hyde Park shape re-derived the benchmark to 75.83%, and
+every explanation said 9 of 63.

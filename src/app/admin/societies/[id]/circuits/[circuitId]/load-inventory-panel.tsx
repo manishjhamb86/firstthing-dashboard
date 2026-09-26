@@ -361,7 +361,9 @@ function LineRow({ line, editable, canCorrect = false }: { line: InventoryLine; 
         {line.excluded
           ? "Kept — not replaced; left out of the saving"
           : line.replacementName
-          ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}`
+          ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}${
+              line.replacementCount != null && line.replacementCount < line.count ? ` · ${line.count - line.replacementCount} kept` : ""
+            }`
           : line.note ?? "—"}
       </td>
       {canCorrect && (
@@ -467,7 +469,10 @@ export function LoadInventoryPanel({
 }) {
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
   const anyReplacement = lines.some((l) => l.replacementName || l.excluded);
-  const keptCount = lines.filter((l) => l.excluded).reduce((n, l) => n + l.count, 0);
+  const keptCount = lines.reduce(
+    (n, l) => n + (l.excluded ? l.count : l.replacementCount != null && l.replacementCount < l.count ? l.count - l.replacementCount : 0),
+    0,
+  );
 
   // A locked inventory is a finished record, so it folds like every other
   // finished thing on this page — header, figure, done (user-reported
@@ -556,6 +561,20 @@ export function LoadInventoryPanel({
             </tfoot>
           </table>
         </div>
+      )}
+
+      {keptCount > 0 && (
+        // Why a kept line exists (2026-09-27, user-asked): nothing here is a
+        // fixed number — the kept lights are whatever the replacement recorded.
+        <p className="text-sm text-[var(--text-muted)]">
+          <strong className="text-[var(--text)]">
+            {keptCount} fixture{keptCount === 1 ? " was" : "s were"} kept, not replaced.
+          </strong>{" "}
+          When a replacement records that only some of the lights were changed, the rest stay on the circuit as they were, so they are
+          shown as their own line (or as &ldquo;N kept&rdquo; on a partly replaced line). The saving leaves them out: kept lights of the
+          same kind come off as their share of what the meter measured; any other item comes off at its rated draw. To change how many
+          were kept, use <em>Correct what was replaced and kept</em> on the demo&apos;s Light replacement step.
+        </p>
       )}
 
       {editable ? (

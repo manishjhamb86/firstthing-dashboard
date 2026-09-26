@@ -17,8 +17,10 @@ export type ReplacementFormLine = {
   hoursPerDay: number;
   /** The fixture type — a kept line of a type being replaced is "the same item". */
   deviceTypeId: string;
-  /** Already marked at the survey as not part of the retrofit. */
+  /** Already marked at the survey (or at the replacement) as kept, not replaced. */
   excluded: boolean;
+  /** What the replacement recorded for this line, when it has been recorded. */
+  recorded?: { replacementTypeId: string | null; replacementCount: number | null; replacementWattage: number | null } | null;
   options: { id: string; name: string; defaultWattage: number | null }[];
 };
 
@@ -38,16 +40,35 @@ const kwhPerDay = (l: ReplacementFormLine) => (l.count * l.wattage * l.hoursPerD
 export function LightReplacementForm({
   demoId,
   lines = [],
+  correcting = false,
+  initialDate,
+  onDone,
 }: {
   demoId: string;
   lines?: ReplacementFormLine[];
+  /**
+   * Correct a replacement already recorded (2026-09-27, user-asked: "what if
+   * I have to change that excluded light count from 8 to 9?"): opens with
+   * what was recorded — which lines were replaced, how many on each, and
+   * which were kept — and saves the change. Nothing about the kept count is
+   * fixed; it is whatever the lines say.
+   */
+  correcting?: boolean;
+  initialDate?: string;
+  onDone?: () => void;
 }) {
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState(initialDate ?? todayISO());
   const [lineState, setLineState] = useState<Record<string, LineState>>(() =>
     Object.fromEntries(
       lines.map((l) => [
         l.lineId,
-        { replacementTypeId: l.excluded ? EXCLUDE : "", count: String(l.count), wattage: "" },
+        l.excluded
+          ? { replacementTypeId: EXCLUDE, count: String(l.count), wattage: "" }
+          : {
+              replacementTypeId: l.recorded?.replacementTypeId ?? "",
+              count: String(l.recorded?.replacementCount ?? l.count),
+              wattage: l.recorded?.replacementWattage != null ? String(l.recorded.replacementWattage) : "",
+            },
       ]),
     ),
   );
@@ -92,7 +113,12 @@ export function LightReplacementForm({
   function submit() {
     // A count that differs from the original is real (a broken fitting left
     // unreplaced) but must be deliberate.
-    const differing = lines.filter((l) => !isExcluded(l) && Number(lineState[l.lineId]?.count) !== l.count);
+    const tooMany = lines.find((l) => !isExcluded(l) && Number(lineState[l.lineId]?.count) > l.count);
+    if (tooMany) {
+      setError(`${tooMany.deviceName}: the line holds ${tooMany.count} lights — no more than that can have been replaced.`);
+      return;
+    }
+    const differing = correcting ? [] : lines.filter((l) => !isExcluded(l) && Number(lineState[l.lineId]?.count) !== l.count);
     if (differing.length > 0) {
       const detail = differing
         .map((l) => `${l.deviceName}: ${l.count} → ${lineState[l.lineId]?.count}`)
@@ -114,7 +140,10 @@ export function LightReplacementForm({
       );
       const result = await recordDemoReplacement({ demoId, replacedOn: date, lines: replacements });
       setError(result?.error);
-      if (!result?.error) router.refresh();
+      if (!result?.error) {
+        onDone?.();
+        router.refresh();
+      }
     });
   }
 
@@ -124,7 +153,8 @@ export function LightReplacementForm({
         <div className="space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
             Record what was installed against each line of the inventory. The dropdown only offers
-            devices mapped as compatible in the catalog. A fixture that stays on the circuit unreplaced
+            devices mapped as compatible in the catalog. <strong className="text-[var(--text)]">Replaced</strong> is how many
+            lights on the line were changed — any fewer than the line holds are kept as they were. A fixture that stays on the circuit unreplaced
             is marked <strong className="text-[var(--text)]">Not replaced — exclude from the benchmark</strong>: its
             draw is subtracted from both the before and after averages, and the reports say so.
           </p>
@@ -134,7 +164,7 @@ export function LightReplacementForm({
                 <tr>
                   <th>Existing</th>
                   <th>Installed device</th>
-                  <th>Count</th>
+                  <th>Replaced</th>
                   <th>W each</th>
                 </tr>
               </thead>
@@ -179,12 +209,20 @@ export function LightReplacementForm({
                       <input
                         type="number"
                         min={1}
+                        max={l.count}
                         value={lineState[l.lineId]?.count ?? ""}
                         onChange={(e) => setLine(l.lineId, { count: e.target.value })}
                         disabled={pending}
                         aria-label={`Installed count for ${l.deviceName}`}
                         className="field field-auto w-20"
                       />
+                      {/* The rest of the line stays as it was — kept, and left
+                          out of the saving by the same rule as a kept line. */}
+                      {Number(lineState[l.lineId]?.count) > 0 && Number(lineState[l.lineId]?.count) < l.count && (
+                        <span className="mt-1 block text-xs text-[var(--text-muted)]">
+                          of {l.count} · {l.count - Number(lineState[l.lineId]?.count)} kept
+                        </span>
+                      )}
                     </td>
                     <td>
                       <input
@@ -259,12 +297,78 @@ export function LightReplacementForm({
             longer completes the install — CON-18's departure gate pass does,
             and it comes after this step because it itemizes what was fitted
             (user-reported 2026-08-24). */}
-        Record the replacement
+        {correcting ? "Save the correction" : "Record the replacement"}
       </button>
-      <p className="mt-2 text-[13px] text-[var(--text-muted)]">
-        The circuit moves to post-install monitoring once the completion gate pass is submitted —
-        it is required before the crew leaves site.
-      </p>
+      {correcting ? (
+        <p className="mt-2 text-[13px] text-[var(--text-muted)]">
+          The demo&apos;s saving is worked out again from the corrected lines; the change is kept in its history.
+        </p>
+      ) : (
+        <p className="mt-2 text-[13px] text-[var(--text-muted)]">
+          The circuit moves to post-install monitoring once the completion gate pass is submitted —
+          it is required before the crew leaves site.
+        </p>
+      )}
     </Card>
+  );
+}
+
+/**
+ * The done replacement step: what was replaced and what was kept, line by
+ * line, and a way to correct it — the kept count is whatever the lines say,
+ * so moving 8 kept to 9 is changing how many on a line were replaced.
+ */
+export function ReplacementRecord({
+  demoId,
+  lines,
+  date,
+  canCorrect,
+}: {
+  demoId: string;
+  lines: ReplacementFormLine[];
+  date: string;
+  canCorrect: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const replaced = (l: ReplacementFormLine) => (l.excluded ? 0 : (l.recorded?.replacementCount ?? 0));
+  if (lines.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto">
+        <table className="tbl">
+          <thead>
+            <tr>
+              <th>Inventory line</th>
+              <th className="text-right">Replaced</th>
+              <th className="text-right">Kept</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.map((l) => (
+              <tr key={l.lineId}>
+                <td>
+                  {l.count} × {l.deviceName}
+                </td>
+                <td className="num text-right">{replaced(l)}</td>
+                <td className="num text-right">{l.count - replaced(l)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {canCorrect &&
+        (open ? (
+          <div className="space-y-2">
+            <LightReplacementForm demoId={demoId} lines={lines} correcting initialDate={date} onDone={() => setOpen(false)} />
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setOpen(true)}>
+            Correct what was replaced and kept
+          </button>
+        ))}
+    </div>
   );
 }

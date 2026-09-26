@@ -778,7 +778,11 @@ export async function recordDemoReplacement(input: { demoId: string; replacedOn:
 
   const devices = await db.circuitDevice.findMany({ where: { circuitId: demo.circuitId }, include: { deviceType: { include: { replacementOptions: true } } } });
   const byLine = new Map((input.lines ?? []).map((r) => [r.lineId, r]));
-  if (!correcting && devices.length > 0) {
+  // A correction may bring the lines too — "change the kept count from 8 to
+  // 9" is a change to how many lights on a line were replaced (2026-09-27).
+  // Without lines it only moves the date, as before.
+  const withLines = devices.length > 0 && (!correcting || (input.lines ?? []).length > 0);
+  if (withLines) {
     if ((input.lines ?? []).length > 0 && devices.every((line) => byLine.get(line.id)?.exclude)) {
       return { error: "At least one line has to be replaced — a demo with every fixture excluded measures no saving." };
     }
@@ -789,12 +793,13 @@ export async function recordDemoReplacement(input: { demoId: string; replacedOn:
       if (!line.deviceType.replacementOptions.some((o) => o.replacementTypeId === r.replacementTypeId)) {
         return { error: `That device isn't in the compatibility list for ${line.deviceType.name}.` };
       }
-      if (!Number.isInteger(r.count) || r.count < 1 || r.count > 5000) return { error: `Installed count for ${line.deviceType.name} must be a whole number.` };
+      if (!Number.isInteger(r.count) || r.count < 1) return { error: `Replaced count for ${line.deviceType.name} must be a whole number.` };
+      if (r.count > line.count) return { error: `The ${line.deviceType.name} line holds ${line.count} lights — no more than that can have been replaced.` };
       if (!Number.isFinite(r.wattage) || r.wattage <= 0 || r.wattage > 2000) return { error: `Installed wattage for ${line.deviceType.name} must be between 1 and 2000 W.` };
     }
   }
   await db.$transaction(async (tx) => {
-    if (!correcting) {
+    if (withLines) {
       for (const line of devices) {
         const r = byLine.get(line.id)!;
         if (r.exclude) {
@@ -810,6 +815,10 @@ export async function recordDemoReplacement(input: { demoId: string; replacedOn:
         }
         if (line.excludedFromCalculation !== Boolean(r.exclude)) {
           await logChange(tx, { entity: "circuit_device", entityId: line.id, kind: "edit", field: "excludedFromCalculation", circuitId: demo.circuitId, demoId: demo.id, oldValue: line.excludedFromCalculation, newValue: Boolean(r.exclude), actorId: a.admin.id });
+        }
+        const newReplaced = r.exclude ? null : r.count;
+        if (correcting && line.replacementCount !== newReplaced) {
+          await logChange(tx, { entity: "circuit_device", entityId: line.id, kind: "edit", field: "replacementCount", circuitId: demo.circuitId, demoId: demo.id, oldValue: line.replacementCount, newValue: newReplaced, actorId: a.admin.id });
         }
       }
     } else {

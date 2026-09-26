@@ -66,6 +66,10 @@ export function DemosPanel({
   exclusion?: Exclusion;
 }) {
   const router = useRouter();
+  // What the counted demos measure now — the mean of their savings, the same
+  // rule the benchmark is derived by.
+  const counted = demos.filter((d) => !d.rejected && d.savingsPct !== null);
+  const measuredNow = counted.length > 0 ? counted.reduce((n, d) => n + (d.savingsPct ?? 0), 0) / counted.length : null;
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -210,7 +214,7 @@ export function DemosPanel({
       )}
 
       {hasExclusion(exclusion) && (
-        <ExclusionNote exclusion={exclusion} before={null} after={null} title="Savings on this table are on the replaced lights" />
+        <ExclusionNote exclusion={exclusion} before={circuitBaseline} after={null} title="Savings on this table are on the replaced lights" />
       )}
 
       {removed.length > 0 && (
@@ -301,7 +305,23 @@ export function DemosPanel({
           ) : (
             <div className="flex flex-wrap items-center gap-3 text-sm">
               <span className="text-[var(--text-muted)]">
-                {overridePct !== null ? `Agreed benchmark ${overridePct}% — ${overrideReason}` : "Not overridden — the benchmark is what the demos measured."}
+                {overridePct !== null ? (
+                  <>
+                    <strong className="text-[var(--text)]">Agreed benchmark {overridePct}%</strong> — what this society is billed against.
+                    {/* The live figure beside the recorded reason: the reason
+                        was written when the override was set and describes
+                        the demos of that moment, which may since have been
+                        redone (2026-09-27, user-caught — the reason still
+                        quoted the deleted paper demos' 56.28%). */}
+                    {measuredNow !== null && (
+                      <> The demos on record now measure <span className="num">{measuredNow.toFixed(2)}%</span>
+                        {hasExclusion(exclusion) ? " on the replaced lights" : ""}.</>
+                    )}
+                    {overrideReason && <span className="block text-xs mt-0.5">Reason recorded with the override: {overrideReason}</span>}
+                  </>
+                ) : (
+                  "Not overridden — the benchmark is what the demos measured."
+                )}
               </span>
               <button type="button" className="btn-secondary btn-sm" onClick={() => setOverriding(true)}>
                 {overridePct !== null ? "Change the agreed benchmark" : "Record an agreed benchmark"}

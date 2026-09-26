@@ -7,7 +7,7 @@ import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } f
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { GatePassForm } from "./gate-pass-form";
 import { GatePassApproval } from "./gate-pass-approval";
-import { LightReplacementForm } from "./light-replacement-form";
+import { LightReplacementForm, ReplacementRecord } from "./light-replacement-form";
 import { ReplacementDateForm } from "./replacement-date-form";
 import { RescaleRowActions } from "./rescale-row-actions";
 import { RescaleForm } from "./rescale-form";
@@ -217,6 +217,9 @@ export default async function CircuitDetailPage({
     deviceTypeId: l.deviceTypeId,
     // Marked at the survey as not part of the retrofit: opens as excluded.
     excluded: l.excludedFromCalculation,
+    recorded: l.replacedAt
+      ? { replacementTypeId: l.replacementTypeId, replacementCount: l.replacementCount, replacementWattage: l.replacementWattage }
+      : null,
     options: replacementOptionRows
       .filter((o) => o.originalTypeId === l.deviceTypeId && o.replacement.active)
       .map((o) => ({ id: o.replacement.id, name: o.replacement.name, defaultWattage: o.replacement.defaultWattage })),
@@ -613,10 +616,23 @@ export default async function CircuitDetailPage({
                         baseline={facts.preAverage}
                         exclusion={exclusion}
                       />
-                      {r.accepted && (
-                        <Link href={`${base}/reports/${phase === "pre" ? "pre-install" : "post-install"}?demo=${demo.id}`} className="text-sm underline">
-                          {phase === "pre" ? "Pre-installation report" : "Post-installation savings report"}
-                        </Link>
+                      {/* The report is built from the accepted days each time it
+                          opens, so it is never stale and there is nothing to
+                          regenerate — which the screen has to say, or its
+                          absence reads as a missing button (2026-09-27). */}
+                      {r.accepted ? (
+                        <div className="flex flex-wrap items-center gap-3">
+                          <Link href={`${base}/reports/${phase === "pre" ? "pre-install" : "post-install"}?demo=${demo.id}`} className="btn-secondary btn-sm">
+                            {phase === "pre" ? "Open the pre-installation report" : "Open the post-installation savings report"}
+                          </Link>
+                          <span className="text-xs text-[var(--text-muted)]">
+                            Built from the accepted days each time it opens — it always shows the current figures; there is nothing to regenerate.
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-[var(--text-muted)]">
+                          The {phase === "pre" ? "pre-installation" : "post-installation savings"} report opens once these days are accepted.
+                        </p>
                       )}
                       {phase === "post" && openReview && urgency && (
                         <DemoReviewPanel
@@ -693,8 +709,18 @@ export default async function CircuitDetailPage({
                   ) : (
                     readOnly(lockedNote ?? (ownerName ? `Awaiting ${ownerName} to record the replacement.` : "Awaiting the field team."))
                   );
-                } else if (step.status === "done" && demo.lightReplacementDate && editable) {
-                  body = <ReplacementDateForm demoId={demo.id} current={isoDate(demo.lightReplacementDate)} />;
+                } else if (step.status === "done" && demo.lightReplacementDate) {
+                  body = (
+                    <div className="space-y-4">
+                      <ReplacementRecord
+                        demoId={demo.id}
+                        lines={replacementFormLines}
+                        date={isoDate(demo.lightReplacementDate)}
+                        canCorrect={editable}
+                      />
+                      {editable && <ReplacementDateForm demoId={demo.id} current={isoDate(demo.lightReplacementDate)} />}
+                    </div>
+                  );
                 }
                 break;
               }

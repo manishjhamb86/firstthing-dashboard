@@ -8004,3 +8004,18 @@ Verified 8/8 in a browser.
 
 **Also:** the removed Hyde Park demo 3 ("Duplicate") was deleted from stage at the user's request,
 with its two change-log lines. It was the only removed demo on stage.
+
+**Same day — what "active" and "paying" mean (the user's definitions).**
+- **Active** means billing has started: the earliest billing start of a contract that has run is
+  today or earlier. It does not mean the stored status was set when the agreement was executed.
+- **Paying** means at least one bill payment has been recorded (money or TDS) against a bill that
+  was not voided.
+- **Suspended and terminated** stand as recorded.
+- **Prospect** is everything before billing starts.
+
+`societyStanding()` (3 cases) and `loadSocietyStandings()` decide these once. The societies list
+has chips All · Prospect · Active · Paying · Suspended · Terminated, and its status column shows
+"paying" or "no payment yet" under Active. The Portfolio's Societies tile counts from the same
+loader.
+
+Verified on dev (14 active, 0 paying, 8 prospect, each matching independent SQL).

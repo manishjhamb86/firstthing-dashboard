@@ -17,7 +17,10 @@ import {
   type SortKey,
 } from "@/lib/society-list";
 
-const STATUS_TABS = ["all", "prospect", "active", "suspended", "terminated"] as const;
+// Active = billing has started; paying = at least one bill payment recorded
+// (the user's definitions, 2026-09-26). Paying is a subset of active, shown
+// as its own filter because it is the question most often asked of the list.
+const STATUS_TABS = ["all", "prospect", "active", "paying", "suspended", "terminated"] as const;
 type Tab = (typeof STATUS_TABS)[number];
 
 /**
@@ -49,9 +52,10 @@ export function SocietiesTable({
   }
 
   const matching = useMemo(() => rows.filter((r) => matchesQuery(r, query)), [rows, query]);
-  const countFor = (t: Tab) => (t === "all" ? matching.length : matching.filter((r) => r.status === t).length);
+  const inTab = (r: SocietyRow, t: Tab) => (t === "all" ? true : t === "paying" ? r.paying : r.standing === t);
+  const countFor = (t: Tab) => matching.filter((r) => inTab(r, t)).length;
   const shown = useMemo(
-    () => sortSocieties(tab === "all" ? matching : matching.filter((r) => r.status === tab), sortKey, dir),
+    () => sortSocieties(matching.filter((r) => inTab(r, tab)), sortKey, dir),
     [matching, tab, sortKey, dir],
   );
 
@@ -114,7 +118,7 @@ export function SocietiesTable({
                   color: isActive ? "var(--text-on-accent)" : "var(--text-muted)",
                 }}
               >
-                {t === "all" ? "All" : statusMeta(SOCIETY_STATUS, t).label}
+                {t === "all" ? "All" : t === "paying" ? "Paying" : statusMeta(SOCIETY_STATUS, t).label}
                 <span className="num ml-1.5 opacity-70">{countFor(t)}</span>
               </button>
             );
@@ -171,7 +175,7 @@ export function SocietiesTable({
             </thead>
             <tbody>
               {shown.map((s) => {
-                const st = statusMeta(SOCIETY_STATUS, s.status);
+                const st = statusMeta(SOCIETY_STATUS, s.standing);
                 const started = startedOn(s);
                 const muted = <span style={{ color: "var(--text-subtle)" }}>—</span>;
                 return (
@@ -233,6 +237,9 @@ export function SocietiesTable({
                     <td className="num hidden md:table-cell">{s.circuits === 0 ? muted : s.circuits}</td>
                     <td>
                       <StatusChip tone={st.tone}>{st.label}</StatusChip>
+                      {s.standing === "active" && (
+                        <span className="block text-xs text-[var(--text-muted)]">{s.paying ? "paying" : "no payment yet"}</span>
+                      )}
                     </td>
                     {/* Decoration only — the whole row is the link. */}
                     <td className="hidden sm:table-cell text-right whitespace-nowrap" aria-hidden>

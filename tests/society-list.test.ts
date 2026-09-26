@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { matchesQuery, sortSocieties, startedOn, type SocietyRow } from "@/lib/society-list";
+import { matchesQuery, societyStanding, sortSocieties, startedOn, type SocietyRow } from "@/lib/society-list";
 
 const row = (o: Partial<SocietyRow> & { id: string }): SocietyRow => ({
-  name: o.id, location: "Noida", flatCount: null, lights: null, circuits: 0, serviceLines: [], status: "active", billingStart: null, signedOn: null, ...o,
+  name: o.id, location: "Noida", flatCount: null, lights: null, circuits: 0, serviceLines: [], status: "active", standing: "active", paying: false, billingStart: null, signedOn: null, ...o,
 });
 const rows = [
   row({ id: "A", billingStart: "2025-11-15" }),
@@ -27,5 +27,21 @@ describe("societies list", () => {
     expect(matchesQuery(row({ id: "x", name: "ATS Village", location: "Noida" }), "ats noi")).toBe(true);
     expect(matchesQuery(row({ id: "x", name: "ATS Village", location: "Noida" }), "ats gurgaon")).toBe(false);
     expect(matchesQuery(row({ id: "x" }), "  ")).toBe(true);
+  });
+});
+
+describe("societyStanding", () => {
+  const today = "2026-09-26";
+  it("active means billing has started", () => {
+    expect(societyStanding({ status: "active", billingStart: "2026-06-01", today })).toBe("active");
+    expect(societyStanding({ status: "prospect", billingStart: "2026-06-01", today })).toBe("active");
+  });
+  it("an executed agreement with billing not yet started is still a prospect", () => {
+    expect(societyStanding({ status: "active", billingStart: null, today })).toBe("prospect");
+    expect(societyStanding({ status: "active", billingStart: "2026-10-01", today })).toBe("prospect");
+  });
+  it("suspended and terminated stand as recorded", () => {
+    expect(societyStanding({ status: "terminated", billingStart: "2026-06-01", today })).toBe("terminated");
+    expect(societyStanding({ status: "suspended", billingStart: "2026-06-01", today })).toBe("suspended");
   });
 });

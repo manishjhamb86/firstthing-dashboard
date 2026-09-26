@@ -18,6 +18,10 @@ export type SocietyRow = {
   circuits: number;
   serviceLines: string[];
   status: string;
+  /** Derived standing — see societyStanding. */
+  standing: Standing;
+  /** At least one payment recorded against one of its bills. */
+  paying: boolean;
   /** ISO day billing started, or null. */
   billingStart: string | null;
   /** ISO day the (earliest) agreement was signed, or null. */
@@ -26,6 +30,21 @@ export type SocietyRow = {
 
 export type SortKey = "started" | "name" | "flats" | "lights" | "serviceLines" | "circuits" | "status";
 export type SortDir = "asc" | "desc";
+
+/**
+ * What a society IS, commercially (2026-09-26, the user's definitions):
+ * active means billing has started — not that an agreement was executed —
+ * and paying means at least one bill payment has been recorded. Suspended
+ * and terminated are recorded acts and stand as recorded. Everything before
+ * billing starts is a prospect.
+ */
+export type Standing = "prospect" | "active" | "suspended" | "terminated";
+
+export function societyStanding(i: { status: string; billingStart: string | null; today: string }): Standing {
+  if (i.status === "terminated") return "terminated";
+  if (i.status === "suspended") return "suspended";
+  return i.billingStart !== null && i.billingStart <= i.today ? "active" : "prospect";
+}
 
 /** The date the default order uses, and which kind of date it is. */
 export function startedOn(r: SocietyRow): { date: string; kind: "billing" | "signed" } | null {
@@ -56,8 +75,9 @@ function valueOf(r: SocietyRow, key: SortKey): string | number | null {
     case "circuits":
       return r.circuits === 0 ? null : r.circuits;
     case "status": {
-      const i = STATUS_ORDER.indexOf(r.status);
-      return i === -1 ? STATUS_ORDER.length : i;
+      // Paying first, then active, prospect, suspended, terminated.
+      const i = STATUS_ORDER.indexOf(r.standing);
+      return (i === -1 ? STATUS_ORDER.length : i) * 2 + (r.paying ? 0 : 1);
     }
   }
 }

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatDate, longDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
 import { db } from "@/lib/db";
+import { loadSocietyStandings } from "@/lib/society-standing-loader";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { YourTasks } from "./your-tasks";
 import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
@@ -42,8 +43,7 @@ export default async function AdminHomePage() {
 
   const [
     societyCount,
-    activeSocietyCount,
-    prospectCount,
+    standings,
     openPipelineCount,
     pendingApprovals,
     circuitsInCommissioning,
@@ -57,8 +57,10 @@ export default async function AdminHomePage() {
     feed,
   ] = await Promise.all([
     db.society.count(),
-    db.society.count({ where: { status: "active" } }),
-    db.society.count({ where: { status: "prospect" } }),
+    // Active = billing started; paying = at least one bill payment (the
+    // user's definitions, 2026-09-26) — the same reading the societies list
+    // counts from, so the two pages cannot disagree.
+    loadSocietyStandings(),
     db.pipeline.count({ where: { stage: { in: ["lead", "survey_pending"] } } }),
     // The ROWS, not just a count: a lead logged on someone's behalf is frozen
     // until its owner confirms it (FEAT-001-AC-2), and this page reported the
@@ -188,6 +190,10 @@ export default async function AdminHomePage() {
   ];
   const decisionCount = waiting.length;
 
+  const standingList = [...standings.values()];
+  const standingCount = (st: string) => standingList.filter((x) => x.standing === st).length;
+  const payingCount = standingList.filter((x) => x.paying).length;
+
   return (
     <>
       {/* PageHeader like every other page — this was the one screen with a
@@ -229,7 +235,7 @@ export default async function AdminHomePage() {
         <Stat
           label="Societies"
           value={societyCount}
-          detail={`${activeSocietyCount} active · ${prospectCount} prospect`}
+          detail={`${standingCount("active")} active · ${payingCount} paying · ${standingCount("prospect")} prospect`}
         />
         {canSeePipeline && (
           <Stat

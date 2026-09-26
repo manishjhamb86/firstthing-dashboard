@@ -12,6 +12,7 @@ import {
 } from "@/lib/demo-report";
 import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
 import { deriveCircuitFigures } from "@/lib/circuit-demos";
+import { excludedDailyKwh } from "@/lib/circuit-load";
 import type { AcceptanceDay } from "@/lib/demo-acceptance";
 
 async function requirePer01() {
@@ -40,6 +41,7 @@ export async function collectDemoReportInput(pipelineId: string) {
                 orderBy: { sequence: "asc" },
                 include: { acceptances: { orderBy: { version: "desc" } } },
               },
+              devices: { include: { deviceType: { select: { name: true } } } },
             },
           },
         },
@@ -76,6 +78,8 @@ export async function collectDemoReportInput(pipelineId: string) {
         preAverage: latest(d, "pre")?.averageKwh ?? null,
         postAverage: latest(d, "post")?.averageKwh ?? null,
       })),
+      null,
+      excludedDailyKwh(c.devices),
     );
     return {
       id: c.id,
@@ -94,6 +98,9 @@ export async function collectDemoReportInput(pipelineId: string) {
       state: counted.length > 0 || c.state === "ineligible" || c.state === "retired" ? c.state : "eligible",
       preInstallReadings: series.pre.map((r) => ({ date: r.date, consumptionKwh: r.kWh })),
       postInstallReadings: series.post.map((r) => ({ date: r.date, consumptionKwh: r.kWh })),
+      excludedDevices: c.devices
+        .filter((d) => d.excludedFromCalculation)
+        .map((d) => ({ name: d.deviceType.name, count: d.count, wattage: d.wattage, kWhPerDay: (d.count * d.wattage * d.hoursPerDay) / 1000 })),
     };
   });
 

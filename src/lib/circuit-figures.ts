@@ -14,7 +14,8 @@
 import type { Tx } from "@/lib/tx";
 import { logger } from "@/lib/logger";
 import { reconcileOfferWithDemos } from "@/lib/offer-demo-reconcile";
-import { deriveCircuitFigures, BAND_MAX_PCT, BAND_MIN_PCT } from "@/lib/circuit-demos";
+import { deriveCircuitFigures, demoSavingsPct, BAND_MAX_PCT, BAND_MIN_PCT } from "@/lib/circuit-demos";
+import { excludedDailyKwh } from "@/lib/circuit-load";
 import { demoCircuitState, type DemoStepFacts } from "@/lib/demo-steps";
 import { changedSince, type AcceptanceDay } from "@/lib/demo-acceptance";
 import { hasPostPeriod, hasPrePeriod, periodOfDay } from "@/lib/demo-periods";
@@ -45,7 +46,12 @@ export function latestAcceptance<T extends { phase: string; version: number }>(l
 }
 
 /** The facts the step map reads for one demo. */
-export function demoFacts(d: DemoForFacts, eligible: boolean): DemoStepFacts & { preAverage: number | null; postAverage: number | null } {
+export function demoFacts(
+  d: DemoForFacts,
+  eligible: boolean,
+  /** Daily draw of the circuit's fixtures excluded from the benchmark. */
+  excludedKwh = 0,
+): DemoStepFacts & { preAverage: number | null; postAverage: number | null } {
   // A version with no average is a withdrawal (a review restart): the set has
   // to be measured and accepted again. (A migrated paper demo carries its
   // recorded average with no daily rows, and is in force.)
@@ -56,7 +62,7 @@ export function demoFacts(d: DemoForFacts, eligible: boolean): DemoStepFacts & {
     d.readings.filter((r) => r.phase === phase && periodOfDay(r.date, d) === phase);
   const preAverage = pre?.averageKwh ?? null;
   const postAverage = post?.averageKwh ?? null;
-  const savings = preAverage !== null && postAverage !== null && preAverage > 0 ? (1 - postAverage / preAverage) * 100 : null;
+  const savings = demoSavingsPct(preAverage, postAverage, excludedKwh);
   const visit = d.scheduledEvents.find((e) => e.kind === "installation_day" && e.status === "scheduled") ?? null;
   return {
     eligible,
@@ -93,6 +99,9 @@ export const demoFactsInclude = {
   readings: { select: { date: true, kWh: true, source: true, excludedAt: true, phase: true } },
 } as const;
 
+/** The device columns every figure reader needs to know the excluded load. */
+export const excludedDevicesSelect = { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } as const;
+
 /** The demo the circuit page works on: the latest one not voided. */
 export function currentDemoOf<T extends { sequence: number; voidedAt: Date | null; rejected: boolean }>(demos: readonly T[]): T | null {
   const live = demos.filter((d) => !d.voidedAt).sort((a, b) => b.sequence - a.sequence);
@@ -110,12 +119,14 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
       benchmarkOverridePct: true,
       benchmarkOverrideReason: true,
       demos: { include: demoFactsInclude },
+      devices: { select: excludedDevicesSelect },
     },
   });
   if (!circuit) return;
+  const excludedKwh = excludedDailyKwh(circuit.devices);
   const eligible = circuit.state !== "surveyed" && circuit.state !== "ineligible";
 
-  const factsById = new Map(circuit.demos.map((d) => [d.id, demoFacts(d, eligible)]));
+  const factsById = new Map(circuit.demos.map((d) => [d.id, demoFacts(d, eligible, excludedKwh)]));
   // Each demo's own figures, cached on the demo row.
   for (const d of circuit.demos) {
     const f = factsById.get(d.id)!;
@@ -140,6 +151,7 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
       postAverage: factsById.get(d.id)!.postAverage,
     })),
     override,
+    excludedKwh,
   );
   const anyAccepted = circuit.demos.some((d) => !d.voidedAt && !d.rejected && factsById.get(d.id)!.preAverage !== null);
 

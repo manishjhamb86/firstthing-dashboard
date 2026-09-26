@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { lightCountStages, type LightStage } from "@/lib/light-count-history";
-import { periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
+import { excludedDailyKwh, periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
 
 export type MonthTotal = {
@@ -159,6 +159,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       benchmarkSavingsPct: true,
       preInstallBaseline: true,
       rescaleEvents: true,
+      devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
       demos: {
         where: { voidedAt: null, rejected: false },
         orderBy: { sequence: "asc" },
@@ -217,7 +218,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
 
   const rows: PortalCircuit[] = perCircuit.map(({ c, monitoring, baselineNow }) => {
     const monthDaysAll = month ? monitoring.filter((d) => d.date.startsWith(month)) : [];
-    const s = periodSavingsSummary(baselineNow, monthDaysAll);
+    const s = periodSavingsSummary(baselineNow, monthDaysAll, excludedDailyKwh(c.devices));
     const counted = monthDaysAll.filter((d) => !d.excluded).length;
     if (s.averageKwh !== null && baselineNow !== null && counted > 0) {
       anyMonth = true;

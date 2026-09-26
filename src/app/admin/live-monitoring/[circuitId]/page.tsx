@@ -7,6 +7,7 @@ import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { formatDate } from "@/lib/format-date";
 import {
+  excludedDailyKwh,
   periodSavingsSummary,
   savingsBand,
   savingsPct,
@@ -45,6 +46,7 @@ export default async function LiveMonitoringCircuitPage({
       society: { select: { id: true, name: true } },
       siteSurvey: { select: { pipelineId: true } },
       rescaleEvents: true,
+      devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
       demos: {
         orderBy: { sequence: "asc" },
@@ -153,7 +155,7 @@ export default async function LiveMonitoringCircuitPage({
   const lastMonth = monthOf(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)).toISOString());
   const thisYear = nowIso.slice(0, 4);
   const periodPct = (days: StoredReadingDTO[]) => {
-    const s = periodSavingsSummary(baselineNow, days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })));
+    const s = periodSavingsSummary(baselineNow, days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })), excludedDailyKwh(circuit.devices));
     return s.savingsPct === null ? null : { pct: s.savingsPct, band: s.band, days: days.filter((d) => !d.excluded).length };
   };
   const savingsRows = [

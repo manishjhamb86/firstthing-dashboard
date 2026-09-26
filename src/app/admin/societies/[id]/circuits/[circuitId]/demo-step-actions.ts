@@ -30,6 +30,7 @@ import { acceptanceOf, refuseAcceptance } from "@/lib/demo-acceptance";
 import { refreshDemoFromMeter } from "@/lib/demo-refresh";
 import { LOAD_TOLERANCE_PCT, resyncCircuitFigures } from "@/lib/circuit-figures";
 import { planSpanAssignment } from "@/lib/meter-installation";
+import { expectedDisplayedLoadW } from "@/lib/circuit-load";
 import { afterHistoryChange, applySpanPlan, lockedDemosTouched } from "@/lib/meter-history";
 import { generateDemoReportInternal } from "@/app/admin/pipeline/[id]/report/actions";
 
@@ -76,6 +77,7 @@ const demoSelect = {
       voidedAt: true,
       wattage: true,
       meteredLightCount: true,
+      devices: { select: { count: true, wattage: true } },
       society: { select: { name: true } },
       siteSurvey: {
         select: {
@@ -207,13 +209,13 @@ export async function recordDemoMeter(input: {
     // The lights on THIS demo's meter — the same figure the form states. The
     // circuit's own count can have moved since (a verified light-count
     // change), and a demo is measured on the lights it was run on.
-    const theoretical = demo.meteredLightCount * demo.circuit.wattage;
+    const theoretical = expectedDisplayedLoadW({ meteredLightCount: demo.meteredLightCount, wattage: demo.circuit.wattage, devices: demo.circuit.devices }).watts;
     discrepancyPct = (Math.abs(input.displayedLoad - theoretical) / theoretical) * 100;
   } else if (input.displayedLoad !== null && Number.isFinite(input.displayedLoad) && input.displayedLoad > 0) {
     // The lights on THIS demo's meter — the same figure the form states. The
     // circuit's own count can have moved since (a verified light-count
     // change), and a demo is measured on the lights it was run on.
-    const theoretical = demo.meteredLightCount * demo.circuit.wattage;
+    const theoretical = expectedDisplayedLoadW({ meteredLightCount: demo.meteredLightCount, wattage: demo.circuit.wattage, devices: demo.circuit.devices }).watts;
     discrepancyPct = (Math.abs(input.displayedLoad - theoretical) / theoretical) * 100;
   }
 
@@ -738,7 +740,13 @@ export async function updateDemoReplacementVisit(
   return { ok: true };
 }
 
-export type DemoReplacementLine = { lineId: string; replacementTypeId: string; count: number; wattage: number };
+/**
+ * What was done to one inventory line. `exclude` marks a fixture that stays on
+ * the circuit unreplaced (no compatible device, or not part of the job): its
+ * draw is subtracted from both the before and after averages when the
+ * benchmark is worked out, and the reports say so (2026-09-26, user-specified).
+ */
+export type DemoReplacementLine = { lineId: string; replacementTypeId: string; count: number; wattage: number; exclude?: boolean };
 
 /**
  * Record the replacement (the pivot day) — or correct it. The work has to be
@@ -768,9 +776,13 @@ export async function recordDemoReplacement(input: { demoId: string; replacedOn:
   const devices = await db.circuitDevice.findMany({ where: { circuitId: demo.circuitId }, include: { deviceType: { include: { replacementOptions: true } } } });
   const byLine = new Map((input.lines ?? []).map((r) => [r.lineId, r]));
   if (!correcting && devices.length > 0) {
+    if ((input.lines ?? []).length > 0 && devices.every((line) => byLine.get(line.id)?.exclude)) {
+      return { error: "At least one line has to be replaced — a demo with every fixture excluded measures no saving." };
+    }
     for (const line of devices) {
       const r = byLine.get(line.id);
-      if (!r) return { error: `Record what replaced the ${line.count} × ${line.deviceType.name} — every line needs its installed device.` };
+      if (!r) return { error: `Record what replaced the ${line.count} × ${line.deviceType.name} — every line needs its installed device, or mark it excluded from the benchmark.` };
+      if (r.exclude) continue;
       if (!line.deviceType.replacementOptions.some((o) => o.replacementTypeId === r.replacementTypeId)) {
         return { error: `That device isn't in the compatibility list for ${line.deviceType.name}.` };
       }
@@ -782,10 +794,20 @@ export async function recordDemoReplacement(input: { demoId: string; replacedOn:
     if (!correcting) {
       for (const line of devices) {
         const r = byLine.get(line.id)!;
-        await tx.circuitDevice.update({
-          where: { id: line.id },
-          data: { replacementTypeId: r.replacementTypeId, replacementCount: r.count, replacementWattage: r.wattage, replacedAt: date, replacedById: a.admin.id },
-        });
+        if (r.exclude) {
+          await tx.circuitDevice.update({
+            where: { id: line.id },
+            data: { excludedFromCalculation: true, replacementTypeId: null, replacementCount: null, replacementWattage: null, replacedAt: null, replacedById: a.admin.id },
+          });
+        } else {
+          await tx.circuitDevice.update({
+            where: { id: line.id },
+            data: { excludedFromCalculation: false, replacementTypeId: r.replacementTypeId, replacementCount: r.count, replacementWattage: r.wattage, replacedAt: date, replacedById: a.admin.id },
+          });
+        }
+        if (line.excludedFromCalculation !== Boolean(r.exclude)) {
+          await logChange(tx, { entity: "circuit_device", entityId: line.id, kind: "edit", field: "excludedFromCalculation", circuitId: demo.circuitId, demoId: demo.id, oldValue: line.excludedFromCalculation, newValue: Boolean(r.exclude), actorId: a.admin.id });
+        }
       }
     } else {
       await tx.circuitDevice.updateMany({ where: { circuitId: demo.circuitId, replacedAt: demo.lightReplacementDate }, data: { replacedAt: date } });
@@ -794,7 +816,12 @@ export async function recordDemoReplacement(input: { demoId: string; replacedOn:
     await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "lightReplacementDate", circuitId: demo.circuitId, demoId: demo.id, oldValue: iso(demo.lightReplacementDate), newValue: input.replacedOn, actorId: a.admin.id });
     await finish(tx, demo.circuitId, a.admin.id);
   });
-  logger.info(correcting ? "demo.replacement_corrected" : "demo.replacement_recorded", { actorId: a.admin.id, demoId: demo.id, replacedOn: input.replacedOn });
+  logger.info(correcting ? "demo.replacement_corrected" : "demo.replacement_recorded", {
+    actorId: a.admin.id,
+    demoId: demo.id,
+    replacedOn: input.replacedOn,
+    excludedLines: (input.lines ?? []).filter((l) => l.exclude).map((l) => l.lineId),
+  });
   revalidatePath(pathOf(demo));
   return { ok: true };
 }

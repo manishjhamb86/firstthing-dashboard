@@ -6,7 +6,7 @@ import { PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
-import { periodSavingsSummary } from "@/lib/circuit-load";
+import { excludedDailyKwh, periodSavingsSummary } from "@/lib/circuit-load";
 import { LiveList, type LiveSocietyRow } from "./live-list";
 
 // Live monitoring — the circuits past commissioning AND past installation,
@@ -30,6 +30,7 @@ export default async function LiveMonitoringPage() {
     include: {
       society: { select: { id: true, name: true, location: true } },
       rescaleEvents: true,
+      devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
     },
     orderBy: { createdAt: "desc" },
@@ -47,6 +48,7 @@ export default async function LiveMonitoringPage() {
     const summary = periodSavingsSummary(
       baseline,
       days.map((d) => ({ kWh: d.kWh, excluded: d.excludedAt !== null })),
+      excludedDailyKwh(c.devices),
     );
     const last = days.length > 0 ? days[days.length - 1].date : null;
 

@@ -29,7 +29,16 @@ export type DemoReportCircuitInput = {
    * circuit's record rather than from re-averaging days.
    */
   postInstallAverage?: number | null;
+  /**
+   * Fixtures on the circuit that were NOT replaced and are excluded from the
+   * benchmark (2026-09-26). Their daily draw comes off both the before and
+   * after averages, and their lights do not count toward the population a
+   * saving is extrapolated from.
+   */
+  excludedDevices?: DemoReportExcludedDevice[];
 };
+
+export type DemoReportExcludedDevice = { name: string; count: number; wattage: number; kWhPerDay: number };
 
 export type DemoReportCircuit = {
   circuitId: string;
@@ -57,6 +66,9 @@ export type DemoReportCircuit = {
    * its own recomputed number would disagree with the contract and the bill.
    */
   agreedSavedKwhPerDay: number;
+  /** Unreplaced fixtures excluded from the benchmark, and their daily draw. */
+  excludedDevices?: DemoReportExcludedDevice[];
+  excludedKwhPerDay?: number;
   benchmarkSavingsPct: number;
   projectedSavedKwhPerDay: number;
   // INV-02 — the days behind both figures travel with the report, so a
@@ -171,11 +183,20 @@ export function buildDemoReport(input: {
     const preInstallBaseline = c.preInstallBaseline!;
     const postInstallAverage = c.postInstallAverage ?? averageOf(c.postInstallReadings);
     const savedKwhPerDay = preInstallBaseline - postInstallAverage;
-    const extrapolationFactor = c.representedLightCount / c.meteredLightCount;
+    const excludedDevices = c.excludedDevices ?? [];
+    const excludedKwhPerDay = excludedDevices.reduce((n, d) => n + d.kWhPerDay, 0);
+    const excludedLights = excludedDevices.reduce((n, d) => n + d.count, 0);
+    // The saving belongs to the lights that were replaced, so it is scaled
+    // by them — an unreplaced street light is not one of the population the
+    // metered tubes stand in for.
+    const replacedLights = c.meteredLightCount - excludedLights > 0 ? c.meteredLightCount - excludedLights : c.meteredLightCount;
+    const extrapolationFactor = c.representedLightCount / replacedLights;
     // CON-11's extrapolation scales the AGREED saving, so the projected
     // figure — which feeds the offer's fee and from there a rupee amount a
-    // society is billed on — can never disagree with what was signed.
-    const agreedSavedKwhPerDay = preInstallBaseline * (c.benchmarkSavingsPct! / 100);
+    // society is billed on — can never disagree with what was signed. The
+    // benchmark is a share of what the REPLACED lights drew: the excluded
+    // fixtures' draw comes off the baseline first.
+    const agreedSavedKwhPerDay = (preInstallBaseline - excludedKwhPerDay) * (c.benchmarkSavingsPct! / 100);
 
     built.push({
       circuitId: c.id,
@@ -188,6 +209,7 @@ export function buildDemoReport(input: {
       postInstallAverage,
       savedKwhPerDay,
       agreedSavedKwhPerDay,
+      ...(excludedDevices.length > 0 ? { excludedDevices, excludedKwhPerDay } : {}),
       benchmarkSavingsPct: c.benchmarkSavingsPct!,
       projectedSavedKwhPerDay: agreedSavedKwhPerDay * extrapolationFactor,
       preInstallReadings: c.preInstallReadings,
@@ -198,6 +220,8 @@ export function buildDemoReport(input: {
   const preInstallBaselineTotal = built.reduce((s, c) => s + c.preInstallBaseline, 0);
   const postInstallAverageTotal = built.reduce((s, c) => s + c.postInstallAverage, 0);
   const meteredLightCount = built.reduce((s, c) => s + c.meteredLightCount, 0);
+  const excludedTotal = built.reduce((s, c) => s + (c.excludedKwhPerDay ?? 0), 0);
+  const replacedBaselineTotal = preInstallBaselineTotal - excludedTotal;
 
   return {
     ok: true,
@@ -205,9 +229,9 @@ export function buildDemoReport(input: {
       preInstallBaselineTotal,
       postInstallAverageTotal,
       measuredSavingsPct:
-        ((preInstallBaselineTotal - postInstallAverageTotal) / preInstallBaselineTotal) * 100,
+        ((preInstallBaselineTotal - postInstallAverageTotal) / replacedBaselineTotal) * 100,
       agreedSavingsPct:
-        (built.reduce((s, c) => s + c.agreedSavedKwhPerDay, 0) / preInstallBaselineTotal) * 100,
+        (built.reduce((s, c) => s + c.agreedSavedKwhPerDay, 0) / replacedBaselineTotal) * 100,
       societyLightCount,
       meteredLightCount,
       extrapolationFactor: societyLightCount / meteredLightCount,

@@ -1,3 +1,4 @@
+import { greetingName } from "@/lib/greeting";
 import { redirect } from "next/navigation";
 import { dealLabel } from "@/lib/deal-scope";
 import { oldRecordReviewer } from "@/lib/onlooker";
@@ -149,7 +150,7 @@ export default async function PortalHomePage() {
     { label: "STP", avg: setupAvg("stp") },
   ].filter((c) => c.avg !== null);
 
-  const first = (viewer.name ?? viewer.email).split(/[@\s]/)[0];
+  const first = greetingName(viewer.name, society.name);
 
   return (
     <>

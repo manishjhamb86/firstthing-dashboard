@@ -14,10 +14,18 @@ export type ReplacementFormLine = {
   deviceName: string;
   count: number;
   wattage: number;
+  hoursPerDay: number;
+  /** Already marked at the survey as not part of the retrofit. */
+  excluded: boolean;
   options: { id: string; name: string; defaultWattage: number | null }[];
 };
 
+/** The select's value for "this line stays on the circuit, unreplaced". */
+const EXCLUDE = "__exclude__";
+
 type LineState = { replacementTypeId: string; count: string; wattage: string };
+
+const kwhPerDay = (l: ReplacementFormLine) => (l.count * l.wattage * l.hoursPerDay) / 1000;
 
 /**
  * FEAT-013 + CON-45 — the engineer records, against each inventory line,
@@ -37,7 +45,7 @@ export function LightReplacementForm({
     Object.fromEntries(
       lines.map((l) => [
         l.lineId,
-        { replacementTypeId: "", count: String(l.count), wattage: "" },
+        { replacementTypeId: l.excluded ? EXCLUDE : "", count: String(l.count), wattage: "" },
       ]),
     ),
   );
@@ -61,15 +69,20 @@ export function LightReplacementForm({
     });
   }
 
+  const isExcluded = (l: ReplacementFormLine) => lineState[l.lineId]?.replacementTypeId === EXCLUDE;
   const incomplete = lines.some((l) => {
     const st = lineState[l.lineId];
+    if (st?.replacementTypeId === EXCLUDE) return false;
     return !st?.replacementTypeId || st.count.trim() === "" || st.wattage.trim() === "";
   });
+  const excludedLines = lines.filter(isExcluded);
+  const allExcluded = lines.length > 0 && excludedLines.length === lines.length;
+  const excludedKwh = excludedLines.reduce((n, l) => n + kwhPerDay(l), 0);
 
   function submit() {
     // A count that differs from the original is real (a broken fitting left
     // unreplaced) but must be deliberate.
-    const differing = lines.filter((l) => Number(lineState[l.lineId]?.count) !== l.count);
+    const differing = lines.filter((l) => !isExcluded(l) && Number(lineState[l.lineId]?.count) !== l.count);
     if (differing.length > 0) {
       const detail = differing
         .map((l) => `${l.deviceName}: ${l.count} → ${lineState[l.lineId]?.count}`)
@@ -79,12 +92,16 @@ export function LightReplacementForm({
       }
     }
     startTransition(async () => {
-      const replacements: ReplacementLine[] = lines.map((l) => ({
-        lineId: l.lineId,
-        replacementTypeId: lineState[l.lineId].replacementTypeId,
-        count: Number(lineState[l.lineId].count),
-        wattage: Number(lineState[l.lineId].wattage),
-      }));
+      const replacements: ReplacementLine[] = lines.map((l) =>
+        isExcluded(l)
+          ? { lineId: l.lineId, replacementTypeId: "", count: l.count, wattage: l.wattage, exclude: true }
+          : {
+              lineId: l.lineId,
+              replacementTypeId: lineState[l.lineId].replacementTypeId,
+              count: Number(lineState[l.lineId].count),
+              wattage: Number(lineState[l.lineId].wattage),
+            },
+      );
       const result = await recordDemoReplacement({ demoId, replacedOn: date, lines: replacements });
       setError(result?.error);
       if (!result?.error) router.refresh();
@@ -97,7 +114,9 @@ export function LightReplacementForm({
         <div className="space-y-3">
           <p className="text-sm text-[var(--text-muted)]">
             Record what was installed against each line of the inventory. The dropdown only offers
-            devices mapped as compatible in the catalog.
+            devices mapped as compatible in the catalog. A fixture that stays on the circuit unreplaced
+            is marked <strong className="text-[var(--text)]">Not replaced — exclude from the benchmark</strong>: its
+            draw is subtracted from both the before and after averages, and the reports say so.
           </p>
           <div className="overflow-x-auto">
             <table className="tbl">
@@ -131,8 +150,16 @@ export function LightReplacementForm({
                             {o.name}
                           </option>
                         ))}
+                        <option value={EXCLUDE}>Not replaced — exclude from the benchmark</option>
                       </select>
                     </td>
+                    {isExcluded(l) ? (
+                      <td colSpan={2} className="text-[13px] text-[var(--text-muted)]">
+                        Stays on the circuit ·{" "}
+                        <span className="num">{kwhPerDay(l).toFixed(2)}</span> kWh/day subtracted
+                      </td>
+                    ) : (
+                    <>
                     <td>
                       <input
                         type="number"
@@ -156,11 +183,29 @@ export function LightReplacementForm({
                         className="field field-auto w-24"
                       />
                     </td>
+                    </>
+                    )}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+          {excludedLines.length > 0 && (
+            <p className="text-[13px] text-[var(--text-muted)]">
+              {allExcluded ? (
+                <strong className="text-[var(--bad-fg)]">
+                  Every line is excluded — at least one has to be replaced for the demo to measure a saving.
+                </strong>
+              ) : (
+                <>
+                  Excluded from the benchmark:{" "}
+                  {excludedLines.map((l) => `${l.count} × ${l.deviceName}`).join(", ")} ·{" "}
+                  <span className="num">{excludedKwh.toFixed(2)}</span> kWh/day comes off both the before and after
+                  daily averages before the saving is worked out.
+                </>
+              )}
+            </p>
+          )}
         </div>
       )}
 
@@ -182,7 +227,7 @@ export function LightReplacementForm({
       <button
         type="button"
         onClick={submit}
-        disabled={pending || (lines.length > 0 && incomplete)}
+        disabled={pending || (lines.length > 0 && (incomplete || allExcluded))}
         className="btn-primary"
       >
         {/* Not "Mark installation complete" any more: recording the work no

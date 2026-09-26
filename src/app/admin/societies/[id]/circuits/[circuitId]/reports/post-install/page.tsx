@@ -42,15 +42,16 @@ export default async function PostInstallReportPage({
   const { demo: demoParam } = await searchParams;
   const report = await loadCircuitReport(circuitId, demoParam ?? null);
   if (!report || report.society.id !== id) notFound();
-  const { circuit, society, preDays, demoPostDays: postDays, demoWindows, preAverage, preIncludedCount, demoBaseline: effBaselineNow, inventory } = report;
+  const { circuit, society, preDays, demoPostDays: postDays, demoWindows, preAverage, preIncludedCount, demoBaseline: effBaselineNow, inventory, excludedKwh } = report;
   if (!report.demo?.lightReplacementDate) notFound(); // no post phase yet — the report doesn't exist
   const circuitHref = `/admin/societies/${id}/circuits/${circuitId}`;
 
-  const summary = summarize(effBaselineNow, postDays);
+  const summary = summarize(effBaselineNow, postDays, excludedKwh);
   const excludedPre = preDays.length - preIncludedCount;
   const excludedPost = postDays.filter((d) => d.excluded).length;
   const countedPost = postDays.length - excludedPost;
-  const replaced = inventory.filter((l) => l.replacementName);
+  const replaced = inventory.filter((l) => l.replacementName || l.excluded);
+  const excludedLines = inventory.filter((l) => l.excluded);
   const generated = shortDate(new Date());
 
   const verdict =
@@ -123,7 +124,23 @@ export default async function PostInstallReportPage({
             <strong className="num text-[var(--text)]">{summary.averageKwh?.toFixed(2) ?? "—"}</strong>{" "}
             kWh/day against the{" "}
             <strong className="num text-[var(--text)]">{effBaselineNow?.toFixed(2) ?? "—"}</strong>{" "}
-            kWh/day baseline. {verdict}
+            kWh/day baseline.{" "}
+            {excludedKwh > 0 && (
+              <>
+                The{" "}
+                {excludedLines.map((l) => `${l.count} × ${l.name}`).join(", ")} on this circuit{" "}
+                {excludedLines.length === 1 && excludedLines[0].count === 1 ? "was" : "were"} not replaced and{" "}
+                {excludedLines.length === 1 && excludedLines[0].count === 1 ? "is" : "are"} excluded from the benchmark: their{" "}
+                <strong className="num text-[var(--text)]">{excludedKwh.toFixed(2)}</strong> kWh/day is subtracted from
+                both the before and after averages, so the saving is{" "}
+                <span className="num">
+                  ({effBaselineNow?.toFixed(2) ?? "—"} − {summary.averageKwh?.toFixed(2) ?? "—"}) ÷ (
+                  {effBaselineNow?.toFixed(2) ?? "—"} − {excludedKwh.toFixed(2)})
+                </span>
+                .{" "}
+              </>
+            )}
+            {verdict}
             {summary.warn &&
               summary.savingsPct !== null &&
               summary.savingsPct < SAVINGS_WARN_BELOW && (
@@ -203,9 +220,11 @@ export default async function PostInstallReportPage({
                           {l.count} × {l.name} ({l.wattage}W, {l.hoursPerDay} h/day)
                         </td>
                         <td>
-                          {l.replacementName
-                            ? `${l.replacementCount ?? l.count} × ${l.replacementName}${l.replacementWattage ? ` (${l.replacementWattage}W)` : ""}`
-                            : "—"}
+                          {l.excluded
+                            ? `Not replaced — excluded from the benchmark (${l.kWhPerDay.toFixed(2)} kWh/day subtracted)`
+                            : l.replacementName
+                              ? `${l.replacementCount ?? l.count} × ${l.replacementName}${l.replacementWattage ? ` (${l.replacementWattage}W)` : ""}`
+                              : "—"}
                         </td>
                       </tr>
                     ))}

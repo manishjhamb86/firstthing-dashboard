@@ -1,5 +1,7 @@
 "use client";
 
+import { expectedDisplayedLoadW } from "@/lib/circuit-load";
+
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field } from "@/components/ui";
@@ -17,6 +19,7 @@ export function DemoMeterForm({
   meters,
   meteredLightCount,
   wattage,
+  inventory = [],
   canOverride,
   initial,
   failedPct,
@@ -25,6 +28,8 @@ export function DemoMeterForm({
   meters: SearchSelectOption[];
   meteredLightCount: number;
   wattage: number;
+  /** The circuit's fixtures — the meter sees every one, replaced or not. */
+  inventory?: { name: string; count: number; wattage: number }[];
   canOverride: boolean;
   initial: { meterId: string | null; installedOn: string; displayedLoad: string; skipped: boolean };
   /** The recorded discrepancy when it is outside tolerance. */
@@ -38,7 +43,8 @@ export function DemoMeterForm({
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const theoretical = meteredLightCount * wattage;
+  const expected = expectedDisplayedLoadW({ meteredLightCount, wattage, devices: inventory });
+  const theoretical = expected.watts;
 
   function save() {
     setError(null);
@@ -66,9 +72,22 @@ export function DemoMeterForm({
   return (
     <Card className="p-5 space-y-4">
       <p className="text-sm text-[var(--text-muted)]">
-        Theoretical load: <span className="num">{meteredLightCount}</span> lights ×{" "}
-        <span className="num">{wattage}</span> W = <span className="num">{theoretical}</span> W. The meter&apos;s displayed
-        load has to be within ±10%.
+        Theoretical load:{" "}
+        {expected.fromInventory ? (
+          <>
+            {inventory.map((l, i) => (
+              <span key={i}>
+                {i > 0 ? " + " : ""}
+                <span className="num">{l.count}</span> × {l.name} (<span className="num">{l.wattage}</span> W)
+              </span>
+            ))}
+          </>
+        ) : (
+          <>
+            <span className="num">{meteredLightCount}</span> lights × <span className="num">{wattage}</span> W
+          </>
+        )}{" "}
+        = <span className="num">{theoretical}</span> W. The meter&apos;s displayed load has to be within ±10%.
       </p>
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={skip} onChange={(e) => setSkip(e.target.checked)} disabled={pending} />

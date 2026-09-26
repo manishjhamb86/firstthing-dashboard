@@ -2176,7 +2176,7 @@ features:
         status: proposed
         depends_on: []
   - id: FEAT-013
-    scope_note: "2026-08-24: the completion gate pass follows the replacement, not the other way round. CON-18 is a departure gate — it itemizes what physically changed and is approved before the crew leaves, so it cannot precede the work it lists. AC-3 gates marking the circuit INSTALLED (the state transition), not recording what was fitted; the circuit advances once both the replacement date and the pass exist, whichever is second."
+    scope_note: "2026-09-26: a line with no replacement is recorded as excluded from the benchmark; its daily draw is subtracted from both the before and after averages (saving = (before − after) ÷ (before − excluded)), monitoring figures subtract it too, and the reports state it. 2026-08-24: the completion gate pass follows the replacement, not the other way round. CON-18 is a departure gate — it itemizes what physically changed and is approved before the crew leaves, so it cannot precede the work it lists. AC-3 gates marking the circuit INSTALLED (the state transition), not recording what was fitted; the circuit advances once both the replacement date and the pass exist, whichever is second."
     title: "Light replacement / demo installation"
     capability: CAP-02
     personas: [PER-04]

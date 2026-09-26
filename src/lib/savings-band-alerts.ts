@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { logger } from "@/lib/logger";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
-import { periodSavingsSummary } from "@/lib/circuit-load";
+import { excludedDailyKwh, periodSavingsSummary } from "@/lib/circuit-load";
 import { evaluateCompliance } from "@/lib/monthly-calculation";
 import { circuitLabelOf } from "@/lib/meter-view";
 
@@ -55,6 +55,7 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
       preInstallBaseline: true,
       benchmarkSavingsPct: true,
       rescaleEvents: true,
+      devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
       society: { select: { name: true } },
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
       siteSurvey: {
@@ -93,6 +94,7 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
   const summary = periodSavingsSummary(
     baseline,
     days.map((d) => ({ kWh: d.kWh, excluded: d.excludedAt !== null })),
+    excludedDailyKwh(circuit.devices),
   );
   if (summary.savingsPct === null) return { state: "unknown", reason: "no days have been recorded yet" };
 

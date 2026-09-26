@@ -31,7 +31,7 @@ import { surveyHappenedAt } from "@/lib/step-dates";
 import { DemoReadingsPanel, type DemoDayDTO } from "./demo-readings-panel";
 import { DemoLockBar } from "./demo-lock-bar";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
-import { theoreticalDailyKwh } from "@/lib/circuit-load";
+import { excludedDailyKwh, theoreticalDailyKwh } from "@/lib/circuit-load";
 import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
 import { currentDemoOf, demoFacts, demoFactsInclude, latestAcceptance, LOAD_TOLERANCE_PCT } from "@/lib/circuit-figures";
 import { demoComplete, demoSteps } from "@/lib/demo-steps";
@@ -158,13 +158,14 @@ export default async function CircuitDetailPage({
     demoLockState({ sharedInReport: sharedIds.has(d.id), unlockedUntil: d.unlockedUntil, demoMode, now });
 
   const demo = circuit.demos.find((d) => d.id === sp.demo) ?? currentDemoOf(circuit.demos);
-  const facts = demo ? demoFacts(demo, eligible) : null;
+  const excludedKwh = excludedDailyKwh(circuit.devices);
+  const facts = demo ? demoFacts(demo, eligible, excludedKwh) : null;
   const lock = demo ? lockOf(demo) : null;
   const editable = canEdit && !circuit.voidedAt && (lock?.editable ?? false);
   const base = `/admin/societies/${id}/circuits/${circuit.id}`;
 
   const demoDTOs: DemoDTO[] = circuit.demos.map((d) => {
-    const f = demoFacts(d, eligible);
+    const f = demoFacts(d, eligible, excludedKwh);
     return {
       id: d.id,
       sequence: d.sequence,
@@ -198,6 +199,9 @@ export default async function CircuitDetailPage({
     deviceName: l.deviceType.name,
     count: l.count,
     wattage: l.wattage,
+    hoursPerDay: l.hoursPerDay,
+    // Marked at the survey as not part of the retrofit: opens as excluded.
+    excluded: l.excludedFromCalculation,
     options: replacementOptionRows
       .filter((o) => o.originalTypeId === l.deviceTypeId && o.replacement.active)
       .map((o) => ({ id: o.replacement.id, name: o.replacement.name, defaultWattage: o.replacement.defaultWattage })),
@@ -210,6 +214,7 @@ export default async function CircuitDetailPage({
     wattage: l.wattage,
     hoursPerDay: l.hoursPerDay,
     historical: l.historical,
+    excluded: l.excludedFromCalculation,
     note: l.note,
     replacementName: l.replacementType?.name ?? null,
     replacementCount: l.replacementCount,
@@ -504,6 +509,7 @@ export default async function CircuitDetailPage({
                     meters={meterOptions}
                     meteredLightCount={demo.meteredLightCount}
                     wattage={circuit.wattage}
+                    inventory={circuit.devices.map((l) => ({ name: l.deviceType.name, count: l.count, wattage: l.wattage }))}
                     canOverride={canOverride}
                     failedPct={failed}
                     initial={{

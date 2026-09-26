@@ -52,6 +52,26 @@ export function excludedDailyKwh(items: LoadItem[]): number {
   return theoreticalDailyKwh(items.filter((i) => i.excludedFromCalculation));
 }
 
+/**
+ * The load a demo's meter should display, in watts (CON-17's ±10% check).
+ * The meter measures everything on the circuit, replaced or not, so when the
+ * inventory describes the lights the demo runs on (its counts add up to the
+ * demo's), the figure is Σ count × wattage over EVERY line — a circuit of 93
+ * tubes and 7 street lights is not 100 × one wattage (2026-09-26). Otherwise
+ * the demo's lights × the circuit's wattage, as before.
+ */
+export function expectedDisplayedLoadW(input: {
+  meteredLightCount: number;
+  wattage: number;
+  devices: { count: number; wattage: number }[];
+}): { watts: number; fromInventory: boolean } {
+  const lights = input.devices.reduce((n, d) => n + d.count, 0);
+  if (input.devices.length > 0 && lights === input.meteredLightCount) {
+    return { watts: input.devices.reduce((n, d) => n + d.count * d.wattage, 0), fromInventory: true };
+  }
+  return { watts: input.meteredLightCount * input.wattage, fromInventory: false };
+}
+
 /** The lights actually being replaced — what a saving is attributable to. */
 export function retrofitLightCount(items: LoadItem[]): number {
   return items.filter((i) => !i.excludedFromCalculation).reduce((n, i) => n + i.count, 0);
@@ -85,9 +105,19 @@ export const SAVINGS_ORANGE_MIN = 55;
 /** CON-20's upper bound — above this, suspect the meter before celebrating. */
 export const SAVINGS_SUSPECT_ABOVE = 80;
 
-export function savingsPct(baselineKwh: number, dayKwh: number): number | null {
-  if (baselineKwh <= 0) return null;
-  return ((baselineKwh - dayKwh) / baselineKwh) * 100;
+/**
+ * The saving on the lights that were replaced. `excludedKwh` is the daily
+ * draw of the fixtures left on the circuit unreplaced (excludedDailyKwh): the
+ * meter sees them before and after alike, so they come off BOTH sides —
+ * (baseline − E) − (day − E) over (baseline − E), i.e. (baseline − day) over
+ * (baseline − E). Without it a circuit carrying lights nobody replaced
+ * reports a saving lower than the retrofit actually achieved (2026-09-26,
+ * user-specified).
+ */
+export function savingsPct(baselineKwh: number, dayKwh: number, excludedKwh = 0): number | null {
+  const replacedBaseline = baselineKwh - excludedKwh;
+  if (replacedBaseline <= 0) return null;
+  return ((baselineKwh - dayKwh) / replacedBaseline) * 100;
 }
 
 export function savingsBand(pct: number): SavingsBand {
@@ -452,13 +482,15 @@ export const SAVINGS_WARN_BELOW = 60;
 export function periodSavingsSummary(
   baseline: number | null,
   days: { kWh: number; excluded?: boolean }[],
+  /** Daily draw of fixtures left unreplaced — off both sides (savingsPct). */
+  excludedKwh = 0,
 ): { averageKwh: number | null; savingsPct: number | null; band: SavingsBand | null; warn: boolean } {
   const live = days.filter((d) => !d.excluded);
   const avg = averageKwh(live);
-  if (avg === null || baseline === null || baseline <= 0) {
+  const pct = avg === null || baseline === null ? null : savingsPct(baseline, avg, excludedKwh);
+  if (pct === null) {
     return { averageKwh: avg, savingsPct: null, band: null, warn: false };
   }
-  const pct = ((baseline - avg) / baseline) * 100;
   return { averageKwh: avg, savingsPct: pct, band: savingsBand(pct), warn: pct < SAVINGS_WARN_BELOW };
 }
 

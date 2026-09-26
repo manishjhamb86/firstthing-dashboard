@@ -48,13 +48,16 @@ export function DemoReportView({
   // The figure that governs is the benchmark each circuit carries — what the
   // agreement says and what the bill is computed from. Derived from the
   // snapshot rather than stored, so reports written before this render it too.
-  const baselineTotal = circuits.reduce((n, c) => n + c.preInstallBaseline, 0);
+  // The benchmark is a share of what the REPLACED lights drew, so the draw of
+  // fixtures left unreplaced comes off the baseline first (2026-09-26).
+  const baselineTotal = circuits.reduce((n, c) => n + c.preInstallBaseline - (c.excludedKwhPerDay ?? 0), 0);
   const agreedSavingsPct =
     baselineTotal > 0
-      ? (circuits.reduce((n, c) => n + c.preInstallBaseline * (c.benchmarkSavingsPct / 100), 0) /
+      ? (circuits.reduce((n, c) => n + (c.preInstallBaseline - (c.excludedKwhPerDay ?? 0)) * (c.benchmarkSavingsPct / 100), 0) /
           baselineTotal) *
         100
       : report.measuredSavingsPct;
+  const withExcluded = circuits.filter((c) => (c.excludedDevices?.length ?? 0) > 0);
 
   const before = report.preInstallBaselineTotal;
   const after = report.postInstallAverageTotal;
@@ -169,6 +172,34 @@ export function DemoReportView({
       {/* INV-02 — the days behind every figure above, so the number can be
           audited rather than taken on trust. Only the demo's days: the report
           is the demo, and the circuit's later monitoring is not part of it. */}
+      {/* Fixtures on a demo circuit that were not replaced (2026-09-26,
+          user-specified): named, with the draw subtracted, so the saving is
+          visibly the saving of the lights that were replaced. */}
+      {withExcluded.length > 0 && (
+        <section className="break-inside-avoid rounded-[var(--r-md)] border px-4 py-3 text-[13.5px] leading-relaxed" style={{ borderColor: "var(--border-subtle)" }}>
+          <p className="font-semibold">Lights on the circuit that were not replaced</p>
+          {withExcluded.map((c) => (
+            <p key={c.circuitId} className="mt-1" style={{ color: "var(--text-muted)" }}>
+              {circuits.length > 1 ? `${circuitLabelOf(c.location ?? null, c.lightType)}: ` : ""}
+              {c.excludedDevices!.map((d) => `${d.count} × ${d.name} (${d.wattage}W)`).join(", ")} stay on the circuit and are
+              excluded from the benchmark. Their{" "}
+              <span className="num font-semibold" style={{ color: "var(--text)" }}>
+                {(c.excludedKwhPerDay ?? 0).toFixed(2)} kWh/day
+              </span>{" "}
+              is subtracted from both the before and after averages, so the saving is measured on the replaced lights only: (
+              <span className="num">{c.preInstallBaseline.toFixed(2)}</span> −{" "}
+              <span className="num">{c.postInstallAverage.toFixed(2)}</span>) ÷ (
+              <span className="num">{c.preInstallBaseline.toFixed(2)}</span> −{" "}
+              <span className="num">{(c.excludedKwhPerDay ?? 0).toFixed(2)}</span>) ={" "}
+              <span className="num font-semibold" style={{ color: "var(--text)" }}>
+                {(((c.preInstallBaseline - c.postInstallAverage) / (c.preInstallBaseline - (c.excludedKwhPerDay ?? 0))) * 100).toFixed(1)}%
+              </span>
+              .
+            </p>
+          ))}
+        </section>
+      )}
+
       {showReadings &&
         circuits.map((c) => {
           const pre = c.preInstallReadings ?? [];

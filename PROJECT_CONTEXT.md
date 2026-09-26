@@ -7839,3 +7839,72 @@ admins see them on `/admin/tickets` and in the notification bell. Details:
 - otherwise, a current member of the same society with the login's email.
 
 An ended member's number is never used. The field stays editable, and a line under it says where the number came from. Verified 7/7 on dev.
+
+## Unreplaced fixtures are excluded from the benchmark (2026-09-26) — user-specified
+
+**The ask.** On the replacement step, a circuit showed "7 × Street light 50W — No compatible
+device mapped" beside 93 tubes. The user asked for a way to exclude such devices from the
+benchmark. Their load comes off the meter's daily averages when benchmarking, and the reports
+say so clearly.
+
+**The flag already existed.** `CircuitDevice.excludedFromCalculation` was set at the survey
+(CON-16's 2026-08-26 amendment), and `excludedDailyKwh()` existed. Nothing that computed a saving
+read either, so the figures were all gross.
+
+**What changed:**
+- **The replacement step.** Every line now offers **"Not replaced — exclude from the
+  benchmark"**, and the survey's own flag preselects it. An excluded line needs no device, count
+  or wattage. It states "Stays on the circuit · X kWh/day subtracted", and the form totals the
+  subtraction. Excluding every line is refused both in the form and on the server. The flag moves
+  with a `ChangeLog` row.
+- **One rule: saving = (before − after) ÷ (before − excluded).** It lives in `savingsPct`,
+  `demoSavingsPct`, `periodSavingsSummary` and `deriveCircuitFigures`, and it is applied at every
+  caller:
+  - the circuit figures writer (so the benchmark);
+  - the demo report builder and the offer reconciliation;
+  - the demo-monitoring board;
+  - live monitoring (list and circuit);
+  - the portal's electricity figures;
+  - the band alerts;
+  - the circuit reports.
+- **The monitoring figures subtract the load too, deliberately.** A net benchmark judged against
+  gross monitoring months would raise false out-of-band alerts on every circuit carrying
+  unreplaced lights.
+- **The baseline itself stays what the meter measured.** Days are read by the same meter, and the
+  subtraction happens when a saving is taken.
+- **The demo report:**
+  - the agreed saving is a share of (baseline − excluded);
+  - the saving is extrapolated by the lights actually replaced (represented ÷ replaced) — an
+    unreplaced street light is not part of the population the metered tubes stand in for;
+  - a "Lights on the circuit that were not replaced" section names them and shows the working.
+- **The post-installation report** says the same in its result line and lists the line as "Not
+  replaced — excluded from the benchmark".
+- **The circuit's inventory** marks the line, and the folded card states the excluded kWh/day.
+
+**Found while testing: the meter load check was wrong for mixed fixtures.** It compared the
+displayed load with lights × the circuit's one wattage. A circuit of 93 × 20 W plus 7 × 50 W
+expects 2,210 W but was checked against 2,000 W, so it failed at 10.5%.
+`expectedDisplayedLoadW()` now sums the inventory whenever it describes the demo's lights, and
+the meter form states that sum. Excluded fixtures count here, because the meter sees them.
+
+**Verified:**
+- 32/32 in a browser, walking a whole demo on a fixture (93 tubes plus 7 street lights at 12 h,
+  4.2 kWh/day). The benchmark came out at **60.61%**: (24 − 12) ÷ (24 − 4.2). The gross figure
+  would have been 50%. The baseline stayed at 24, both reports name the lights and show the
+  working, and the demo report's extrapolation factor is 930 ÷ 93.
+- 10 new unit cases.
+
+**Stage.** Three circuits already carry survey-excluded lines: Aditya Mega City, Gaur Saundaryam
+and Arihant Arden. None moves on deploy. Two have no accepted demo, so they keep their agreed
+figures. Aditya Mega City's demo is mid-way, and its benchmark is an agreed 64% override. This
+change is what reconciles that 64% with the 58.48% its readings gave when measured gross.
+
+## The portal greeting (2026-09-26) — user-caught: "Good day, The"
+
+Portal logins are sometimes named after the society ("The Hyde Park"). Taking the first word
+greeted an article. `greetingName()` in `src/lib/greeting.ts` (4 cases):
+- a login named after its society, or with no name, greets the society in full;
+- a person is greeted by first name;
+- a title or article ("The", "Dr.", an initial) is never used on its own.
+
+Verified in a browser.

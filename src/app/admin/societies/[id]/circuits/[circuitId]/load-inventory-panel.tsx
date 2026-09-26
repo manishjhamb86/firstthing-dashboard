@@ -18,6 +18,8 @@ export type InventoryLine = {
   replacementCount: number | null;
   replacementWattage: number | null;
   historical: boolean;
+  /** Stays on the circuit unreplaced; its draw comes off the benchmark. */
+  excluded: boolean;
 };
 
 export type CatalogOption = { id: string; name: string; defaultWattage: number | null };
@@ -356,7 +358,9 @@ function LineRow({ line, editable }: { line: InventoryLine; editable: boolean })
       <td className="num">{line.hoursPerDay} h</td>
       <td className="num">{lineKwh(line).toFixed(2)}</td>
       <td className="text-[var(--text-muted)]">
-        {line.replacementName
+        {line.excluded
+          ? "Not replaced — excluded from the benchmark"
+          : line.replacementName
           ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}`
           : line.note ?? "—"}
       </td>
@@ -454,7 +458,8 @@ export function LoadInventoryPanel({
   canRecordHistorical: boolean;
 }) {
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
-  const anyReplacement = lines.some((l) => l.replacementName);
+  const anyReplacement = lines.some((l) => l.replacementName || l.excluded);
+  const excludedKwh = lines.filter((l) => l.excluded).reduce((s, l) => s + lineKwh(l), 0);
 
   // A locked inventory is a finished record, so it folds like every other
   // finished thing on this page — header, figure, done (user-reported
@@ -481,6 +486,11 @@ export function LoadInventoryPanel({
               <span className="chip-dot" aria-hidden />
               {theoretical.toFixed(2)} kWh/day theoretical
             </span>
+            {excludedKwh > 0 && (
+              <span className="text-xs text-[var(--text-muted)]">
+                <span className="num">{excludedKwh.toFixed(2)}</span> kWh/day not replaced — excluded from the benchmark
+              </span>
+            )}
           </span>
           <span className="text-sm text-[var(--text-muted)]">Show</span>
         </button>

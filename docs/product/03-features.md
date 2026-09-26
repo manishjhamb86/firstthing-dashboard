@@ -492,6 +492,18 @@ Will be written up once in §5 (Cross-cutting requirements) rather than duplicat
 - **Description:** PER-04 (or the society's own electricians under PER-04's guidance, per CON-14) replaces the circuit's lights on a single recorded calendar day. Completion triggers the demo-installation-completion instance of the cross-cutting gate-pass component (§5, CON-18).
 - **Behavioral rules:** The replacement date is recorded exactly (not a range) since it's the pivot day excluded from both windows. This gate-pass sign-off is a separate instance from the meter-install one in FEAT-011 — per CON-18, gate-pass applies at each of the 3 named stages independently, not once for the whole commissioning process.
 
+- **Unreplaced fixtures (2026-09-26, user-specified):** a line on the circuit with no
+  compatible replacement (or not part of the job) is recorded at the replacement as
+  **"Not replaced — exclude from the benchmark"**. Its draw (count × W × h ÷ 1000) is
+  subtracted from both the before and after daily averages, so the demo's saving is
+  (before − after) ÷ (before − excluded) — the saving of the lights that were replaced.
+  The same subtraction applies to every later monitoring figure on that circuit, the
+  demo report extrapolates by the replaced lights only, and the post-installation and
+  demo reports name the excluded fixtures and show the working. At least one line must
+  be replaced. The meter load check counts every fixture, excluded or not — the meter
+  sees them all. Extends CON-16's 2026-08-26 amendment from survey time to the
+  replacement.
+
 - **Sequencing clarification (2026-08-24, user-reported):** the completion gate
   pass comes **after** the replacement is recorded, not before. CON-18's pass is a
   *departure* gate — it itemizes the equipment that physically changed at the site

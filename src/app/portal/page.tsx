@@ -555,8 +555,11 @@ export default async function PortalHomePage() {
           {/* One card per DEAL's latest shared report (CON-24 as amended:
               a line delivered in parts has one report per part, and showing
               only the newest hid the sibling's). The query is version-desc,
-              so first-seen per pipeline is that deal's latest version. */}
-          {[...new Map(sharedReports.map((r) => [r.pipelineId, r])).values()].map((report, i, all) => (
+              so first-seen per pipeline is that deal's latest version — kept
+              with findIndex, not a Map: a Map keeps the LAST value written
+              for a key, which showed the society its oldest shared version
+              (2026-09-26, user-caught). */}
+          {sharedReports.filter((r, i) => sharedReports.findIndex((x) => x.pipelineId === r.pipelineId) === i).map((report, i, all) => (
             <Card key={report.id} className="p-6">
               <CardTitle>
                 Your demo savings report

@@ -180,15 +180,21 @@ export function DemoReportView({
                 <h3 className="text-[15px] font-semibold">
                   Demo days{circuits.length > 1 ? ` — ${circuitLabelOf(c.location ?? null, c.lightType)}` : ""}
                 </h3>
-                <Legend />
               </div>
               <div className="dr-days grid gap-5 @2xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-                {/* On paper the chart runs the full width, taller: a portrait page has the height. */}
-                <div className="print:hidden">
-                  <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
-                </div>
-                <div className="hidden print:block">
-                  <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} width={720} height={130} />
+                {/* The legend sits on the chart it explains, so it moves with the
+                    chart wherever the table goes (user-caught 2026-09-26: on
+                    paper the table moved under the chart and the legend was
+                    left stranded top right). On paper the chart runs the full
+                    width, taller: a portrait page has the height. */}
+                <div className="min-w-0">
+                  <Legend hasPre={pre.length > 0} hasPost={post.length > 0} />
+                  <div className="print:hidden">
+                    <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
+                  </div>
+                  <div className="hidden print:block">
+                    <DemoDaysChart pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} width={720} height={130} />
+                  </div>
                 </div>
                 <DaysTable pre={pre} post={post} preAvg={c.preInstallBaseline} postAvg={c.postInstallAverage} />
               </div>
@@ -231,17 +237,19 @@ function PeriodFact({ label, days }: { label: string; days: DemoReportReading[] 
   );
 }
 
-function Legend() {
+/** Over the chart, split like it: before over the left half, after from the midpoint. */
+function Legend({ hasPre, hasPost }: { hasPre: boolean; hasPost: boolean }) {
+  const both = hasPre && hasPost;
+  const item = (label: string, colour: string) => (
+    <span className="flex items-center gap-1.5">
+      <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: colour }} />
+      {label}
+    </span>
+  );
   return (
-    <p className="flex gap-4 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-      <span className="flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--chart-mark-inert)" }} />
-        Before replacement
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: "var(--chart-mark)" }} />
-        After replacement
-      </span>
+    <p className={`mb-1 grid text-[11.5px] ${both ? "grid-cols-2" : ""}`} style={{ color: "var(--text-subtle)" }}>
+      {hasPre && item("Before replacement", "var(--chart-mark-inert)")}
+      {hasPost && item("After replacement", "var(--chart-mark)")}
     </p>
   );
 }

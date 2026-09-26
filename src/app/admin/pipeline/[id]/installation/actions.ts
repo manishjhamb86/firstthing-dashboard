@@ -3,8 +3,12 @@
 import { revalidatePath } from "next/cache";
 import type { BlockerType } from "@prisma/client";
 import { db } from "@/lib/db";
-import { demoBypass } from "@/lib/demo-mode";
-import { requireAdmin, requireAdminPermission } from "@/lib/admin-permissions";
+import { demoBypass, isDemoMode } from "@/lib/demo-mode";
+import { requireAdmin, requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
+import { logChange } from "@/lib/change-log";
+import { refuseDateCorrector, refuseInstallationDates } from "@/lib/installation-dates";
+import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
+import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
 import { startOfDayUTC } from "@/lib/step-dates";
 import {
@@ -276,9 +280,21 @@ export async function submitBatch(
     photoKeys: string[];
     /** Old records only: why there are no photos for a day already past. */
     photosWaivedReason?: string;
+    /** The day the work was done (YYYY-MM-DD). Defaults to now. */
+    workedOn?: string;
   },
 ) {
   const session = await requireField();
+
+  // A day typed up after the fact is dated to the day it happened, not to
+  // the moment it was entered (2026-09-27, user-caught).
+  let submittedAt = new Date();
+  if (input.workedOn) {
+    const worked = new Date(`${input.workedOn}T00:00:00.000Z`);
+    if (Number.isNaN(worked.getTime())) return { error: "Unreadable work date." };
+    if (worked.getTime() > startOfDayUTC(new Date()).getTime()) return { error: "The work cannot be dated in the future." };
+    if (input.workedOn !== new Date().toISOString().slice(0, 10)) submittedAt = worked;
+  }
 
   const batch = await db.installationBatch.findUnique({
     where: { id: batchId },
@@ -337,7 +353,7 @@ export async function submitBatch(
         photosWaivedReason: input.photoKeys.length === 0 ? waived : null,
         state: "awaiting_review",
         submittedById: session.user.id,
-        submittedAt: new Date(),
+        submittedAt,
       },
     });
     if (batch.fieldVisitId) {
@@ -669,6 +685,193 @@ export async function signCompletionCertificate(
 
   revalidatePath(pathFor(pipelineId));
   revalidatePath(`/admin/pipeline/${pipelineId}`);
+  return { ok: true as const };
+}
+
+// ── Date corrections (2026-09-27, user-asked) ────────────────────────────
+//
+// Batch and certificate dates were stamped at the moment of entry with no way
+// back. In demo mode anyone doing the data entry may correct them; once live,
+// operations only, with a reason. Every old value goes to the change log.
+
+async function dateCorrector(reason: string, pipelineId: string, what: string) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." as const };
+  const perms = admin.permissions;
+  const refusal = refuseDateCorrector({
+    demo: await isDemoMode(),
+    isField: perms.includes("manage_survey"),
+    isOps: perms.includes("manage_survey") && perms.includes("manage_pipeline"),
+    reason,
+  });
+  if (refusal) {
+    logger.warn("installation.date_correction_refused", { actorId: admin.id, pipelineId, what, refusal });
+    return { error: refusal };
+  }
+  return { actorId: admin.id };
+}
+
+function parseDay(s: string | undefined, label: string): Date | { error: string } | undefined {
+  if (!s) return undefined;
+  const v = new Date(`${s}T00:00:00.000Z`);
+  return Number.isNaN(v.getTime()) ? { error: `Unreadable ${label}.` } : v;
+}
+
+async function loadDates(pipelineId: string) {
+  return db.installationProject.findUnique({
+    where: { pipelineId },
+    include: { batches: { include: { review: true } }, certificate: true },
+  });
+}
+
+export async function correctBatchDates(
+  pipelineId: string,
+  batchId: string,
+  input: { workedOn?: string; approvedOn?: string; reason: string },
+) {
+  const who = await dateCorrector(input.reason, pipelineId, "batch");
+  if ("error" in who) return who;
+
+  const project = await loadDates(pipelineId);
+  const batch = project?.batches.find((b) => b.id === batchId);
+  if (!project || !batch) return { error: "Batch not found." };
+  if (!batch.submittedAt) return { error: "This day has not been submitted yet — its date is set when it is." };
+
+  const worked = parseDay(input.workedOn, "work date");
+  const approved = parseDay(input.approvedOn, "approval date");
+  if (worked && "error" in worked) return worked;
+  if (approved && "error" in approved) return approved;
+  if (approved && !batch.review) return { error: "This day has not been reviewed by the society yet." };
+
+  const newWorked = worked ?? batch.submittedAt;
+  const newApproved = approved ?? batch.review?.reviewedAt ?? null;
+  const refusal = refuseInstallationDates({
+    today: new Date(),
+    batches: project.batches.map((b) =>
+      b.id === batchId
+        ? { day: b.day, submittedOn: newWorked, reviewedOn: newApproved }
+        : { day: b.day, submittedOn: b.submittedAt, reviewedOn: b.review?.reviewedAt ?? null },
+    ),
+    signedOn: project.certificate?.signedAt ?? null,
+  });
+  if (refusal) {
+    logger.warn("installation.date_correction_refused", { actorId: who.actorId, pipelineId, batchId, refusal });
+    return { error: refusal };
+  }
+
+  await db.$transaction(async (tx) => {
+    if (worked && worked.getTime() !== batch.submittedAt!.getTime()) {
+      await tx.installationBatch.update({ where: { id: batchId }, data: { submittedAt: worked } });
+      await logChange(tx, {
+        entity: "installation_batch", entityId: batchId, kind: "edit", field: "submittedAt",
+        oldValue: batch.submittedAt, newValue: worked, reason: input.reason.trim() || null, actorId: who.actorId,
+      });
+    }
+    if (approved && batch.review && approved.getTime() !== batch.review.reviewedAt.getTime()) {
+      await tx.batchReview.update({ where: { id: batch.review.id }, data: { reviewedAt: approved } });
+      await logChange(tx, {
+        entity: "batch_review", entityId: batch.review.id, kind: "edit", field: "reviewedAt",
+        oldValue: batch.review.reviewedAt, newValue: approved, reason: input.reason.trim() || null, actorId: who.actorId,
+      });
+    }
+  });
+
+  logger.info("installation.batch_dates_corrected", {
+    actorId: who.actorId, pipelineId, batchId,
+    workedOn: newWorked.toISOString(), approvedOn: newApproved?.toISOString() ?? null,
+  });
+  revalidatePath(pathFor(pipelineId));
+  return { ok: true as const };
+}
+
+export async function correctCertificateDate(pipelineId: string, input: { signedOn: string; reason: string }) {
+  const who = await dateCorrector(input.reason, pipelineId, "certificate");
+  if ("error" in who) return who;
+
+  const project = await loadDates(pipelineId);
+  const cert = project?.certificate;
+  if (!project || !cert) return { error: "There is no completion certificate to correct." };
+
+  const signed = parseDay(input.signedOn, "signature date");
+  if (!signed) return { error: "Choose the date the certificate was signed." };
+  if ("error" in signed) return signed;
+  if (signed.getTime() === startOfDayUTC(cert.signedAt).getTime()) return { error: "That is already the signature date." };
+
+  const refusal = refuseInstallationDates({
+    today: new Date(),
+    batches: project.batches.map((b) => ({ day: b.day, submittedOn: b.submittedAt, reviewedOn: b.review?.reviewedAt ?? null })),
+    signedOn: signed,
+  });
+  if (refusal) {
+    logger.warn("installation.date_correction_refused", { actorId: who.actorId, pipelineId, refusal });
+    return { error: refusal };
+  }
+
+  const proration = prorateFirstMonth(signed);
+  const oldStart = cert.billingStartDate;
+  const month = (x: Date) => x.toISOString().slice(0, 7);
+
+  const circuits = await db.circuit.findMany({
+    where: { siteSurvey: { pipelineId }, voidedAt: null },
+    select: { id: true },
+  });
+
+  // Moving billing start LATER would unbill months already released to the
+  // society (GATE-02). Moving it earlier never touches a released figure: the
+  // months it adds are re-derived as new versions, not rewritten.
+  if (proration.billingStart.getTime() > oldStart.getTime() && circuits.length > 0) {
+    const released = await db.circuitFeeLine.findFirst({
+      where: {
+        circuitId: { in: circuits.map((c) => c.id) },
+        calculation: { status: "released", supersededById: null, period: { gte: month(oldStart), lt: month(proration.billingStart) } },
+      },
+      select: { calculation: { select: { period: true } } },
+    });
+    if (released) {
+      return {
+        error: `${released.calculation.period} has already been billed and released to the society. Billing cannot start after a month it was already billed for.`,
+      };
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.completionCertificate.update({
+      where: { id: cert.id },
+      data: {
+        signedAt: signed,
+        billingStartDate: proration.billingStart,
+        proratedDays: proration.proratedDays,
+        daysInMonth: proration.daysInMonth,
+      },
+    });
+    await logChange(tx, {
+      entity: "completion_certificate", entityId: cert.id, kind: "edit", field: "signedAt",
+      oldValue: { signedAt: cert.signedAt, billingStartDate: oldStart },
+      newValue: { signedAt: signed, billingStartDate: proration.billingStart },
+      reason: input.reason.trim() || null, actorId: who.actorId,
+    });
+  });
+
+  // Monitoring runs from the billing start, and published months prorate on
+  // it — both follow the corrected date.
+  const fromPeriod = month(oldStart < proration.billingStart ? oldStart : proration.billingStart);
+  for (const c of circuits) {
+    try {
+      await projectCircuitMonitoring(c.id, who.actorId);
+      await rederiveInvoiceMonthsAfterRescale(c.id, fromPeriod, who.actorId);
+    } catch (err) {
+      logger.error("installation.certificate_followup_failed", { pipelineId, circuitId: c.id, error: String(err) });
+    }
+  }
+
+  logger.info("installation.certificate_date_corrected", {
+    actorId: who.actorId, pipelineId,
+    from: cert.signedAt.toISOString(), to: signed.toISOString(),
+    billingStartDate: proration.billingStart.toISOString(),
+  });
+  revalidatePath(pathFor(pipelineId));
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  revalidatePath("/portal");
   return { ok: true as const };
 }
 

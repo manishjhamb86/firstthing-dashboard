@@ -10,6 +10,8 @@ import { uploadFileToS3 } from "@/lib/upload-to-s3";
 import { prorateFirstMonth } from "@/lib/billing-start";
 import { BLOCKER_TYPE_LABEL } from "@/lib/status-maps";
 import {
+  correctBatchDates,
+  correctCertificateDate,
   raiseBlocker,
   reopenBatch,
   resolveBlocker,
@@ -250,6 +252,8 @@ export function BatchCaptureForm({
   societyName,
   plannedCount,
   isOldRecord,
+  plannedDate,
+  today,
 }: {
   pipelineId: string;
   batchId: string;
@@ -257,8 +261,13 @@ export function BatchCaptureForm({
   plannedCount: number;
   /** The planned day is already past — photos may be waived with a reason. */
   isOldRecord: boolean;
+  /** The planned day, YYYY-MM-DD — what an old record's work date starts at. */
+  plannedDate: string | null;
+  /** Today, YYYY-MM-DD, from the server so the default cannot drift at hydration. */
+  today: string;
 }) {
   const [installed, setInstalled] = useState(String(plannedCount));
+  const [workedOn, setWorkedOn] = useState(isOldRecord && plannedDate ? plannedDate : today);
   const [noPhotos, setNoPhotos] = useState(false);
   const [waivedReason, setWaivedReason] = useState("");
   const [removed, setRemoved] = useState("0");
@@ -305,6 +314,7 @@ export function BatchCaptureForm({
                 locationDetail: location,
                 photoKeys: keys,
                 photosWaivedReason: noPhotos ? waivedReason : undefined,
+                workedOn,
               });
               setError(r?.error);
             });
@@ -315,6 +325,10 @@ export function BatchCaptureForm({
         })();
       }}
     >
+      <Field label="Date of the work" htmlFor="batch-worked-on" hint={isOldRecord ? "The day the work was done — this day is being recorded after the fact." : "The day the work was done."}>
+        <input id="batch-worked-on" className="field field-auto" type="date" max={today} value={workedOn} onChange={(e) => setWorkedOn(e.target.value)} required />
+      </Field>
+
       <div className="grid gap-4 sm:grid-cols-3">
         <Field label="Fittings installed" htmlFor="installed-count" hint={`Today's target is ${plannedCount}.`}>
           <input id="installed-count" className="field num" type="number" min={0} value={installed} onChange={(e) => setInstalled(e.target.value)} required />
@@ -684,6 +698,95 @@ export function CompletionForm({ pipelineId }: { pipelineId: string }) {
       <button type="submit" className="btn-primary" disabled={pending}>
         {pending ? "Recording…" : "Record the signed certificate"}
       </button>
+      {error && <ErrorText>{error}</ErrorText>}
+    </form>
+  );
+}
+
+/**
+ * Correct a batch's work and approval dates, or the certificate's signature
+ * date (2026-09-27). Closed until asked for — an open date on a finished
+ * record reads as something waiting to be filled in. In demo mode the reason
+ * is optional; once live the server requires it.
+ */
+export function CorrectDatesControl(
+  props:
+    | { kind: "batch"; pipelineId: string; batchId: string; workedOn: string; approvedOn: string | null; today: string; live: boolean }
+    | { kind: "certificate"; pipelineId: string; signedOn: string; today: string; live: boolean },
+) {
+  const [open, setOpen] = useState(false);
+  const [worked, setWorked] = useState(props.kind === "batch" ? props.workedOn : "");
+  const [approved, setApproved] = useState(props.kind === "batch" ? props.approvedOn ?? "" : "");
+  const [signed, setSigned] = useState(props.kind === "certificate" ? props.signedOn : "");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-ghost btn-sm mt-2" onClick={() => setOpen(true)}>
+        {props.kind === "batch" ? "Correct the dates" : "Correct the signature date"}
+      </button>
+    );
+  }
+
+  const preview = props.kind === "certificate" && signed ? prorateFirstMonth(new Date(`${signed}T00:00:00.000Z`)) : null;
+
+  return (
+    <form
+      className="mt-3 space-y-3 rounded-[var(--r-md)] border border-[var(--border)] p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(undefined);
+        startTransition(async () => {
+          const r =
+            props.kind === "batch"
+              ? await correctBatchDates(props.pipelineId, props.batchId, {
+                  workedOn: worked,
+                  approvedOn: props.approvedOn ? approved : undefined,
+                  reason,
+                })
+              : await correctCertificateDate(props.pipelineId, { signedOn: signed, reason });
+          if (r && "error" in r) setError(r.error);
+          else setOpen(false);
+        });
+      }}
+    >
+      {props.kind === "batch" ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Date of the work" htmlFor={`fix-worked-${props.batchId}`}>
+            <input id={`fix-worked-${props.batchId}`} className="field" type="date" max={props.today} value={worked} onChange={(e) => setWorked(e.target.value)} required />
+          </Field>
+          {props.approvedOn && (
+            <Field label="Approved by the society on" htmlFor={`fix-approved-${props.batchId}`}>
+              <input id={`fix-approved-${props.batchId}`} className="field" type="date" max={props.today} value={approved} onChange={(e) => setApproved(e.target.value)} required />
+            </Field>
+          )}
+        </div>
+      ) : (
+        <Field
+          label="Certificate signed on"
+          htmlFor="fix-signed-on"
+          hint={preview ? `Billing then starts ${formatDate(preview.billingStart)} — first month ${preview.proratedDays} of ${preview.daysInMonth} days. Monitoring and published months follow.` : undefined}
+        >
+          <input id="fix-signed-on" className="field field-auto" type="date" max={props.today} value={signed} onChange={(e) => setSigned(e.target.value)} required />
+        </Field>
+      )}
+      <Field
+        label={props.live ? "Why it is being corrected" : "Why (optional in demo mode)"}
+        htmlFor={`fix-reason-${props.kind}`}
+        hint="Kept with the old date."
+      >
+        <input id={`fix-reason-${props.kind}`} className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Recorded on the wrong day; the installation was completed earlier." />
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+          {pending ? "Saving…" : "Save the correction"}
+        </button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => { setOpen(false); setError(undefined); }}>
+          Cancel
+        </button>
+      </div>
       {error && <ErrorText>{error}</ErrorText>}
     </form>
   );

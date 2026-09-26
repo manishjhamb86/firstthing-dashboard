@@ -8133,3 +8133,40 @@ the page headlined an empty September; it now takes the newest *counted* day. (2
 certificate recorded on 26-09-2026 (signed-on defaulting to today) set billing start 27-09-2026,
 which outranks the contract's 06-07-2025 term start, so monitoring starts today and none of the 190
 days count. A certificate cannot be corrected in the app; the date is the user's to supply.
+
+## Installation dates can be set and corrected (2026-09-27) — user-caught on Hyde Park
+
+**The report**: a batch recorded after the fact read "submitted 26-09-2026", the society's approval
+"on 26-09-2026", and the certificate "Signed 26-09-2026 → billing starts 27-09-2026" for an
+installation billed since July 2025 — with no way to choose those dates or change them afterwards.
+The certificate's billing start outranks the contract's term start, so it also blanked the
+society's Electricity figures (monitoring started "today").
+
+**Setting it right the first time**: the batch form asks for the **date of the work**, defaulting
+to the planned day when that day is past; the server refuses a future date.
+
+**Correcting it later** (`correctBatchDates`, `correctCertificateDate`, one "Correct the dates"
+control per batch and one on the certificate, closed until asked for):
+- **Who** (`refuseDateCorrector`, the user's rule): in demo mode, anyone doing the data entry
+  (field or operations), reason optional; once live, **operations only, and a reason is required**
+  — the "special request". An approve-a-request flow for non-operations staff is not built.
+- **Order** (`refuseInstallationDates`, pure, 7 cases with the demo/live rules), checked against
+  the state *after* the correction: nothing in the future, an approval never before its work, the
+  certificate never before any day's work and approval — and the refusal says which day to correct
+  first.
+- **The certificate carries billing with it**: billing start and the first month's proration are
+  recomputed; monitoring is re-projected and released invoice months are re-derived from the
+  earlier of the two starts (new versions only where figures move). Moving billing start *later*
+  past a month already released to the society is refused (GATE-02).
+- Every old value goes to the change log with the reason.
+
+**Verified 12/12 in a browser** on a fixture shaped exactly like the report, on Hyde Park's deal:
+the preview reads "Billing then starts 06-07-2025 — 26 of 31 days"; moving the certificate before
+day 1's recorded dates is refused, naming the day, with nothing written; in demo mode the batch
+moves to 04-07-2025 with no reason asked, both old values logged; with the admin's demo switch
+turned off behind the open page, a blank reason is refused by the server; with a reason the
+certificate lands at 05-07-2025 → billing 06-07-2025, 26/31, logged. Plus the work-date default on a
+past day. Fixture removed and confirmed by count. 1,102 unit tests, `tsc`/`lint`/`build` clean.
+
+**Hyde Park on stage is not corrected by this deploy** — its certificate still says 26-09-2026
+until someone uses the control (or supplies the date).

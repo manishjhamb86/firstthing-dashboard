@@ -3,7 +3,7 @@ import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { demoBypass } from "@/lib/demo-mode";
+import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { AddPortalAccountButton } from "@/components/add-portal-account-button";
@@ -29,6 +29,7 @@ import {
   CompletionForm,
   ProjectSetupForm,
   RaiseBlockerForm,
+  CorrectDatesControl,
   ReopenBatchControl,
   ResolveBlockerControls,
   SkipGateForm,
@@ -48,6 +49,11 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   if (!perms.includes("manage_pipeline") && !perms.includes("manage_survey")) redirect("/admin");
   const isOps = perms.includes("manage_pipeline") && perms.includes("manage_survey");
   const isField = perms.includes("manage_survey");
+  // Correcting a recorded date (2026-09-27): data entry before go-live, an
+  // operations act with a reason after it.
+  const demoMode = await isDemoMode();
+  const canCorrectDates = demoMode ? isField : isOps;
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   const { id } = await params;
   const pipeline = await db.pipeline.findUnique({
@@ -438,8 +444,10 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   plannedCount={project.plannedDays.find((d) => d.id === b.plannedDayId)?.plannedCount ?? 0}
                   isOldRecord={(() => {
                     const pd = project.plannedDays.find((d) => d.id === b.plannedDayId)?.plannedDate;
-                    return pd != null && pd.toISOString().slice(0, 10) < new Date().toISOString().slice(0, 10);
+                    return pd != null && pd.toISOString().slice(0, 10) < todayIso;
                   })()}
+                  plannedDate={project.plannedDays.find((d) => d.id === b.plannedDayId)?.plannedDate?.toISOString().slice(0, 10) ?? null}
+                  today={todayIso}
                 />
               ) : (
                 <p className="text-sm text-[var(--text-muted)]">Logging a batch is field staff&apos;s action.</p>
@@ -504,6 +512,17 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       )}
                       {b.state === "disputed" && isField && (
                         <ReopenBatchControl pipelineId={pipeline.id} batchId={b.id} />
+                      )}
+                      {canCorrectDates && b.submittedAt && (
+                        <CorrectDatesControl
+                          kind="batch"
+                          pipelineId={pipeline.id}
+                          batchId={b.id}
+                          workedOn={b.submittedAt.toISOString().slice(0, 10)}
+                          approvedOn={b.review?.reviewedAt.toISOString().slice(0, 10) ?? null}
+                          today={todayIso}
+                          live={!demoMode}
+                        />
                       )}
                     </div>
                   );
@@ -618,6 +637,15 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   <dd className="num">{project.certificate.totalInstalledCount}</dd>
                 </div>
               </dl>
+              {canCorrectDates && (
+                <CorrectDatesControl
+                  kind="certificate"
+                  pipelineId={pipeline.id}
+                  signedOn={project.certificate.signedAt.toISOString().slice(0, 10)}
+                  today={todayIso}
+                  live={!demoMode}
+                />
+              )}
               {project.certificate.waiverReason && (
                 <p className="mt-4 text-sm" style={{ color: "var(--warn-fg)" }}>
                   Signed with a waived blocker: {project.certificate.waiverReason}

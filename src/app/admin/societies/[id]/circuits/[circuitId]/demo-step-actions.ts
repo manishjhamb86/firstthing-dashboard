@@ -18,6 +18,7 @@ import { resolveAdmin } from "@/lib/admin-permissions";
 import { canOwn, teamMeta } from "@/lib/admin-teams";
 import { eventTitle } from "@/lib/schedule";
 import { logger } from "@/lib/logger";
+import { formatDate } from "@/lib/format-date";
 import { logChange } from "@/lib/change-log";
 import { isDemoMode } from "@/lib/demo-mode";
 import { scheduleJob } from "@/lib/jobs";
@@ -114,6 +115,9 @@ async function editableDemo(demoId: string, actorId: string, action: string) {
   }
   return { demo } as const;
 }
+
+/** The reason stored when a day is simply left out of the average. */
+const NOT_COUNTED = "Not counted in the average";
 
 function pathOf(demo: { circuitId: string; circuit: { societyId: string } }) {
   return `/admin/societies/${demo.circuit.societyId}/circuits/${demo.circuitId}`;
@@ -461,6 +465,103 @@ export async function setDemoDay(input: { demoId: string; date: string; phase: "
   });
   logger.info("demo.day_set", { actorId: a.admin.id, demoId: demo.id, date: input.date, phase: input.phase, kWh: input.kWh, replaced: existing?.kWh ?? null });
   revalidatePath(pathOf(demo));
+  return { ok: true };
+}
+
+/**
+ * Save the period's typed days in one go (2026-09-26, user-asked): every date
+ * of the period is laid out at once, the operator removes the ones they have
+ * no figure for, and the rest are stored together. Each day follows the same
+ * rules as typing it singly; nothing is stored unless every day passes.
+ */
+export async function saveDemoDays(input: {
+  demoId: string;
+  phase: "pre" | "post";
+  /** `counted: false` keeps the day on the demo but out of its average. */
+  days: { date: string; kWh: number; counted?: boolean }[];
+}): Promise<Outcome & { saved?: number }> {
+  const a = await actor("field");
+  if ("error" in a) return { error: a.error };
+  const g = await editableDemo(input.demoId, a.admin.id, "save_days");
+  if ("error" in g) return { error: g.error };
+  const demo = g.demo;
+  if (input.days.length === 0) return { error: "There are no days to save — every date was removed." };
+  const seen = new Set<string>();
+  for (const d of input.days) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d.date)) return { error: "One of the days has no date." };
+    if (seen.has(d.date)) return { error: `${formatDate(d.date)} is listed twice.` };
+    seen.add(d.date);
+    if (!Number.isFinite(d.kWh) || d.kWh < 0) return { error: `${formatDate(d.date)}: the reading must be zero or a positive number of kWh.` };
+    if (periodOfDay(new Date(`${d.date}T00:00:00Z`), demo) !== input.phase) {
+      return { error: `${formatDate(d.date)} is outside the ${input.phase === "pre" ? "pre" : "post"}-installation period.` };
+    }
+  }
+  const demoMode = await isDemoMode();
+  await db.$transaction(
+    async (tx) => {
+      for (const d of input.days) {
+        const date = new Date(`${d.date}T00:00:00Z`);
+        const existing = await tx.circuitDemoReading.findUnique({ where: { demoId_date_phase: { demoId: demo.id, date, phase: input.phase } } });
+        const exclusion =
+          d.counted === false
+            ? { excludedAt: new Date(), excludedById: a.admin.id, excludedReason: NOT_COUNTED }
+            : d.counted === true
+              ? { excludedAt: null, excludedById: null, excludedReason: null }
+              : {};
+        if (existing) {
+          const sameCount = d.counted === undefined || (existing.excludedAt === null) === d.counted;
+          if (Math.abs(existing.kWh - d.kWh) < 1e-9 && sameCount) continue;
+          await tx.circuitDemoReading.update({
+            where: { id: existing.id },
+            data: {
+              ...exclusion,
+              kWh: d.kWh,
+              source: existing.source === "meter" ? "manual" : existing.source === "demo_generated" && !demoMode ? "manual" : existing.source,
+              meterKwh: existing.source === "meter" ? existing.kWh : existing.meterKwh,
+              editedById: a.admin.id,
+            },
+          });
+        } else {
+          await tx.circuitDemoReading.create({
+            data: { demoId: demo.id, date, phase: input.phase, kWh: d.kWh, source: "manual", editedById: a.admin.id, hoursCovered: 24, ...exclusion },
+          });
+        }
+        await logChange(tx, {
+          entity: "circuit_demo_reading", entityId: existing?.id ?? `${demo.id}:${d.date}:${input.phase}`, kind: "edit", field: d.counted === false ? "kWh_not_counted" : "kWh",
+          circuitId: demo.circuitId, demoId: demo.id, oldValue: existing ? { kWh: existing.kWh, source: existing.source } : null, newValue: { kWh: d.kWh }, actorId: a.admin.id,
+        });
+      }
+      await finish(tx, demo.circuitId, a.admin.id);
+    },
+    { timeout: 60_000, maxWait: 20_000 },
+  );
+  logger.info("demo.days_saved", { actorId: a.admin.id, demoId: demo.id, phase: input.phase, days: input.days.length });
+  revalidatePath(pathOf(demo));
+  return { ok: true, saved: input.days.length };
+}
+
+/**
+ * Take a typed day out of the demo period altogether. A day the meter
+ * recorded is not removed — the next fill from the meter would bring it back —
+ * it is left out of the average instead.
+ */
+export async function deleteDemoDay(readingId: string): Promise<Outcome> {
+  const a = await actor("field");
+  if ("error" in a) return { error: a.error };
+  const r = await db.circuitDemoReading.findUnique({ where: { id: readingId }, select: { id: true, demoId: true, date: true, phase: true, kWh: true, source: true } });
+  if (!r) return { error: "That reading is no longer on record." };
+  if (r.source === "meter") {
+    return { error: "The meter recorded that day, so it stays on the demo — untick it to leave it out of the average." };
+  }
+  const g = await editableDemo(r.demoId, a.admin.id, "delete_day");
+  if ("error" in g) return { error: g.error };
+  await db.$transaction(async (tx) => {
+    await tx.circuitDemoReading.delete({ where: { id: r.id } });
+    await logChange(tx, { entity: "circuit_demo_reading", entityId: r.id, kind: "edit", field: "removed", circuitId: g.demo.circuitId, demoId: r.demoId, oldValue: { date: r.date.toISOString().slice(0, 10), kWh: r.kWh, source: r.source }, newValue: null, actorId: a.admin.id });
+    await finish(tx, g.demo.circuitId, a.admin.id);
+  });
+  logger.info("demo.day_removed", { actorId: a.admin.id, readingId, demoId: r.demoId });
+  revalidatePath(pathOf(g.demo));
   return { ok: true };
 }
 

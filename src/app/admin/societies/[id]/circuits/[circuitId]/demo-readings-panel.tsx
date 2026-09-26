@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
-import { acceptDemoPhase, refreshDemoReadings, revertDemoDayToMeter, setDemoDay, setDemoDayExclusion, setDemoPeriods } from "./demo-step-actions";
+import { acceptDemoPhase, deleteDemoDay, refreshDemoReadings, revertDemoDayToMeter, saveDemoDays, setDemoDay, setDemoDayExclusion, setDemoPeriods } from "./demo-step-actions";
 
 export type DemoDayDTO = {
   id: string;
@@ -64,8 +64,34 @@ export function DemoReadingsPanel({
   const [from, setFrom] = useState(own.from || suggested?.from || "");
   const [to, setTo] = useState(own.to || suggested?.to || "");
   const [editingPeriod, setEditingPeriod] = useState(!own.from);
-  const [typedDate, setTypedDate] = useState(missing[0] ?? "");
-  const [typedKwh, setTypedKwh] = useState("");
+  // Every date of the period the meter has nothing for, laid out at once
+  // (2026-09-26, user-asked): type each, remove the ones there is no figure
+  // for, then save them together. Reset whenever the set of missing dates
+  // stays removed after a save. Each day carries a "counted" tick: unticked
+  // days are kept on the demo but out of its average.
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [draftCounted, setDraftCounted] = useState<Record<string, boolean>>({});
+  const [removedAll, setRemoved] = useState<string[]>([]);
+  // A saved day's tick shows at once; it is undone if the server refuses.
+  const [tick, setTick] = useState<Record<string, boolean>>({});
+  const setCounted = (id: string, counted: boolean, reason?: string) => {
+    setTick((cur) => ({ ...cur, [id]: counted }));
+    setError(null);
+    start(async () => {
+      const r = await setDemoDayExclusion(id, !counted, reason);
+      if (r.error) {
+        setError(r.error);
+        setTick((cur) => {
+          const next = { ...cur };
+          delete next[id];
+          return next;
+        });
+      } else router.refresh();
+    });
+  };
+  const removed = removedAll.filter((m) => missing.includes(m));
+  const kept = missing.filter((m) => !removed.includes(m));
+  const blank = kept.filter((m) => (draft[m] ?? "").trim() === "");
   const [edits, setEdits] = useState<Record<string, string>>({});
   const run = (fn: () => Promise<{ error?: string }>) => {
     setError(null);
@@ -80,6 +106,11 @@ export function DemoReadingsPanel({
   const average = counted.length > 0 ? counted.reduce((s, d) => s + d.kWh, 0) / counted.length : null;
   const changed = accepted !== null && (days.some((d) => d.changedSinceAccept) || accepted.countedDays !== counted.length);
   const label = phase === "pre" ? "pre-installation" : "post-installation";
+  type Row = { kind: "stored"; date: string; d: DemoDayDTO } | { kind: "draft"; date: string };
+  const rows: Row[] = [
+    ...days.map((d): Row => ({ kind: "stored", date: d.date, d })),
+    ...(editable ? kept.map((m): Row => ({ kind: "draft", date: m })) : []),
+  ].sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
 
   return (
     <div className="space-y-4">
@@ -163,9 +194,10 @@ export function DemoReadingsPanel({
               until these days are accepted again.
             </p>
           )}
-          {days.length === 0 ? (
+          {days.length === 0 && (!editable || kept.length === 0) ? (
             <p className="text-sm text-[var(--text-muted)]">
-              No days yet. Upload the meter&apos;s CSV on the meter&apos;s page (its hours fill in here), or type the days below.
+              No days yet. Upload the meter&apos;s CSV on the meter&apos;s page (its hours fill in here)
+              {editable && removed.length > 0 ? ", or restore the removed dates to type them." : "."}
             </p>
           ) : (
             <div className="overflow-x-auto">
@@ -182,7 +214,48 @@ export function DemoReadingsPanel({
                   </tr>
                 </thead>
                 <tbody>
-                  {days.map((d) => {
+                  {rows.map((row) => {
+                    if (row.kind === "draft") {
+                      const m = row.date;
+                      return (
+                        <tr key={`draft-${m}`}>
+                          <td className="num">{formatDate(new Date(`${m}T00:00:00Z`))}</td>
+                          <td className="num text-right">
+                            <input
+                              aria-label={`kWh for ${m}`}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              className="field field-auto w-24"
+                              value={draft[m] ?? ""}
+                              onChange={(e) => setDraft({ ...draft, [m]: e.target.value })}
+                            />
+                          </td>
+                          <td>
+                            <StatusChip tone="neu">No reading</StatusChip>
+                          </td>
+                          <td className="num text-right">—</td>
+                          <td className="num text-right">—</td>
+                          <td>
+                            <label className="inline-flex items-center gap-1.5 text-xs">
+                              <input
+                                type="checkbox"
+                                aria-label={`Count ${m} in the average`}
+                                checked={draftCounted[m] !== false}
+                                onChange={(e) => setDraftCounted({ ...draftCounted, [m]: e.target.checked })}
+                              />
+                              {draftCounted[m] === false ? "Not counted" : "Counted"}
+                            </label>
+                          </td>
+                          <td className="text-right">
+                            <button type="button" className="btn-ghost btn-sm" aria-label={`Remove ${m}`} onClick={() => setRemoved([...removed, m])}>
+                              Remove
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const d = row.d;
                     const judge =
                       phase === "pre"
                         ? theoretical
@@ -248,7 +321,29 @@ export function DemoReadingsPanel({
                           {d.hoursCovered === null ? "—" : d.dataHours !== null && d.dataHours < d.hoursCovered ? `${d.hoursCovered} · ${d.dataHours} with data` : d.hoursCovered}
                         </td>
                         <td className="num text-right">{judge}</td>
-                        <td>{d.excluded ? <span className="text-xs text-[var(--text-muted)]">No — {d.excludedReason}</span> : "Yes"}</td>
+                        <td>
+                          {editable ? (
+                            <label className="inline-flex items-center gap-1.5 text-xs">
+                              <input
+                                type="checkbox"
+                                aria-label={`Count ${d.date} in the average`}
+                                checked={tick[d.id] ?? !d.excluded}
+                                onChange={(e) => {
+                                  if (e.target.checked) setCounted(d.id, true);
+                                  else {
+                                    const why = window.prompt(`Leave ${d.date} out of the average? It stays listed with this reason.`, "Not counted in the average");
+                                    if (why) setCounted(d.id, false, why);
+                                  }
+                                }}
+                              />
+                              {!(tick[d.id] ?? !d.excluded) ? <span className="text-[var(--text-muted)]">Not counted{d.excludedReason && d.excludedReason !== "Not counted in the average" ? ` — ${d.excludedReason}` : ""}</span> : "Counted"}
+                            </label>
+                          ) : d.excluded ? (
+                            <span className="text-xs text-[var(--text-muted)]">No — {d.excludedReason}</span>
+                          ) : (
+                            "Yes"
+                          )}
+                        </td>
                         {editable && (
                           <td className="whitespace-nowrap text-right">
                             {edits[d.id] === undefined && (
@@ -261,21 +356,21 @@ export function DemoReadingsPanel({
                                 Use meter
                               </button>
                             )}
-                            {d.excluded ? (
-                              <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={() => run(() => setDemoDayExclusion(d.id, false))}>
-                                Include
-                              </button>
-                            ) : (
+                            {d.source !== "meter" && (
                               <button
                                 type="button"
                                 className="btn-ghost btn-sm"
                                 disabled={pending}
+                                aria-label={`Remove ${d.date} from the period`}
                                 onClick={() => {
-                                  const why = window.prompt(`Why is ${d.date} excluded? It stays listed with the reason.`);
-                                  if (why) run(() => setDemoDayExclusion(d.id, true, why));
+                                  if (window.confirm(`Take ${d.date} out of this demo period? The typed figure is removed (kept in the change log).`)) run(async () => {
+                                      const r = await deleteDemoDay(d.id);
+                                      if (!r.error) setRemoved((cur) => [...cur, d.date]);
+                                      return r;
+                                    });
                                 }}
                               >
-                                Exclude
+                                Remove
                               </button>
                             )}
                           </td>
@@ -288,34 +383,38 @@ export function DemoReadingsPanel({
             </div>
           )}
 
-          {editable && missing.length > 0 && (
-            <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-[var(--border-subtle)]">
-              <Field label="Type a day the meter has no reading for" htmlFor={`dp-${phase}-type-day`}>
-                <select id={`dp-${phase}-type-day`} className="field field-auto" value={typedDate} onChange={(e) => setTypedDate(e.target.value)}>
-                  {missing.map((m) => (
-                    <option key={m} value={m}>
-                      {formatDate(new Date(`${m}T00:00:00Z`))}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="kWh" htmlFor={`dp-${phase}-type-kwh`}>
-                <input id={`dp-${phase}-type-kwh`} type="number" step="0.01" className="field field-auto w-28" value={typedKwh} onChange={(e) => setTypedKwh(e.target.value)} />
-              </Field>
-              <button
-                type="button"
-                className="btn-secondary mb-2"
-                disabled={pending || !typedDate || typedKwh.trim() === ""}
-                onClick={() =>
-                  run(async () => {
-                    const r = await setDemoDay({ demoId, date: typedDate, phase, kWh: Number(typedKwh) });
-                    if (!r.error) setTypedKwh("");
-                    return r;
-                  })
-                }
-              >
-                Add the day
-              </button>
+          {editable && (kept.length > 0 || removed.length > 0) && (
+            <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[var(--border-subtle)]">
+              {kept.length > 0 && (
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={pending || blank.length > 0}
+                  onClick={() =>
+                    run(() =>
+                      saveDemoDays({ demoId, phase, days: kept.map((m) => ({ date: m, kWh: Number(draft[m]), counted: draftCounted[m] !== false })) }),
+                    )
+                  }
+                >
+                  {pending ? "Saving…" : `Save ${kept.length} day${kept.length === 1 ? "" : "s"}`}
+                </button>
+              )}
+              <span className="text-xs text-[var(--text-muted)]">
+                {blank.length > 0
+                  ? `Type a figure for each day, or remove the ${blank.length === 1 ? "day" : "days"} there is no reading for.`
+                  : kept.length > 0
+                    ? "Saved days can still be edited or excluded before they are accepted."
+                    : ""}
+                {removed.length > 0 && (
+                  <>
+                    {" "}
+                    {removed.length} date{removed.length === 1 ? "" : "s"} removed —{" "}
+                    <button type="button" className="underline" onClick={() => setRemoved([])}>
+                      restore
+                    </button>
+                  </>
+                )}
+              </span>
             </div>
           )}
 

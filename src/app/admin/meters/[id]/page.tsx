@@ -7,6 +7,8 @@ import { DailyBars, MeterAlerts, MeterDemoCard, MeterHourlyChart, MeterReadout, 
 import { circuitLabelOf, meterDemoContext, meterHourly, meterRow } from "@/lib/meter-view";
 import { db } from "@/lib/db";
 import { MeterDetailActions } from "./meter-detail-client";
+import { MeterHistoryEditor } from "./meter-history-editor";
+import { isDemoMode } from "@/lib/demo-mode";
 
 export default async function MeterDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const actor = await requireAdminPage();
@@ -103,6 +105,37 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
   const EVENT_TONE = { ok: "var(--signal)", warn: "var(--warn-fg)", bad: "var(--bad-fg)", info: "var(--chart-mark)" } as const;
 
   const canManage = actor.user.adminPermissions.includes("manage_users");
+
+  // The history editor (2026-09-26): the circuits a stretch can go to, the
+  // entries as they read on screen (the last day inclusive), and the days of
+  // readings no entry covers.
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const demoMode = canManage ? await isDemoMode() : false;
+  const circuitOptions = canManage
+    ? (
+        await db.circuit.findMany({
+          where: { voidedAt: null },
+          orderBy: [{ society: { name: "asc" } }, { createdAt: "asc" }],
+          select: { id: true, location: true, lightType: true, society: { select: { name: true } } },
+        })
+      ).map((c) => ({ id: c.id, label: `${c.society.name} · ${circuitLabelOf(c.location, c.lightType)}` }))
+    : [];
+  const stayDTOs = stays.map((st) => ({
+    id: st.id,
+    label: `${st.society.name} · ${circuitLabelOf(st.circuit.location, st.circuit.lightType)}`,
+    from: iso(st.installedAt),
+    to: st.removedAt ? iso(new Date(st.removedAt.getTime() - 86_400_000)) : null,
+  }));
+  const hourDays = await db.meterHourlyReading.groupBy({ by: ["day"], where: { meterId: id } });
+  const uncovered = hourDays
+    .map((h) => h.day)
+    .filter((d) => !stays.some((st) => d >= st.installedAt && (!st.removedAt || d < st.removedAt)))
+    .sort((a, b) => a.getTime() - b.getTime());
+  const unassigned = {
+    days: uncovered.length,
+    first: uncovered.length ? iso(uncovered[0]) : null,
+    last: uncovered.length ? iso(uncovered[uncovered.length - 1]) : null,
+  };
 
   return (
     <>
@@ -261,6 +294,15 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
                   </li>
                 ))}
               </ol>
+            )}
+            {canManage && (
+              <MeterHistoryEditor
+                meterId={meter.id}
+                demoMode={demoMode}
+                stays={stayDTOs}
+                circuits={circuitOptions}
+                unassigned={unassigned}
+              />
             )}
           </Card>
 

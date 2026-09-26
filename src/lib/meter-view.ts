@@ -248,9 +248,22 @@ export async function meterRow(id: string, societyId?: string): Promise<MeterRow
  * truncated query dressed as a partial day is a false claim, and partiality
  * is exactly the fact this chart promises to report honestly.
  */
-export async function meterHourly(meterId: string, days = 14) {
+export async function meterHourly(meterId: string, days = 14, societyId?: string) {
+  // INV-05 (2026-09-26): a reused meter carries hours from every society it
+  // has served. A society asking sees only the hours it was installed there.
+  let scope: { OR: { day: { gte: Date; lt?: Date } }[] } | null = null;
+  if (societyId) {
+    const stays = await db.meterInstallation.findMany({
+      where: { meterId, societyId },
+      select: { installedAt: true, removedAt: true },
+    });
+    if (stays.length === 0) return [];
+    scope = {
+      OR: stays.map((s) => ({ day: { gte: s.installedAt, ...(s.removedAt ? { lt: s.removedAt } : {}) } })),
+    };
+  }
   const latest = await db.meterHourlyReading.findFirst({
-    where: { meterId },
+    where: { meterId, ...(scope ?? {}) },
     orderBy: { day: "desc" },
     select: { day: true },
   });
@@ -258,7 +271,7 @@ export async function meterHourly(meterId: string, days = 14) {
   const cutoff = new Date(latest.day);
   cutoff.setUTCDate(cutoff.getUTCDate() - (days - 1));
   const rows = await db.meterHourlyReading.findMany({
-    where: { meterId, day: { gte: cutoff } },
+    where: { meterId, day: { gte: cutoff }, ...(scope ? { AND: [scope] } : {}) },
     orderBy: [{ day: "desc" }, { hour: "asc" }],
     select: { day: true, hour: true, kWh: true },
   });
@@ -292,9 +305,9 @@ export async function meterHourly(meterId: string, days = 14) {
 export type MeterDemo = {
   sequence: number;
   lightCount: number;
-  beforeKwhPerDay: number;
-  afterKwhPerDay: number;
-  savingsPct: number;
+  beforeKwhPerDay: number | null;
+  afterKwhPerDay: number | null;
+  savingsPct: number | null;
   rejected: boolean;
   rejectionReason: string | null;
 };
@@ -456,11 +469,12 @@ export async function meterDemoContext(meterId: string, societyId?: string): Pro
           representedLightCount: true,
           preInstallBaseline: true,
           benchmarkSavingsPct: true,
-          lightReplacementDate: true,
           rescaleEvents: true,
           demos: {
+            where: { voidedAt: null },
             orderBy: { sequence: "asc" },
             select: {
+              lightReplacementDate: true,
               sequence: true,
               meteredLightCount: true,
               preInstallBaseline: true,
@@ -478,9 +492,15 @@ export async function meterDemoContext(meterId: string, societyId?: string): Pro
 
   const c = m.circuit;
   const now = new Date();
+  // When the lights went in: the latest counted demo's replacement day.
+  const replaced =
+    c.demos
+      .filter((d) => !d.rejected && d.lightReplacementDate)
+      .map((d) => d.lightReplacementDate!)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
   const events = c.rescaleEvents as RescaleEvent[];
   const currentBaseline = effectiveBaselineAt(c.preInstallBaseline, events, now);
-  const hourly = await meterHourly(meterId, 35);
+  const hourly = await meterHourly(meterId, 35, societyId);
 
   return {
     circuitId: m.circuitId,
@@ -489,8 +509,8 @@ export async function meterDemoContext(meterId: string, societyId?: string): Pro
     preInstallBaseline: c.preInstallBaseline,
     currentBaseline,
     benchmarkSavingsPct: c.benchmarkSavingsPct,
-    installedAt: c.lightReplacementDate?.toISOString().slice(0, 10) ?? null,
-    lastVerifiedAt: lastVerifiedAt(events, c.lightReplacementDate, now)?.toISOString().slice(0, 10) ?? null,
+    installedAt: replaced?.toISOString().slice(0, 10) ?? null,
+    lastVerifiedAt: lastVerifiedAt(events, replaced, now)?.toISOString().slice(0, 10) ?? null,
     demos: c.demos.map((d) => ({
       sequence: d.sequence,
       lightCount: d.meteredLightCount,

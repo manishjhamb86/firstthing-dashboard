@@ -29,18 +29,21 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function PostInstallReportPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; circuitId: string }>;
+  searchParams: Promise<{ demo?: string }>;
 }) {
   const session = await requireAdminPage();
   const perms = session.user.adminPermissions ?? [];
   if (!perms.includes("manage_survey") && !perms.includes("manage_pipeline")) redirect("/admin");
 
   const { id, circuitId } = await params;
-  const report = await loadCircuitReport(circuitId);
+  const { demo: demoParam } = await searchParams;
+  const report = await loadCircuitReport(circuitId, demoParam ?? null);
   if (!report || report.society.id !== id) notFound();
-  const { circuit, society, preDays, demoPostDays: postDays, demoWindows, preAverage, preIncludedCount, effBaselineNow, inventory } = report;
-  if (!circuit.lightReplacementDate) notFound(); // no post phase yet — the report doesn't exist
+  const { circuit, society, preDays, demoPostDays: postDays, demoWindows, preAverage, preIncludedCount, demoBaseline: effBaselineNow, inventory } = report;
+  if (!report.demo?.lightReplacementDate) notFound(); // no post phase yet — the report doesn't exist
   const circuitHref = `/admin/societies/${id}/circuits/${circuitId}`;
 
   const summary = summarize(effBaselineNow, postDays);
@@ -89,7 +92,7 @@ export default async function PostInstallReportPage({
             <p className="text-[20px] font-bold tracking-[-0.01em]">After installation</p>
             <p className="mt-1 text-xs text-[var(--text-subtle)]">
               Lights replaced{" "}
-              <span className="num">{formatDate(circuit.lightReplacementDate)}</span>
+              <span className="num">{formatDate(report.demo.lightReplacementDate)}</span>
               <br />
               Generated <span className="num">{generated}</span>
             </p>
@@ -173,9 +176,9 @@ export default async function PostInstallReportPage({
             {effBaselineNow !== null && preAverage !== null && Math.abs(effBaselineNow - preAverage) > 1e-9 && (
               <>
                 {" "}
-                After recorded light-count changes, the baseline in force is{" "}
-                <strong className="num text-[var(--text)]">{effBaselineNow.toFixed(2)}</strong> kWh/day —
-                each day below is judged against the baseline in force on that day.
+                The accepted baseline is{" "}
+                <strong className="num text-[var(--text)]">{effBaselineNow.toFixed(2)}</strong> kWh/day — the
+                figure accepted for this demo, and the one each day below is judged against.
               </>
             )}
           </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { approveGatePass, rejectGatePass } from "./actions";
+import { decideDemoGatePass } from "./demo-step-actions";
 import { ErrorText } from "@/components/ui";
 
 export function GatePassApproval({ gatePassId }: { gatePassId: string }) {
@@ -11,14 +11,14 @@ export function GatePassApproval({ gatePassId }: { gatePassId: string }) {
 
   function approve() {
     startTransition(async () => {
-      const result = await approveGatePass(gatePassId);
+      const result = await decideDemoGatePass(gatePassId, "approve");
       setError(result?.error);
     });
   }
 
   function reject() {
     startTransition(async () => {
-      const result = await rejectGatePass(gatePassId, reason);
+      const result = await decideDemoGatePass(gatePassId, "reject", reason);
       setError(result?.error);
     });
   }

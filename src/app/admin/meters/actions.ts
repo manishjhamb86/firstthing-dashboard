@@ -6,7 +6,10 @@ import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
-import { refuseOverlap } from "@/lib/meter-installation";
+import { movedRanges, planSpanAssignment, toUtcMidnight, type SpanPlan } from "@/lib/meter-installation";
+import { afterHistoryChange, applySpanPlan, lockedDemosTouched, syncMeterCache } from "@/lib/meter-history";
+import { logChange } from "@/lib/change-log";
+import { isDemoMode } from "@/lib/demo-mode";
 import { formatDate } from "@/lib/format-date";
 import { authorizeUrl, EWELINK_STATE_COOKIE } from "@/lib/ewelink-sign";
 import { resolveEwelinkConfig, syncMeterDevices, EwelinkNeedsAuthorisation } from "@/lib/ewelink";
@@ -143,30 +146,20 @@ export async function syncMetersNow(): Promise<{ error?: string; devices?: numbe
 }
 
 /**
- * Bind a meter to the circuit it measures. CON-11 makes the circuit the
- * billing grain and the ask is explicitly the demo circuit, so the circuit
- * is the assignment; the society is carried alongside it for scoping and
- * may be set on its own while the circuit is still undecided.
- */
-/**
- * Bind a meter to a circuit — and record the STAY, not just the pointer.
+ * Record where a meter is now (a forward move). The meter HISTORY is the one
+ * record of where a meter was (2026-09-26): this closes the open entry on the
+ * day given and opens the new one the same instant (a meter exchange leaves no
+ * gap and no overlap), then re-files the readings of every circuit touched.
  *
- * Meters get reused: pulled from one society, installed in another, renamed on
- * the way. The device's own `circuitId` says where it is NOW; a
- * `MeterInstallation` says where it was WHEN, and that is what the readings
- * are attributed through (researched 2026-09-09 — see meter-installation.ts).
- *
- * A move is a removal and an installation sharing one instant, which is how UK
- * settlement models a meter exchange: the outgoing Remove Date equals the
- * incoming Install Date, so the series has no gap and no overlap.
+ * Every entry names a circuit — the society follows from it. Rewriting past
+ * history (a date inside an earlier entry) is the demo-mode span editor's job.
  */
 export async function assignMeter(input: {
   meterId: string;
-  societyId: string | null;
   circuitId: string | null;
-  /** When it physically went in. Defaults to now. */
+  /** When it physically went in (or came out). Defaults to today. */
   installedOn?: string;
-  /** Why it left the circuit it was on, when this is a move. */
+  /** Why it left the circuit it was on, when this is a move or a removal. */
   removalNote?: string;
 }): Promise<{ error?: string; assigned?: true }> {
   const actor = await resolveAdmin();
@@ -181,38 +174,16 @@ export async function assignMeter(input: {
   if (!meter.hasEnergySignal && input.circuitId) {
     return { error: `${meter.name} reports no electricity datapoint — only a metering device can measure a circuit.` };
   }
-
-  let societyId = input.societyId;
   if (input.circuitId) {
-    const circuit = await db.circuit.findUnique({
-      where: { id: input.circuitId },
-      select: { id: true, societyId: true, voidedAt: true, meterDevice: { select: { id: true, name: true } } },
-    });
+    const circuit = await db.circuit.findUnique({ where: { id: input.circuitId }, select: { voidedAt: true } });
     if (!circuit) return { error: "That circuit no longer exists." };
     if (circuit.voidedAt) return { error: "That circuit has been removed." };
-    // One meter per circuit: two meters silently measuring one circuit is
-    // two sources for one billed figure, which INV-02 has no way to resolve.
-    if (circuit.meterDevice && circuit.meterDevice.id !== meter.id) {
-      return { error: `That circuit is already metered by ${circuit.meterDevice.name}. Unassign it first.` };
-    }
-    if (societyId && societyId !== circuit.societyId) {
-      return { error: "That circuit belongs to a different society." };
-    }
-    societyId = circuit.societyId;
-  }
-  if (societyId) {
-    const society = await db.society.findUnique({ where: { id: societyId }, select: { id: true } });
-    if (!society) return { error: "That society no longer exists." };
   }
 
-  // The changeover instant. One value closes the old stay and opens the new,
-  // so the two intervals touch without overlapping — the exclusion constraints
-  // in the database enforce that, and this is what satisfies them.
-  const at = input.installedOn ? new Date(`${input.installedOn}T00:00:00.000Z`) : new Date();
+  const today = toUtcMidnight(new Date());
+  const at = input.installedOn ? new Date(`${input.installedOn}T00:00:00.000Z`) : today;
   if (Number.isNaN(at.getTime())) return { error: "That installation date could not be read." };
-  if (at.getTime() > Date.now() + 86_400_000) {
-    return { error: "A meter cannot be recorded as installed in the future." };
-  }
+  if (at.getTime() > today.getTime()) return { error: "A meter cannot be recorded as installed in the future." };
 
   const open = await db.meterInstallation.findFirst({
     where: { meterId: meter.id, removedAt: null },
@@ -220,74 +191,201 @@ export async function assignMeter(input: {
   });
   if (open && at.getTime() <= open.installedAt.getTime()) {
     return {
-      error: `This meter has been installed on its current circuit since ${formatDate(open.installedAt)} — a move has to be dated after that.`,
+      error: `This meter has been on its current circuit since ${formatDate(open.installedAt)} — a move has to be dated after that. Correcting earlier history is done in demo mode from the meter's page.`,
     };
   }
+  if (open && input.circuitId === open.circuitId) return { error: "The meter is already on that circuit." };
 
+  const stays = await db.meterInstallation.findMany({
+    where: { OR: [{ meterId: meter.id }, ...(input.circuitId ? [{ circuitId: input.circuitId }] : [])] },
+    select: { id: true, meterId: true, circuitId: true, societyId: true, installedAt: true, removedAt: true },
+  });
+  // A forward move only ever closes OPEN entries; anything else rewrites the past.
   if (input.circuitId) {
-    const [meterStays, circuitStays] = await Promise.all([
-      db.meterInstallation.findMany({
-        where: { meterId: meter.id, ...(open ? { id: { not: open.id } } : {}) },
-        select: { id: true, circuitId: true, societyId: true, installedAt: true, removedAt: true },
-      }),
-      db.meterInstallation.findMany({
-        where: { circuitId: input.circuitId },
-        select: { id: true, circuitId: true, societyId: true, installedAt: true, removedAt: true },
-      }),
-    ]);
-    const refusal = refuseOverlap({
-      installedAt: at,
-      meterStays,
-      // The stay we are about to close does not collide with the one we are
-      // about to open — they share an instant, which is legal.
-      circuitStays: circuitStays.filter((c) => c.id !== open?.id),
-    });
-    if (refusal) {
-      logger.warn("meter.assign_refused", { actorId: actor.id, meterId: meter.id, reason: refusal.at });
-      return { error: refusal.message };
+    const plan = planSpanAssignment({ meterId: meter.id, circuitId: input.circuitId, from: at, to: null, stays });
+    if ("error" in plan) return { error: plan.error };
+    const rewrites = plan.changes.some((c) => c.kind !== "trim-end" || c.stay.removedAt !== null);
+    if (rewrites) {
+      logger.warn("meter.assign_refused", { actorId: actor.id, meterId: meter.id, reason: "history_rewrite" });
+      return { error: "That date falls inside earlier recorded history (this meter's or another meter's on that circuit). Correcting past history is done in demo mode from the meter's page." };
     }
+    const locked = await lockedDemosTouched(plan.changes.map((c) => ({ circuitId: c.stay.circuitId, from: at, to: null })));
+    if (locked.length > 0) return { error: `That would move readings under ${locked.join(", ")}, whose report has been shared. Unlock it first.` };
+    const affected = await db.$transaction((tx) => applySpanPlan(tx, plan, { actorId: actor.id, reason: input.removalNote?.trim() || null }));
+    await afterHistoryChange(affected.circuitIds, actor.id);
+  } else if (open) {
+    // Taking the meter off its circuit: close the open entry.
+    await db.$transaction(async (tx) => {
+      await tx.meterInstallation.update({ where: { id: open.id }, data: { removedAt: at, removedById: actor.id, removalNote: input.removalNote?.trim() || null } });
+      await logChange(tx, { entity: "meter_installation", entityId: open.id, kind: "history_edit", field: "removedAt", meterId: meter.id, circuitId: open.circuitId, oldValue: { removedAt: null }, newValue: { removedAt: at.toISOString().slice(0, 10) }, reason: input.removalNote?.trim() || null, actorId: actor.id });
+      await syncMeterCache(tx, [meter.id], actor.id);
+    });
+    await afterHistoryChange([open.circuitId], actor.id);
+  } else {
+    return { error: "The meter is not on any circuit." };
   }
 
-  await db.$transaction(async (tx) => {
-    if (open) {
-      await tx.meterInstallation.update({
-        where: { id: open.id },
-        data: { removedAt: at, removedById: actor.id, removalNote: input.removalNote?.trim() || null },
-      });
-    }
-    if (input.circuitId && societyId) {
-      await tx.meterInstallation.create({
-        data: {
-          meterId: meter.id,
-          circuitId: input.circuitId,
-          societyId,
-          installedAt: at,
-          installedById: actor.id,
-        },
-      });
-    }
-    await tx.meterDevice.update({
-      where: { id: meter.id },
-      data: {
-        societyId,
-        circuitId: input.circuitId,
-        assignedAt: societyId || input.circuitId ? at : null,
-        assignedById: societyId || input.circuitId ? actor.id : null,
-      },
-    });
-  });
-  logger.info("meter.assigned", {
-    actorId: actor.id,
-    meterId: meter.id,
-    societyId,
-    circuitId: input.circuitId,
-    installedAt: at.toISOString(),
-    movedFromCircuitId: open?.circuitId ?? null,
-  });
+  logger.info("meter.assigned", { actorId: actor.id, meterId: meter.id, circuitId: input.circuitId, installedAt: at.toISOString(), movedFromCircuitId: open?.circuitId ?? null });
   revalidatePath("/admin/meters");
-  if (societyId) revalidatePath(`/admin/societies/${societyId}`);
-  if (input.circuitId) revalidatePath(`/admin/circuits/${input.circuitId}`);
+  revalidatePath(`/admin/meters/${meter.id}`);
   return { assigned: true };
+}
+
+export type SpanPreview = {
+  changes: Array<{ kind: string; meterName: string; circuitLabel: string; before: string; after: string }>;
+  releasedDays: number;
+  lockedDemos: string[];
+};
+
+async function describePlan(plan: SpanPlan): Promise<SpanPreview> {
+  const meterIds = [...new Set(plan.changes.map((c) => c.stay.meterId))];
+  const circuitIds = [...new Set(plan.changes.map((c) => c.stay.circuitId))];
+  const [meters, circuits] = await Promise.all([
+    db.meterDevice.findMany({ where: { id: { in: meterIds } }, select: { id: true, name: true } }),
+    db.circuit.findMany({ where: { id: { in: circuitIds } }, select: { id: true, location: true, lightType: true, society: { select: { name: true } } } }),
+  ]);
+  const name = (id: string) => meters.find((m) => m.id === id)?.name ?? id;
+  const label = (id: string) => {
+    const c = circuits.find((x) => x.id === id);
+    return c ? `${c.society.name} · ${c.location || c.lightType}` : id;
+  };
+  const span = (a: Date, b: Date | null) => `${formatDate(a)} → ${b ? formatDate(b) : "now"}`;
+  const moved = movedRanges(plan);
+  const releasedDays = await db.meterReading.count({
+    where: {
+      OR: moved.map((m) => ({ circuitId: m.stay.circuitId, date: { gte: m.from, ...(m.to ? { lt: m.to } : {}) } })),
+      usedInCalculationId: { not: null },
+    },
+  });
+  const lockedDemos = await lockedDemosTouched(moved.map((m) => ({ circuitId: m.stay.circuitId, from: m.from, to: m.to })));
+  return {
+    changes: plan.changes.map((c) => ({
+      kind: c.kind,
+      meterName: name(c.stay.meterId),
+      circuitLabel: label(c.stay.circuitId),
+      before: span(c.stay.installedAt, c.stay.removedAt),
+      after:
+        c.kind === "delete"
+          ? "removed"
+          : c.kind === "trim-end"
+            ? span(c.stay.installedAt, c.removedAt)
+            : c.kind === "trim-start"
+              ? span(c.installedAt, c.stay.removedAt)
+              : `${span(c.stay.installedAt, c.removedAt)} and ${span(c.tailFrom, c.stay.removedAt)}`,
+    })),
+    releasedDays,
+    lockedDemos,
+  };
+}
+
+async function spanPlanFor(input: { meterId: string; circuitId: string; from: string; to: string | null; ignoreStayId?: string }) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.from) || (input.to && !/^\d{4}-\d{2}-\d{2}$/.test(input.to))) {
+    return { error: "Pick the dates in full." } as const;
+  }
+  const from = new Date(`${input.from}T00:00:00Z`);
+  // The span's last day is inclusive on screen; the entry ends the day after.
+  const to = input.to ? new Date(new Date(`${input.to}T00:00:00Z`).getTime() + 86_400_000) : null;
+  const circuit = await db.circuit.findUnique({ where: { id: input.circuitId }, select: { voidedAt: true } });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." } as const;
+  const stays = await db.meterInstallation.findMany({
+    where: { OR: [{ meterId: input.meterId }, { circuitId: input.circuitId }], ...(input.ignoreStayId ? { id: { not: input.ignoreStayId } } : {}) },
+    select: { id: true, meterId: true, circuitId: true, societyId: true, installedAt: true, removedAt: true },
+  });
+  const plan = planSpanAssignment({ meterId: input.meterId, circuitId: input.circuitId, from, to, stays });
+  if ("error" in plan) return { error: plan.error } as const;
+  return { plan } as const;
+}
+
+async function demoModeHistoryActor() {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." } as const;
+  if (!actor.permissions.includes("manage_users")) return { error: "Changing a meter's history is a society-management action (Manage users)." } as const;
+  if (!(await isDemoMode())) {
+    logger.warn("meter.history_edit_refused", { actorId: actor.id, reason: "not_demo_mode" });
+    return { error: "Correcting a meter's past history is a demo-mode action — after go-live the history only moves forward." } as const;
+  }
+  return { actor } as const;
+}
+
+/** Preview what assigning a span of this meter's readings would change. */
+export async function previewMeterSpan(input: { meterId: string; circuitId: string; from: string; to: string | null }): Promise<{ error?: string; preview?: SpanPreview }> {
+  const a = await demoModeHistoryActor();
+  if ("error" in a) return { error: a.error };
+  const r = await spanPlanFor(input);
+  if ("error" in r) return { error: r.error };
+  return { preview: await describePlan(r.plan) };
+}
+
+/**
+ * Assign a span of this meter's readings to a circuit (demo mode). The readings
+ * follow the history: the entry is written, neighbours trimmed, and every
+ * circuit touched is re-filed — its monitoring days and its unlocked demos.
+ */
+export async function assignMeterSpan(input: { meterId: string; circuitId: string; from: string; to: string | null; reason: string }): Promise<{ error?: string; ok?: true }> {
+  const a = await demoModeHistoryActor();
+  if ("error" in a) return { error: a.error };
+  if (!input.reason.trim()) return { error: "Say why the history is being corrected — the old entries are kept in the change log with it." };
+  const meter = await db.meterDevice.findUnique({ where: { id: input.meterId }, select: { hasEnergySignal: true, name: true } });
+  if (!meter) return { error: "That meter is no longer in the mirror." };
+  if (!meter.hasEnergySignal) return { error: `${meter.name} reports no electricity datapoint.` };
+  const r = await spanPlanFor(input);
+  if ("error" in r) return { error: r.error };
+  const preview = await describePlan(r.plan);
+  if (preview.releasedDays > 0) return { error: `${preview.releasedDays} of the days this would move are on a released bill — they cannot move.` };
+  if (preview.lockedDemos.length > 0) return { error: `That would move readings under ${preview.lockedDemos.join(", ")}, whose report has been shared. Unlock it first.` };
+  const affected = await db.$transaction((tx) => applySpanPlan(tx, r.plan, { actorId: a.actor.id, reason: input.reason.trim() }));
+  await afterHistoryChange(affected.circuitIds, a.actor.id);
+  logger.info("meter.span_assigned", { actorId: a.actor.id, ...input, changes: r.plan.changes.length });
+  revalidatePath(`/admin/meters/${input.meterId}`);
+  revalidatePath("/admin/meters");
+  return { ok: true };
+}
+
+/** Change one history entry's dates (demo mode) — its neighbours are trimmed to fit. */
+export async function editMeterStay(input: { stayId: string; from: string; to: string | null; reason: string }): Promise<{ error?: string; ok?: true }> {
+  const a = await demoModeHistoryActor();
+  if ("error" in a) return { error: a.error };
+  if (!input.reason.trim()) return { error: "Say why the history is being corrected." };
+  const stay = await db.meterInstallation.findUnique({ where: { id: input.stayId } });
+  if (!stay) return { error: "That history entry is no longer on record." };
+  const r = await spanPlanFor({ meterId: stay.meterId, circuitId: stay.circuitId, from: input.from, to: input.to, ignoreStayId: stay.id });
+  if ("error" in r) return { error: r.error };
+  const preview = await describePlan(r.plan);
+  if (preview.releasedDays > 0) return { error: `${preview.releasedDays} of the days this would move are on a released bill — they cannot move.` };
+  if (preview.lockedDemos.length > 0) return { error: `That would move readings under ${preview.lockedDemos.join(", ")}, whose report has been shared. Unlock it first.` };
+  const affected = await db.$transaction(async (tx) => {
+    await tx.meterInstallation.delete({ where: { id: stay.id } });
+    await logChange(tx, { entity: "meter_installation", entityId: stay.id, kind: "history_edit", field: "edited", meterId: stay.meterId, circuitId: stay.circuitId, oldValue: { installedAt: stay.installedAt.toISOString().slice(0, 10), removedAt: stay.removedAt?.toISOString().slice(0, 10) ?? null }, newValue: { from: input.from, to: input.to }, reason: input.reason.trim(), actorId: a.actor.id });
+    const res = await applySpanPlan(tx, r.plan, { actorId: a.actor.id, reason: input.reason.trim() });
+    return [...res.circuitIds, stay.circuitId];
+  });
+  await afterHistoryChange(affected, a.actor.id);
+  revalidatePath(`/admin/meters/${stay.meterId}`);
+  return { ok: true };
+}
+
+/** Remove one history entry (demo mode). Its days go back to unassigned. */
+export async function deleteMeterStay(input: { stayId: string; reason: string }): Promise<{ error?: string; ok?: true }> {
+  const a = await demoModeHistoryActor();
+  if ("error" in a) return { error: a.error };
+  if (!input.reason.trim()) return { error: "Say why the entry is being removed." };
+  const stay = await db.meterInstallation.findUnique({ where: { id: input.stayId } });
+  if (!stay) return { error: "That history entry is no longer on record." };
+  const released = await db.meterReading.count({
+    where: { circuitId: stay.circuitId, meterId: stay.meterId, date: { gte: stay.installedAt, ...(stay.removedAt ? { lt: stay.removedAt } : {}) }, usedInCalculationId: { not: null } },
+  });
+  if (released > 0) return { error: `${released} of this entry's days are on a released bill — it cannot be removed.` };
+  const locked = await lockedDemosTouched([{ circuitId: stay.circuitId, from: stay.installedAt, to: stay.removedAt }]);
+  if (locked.length > 0) return { error: `That would move readings under ${locked.join(", ")}, whose report has been shared. Unlock it first.` };
+  await db.$transaction(async (tx) => {
+    await tx.meterInstallation.delete({ where: { id: stay.id } });
+    await tx.circuitDemo.updateMany({ where: { meterInstallationId: stay.id }, data: { meterInstallationId: null } });
+    await logChange(tx, { entity: "meter_installation", entityId: stay.id, kind: "history_edit", field: "deleted", meterId: stay.meterId, circuitId: stay.circuitId, oldValue: { installedAt: stay.installedAt.toISOString().slice(0, 10), removedAt: stay.removedAt?.toISOString().slice(0, 10) ?? null }, reason: input.reason.trim(), actorId: a.actor.id });
+    await syncMeterCache(tx, [stay.meterId], a.actor.id);
+  });
+  await afterHistoryChange([stay.circuitId], a.actor.id);
+  revalidatePath(`/admin/meters/${stay.meterId}`);
+  return { ok: true };
 }
 
 /**

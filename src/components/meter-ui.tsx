@@ -501,14 +501,14 @@ export function MeterDemoCard({ context }: { context: MeterDemoContext }) {
                   <span className="font-semibold">Demo {d.sequence}</span>
                   <span style={{ color: "var(--text-muted)" }}>
                     {" — "}
-                    {d.lightCount} lights · {d.beforeKwhPerDay.toFixed(2)} → {d.afterKwhPerDay.toFixed(2)} kWh/day
+                    {d.lightCount} lights · {d.beforeKwhPerDay?.toFixed(2) ?? "—"} → {d.afterKwhPerDay?.toFixed(2) ?? "—"} kWh/day
                   </span>
                 </div>
                 {d.rejected ? (
                   <StatusChip tone="bad">Rejected{d.rejectionReason ? ` — ${d.rejectionReason}` : ""}</StatusChip>
                 ) : (
                   <span className="num text-[13px] font-semibold" style={{ color: "var(--signal)" }}>
-                    {d.savingsPct.toFixed(2)}%
+                    {d.savingsPct === null ? "in progress" : `${d.savingsPct.toFixed(2)}%`}
                   </span>
                 )}
               </li>

@@ -1,26 +1,29 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { submitGatePass } from "./actions";
+import { useRouter } from "next/navigation";
+import { submitDemoGatePass } from "./demo-step-actions";
 import { Card, ErrorText, Field } from "@/components/ui";
 
 export function GatePassForm({
-  circuitId,
+  demoId,
   kind = "demo_install",
 }: {
-  circuitId: string;
+  demoId: string;
   kind?: "demo_install" | "demo_install_completion";
 }) {
   const [itemsText, setItemsText] = useState("");
   const [photoUrl, setPhotoUrl] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function submit() {
     startTransition(async () => {
       const items = itemsText.split("\n");
-      const result = await submitGatePass(circuitId, items, photoUrl, kind);
+      const result = await submitDemoGatePass({ demoId, kind, items, photoUrl });
       setError(result?.error);
+      if (!result?.error) router.refresh();
     });
   }
 

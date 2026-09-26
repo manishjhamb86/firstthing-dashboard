@@ -6,7 +6,7 @@ import { resolveAdmin } from "@/lib/admin-permissions";
 import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
 import { REFUSAL_MESSAGE, refuseRescale, refuseVoid, rescaleBaseline } from "@/lib/benchmark-rescale";
-import { startOfDayUTC } from "@/lib/monitoring-window";
+import { utcMidnight as startOfDayUTC } from "@/lib/circuit-load";
 
 export type RescaleResult = { error?: string };
 

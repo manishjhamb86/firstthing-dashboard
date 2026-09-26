@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { recordLightReplacement, type ReplacementLine } from "./actions";
+import { useRouter } from "next/navigation";
+import { recordDemoReplacement, type DemoReplacementLine as ReplacementLine } from "./demo-step-actions";
 import { Card, ErrorText, Field } from "@/components/ui";
 
 function todayISO() {
@@ -25,10 +26,10 @@ type LineState = { replacementTypeId: string; count: string; wattage: string };
  * the date-only form (the legacy flow).
  */
 export function LightReplacementForm({
-  circuitId,
+  demoId,
   lines = [],
 }: {
-  circuitId: string;
+  demoId: string;
   lines?: ReplacementFormLine[];
 }) {
   const [date, setDate] = useState(todayISO());
@@ -42,6 +43,7 @@ export function LightReplacementForm({
   );
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   function setLine(lineId: string, patch: Partial<LineState>) {
     setLineState((prev) => ({ ...prev, [lineId]: { ...prev[lineId], ...patch } }));
@@ -83,8 +85,9 @@ export function LightReplacementForm({
         count: Number(lineState[l.lineId].count),
         wattage: Number(lineState[l.lineId].wattage),
       }));
-      const result = await recordLightReplacement(circuitId, date, replacements);
+      const result = await recordDemoReplacement({ demoId, replacedOn: date, lines: replacements });
       setError(result?.error);
+      if (!result?.error) router.refresh();
     });
   }
 
@@ -164,7 +167,7 @@ export function LightReplacementForm({
       <Field
         label="Date the last light was replaced"
         htmlFor="lr-date"
-        hint="This pivot day is excluded; the post-install window starts the next midnight. The inventory and the pre-install baseline freeze with it."
+        hint="This pivot day is left out of both periods — the pre-install period ends before it, the post-install period starts after it."
       >
         <input
           id="lr-date"

@@ -33,7 +33,7 @@ export default async function PortalMeterPage({ params }: { params: Promise<{ id
   const meter = read === "read" ? ((await meterRow(id, viewer.societyId)) ?? owned) : owned;
   const nextRead = nextLiveReadAt(meter.readAt ? new Date(meter.readAt) : null, "portal");
 
-  const [days, demo] = await Promise.all([meterHourly(id, 14), meterDemoContext(id, viewer.societyId)]);
+  const [days, demo] = await Promise.all([meterHourly(id, 14, viewer.societyId), meterDemoContext(id, viewer.societyId)]);
 
   return (
     <>

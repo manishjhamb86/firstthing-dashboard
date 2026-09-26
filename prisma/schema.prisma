@@ -159,38 +159,8 @@ enum CircuitState {
 // day is simply the absence of a row here — distinguished from an
 // actively-flagged anomaly (FEAT-012-AC-5) by presence/status rather than
 // a third enum value.
-enum CommissioningWindowType {
-  pre_install
-  post_install
 
-  @@map("commissioning_window_type")
-}
 
-enum CommissioningReadingStatus {
-  valid
-  anomaly
-
-  @@map("commissioning_reading_status")
-}
-
-model CommissioningReading {
-  id             String                     @id @default(cuid())
-  circuitId      String                     @map("circuit_id")
-  windowType     CommissioningWindowType    @map("window_type")
-  date           DateTime                   @map("date") // calendar day, stored at midnight UTC
-  consumptionKwh Float?                     @map("consumption_kwh")
-  status         CommissioningReadingStatus
-  anomalyNote    String?                    @map("anomaly_note")
-  recordedById   String                     @map("recorded_by_id")
-  createdAt      DateTime                   @default(now()) @map("created_at")
-
-  circuit    Circuit   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  recordedBy AdminUser @relation(fields: [recordedById], references: [id])
-
-  @@unique([circuitId, windowType, date])
-  @@index([circuitId, windowType])
-  @@map("commissioning_readings")
-}
 
 // FEAT-011/CON-18 — one instance of the cross-cutting gate-pass component
 // (09-architecture.md §5, ADR-006): an itemized equipment list signed,
@@ -236,6 +206,8 @@ enum JobType {
   invoice_intake_sweep
   // Google Calendar (2026-09-25): push changed events, read back RSVPs.
   calendar_sync
+  // 2026-09-26: a demo unlocked for correction relocks after 24 hours.
+  demo_relock_sweep
 
   @@map("job_type")
 }
@@ -266,6 +238,7 @@ model Job {
 model GatePass {
   id             String         @id @default(cuid())
   circuitId      String         @map("circuit_id")
+  demoId         String?        @map("demo_id")
   kind           GatePassKind
   status         GatePassStatus @default(submitted)
   itemsJson      Json           @map("items_json") // itemized equipment list, CON-18
@@ -276,11 +249,13 @@ model GatePass {
   approvedAt     DateTime?      @map("approved_at")
   rejectedReason String?        @map("rejected_reason")
 
-  circuit     Circuit    @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  submittedBy AdminUser  @relation("GatePassSubmittedBy", fields: [submittedById], references: [id])
-  approvedBy  AdminUser? @relation("GatePassApprovedBy", fields: [approvedById], references: [id])
+  circuit     Circuit      @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  demo        CircuitDemo? @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  submittedBy AdminUser    @relation("GatePassSubmittedBy", fields: [submittedById], references: [id])
+  approvedBy  AdminUser?   @relation("GatePassApprovedBy", fields: [approvedById], references: [id])
 
   @@index([circuitId])
+  @@index([demoId])
   @@index([status])
   @@map("gate_passes")
 }
@@ -504,7 +479,10 @@ model AdminUser {
   pipelinesSurveying          Pipeline[]                  @relation("PipelineSurveyOwner")
   pipelinesSurveyAssigned     Pipeline[]                  @relation("PipelineSurveyAssignedBy")
   scheduledEvents             ScheduledEvent[]            @relation("ScheduledEventAssignee")
-  circuitsReplacing           Circuit[]                   @relation("CircuitReplacementOwner")
+  demosReplacing              CircuitDemo[]               @relation("DemoReplacementOwner")
+  demoReplacementsAssigned    CircuitDemo[]               @relation("DemoReplacementAssignedBy")
+  demosUnlocked               CircuitDemo[]               @relation("DemoUnlockedBy")
+  demoAcceptances             CircuitDemoAcceptance[]
   waterTanksAssigned          WaterTank[]                 @relation("WaterTankAssignedBy")
   meterDevicesAssigned        MeterDevice[]               @relation("MeterDeviceAssignedBy")
   meterInstallationsOpened    MeterInstallation[]         @relation("MeterInstalledBy")
@@ -525,17 +503,14 @@ model AdminUser {
   fmEngagementsRecorded       SocietyFmEngagement[]       @relation("FmEngagementRecordedBy")
   fmEmploymentsRecorded       FmEmployment[]              @relation("FmEmploymentRecordedBy")
   meetingInvitations          ScheduledEventAttendee[]    @relation("ScheduledEventAttendeeUser")
-  circuitsReplacementAssigned Circuit[]                   @relation("CircuitReplacementAssignedBy")
   scheduledEventsCreated      ScheduledEvent[]            @relation("ScheduledEventCreatedBy")
   pipelinesLogged             Pipeline[]                  @relation("PipelineLoggedBy")
 
-  circuitLoadOverrides          Circuit[]               @relation("CircuitLoadOverrideBy")
   circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
   circuitsVoided                Circuit[]               @relation("CircuitVoidedBy")
   demoResultsResolved           DemoResultReview[]      @relation("DemoResultResolvedBy")
   gatePassSubmissions           GatePass[]              @relation("GatePassSubmittedBy")
   gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
-  commissioningReadingsRecorded CommissioningReading[]
   circuitDevicesReplaced        CircuitDevice[]         @relation("CircuitDeviceReplacedBy")
   circuitDevicesRecorded        CircuitDevice[]         @relation("CircuitDeviceRecordedBy")
   benchmarkRescalesRecorded     BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
@@ -739,6 +714,8 @@ model ScheduledEvent {
   societyId  String? @map("society_id")
   pipelineId String? @map("pipeline_id")
   circuitId  String? @map("circuit_id")
+  /// The demo a replacement day belongs to (2026-09-26 — every demo walks its own steps).
+  demoId     String? @map("demo_id")
 
   /// Tasks (2026-09-25): what is to be done, how urgent, and how it ended.
   description    String?
@@ -775,11 +752,12 @@ model ScheduledEvent {
 
   attendees ScheduledEventAttendee[]
 
-  assignee  AdminUser @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
-  createdBy AdminUser @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
-  society   Society?  @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  pipeline  Pipeline? @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  circuit   Circuit?  @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  assignee  AdminUser    @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
+  createdBy AdminUser    @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
+  society   Society?     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  pipeline  Pipeline?    @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  circuit   Circuit?     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  demo      CircuitDemo? @relation(fields: [demoId], references: [id], onDelete: Cascade)
 
   @@index([assigneeId, startAt])
   @@index([startAt])
@@ -913,40 +891,9 @@ model Circuit {
   /// network never reports: the commissioning team has to be able to read what
   /// was let through (CON-16 amendment, 2026-09-08).
   eligibilityExceptionCriteria  String[]    @default([]) @map("eligibility_exception_criteria")
-  // FEAT-011 — CON-17 load validation: the meter's displayed load vs.
-  // (light count × wattage), and the resulting delta. A persistently
-  // failed validation can only be overridden by PER-01 (FEAT-011-AC-5),
-  // recorded here rather than silently accepted as a normal pass.
-  meterDisplayedLoad            Float?      @map("meter_displayed_load")
-  meterInstalledAt              DateTime?   @map("meter_installed_at")
-  loadDiscrepancyPct            Float?      @map("load_discrepancy_pct")
-  loadValidationOverrideById    String?     @map("load_validation_override_by_id")
-  loadValidationOverrideReason  String?     @map("load_validation_override_reason")
-  // FEAT-012/014 — pre/post monitoring windows. windowStartAt is the
-  // calendar day valid-day counting begins from; an anomaly fix (AC-3)
-  // bumps it forward to the midnight after the fix rather than mutating
-  // past readings, so evaluation is always just "valid readings on/after
-  // windowStartAt". Baselines are the resulting averages once each window
-  // completes (FEAT-012-AC-1/FEAT-014-AC-1).
-  preInstallWindowStartAt       DateTime?   @map("pre_install_window_start_at")
+  // The baseline and benchmark are caches of the accepted demos (2026-09-26),
+  // written only by resyncCircuitFigures.
   preInstallBaseline            Float?      @map("pre_install_baseline")
-  /// FEAT-013 — who is doing the replacement, and when it was handed to
-  /// them. The visit itself is a ScheduledEvent (installation_day), not a
-  /// column: an owning record never stores its own time.
-  replacementOwnerId            String?     @map("replacement_owner_id")
-  replacementAssignedAt         DateTime?   @map("replacement_assigned_at")
-  replacementAssignedById       String?     @map("replacement_assigned_by_id")
-  lightReplacementDate          DateTime?   @map("light_replacement_date") // FEAT-013 — the pivot day (last light replaced)
-  /// The demo periods (2026-09-25, user-set): when set, ONLY these days make
-  /// the baseline (pre) and the benchmark (post) and appear in the demo
-  /// reports — nothing before, between or after. Unset keeps the old rule
-  /// (pre = after the meter until the replacement, post = after it).
-  preDemoFrom                   DateTime?   @map("pre_demo_from")
-  preDemoTo                     DateTime?   @map("pre_demo_to")
-  postDemoFrom                  DateTime?   @map("post_demo_from")
-  postDemoTo                    DateTime?   @map("post_demo_to")
-  postInstallWindowStartAt      DateTime?   @map("post_install_window_start_at")
-  postInstallBaseline           Float?      @map("post_install_baseline")
   // FEAT-014 — the number the contract prices against (CON-20's 60-80%
   // band). System-computed only; FEAT-014-AC-4 requires no manual entry
   // path exists for it. FEAT-014 AC-8 (2026-08-27) adds ONE: a recorded
@@ -982,14 +929,10 @@ model Circuit {
 
   society                  Society                  @relation(fields: [societyId], references: [id], onDelete: Cascade)
   siteSurvey               SiteSurvey?              @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
-  loadValidationOverrideBy AdminUser?               @relation("CircuitLoadOverrideBy", fields: [loadValidationOverrideById], references: [id])
   createdBy                AdminUser?               @relation("CircuitCreatedBy", fields: [createdById], references: [id])
   voidedBy                 AdminUser?               @relation("CircuitVoidedBy", fields: [voidedById], references: [id])
-  replacementOwner         AdminUser?               @relation("CircuitReplacementOwner", fields: [replacementOwnerId], references: [id])
-  replacementAssignedBy    AdminUser?               @relation("CircuitReplacementAssignedBy", fields: [replacementAssignedById], references: [id])
   scheduledEvents          ScheduledEvent[]
   gatePasses               GatePass[]
-  commissioningReadings    CommissioningReading[]
   rescaleEvents            BenchmarkRescaleEvent[]
   demoResultReviews        DemoResultReview[]
   demos                    CircuitDemo[]
@@ -1047,11 +990,62 @@ model CircuitDemo {
   /// 1, 2, 3 — the order they were run in, and how the screen orders them.
   sequence  Int
 
-  meteredLightCount  Int   @map("metered_light_count")
-  preInstallBaseline Float @map("pre_install_baseline")
-  postInstallAverage Float @map("post_install_average")
+  meteredLightCount  Int    @map("metered_light_count")
+  /// Derived from the latest accepted pre/post day sets (2026-09-26). Kept on
+  /// the row so the demos list and the report read one figure; only the
+  /// single writer (src/lib/circuit-figures.ts) sets them.
+  preInstallBaseline Float? @map("pre_install_baseline")
+  postInstallAverage Float? @map("post_install_average")
   /// Verbatim, never rounded (AC-8).
-  savingsPct         Float @map("savings_pct")
+  savingsPct         Float? @map("savings_pct")
+
+  // ── Per-demo commissioning (2026-09-26, user-specified) ────────────────
+  // Every demo walks the full step set, so every fact the steps record lives
+  // here, not on the circuit: a second demo on the same circuit has its own
+  // meter date, gate passes, replacement and periods.
+
+  /// The meter the demo ran on. Optional: an old demo that exists only on
+  /// paper is re-entered without one, its days typed by hand.
+  meterId                      String?   @map("meter_id")
+  /// The history entry this demo's meter pick wrote, so correcting the date
+  /// here moves that entry rather than writing a second one.
+  meterInstallationId          String?   @map("meter_installation_id")
+  meterSkipped                 Boolean   @default(false) @map("meter_skipped")
+  meterInstalledAt             DateTime? @map("meter_installed_at")
+  meterDisplayedLoad           Float?    @map("meter_displayed_load")
+  loadDiscrepancyPct           Float?    @map("load_discrepancy_pct")
+  loadValidationOverrideById   String?   @map("load_validation_override_by_id")
+  loadValidationOverrideReason String?   @map("load_validation_override_reason")
+
+  /// The demo periods. Only days inside them are the demo's readings, feed
+  /// its figures and appear in its reports — strictly, nothing either side.
+  preFrom  DateTime? @map("pre_from")
+  preTo    DateTime? @map("pre_to")
+  postFrom DateTime? @map("post_from")
+  postTo   DateTime? @map("post_to")
+
+  replacementOwnerId      String?   @map("replacement_owner_id")
+  replacementAssignedAt   DateTime? @map("replacement_assigned_at")
+  replacementAssignedById String?   @map("replacement_assigned_by_id")
+  /// The pivot day: the last light replaced. Excluded from both periods.
+  lightReplacementDate    DateTime? @map("light_replacement_date")
+
+  /// How a second demo combines with the first: `batch` covered different
+  /// lights (baselines and metered counts add up), `rerun` repeated the same
+  /// lights (baselines average). The benchmark is the mean of the accepted
+  /// demos' percentages either way (the rule behind Urban Casa's 66.72%).
+  combine DemoCombine @default(rerun)
+  origin  DemoOrigin  @default(app)
+
+  /// Unlock for correction (2026-09-26): after the report is shared a demo is
+  /// locked; operations may reopen it with a reason until this instant.
+  unlockedUntil DateTime? @map("unlocked_until")
+  unlockedById  String?   @map("unlocked_by_id")
+  unlockReason  String?   @map("unlock_reason")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
 
   /// A rejected demo stays on record and takes no part in the figure.
   rejected        Boolean   @default(false)
@@ -1061,12 +1055,44 @@ model CircuitDemo {
 
   note      String?
   createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  circuit  Circuit              @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  readings CircuitDemoReading[]
+  circuit               Circuit                 @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  meter                 MeterDevice?            @relation(fields: [meterId], references: [id], onDelete: SetNull)
+  replacementOwner      AdminUser?              @relation("DemoReplacementOwner", fields: [replacementOwnerId], references: [id])
+  replacementAssignedBy AdminUser?              @relation("DemoReplacementAssignedBy", fields: [replacementAssignedById], references: [id])
+  unlockedBy            AdminUser?              @relation("DemoUnlockedBy", fields: [unlockedById], references: [id])
+  readings              CircuitDemoReading[]
+  acceptances           CircuitDemoAcceptance[]
+  gatePasses            GatePass[]
+  scheduledEvents       ScheduledEvent[]
+  reviews               DemoResultReview[]
 
   @@unique([circuitId, sequence])
   @@map("circuit_demos")
+}
+
+enum DemoCombine {
+  batch
+  rerun
+
+  @@map("demo_combine")
+}
+
+enum DemoOrigin {
+  app
+  migrated
+
+  @@map("demo_origin")
+}
+
+enum DemoReadingSource {
+  meter
+  manual
+  demo_generated
+  migrated
+
+  @@map("demo_reading_source")
 }
 
 /// A demo's own daily readings, kept apart from `MeterReading`.
@@ -1074,20 +1100,83 @@ model CircuitDemo {
 /// Deliberately not the billing table: these are the days that produced a
 /// benchmark, not the days a month is billed on, and two demos on one circuit
 /// routinely share dates — Aditya Urban Casa's overlap for four of them.
-/// Putting them in `MeterReading` would either collide on its per-circuit
-/// uniqueness or force that guarantee to be loosened for every circuit.
+///
+/// Filled from the demo meter's hourly store for the chosen periods, or typed
+/// by hand; a hand-entered day keeps the meter's own figure beside it.
 model CircuitDemoReading {
   id     String   @id @default(cuid())
   demoId String   @map("demo_id")
   date   DateTime @db.Date
   kWh    Float    @map("kwh")
-  /// "pre" or "post" — which side of the replacement this day sits.
+  /// "pre" or "post" — which period this day belongs to.
   phase  String
+
+  source       DemoReadingSource @default(meter)
+  /// The meter's own figure for the day, kept when a person typed another.
+  meterKwh     Float?            @map("meter_kwh")
+  meterId      String?           @map("meter_id")
+  /// Hours the meter store holds for the day, and how many carry a reading.
+  hoursCovered Int?              @map("hours_covered")
+  dataHours    Int?              @map("data_hours")
+  /// The file a migrated day came from (INV-02).
+  rawFileId    String?           @map("raw_file_id")
+
+  excludedAt     DateTime? @map("excluded_at")
+  excludedById   String?   @map("excluded_by_id")
+  excludedReason String?   @map("excluded_reason")
+  editedById     String?   @map("edited_by_id")
+  updatedAt      DateTime  @default(now()) @updatedAt @map("updated_at")
 
   demo CircuitDemo @relation(fields: [demoId], references: [id], onDelete: Cascade)
 
   @@unique([demoId, date, phase])
   @@map("circuit_demo_readings")
+}
+
+/// "Accept these N days" (2026-09-26). Versioned, never edited: the latest
+/// version is the figure in force; a reading changed after it shows as
+/// changed and needs re-accepting, and until then this version still counts.
+model CircuitDemoAcceptance {
+  id           String   @id @default(cuid())
+  demoId       String   @map("demo_id")
+  phase        String
+  version      Int
+  /// The accepted days as they stood: [{date, kWh, source, excluded}].
+  days         Json
+  averageKwh   Float?   @map("average_kwh")
+  countedDays  Int      @map("counted_days")
+  acceptedById String?  @map("accepted_by_id")
+  acceptedAt   DateTime @default(now()) @map("accepted_at")
+
+  demo       CircuitDemo @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  acceptedBy AdminUser?  @relation(fields: [acceptedById], references: [id])
+
+  @@unique([demoId, phase, version])
+  @@map("circuit_demo_acceptances")
+}
+
+/// The old values of every correction (2026-09-26): a demo edit, an unlock
+/// and relock, a meter-history change. Nothing edited in place loses what it
+/// was — the audit a society could ask for.
+model ChangeLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String   @map("entity_id")
+  circuitId String?  @map("circuit_id")
+  demoId    String?  @map("demo_id")
+  meterId   String?  @map("meter_id")
+  kind      String
+  field     String?
+  oldValue  Json?    @map("old_value")
+  newValue  Json?    @map("new_value")
+  reason    String?
+  actorId   String?  @map("actor_id")
+  at        DateTime @default(now())
+
+  @@index([demoId, at])
+  @@index([circuitId, at])
+  @@index([meterId, at])
+  @@map("change_log")
 }
 
 model BenchmarkRescaleEvent {
@@ -1167,8 +1256,9 @@ enum DemoResultResolution {
 }
 
 model DemoResultReview {
-  id        String @id @default(cuid())
-  circuitId String @map("circuit_id")
+  id        String  @id @default(cuid())
+  circuitId String  @map("circuit_id")
+  demoId    String? @map("demo_id")
 
   // FEAT-015-AC-5 — 1 for a first failure, 2+ for one that recurred after a
   // restart. Stored rather than counted at read time so the queue can rank on
@@ -1194,8 +1284,9 @@ model DemoResultReview {
   resolvedAt   DateTime? @map("resolved_at")
   raisedAt     DateTime  @default(now()) @map("raised_at")
 
-  circuit    Circuit    @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  resolvedBy AdminUser? @relation("DemoResultResolvedBy", fields: [resolvedById], references: [id])
+  circuit    Circuit      @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  demo       CircuitDemo? @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  resolvedBy AdminUser?   @relation("DemoResultResolvedBy", fields: [resolvedById], references: [id])
 
   @@index([state, raisedAt])
   @@index([circuitId])
@@ -1244,7 +1335,9 @@ model DemoReport {
   // Per-circuit table: benchmark %, both window averages, and the daily
   // readings behind each window. Json because it is a frozen snapshot, not
   // a queryable working set — the live rows stay in their own tables.
-  circuitSnapshot Json @map("circuit_snapshot")
+  circuitSnapshot Json     @map("circuit_snapshot")
+  /// Which demos this version was built from. Sharing it locks them.
+  demoIds         String[] @default([]) @map("demo_ids")
 
   generatedAt DateTime  @default(now()) @map("generated_at")
   // FEAT-020-AC-6 (added to R0 2026-08-14 — see docs/backlog.yaml's scope
@@ -1968,6 +2061,14 @@ model CompletionCertificate {
 // interpretation is replayable — see `src/lib/gemini.ts` for why the model
 // only ever proposes a mapping and never transforms the rows itself.
 
+enum ReadingOrigin {
+  meter
+  monthly_upload
+  legacy
+
+  @@map("reading_origin")
+}
+
 enum ReadingSource {
   csv
   // FEAT-104's scheduled vendor fetch is R1 and nothing writes this value
@@ -2124,6 +2225,18 @@ model MeterReading {
   expectedIntervals Int? @map("expected_intervals")
 
   rawFileId String @map("raw_file_id")
+
+  /// Where the day came from (2026-09-26). `meter` rows are projected from
+  /// the hourly store through the meter history and win a shared day;
+  /// `monthly_upload` fills days no meter covers; `legacy` is anything
+  /// written before this rule, kept and read only from the billing start.
+  origin         ReadingOrigin  @default(legacy)
+  /// Hours of the day that carry a reading (a meter-origin day).
+  dataHours      Int?           @map("data_hours")
+  /// The losing source's value for the same day, kept, never lost.
+  otherKwh       Float?         @map("other_kwh")
+  otherOrigin    ReadingOrigin? @map("other_origin")
+  otherRawFileId String?        @map("other_raw_file_id")
 
   circuit Circuit        @relation(fields: [circuitId], references: [id], onDelete: Cascade)
   rawFile RawReadingFile @relation(fields: [rawFileId], references: [id], onDelete: Cascade)
@@ -3221,6 +3334,7 @@ model MeterDevice {
   circuit       Circuit?             @relation(fields: [circuitId], references: [id], onDelete: SetNull)
   /// Every stay this meter has had, oldest first — its lifecycle.
   installations MeterInstallation[]
+  demos         CircuitDemo[]
   /// Billing-grade days this meter produced, wherever they were attributed.
   meterReadings MeterReading[]
   assignedBy    AdminUser?           @relation("MeterDeviceAssignedBy", fields: [assignedById], references: [id])

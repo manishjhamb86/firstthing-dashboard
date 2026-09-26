@@ -7592,3 +7592,64 @@ the benchmark came from the demos or an override). "Clear & start over" reads th
 clears exactly what its section shows. The other-readings average carries no savings figure when
 it spans both sides of the replacement. Verified 8/8 in a browser: 5 / 7 / 13 days under pre /
 post / other for 11–15 and 18–24 Aug, the old rule back once periods are cleared.
+
+## Meter readings by meter, a dated meter history, per-demo commissioning (2026-09-26) — user-specified, researched first
+
+**The ask**: raw readings stored hourly against the meter's permanent device id; a history of where
+the meter was (society, circuit, from, to); readings falling into buckets by date alone (a demo's
+pre period, its post period, monitoring from the contract start); demo reports holding only their
+periods' days; the demo data typed into the database for the imported societies cleared and redone
+in the app; the commissioning steps kept, editable until the demo is shared with the society (always
+in demo mode, otherwise only by special request). Sixteen decisions were put one at a time; the
+plan is at the top of this conversation's record and the choices are restated here where they bind.
+
+**Measured against the industry before building** (IPMVP, FEMP 4.0/5.0, ASHRAE Guideline 14, MDM /
+IEC CIM): the plan matched — raw interval data per permanent meter id, an effective-dated
+meter→metering-point history with no gaps or overlaps, explicit baseline and reporting periods,
+edits versioned with the raw read untouched. Two adjustments came from it: periods lock when the
+report is shared (IPMVP's "fixed in the M&V plan"; changing them after seeing results is the
+cherry-picking risk), and span assignment edits history entries rather than moving readings.
+
+**The model now:**
+- `MeterHourlyReading` (per meter) is the only raw store. `MeterInstallation` is the only record of
+  where a meter was; `MeterDevice.circuitId/societyId` is a cache of the open entry. Every history
+  entry names a circuit; hours no entry covers stay on the meter and feed nothing.
+- **A demo owns its commissioning** (`CircuitDemo` gained the meter, load test, periods,
+  replacement, combine rule, lock and origin). Its steps: eligibility → meter & load test → install
+  gate pass → pre period & readings → schedule/assign the replacement → replacement → completion
+  gate pass → post period & readings (`src/lib/demo-steps.ts`). A demo's days live in its own table,
+  filled from the meter through the history or typed by hand (the meter figure kept beside a typed
+  one), and count only once a person accepts them — versioned in `CircuitDemoAcceptance`, with
+  "changed — re-accept" when a day moves afterwards.
+- **One writer** of the circuit's cached baseline, benchmark and state: `resyncCircuitFigures`
+  (`src/lib/circuit-figures.ts`). A second demo on different lights adds to the baseline; on the same
+  lights it averages; the benchmark is the mean of the demos' percentages either way (Urban Casa's
+  signed 66.72%). An agreed override still wins.
+- **Monitoring rows** (`MeterReading`) run from the billing start (the certificate, else the
+  contract's term start) and are a projection of the meter store through the history
+  (`src/lib/monitoring-projection.ts`). The monthly upload fills days no meter covers; the meter
+  wins a clash and the upload's value is kept on the row. The circuit-page CSV upload is gone.
+- **The lock**: a demo in a shared demo report is read-only unless demo mode is on, or operations
+  unlocks it for 24 hours with a reason (a job relocks it). Every edit writes `ChangeLog` with the
+  old value. History edits and span assignment on the meter page are demo-mode only; a released
+  bill's days never move.
+
+**Data** (migrations `20260926090000` additive, `20260926100000` data, `20260926110000` drop):
+the imported (`bf-`) demos, demo readings and demo reports are deleted (offers' pointers nulled
+first); the imported circuits, contracts, invoices, meter history and figures are kept and read
+"Agreed figure — demo pending re-entry" until a demo is redone. Every app-made circuit's
+commissioning moved onto demo 1 with its days and accepted sets; the post period is the first run
+of days whose mean reproduces the stored benchmark, which a read-only pass on stage showed matches
+14 of 17 circuits exactly (one kept its paper demo's recorded figures; one baseline had averaged
+days from before its meter and is corrected). `scripts/rebuild-demos-and-monitoring.ts` then
+re-derives every circuit through the single writer (printing any drift) and rebuilds monitoring.
+
+**Also fixed**: the portal's hourly meter view now shows a reused meter's hours only from the stays
+at the viewer's own society (INV-05).
+
+**Verified**: 1,056 unit tests; in a browser 25/25 on one demo walked through every step against a
+test meter's hours (5 pre days → baseline 24, 7 post days → 66.67%, reports holding exactly the
+periods, the report auto-generated with the demo's id, locked once shared, the lock refused by the
+server behind an open form and logged, unlock logged); 12/12 on the meter history editor (a split
+around an open entry, the last day inclusive, a correction logged with its reason, unassigned days
+counted); 18/18 smoke across the admin and portal screens it touches.

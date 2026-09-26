@@ -3,26 +3,18 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, PageHeader, StatusChip } from "@/components/ui";
-import { isDemoMode } from "@/lib/demo-mode";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { formatDate } from "@/lib/format-date";
 import {
-  circuitReadingWindow,
-  classifyDay,
   periodSavingsSummary,
   savingsBand,
   savingsPct,
   SAVINGS_BAND_META,
 } from "@/lib/circuit-load";
-import {
-  CircuitReadingPanel,
-  type ReadingWindowDTO,
-} from "../../societies/[id]/circuits/[circuitId]/circuit-reading-panel";
-import { type StoredReadingDTO } from "../../societies/[id]/circuits/[circuitId]/stored-readings-panel";
 import { deriveBenchmark } from "@/lib/circuit-demos";
-import { ReadingsExplorer } from "@/components/readings-explorer";
-import { RecordReadingsDialog } from "@/components/record-readings-dialog";
+import { ReadingsExplorer, type StoredReadingDTO } from "@/components/readings-explorer";
+import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 
 // Live monitoring for one circuit — the monthly readings that feed billing.
 //
@@ -46,7 +38,6 @@ export default async function LiveMonitoringCircuitPage({
     (session.user.adminPermissions?.includes("manage_survey") ?? false) &&
     (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
 
-  const demoOn = await isDemoMode();
   const { circuitId } = await params;
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
@@ -59,28 +50,9 @@ export default async function LiveMonitoringCircuitPage({
         orderBy: { sequence: "asc" },
         select: { id: true, sequence: true, savingsPct: true, preInstallBaseline: true, rejected: true },
       },
-      meterDevice: { select: { id: true } },
+      meterDevice: { select: { id: true, name: true } },
     },
   });
-
-  // A file waiting in the review queue — filed by the meter page's import.
-  // Surfaced here because for a circuit in live monitoring, THIS is the
-  // screen the review happens on.
-  const pendingRawFile = await db.rawReadingFile.findFirst({
-    where: {
-      circuitId,
-      status: { in: ["pending_normalization", "awaiting_mapping", "ready"] },
-    },
-    orderBy: { uploadedAt: "desc" },
-    select: { id: true, fileName: true, meterCsvImports: { select: { id: true }, take: 1 } },
-  });
-  const resumeFile = pendingRawFile
-    ? {
-        id: pendingRawFile.id,
-        fileName: pendingRawFile.fileName,
-        fromMeter: pendingRawFile.meterCsvImports.length > 0,
-      }
-    : null;
 
   if (!circuit || circuit.voidedAt) notFound();
 
@@ -135,16 +107,12 @@ export default async function LiveMonitoringCircuitPage({
   const circuitHref = `/admin/societies/${circuit.societyId}/circuits/${circuit.id}`;
   const baselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
 
-  // Only the monitoring days — the commissioning ones stay on the circuit
-  // page, where the steps that produced them are.
-  const monitoringDays: StoredReadingDTO[] =
-    circuit.meterInstalledAt && circuit.lightReplacementDate
-      ? circuit.meterReadings
-          .filter(
-            (r) =>
-              classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate) ===
-              "post_install",
-          )
+  // Monitoring days only, from the billing start (2026-09-26): the demo's
+  // days live on the demo itself, and a day between the demo's post period
+  // and the billing start feeds nothing.
+  const monitoringStart = await circuitMonitoringStart(circuitId);
+  const monitoringDays: StoredReadingDTO[] = circuit.meterReadings
+          .filter((r) => monitoringStart === null || r.date.getTime() >= monitoringStart.getTime())
           .map((r) => {
             const b = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, r.date);
             const pct = b === null ? null : savingsPct(b, r.kWh);
@@ -159,7 +127,7 @@ export default async function LiveMonitoringCircuitPage({
               flagged: r.anomalyFlag,
               // Days the meter store never saw (upload-era rows) stay null —
               // absence of hour-level truth is not evidence of silence.
-              dataHours: dataHoursByDay.get(r.date.toISOString().slice(0, 10)) ?? null,
+              dataHours: r.dataHours ?? dataHoursByDay.get(r.date.toISOString().slice(0, 10)) ?? null,
               excludedReason: r.excludedReason,
               released: r.usedInCalculationId !== null,
               superseded: r.supersededAt !== null,
@@ -168,12 +136,13 @@ export default async function LiveMonitoringCircuitPage({
               savingsPct: pct,
               savingsBand: pct === null ? null : savingsBand(pct),
             };
-          })
-      : [];
+          });
 
   // The demo record behind the agreement: what the demos measured, before
   // any override, and the baseline they measured against.
-  const demoDerived = deriveBenchmark(circuit.demos);
+  const demoDerived = deriveBenchmark(
+    circuit.demos.flatMap((d) => (d.savingsPct === null ? [] : [{ id: d.id, sequence: d.sequence, rejected: d.rejected, savingsPct: d.savingsPct }])),
+  );
   const demoBaseline = circuit.preInstallBaseline;
   const baselineRescaled = baselineNow !== null && demoBaseline !== null && Math.abs(baselineNow - demoBaseline) > 0.005;
 
@@ -198,37 +167,6 @@ export default async function LiveMonitoringCircuitPage({
   const contractSince = fmtDate(pipeline?.contract?.termStart ?? pipeline?.contract?.activatedAt);
   const billingStarted = fmtDate(pipeline?.installationProject?.certificate?.billingStartDate);
 
-  const lastStoredDate =
-    circuit.meterReadings.length > 0
-      ? circuit.meterReadings[circuit.meterReadings.length - 1].date
-      : null;
-  const window = circuitReadingWindow({
-    meterInstalledAt: circuit.meterInstalledAt,
-    lightReplacementDate: circuit.lightReplacementDate,
-    preInstallBaseline: circuit.preInstallBaseline,
-    benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-    lastStoredDate,
-    demo: demoOn,
-  });
-  const day = (d: Date) => d.toISOString().slice(0, 10);
-  const windowDTO: ReadingWindowDTO | null = window
-    ? {
-        kind: window.kind,
-        from: day(window.from),
-        to: day(window.to),
-        empty: window.empty,
-        demoExtended: window.demoExtended,
-        startBasis:
-          window.kind === "monitoring" && lastStoredDate
-            ? `one day before the last stored reading (${formatDate(
-                lastStoredDate,
-              )}), so a part-day at the end of the previous file is re-read in full`
-            : `the day after the lights were replaced (${
-                circuit.lightReplacementDate ? formatDate(circuit.lightReplacementDate) : "—"
-              })`,
-      }
-    : null;
-
   return (
     <>
       <PageHeader
@@ -244,14 +182,12 @@ export default async function LiveMonitoringCircuitPage({
         subtitle={`${circuit.society.name} · ${circuit.lightType} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`}
         action={
           !blocker && canIngest ? (
-            <RecordReadingsDialog label="Record readings" waiting={resumeFile !== null}>
-              <CircuitReadingPanel
-                circuitId={circuit.id}
-                window={windowDTO}
-                demoMode={demoOn}
-                resumeFile={resumeFile}
-              />
-            </RecordReadingsDialog>
+            <Link
+              href={circuit.meterDevice ? `/admin/meters/${circuit.meterDevice.id}` : "/admin/readings"}
+              className="btn-primary"
+            >
+              {circuit.meterDevice ? "Upload the meter's readings" : "Monthly upload"}
+            </Link>
           ) : undefined
         }
       />

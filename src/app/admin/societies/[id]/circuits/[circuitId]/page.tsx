@@ -1,70 +1,49 @@
 import type { ReactNode } from "react";
-import { DemoWindowsPanel } from "./demo-windows-panel";
-import { demoPhase, hasPostWindow, hasPreWindow, readingSection } from "@/lib/demo-window";
-import { DEMO_RAW_KEY_PREFIX } from "@/lib/ingest-keys";
-import { DiscardDemoReadings } from "./discard-demo-readings";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { HistoricalCommissioning } from "./historical-commissioning";
 import { db } from "@/lib/db";
 import { isDemoMode } from "@/lib/demo-mode";
-import { InstallDateForm } from "./install-date-form";
-import { ReplacementDateForm } from "./replacement-date-form";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
-import { LoadValidationForm } from "./load-validation-form";
 import { GatePassForm } from "./gate-pass-form";
 import { GatePassApproval } from "./gate-pass-approval";
-import { MonitoringWindowPanel } from "./monitoring-window-panel";
 import { LightReplacementForm } from "./light-replacement-form";
+import { ReplacementDateForm } from "./replacement-date-form";
 import { RescaleRowActions } from "./rescale-row-actions";
 import { RescaleForm } from "./rescale-form";
 import { DemoReviewPanel } from "./demo-review-panel";
-import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
-import { describeDeviations } from "@/lib/backfill-deviations";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { inventoryCountFor } from "@/lib/light-type";
 import { RepresentedCountForm } from "./represented-count-form";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { circuitSteps } from "@/lib/deal-progress";
 import { formatDate } from "@/lib/format-date";
 import { AssignReplacement } from "./assign-replacement";
 import { VisitDetails } from "@/components/visit-details";
 import { teamMeta, teamsFor } from "@/lib/admin-teams";
 import { isoDate, isoDateTimeLocal } from "@/lib/format-date";
 import { StepSection } from "@/components/step-section";
-import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
-import { loadDealProgress } from "@/lib/pipeline-facts";
 import { LoadInventoryPanel, type InventoryLine } from "./load-inventory-panel";
 import { DemosPanel, type DemoDTO } from "./demos-panel";
-import { CircuitReadingPanel, type ReadingWindowDTO } from "./circuit-reading-panel";
+import { DemoMeterForm } from "./demo-meter-form";
+import { DemoReadingsPanel, type DemoDayDTO } from "./demo-readings-panel";
+import { DemoLockBar } from "./demo-lock-bar";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
-import { exclusionRefusal } from "@/lib/reading-exclusion";
-import { StoredReadingsPanel, type StoredReadingDTO } from "./stored-readings-panel";
-import {
-  circuitReadingWindow,
-  classifyDay,
-  periodSavingsSummary,
-  savingsBand,
-  savingsPct,
-  theoreticalDailyKwh,
-  varianceAgainstTheoretical,
-  type SavingsBand,
-  baselineUnsettled,
-} from "@/lib/circuit-load";
+import { theoreticalDailyKwh } from "@/lib/circuit-load";
+import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
+import { currentDemoOf, demoFacts, demoFactsInclude, latestAcceptance, LOAD_TOLERANCE_PCT } from "@/lib/circuit-figures";
+import { demoComplete, demoSteps } from "@/lib/demo-steps";
+import { demoLockState } from "@/lib/demo-lock";
+import { changedSince, type AcceptanceDay } from "@/lib/demo-acceptance";
+import { missingDays } from "@/lib/demo-readings-fill";
+import { periodOfDay, suggestedPeriod } from "@/lib/demo-periods";
+import { circuitLabelOf } from "@/lib/circuit-label";
 
 function GatePassCard({
   gatePass,
   canOverride,
 }: {
-  gatePass: {
-    id: string;
-    status: string;
-    itemsJson: unknown;
-    photoUrl: string | null;
-    rejectedReason: string | null;
-  };
+  gatePass: { id: string; status: string; itemsJson: unknown; photoUrl: string | null; rejectedReason: string | null };
   canOverride: boolean;
 }) {
   const status = statusMeta(GATE_PASS_STATUS, gatePass.status);
@@ -92,13 +71,16 @@ function GatePassCard({
   );
 }
 
+const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "");
+
 export default async function CircuitDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; circuitId: string }>;
+  searchParams: Promise<{ demo?: string }>;
 }) {
   const session = await requireAdminPage();
-
   const canView =
     session.user.adminPermissions?.includes("manage_survey") ||
     session.user.adminPermissions?.includes("manage_pipeline");
@@ -110,6 +92,7 @@ export default async function CircuitDetailPage({
     (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
 
   const { id, circuitId } = await params;
+  const sp = await searchParams;
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
     include: {
@@ -118,29 +101,10 @@ export default async function CircuitDetailPage({
         select: {
           pipelineId: true,
           pipeline: { select: { surveyOwnerId: true } },
-          // CON-11's extrapolation base, as this survey itself counted it —
-          // the figure the represented count is checked against.
           areas: { select: { lightType: true, count: true } },
         },
       },
-      replacementOwner: { select: { id: true, name: true, email: true, team: true } },
-      replacementAssignedBy: { select: { name: true, email: true } },
-      // FEAT-013 — the replacement day lives on the schedule module.
-      scheduledEvents: {
-        where: { kind: "installation_day", status: "scheduled" },
-        orderBy: { startAt: "asc" },
-        take: 1,
-      },
-      gatePasses: { orderBy: { submittedAt: "desc" } },
-      commissioningReadings: { orderBy: { date: "asc" } },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },
-      demos: {
-        orderBy: { sequence: "asc" },
-        include: {
-          _count: { select: { readings: true } },
-          readings: { orderBy: [{ phase: "asc" }, { date: "asc" }] },
-        },
-      },
       voidedBy: { select: { name: true, email: true } },
       demoResultReviews: {
         orderBy: { raisedAt: "desc" },
@@ -148,54 +112,70 @@ export default async function CircuitDetailPage({
       },
       devices: {
         orderBy: { createdAt: "asc" },
+        include: { deviceType: { select: { name: true } }, replacementType: { select: { name: true } } },
+      },
+      demos: {
+        where: { voidedAt: null },
+        orderBy: { sequence: "asc" },
         include: {
-          deviceType: { select: { name: true } },
-          replacementType: { select: { name: true } },
+          ...demoFactsInclude,
+          replacementOwner: { select: { id: true, name: true, email: true, team: true } },
+          replacementAssignedBy: { select: { name: true, email: true } },
+          unlockedBy: { select: { name: true, email: true } },
+          meter: { select: { id: true, name: true } },
+          gatePasses: { orderBy: { submittedAt: "desc" } },
+          scheduledEvents: { where: { kind: "installation_day" }, orderBy: { startAt: "asc" } },
+          readings: { orderBy: { date: "asc" } },
+          acceptances: { orderBy: { version: "desc" } },
         },
       },
-      meterReadings: {
-        where: { source: "csv" },
-        orderBy: { date: "asc" },
-        // The file each day traces to, so a demo-generated series can be
-        // named as one on screen (INV-02 already requires the link).
-        include: { rawFile: { select: { s3Key: true } } },
-      },
     },
   });
-
-  // A file already waiting in the review queue — filed by the meter page's
-  // import, or left behind by a reload mid-review — surfaced so it can be
-  // resumed instead of sitting invisible forever. `fromMeter` is decided by
-  // whether a meter import points at it.
-  const pendingRawFile = await db.rawReadingFile.findFirst({
-    where: {
-      circuitId,
-      status: { in: ["pending_normalization", "awaiting_mapping", "ready"] },
-    },
-    orderBy: { uploadedAt: "desc" },
-    select: { id: true, fileName: true, meterCsvImports: { select: { id: true }, take: 1 } },
-  });
-  const resumeFile = pendingRawFile
-    ? {
-        id: pendingRawFile.id,
-        fileName: pendingRawFile.fileName,
-        fromMeter: pendingRawFile.meterCsvImports.length > 0,
-      }
-    : null;
-
   if (!circuit || circuit.societyId !== id) notFound();
-  // The install date defines the window the baseline is computed from, so it
-  // stops being correctable once that baseline has settled.
-  const baselineOpen = baselineUnsettled(circuit);
 
-  // CON-45 — the inventory dropdown reads the catalog's active originals.
+  const eligible = circuit.state !== "surveyed" && circuit.state !== "ineligible";
+  const pipelineId = circuit.siteSurvey?.pipelineId ?? null;
+  const sharedIds = new Set(
+    pipelineId
+      ? (await db.demoReport.findMany({ where: { pipelineId, status: "shared" }, select: { demoIds: true } })).flatMap((r) => r.demoIds)
+      : [],
+  );
+  const now = new Date();
+  const lockOf = (d: { id: string; unlockedUntil: Date | null }) =>
+    demoLockState({ sharedInReport: sharedIds.has(d.id), unlockedUntil: d.unlockedUntil, demoMode, now });
+
+  const demo = circuit.demos.find((d) => d.id === sp.demo) ?? currentDemoOf(circuit.demos);
+  const facts = demo ? demoFacts(demo, eligible) : null;
+  const lock = demo ? lockOf(demo) : null;
+  const editable = canEdit && !circuit.voidedAt && (lock?.editable ?? false);
+  const base = `/admin/societies/${id}/circuits/${circuit.id}`;
+
+  const demoDTOs: DemoDTO[] = circuit.demos.map((d) => {
+    const f = demoFacts(d, eligible);
+    return {
+      id: d.id,
+      sequence: d.sequence,
+      combine: d.combine,
+      meteredLightCount: d.meteredLightCount,
+      preAverage: f.preAverage,
+      postAverage: f.postAverage,
+      savingsPct: f.savingsPct,
+      rejected: d.rejected,
+      rejectionReason: d.rejectionReason,
+      complete: demoComplete(f),
+      locked: !lockOf(d).editable,
+      href: `${base}?demo=${d.id}`,
+      current: d.id === demo?.id,
+    };
+  });
+  const anyAccepted = demoDTOs.some((d) => !d.rejected && d.preAverage !== null);
+  const agreedPending = !anyAccepted && (circuit.preInstallBaseline !== null || circuit.benchmarkSavingsPct !== null);
+
   const catalogOriginals = await db.deviceType.findMany({
     where: { role: "original", active: true, deletedAt: null },
     orderBy: { name: "asc" },
     select: { id: true, name: true, defaultWattage: true },
   });
-  // CON-45 — each inventory line's compatible replacements, for the
-  // installation step's dropdowns.
   const replacementOptionRows = await db.deviceReplacementOption.findMany({
     where: { originalTypeId: { in: circuit.devices.map((d) => d.deviceTypeId) } },
     include: { replacement: { select: { id: true, name: true, defaultWattage: true, active: true } } },
@@ -207,13 +187,8 @@ export default async function CircuitDetailPage({
     wattage: l.wattage,
     options: replacementOptionRows
       .filter((o) => o.originalTypeId === l.deviceTypeId && o.replacement.active)
-      .map((o) => ({
-        id: o.replacement.id,
-        name: o.replacement.name,
-        defaultWattage: o.replacement.defaultWattage,
-      })),
+      .map((o) => ({ id: o.replacement.id, name: o.replacement.name, defaultWattage: o.replacement.defaultWattage })),
   }));
-
   const inventoryLines: InventoryLine[] = circuit.devices.map((l) => ({
     id: l.id,
     deviceTypeId: l.deviceTypeId,
@@ -227,358 +202,99 @@ export default async function CircuitDetailPage({
     replacementCount: l.replacementCount,
     replacementWattage: l.replacementWattage,
   }));
-
-  // CON-45 — the stored daily readings, phase-classified against the
-  // circuit's own dates, with the same bands every review surface uses.
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
-  const demoGeneratedDays = circuit.meterReadings.filter((r) =>
-    r.rawFile?.s3Key?.startsWith(DEMO_RAW_KEY_PREFIX),
-  ).length;
-  const sectionFacts = {
-    ...circuit,
-    benchmarkFromDemos:
-      circuit.benchmarkOverridePct !== null || circuit.demos.some((d) => !d.rejected),
-  };
-  const demoPeriodsSet = hasPreWindow(circuit) || hasPostWindow(circuit);
-  const storedReadings: StoredReadingDTO[] = circuit.meterInstalledAt
-    ? circuit.meterReadings
-        .map((r) => {
-          const phase = classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate);
-          const section = readingSection(r.date, sectionFacts);
-          if (section === null) return null;
-          const isPre = phase === "pre_install";
-          const effB = isPre
-            ? null
-            : effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, r.date);
-          const sPct = isPre || effB === null ? null : savingsPct(effB, r.kWh);
-          const v = isPre && theoretical !== null ? varianceAgainstTheoretical(r.kWh, theoretical) : null;
-          return {
-            id: r.id,
-            date: r.date.toISOString().slice(0, 10),
-            kWh: r.kWh,
-            intervalCount: r.intervalCount,
-            expectedIntervals: r.expectedIntervals,
-            // On THIS page every post-replacement day is a post-installation
-            // reading: these are the days the benchmark was computed from.
-            // Labelling them "Monthly monitoring" the moment a benchmark
-            // existed named the evidence after the thing it produced. The
-            // monthly record lives on the Live monitoring screen.
-            // Which section: a set demo period is the only source of its
-            // section; everything else is listed as other readings.
-            phase: section,
-            excluded: r.excludedAt !== null,
-            excludedReason: r.excludedReason,
-            released: r.usedInCalculationId !== null,
-            superseded: r.supersededAt !== null,
-            variancePct: v?.pct ?? null,
-            varianceBand: v?.band ?? null,
-            savingsPct: sPct,
-            savingsBand: sPct === null ? null : savingsBand(sPct),
-            frozenReason: exclusionRefusal({
-              phase: section,
-              replacementRecorded: circuit.lightReplacementDate !== null,
-              benchmarkConfirmed: circuit.benchmarkSavingsPct !== null,
-              billed: r.usedInCalculationId !== null,
-              isOps: canOverride,
-            }),
-          };
-        })
-        .filter((r): r is NonNullable<typeof r> => r !== null)
-    : [];
-  const effBaselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
+  const anyMeterInstalled = circuit.demos.some((d) => d.meterInstalledAt !== null);
+  const anyReplaced = circuit.demos.some((d) => d.lightReplacementDate !== null);
 
-  // A circuit backfilled from paper has no reviewed meter export, and its
-  // pre- and post-installation days are the ones its demo report printed.
-  // Those ARE this circuit's pre/post readings, so they belong where every
-  // other circuit shows its readings rather than only behind the demos
-  // table (user-reported 2026-08-27: "still no pre post readings under any
-  // society"). They are never excludable: a figure read off paper cannot be
-  // re-reviewed, and the baseline it produced is already frozen.
-  //
-  // Only when exactly one demo counts. Two live demos measured on
-  // overlapping dates — Urban Casa's ran 14-19 and 15-17 December on
-  // different sets of lights — are two series, and flattening them into one
-  // list would show the same date twice with different values under a
-  // single average. That circuit keeps its per-demo tables, which is the
-  // reason those are stored per demo in the first place.
-  const demoSeries = circuitDailyFromDemos(
-    circuit.demos.map((d) => ({
-      rejected: d.rejected,
-      readings: d.readings.map((r) => ({
-        date: r.date.toISOString().slice(0, 10),
-        kWh: r.kWh,
-        phase: r.phase as "pre" | "post",
-      })),
-    })),
-  );
-  const demoDays: StoredReadingDTO[] =
-    storedReadings.length > 0
-      ? []
-      : (["pre", "post"] as const).flatMap((p) =>
-          demoSeries[p].map((r) => {
-            const isPre = p === "pre";
-            const effB = isPre
-              ? null
-              : effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date(r.date));
-            const sPct = isPre || effB === null ? null : savingsPct(effB, r.kWh);
-            const v = isPre && theoretical !== null ? varianceAgainstTheoretical(r.kWh, theoretical) : null;
-            return {
-              id: `${circuit.id}-demo-${p}-${r.date}`,
-              date: r.date,
-              kWh: r.kWh,
-              intervalCount: null,
-              expectedIntervals: null,
-              phase: isPre ? ("pre_install" as const) : ("post_install" as const),
-              excluded: false,
-              excludedReason: null,
-              released: false,
-              superseded: false,
-              variancePct: v?.pct ?? null,
-              varianceBand: v?.band ?? null,
-              savingsPct: sPct,
-              savingsBand: sPct === null ? null : savingsBand(sPct),
-              frozenReason:
-                "Read from the demo report — a figure printed on paper cannot be re-reviewed here.",
-            };
-          }),
-        );
-  const displayReadings = storedReadings.length > 0 ? storedReadings : demoDays;
-
-  const phaseSummaries = (["pre_install", "post_install", "monitoring"] as const).flatMap((phase) => {
-    const rows = displayReadings.filter((r) => r.phase === phase);
-    if (rows.length === 0) return [];
-    const days = rows.map((r) => ({ kWh: r.kWh, excluded: r.excluded }));
-    // Other readings can sit on both sides of the replacement once demo
-    // periods are set; a savings figure only means something after it.
-    const allAfter = rows.every((r) => r.savingsPct !== null || r.phase === "post_install");
-    const summary = periodSavingsSummary(
-      phase === "pre_install" || (phase === "monitoring" && !allAfter) ? null : effBaselineNow,
-      days,
-    );
-    return [
-      {
-        phase,
-        label: phase,
-        averageKwh: summary.averageKwh,
-        savingsPct: summary.savingsPct,
-        savingsBand: summary.band as SavingsBand | null,
-        warn: summary.warn,
-      },
-    ];
+  const meters = await db.meterDevice.findMany({
+    where: { hasEnergySignal: true, removedFromAccountAt: null },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, circuit: { select: { id: true, location: true, lightType: true, society: { select: { name: true } } } } },
   });
-  // A circuit that already ran the manual/commissioning-window flow keeps it;
-  // a fresh circuit gets the CSV review flow. One circuit, one flow — mixing
-  // the two stores under one baseline is how figures stop agreeing.
-  const usesLegacyFlow = circuit.commissioningReadings.length > 0 && storedReadings.length === 0;
-
-  // Has this circuit's deal actually finished installing? That, not the demo
-  // benchmark, is what makes a month billable (CON-22).
-  const installationSignedOff = circuit.siteSurvey
-    ? (await db.pipeline.findUnique({
-        where: { id: circuit.siteSurvey.pipelineId },
-        select: { stage: true, installationProject: { select: { certificate: { select: { id: true } } } } },
-      }).then((pl) => pl?.stage === "active_billing" || !!pl?.installationProject?.certificate)) ?? false
-    : false;
-
-  // The valid period for THIS step's readings, resolved from the circuit's
-  // own dates by the same composition the ingest action uses to enforce it
-  // (user-asked 2026-08-20: "Show the valid period for meter readings"). It
-  // is shown before a file is chosen, so the range is an instruction rather
-  // than a verdict delivered after the upload.
-  const lastStoredReadingDate =
-    circuit.meterReadings.length > 0
-      ? circuit.meterReadings[circuit.meterReadings.length - 1].date
-      : null;
-  const readingWindow = circuitReadingWindow({
-    meterInstalledAt: circuit.meterInstalledAt,
-    lightReplacementDate: circuit.lightReplacementDate,
-    preInstallBaseline: circuit.preInstallBaseline,
-    benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-    lastStoredDate: lastStoredReadingDate,
-    demo: demoMode,
-  });
-  const day = (d: Date) => d.toISOString().slice(0, 10);
-  // The same window for each thing the readings could be for (2026-09-25):
-  // the upload asks, and holds the dates to the choice.
-  const windowFor = (kind: "pre_install" | "post_install" | "monitoring"): ReadingWindowDTO | null => {
-    const w = circuitReadingWindow({
-      meterInstalledAt: circuit.meterInstalledAt,
-      lightReplacementDate: circuit.lightReplacementDate,
-      preInstallBaseline: circuit.preInstallBaseline,
-      benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-      lastStoredDate: lastStoredReadingDate,
-      demo: demoMode,
-      kind,
-      preDemoFrom: circuit.preDemoFrom,
-      preDemoTo: circuit.preDemoTo,
-      postDemoFrom: circuit.postDemoFrom,
-      postDemoTo: circuit.postDemoTo,
-    });
-    if (!w) return null;
-    const demoPeriod =
-      (kind === "pre_install" && circuit.preDemoFrom) || (kind === "post_install" && circuit.postDemoFrom);
-    return {
-      kind,
-      from: day(w.from),
-      to: day(w.to),
-      empty: w.empty,
-      demoExtended: w.demoExtended,
-      startBasis: demoPeriod
-        ? "the demo period set for this circuit"
-        : kind === "monitoring" && lastStoredReadingDate
-          ? `one day before the last stored reading (${day(lastStoredReadingDate)}), so a part-day at the end of the previous file is re-read in full`
-          : kind === "post_install" && circuit.lightReplacementDate
-            ? `the day after the lights were replaced (${day(circuit.lightReplacementDate)})`
-            : `the day after the meter was installed (${day(circuit.meterInstalledAt!)})`,
-    };
-  };
-  const readingWindows = circuit.meterInstalledAt
-    ? {
-        pre_install: windowFor("pre_install"),
-        post_install: circuit.lightReplacementDate ? windowFor("post_install") : null,
-        monitoring: circuit.lightReplacementDate ? windowFor("monitoring") : null,
-      }
-    : null;
-  const readingWindowDTO: ReadingWindowDTO | null = readingWindow
-    ? {
-        kind: readingWindow.kind,
-        from: day(readingWindow.from),
-        to: day(readingWindow.to),
-        empty: readingWindow.empty,
-        demoExtended: readingWindow.demoExtended,
-        startBasis:
-          readingWindow.kind === "monitoring" && lastStoredReadingDate
-            ? `one day before the last stored reading (${day(
-                lastStoredReadingDate,
-              )}), so a part-day at the end of the previous file is re-read in full`
-            : readingWindow.kind === "post_install" && circuit.lightReplacementDate
-              ? `the day after the lights were replaced (${day(circuit.lightReplacementDate)})`
-              : `the day after the meter was installed (${day(circuit.meterInstalledAt!)})`,
-      }
-    : null;
-  const periodChip = readingWindowDTO ? (
-    <StatusChip tone="info">
-      {readingWindowDTO.empty
-        ? `Opens ${readingWindowDTO.from}`
-        : // In demo the end is a year out by design; unlabelled, that date
-          // reads as a defect rather than as the horizon it is.
-          `${readingWindowDTO.from} → ${readingWindowDTO.to}${
-            readingWindowDTO.demoExtended ? " · demo" : ""
-          }`}
-    </StatusChip>
-  ) : null;
-
-  // FEAT-015 — at most one review is open at a time: a review is only raised
-  // when a window completes, and a completed window can't complete again
-  // until this one resolves and restarts it.
-  const openReview = circuit.demoResultReviews.find((r) => r.state === "open") ?? null;
-  const resolvedReviews = circuit.demoResultReviews.filter((r) => r.state === "resolved");
-
-  // FEAT-041 — preInstallBaseline stays as commissioned; the baseline in
-  // force today is replayed from the rescale events (INV-07/ADR-005).
-  const effectiveBaseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
-  // The table shows what is in force; voided entries are kept but collapsed,
-  // so a corrected entry doesn't read as a duplicate of the one it replaced.
-  const liveRescaleEvents = circuit.rescaleEvents.filter((e) => !e.voidedAt);
-  const voidedRescaleEvents = circuit.rescaleEvents.filter((e) => e.voidedAt);
-
-  const state = statusMeta(CIRCUIT_STATE, circuit.state);
-  const installGatePass = circuit.gatePasses.find((g) => g.kind === "demo_install");
-  const completionGatePass = circuit.gatePasses.find((g) => g.kind === "demo_install_completion");
-  const preInstallReadings = circuit.commissioningReadings
-    .filter(
-      (r) =>
-        r.windowType === "pre_install" && circuit.preInstallWindowStartAt && r.date >= circuit.preInstallWindowStartAt,
-    )
-    .map((r) => ({ ...r, date: r.date.toISOString() }));
-  const preInstallValidCount = preInstallReadings.filter((r) => r.status === "valid").length;
-  const preInstallPendingAnomaly = preInstallReadings.some((r) => r.status === "anomaly");
-  const postInstallReadings = circuit.commissioningReadings
-    .filter(
-      (r) =>
-        r.windowType === "post_install" &&
-        circuit.postInstallWindowStartAt &&
-        r.date >= circuit.postInstallWindowStartAt,
-    )
-    .map((r) => ({ ...r, date: r.date.toISOString() }));
-  const postInstallValidCount = postInstallReadings.filter((r) => r.status === "valid").length;
-  const postInstallPendingAnomaly = postInstallReadings.some((r) => r.status === "anomaly");
-
-  // FEAT-013 — who is doing the replacement, when, and whether this viewer is
-  // that person. Ops is never blocked but is told whose work it is.
-  const replacementVisit = circuit.scheduledEvents[0] ?? null;
-  const replacementOwnerName =
-    circuit.replacementOwner?.name ?? circuit.replacementOwner?.email ?? null;
-  const isReplacementAssignee = circuit.replacementOwnerId === session.user.id;
-  const canAssignReplacement =
-    canOverride || circuit.siteSurvey?.pipeline?.surveyOwnerId === session.user.id;
+  const meterOptions = meters.map((m) => ({
+    id: m.id,
+    label: m.name,
+    sublabel: m.circuit ? (m.circuit.id === circuit.id ? "on this circuit" : `now on ${m.circuit.society.name} · ${circuitLabelOf(m.circuit.location, m.circuit.lightType)}`) : "not on any circuit",
+  }));
   const fieldCandidates = await db.adminUser.findMany({
-    where: {
-      team: { in: teamsFor("survey") },
-      permissions: { has: "manage_survey" },
-      isActive: true,
-      deletedAt: null,
-    },
+    where: { team: { in: teamsFor("survey") }, permissions: { has: "manage_survey" }, isActive: true, deletedAt: null },
     select: { id: true, name: true, email: true, team: true },
     orderBy: { name: "asc" },
   });
 
-  const backfilled =
-    (circuit.eligibilityChecklist as { backfilled?: boolean } | null)?.backfilled === true;
+  const installationSignedOff = pipelineId
+    ? await db.pipeline
+        .findUnique({ where: { id: pipelineId }, select: { stage: true, installationProject: { select: { certificate: { select: { id: true } } } } } })
+        .then((pl) => pl?.stage === "active_billing" || !!pl?.installationProject?.certificate)
+    : false;
 
-  const steps = circuitSteps({
-    state: circuit.state,
-    backfilled,
-    meterInstalledAt: circuit.meterInstalledAt,
-    hasStoredReadings: storedReadings.length > 0,
-    hasInstallGatePass: !!installGatePass,
-    hasCompletionGatePass: !!completionGatePass,
-    preInstallBaseline: circuit.preInstallBaseline,
-    replacementOwnerName:
-      circuit.replacementOwner?.name ?? circuit.replacementOwner?.email ?? null,
-    replacementScheduledAt: replacementVisit?.startAt ?? null,
-    lightReplacementDate: circuit.lightReplacementDate,
-    benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-  });
-  // The survey's own count for this light type, summed across its areas —
-  // four towers are four rows and one type (the page that records them groups
-  // the same way).
-  const surveyInventoryTotals = new Map<string, { label: string; lights: number }>();
+  const effectiveBaseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, now);
+  const effBaselineNow = effectiveBaseline;
+  const liveRescaleEvents = circuit.rescaleEvents.filter((e) => !e.voidedAt);
+  const voidedRescaleEvents = circuit.rescaleEvents.filter((e) => e.voidedAt);
+  const openReview = demo ? (circuit.demoResultReviews.find((r) => r.state === "open" && (r.demoId === demo.id || r.demoId === null)) ?? null) : null;
+  const resolvedReviews = circuit.demoResultReviews.filter((r) => r.state === "resolved");
+  const urgency = openReview ? reviewUrgency({ raisedAt: openReview.raisedAt, occurrence: openReview.occurrence, now }) : null;
+  const state = statusMeta(CIRCUIT_STATE, circuit.state);
+
+  const surveyTotals = new Map<string, { label: string; lights: number }>();
   for (const a of circuit.siteSurvey?.areas ?? []) {
-    const e = surveyInventoryTotals.get(a.lightType) ?? { label: a.lightType, lights: 0 };
+    const e = surveyTotals.get(a.lightType) ?? { label: a.lightType, lights: 0 };
     e.lights += a.count;
-    surveyInventoryTotals.set(a.lightType, e);
+    surveyTotals.set(a.lightType, e);
   }
-  const surveyInventoryCount = inventoryCountFor(circuit.lightType, [...surveyInventoryTotals.values()]);
-  const representedMismatch =
-    surveyInventoryCount !== null && surveyInventoryCount !== circuit.representedLightCount;
+  const surveyInventoryCount = inventoryCountFor(circuit.lightType, [...surveyTotals.values()]);
+  const representedMismatch = surveyInventoryCount !== null && surveyInventoryCount !== circuit.representedLightCount;
+  const surveyHref = pipelineId ? `/admin/pipeline/${pipelineId}/survey` : null;
 
-  const surveyHref = circuit.siteSurvey ? `/admin/pipeline/${circuit.siteSurvey.pipelineId}/survey` : null;
+  // One period of the chosen demo, as the readings panel reads it.
+  const periodDTO = demo ? { preFrom: iso(demo.preFrom), preTo: iso(demo.preTo), postFrom: iso(demo.postFrom), postTo: iso(demo.postTo) } : null;
+  const readingsFor = (phase: "pre" | "post") => {
+    if (!demo) return null;
+    const acc = latestAcceptance(demo.acceptances, phase);
+    const live = acc && acc.averageKwh !== null ? acc : null;
+    const rows = demo.readings.filter((r) => r.phase === phase && periodOfDay(r.date, demo) === phase);
+    const changed = new Set(live ? changedSince(live.days as AcceptanceDay[], rows) : []);
+    const from = phase === "pre" ? demo.preFrom : demo.postFrom;
+    const to = phase === "pre" ? demo.preTo : demo.postTo;
+    const days: DemoDayDTO[] = rows.map((r) => {
+      const key = r.date.toISOString().slice(0, 10);
+      return {
+        id: r.id,
+        date: key,
+        kWh: r.kWh,
+        source: r.source,
+        meterKwh: r.meterKwh,
+        hoursCovered: r.hoursCovered,
+        dataHours: r.dataHours,
+        excluded: r.excludedAt !== null,
+        excludedReason: r.excludedReason,
+        changedSinceAccept: changed.has(key),
+      };
+    });
+    return {
+      days,
+      missing: from && to ? missingDays({ from, to }, rows).map((d) => d.toISOString().slice(0, 10)) : [],
+      accepted: live ? { version: live.version, averageKwh: live.averageKwh, countedDays: live.countedDays, at: "" } : null,
+      suggested: suggestedPeriod(phase, { meterInstalledAt: demo.meterInstalledAt, lightReplacementDate: demo.lightReplacementDate }, now),
+    };
+  };
 
-  // Nothing on this page needs a person any more. Say so at the top and
-  // point off the page, rather than leaving an operator to scan seven ticked
-  // rows to work that out (user-reported 2026-08-20).
-  const allStepsComplete = steps.every((st) => st.status === "done");
-  const dealNext =
-    allStepsComplete && circuit.siteSurvey
-      ? (await loadDealProgress(circuit.siteSurvey.pipelineId))?.next ?? null
-      : null;
-  const urgency = openReview
-    ? reviewUrgency({ raisedAt: openReview.raisedAt, occurrence: openReview.occurrence, now: new Date() })
-    : null;
+  const steps = facts ? demoSteps(facts) : [];
+  const visit = demo?.scheduledEvents.find((e) => e.status === "scheduled") ?? null;
+  const ownerName = demo?.replacementOwner ? (demo.replacementOwner.name ?? demo.replacementOwner.email) : null;
+  const isAssignee = demo?.replacementOwnerId === session.user.id;
+  const canAssign = canOverride || circuit.siteSurvey?.pipeline?.surveyOwnerId === session.user.id;
+  const readOnly = (what: string) => <p className="text-sm text-[var(--text-muted)]">{what}</p>;
+  const lockedNote = lock && !lock.editable ? "Locked — the demo's report has been shared. Operations can unlock it for correction." : null;
 
   return (
     <>
-      {/* A removed circuit stays reachable by link — saying nothing would
-          make the page read as a live circuit that has simply gone missing
-          from every list. It has to lead the page: below the step map, a
-          reader has already spent the page believing the circuit is live. */}
       {circuit.voidedAt && (
         <PageRibbon tone="bad">
           This circuit was removed by {circuit.voidedBy?.name ?? circuit.voidedBy?.email ?? "—"} on{" "}
-          <span className="num">{formatDate(circuit.voidedAt)}</span> — {circuit.voidReason}.
-          It is excluded from the registry, the monitoring board and every billing run. The record is kept,
-          and the operations lead can restore it from the registry.
+          <span className="num">{formatDate(circuit.voidedAt)}</span> — {circuit.voidReason}. It is excluded from the registry,
+          the monitoring board and every billing run. The record is kept, and the operations lead can restore it from the registry.
         </PageRibbon>
       )}
 
@@ -620,56 +336,24 @@ export default async function CircuitDetailPage({
         )}
       </div>
 
-      {/* The four figures someone opens a circuit to check, before the
-          step-by-step detail. Each is absent-not-invented: a circuit with no
-          baseline yet says so rather than showing a zero. */}
-      {/* Either the deal has somewhere else to be, or this circuit is
-          genuinely finished. Both beat silence under a page of ticks. */}
-      {allStepsComplete &&
-        (dealNext ? (
-          <NextStepCallout next={dealNext} />
-        ) : (
-          <StepComplete title="Commissioning complete — nothing left to do here.">
-            Every step on this circuit is done. The records below are folded; open any of them to
-            check a figure.
-          </StepComplete>
-        ))}
 
       <StatRow>
         {[
+          { label: "Theoretical", value: theoretical === null ? "—" : theoretical.toFixed(2), unit: theoretical === null ? "no inventory" : "kWh/day" },
           {
-            label: "Theoretical",
-            value: theoretical === null ? "—" : theoretical.toFixed(2),
-            unit: theoretical === null ? "no inventory" : "kWh/day",
-          },
-          {
-            // "Pre-install baseline" read like "the average of the pre-install
-            // readings", which is a different number once days move. This is
-            // the figure frozen at replacement.
-            label: "Commissioned baseline",
+            label: "Baseline",
             value: circuit.preInstallBaseline === null ? "—" : circuit.preInstallBaseline.toFixed(2),
-            unit:
-              circuit.preInstallBaseline === null
-                ? "not commissioned"
-                : circuit.lightReplacementDate
-                  ? "kWh/day · frozen at replacement"
-                  : "kWh/day · not yet frozen",
+            unit: circuit.preInstallBaseline === null ? "no accepted demo" : agreedPending ? "kWh/day · agreed, demo pending" : "kWh/day · from accepted demos",
           },
           {
             label: "In force now",
             value: effBaselineNow === null ? "—" : effBaselineNow.toFixed(2),
-            unit:
-              effBaselineNow === null
-                ? "no baseline"
-                : liveRescaleEvents.length > 0
-                  ? `after ${liveRescaleEvents.length} rescale${liveRescaleEvents.length === 1 ? "" : "s"}`
-                  : "unchanged",
+            unit: effBaselineNow === null ? "no baseline" : liveRescaleEvents.length > 0 ? `after ${liveRescaleEvents.length} rescale${liveRescaleEvents.length === 1 ? "" : "s"}` : "unchanged",
           },
           {
             label: "Benchmark",
-            value:
-              circuit.benchmarkSavingsPct === null ? "—" : `${circuit.benchmarkSavingsPct.toFixed(1)}%`,
-            unit: circuit.benchmarkSavingsPct === null ? "not confirmed" : "fixed for the term",
+            value: circuit.benchmarkSavingsPct === null ? "—" : `${circuit.benchmarkSavingsPct.toFixed(1)}%`,
+            unit: circuit.benchmarkSavingsPct === null ? "not confirmed" : agreedPending ? "agreed, demo pending" : "fixed for the term",
           },
         ].map((f) => (
           <Stat key={f.label} label={f.label} value={f.value} detail={f.unit} />
@@ -685,7 +369,7 @@ export default async function CircuitDetailPage({
             the panel folds to a header carrying its own figure, and this
             explanation of a rule nobody can act on any more is just noise
             above it. */}
-        {circuit.meterInstalledAt === null && (
+        {!anyMeterInstalled && (
           <>
             <h2 className="text-[15px] font-semibold mb-1">Load inventory</h2>
             <p className="text-sm text-[var(--text-muted)] mb-3">
@@ -704,10 +388,10 @@ export default async function CircuitDetailPage({
           // is in, every pre-install reading is judged against the
           // theoretical figure these lines produce — so changing them after
           // that silently moves the basis those readings were compared to.
-          editable={canEdit && circuit.meterInstalledAt === null && !circuit.voidedAt}
+          editable={canEdit && !anyMeterInstalled && !circuit.voidedAt}
           frozenReason={
-            circuit.meterInstalledAt
-              ? (circuit.lightReplacementDate
+            anyMeterInstalled
+              ? (anyReplaced
                   ? "The meter is installed and the lights have been replaced — the inventory is locked as the record both were measured against."
                   : "The meter is installed — the inventory is locked, because every pre-install reading is judged against the theoretical figure it produces.") +
                 // Say which of the two is true, rather than telling the
@@ -731,776 +415,251 @@ export default async function CircuitDetailPage({
         />
       </section>
 
-      {/* FEAT-014 AC-7/AC-8 — which demos the benchmark rests on, and the
-          override for when the agreed figure differs from what they measured. */}
+
       <DemosPanel
         circuitId={circuit.id}
-        demos={circuit.demos.map<DemoDTO>((d) => ({
-          id: d.id,
-          sequence: d.sequence,
-          savingsPct: d.savingsPct,
-          rejected: d.rejected,
-          meteredLightCount: d.meteredLightCount,
-          preInstallBaseline: d.preInstallBaseline,
-          postInstallAverage: d.postInstallAverage,
-          rejectionReason: d.rejectionReason,
-          note: d.note,
-          readingCount: d._count.readings,
-          readings: d.readings.map((r) => ({
-            date: r.date.toISOString().slice(0, 10),
-            kWh: r.kWh,
-            phase: r.phase as "pre" | "post",
-          })),
-        }))}
+        demos={demoDTOs}
+        circuitBaseline={circuit.preInstallBaseline}
+        circuitBenchmark={circuit.benchmarkSavingsPct}
+        meteredLightCount={circuit.meteredLightCount}
         overridePct={circuit.benchmarkOverridePct}
         overrideReason={circuit.benchmarkOverrideReason}
-        canEdit={canEdit && !circuit.voidedAt}
+        canStart={canEdit && !circuit.voidedAt && eligible}
+        canDecide={canOverride && !circuit.voidedAt}
+        maxDemos={MAX_DEMOS_PER_CIRCUIT}
+        agreedPending={agreedPending}
       />
 
-      {/* The commissioning sequence as an accordion — the user-specified
-          arrangement (2026-08-15): only the step that needs action right now
-          is an open form; done steps are closed headers with their record one
-          "View" toggle away (still-live controls, like a gate-pass approval,
-          sit behind that same toggle); future steps are disabled headers that
-          say what unlocks them. circuitSteps() is the single source of the
-          ordering and statuses — this page only supplies each step's body. */}
-      <div className="max-w-none space-y-3 mb-10">
-        {steps.map((step, i) => {
-          let summary: string = step.summary;
-          let chip: ReactNode = null;
-          let body: ReactNode = null;
+      {!eligible && (
+        <Card className="p-5 mb-6">
+          <p className="text-sm text-[var(--text-muted)]">
+            The eligibility decision happens on the{" "}
+            {surveyHref ? (
+              <Link href={surveyHref} className="underline">
+                survey page
+              </Link>
+            ) : (
+              "survey page"
+            )}
+            . A demo starts once the circuit passes it.
+          </p>
+        </Card>
+      )}
 
-          switch (step.key) {
-            // ---- the short path, for a circuit that predates the system ----
-            case "historical-dates": {
-              body = canEdit ? (
-                <HistoricalCommissioning
-                  circuitId={circuit.id}
-                  meterInstalledAt={circuit.meterInstalledAt?.toISOString().slice(0, 10) ?? null}
-                  lightReplacementDate={circuit.lightReplacementDate?.toISOString().slice(0, 10) ?? null}
-                  embedded
-                />
-              ) : (
-                <p className="text-sm text-[var(--text-muted)]">
-                  Recording the commissioning dates is the field team&apos;s action.
-                </p>
-              );
-              if (step.status === "done") {
-                summary = `Meter installed ${
-                  circuit.meterInstalledAt ? formatDate(circuit.meterInstalledAt) : "—"
-                }${
-                  circuit.lightReplacementDate
-                    ? ` · lights replaced ${formatDate(circuit.lightReplacementDate)}`
-                    : " · replacement date not recorded"
-                }`;
-              }
-              break;
-            }
-            case "readings": {
-              if (circuit.benchmarkSavingsPct != null) {
-                summary = `Benchmark ${circuit.benchmarkSavingsPct.toFixed(2)}% from the stored readings`;
-              }
-              body = canEdit ? (
-                <CircuitReadingPanel
-                  circuitId={circuit.id}
-                  window={readingWindowDTO}
-                  windows={readingWindows}
-                  demoMode={demoMode}
-                  resumeFile={resumeFile}
-                />
-              ) : (
-                <p className="text-sm text-[var(--text-muted)]">
-                  Awaiting the field team to upload the meter&apos;s readings.
-                </p>
-              );
-              break;
-            }
-            case "eligibility": {
-              // A circuit backfilled from a document has no survey to send
-              // anyone to, and its demo already happened — so it says what
-              // is true rather than pointing at a page that does not exist.
-              const backfilled =
-                (circuit.eligibilityChecklist as { backfilled?: boolean; source?: string; note?: string } | null)
-                  ?.backfilled === true;
-              if (backfilled) {
-                const meta = circuit.eligibilityChecklist as {
-                  source?: string;
-                  note?: string;
-                  deviations?: string[];
-                  basisNote?: string;
-                };
-                const dev = describeDeviations(meta.deviations ?? []);
-                summary =
-                  dev.length > 0
-                    ? `Not assessed — ${dev.length} exception${dev.length === 1 ? "" : "s"} on record`
-                    : "Not assessed — already in service when it was recorded";
-                body = (
-                  <div className="space-y-4">
-                    <p className="text-sm text-[var(--text-muted)]">
-                      {meta.note}
-                      {meta.source ? ` Built from ${meta.source}.` : ""}
-                    </p>
-                    {dev.length > 0 && (
-                      <div>
-                        <p className="text-sm font-medium">How this circuit&apos;s figures were arrived at</p>
-                        <p className="mb-3 text-[13px] text-[var(--text-muted)]">
-                          These societies were commissioned before the system existed and share no single
-                          method. None of it can be corrected — it is what was signed and billed on — so
-                          it is recorded, because a figure whose basis is unstated cannot be defended
-                          when it is questioned.
-                        </p>
-                        <ul className="space-y-2">
-                          {dev.map(({ code, meta: m }) => (
-                            <li key={code} className="text-[13px]">
-                              <span className="font-medium">{m.label}</span>
-                              <span className="block text-[var(--text-muted)]">{m.what}</span>
-                              <span className="block text-[var(--text-subtle)]">Standard: {m.standard}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    {meta.basisNote && (
-                      <div>
-                        <p className="text-sm font-medium">Read from the documents</p>
-                        <p className="text-[13px] text-[var(--text-muted)]">{meta.basisNote}</p>
-                      </div>
-                    )}
-                  </div>
-                );
-              } else if (step.status === "current") {
-                body = (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    The eligibility decision happens on the{" "}
-                    {surveyHref ? (
-                      <Link href={surveyHref} className="underline">
-                        survey page
-                      </Link>
-                    ) : (
-                      "survey page"
-                    )}
-                    , not here.
-                  </p>
-                );
-              }
-              break;
-            }
-
-            case "meter": {
-              if (step.status === "current") {
-                body = canEdit ? (
-                  <LoadValidationForm
-                    circuitId={circuit.id}
-                    meteredLightCount={circuit.meteredLightCount}
+      {demo && facts && lock && (
+        <section className="max-w-none mb-10 space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[15px] font-semibold">Demo {demo.sequence} — commissioning</h2>
+            {demo.rejected && <StatusChip tone="bad">Rejected</StatusChip>}
+          </div>
+          <DemoLockBar
+            demoId={demo.id}
+            why={lock.why}
+            unlockedUntil={demo.unlockedUntil?.toISOString() ?? null}
+            unlockedBy={demo.unlockedBy ? (demo.unlockedBy.name ?? demo.unlockedBy.email) : null}
+            unlockReason={demo.unlockReason}
+            canUnlock={canOverride}
+          />
+          {steps.map((step, i) => {
+            let summary: string = step.summary;
+            let chip: ReactNode = null;
+            let body: ReactNode = null;
+            switch (step.key) {
+              case "eligibility":
+                body = readOnly("Decided on the survey page.");
+                break;
+              case "meter": {
+                const failed = demo.loadDiscrepancyPct !== null && demo.loadDiscrepancyPct > LOAD_TOLERANCE_PCT && !demo.loadValidationOverrideById ? demo.loadDiscrepancyPct : null;
+                const form = editable ? (
+                  <DemoMeterForm
+                    demoId={demo.id}
+                    meters={meterOptions}
+                    meteredLightCount={demo.meteredLightCount}
                     wattage={circuit.wattage}
                     canOverride={canOverride}
-                    lastDiscrepancyPct={circuit.loadDiscrepancyPct}
-                  />
-                ) : (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Meter installation and load validation is the field team&apos;s action — you can read this
-                    circuit&apos;s record but not edit it.
-                  </p>
-                );
-              } else if (step.status === "done") {
-                // The date is what a later step is measured against, and the
-                // step's own form defaults to today — so a circuit whose
-                // meter really went in weeks ago is stranded by accepting
-                // that default, with no route back to it (user-caught
-                // 2026-09-07). Demo mode gets one; the server decides.
-                const dateLine = circuit.meterInstalledAt ? (
-                  <p className="text-sm">
-                    Meter installed{" "}
-                    <span className="num">{formatDate(circuit.meterInstalledAt)}</span>
-                    {circuit.preInstallWindowStartAt && (
-                      <span className="text-[var(--text-muted)]">
-                        {" "}
-                        · the pre-install window opens{" "}
-                        <span className="num">{formatDate(circuit.preInstallWindowStartAt)}</span>
-                      </span>
-                    )}
-                  </p>
-                ) : null;
-                const overridden = circuit.loadValidationOverrideById ? (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Load validation was overridden by ops — {circuit.loadValidationOverrideReason}
-                    {circuit.loadDiscrepancyPct != null &&
-                      ` (discrepancy was ${circuit.loadDiscrepancyPct.toFixed(1)}%)`}
-                  </p>
-                ) : null;
-                const fixer =
-                  demoMode && canEdit && circuit.meterInstalledAt && baselineOpen ? (
-                    <InstallDateForm
-                      circuitId={circuit.id}
-                      current={isoDate(circuit.meterInstalledAt)}
-                    />
-                  ) : null;
-                if (circuit.loadValidationOverrideById) {
-                  // An overridden circuit stays visibly distinguishable from
-                  // one that passed normally (FEAT-011-AC-5).
-                  summary = "Validation overridden by ops";
-                }
-                if (dateLine || overridden || fixer) {
-                  body = (
-                    <div className="space-y-3">
-                      {dateLine}
-                      {overridden}
-                      {fixer}
-                    </div>
-                  );
-                }
-              }
-              break;
-            }
-
-            // FEAT-011/013/CON-18 — the two gate passes are the same
-            // component parameterized by kind, here too.
-            case "install-gate":
-            case "completion-gate": {
-              const pass = step.key === "install-gate" ? installGatePass : completionGatePass;
-              if (pass) {
-                const meta = statusMeta(GATE_PASS_STATUS, pass.status);
-                chip = <StatusChip tone={meta.tone}>{meta.label}</StatusChip>;
-                summary = ""; // the chip already states it
-                body = <GatePassCard gatePass={pass} canOverride={canOverride} />;
-              } else if (step.status === "done") {
-                // Rank-inferred done: the lifecycle is past this step but no
-                // pass row exists (data predating the feature, an override).
-                // Claiming "Submitted" would assert an artifact that isn't there.
-                summary = "No stored record — the lifecycle advanced past this step";
-              } else if (step.status === "current") {
-                body = canEdit ? (
-                  <GatePassForm
-                    circuitId={circuit.id}
-                    kind={step.key === "completion-gate" ? "demo_install_completion" : undefined}
-                  />
-                ) : (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Awaiting the field team to submit the gate pass on site.
-                  </p>
-                );
-              }
-              break;
-            }
-
-            // FEAT-012 — pre-install baseline monitoring window.
-            case "pre-window": {
-              if (step.status === "current") {
-                // The "Day X of 5" count belongs to the legacy commissioning
-                // window. On a CSV-flow circuit nothing ever writes those
-                // rows, so it read "Day 0 of 5" no matter how many readings
-                // were stored — a progress figure that could not move. That
-                // flow's own measure is the period it accepts.
-                chip = usesLegacyFlow ? (
-                  <StatusChip tone={preInstallPendingAnomaly ? "warn" : "info"}>
-                    {preInstallPendingAnomaly ? "Anomaly open" : `Day ${preInstallValidCount} of 5`}
-                  </StatusChip>
-                ) : (
-                  periodChip
-                );
-                if (!usesLegacyFlow) {
-                  summary =
-                    "Record the meter's daily readings for the period below — every day is reviewed before it is saved";
-                }
-                body = usesLegacyFlow ? (
-                  circuit.preInstallWindowStartAt ? (
-                    <MonitoringWindowPanel
-                      circuitId={circuit.id}
-                      windowType="pre_install"
-                      windowStartAt={circuit.preInstallWindowStartAt?.toISOString() ?? null}
-                      title="Pre-install monitoring window"
-                      readings={preInstallReadings}
-                      validCount={preInstallValidCount}
-                      pendingAnomaly={preInstallPendingAnomaly}
-                      canEdit={canEdit && circuit.preInstallBaseline == null}
-                      canClear={canEdit}
-                      embedded
-                    />
-                  ) : (
-                    <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
-                  )
-                ) : canEdit ? (
-                  // CON-45 — the CSV review flow. The system extracts from the
-                  // day after meter install; every day is reviewed before save.
-                  <CircuitReadingPanel
-                    circuitId={circuit.id}
-                    window={readingWindowDTO}
-                    windows={readingWindows}
-                    demoMode={demoMode}
-                    resumeFile={resumeFile}
-                  />
-                ) : (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    Awaiting the field team to upload the meter&apos;s readings.
-                  </p>
-                );
-              } else if (step.status === "done" && circuit.preInstallBaseline == null) {
-                // The rank-inferred "done" above (the circuit walked past
-                // this step: replacement recorded, gate passes approved)
-                // can still be genuinely true while NO pre-install baseline
-                // was ever actually set — found 2026-09-18: a circuit
-                // reached benchmark_review with a real replacement date and
-                // an approved completion gate pass, yet no MeterReading had
-                // ever produced a baseline. The step's own map coherence
-                // rule (rank OR artifact) is about the CHECKMARK, not about
-                // whether there's still real work to do — CON-45's own
-                // evidence-based phase derivation (readingWindowDTO.kind,
-                // shared with the CSV upload panel) still says this circuit
-                // needs pre-install readings, and that has to stay
-                // reachable from here rather than surfacing, mislabeled,
-                // under the "Post-install window" step below (the reported
-                // bug: a panel titled "Post-install" showing the PRE-install
-                // window and asking for pre-install-shaped readings).
-                summary = "No stored baseline — record it now to set one";
-                if (!usesLegacyFlow && canEdit && readingWindowDTO?.kind === "pre_install") {
-                  body = (
-                    <CircuitReadingPanel
-                      circuitId={circuit.id}
-                      window={readingWindowDTO}
-                      windows={readingWindows}
-                      demoMode={demoMode}
-                      resumeFile={resumeFile}
-                    />
-                  );
-                }
-                // The rank-inferred "done" above can still leave real
-                // CommissioningReading rows sitting on the circuit — an
-                // abandoned or partial attempt, never completed — that were
-                // previously invisible here entirely (user-reported
-                // 2026-09-18: "nowhere I see premetering records"). Shown
-                // and, since nothing here is frozen (no baseline was ever
-                // set), clearable the same way the current step's window is.
-                if (circuit.preInstallWindowStartAt && preInstallReadings.length > 0) {
-                  body = (
-                    <MonitoringWindowPanel
-                      circuitId={circuit.id}
-                      windowType="pre_install"
-                      windowStartAt={circuit.preInstallWindowStartAt.toISOString()}
-                      title="Pre-install monitoring window"
-                      readings={preInstallReadings}
-                      validCount={preInstallValidCount}
-                      pendingAnomaly={preInstallPendingAnomaly}
-                      canEdit={false}
-                      canClear={canEdit}
-                      embedded
-                    />
-                  );
-                }
-              } else if (step.status === "done" && circuit.preInstallBaseline != null) {
-                summary = usesLegacyFlow
-                  ? `Baseline ${circuit.preInstallBaseline.toFixed(2)} kWh/day from 5 valid days`
-                  : `Commissioned baseline ${circuit.preInstallBaseline.toFixed(
-                      2,
-                    )} kWh/day — frozen when the lights were replaced`;
-                body = (
-                  <div className="space-y-4">
-                    <p className="text-sm text-[var(--text-muted)]">
-                      Commissioned baseline:{" "}
-                      <span className="num">{circuit.preInstallBaseline.toFixed(2)}</span> kWh/day at{" "}
-                      <span className="num">
-                        {circuit.rescaleEvents[0]?.previousLightCount ?? circuit.meteredLightCount}
-                      </span>{" "}
-                      lights
-                      {/* Only a LIVE entry moves the baseline — a circuit whose
-                          entries were all voided is back on its commissioned
-                          figure, and saying "in force now" there would
-                          contradict the replay. */}
-                      {liveRescaleEvents.length > 0 && effectiveBaseline != null && (
-                        <>
-                          {" · in force now: "}
-                          <span className="num font-semibold" style={{ color: "var(--text)" }}>
-                            {effectiveBaseline.toFixed(2)}
-                          </span>{" "}
-                          kWh/day at <span className="num">{circuit.meteredLightCount}</span> lights
-                        </>
-                      )}
-                    </p>
-                    {circuit.preInstallWindowStartAt && preInstallReadings.length > 0 && (
-                      <MonitoringWindowPanel
-                        circuitId={circuit.id}
-                        windowType="pre_install"
-                        windowStartAt={circuit.preInstallWindowStartAt?.toISOString() ?? null}
-                        title="Pre-install monitoring window"
-                        readings={preInstallReadings}
-                        validCount={preInstallValidCount}
-                        pendingAnomaly={preInstallPendingAnomaly}
-                        canEdit={false}
-                        frozen
-                        embedded
-                      />
-                    )}
-                  </div>
-                );
-              }
-              break;
-            }
-
-            // FEAT-013 — light replacement / demo installation.
-            // FEAT-013 — the replacement is handed to a named crew and booked
-            // with the society before anybody records what was installed
-            // (user-asked 2026-08-25).
-            case "assign-replacement": {
-              if (step.status === "current" || (step.status === "done" && replacementOwnerName)) {
-                const details = replacementOwnerName ? (
-                  <VisitDetails
-                    visit={{
-                      assigneeName: replacementOwnerName,
-                      assigneeTeam: circuit.replacementOwner
-                        ? teamMeta(circuit.replacementOwner.team).label
-                        : "—",
-                      assignedAt: circuit.replacementAssignedAt,
-                      assignedByName:
-                        circuit.replacementAssignedBy?.name ??
-                        circuit.replacementAssignedBy?.email ??
-                        null,
-                      scheduledAt: replacementVisit?.startAt ?? null,
-                      contactName: replacementVisit?.contactName ?? null,
-                      contactPhone: replacementVisit?.contactPhone ?? null,
-                      note: replacementVisit?.note ?? null,
-                      leadContactName: circuit.society.name,
-                      leadContactPhone: null,
+                    failedPct={failed}
+                    initial={{
+                      meterId: demo.meterId,
+                      installedOn: iso(demo.meterInstalledAt) || new Date().toISOString().slice(0, 10),
+                      displayedLoad: demo.meterDisplayedLoad === null ? "" : String(demo.meterDisplayedLoad),
+                      skipped: demo.meterSkipped,
                     }}
                   />
                 ) : null;
-                body = (
-                  <div className="space-y-5">
-                    {details}
-                    {canAssignReplacement || isReplacementAssignee ? (
-                      <AssignReplacement
-                        circuitId={circuit.id}
-                        current={
-                          circuit.replacementOwnerId && replacementOwnerName
-                            ? { id: circuit.replacementOwnerId, name: replacementOwnerName }
-                            : null
-                        }
-                        candidates={fieldCandidates.map((c) => ({
-                          id: c.id,
-                          name: c.name ?? c.email,
-                          team: teamMeta(c.team).label,
-                        }))}
-                        visit={{
-                          scheduledAt: isoDateTimeLocal(replacementVisit?.startAt ?? null),
-                          contactName: replacementVisit?.contactName ?? "",
-                          contactPhone: replacementVisit?.contactPhone ?? "",
-                          note: replacementVisit?.note ?? "",
-                        }}
-                        canArrange={isReplacementAssignee || canOverride}
-                      />
-                    ) : (
-                      <p className="text-sm text-[var(--text-muted)]">
-                        Operations, or whoever is holding this deal&apos;s field work, hands the
-                        replacement to a crew.
-                      </p>
-                    )}
+                const record = demo.meterInstalledAt ? (
+                  <div className="text-sm space-y-1">
+                    <p>
+                      {demo.meterSkipped ? "No meter — days typed from the paper report" : `Meter ${demo.meter?.name ?? "—"}`} · installed{" "}
+                      <span className="num">{formatDate(demo.meterInstalledAt)}</span>
+                      {demo.meterDisplayedLoad !== null && demo.loadDiscrepancyPct !== null && (
+                        <span className="text-[var(--text-muted)]">
+                          {" "}
+                          · load {demo.meterDisplayedLoad} W ({demo.loadDiscrepancyPct.toFixed(1)}% from theoretical)
+                        </span>
+                      )}
+                    </p>
+                    {demo.loadValidationOverrideById && <p className="text-[var(--text-muted)]">Load test overridden by operations — {demo.loadValidationOverrideReason}</p>}
                   </div>
-                );
-              }
-              break;
-            }
-
-            case "replacement": {
-              if (step.status === "current") {
-                body = canEdit ? (
-                  <div className="space-y-4">
-                    {/* The work is somebody's. Anyone else recording it is
-                        doing so on their behalf, and is told. */}
-                    {replacementOwnerName && !isReplacementAssignee && (
-                      <PageRibbon tone="warn">
-                        <strong>Assigned to {replacementOwnerName}.</strong> They are doing this
-                        replacement. You can record it for them, but only if the work has actually
-                        been done.
-                      </PageRibbon>
+                ) : null;
+                if (demo.loadValidationOverrideById) summary = "Load test overridden by operations";
+                body = step.status === "done" ? (
+                  <div className="space-y-3">
+                    {record}
+                    {editable && (
+                      <details>
+                        <summary className="text-sm underline cursor-pointer text-[var(--text-muted)]">Correct the meter or its install date</summary>
+                        <div className="mt-3">{form}</div>
+                      </details>
                     )}
-                    <LightReplacementForm circuitId={circuit.id} lines={replacementFormLines} />
                   </div>
                 ) : (
-                  <p className="text-sm text-[var(--text-muted)]">
-                    {replacementOwnerName
-                      ? `Awaiting ${replacementOwnerName} to record the replacement.`
-                      : "Awaiting the field team to record the replacement date."}
-                  </p>
+                  form ?? readOnly(lockedNote ?? "Meter installation and the load test are the field team's action.")
                 );
-              } else if (step.status === "done") {
-                summary = circuit.lightReplacementDate
-                  ? `Replaced ${formatDate(circuit.lightReplacementDate)} — that day is excluded; the post window starts the day after`
-                  : "No stored date — the lifecycle advanced past this step";
-                // A wrong date is correctable from the done step (user-asked
-                // 2026-09-16); the server decides whether the move is safe.
-                if (canEdit && circuit.lightReplacementDate) {
-                  body = <ReplacementDateForm circuitId={circuit.id} current={isoDate(circuit.lightReplacementDate)} />;
-                }
+                break;
               }
-              break;
-            }
-
-            // FEAT-014/015 — post-install window, benchmark, and the
-            // out-of-range review when the result lands outside CON-20.
-            case "benchmark": {
-              if (step.status === "current") {
-                if (openReview && urgency) {
-                  chip = <StatusChip tone={urgency.tone}>{urgency.label}</StatusChip>;
+              case "install-gate":
+              case "completion-gate": {
+                const kind = step.key === "install-gate" ? "demo_install" : "demo_install_completion";
+                const pass = demo.gatePasses.find((g) => g.kind === kind);
+                if (pass) {
+                  const meta = statusMeta(GATE_PASS_STATUS, pass.status);
+                  chip = <StatusChip tone={meta.tone}>{meta.label}</StatusChip>;
+                  summary = "";
+                  body = <GatePassCard gatePass={pass} canOverride={canOverride} />;
+                } else if (step.status === "current") {
+                  body = editable ? <GatePassForm demoId={demo.id} kind={kind} /> : readOnly(lockedNote ?? "Awaiting the field team to submit the gate pass on site.");
+                }
+                break;
+              }
+              case "pre-readings":
+              case "post-readings": {
+                const phase = step.key === "pre-readings" ? "pre" : "post";
+                const r = readingsFor(phase);
+                if (step.status !== "locked" && r && periodDTO) {
                   body = (
-                    <div className="space-y-4">
-                      <DemoReviewPanel
-                        reviewId={openReview.id}
-                        measuredSavingsPct={openReview.measuredSavingsPct}
-                        preInstallBaseline={openReview.preInstallBaseline}
-                        postInstallAverage={openReview.postInstallAverage}
-                        occurrence={openReview.occurrence}
-                        urgencyLabel={urgency.label}
-                        urgencyTone={urgency.tone}
-                        canResolve={canOverride}
-                        embedded
+                    <div className="space-y-3">
+                      <DemoReadingsPanel
+                        demoId={demo.id}
+                        phase={phase}
+                        editable={editable}
+                        periods={periodDTO}
+                        suggested={r.suggested}
+                        days={r.days}
+                        missing={r.missing}
+                        accepted={r.accepted}
+                        theoretical={theoretical}
+                        baseline={facts.preAverage}
                       />
-                      {circuit.postInstallWindowStartAt && (
-                        <MonitoringWindowPanel
-                          circuitId={circuit.id}
-                          windowType="post_install"
-                          windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
-                          title="Post-install monitoring window"
-                          readings={postInstallReadings}
-                          validCount={postInstallValidCount}
-                          pendingAnomaly={postInstallPendingAnomaly}
-                          canEdit={false}
-                          canClear={canOverride}
-                          hasStalledReview
+                      {r.accepted && (
+                        <Link href={`${base}/reports/${phase === "pre" ? "pre-install" : "post-install"}?demo=${demo.id}`} className="text-sm underline">
+                          {phase === "pre" ? "Pre-installation report" : "Post-installation savings report"}
+                        </Link>
+                      )}
+                      {phase === "post" && openReview && urgency && (
+                        <DemoReviewPanel
+                          reviewId={openReview.id}
+                          measuredSavingsPct={openReview.measuredSavingsPct}
+                          preInstallBaseline={openReview.preInstallBaseline}
+                          postInstallAverage={openReview.postInstallAverage}
+                          occurrence={openReview.occurrence}
+                          urgencyLabel={urgency.label}
+                          urgencyTone={urgency.tone}
+                          canResolve={canOverride}
                           embedded
                         />
                       )}
                     </div>
                   );
-                } else if (circuit.state === "benchmark_review") {
+                }
+                if (phase === "post" && openReview && urgency) chip = <StatusChip tone={urgency.tone}>{urgency.label}</StatusChip>;
+                break;
+              }
+              case "assign-replacement": {
+                if (step.status !== "locked") {
                   body = (
-                    <div className="space-y-4">
-                      <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
-                        The measured result fell outside the 60-80% band, and the review was
-                        escalated for a manual benchmark decision — so it is not written by this screen.
-                      </p>
-                      {circuit.postInstallWindowStartAt && (
-                        <MonitoringWindowPanel
-                          circuitId={circuit.id}
-                          windowType="post_install"
-                          windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
-                          title="Post-install monitoring window"
-                          readings={postInstallReadings}
-                          validCount={postInstallValidCount}
-                          pendingAnomaly={postInstallPendingAnomaly}
-                          canEdit={false}
-                          canClear={canOverride}
-                          embedded
+                    <div className="space-y-5">
+                      {ownerName && (
+                        <VisitDetails
+                          visit={{
+                            assigneeName: ownerName,
+                            assigneeTeam: demo.replacementOwner ? teamMeta(demo.replacementOwner.team).label : "—",
+                            assignedAt: demo.replacementAssignedAt,
+                            assignedByName: demo.replacementAssignedBy?.name ?? demo.replacementAssignedBy?.email ?? null,
+                            scheduledAt: visit?.startAt ?? null,
+                            contactName: visit?.contactName ?? null,
+                            contactPhone: visit?.contactPhone ?? null,
+                            note: visit?.note ?? null,
+                            leadContactName: circuit.society.name,
+                            leadContactPhone: null,
+                          }}
                         />
+                      )}
+                      {editable && (canAssign || isAssignee) ? (
+                        <AssignReplacement
+                          demoId={demo.id}
+                          current={demo.replacementOwnerId && ownerName ? { id: demo.replacementOwnerId, name: ownerName } : null}
+                          candidates={fieldCandidates.map((c) => ({ id: c.id, name: c.name ?? c.email, team: teamMeta(c.team).label }))}
+                          visit={{
+                            scheduledAt: isoDateTimeLocal(visit?.startAt ?? null),
+                            contactName: visit?.contactName ?? "",
+                            contactPhone: visit?.contactPhone ?? "",
+                            note: visit?.note ?? "",
+                          }}
+                          canArrange={isAssignee || canOverride}
+                        />
+                      ) : (
+                        readOnly(lockedNote ?? "Operations, or whoever is holding this deal's field work, hands the replacement to a crew.")
                       )}
                     </div>
                   );
-                } else if (usesLegacyFlow) {
-                  chip = circuit.postInstallWindowStartAt ? (
-                    <StatusChip tone={postInstallPendingAnomaly ? "warn" : "info"}>
-                      {postInstallPendingAnomaly ? "Anomaly open" : `Day ${postInstallValidCount} of 5`}
-                    </StatusChip>
-                  ) : null;
-                  body = circuit.postInstallWindowStartAt ? (
-                    <MonitoringWindowPanel
-                      circuitId={circuit.id}
-                      windowType="post_install"
-                      windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
-                      title="Post-install monitoring window"
-                      readings={postInstallReadings}
-                      validCount={postInstallValidCount}
-                      pendingAnomaly={postInstallPendingAnomaly}
-                      canEdit={canEdit}
-                      canClear={canOverride}
-                      embedded
-                    />
-                  ) : (
-                    <p className="text-sm text-[var(--text-muted)]">The window has not started yet.</p>
-                  );
-                } else if (readingWindowDTO?.kind === "pre_install") {
-                  // The rank-based sequencing marks this step "current," but
-                  // CON-45's own evidence-based phase derivation — the same
-                  // one the CSV upload panel itself relies on — still says
-                  // pre_install: no baseline has ever actually been set.
-                  // Rendering the upload panel here would title it "Post-
-                  // install window" while it silently asked for and judged
-                  // PRE-install-shaped readings against the meter-install
-                  // date, not the replacement date (the reported bug — a
-                  // "Post-install window" chip showing 2026-08-06 (day after
-                  // METER install) instead of 2026-08-17 (day after the
-                  // REPLACEMENT), with the caption naming the meter-install
-                  // date as the basis for a step titled "post-install").
-                  chip = <StatusChip tone="warn">Pre-install baseline missing</StatusChip>;
-                  summary = ""; // the body says it, in full
-                  body = (
-                    <p className="text-sm text-[var(--text-muted)]">
-                      This circuit has no recorded pre-install baseline yet, so there is nothing to
-                      measure post-install savings against. Record it on the{" "}
-                      <strong>Pre-install baseline window</strong> step above — this step opens once
-                      that baseline is set.
-                    </p>
-                  );
-                } else {
-                  chip = periodChip;
-                  // The benchmark can already be fixed by the demos while
-                  // this window has no readings at all — saying "savings are
-                  // measured against the pre-install baseline" there names a
-                  // baseline the circuit does not hold.
-                  summary =
-                    circuit.benchmarkSavingsPct != null
-                      ? `The benchmark is already fixed at ${circuit.benchmarkSavingsPct.toFixed(
-                          1,
-                        )}% by this circuit's demos — record the meter's daily readings for the period below`
-                      : "Record the meter's daily readings for the period below — savings are measured against the pre-install baseline";
-                  body = canEdit ? (
-                    <CircuitReadingPanel
-                      circuitId={circuit.id}
-                      window={readingWindowDTO}
-                      windows={readingWindows}
-                      demoMode={demoMode}
-                      resumeFile={resumeFile}
-                    />
-                  ) : (
-                    <p className="text-sm text-[var(--text-muted)]">
-                      Awaiting the field team to upload the post-installation readings.
-                    </p>
-                  );
                 }
-              } else if (step.status === "done" && circuit.benchmarkSavingsPct != null) {
-                summary = `Benchmark confirmed — ${circuit.benchmarkSavingsPct.toFixed(
-                  1,
-                )}% savings, fixed for the contract term`;
-                if (circuit.postInstallWindowStartAt && postInstallReadings.length > 0) {
-                  body = (
-                    <MonitoringWindowPanel
-                      circuitId={circuit.id}
-                      windowType="post_install"
-                      windowStartAt={circuit.postInstallWindowStartAt?.toISOString() ?? null}
-                      title="Post-install monitoring window"
-                      readings={postInstallReadings}
-                      validCount={postInstallValidCount}
-                      pendingAnomaly={postInstallPendingAnomaly}
-                      canEdit={false}
-                      frozen
-                      embedded
-                    />
-                  );
-                }
+                break;
               }
-              break;
+              case "replacement": {
+                if (step.status === "current") {
+                  body = editable ? (
+                    <div className="space-y-4">
+                      {ownerName && !isAssignee && (
+                        <PageRibbon tone="warn">
+                          <strong>Assigned to {ownerName}.</strong> They are doing this replacement. You can record it for them, but
+                          only if the work has actually been done.
+                        </PageRibbon>
+                      )}
+                      <LightReplacementForm demoId={demo.id} lines={replacementFormLines} />
+                    </div>
+                  ) : (
+                    readOnly(lockedNote ?? (ownerName ? `Awaiting ${ownerName} to record the replacement.` : "Awaiting the field team."))
+                  );
+                } else if (step.status === "done" && demo.lightReplacementDate && editable) {
+                  body = <ReplacementDateForm demoId={demo.id} current={isoDate(demo.lightReplacementDate)} />;
+                }
+                break;
+              }
             }
-          }
-
-          return (
-            <StepSection key={step.key} index={i + 1} title={step.title} status={step.status} summary={summary} chip={chip}>
-              {body}
-            </StepSection>
-          );
-        })}
-      </div>
-
-      {/* CON-45 — every stored daily reading, phase-grouped. The readings
-          come FIRST and the reports/links block after them: the block was
-          sitting above the data as a heading, so the screen opened on
-          footnotes and a CON-22 caveat rather than on the numbers
-          (user-reported 2026-08-20). */}
-      {circuit.meterInstalledAt && !usesLegacyFlow && (
-        <section className="max-w-none mb-10 space-y-4">
-          <StoredReadingsPanel
-            circuitId={circuit.id}
-            readings={displayReadings}
-            canEdit={canEdit}
-            fromDemoReport={displayReadings === demoDays && demoDays.length > 0}
-            demoDayCount={circuit.demos.reduce((n, d) => n + d._count.readings, 0)}
-            summaries={phaseSummaries}
-            allComplete={allStepsComplete}
-            commissionedBaseline={circuit.preInstallBaseline}
-            monitoringLabel={demoPeriodsSet ? "Other readings — outside the demo periods" : undefined}
-          />
-
-          <div className="pt-2 border-t border-[var(--border-subtle)]">
-            <h2 className="text-[15px] font-semibold mb-1">Meter readings</h2>
-            <p className="text-sm text-[var(--text-muted)]">
-              Every day the meter has reported, as reviewed and saved. Excluded days stay listed with
-              their reason and never count toward an average or a report.
-            </p>
-            {/* A demo-generated series is indistinguishable from a vendor
-                export once it is stored — which is exactly what "from where
-                is the system showing these readings?" meant (user-caught
-                2026-09-08). The store knows (the file sits under
-                DEMO_RAW_KEY_PREFIX); the screen now says so. */}
-            {demoGeneratedDays > 0 && (
-              <p className="mt-2 text-sm" style={{ color: "var(--warn-fg)" }}>
-                {demoGeneratedDays} of these {demoGeneratedDays === 1 ? "days was" : "days were"}{" "}
-                <strong>generated by demo mode</strong>, not uploaded from a meter — they carry no
-                vendor export behind them and must not stand behind a figure a society is billed on.
-              </p>
-            )}
-            {demoGeneratedDays > 0 && demoMode && canEdit && (
-              <DiscardDemoReadings circuitId={circuit.id} days={demoGeneratedDays} />
-            )}
-            <div className="mt-3 scroll-mt-24" id="demo-periods">
-              <DemoWindowsPanel
-                circuitId={circuit.id}
-                canEdit={canEdit}
-                demoMode={demoMode}
-                meterInstalledOn={circuit.meterInstalledAt ? circuit.meterInstalledAt.toISOString().slice(0, 10) : null}
-                replacedOn={circuit.lightReplacementDate ? circuit.lightReplacementDate.toISOString().slice(0, 10) : null}
-                initial={{
-                  preFrom: circuit.preDemoFrom?.toISOString().slice(0, 10) ?? "",
-                  preTo: circuit.preDemoTo?.toISOString().slice(0, 10) ?? "",
-                  postFrom: circuit.postDemoFrom?.toISOString().slice(0, 10) ?? "",
-                  postTo: circuit.postDemoTo?.toISOString().slice(0, 10) ?? "",
-                }}
-                counts={(() => {
-                  const c = { pre: 0, post: 0, outside: 0 };
-                  for (const r of storedReadings) c[demoPhase(new Date(`${r.date}T00:00:00Z`), circuit)] += 1;
-                  return c;
-                })()}
-              />
-            </div>
-            {/* CON-45 — the reports, each appearing once its phase has data.
-                Print-styled routes rendering straight from the store. */}
-            <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-sm">
-              {storedReadings.some((r) => r.phase === "pre_install") && (
-                <Link href={`/admin/societies/${id}/circuits/${circuit.id}/reports/pre-install`} className="underline">
-                  Pre-installation report
-                </Link>
-              )}
-              {circuit.lightReplacementDate && storedReadings.some((r) => r.phase !== "pre_install") && (
-                <Link href={`/admin/societies/${id}/circuits/${circuit.id}/reports/post-install`} className="underline">
-                  Post-installation savings report
-                </Link>
-              )}
-            </div>
-
-            {/* Monthly readings are NOT uploaded here. This page is the
-                commissioning sequence; a monthly figure is what a society is
-                billed on, and billing does not begin until the day after the
-                completion certificate (CON-22). */}
-            {circuit.benchmarkSavingsPct !== null && (
-              <p className="text-sm mt-3">
-                {liveMonitoringBlocker({
-                  benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-                  installationCertificateSigned: installationSignedOff,
-                }) === null ? (
-                  <>
-                    <Link href={`/admin/live-monitoring/${circuit.id}`} className="underline font-medium">
-                      Live monitoring →
-                    </Link>{" "}
-                    <span className="text-[var(--text-muted)]">
-                      — this circuit is live; each month&apos;s readings are recorded there.
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-[var(--text-muted)]">
-                    {liveMonitoringBlocker({
-                      benchmarkSavingsPct: circuit.benchmarkSavingsPct,
-                      installationCertificateSigned: installationSignedOff,
-                    })}
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
+            return (
+              <StepSection key={step.key} index={i + 1} title={step.title} status={step.status} summary={summary} chip={chip}>
+                {body}
+              </StepSection>
+            );
+          })}
         </section>
+      )}
+
+      {circuit.benchmarkSavingsPct !== null && (
+        <p className="text-sm mb-8">
+          {liveMonitoringBlocker({ benchmarkSavingsPct: circuit.benchmarkSavingsPct, installationCertificateSigned: installationSignedOff }) === null ? (
+            <>
+              <Link href={`/admin/live-monitoring/${circuit.id}`} className="underline font-medium">
+                Live monitoring →
+              </Link>{" "}
+              <span className="text-[var(--text-muted)]">— this circuit is live; its monthly readings count from the billing start.</span>
+            </>
+          ) : (
+            <span className="text-[var(--text-muted)]">
+              {liveMonitoringBlocker({ benchmarkSavingsPct: circuit.benchmarkSavingsPct, installationCertificateSigned: installationSignedOff })}
+            </span>
+          )}
+        </p>
       )}
 
       {resolvedReviews.length > 0 && (
@@ -1534,6 +693,7 @@ export default async function CircuitDetailPage({
           </Card>
         </section>
       )}
+
       {/* FEAT-041 / INV-07 — light-count change & baseline rescale. Only
           meaningful once a baseline exists to rescale, which is also
           exactly when the count stops being free-form config. */}
@@ -1682,6 +842,7 @@ export default async function CircuitDetailPage({
           )}
         </section>
       )}
+
     </>
   );
 }

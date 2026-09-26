@@ -9,7 +9,8 @@ import {
   restartsWindow,
   type DemoResolution,
 } from "@/lib/demo-result-review";
-import { restartFromDate } from "@/lib/commissioning-anomaly";
+import { logChange } from "@/lib/change-log";
+import { resyncCircuitFigures } from "@/lib/circuit-figures";
 
 export type ResolveReviewResult = { error?: string };
 
@@ -72,22 +73,22 @@ export async function resolveDemoResultReview(
       },
     });
 
-    if (restart) {
-      const latest = await tx.commissioningReading.findFirst({
-        where: { circuitId: review.circuitId, windowType: "post_install" },
-        orderBy: { date: "desc" },
-        select: { date: true },
+    if (restart && review.demoId) {
+      // Measure again: the post-installation set is withdrawn (a new, empty
+      // acceptance version — every earlier one stays on record) and the
+      // period is cleared so it is chosen afresh.
+      const demo = await tx.circuitDemo.findUnique({ where: { id: review.demoId }, select: { postFrom: true, postTo: true } });
+      const last = await tx.circuitDemoAcceptance.findFirst({ where: { demoId: review.demoId, phase: "post" }, orderBy: { version: "desc" }, select: { version: true } });
+      await tx.circuitDemoAcceptance.create({
+        data: { demoId: review.demoId, phase: "post", version: (last?.version ?? 0) + 1, days: [], averageKwh: null, countedDays: 0, acceptedById: admin.id },
       });
-      await tx.circuit.update({
-        where: { id: review.circuitId },
-        data: {
-          // Clearing the average is what makes the window re-runnable — the
-          // completion check refuses a window whose baseline is already set.
-          postInstallBaseline: null,
-          postInstallWindowStartAt: restartFromDate(new Date(), latest?.date ?? null),
-          state: "post_install_monitoring",
-        },
+      await tx.circuitDemo.update({ where: { id: review.demoId }, data: { postFrom: null, postTo: null } });
+      await logChange(tx, {
+        entity: "circuit_demo", entityId: review.demoId, kind: "edit", field: "post_withdrawn_by_review", circuitId: review.circuitId, demoId: review.demoId,
+        oldValue: { postFrom: demo?.postFrom?.toISOString().slice(0, 10) ?? null, postTo: demo?.postTo?.toISOString().slice(0, 10) ?? null },
+        reason: input.note.trim(), actorId: admin.id,
       });
+      await resyncCircuitFigures(tx, review.circuitId, admin.id);
     }
     // An escalation deliberately leaves the circuit in `benchmark_review`:
     // measurement is not going to settle it, and moving the circuit on would

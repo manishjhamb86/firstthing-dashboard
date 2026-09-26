@@ -43,9 +43,8 @@ async function editableCircuit(circuitId: string, historical = false): Promise<E
     select: {
       id: true,
       societyId: true,
-      meterInstalledAt: true,
-      lightReplacementDate: true,
       voidedAt: true,
+      demos: { where: { voidedAt: null, rejected: false, meterInstalledAt: { not: null } }, select: { id: true }, take: 1 },
     },
   });
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
@@ -53,7 +52,7 @@ async function editableCircuit(circuitId: string, historical = false): Promise<E
   // The lock moved earlier, to meter install: from that point the theoretical
   // figure is what every pre-install reading is judged against. The UI hides
   // the controls, but this is the enforcement — a hidden button is not a gate.
-  if (circuit.meterInstalledAt && !historical) {
+  if (circuit.demos.length > 0 && !historical && !(await isDemoMode())) {
     return {
       error:
         "The meter is installed — the load inventory is locked, because the pre-install readings are judged against it. Contact an administrator if it has to change.",

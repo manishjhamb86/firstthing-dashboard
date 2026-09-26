@@ -4,9 +4,36 @@ import React, { useMemo, useState, useTransition } from "react";
 import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { EmptyState, ErrorText } from "@/components/ui";
-import { setReadingExclusion } from "@/app/admin/societies/[id]/circuits/[circuitId]/reading-actions";
-import { SAVINGS_BAND_META } from "@/lib/circuit-load";
-import type { StoredReadingDTO } from "@/app/admin/societies/[id]/circuits/[circuitId]/stored-readings-panel";
+import { setReadingExclusion } from "@/app/admin/readings/exclusion-actions";
+import { SAVINGS_BAND_META, type SavingsBand, type VarianceBand } from "@/lib/circuit-load";
+
+/** One stored monitoring day, as the explorer lists it. */
+export type StoredReadingDTO = {
+  id: string;
+  date: string;
+  kWh: number;
+  intervalCount: number | null;
+  expectedIntervals: number | null;
+  phase: "pre_install" | "post_install" | "monitoring";
+  excluded: boolean;
+  excludedReason: string | null;
+  released: boolean;
+  superseded: boolean;
+  /** A stored day whose figure looks impossible. */
+  flagged?: boolean;
+  /**
+   * Hours that carried a reading. The vendor writes 0 for an hour the meter
+   * was offline, so a 24-row day can still be mostly silence. Null when no
+   * hour-level truth exists for the day.
+   */
+  dataHours?: number | null;
+  variancePct: number | null;
+  varianceBand: VarianceBand | null;
+  savingsPct: number | null;
+  savingsBand: SavingsBand | null;
+  /** Non-null when this day can no longer be excluded or re-included. */
+  frozenReason?: string | null;
+};
 
 /**
  * The stored readings as a working table — latest first, sortable by

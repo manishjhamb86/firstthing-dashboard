@@ -192,10 +192,9 @@ export function MetersListClient({
       setError(null);
       const r = await assignMeter({
         meterId: editingMeter.id,
-        societyId: society || null,
         circuitId: circuit || null,
-        installedOn: circuit ? installedOn : undefined,
-        removalNote: isMove ? removalNote : undefined,
+        installedOn,
+        removalNote: isMove || (!circuit && editingMeter.circuitId) ? removalNote : undefined,
       });
       if (r.error) {
         setError(r.error);

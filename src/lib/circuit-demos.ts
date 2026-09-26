@@ -110,3 +110,71 @@ export function describeBasis(b: BenchmarkBasis): string {
         : `Set by hand, over a measured ${b.raw.toFixed(2)}%`;
   }
 }
+
+// ── The circuit's figures from its demos (2026-09-26) ──────────────────────
+
+export type DemoFiguresInput = {
+  id: string;
+  sequence: number;
+  rejected: boolean;
+  voided: boolean;
+  /** How this demo combines with the one before it; the first demo's is ignored. */
+  combine: "batch" | "rerun";
+  meteredLightCount: number;
+  /** The accepted pre-install average (kWh/day), or null until accepted. */
+  preAverage: number | null;
+  /** The accepted post-install average, or null until accepted. */
+  postAverage: number | null;
+};
+
+export type CircuitFigures = {
+  /** Baseline in force (kWh/day), or null when no demo has an accepted pre set. */
+  baseline: number | null;
+  /** Lights the baseline covers — a batch demo on different lights adds its own. */
+  meteredLightCount: number | null;
+  /** The circuit's post-install average, combined the same way as the baseline. */
+  postAverage: number | null;
+  /** Each counted demo's own measured saving. */
+  perDemo: Array<{ id: string; savingsPct: number | null }>;
+  benchmark: DerivedBenchmark;
+};
+
+export function demoSavingsPct(pre: number | null, post: number | null): number | null {
+  if (pre === null || post === null || pre <= 0) return null;
+  return (1 - post / pre) * 100;
+}
+
+/**
+ * The one derivation of a circuit's baseline and benchmark (2026-09-26).
+ *
+ * Demos are taken in sequence. The first opens a group; a `rerun` joins the
+ * group before it (same lights again — its baseline averages in); a `batch`
+ * opens a new group (different lights — its baseline and light count add up).
+ * The benchmark is the mean of the counted demos' percentages, as before,
+ * unless an agreed override is set.
+ */
+export function deriveCircuitFigures(
+  demos: readonly DemoFiguresInput[],
+  override: BenchmarkOverride = null,
+): CircuitFigures {
+  const live = demos.filter((d) => !d.rejected && !d.voided).sort((a, b) => a.sequence - b.sequence);
+  const groups: Array<{ pre: number[]; post: number[]; lights: number }> = [];
+  for (const d of live) {
+    if (d.preAverage === null) continue;
+    if (groups.length === 0 || d.combine === "batch") groups.push({ pre: [d.preAverage], post: [], lights: d.meteredLightCount });
+    else groups[groups.length - 1].pre.push(d.preAverage);
+    if (d.postAverage !== null) groups[groups.length - 1].post.push(d.postAverage);
+  }
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const postAverage =
+    groups.length > 0 && groups.every((g) => g.post.length > 0) ? groups.reduce((s, g) => s + mean(g.post), 0) : null;
+  const baseline = groups.length === 0 ? null : groups.reduce((s, g) => s + g.pre.reduce((a, b) => a + b, 0) / g.pre.length, 0);
+  const meteredLightCount = groups.length === 0 ? null : groups.reduce((s, g) => s + g.lights, 0);
+
+  const perDemo = live.map((d) => ({ id: d.id, savingsPct: demoSavingsPct(d.preAverage, d.postAverage) }));
+  const measured = perDemo
+    .map((p, i) => ({ id: p.id, sequence: live[i].sequence, savingsPct: p.savingsPct, rejected: false }))
+    .filter((p): p is { id: string; sequence: number; savingsPct: number; rejected: boolean } => p.savingsPct !== null);
+  const benchmark = deriveBenchmark(measured, override);
+  return { baseline, meteredLightCount, postAverage, perDemo, benchmark };
+}

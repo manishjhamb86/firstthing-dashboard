@@ -70,8 +70,11 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
   {
     id: "meterReadings",
     label: "Meter reading export",
+    // 2026-09-26: readings are stored against the METER (its permanent id)
+    // and reach a circuit through the meter's history, so the export is
+    // uploaded on the meter's own page — never filed against a circuit.
     operation:
-      "Parsed into daily readings and opened for row-by-row review against the circuit — nothing is stored until you accept it.",
+      "Uploaded on the meter's own page: stored hourly against the meter and filed to whichever circuit the meter was on for each day.",
     context: "circuit",
     needsPeriod: true,
     periodHint: "The month these readings start.",
@@ -86,7 +89,8 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     acceptedExtensions: ["csv", "txt", "xlsx"],
     maxBytes: 25 * MB,
     permission: "manage_pipeline",
-    uploadHere: true,
+    uploadHere: false,
+    handledAt: "Meters → the meter → Import readings",
   },
   {
     id: "kycGstCertificate",

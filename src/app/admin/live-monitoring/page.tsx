@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
-import { classifyDay, periodSavingsSummary } from "@/lib/circuit-load";
+import { periodSavingsSummary } from "@/lib/circuit-load";
 import { LiveList, type LiveSocietyRow } from "./live-list";
 
 // Live monitoring — the circuits past commissioning AND past installation,
@@ -34,16 +35,14 @@ export default async function LiveMonitoringPage() {
     orderBy: { createdAt: "desc" },
   });
 
+  const starts = new Map(
+    await Promise.all(circuits.map(async (c) => [c.id, await circuitMonitoringStart(c.id)] as const)),
+  );
   const bySociety = new Map<string, LiveSocietyRow>();
   for (const c of circuits) {
-    // Only the post-replacement days: those are what a savings figure is
-    // measured from.
-    const days =
-      c.meterInstalledAt && c.lightReplacementDate
-        ? c.meterReadings.filter(
-            (r) => classifyDay(r.date, c.meterInstalledAt!, c.lightReplacementDate) === "post_install",
-          )
-        : [];
+    // Monitoring days only, from the billing start (2026-09-26).
+    const start = starts.get(c.id) ?? null;
+    const days = start ? c.meterReadings.filter((r) => r.date.getTime() >= start.getTime()) : [];
     const baseline = effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, now);
     const summary = periodSavingsSummary(
       baseline,

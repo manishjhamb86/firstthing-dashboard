@@ -146,6 +146,9 @@ async function processJob(job: { id: string; type: string }) {
     case "calendar_sync":
       await runCalendarSync();
       break;
+    case "demo_relock_sweep":
+      await runDemoRelockSweep();
+      break;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
   }
@@ -157,6 +160,28 @@ async function processJob(job: { id: string; type: string }) {
  * discipline as the gate-pass sweep — a forked chain here would double the
  * sampling rate silently.
  */
+/**
+ * A demo unlocked for correction relocks after 24 hours (2026-09-26). One-shot:
+ * the unlock schedules this for its own expiry, and each run relocks every
+ * demo whose window has passed, so a missed run is caught by the next.
+ */
+async function runDemoRelockSweep() {
+  const now = new Date();
+  const due = await db.circuitDemo.findMany({
+    where: { unlockedUntil: { not: null, lte: now } },
+    select: { id: true, circuitId: true, unlockedUntil: true },
+  });
+  for (const d of due) {
+    await db.$transaction([
+      db.circuitDemo.update({ where: { id: d.id }, data: { unlockedUntil: null } }),
+      db.changeLog.create({
+        data: { entity: "circuit_demo", entityId: d.id, kind: "auto_relock", circuitId: d.circuitId, demoId: d.id, oldValue: { until: d.unlockedUntil!.toISOString() } },
+      }),
+    ]);
+  }
+  if (due.length > 0) logger.info("demo.auto_relocked", { count: due.length });
+}
+
 async function runTankLevelSample() {
   try {
     const cfg = await resolveTuyaConfig();

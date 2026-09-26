@@ -7,7 +7,10 @@ import { logger } from "@/lib/logger";
 import { matchKnownFormat } from "@/lib/reading-formats";
 import { hourlyPoints, type HourlyPoint } from "@/lib/reading-normalize";
 import { circuitLabelOf } from "@/lib/meter-view";
-import { projectMeterStoreToCircuit, recordMeterRawFile } from "@/lib/meter-billing-handoff";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { s3, S3_BUCKET } from "@/lib/s3";
+import { buildMeterImportKey } from "@/lib/ingest-keys";
+import { afterHistoryChange } from "@/lib/meter-history";
 import {
   matchMeter,
   dayKeyOf,
@@ -119,10 +122,10 @@ export async function analyseMeterCsv(input: {
   if ("error" in parsed) return { error: parsed.error };
   const { points, vendor, problems, unparseable } = parsed;
 
-  // Only meters bound to something are candidates: filing a society's
-  // readings against a device nobody has assigned helps no one.
+  // Every metering device is a candidate: readings are stored against the
+  // METER, and which circuit a day belongs to is decided by its history.
   const meters = await db.meterDevice.findMany({
-    where: { hasEnergySignal: true, OR: [{ circuitId: { not: null } }, { societyId: { not: null } }] },
+    where: { hasEnergySignal: true },
     select: {
       id: true,
       name: true,
@@ -192,17 +195,10 @@ export async function commitMeterCsv(input: {
   stored?: number;
   superseded?: number;
   importId?: string;
-  /** The same readings, projected into the circuit's daily billing rows. */
-  billing?: {
-    href: string;
-    circuitLabel: string;
-    days: number;
-    flagged: number;
-    partialExcluded: number;
-    lockedSkipped: number;
-  };
-  /** Why the projection could not run, when it could not. */
-  billingSkipped?: string;
+  /** Circuits whose days this file re-filed, through the meter history. */
+  circuits?: Array<{ href: string; label: string }>;
+  /** Days of the file no history entry covers — kept on the meter, unassigned. */
+  unassignedDays?: number;
 }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -222,9 +218,6 @@ export async function commitMeterCsv(input: {
     },
   });
   if (!meter) return { error: "That meter is no longer in the mirror." };
-  if (!meter.circuitId && !meter.societyId) {
-    return { error: "Assign this meter to a circuit or society first — an unassigned meter has nothing to record against." };
-  }
 
   const parsed = parseFile(input.text);
   if ("error" in parsed) return { error: parsed.error };
@@ -304,53 +297,33 @@ export async function commitMeterCsv(input: {
     overrodeMatch: input.overrodeMatch,
   });
 
-  // One upload, one store of readings. The daily billing rows are a
-  // PROJECTION of the hourly store — the user's decision: "they both should
-  // use the same table same readings" — so the figures appear on live
-  // monitoring, the circuit page and billing the moment the import lands,
-  // with correction post-hoc rather than a review gating them from view.
-  let billing:
-    | { href: string; circuitLabel: string; days: number; flagged: number; partialExcluded: number; lockedSkipped: number }
-    | undefined;
-  let billingSkipped: string | undefined;
-  if (meter.circuitId && meter.circuit) {
-    try {
-      const society = await db.society.findUnique({
-        where: { id: meter.circuit.societyId },
-        select: { name: true },
-      });
-      await recordMeterRawFile({
-        actorId: actor.id,
-        importId,
-        circuitId: meter.circuitId,
-        societyName: society?.name ?? "Unknown",
-        fileName: input.fileName,
-        text: input.text,
-      });
-      const projected = await projectMeterStoreToCircuit({ meterId: meter.id, actorId: actor.id });
-      if ("error" in projected) {
-        billingSkipped = projected.error;
-      } else {
-        billing = {
-          href: `/admin/live-monitoring/${meter.circuitId}`,
-          circuitLabel: circuitLabelOf(meter.circuit.location, meter.circuit.lightType),
-          days: projected.days,
-          flagged: projected.flagged,
-          partialExcluded: projected.partialExcluded,
-          lockedSkipped: projected.lockedSkipped,
-        };
-      }
-    } catch (err) {
-      // The hourly store is already correct — a projection failure is
-      // reported, never allowed to roll the import back.
-      logger.warn("meter.projection_failed", { importId, error: String(err) });
-      billingSkipped = "the readings could not be projected to billing — see the server log";
-    }
-  } else {
-    billingSkipped = "the meter is not bound to a circuit, so there are no billing rows to project";
+  // The bytes are kept against the meter (INV-02). Which circuit each day
+  // belongs to is the history's call, so every circuit the meter was on over
+  // the file's dates is re-filed — its monitoring days and unlocked demos.
+  try {
+    const key = buildMeterImportKey({ meterId: meter.id, fileName: input.fileName, uploadedAt: new Date() });
+    await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: input.text, ContentType: "text/csv" }));
+    await db.meterCsvImport.update({ where: { id: importId }, data: { s3Key: key } });
+  } catch (err) {
+    logger.warn("meter.csv_bytes_not_stored", { importId, error: String(err) });
   }
+  const lastExclusive = new Date(last.getTime() + 86_400_000);
+  const stays = await db.meterInstallation.findMany({
+    where: { meterId: meter.id, installedAt: { lt: lastExclusive }, OR: [{ removedAt: null }, { removedAt: { gt: first } }] },
+    select: { circuitId: true, installedAt: true, removedAt: true, circuit: { select: { societyId: true, location: true, lightType: true } } },
+  });
+  await afterHistoryChange(stays.map((s) => s.circuitId), actor.id);
+  const covered = new Set<number>();
+  for (const p of points) {
+    if (stays.some((st) => p.day.getTime() >= st.installedAt.getTime() && (!st.removedAt || p.day.getTime() < st.removedAt.getTime()))) covered.add(p.day.getTime());
+  }
+  const allDays = new Set(points.map((p) => p.day.getTime()));
+  const circuits = [...new Map(stays.map((st) => [st.circuitId, st])).values()].map((st) => ({
+    href: `/admin/societies/${st.circuit.societyId}/circuits/${st.circuitId}`,
+    label: circuitLabelOf(st.circuit.location, st.circuit.lightType),
+  }));
 
   revalidatePath(`/admin/meters/${meter.id}`);
   revalidatePath("/admin/meters");
-  return { stored: points.length, superseded: effect.supersededHours, importId, billing, billingSkipped };
+  return { stored: points.length, superseded: effect.supersededHours, importId, circuits, unassignedDays: allDays.size - covered.size };
 }

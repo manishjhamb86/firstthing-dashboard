@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ErrorText } from "@/components/ui";
-import { raisePreInstallInvestigation } from "../reading-actions";
+import { raisePreInstallInvestigation } from "../demo-step-actions";
 
 export function PrintButton() {
   return (

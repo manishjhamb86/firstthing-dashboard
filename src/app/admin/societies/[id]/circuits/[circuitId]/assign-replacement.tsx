@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { assignReplacement, updateReplacementVisit } from "./actions";
+import { assignDemoReplacement, updateDemoReplacementVisit } from "./demo-step-actions";
 import { ErrorText, Field } from "@/components/ui";
 
 /**
@@ -15,13 +15,13 @@ import { ErrorText, Field } from "@/components/ui";
  * re-checks, because a picker is not a gate.
  */
 export function AssignReplacement({
-  circuitId,
+  demoId,
   current,
   candidates,
   visit,
   canArrange,
 }: {
-  circuitId: string;
+  demoId: string;
   current: { id: string; name: string } | null;
   candidates: { id: string; name: string; team: string }[];
   visit: { scheduledAt: string; contactName: string; contactPhone: string; note: string };
@@ -40,7 +40,7 @@ export function AssignReplacement({
   function assign(toId: string | null) {
     setError(null);
     start(async () => {
-      const r = await assignReplacement({ circuitId, toId });
+      const r = await assignDemoReplacement({ demoId, toId });
       if (r?.error) setError(r.error);
       else router.refresh();
     });
@@ -49,7 +49,7 @@ export function AssignReplacement({
   function saveVisit() {
     setError(null);
     start(async () => {
-      const r = await updateReplacementVisit(circuitId, {
+      const r = await updateDemoReplacementVisit(demoId, {
         scheduledAt,
         contactName,
         contactPhone,

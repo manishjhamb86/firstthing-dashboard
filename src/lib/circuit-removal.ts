@@ -33,14 +33,16 @@ export async function resolveCircuitRemoval(
         id: true,
         createdById: true,
         voidedAt: true,
-        meterInstalledAt: true,
+        demos: {
+          where: { voidedAt: null },
+          select: { meterInstalledAt: true, _count: { select: { readings: true } } },
+        },
         preInstallBaseline: true,
         benchmarkSavingsPct: true,
         _count: {
           select: {
             gatePasses: true,
-            commissioningReadings: true,
-            meterReadings: true,
+                        meterReadings: true,
             rescaleEvents: true,
             feeLines: true,
           },
@@ -58,11 +60,15 @@ export async function resolveCircuitRemoval(
 
   for (const c of circuits) {
     const facts: CircuitProgressFacts = {
-      meterInstalledAt: c.meterInstalledAt,
+      meterInstalledAt:
+      c.demos
+        .map((d) => d.meterInstalledAt)
+        .filter((d): d is Date => d !== null)
+        .sort((a, b) => a.getTime() - b.getTime())[0] ?? null,
       preInstallBaseline: c.preInstallBaseline,
       benchmarkSavingsPct: c.benchmarkSavingsPct,
       gatePassCount: c._count.gatePasses,
-      commissioningReadingCount: c._count.commissioningReadings,
+      commissioningReadingCount: c.demos.reduce((n, d) => n + d._count.readings, 0),
       meterReadingCount: c._count.meterReadings,
       rescaleEventCount: c._count.rescaleEvents,
       feeLineCount: c._count.feeLines,

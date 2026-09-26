@@ -4,9 +4,9 @@
 // property the agreement print route (FEAT-029) was built on.
 
 import { db } from "@/lib/db";
-import { demoPhase, hasPostWindow, hasPreWindow } from "@/lib/demo-window";
+import { currentDemoOf } from "@/lib/circuit-figures";
+import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import {
-  classifyDay,
   periodSavingsSummary,
   savingsBand,
   savingsPct,
@@ -56,7 +56,13 @@ export async function circuitFeeLineFor(circuitId: string, period: string): Prom
   return { savedValue: line.savedValue, amount: line.amount, societyNet: line.savedValue - line.amount };
 }
 
-export async function loadCircuitReport(circuitId: string) {
+/**
+ * One circuit's reports (2026-09-26). The pre- and post-installation reports
+ * are a DEMO's — its own days inside its own periods, nothing before, between
+ * or after — and `demoId` picks which demo (default: the current one). The
+ * monthly report reads the monitoring rows, from the billing start.
+ */
+export async function loadCircuitReport(circuitId: string, demoId?: string | null) {
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
     include: {
@@ -72,17 +78,31 @@ export async function loadCircuitReport(circuitId: string) {
       // NO supersededAt filter, deliberately: supersession is an in-place
       // UPDATE (one row per date; supersededValue keeps what was replaced),
       // so a non-null supersededAt marks a CORRECTED day whose kWh is the
-      // value in force. Filtering it out would drop the corrected day
-      // entirely — the misreading that briefly shipped on 2026-08-31.
+      // value in force.
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
+      demos: {
+        where: { voidedAt: null },
+        orderBy: { sequence: "asc" },
+        include: { readings: { orderBy: { date: "asc" } } },
+      },
     },
   });
-  if (!circuit || !circuit.meterInstalledAt) return null;
+  if (!circuit) return null;
 
+  const demo =
+    (demoId ? circuit.demos.find((d) => d.id === demoId) : null) ?? currentDemoOf(circuit.demos) ?? null;
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
 
-  const toDay = (r: (typeof circuit.meterReadings)[number], phase: "pre" | "post"): ReportDay => {
-    const excluded = r.excludedAt !== null;
+  type Row = {
+    date: Date;
+    kWh: number;
+    excludedAt: Date | null;
+    excludedReason: string | null;
+    intervalCount?: number | null;
+    hoursCovered?: number | null;
+    expectedIntervals?: number | null;
+  };
+  const toDay = (r: Row, phase: "pre" | "post", baselineFor: (d: Date) => number | null): ReportDay => {
     let variancePct: number | null = null;
     let vBand: VarianceBand | null = null;
     let sPct: number | null = null;
@@ -92,16 +112,16 @@ export async function loadCircuitReport(circuitId: string) {
       variancePct = v.pct;
       vBand = v.band;
     } else if (phase === "post") {
-      const b = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, r.date);
+      const b = baselineFor(r.date);
       sPct = b === null ? null : savingsPct(b, r.kWh);
       sBand = sPct === null ? null : savingsBand(sPct);
     }
     return {
       date: r.date.toISOString().slice(0, 10),
       kWh: r.kWh,
-      intervalCount: r.intervalCount,
-      expectedIntervals: r.expectedIntervals,
-      excluded,
+      intervalCount: r.intervalCount ?? r.hoursCovered ?? null,
+      expectedIntervals: r.expectedIntervals ?? (r.hoursCovered != null ? 24 : null),
+      excluded: r.excludedAt !== null,
       excludedReason: r.excludedReason,
       variancePct,
       varianceBand: vBand,
@@ -110,40 +130,42 @@ export async function loadCircuitReport(circuitId: string) {
     };
   };
 
-  // Every day after the replacement — the monthly report's source.
-  const postDays: ReportDay[] = [];
-  // The demo reports (2026-09-25): only the demo periods' days when they are
-  // set — "nothing before or after or in between" — else the old rule.
-  const preDays: ReportDay[] = [];
-  const demoPostDays: ReportDay[] = [];
-  for (const r of circuit.meterReadings) {
-    const phase = classifyDay(r.date, circuit.meterInstalledAt, circuit.lightReplacementDate);
-    if (phase === "post_install") postDays.push(toDay(r, "post"));
-    const dp = demoPhase(r.date, circuit);
-    if (dp === "pre") preDays.push(toDay(r, "pre"));
-    else if (dp === "post") demoPostDays.push(toDay(r, "post"));
-  }
-
+  // The demo's own days — only its own periods' rows live on it.
+  const preRows = demo ? demo.readings.filter((r) => r.phase === "pre") : [];
+  const preDays = preRows.map((r) => toDay(r, "pre", () => null));
   const preIncluded = preDays.filter((d) => !d.excluded);
   const preAverage =
     preIncluded.length > 0 ? preIncluded.reduce((s, d) => s + d.kWh, 0) / preIncluded.length : null;
-  const avgVariance =
-    preAverage !== null && theoretical !== null
-      ? varianceAgainstTheoretical(preAverage, theoretical)
-      : null;
+  const demoBaseline = demo?.preInstallBaseline ?? preAverage;
+  const demoPostDays = demo
+    ? demo.readings.filter((r) => r.phase === "post").map((r) => toDay(r, "post", () => demoBaseline))
+    : [];
 
+  // Monitoring days, from the billing start (when one is known).
+  const monitoringStart = await circuitMonitoringStart(circuitId);
+  const postDays = circuit.meterReadings
+    .filter((r) => monitoringStart === null || r.date.getTime() >= monitoringStart.getTime())
+    .map((r) =>
+      toDay(r, "post", (d) => effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, d)),
+    );
+
+  const avgVariance =
+    preAverage !== null && theoretical !== null ? varianceAgainstTheoretical(preAverage, theoretical) : null;
   const effBaselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
 
   return {
     circuit,
     society: circuit.society,
+    demo,
+    demos: circuit.demos.map((d) => ({ id: d.id, sequence: d.sequence, rejected: d.rejected })),
     theoretical,
     preDays,
     postDays,
     demoPostDays,
+    demoBaseline,
     demoWindows: {
-      pre: hasPreWindow(circuit) ? { from: circuit.preDemoFrom!, to: circuit.preDemoTo! } : null,
-      post: hasPostWindow(circuit) ? { from: circuit.postDemoFrom!, to: circuit.postDemoTo! } : null,
+      pre: demo?.preFrom && demo.preTo ? { from: demo.preFrom, to: demo.preTo } : null,
+      post: demo?.postFrom && demo.postTo ? { from: demo.postFrom, to: demo.postTo } : null,
     },
     preAverage,
     preIncludedCount: preIncluded.length,

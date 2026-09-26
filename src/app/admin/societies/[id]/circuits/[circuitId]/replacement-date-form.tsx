@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorText, Field } from "@/components/ui";
-import { correctLightReplacementDate } from "./actions";
+import { recordDemoReplacement } from "./demo-step-actions";
 
 /**
  * Correcting the recorded replacement date after the step is done
@@ -12,7 +12,7 @@ import { correctLightReplacementDate } from "./actions";
  * field on a done step reads as something still waiting to be filled in.
  * Every refusal is the server's.
  */
-export function ReplacementDateForm({ circuitId, current }: { circuitId: string; current: string }) {
+export function ReplacementDateForm({ demoId, current }: { demoId: string; current: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(current);
@@ -50,7 +50,7 @@ export function ReplacementDateForm({ circuitId, current }: { circuitId: string;
           onClick={() =>
             start(async () => {
               setError(null);
-              const r = await correctLightReplacementDate(circuitId, value);
+              const r = await recordDemoReplacement({ demoId, replacedOn: value });
               if (r.error) setError(r.error);
               else {
                 setOpen(false);

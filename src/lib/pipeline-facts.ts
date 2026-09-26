@@ -45,11 +45,20 @@ export const DEAL_CANDIDATE_SELECT = {
   state: true,
   location: true,
   lightType: true,
-  replacementOwnerId: true,
-  scheduledEvents: {
-    where: { kind: "installation_day" as const, status: "scheduled" as const },
-    select: { id: true },
+  // The replacement belongs to the demo now (2026-09-26): the current one —
+  // the latest demo that is neither withdrawn nor rejected.
+  demos: {
+    where: { voidedAt: null, rejected: false },
+    orderBy: { sequence: "desc" as const },
     take: 1,
+    select: {
+      replacementOwnerId: true,
+      scheduledEvents: {
+        where: { kind: "installation_day" as const, status: "scheduled" as const },
+        select: { id: true },
+        take: 1,
+      },
+    },
   },
 } satisfies Prisma.CircuitSelect;
 
@@ -78,7 +87,7 @@ export function toDealProgress(
     candidates: candidates.map((c) => ({
       ...c,
       // Both halves: handed to a crew AND booked with the society.
-      replacementScheduled: c.replacementOwnerId != null && (c.scheduledEvents?.length ?? 0) > 0,
+      replacementScheduled: c.demos[0]?.replacementOwnerId != null && (c.demos[0]?.scheduledEvents.length ?? 0) > 0,
     })),
     reportStatus: pipeline.demoReports[0]?.status ?? null,
     kyc: (() => {

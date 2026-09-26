@@ -22,7 +22,7 @@ export default async function PortalInventoryPage() {
   if (!hasGrant(viewer, "inventory")) redirect("/portal");
   const societyId = viewer.societyId;
 
-  const [circuits, meters, tanks] = await Promise.all([
+  const [circuitRows, meters, tanks] = await Promise.all([
     db.circuit.findMany({
       where: { societyId, voidedAt: null },
       orderBy: { createdAt: "asc" },
@@ -30,7 +30,14 @@ export default async function PortalInventoryPage() {
         id: true,
         location: true,
         lightType: true,
-        lightReplacementDate: true,
+        // When the lights went in: the latest counted demo's replacement day
+        // (2026-09-26 — the replacement belongs to the demo now).
+        demos: {
+          where: { voidedAt: null, rejected: false, lightReplacementDate: { not: null } },
+          orderBy: { lightReplacementDate: "desc" },
+          take: 1,
+          select: { lightReplacementDate: true },
+        },
         meteredLightCount: true,
         representedLightCount: true,
         devices: {
@@ -60,6 +67,10 @@ export default async function PortalInventoryPage() {
       select: { id: true, name: true, productName: true, hasLevelSignal: true, setupType: true },
     }),
   ]);
+  const circuits = circuitRows.map(({ demos, ...c }) => ({
+    ...c,
+    lightReplacementDate: demos[0]?.lightReplacementDate ?? null,
+  }));
 
   // What counts as a FirsThing-installed fitting: a line with a recorded
   // replacement, OR a historical line on a replaced circuit — for a

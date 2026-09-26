@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
+import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { logger } from "@/lib/logger";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
-import { classifyDay, periodSavingsSummary } from "@/lib/circuit-load";
+import { periodSavingsSummary } from "@/lib/circuit-load";
 import { evaluateCompliance } from "@/lib/monthly-calculation";
 import { circuitLabelOf } from "@/lib/meter-view";
 
@@ -51,8 +52,6 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
       voidedAt: true,
       location: true,
       lightType: true,
-      meterInstalledAt: true,
-      lightReplacementDate: true,
       preInstallBaseline: true,
       benchmarkSavingsPct: true,
       rescaleEvents: true,
@@ -83,14 +82,13 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
     // nobody agreed to, and this alert is about a contractual shortfall.
     return { state: "unknown", reason: "no contract term version records a tolerance" };
   }
-  if (!circuit.meterInstalledAt || !circuit.lightReplacementDate) {
-    return { state: "unknown", reason: "the circuit has no post-replacement period yet" };
-  }
+  // Monitoring days only, from the billing start (2026-09-26): the demo's
+  // days live on the demo, and the band is a contractual judgement.
+  const start = await circuitMonitoringStart(circuitId);
+  if (!start) return { state: "unknown", reason: "billing has not started for this circuit" };
 
   const now = new Date();
-  const days = circuit.meterReadings.filter(
-    (r) => classifyDay(r.date, circuit.meterInstalledAt!, circuit.lightReplacementDate) === "post_install",
-  );
+  const days = circuit.meterReadings.filter((r) => r.date.getTime() >= start.getTime());
   const baseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, now);
   const summary = periodSavingsSummary(
     baseline,

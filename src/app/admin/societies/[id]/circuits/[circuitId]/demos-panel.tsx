@@ -1,346 +1,236 @@
 "use client";
 
-import { Fragment, useState, useTransition } from "react";
-import { formatDate } from "@/lib/format-date";
+import Link from "next/link";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
-import { describeBasis, deriveBenchmark, type DemoInput } from "@/lib/circuit-demos";
-import { recordCircuitDemo, setBenchmarkOverride, setDemoRejected } from "./demo-actions";
+import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
+import { setBenchmarkOverride, setDemoRejected, startDemo } from "./demo-step-actions";
 
-export type DemoDTO = DemoInput & {
+export type DemoDTO = {
+  id: string;
+  sequence: number;
+  combine: "batch" | "rerun";
   meteredLightCount: number;
-  preInstallBaseline: number;
-  postInstallAverage: number;
+  preAverage: number | null;
+  postAverage: number | null;
+  savingsPct: number | null;
+  rejected: boolean;
   rejectionReason: string | null;
-  note: string | null;
-  readingCount: number;
-  /** The demo's own daily table, as printed in the report it came from. */
-  readings: { date: string; kWh: number; phase: "pre" | "post" }[];
+  complete: boolean;
+  locked: boolean;
+  href: string;
+  current: boolean;
 };
 
+/**
+ * The circuit's demos (2026-09-26): each walks its own steps and is measured
+ * over its own periods. A second demo either covers DIFFERENT lights (its
+ * baseline adds to the first) or repeats the SAME lights (the baselines
+ * average); the benchmark is the mean of the demos' percentages either way.
+ */
 export function DemosPanel({
   circuitId,
   demos,
+  circuitBaseline,
+  circuitBenchmark,
+  meteredLightCount,
   overridePct,
   overrideReason,
-  canEdit,
+  canStart,
+  canDecide,
+  maxDemos,
+  agreedPending,
 }: {
   circuitId: string;
   demos: DemoDTO[];
+  circuitBaseline: number | null;
+  circuitBenchmark: number | null;
+  meteredLightCount: number;
   overridePct: number | null;
   overrideReason: string | null;
-  canEdit: boolean;
+  canStart: boolean;
+  canDecide: boolean;
+  maxDemos: number;
+  /** An imported circuit whose figures stand until a redone demo is accepted. */
+  agreedPending: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
-  const [rejecting, setRejecting] = useState<string | null>(null);
-  const [reason, setReason] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [combine, setCombine] = useState<"batch" | "rerun">("rerun");
+  const [lights, setLights] = useState(String(meteredLightCount));
   const [overriding, setOverriding] = useState(false);
-  const [openDemo, setOpenDemo] = useState<string | null>(null);
   const [pct, setPct] = useState(overridePct === null ? "" : String(overridePct));
-  const [why, setWhy] = useState(overrideReason ?? "");
-  const [lights, setLights] = useState("");
-  const [pre, setPre] = useState("");
-  const [post, setPost] = useState("");
-
-  const derived = deriveBenchmark(
-    demos,
-    overridePct === null ? null : { pct: overridePct, reason: overrideReason ?? "" },
-  );
-  const run = (fn: () => Promise<{ ok?: true; error?: string }>, done?: () => void) =>
+  const [reason, setReason] = useState(overrideReason ?? "");
+  const run = (fn: () => Promise<{ error?: string }>, after?: () => void) =>
     start(async () => {
       setError(null);
       const r = await fn();
       if (r.error) setError(r.error);
-      else { done?.(); router.refresh(); }
+      else {
+        after?.();
+        router.refresh();
+      }
     });
 
   return (
-    <Card className="mb-5 p-6">
-      {/* The action sits on the heading's line, not below a paragraph and a
-          figure — a control in the middle of a card reads as part of the text
-          it follows rather than as the thing the card is for (user-caught
-          2026-09-08: "This option should come on top as a button. not here in
-          middle"). It is also the repo's own layout rule for a card action. */}
-      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-        <div className="min-w-0 flex-1">
-          <CardTitle>Demos &amp; benchmark</CardTitle>
-        </div>
-        {canEdit && !adding && (
-          <button type="button" className="btn-secondary shrink-0" onClick={() => setAdding(true)}>
-            Record another demo
-          </button>
-        )}
-      </div>
-      <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-        A circuit can be demonstrated more than once. A demo that ran badly is rejected and the one
-        done in its place decides alone; a second run at the society&apos;s own request counts
-        alongside the first, and the benchmark is the mean of their savings percentages.
-      </p>
-
-      <div className="mb-4 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <span className="text-2xl num font-semibold">
-          {derived.pct === null ? "—" : `${derived.pct.toFixed(2)}%`}
-        </span>
-        <span className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-          {describeBasis(derived.basis)}
-        </span>
-        {derived.raw !== null && !derived.inBand && (
-          <StatusChip tone="warn">
-            Measured {derived.raw.toFixed(2)}% — outside the 60–80% band
+    <Card className="p-5 mb-6 space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-[15px] font-semibold">Demos</h2>
+        {circuitBenchmark !== null && (
+          <StatusChip tone="ok">
+            Benchmark {circuitBenchmark.toFixed(2)}%{overridePct !== null ? " · agreed override" : ""}
           </StatusChip>
         )}
+        {circuitBaseline !== null && <StatusChip tone="info">Baseline {circuitBaseline.toFixed(2)} kWh/day</StatusChip>}
       </div>
+      {agreedPending && (
+        <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
+          Agreed figure — demo pending re-entry. This circuit was set up before the system; its baseline and benchmark are the
+          ones on record until a demo is redone here and accepted, and invoices keep using them meanwhile.
+        </p>
+      )}
 
       {demos.length === 0 ? (
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          No demo on record. A circuit backfilled from paper may have its benchmark set by hand
-          instead — the override below says so where that is the case.
-        </p>
+        <p className="text-sm text-[var(--text-muted)]">No demo on this circuit yet.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="tbl">
+          <table className="tbl tbl-compact">
             <thead>
               <tr>
-                <th>Demo</th><th>Lights</th><th>Before</th><th>After</th><th>Savings</th>
-                <th>Days</th><th>Counts?</th><th></th>
+                <th>Demo</th>
+                <th className="text-right">Lights</th>
+                <th className="text-right">Before · kWh/day</th>
+                <th className="text-right">After · kWh/day</th>
+                <th className="text-right">Saving</th>
+                <th>Status</th>
+                {canDecide && <th />}
               </tr>
             </thead>
             <tbody>
               {demos.map((d) => (
-                <Fragment key={d.id}>
-                <tr style={d.rejected ? { opacity: 0.6 } : undefined}>
-                  <td className="num">#{d.sequence}</td>
-                  <td className="num">{d.meteredLightCount}</td>
-                  <td className="num">{d.preInstallBaseline.toFixed(2)}</td>
-                  <td className="num">{d.postInstallAverage.toFixed(2)}</td>
-                  <td className="num">{d.savingsPct.toFixed(2)}%</td>
-                  <td className="num">
-                    {d.readingCount === 0 ? (
-                      "—"
-                    ) : (
-                      <button type="button" className="btn-ghost btn-sm"
-                        aria-expanded={openDemo === d.id}
-                        onClick={() => setOpenDemo(openDemo === d.id ? null : d.id)}>
-                        {d.readingCount}
-                      </button>
+                <tr key={d.id} style={d.rejected ? { opacity: 0.6 } : undefined}>
+                  <td>
+                    <Link href={d.href} className="underline">
+                      Demo {d.sequence}
+                    </Link>
+                    {d.sequence > 1 && (
+                      <span className="block text-xs text-[var(--text-muted)]">{d.combine === "batch" ? "different lights — adds" : "same lights — averages"}</span>
                     )}
                   </td>
+                  <td className="num text-right">{d.meteredLightCount}</td>
+                  <td className="num text-right">{d.preAverage?.toFixed(2) ?? "—"}</td>
+                  <td className="num text-right">{d.postAverage?.toFixed(2) ?? "—"}</td>
+                  <td className="num text-right">{d.savingsPct === null ? "—" : `${d.savingsPct.toFixed(2)}%`}</td>
                   <td>
                     {d.rejected ? (
-                      <StatusChip tone="warn">Rejected</StatusChip>
+                      <StatusChip tone="bad">Rejected</StatusChip>
+                    ) : d.complete ? (
+                      <StatusChip tone="ok">{d.locked ? "Complete · locked" : "Complete"}</StatusChip>
                     ) : (
-                      <StatusChip tone="ok">Counts</StatusChip>
+                      <StatusChip tone="info">{d.current ? "In progress · shown below" : "In progress"}</StatusChip>
                     )}
-                    {d.rejectionReason && (
-                      <span className="block text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                        {d.rejectionReason}
-                      </span>
-                    )}
+                    {d.rejectionReason && <span className="block text-xs text-[var(--text-muted)]">{d.rejectionReason}</span>}
                   </td>
-                  <td>
-                    {canEdit && (d.rejected ? (
-                      <button type="button" className="btn-ghost btn-sm" disabled={pending}
-                        onClick={() => run(() => setDemoRejected({ demoId: d.id, rejected: false }))}>
-                        Count it again
-                      </button>
-                    ) : rejecting === d.id ? (
-                      <span className="flex flex-wrap items-center gap-2">
-                        <input className="field field-auto" placeholder="Why is it rejected?"
-                          value={reason} onChange={(e) => setReason(e.target.value)}
-                          aria-label={`Why demo ${d.sequence} is rejected`} />
-                        <button type="button" className="btn-primary btn-sm" disabled={pending}
-                          onClick={() => run(
-                            () => setDemoRejected({ demoId: d.id, rejected: true, reason }),
-                            () => { setRejecting(null); setReason(""); },
-                          )}>
+                  {canDecide && (
+                    <td className="text-right whitespace-nowrap">
+                      {d.rejected ? (
+                        <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={() => run(() => setDemoRejected({ demoId: d.id, rejected: false }))}>
+                          Count it again
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-ghost btn-sm"
+                          disabled={pending}
+                          onClick={() => {
+                            const why = window.prompt(`Why is demo ${d.sequence} rejected? It stays on record and takes no part in the figure.`);
+                            if (why) run(() => setDemoRejected({ demoId: d.id, rejected: true, reason: why }));
+                          }}
+                        >
                           Reject
                         </button>
-                        <button type="button" className="btn-ghost btn-sm"
-                          onClick={() => { setRejecting(null); setReason(""); }}>Cancel</button>
-                      </span>
-                    ) : (
-                      <button type="button" className="btn-ghost btn-sm" disabled={pending}
-                        onClick={() => setRejecting(d.id)}>Reject</button>
-                    ))}
-                  </td>
-                </tr>
-                {openDemo === d.id && (
-                  <tr>
-                    <td colSpan={8} className="p-0">
-                      <DemoReadings readings={d.readings} recorded={{ pre: d.preInstallBaseline, post: d.postInstallAverage }} />
+                      )}
                     </td>
-                  </tr>
-                )}
-                </Fragment>
+                  )}
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
 
-      {canEdit && adding && (
-        <div className="mt-4 flex flex-wrap items-center gap-2">
-          {(
-            <div className="flex w-full flex-wrap items-end gap-3">
-              <Field label="Lights in this demo" htmlFor="dm-n">
-                <input id="dm-n" type="number" className="field field-auto w-28" value={lights}
-                  onChange={(e) => setLights(e.target.value)} />
+      {canStart && demos.length < maxDemos && (
+        starting || demos.length === 0 ? (
+          <div className="flex flex-wrap items-end gap-3 pt-2 border-t border-[var(--border-subtle)]">
+            {demos.length > 0 && (
+              <Field label="This demo covers" htmlFor="nd-combine">
+                <select id="nd-combine" className="field field-auto" value={combine} onChange={(e) => setCombine(e.target.value as "batch" | "rerun")}>
+                  <option value="rerun">The same lights again — baselines average</option>
+                  <option value="batch">Different lights — adds to the baseline</option>
+                </select>
               </Field>
-              <Field label="Before (kWh/day)" htmlFor="dm-pre">
-                <input id="dm-pre" type="number" step="0.01" className="field field-auto w-32" value={pre}
-                  onChange={(e) => setPre(e.target.value)} />
-              </Field>
-              <Field label="After (kWh/day)" htmlFor="dm-post">
-                <input id="dm-post" type="number" step="0.01" className="field field-auto w-32" value={post}
-                  onChange={(e) => setPost(e.target.value)} />
-              </Field>
-              <button type="button" className="btn-primary mb-2" disabled={pending}
-                onClick={() => run(
-                  () => recordCircuitDemo({
-                    circuitId, meteredLightCount: Number(lights),
-                    preInstallBaseline: Number(pre), postInstallAverage: Number(post),
-                  }),
-                  () => { setAdding(false); setLights(""); setPre(""); setPost(""); },
-                )}>
-                Record it
+            )}
+            <Field label="Lights on the meter" htmlFor="nd-lights">
+              <input id="nd-lights" type="number" className="field field-auto w-28" value={lights} onChange={(e) => setLights(e.target.value)} />
+            </Field>
+            <button
+              type="button"
+              className="btn-primary mb-2"
+              disabled={pending || !lights.trim()}
+              onClick={() => run(() => startDemo({ circuitId, combine, meteredLightCount: Number(lights) }), () => setStarting(false))}
+            >
+              {demos.length === 0 ? "Start the demo" : `Start demo ${demos.length + 1}`}
+            </button>
+            {demos.length > 0 && (
+              <button type="button" className="btn-ghost mb-2" onClick={() => setStarting(false)}>
+                Cancel
               </button>
-              <button type="button" className="btn-ghost mb-2" onClick={() => setAdding(false)}>Cancel</button>
+            )}
+          </div>
+        ) : (
+          <button type="button" className="btn-secondary btn-sm" onClick={() => setStarting(true)}>
+            Start another demo
+          </button>
+        )
+      )}
+
+      {canDecide && (demos.some((d) => d.savingsPct !== null) || overridePct !== null) && (
+        <div className="pt-2 border-t border-[var(--border-subtle)] space-y-2">
+          {overriding ? (
+            <div className="flex flex-wrap items-end gap-3">
+              <Field label="Agreed benchmark %" htmlFor="ov-pct">
+                <input id="ov-pct" type="number" step="0.01" className="field field-auto w-28" value={pct} onChange={(e) => setPct(e.target.value)} />
+              </Field>
+              <Field label="Why it differs from what the demos measured" htmlFor="ov-reason">
+                <input id="ov-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} />
+              </Field>
+              <button type="button" className="btn-primary mb-2" disabled={pending} onClick={() => run(() => setBenchmarkOverride({ circuitId, pct: pct.trim() === "" ? null : Number(pct), reason }), () => setOverriding(false))}>
+                Save
+              </button>
+              {overridePct !== null && (
+                <button type="button" className="btn-ghost mb-2" disabled={pending} onClick={() => run(() => setBenchmarkOverride({ circuitId, pct: null }), () => setOverriding(false))}>
+                  Remove the override
+                </button>
+              )}
+              <button type="button" className="btn-ghost mb-2" onClick={() => setOverriding(false)}>
+                Cancel
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="text-[var(--text-muted)]">
+                {overridePct !== null ? `Agreed benchmark ${overridePct}% — ${overrideReason}` : "Not overridden — the benchmark is what the demos measured."}
+              </span>
+              <button type="button" className="btn-secondary btn-sm" onClick={() => setOverriding(true)}>
+                {overridePct !== null ? "Change the agreed benchmark" : "Record an agreed benchmark"}
+              </button>
             </div>
           )}
         </div>
       )}
-
-      {/* An override is a decision ABOUT a measured figure, so it only exists
-          once there is one — before the first demo there is nothing to
-          override, and an open form there asked for a benchmark by hand at
-          exactly the moment FEAT-014-AC-4 says one must never be typed
-          (user-caught 2026-09-07). Closed by default afterwards too: the
-          demos are the normal answer, and a form standing open reads as a
-          field waiting to be filled in. */}
-      {(demos.length > 0 || overridePct !== null) && (
-      <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--hairline)" }}>
-        <p className="text-sm font-medium">Benchmark override</p>
-        <p className="mb-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
-          The agreed figure is what the society is billed against, and it does not always equal what
-          the demos measured. Rounding counts as an override too — nothing here is rounded
-          automatically. What the demos measured stays on record either way, and an override never
-          moves a circuit into the band.
-        </p>
-        {overridePct !== null && !overriding ? (
-          <p className="text-sm">
-            <span className="num font-semibold">{overridePct.toFixed(2)}%</span>
-            {overrideReason ? ` — ${overrideReason}` : ""}
-            {canEdit && (
-              <>
-                {" "}
-                <button type="button" className="btn-ghost btn-sm" onClick={() => setOverriding(true)}>Change</button>
-                <button type="button" className="btn-ghost btn-sm" disabled={pending}
-                  onClick={() => run(() => setBenchmarkOverride({ circuitId, pct: null }))}>
-                  Remove, use the demos
-                </button>
-              </>
-            )}
-          </p>
-        ) : canEdit && overriding ? (
-          <div className="flex flex-wrap items-end gap-3">
-            <Field label="Benchmark %" htmlFor="ov-pct">
-              <input id="ov-pct" type="number" step="0.01" className="field field-auto w-28" value={pct}
-                onChange={(e) => setPct(e.target.value)} />
-            </Field>
-            <Field label="Why" htmlFor="ov-why" hint="Kept on record with your name and the date">
-              <input id="ov-why" className="field" value={why} onChange={(e) => setWhy(e.target.value)} />
-            </Field>
-            <button type="button" className="btn-primary mb-2" disabled={pending}
-              onClick={() => run(
-                () => setBenchmarkOverride({ circuitId, pct: Number(pct), reason: why }),
-                () => setOverriding(false),
-              )}>
-              Set it
-            </button>
-            <button type="button" className="btn-ghost mb-2" onClick={() => setOverriding(false)}>Cancel</button>
-          </div>
-        ) : (
-          <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-            Not overridden — the benchmark is what the demos measured.
-            {canEdit && (
-              <>
-                {" "}
-                <button type="button" className="btn-secondary btn-sm" onClick={() => setOverriding(true)}>
-                  Record an agreed benchmark
-                </button>
-              </>
-            )}
-          </p>
-        )}
-      </div>
-      )}
-
       {error && <ErrorText>{error}</ErrorText>}
     </Card>
-  );
-}
-
-/**
- * A demo's own daily table, as the report printed it.
- *
- * The mean of the days is shown beside the figure the demo was recorded
- * with, and where the two differ the difference is stated rather than
- * quietly reconciled: Aditya Urban Casa's first demo prints five days that
- * average 24.5580 under a stated 24.53, and every downstream figure in that
- * report — its 48.28%, and the 66.72% in the signed agreement — was
- * computed from 24.53. The recorded figure stays what was agreed; the days
- * stay what was measured; the gap is visible to whoever needs to chase it.
- */
-function DemoReadings({
-  readings,
-  recorded,
-}: {
-  readings: { date: string; kWh: number; phase: "pre" | "post" }[];
-  recorded: { pre: number; post: number };
-}) {
-  const groups = [
-    { phase: "pre" as const, label: "Before the lights were replaced", recorded: recorded.pre },
-    { phase: "post" as const, label: "After", recorded: recorded.post },
-  ];
-  return (
-    <div className="grid gap-4 p-4 sm:grid-cols-2" style={{ background: "var(--surface-sunken)" }}>
-      {groups.map((g) => {
-        const rows = readings.filter((r) => r.phase === g.phase);
-        if (rows.length === 0) return null;
-        const mean = rows.reduce((a, r) => a + r.kWh, 0) / rows.length;
-        const agrees = Math.abs(mean - g.recorded) < 0.0101;
-        return (
-          <div key={g.phase}>
-            <p className="text-[13px] font-medium">{g.label}</p>
-            <p className="mb-2 text-[12px]" style={{ color: "var(--text-muted)" }}>
-              {rows.length} days averaging <span className="num">{mean.toFixed(4)}</span> kWh/day
-              {agrees ? (
-                <> — the figure this demo was recorded with.</>
-              ) : (
-                <>
-                  {" "}— but this demo was recorded at{" "}
-                  <span className="num">{g.recorded}</span>, which is the figure the report&apos;s
-                  own savings and the signed agreement were computed from.
-                </>
-              )}
-            </p>
-            <table className="tbl">
-              <thead><tr><th>Date</th><th>kWh</th></tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.date}>
-                    <td className="num">{formatDate(r.date)}</td>
-                    <td className="num">{r.kWh.toFixed(2)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        );
-      })}
-    </div>
   );
 }

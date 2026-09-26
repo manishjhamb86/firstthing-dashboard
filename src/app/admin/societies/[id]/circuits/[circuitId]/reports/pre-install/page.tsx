@@ -30,15 +30,18 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
 
 export default async function PreInstallReportPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string; circuitId: string }>;
+  searchParams: Promise<{ demo?: string }>;
 }) {
   const session = await requireAdminPage();
   const perms = session.user.adminPermissions ?? [];
   if (!perms.includes("manage_survey") && !perms.includes("manage_pipeline")) redirect("/admin");
 
   const { id, circuitId } = await params;
-  const report = await loadCircuitReport(circuitId);
+  const { demo: demoParam } = await searchParams;
+  const report = await loadCircuitReport(circuitId, demoParam ?? null);
   if (!report || report.society.id !== id) notFound();
   const { circuit, society, theoretical, preDays, preAverage, preIncludedCount, avgVariance, inventory, demoWindows } = report;
   const circuitHref = `/admin/societies/${id}/circuits/${circuitId}`;
@@ -77,7 +80,7 @@ export default async function PreInstallReportPage({
             <p className="text-[20px] font-bold tracking-[-0.01em]">Before installation</p>
             <p className="mt-1 text-xs text-[var(--text-subtle)]">
               Meter installed{" "}
-              <span className="num">{formatDate(circuit.meterInstalledAt)}</span>
+              <span className="num">{formatDate(report.demo?.meterInstalledAt ?? null)}</span>
               <br />
               Generated <span className="num">{generated}</span>
             </p>

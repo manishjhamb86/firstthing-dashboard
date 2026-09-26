@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
+import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
@@ -124,7 +125,7 @@ export type PortalEnergy = {
 
 export const societyEnergy = cache(async (societyId: string): Promise<PortalEnergy> => {
   const circuits = await db.circuit.findMany({
-    where: { societyId, voidedAt: null, lightReplacementDate: { not: null } },
+    where: { societyId, voidedAt: null },
     select: {
       id: true,
       location: true,
@@ -133,8 +134,13 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       representedLightCount: true,
       benchmarkSavingsPct: true,
       preInstallBaseline: true,
-      lightReplacementDate: true,
       rescaleEvents: true,
+      demos: {
+        where: { voidedAt: null, rejected: false, lightReplacementDate: { not: null } },
+        orderBy: { lightReplacementDate: "desc" },
+        take: 1,
+        select: { lightReplacementDate: true },
+      },
       meterReadings: {
         // NO supersededAt filter: supersession updates the row IN PLACE, so
         // a non-null supersededAt is a corrected day whose kWh is current.
@@ -149,9 +155,20 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
 
   const today = new Date();
   type Day = { date: string; kWh: number; excluded: boolean };
-  const perCircuit = circuits.map((c) => {
+  // A circuit reaches the resident once its lights are in. Its days are the
+  // monitoring rows from the billing start (2026-09-26); before a billing
+  // start is known, the days after the lights went in.
+  const installed = circuits.flatMap((c) => {
+    const replaced = c.demos[0]?.lightReplacementDate ?? null;
+    return replaced || c.benchmarkSavingsPct !== null ? [{ ...c, lightReplacementDate: replaced }] : [];
+  });
+  const starts = new Map(
+    await Promise.all(installed.map(async (c) => [c.id, await circuitMonitoringStart(c.id)] as const)),
+  );
+  const perCircuit = installed.map((c) => {
+    const from = starts.get(c.id) ?? c.lightReplacementDate;
     const monitoring: Day[] = c.meterReadings
-      .filter((r) => r.date > c.lightReplacementDate!)
+      .filter((r) => (from ? (starts.get(c.id) ? r.date >= from : r.date > from) : true))
       .map((r) => ({
         date: r.date.toISOString().slice(0, 10),
         kWh: r.kWh,

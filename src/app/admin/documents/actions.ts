@@ -15,7 +15,6 @@ import { extensionOf } from "@/lib/file-signature";
 import { logger } from "@/lib/logger";
 import { findDuplicateCircuit } from "@/lib/circuit-duplicate";
 import { recordKycDocument } from "@/app/admin/pipeline/[id]/kyc/actions";
-import { recordCircuitRawUpload } from "@/app/admin/societies/[id]/circuits/[circuitId]/reading-actions";
 import type { KycDocumentType } from "@prisma/client";
 
 type Presigned = { uploadUrl: string; key: string };
@@ -269,26 +268,6 @@ export async function finalizeDocument(input: {
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
   const spec = documentType(input.docTypeId);
   if (!spec || !spec.uploadHere) return { error: "That document type is not filed from here." };
-
-  if (spec.id === "meterReadings") {
-    const result = await recordCircuitRawUpload({
-      circuitId: input.contextId,
-      s3Key: input.s3Key,
-      fileName: input.fileName,
-      contentType: input.contentType,
-      byteSize: input.byteSize,
-    });
-    if ("error" in result) return { error: result.error };
-    const circuit = await db.circuit.findUnique({
-      where: { id: input.contextId },
-      select: { societyId: true },
-    });
-    logger.info("document.filed", { actorId: actor.id, docTypeId: spec.id, rawFileId: result.rawFileId });
-    return {
-      message: "Uploaded. Open the circuit to review the days before anything is stored.",
-      href: circuit ? `/admin/societies/${circuit.societyId}/circuits/${input.contextId}` : undefined,
-    };
-  }
 
   if (spec.context === "society") {
     const filed = await fileStoredDocumentForSociety({
@@ -660,7 +639,6 @@ export async function createCircuitFromDocument(input: {
         // operator to a survey page that does not exist for a circuit no
         // survey produced. Recorded as not assessed, and why.
         eligibilityChecklist: {
-          backfilled: true,
           source: doc.fileName,
           // The month the source document was filed under, so a later report
           // of the same circuit can say the two describe the same period.

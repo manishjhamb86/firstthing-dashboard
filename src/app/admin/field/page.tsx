@@ -73,15 +73,25 @@ export default async function FieldWorkPage() {
         },
       },
     }),
-    // Light replacements: assigned on the circuit, not on the deal.
-    db.circuit.findMany({
+    // Light replacements: assigned on the demo (2026-09-26), not the deal.
+    db.circuitDemo.findMany({
       where: {
         voidedAt: null,
+        rejected: false,
         lightReplacementDate: null,
+        circuit: { voidedAt: null },
         ...(mineOnly ? { replacementOwnerId: actor.id } : { replacementOwnerId: { not: null } }),
       },
       include: {
-        society: { select: { id: true, name: true, location: true } },
+        circuit: {
+          select: {
+            id: true,
+            societyId: true,
+            serviceLine: true,
+            lightType: true,
+            society: { select: { id: true, name: true, location: true } },
+          },
+        },
         replacementOwner: { select: { name: true, email: true } },
         scheduledEvents: {
           where: { kind: "installation_day", status: "scheduled" },
@@ -117,20 +127,21 @@ export default async function FieldWorkPage() {
         touchedAt: p.updatedAt,
       };
     }),
-    ...circuits.map((c): WorkRow => {
-      const visit = c.scheduledEvents[0] ?? null;
+    ...circuits.map((d): WorkRow => {
+      const c = d.circuit;
+      const visit = d.scheduledEvents[0] ?? null;
       return {
-        key: `c-${c.id}`,
-        href: `/admin/societies/${c.societyId}/circuits/${c.id}`,
+        key: `d-${d.id}`,
+        href: `/admin/societies/${c.societyId}/circuits/${c.id}?demo=${d.id}`,
         societyName: c.society.name,
         societyLocation: c.society.location,
         serviceLine: SERVICE_LINE_LABEL[c.serviceLine] ?? c.serviceLine,
         kind: "replacement",
-        need: { label: `Replace ${c.meteredLightCount} × ${c.lightType}`, tone: "warn" },
-        assigneeName: c.replacementOwner?.name ?? c.replacementOwner?.email ?? null,
+        need: { label: `Replace ${d.meteredLightCount} × ${c.lightType} · demo ${d.sequence}`, tone: "warn" },
+        assigneeName: d.replacementOwner?.name ?? d.replacementOwner?.email ?? null,
         visitAt: visit?.startAt ?? null,
         contactName: visit?.contactName ?? null,
-        touchedAt: c.replacementAssignedAt ?? c.createdAt,
+        touchedAt: d.replacementAssignedAt ?? d.createdAt,
       };
     }),
   ];

@@ -56,8 +56,8 @@ function UploadHistory({ meterId }: { meterId: string }) {
   const [fileName, setFileName] = useState<string>("");
   const [done, setDone] = useState<{
     text: string;
-    billing?: { href: string; circuitLabel: string; days: number; flagged: number; partialExcluded: number };
-    note?: string;
+    circuits?: { href: string; label: string }[];
+    unassignedDays?: number;
   } | null>(null);
 
   function choose(file: File) {
@@ -107,22 +107,24 @@ function UploadHistory({ meterId }: { meterId: string }) {
       {done && (
         <div className="mt-2 text-[13px]">
           <p style={{ color: "var(--ok-fg)" }}>{done.text}</p>
-          {done.billing && (
+          {done.circuits && done.circuits.length > 0 && (
             <p className="mt-1">
-              <strong>{done.billing.days}</strong> days projected to <strong>{done.billing.circuitLabel}</strong>
-              {done.billing.partialExcluded > 0 && `, ${done.billing.partialExcluded} partial excluded`}
-              {done.billing.flagged > 0 && (
-                <span style={{ color: "var(--warn-fg)" }}>, {done.billing.flagged} flagged</span>
-              )}
-              {" — "}
-              <a href={done.billing.href} className="font-semibold underline">
-                see live monitoring →
-              </a>
+              Filed through this meter&apos;s history to{" "}
+              {done.circuits.map((c, i) => (
+                <span key={c.href}>
+                  {i > 0 && ", "}
+                  <a href={c.href} className="font-semibold underline">
+                    {c.label}
+                  </a>
+                </span>
+              ))}
+              {" "}— monitoring days from the billing start and the unlocked demos&apos; periods follow.
             </p>
           )}
-          {done.note && (
+          {done.unassignedDays !== undefined && done.unassignedDays > 0 && (
             <p className="mt-1" style={{ color: "var(--text-subtle)" }}>
-              Not projected to billing: {done.note}.
+              {done.unassignedDays} day{done.unassignedDays === 1 ? "" : "s"} of the file fall outside every entry in this meter&apos;s
+              history — kept on the meter, unassigned, until a history entry covers them.
             </p>
           )}
         </div>
@@ -239,8 +241,8 @@ function UploadHistory({ meterId }: { meterId: string }) {
                   setPreview(null);
                   setDone({
                     text: `Stored ${r.stored} hours${r.superseded ? `, replacing ${r.superseded}` : ""}.`,
-                    billing: r.billing,
-                    note: r.billingSkipped,
+                    circuits: r.circuits,
+                    unassignedDays: r.unassignedDays,
                   });
                   router.refresh();
                 })

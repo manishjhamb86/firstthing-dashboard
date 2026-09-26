@@ -348,7 +348,11 @@ export async function correctProposalDate(
           id: true,
           circuits: {
             where: { voidedAt: null },
-            select: { id: true, lightType: true, meterInstalledAt: true },
+            select: {
+              id: true,
+              lightType: true,
+              demos: { where: { voidedAt: null }, select: { meterInstalledAt: true } },
+            },
           },
         },
       },
@@ -377,6 +381,7 @@ export async function correctProposalDate(
   // The other direction: a meter already installed against a circuit this
   // survey selected cannot end up predating the survey that selected it.
   const earliest = (pipeline.siteSurvey?.circuits ?? [])
+    .flatMap((c) => c.demos.map((d) => ({ lightType: c.lightType, meterInstalledAt: d.meterInstalledAt })))
     .filter((c) => c.meterInstalledAt !== null)
     .sort((a, b) => a.meterInstalledAt!.getTime() - b.meterInstalledAt!.getTime())[0];
   if (earliest && earliest.meterInstalledAt!.getTime() < decided.getTime()) {

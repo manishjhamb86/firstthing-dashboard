@@ -10,8 +10,9 @@ import {
   resolveSocietyLightCount,
   type DemoReportCircuitInput,
 } from "@/lib/demo-report";
-import { classifyDay } from "@/lib/circuit-load";
-import { circuitDailyFromDemos, demoCircuitAverages } from "@/lib/demo-readings-series";
+import { circuitDailyFromDemos } from "@/lib/demo-readings-series";
+import { deriveCircuitFigures } from "@/lib/circuit-demos";
+import type { AcceptanceDay } from "@/lib/demo-acceptance";
 
 async function requirePer01() {
   await requireAdminPermission("manage_survey");
@@ -34,21 +35,10 @@ export async function collectDemoReportInput(pipelineId: string) {
           circuits: {
             where: { voidedAt: null },
             include: {
-              commissioningReadings: { orderBy: { date: "asc" } },
-              // CON-45's store. A circuit commissioned through the current
-              // flow has NO CommissioningReading rows at all — reading only
-              // that store reported "a benchmarked circuit has no
-              // post-install readings to average" for every such circuit, so
-              // the report could never generate and the whole deal spine
-              // stopped at step 4 (user-reported 2026-08-20).
-              meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
-              // The third store, and the only one a society commissioned
-              // before this system existed has: the daily tables its demo
-              // report printed, kept per demo because two demos of one
-              // circuit can share dates.
               demos: {
+                where: { voidedAt: null },
                 orderBy: { sequence: "asc" },
-                include: { readings: { orderBy: { date: "asc" } } },
+                include: { acceptances: { orderBy: { version: "desc" } } },
               },
             },
           },
@@ -58,61 +48,35 @@ export async function collectDemoReportInput(pipelineId: string) {
   });
   if (!pipeline) return null;
 
+  const demoIds: string[] = [];
   const circuits: DemoReportCircuitInput[] = (pipeline.siteSurvey?.circuits ?? []).map((c) => {
-    // One circuit uses one store, never both — mixing them under one
-    // baseline is how figures stop agreeing (the rule the circuit page
-    // already applies with `usesLegacyFlow`). Prefer the CON-45 store when
-    // it holds anything, since that is the flow a new circuit walks.
-    const csv = c.meterReadings;
-    const useCsv = csv.length > 0 && c.meterInstalledAt !== null;
-    const day = (d: Date) => d.toISOString().slice(0, 10);
-
-    // Neither commissioning store has anything for a backfilled circuit, so
-    // before this the report named "no post-install readings to average" and
-    // there was no site visit left to make that would produce any.
-    const fromDemos =
-      !useCsv && c.commissioningReadings.length === 0
-        ? circuitDailyFromDemos(
-            c.demos.map((d) => ({
-              rejected: d.rejected,
-              readings: d.readings.map((r) => ({
-                date: day(r.date),
-                kWh: r.kWh,
-                phase: r.phase as "pre" | "post",
-              })),
-            })),
-          )
-        : null;
-    const demoAverages = fromDemos ? demoCircuitAverages(c.demos) : null;
-
-    const preInstallReadings = fromDemos
-      ? fromDemos.pre.map((r) => ({ date: r.date, consumptionKwh: r.kWh }))
-      : useCsv
-      ? csv
-          .filter(
-            (r) =>
-              r.excludedAt === null &&
-              classifyDay(r.date, c.meterInstalledAt!, c.lightReplacementDate) === "pre_install",
-          )
-          .map((r) => ({ date: day(r.date), consumptionKwh: r.kWh }))
-      : c.commissioningReadings
-          .filter((r) => r.windowType === "pre_install" && r.status === "valid" && r.consumptionKwh != null)
-          .map((r) => ({ date: day(r.date), consumptionKwh: r.consumptionKwh! }));
-
-    const postInstallReadings = fromDemos
-      ? fromDemos.post.map((r) => ({ date: r.date, consumptionKwh: r.kWh }))
-      : useCsv
-      ? csv
-          .filter(
-            (r) =>
-              r.excludedAt === null &&
-              classifyDay(r.date, c.meterInstalledAt!, c.lightReplacementDate) === "post_install",
-          )
-          .map((r) => ({ date: day(r.date), consumptionKwh: r.kWh }))
-      : c.commissioningReadings
-          .filter((r) => r.windowType === "post_install" && r.status === "valid" && r.consumptionKwh != null)
-          .map((r) => ({ date: day(r.date), consumptionKwh: r.consumptionKwh! }));
-
+    // The report is built from what each demo's reviewer ACCEPTED (2026-09-26):
+    // the day sets frozen by "Accept these N days", nothing else. A demo that
+    // is rejected, or not yet accepted after replacement, takes no part.
+    // Latest version per phase (ordered newest first); an empty one is a withdrawal.
+    const latest = (d: (typeof c.demos)[number], phase: "pre" | "post") => {
+      const a = d.acceptances.find((x) => x.phase === phase);
+      return a && a.averageKwh !== null ? a : null;
+    };
+    const counted = c.demos.filter((d) => !d.rejected && latest(d, "pre") && latest(d, "post"));
+    for (const d of counted) demoIds.push(d.id);
+    const accepted = (d: (typeof counted)[number], phase: "pre" | "post") =>
+      ((latest(d, phase)?.days ?? []) as AcceptanceDay[])
+        .filter((x) => !x.excluded)
+        .map((x) => ({ date: x.date, kWh: x.kWh, phase }));
+    const series = circuitDailyFromDemos(counted.map((d) => ({ rejected: false, readings: [...accepted(d, "pre"), ...accepted(d, "post")] })));
+    const figures = deriveCircuitFigures(
+      counted.map((d) => ({
+        id: d.id,
+        sequence: d.sequence,
+        rejected: false,
+        voided: false,
+        combine: d.combine,
+        meteredLightCount: d.meteredLightCount,
+        preAverage: latest(d, "pre")?.averageKwh ?? null,
+        postAverage: latest(d, "post")?.averageKwh ?? null,
+      })),
+    );
     return {
       id: c.id,
       lightType: c.lightType,
@@ -120,14 +84,12 @@ export async function collectDemoReportInput(pipelineId: string) {
       meteredLightCount: c.meteredLightCount,
       representedLightCount: c.representedLightCount,
       wattage: c.wattage,
-      preInstallBaseline: c.preInstallBaseline,
-      // A circuit demonstrated in batches has no day on which all of it was
-      // measured, so its post figure is the demos' own averages added up.
-      postInstallAverage: demoAverages?.post ?? null,
+      preInstallBaseline: counted.length > 0 ? figures.baseline : c.preInstallBaseline,
+      postInstallAverage: counted.length > 0 ? figures.postAverage : null,
       benchmarkSavingsPct: c.benchmarkSavingsPct,
-      state: c.state,
-      preInstallReadings,
-      postInstallReadings,
+      state: counted.length > 0 || c.state === "ineligible" || c.state === "retired" ? c.state : "eligible",
+      preInstallReadings: series.pre.map((r) => ({ date: r.date, consumptionKwh: r.kWh })),
+      postInstallReadings: series.post.map((r) => ({ date: r.date, consumptionKwh: r.kWh })),
     };
   });
 
@@ -138,6 +100,7 @@ export async function collectDemoReportInput(pipelineId: string) {
   return {
     pipeline,
     circuits,
+    demoIds,
     societyLightCount: resolved.count,
     lightCountSource: resolved.source,
   };
@@ -192,6 +155,8 @@ export async function generateDemoReportInternal(pipelineId: string, actorId: st
       extrapolationFactor: f.extrapolationFactor,
       projectedSavingsKwhPerDay: f.projectedSavingsKwhPerDay,
       circuitSnapshot: f.circuits,
+      // Which demos this version rests on — sharing it locks them.
+      demoIds: collected.demoIds,
     },
   });
 

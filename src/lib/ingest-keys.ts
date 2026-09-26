@@ -77,3 +77,15 @@ export function buildInvoiceKey(params: {
   const ext = (params.fileName.split(".").pop() ?? "pdf").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   return `Invoices/${slug(params.society)}/${params.period}/${params.calculationId}/${stamp}_${name}.${ext}`;
 }
+
+/**
+ * A meter's own CSV upload (2026-09-26). Readings are stored hourly against
+ * the METER; which circuit a day belongs to is decided later by the meter
+ * history, so the bytes are filed under the meter, not under a circuit.
+ */
+export function buildMeterImportKey(params: { meterId: string; fileName: string; uploadedAt: Date }): string {
+  const stamp = params.uploadedAt.toISOString().replace(/[:.]/g, "-");
+  const name = slug(params.fileName.replace(/\.[^.]+$/, ""));
+  const ext = (params.fileName.split(".").pop() ?? "csv").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return `Ingest/Meters/${params.meterId}/${stamp}_${name}.${ext}`;
+}

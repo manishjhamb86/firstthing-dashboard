@@ -74,12 +74,20 @@ export default async function SiteSurveyPage({
     where: { siteSurveyId: siteSurvey.id, voidedAt: null },
     orderBy: { createdAt: "asc" },
     include: {
-      // Whether the replacement is booked, which is what the hand-off label
-      // turns on — assigned alone is not enough.
-      scheduledEvents: {
-        where: { kind: "installation_day", status: "scheduled" },
-        select: { id: true },
+      // Whether the current demo's replacement is booked, which is what the
+      // hand-off label turns on — assigned alone is not enough.
+      demos: {
+        where: { voidedAt: null, rejected: false },
+        orderBy: { sequence: "desc" },
         take: 1,
+        select: {
+          replacementOwnerId: true,
+          scheduledEvents: {
+            where: { kind: "installation_day", status: "scheduled" },
+            select: { id: true },
+            take: 1,
+          },
+        },
       },
     },
   });
@@ -173,7 +181,7 @@ export default async function SiteSurveyPage({
       state: c.state,
       location: c.location,
       lightType: c.lightType,
-      replacementScheduled: c.replacementOwnerId != null && c.scheduledEvents.length > 0,
+      replacementScheduled: c.demos[0]?.replacementOwnerId != null && (c.demos[0]?.scheduledEvents.length ?? 0) > 0,
     })),
   );
   const handoff =

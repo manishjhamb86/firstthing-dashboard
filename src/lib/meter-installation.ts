@@ -158,3 +158,83 @@ export function sliceDaysByInstallation(
 export function unattributedDays(slices: readonly DaySlice[]): Date[] {
   return slices.filter((s) => s.installation === null).map((s) => s.day);
 }
+
+// ── Assigning a span of a meter's readings (2026-09-26) ─────────────────────
+//
+// On a meter's readings page an operator selects a span and assigns it to a
+// circuit. Meter data systems never assign readings directly — the install
+// record is corrected and the readings follow it by date — so a span assign
+// IS a history edit: the new stay is written, and any stay it overlaps (this
+// meter's, or another meter's on the target circuit) is trimmed or split so
+// nothing overlaps. The screen shows exactly this plan before anything moves.
+
+export type StayRef = Installation & { meterId: string };
+
+export type SpanChange =
+  | { kind: "delete"; stay: StayRef }
+  | { kind: "trim-end"; stay: StayRef; removedAt: Date }
+  | { kind: "trim-start"; stay: StayRef; installedAt: Date }
+  | { kind: "split"; stay: StayRef; removedAt: Date; tailFrom: Date };
+
+export type SpanPlan = {
+  changes: SpanChange[];
+  create: { meterId: string; circuitId: string; installedAt: Date; removedAt: Date | null };
+};
+
+const end = (s: { removedAt: Date | null }) => s.removedAt?.getTime() ?? Number.POSITIVE_INFINITY;
+
+/**
+ * Plan a span assignment. `stays` is every stay of this meter AND every stay
+ * on the target circuit (either may overlap). Pure; the caller refuses the
+ * plan if a moved day is on a released bill or under a locked demo.
+ */
+export function planSpanAssignment(input: {
+  meterId: string;
+  circuitId: string;
+  from: Date;
+  /** Exclusive end; null = still there. */
+  to: Date | null;
+  stays: readonly StayRef[];
+}): SpanPlan | { error: string } {
+  const f = input.from.getTime();
+  const t = input.to?.getTime() ?? Number.POSITIVE_INFINITY;
+  if (t <= f) return { error: "The span has to end after it starts." };
+  const changes: SpanChange[] = [];
+  const seen = new Set<string>();
+  for (const s of input.stays) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    const relevant = s.meterId === input.meterId || s.circuitId === input.circuitId;
+    if (!relevant) continue;
+    const a = s.installedAt.getTime();
+    const b = end(s);
+    if (!(a < t && f < b)) continue; // no overlap (half-open)
+    if (f <= a && b <= t) changes.push({ kind: "delete", stay: s });
+    else if (a < f && b > t) changes.push({ kind: "split", stay: s, removedAt: new Date(f), tailFrom: new Date(t) });
+    else if (a < f) changes.push({ kind: "trim-end", stay: s, removedAt: new Date(f) });
+    else changes.push({ kind: "trim-start", stay: s, installedAt: new Date(t) });
+  }
+  return {
+    changes,
+    create: { meterId: input.meterId, circuitId: input.circuitId, installedAt: input.from, removedAt: input.to },
+  };
+}
+
+/** Days a plan moves away from where they were attributed — for the preview and the blockers. */
+export function movedRanges(plan: SpanPlan): Array<{ stay: StayRef; from: Date; to: Date | null }> {
+  const out: Array<{ stay: StayRef; from: Date; to: Date | null }> = [];
+  const f = plan.create.installedAt;
+  const t = plan.create.removedAt;
+  for (const c of plan.changes) {
+    const s = c.stay;
+    const from = new Date(Math.max(s.installedAt.getTime(), f.getTime()));
+    const toMs = Math.min(end(s), t?.getTime() ?? Number.POSITIVE_INFINITY);
+    out.push({ stay: s, from, to: Number.isFinite(toMs) ? new Date(toMs) : null });
+  }
+  return out;
+}
+
+/** Midnight UTC of a date — every stay boundary is a whole day. */
+export function toUtcMidnight(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+}

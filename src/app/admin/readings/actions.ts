@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
+import { mergeMonitoringDay, type Origin } from "@/lib/monitoring";
 import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { requireOps } from "./ops";
@@ -385,31 +386,23 @@ export async function commitUpload(
     for (const day of parsed.days) {
       const key = utcDayOf(day.date).getTime();
       const existing = storedByDay.get(key);
-      if (existing) {
-        if (existing.kWh === day.kWh) continue; // identical is a silent no-op (SCR-080)
-        await tx.meterReading.update({
-          where: { id: existing.id },
-          data: {
-            kWh: day.kWh,
-            intervalCount: day.intervalCount,
-            rawFileId: file.id,
-            supersededValue: existing.kWh,
-            supersededAt: now,
-            supersededByUserId: ops.session.user.id,
-            // An exclusion is a judgment about a specific number. Once that
-            // number is superseded the judgment no longer has a subject, and
-            // carrying it forward would silently drop a day the corrected file
-            // supplies — the exact day the operator re-uploaded to fix. The
-            // decision itself is not erased: the ReadingAnomaly row that
-            // recorded it stays, pointing at the superseded file. If the new
-            // value is still unusable, detection below flags it again and the
-            // operator decides against the evidence actually in the system.
-            excludedAt: null,
-            excludedById: null,
-            excludedReason: null,
-          },
-        });
-      } else {
+      // Meter wins (2026-09-26): a day the circuit's meter covers keeps the
+      // meter's figure, and this upload's value is kept beside it, never lost.
+      const action = mergeMonitoringDay(
+        existing
+          ? {
+              kWh: existing.kWh,
+              origin: existing.origin as Origin,
+              rawFileId: existing.rawFileId,
+              released: existing.usedInCalculationId !== null,
+              otherKwh: existing.otherKwh,
+              otherOrigin: existing.otherOrigin as Origin | null,
+            }
+          : null,
+        { kWh: day.kWh, origin: "monthly_upload", rawFileId: file.id },
+      );
+      if (action.kind === "skip") continue;
+      if (action.kind === "create") {
         await tx.meterReading.create({
           data: {
             circuitId: file.circuitId,
@@ -417,10 +410,38 @@ export async function commitUpload(
             kWh: day.kWh,
             intervalCount: day.intervalCount,
             source: "csv",
+            origin: "monthly_upload",
             rawFileId: file.id,
           },
         });
+        continue;
       }
+      if (!existing) continue;
+      if (!action.replaceValue) {
+        await tx.meterReading.update({
+          where: { id: existing.id },
+          data: { otherKwh: day.kWh, otherOrigin: "monthly_upload", otherRawFileId: file.id },
+        });
+        continue;
+      }
+      await tx.meterReading.update({
+        where: { id: existing.id },
+        data: {
+          kWh: day.kWh,
+          intervalCount: day.intervalCount,
+          origin: "monthly_upload",
+          rawFileId: file.id,
+          ...(action.supersede ? { supersededValue: existing.kWh, supersededAt: now, supersededByUserId: ops.session.user.id } : {}),
+          otherKwh: action.other.kWh,
+          otherOrigin: action.other.origin,
+          // An exclusion is a judgment about a specific number. Once that
+          // number is superseded the judgment no longer has a subject; the
+          // ReadingAnomaly row that recorded it stays, pointing at the old file.
+          excludedAt: null,
+          excludedById: null,
+          excludedReason: null,
+        },
+      });
     }
 
     // The previous file's own anomalies belong to a superseded interpretation.

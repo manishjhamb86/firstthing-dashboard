@@ -7942,8 +7942,9 @@ figures resync ran 8 seconds against Prisma's 5-second default. `db.ts` now sets
 timeout and 20-second maxWait for every interactive transaction, instead of a timeout remembered
 at each call site. Several demo actions had the same exposure.
 
-**The portal greeting's second line** now names who is signed in: "Signed in as <name> · you are
-committee". When the login is named after the society, it shows the account's email instead.
+**The portal greeting's second line** now names who is signed in: "You are logged in as <name>
+(<email>) · committee". With no name on the account it shows the email alone. (The first cut showed
+only the email for a login named after the society, and the user corrected it the same day.)
 
 **Verified:** 18/18 in a browser on a fixture with demos at 55, 63 and 63 over a 63-light
 inventory:

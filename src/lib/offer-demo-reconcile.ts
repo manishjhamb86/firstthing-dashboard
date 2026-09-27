@@ -13,6 +13,7 @@
  * "negotiated". Offers whose benchmark was measured from the start are never
  * touched. Every change is change-logged with the old value.
  */
+import { termPricedLights } from "@/lib/offer";
 import type { Tx } from "@/lib/tx";
 import { logger } from "@/lib/logger";
 import { logChange } from "@/lib/change-log";
@@ -87,7 +88,7 @@ export async function reconcileOfferWithDemos(tx: Tx, circuitId: string, actorId
     // The agreed population's pre-install draw, from the demo's baseline per
     // light — only where the offer had none of its own, or it came from here.
     if (m && m.baseline !== null && m.lights && (t.preInstallKwhPerDay == null || t.preInstallBasis === "demo")) {
-      out.preInstallKwhPerDay = (m.baseline / m.lights) * t.representedLightCount;
+      out.preInstallKwhPerDay = (m.baseline / m.lights) * termPricedLights(t);
       out.preInstallBasis = "demo";
     }
     return out;

@@ -1,3 +1,4 @@
+import { termPricedLights } from "@/lib/offer";
 import { greetingName } from "@/lib/greeting";
 import { circuitLabelOf } from "@/lib/circuit-label";
 import { redirect } from "next/navigation";
@@ -254,8 +255,8 @@ export default async function PortalHomePage() {
               projectedMonthlyFee: openOffer.projectedMonthlyFee,
               projectedSavedValue: openOffer.projectedSavedValue,
               projectedSavedKwhPerMonth: openOffer.projectedSavedKwhPerMonth,
-              lightCount: ((openOffer.circuitTerms as { representedLightCount: number }[] | null) ?? []).reduce(
-                (n, c) => n + c.representedLightCount,
+              lightCount: ((openOffer.circuitTerms as { representedLightCount: number; demoLightCount?: number }[] | null) ?? []).reduce(
+                (n, c) => n + termPricedLights(c),
                 0,
               ),
               exclusions: (openOffer.exclusions as string[]) ?? [],
@@ -544,6 +545,11 @@ export default async function PortalHomePage() {
                       )}
                     </div>
                     <LightCountHistory stages={c.lightHistory} />
+                    {c.keptStory && (
+                      <p className="mt-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
+                        {c.keptStory.afterFull}
+                      </p>
+                    )}
                   </div>
                 ))}
               </div>

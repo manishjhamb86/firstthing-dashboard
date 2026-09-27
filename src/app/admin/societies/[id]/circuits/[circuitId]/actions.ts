@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { refuseRepresentedCount } from "@/lib/light-type";
+import { refuseFullInstallationCount } from "@/lib/light-population";
 
 /**
  * Correct CON-11's extrapolation base.
@@ -59,7 +59,7 @@ export async function updateRepresentedLightCount(
   });
   if (!circuit) return { error: "Circuit not found." };
 
-  const refusal = refuseRepresentedCount(representedLightCount, circuit.meteredLightCount);
+  const refusal = refuseFullInstallationCount(representedLightCount);
   if (refusal) return { error: refusal };
 
   // GATE-02 / INV-02 — a figure a released calculation was computed on is not

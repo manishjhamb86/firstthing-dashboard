@@ -1,5 +1,6 @@
 "use server";
 
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled, fullFromTotal } from "@/lib/light-population";
 // CON-47 / FEAT-109 — invoice intake: a Zoho PDF becomes a society-month of
 // record. The shape of every action here is this codebase's standing one:
 // requireBillingOps() (the PER-01 proxy), a typed { error } on refusal —
@@ -569,18 +570,28 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
       for (const a of lineAllocations(l)) {
         const d = derived.lines.find((x) => x.lineNo === l.lineNo && x.circuitId === a.circuitId);
         if (!a.applyCountForward || !d || d.countDisagreement === null) continue;
+        // The invoice bills full installation + demo lights; the record
+        // stores the full installation alone (2026-09-27), so the demo
+        // lights come off what the invoice billed.
+        const rec = await tx.circuit.findUnique({
+          where: { id: a.circuitId },
+          select: { representedLightCount: true, ...DEMO_LIGHTS_SELECT },
+        });
+        if (!rec) continue;
+        const nextFull = fullFromTotal(d.lightsBilled, demoLightsInstalled(rec));
+        if (nextFull === rec.representedLightCount) continue;
         await tx.representedCountChange.create({
           data: {
             circuitId: a.circuitId,
-            previousCount: d.countDisagreement,
-            nextCount: d.lightsBilled,
+            previousCount: rec.representedLightCount,
+            nextCount: nextFull,
             effectiveFrom: period,
-            reason: `Applied from invoice ${review.invoiceNumber.trim()} (${period}), which billed ${d.lightsBilled} lights against a recorded ${d.countDisagreement}.`,
+            reason: `Applied from invoice ${review.invoiceNumber.trim()} (${period}), which billed ${d.lightsBilled} lights against a recorded ${d.countDisagreement} (full installation + demo lights).`,
             billingInvoiceId: invoice.id,
             recordedById: ops.actor.id,
           },
         });
-        await tx.circuit.update({ where: { id: a.circuitId }, data: { representedLightCount: d.lightsBilled } });
+        await tx.circuit.update({ where: { id: a.circuitId }, data: { representedLightCount: nextFull } });
       }
     }
 

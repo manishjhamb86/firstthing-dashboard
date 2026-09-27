@@ -59,7 +59,7 @@ export type InvoiceMonthCircuit = {
   circuitId: string;
   lightType: string;
   meteredLightCount: number;
-  /** The circuit RECORD's population — compared against `lightsBilled`, never used in its place. */
+  /** The circuit RECORD's lights as an invoice bills them — full installation + demo lights (2026-09-27) — compared against `lightsBilled`, never used in its place. */
   representedLightCount: number;
   /** The baseline in force for this period (INV-07 replay), or null when none was ever commissioned. */
   baselineKwhPerDay: number | null;

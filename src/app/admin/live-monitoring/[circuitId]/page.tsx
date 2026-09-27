@@ -2,6 +2,7 @@ import { ExclusionNote } from "@/components/exclusion-note";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { demoLightsInstalled, describeLights } from "@/lib/light-population";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, PageHeader, StatusChip } from "@/components/ui";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
@@ -51,7 +52,7 @@ export default async function LiveMonitoringCircuitPage({
       meterReadings: { where: { source: "csv" }, orderBy: { date: "asc" } },
       demos: {
         orderBy: { sequence: "asc" },
-        select: { id: true, sequence: true, savingsPct: true, preInstallBaseline: true, rejected: true },
+        select: { id: true, sequence: true, savingsPct: true, preInstallBaseline: true, rejected: true, voidedAt: true, meteredLightCount: true },
       },
       meterDevice: { select: { id: true, name: true } },
     },
@@ -110,7 +111,7 @@ export default async function LiveMonitoringCircuitPage({
   const circuitHref = `/admin/societies/${circuit.societyId}/circuits/${circuit.id}`;
   const baselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
   // What stayed on the circuit unreplaced — off both sides of every saving here.
-  const exclusion = exclusionFromDevices(circuit.devices);
+  const exclusion = exclusionFromDevices(circuit.devices, "monitoring");
 
   // Monitoring days only, from the billing start (2026-09-26): the demo's
   // days live on the demo itself, and a day between the demo's post period
@@ -184,7 +185,10 @@ export default async function LiveMonitoringCircuitPage({
             <StatusChip tone="ok">Live monitoring</StatusChip>
           )
         }
-        subtitle={`${circuit.society.name} · ${circuit.lightType} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`}
+        subtitle={`${circuit.society.name} · ${circuit.lightType} · ${circuit.meteredLightCount} metered · ${describeLights(
+          circuit.representedLightCount,
+          demoLightsInstalled({ meteredLightCount: circuit.meteredLightCount, demos: circuit.demos.filter((d) => !d.voidedAt), devices: circuit.devices }),
+        )}`}
         action={
           !blocker && canIngest ? (
             <Link

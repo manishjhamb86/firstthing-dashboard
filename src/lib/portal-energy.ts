@@ -1,9 +1,10 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
+import { demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { lightCountStages, type LightStage } from "@/lib/light-count-history";
-import { EXCLUSION_DEVICE_SELECT, excludedKwhAt, exclusionFromDevices, type Exclusion, periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
+import { comparableBaseline, EXCLUSION_DEVICE_SELECT, excludedKwhAt, keptStory, exclusionFromDevices, type Exclusion, periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
 
 export type MonthTotal = {
@@ -79,9 +80,14 @@ export type PortalCircuit = {
    * (researched 2026-09-11/12: IPMVP's Transparent principle requires the
    * extrapolation basis be stated to the party being billed, and showing
    * only the metered count would leave that basis unstated). Equal to
-   * `lightCount` when the circuit represents only itself.
+   * `lightCount` when the circuit represents only itself. Since 2026-09-27
+   * this is the TOTAL: the full installation plus the demo lights.
    */
   representedLightCount: number;
+  /** The lights fitted in the full installation, not counting the demo lights. */
+  fullInstallation: number;
+  /** The demo lights FirsThing replaced on this circuit before the full installation. */
+  demoLights: number;
   /**
    * When the fixture count behind this circuit's saving was last physically
    * confirmed — a rescale event's date, or the commissioning date if the
@@ -93,8 +99,10 @@ export type PortalCircuit = {
   lastVerifiedAt: string | null;
   /** The count at the demo, then each change, the last one current. */
   lightHistory: LightStage[];
-  /** What stayed on the circuit unreplaced — off both sides of every saving. */
+  /** What stayed on the circuit unreplaced — as monitored now, after the full installation. */
   exclusion: Exclusion;
+  /** What the demo left out and what the full installation recorded about it, in words (2026-09-27). */
+  keptStory: { atDemo: string; afterFull: string } | null;
   /** YYYY-MM-DD: the first day of the monitoring period (the billing start). */
   monitoringFrom: string | null;
   /**
@@ -162,10 +170,12 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       preInstallBaseline: true,
       rescaleEvents: true,
       devices: { select: EXCLUSION_DEVICE_SELECT },
+      // Every live demo: the first is the initial demo (its lights are the
+      // demo lights); only counted ones place the lights' replacement.
       demos: {
-        where: { voidedAt: null, rejected: false },
+        where: { voidedAt: null },
         orderBy: { sequence: "asc" },
-        select: { lightReplacementDate: true, meterInstalledAt: true, preFrom: true, postTo: true },
+        select: { rejected: true, meteredLightCount: true, lightReplacementDate: true, meterInstalledAt: true, preFrom: true, postTo: true },
       },
       meterReadings: {
         // NO supersededAt filter: supersession updates the row IN PLACE, so
@@ -187,6 +197,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   const installed = circuits.flatMap((c) => {
     const replaced =
       c.demos
+        .filter((d) => !d.rejected)
         .map((d) => d.lightReplacementDate)
         .filter((d): d is Date => d !== null)
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
@@ -227,20 +238,25 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
 
   const rows: PortalCircuit[] = perCircuit.map(({ c, monitoring, baselineNow }) => {
     const monthDaysAll = month ? monitoring.filter((d) => d.date.startsWith(month)) : [];
-    const exclusion = exclusionFromDevices(c.devices);
+    const exclusion = exclusionFromDevices(c.devices, "monitoring");
+    const demoLights = demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos: c.demos, devices: c.devices });
     const s = periodSavingsSummary(baselineNow, monthDaysAll, exclusion);
     const counted = monthDaysAll.filter((d) => !d.excluded).length;
     if (s.averageKwh !== null && baselineNow !== null && counted > 0) {
       anyMonth = true;
       totalConsumed += s.averageKwh * counted;
-      totalBaseline += baselineNow * counted;
+      // The circuit as it now stands: fixtures taken off it at the full
+      // installation are not in its before figure (2026-09-27).
+      totalBaseline += comparableBaseline(baselineNow, exclusion) * counted;
       totalReplacedBaseline += (baselineNow - excludedKwhAt(baselineNow, exclusion)) * counted;
     }
     return {
       id: c.id,
       label: circuitLabelOf(c.location, c.lightType),
       lightCount: c.meteredLightCount,
-      representedLightCount: c.representedLightCount,
+      representedLightCount: totalLights(c.representedLightCount, demoLights),
+      fullInstallation: c.representedLightCount,
+      demoLights,
       monthDays: counted,
       monthKwh: s.averageKwh !== null ? s.averageKwh * counted : null,
       monthDailyAvg: s.averageKwh,
@@ -252,13 +268,19 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         currentLightCount: c.meteredLightCount,
         commissionedBaseline: c.preInstallBaseline,
         benchmarkPct: c.benchmarkSavingsPct,
-        demo: demoPeriod(c.demos),
+        demo: demoPeriod(c.demos.filter((d) => !d.rejected)),
         fallbackStart: c.lightReplacementDate,
         events: c.rescaleEvents,
         today,
         exclusion,
       }),
       exclusion,
+      keptStory: keptStory(
+        exclusionFromDevices(c.devices, "demo"),
+        exclusion,
+        c.devices.some((d) => d.keptRecordedAt),
+        c.meteredLightCount,
+      ),
       monitoringFrom: (starts.get(c.id) ?? null)?.toISOString().slice(0, 10) ?? null,
       monitoring: monitoring.map((d) => ({
         ...d,
@@ -277,7 +299,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   // like with like.
   const byDate = new Map<string, { kWh: number; baseline: number; replacedBaseline: number; missingBaseline: boolean }>();
   for (const p of perCircuit) {
-    const ex = exclusionFromDevices(p.c.devices);
+    const ex = exclusionFromDevices(p.c.devices, "monitoring");
     for (const d of p.monitoring) {
       if (d.excluded) continue;
       const dayBaseline = effectiveBaselineAt(
@@ -289,7 +311,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       cur.kWh += d.kWh;
       if (dayBaseline === null) cur.missingBaseline = true;
       else {
-        cur.baseline += dayBaseline;
+        cur.baseline += comparableBaseline(dayBaseline, ex);
         cur.replacedBaseline += dayBaseline - excludedKwhAt(dayBaseline, ex);
       }
       byDate.set(d.date, cur);

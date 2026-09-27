@@ -109,7 +109,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
     effectiveBaselineAt(line.circuit.preInstallBaseline, line.circuit.rescaleEvents, to) ??
     line.baselineKwhPerDay;
   // What stayed on the circuit unreplaced comes off both sides (2026-09-26).
-  const exclusion = exclusionFromDevices(line.circuit.devices);
+  const exclusion = exclusionFromDevices(line.circuit.devices, "monitoring");
   const benchmarkKwh = benchmarkCeiling(baseline, line.benchmarkSavingsPct, exclusion);
   // Resolution order matters: the circuit's own contract first (correct in
   // every case, including multi-part months where calc.contractTermVersion

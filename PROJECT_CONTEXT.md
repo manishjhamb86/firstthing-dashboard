@@ -8202,3 +8202,49 @@ contract, demos, readings, invoices) is gone from `firsthing_dev`. Stage and pro
 touched. The two `@ace-city.test` portal logins survive with no society. Restoring is the user's
 call. **The lesson**: a fixture cleanup deletes only rows it created, by their own ids — never a
 parent looked up from a fixture row.
+
+## Full installation vs demo lights, kept fixtures after the full installation, and every agreement date correctable (2026-09-27) — user-specified
+
+**Full installation + demo lights (CON-11 amended).** The inventory showed 1,600 "LED lights installed"
+for Hyde Park from the stored represented count, which every screen and invoice treated as the whole
+population. The user's rule: the stored count is the **full installation** and excludes the demo
+lights, installed before it; everything society-wide is **full + demo**. `src/lib/light-population.ts`
+owns it: `demoLightsInstalled` = the initial (first live) demo's light count, capped at the lights
+actually replaced on the circuit (the circuit's metered count when the demo was on paper);
+`totalLights`, `fullFromTotal`, `refuseFullInstallationCount` (above zero — the user's 2026-09-08
+Indiabulls rule carried over). Readers were classified one by one (49 files): inventory, invoice
+matching/count checks/apply-forward (the invoice bills the total; apply-forward stores total − demo),
+demo report extrapolation, offer pricing (the worksheet's "lights to install" is the full installation;
+priced on full + demo; new offer terms carry `demoLightCount`, older terms are read as totals via
+`termPricedLights`), the phase-two billing run, survey inventory correction (inventory total − demo),
+the candidate form's suggested figure, inspection defaults, and every "N metered of M represented"
+display (now `describeLights`: "1,600 (1,545 full installation + 55 demo)"). Migration
+`20260927100000_split_demo_lights` applies the identical rule in SQL, once, with an audit row per
+circuit; previewed read-only on stage first — every total unchanged, Hyde Park 1,600 → 1,545 + 55.
+
+**Kept fixtures after the full installation.** The demo's deduction for kept fixtures applies to the
+demo only. `CircuitDevice.keptReplacedCount/keptRemovedCount/keptRecordedAt` (migration
+`20260927110000_kept_fixture_outcome`) record, on the installation page, what became of each kept line.
+The deduction model gained a removed component: saving = (B − Xr − day) ÷ (B − Xk − Xr), ceiling =
+(B − Xr) − pct × (B − Xk − Xr); `exclusionFromDevices(rows, "demo" | "monitoring")` — the demo view
+(benchmark, demo report, pre/post reports, demo board, offer reconcile) ignores outcomes; the
+monitoring view (live monitoring, portal, monthly report, invoice-month, projection, meter page,
+alerts, deviation review) applies them from the billing start. `keptStory` gives the portal's
+Electricity card two plain sentences — what the demo left out, what the full installation recorded —
+so a change in the figures never reads as a mistake. A first recording is field work; changing one is
+the date-correction rule.
+
+**Dates.** Installation: the certificate and every day's dates are corrected together and checked
+once (a certificate recorded before the ordering rule sat before its own day on Arihant Arden — each
+correction alone was refused by the other; shipped separately as `7fa7e03`). Agreement & contract:
+all eight dates (prepared, printed, notarised, signed, scan uploaded, activated, term start/end) in
+one panel, `refuseAgreementDates`; the term start carries terms version 1 with it and, where no
+certificate exists, re-projects monitoring and re-derives published months, never past a released
+month. Rule for both: demo mode free, live operations with a reason; old values to the change log.
+
+**Verified** on dev: kept flow 13/13 through admin and portal (before: "not yet recorded"; after:
+"nothing is left out: the saving is on all 63 lights"); agreement dates 10/10 (out-of-order refused,
+eight dates moved together, v1 followed, live blank-reason refused), dev data restored exactly;
+deadlock 8/8. 1,121 unit tests, `tsc`/`lint`/`build` clean. **One environment note**: restarting the
+dev server dropped the `DEMO_MODE=true` it had been started with — dev ran in live mode until
+restarted with it. Restart dev with `DEMO_MODE=true`.

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { formatDate } from "@/lib/format-date";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_INCLUDE, demoLightsInstalled, describeLights } from "@/lib/light-population";
 import { ListToolbar } from "@/components/list-toolbar";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -26,7 +27,7 @@ export default async function CircuitReadingHistory({
 
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
-    include: { society: { select: { id: true, name: true } } },
+    include: { society: { select: { id: true, name: true } }, ...DEMO_LIGHTS_INCLUDE },
   });
   if (!circuit) notFound();
 
@@ -74,8 +75,8 @@ export default async function CircuitReadingHistory({
         title={`${circuit.lightType} readings`}
         subtitle={
           circuit.location
-            ? `${circuit.location} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`
-            : `${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`
+            ? `${circuit.location} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
+            : `${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
         }
         action={
           <Link href="/admin/readings" className="btn-secondary">

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { Card, CardTitle, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -31,7 +32,7 @@ export default async function InspectionDetailPage({
     where: { id },
     include: {
       society: { select: { name: true, location: true } },
-      circuit: { select: { representedLightCount: true } },
+      circuit: { select: { representedLightCount: true, ...DEMO_LIGHTS_SELECT } },
       voidedBy: { select: { name: true, email: true } },
       findings: { orderBy: { srNo: "asc" } },
     },
@@ -61,6 +62,8 @@ export default async function InspectionDetailPage({
     .filter(Boolean)
     .join(" · ");
 
+  // Every light installed on the circuit's type: full installation + demo lights (2026-09-27).
+  const lightsToCheck = inspection.circuit ? totalLights(inspection.circuit.representedLightCount, demoLightsInstalled(inspection.circuit)) : null;
   return (
     <>
       {inspection.voidedAt && (
@@ -91,12 +94,12 @@ export default async function InspectionDetailPage({
       {isDraft ? (
         <FinalizeInspectionForm
           inspectionId={inspection.id}
-          defaultTotal={inspection.circuit?.representedLightCount ?? null}
+          defaultTotal={lightsToCheck}
         />
       ) : isEditing ? (
         <FinalizeInspectionForm
           inspectionId={inspection.id}
-          defaultTotal={inspection.circuit?.representedLightCount ?? null}
+          defaultTotal={lightsToCheck}
           cancelHref={`/admin/inspections/${inspection.id}`}
           initial={{
             totalLightsChecked: inspection.totalLightsChecked ?? 0,

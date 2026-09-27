@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled } from "@/lib/light-population";
 import type { DemoReportCircuit } from "@/lib/demo-report";
 import type { OfferCircuitTerm } from "@/lib/offer";
 
@@ -16,8 +17,10 @@ export type OfferBaseRow = {
   lightType: string;
   location: string | null;
   meteredLightCount: number;
-  /** The circuit's own represented count today — the worksheet's default population. */
+  /** The circuit's full installation today (excluding the demo lights) — the worksheet's default "lights to install". */
   representedLightCount: number;
+  /** The demo lights already installed on the circuit — priced alongside the full installation (2026-09-27). */
+  demoLightCount: number;
   preInstallBaseline: number | null;
   demoBenchmarkSavingsPct: number | null;
   /**
@@ -66,7 +69,8 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
               benchmarkSavingsPct: true,
               wattage: true,
               workingHours: true,
-              devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true } },
+              devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true, replacementCount: true } },
+              demos: DEMO_LIGHTS_SELECT.demos,
             },
           },
         },
@@ -87,6 +91,7 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
         // The live record wins for the default population: a count corrected
         // after the report was generated is what the agreement is about.
         representedLightCount: live.get(c.circuitId)?.representedLightCount ?? c.representedLightCount,
+        demoLightCount: live.get(c.circuitId) ? demoLightsInstalled(live.get(c.circuitId)!) : 0,
         preInstallBaseline: c.preInstallBaseline,
         demoBenchmarkSavingsPct: c.benchmarkSavingsPct,
         ...(live.get(c.circuitId) ? loadFigures(live.get(c.circuitId)!) : { wattagePerLight: null, hoursPerDay: null }),
@@ -101,6 +106,7 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
       location: c.location,
       meteredLightCount: c.meteredLightCount,
       representedLightCount: c.representedLightCount,
+      demoLightCount: demoLightsInstalled(c),
       preInstallBaseline: c.preInstallBaseline,
       demoBenchmarkSavingsPct: c.benchmarkSavingsPct,
       ...loadFigures(c),

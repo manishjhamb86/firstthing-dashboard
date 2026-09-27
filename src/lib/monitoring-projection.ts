@@ -193,7 +193,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
   const now = new Date();
   const baseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, now);
   // Judged on the replaced lights: what stayed unreplaced comes off both sides.
-  const exclusion = exclusionFromDevices(circuit.devices);
+  const exclusion = exclusionFromDevices(circuit.devices, "monitoring");
   const rawFiles = new Map<string, string>();
   const rawFile = async (importId: string | null) => {
     if (!importId) throw new Error("an hourly row with no import cannot be projected");

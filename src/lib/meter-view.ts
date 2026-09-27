@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
+import { demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, savingsBand, savingsPct, theoreticalDailyKwh, type Exclusion, type SavingsBand } from "@/lib/circuit-load";
 import { effectiveBaselineAt, lastVerifiedAt, type RescaleEvent } from "@/lib/benchmark-rescale";
 import { evaluateMeterHealth, outageMessage, outageMinutes, type MeterState } from "@/lib/meter-health";
@@ -512,7 +513,8 @@ export async function meterDemoContext(meterId: string, societyId?: string): Pro
   return {
     circuitId: m.circuitId,
     meteredLightCount: c.meteredLightCount,
-    representedLightCount: c.representedLightCount,
+    // Every light installed of this type: full installation + demo lights (2026-09-27).
+    representedLightCount: totalLights(c.representedLightCount, demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos: c.demos, devices: c.devices })),
     preInstallBaseline: c.preInstallBaseline,
     currentBaseline,
     benchmarkSavingsPct: c.benchmarkSavingsPct,
@@ -527,6 +529,6 @@ export async function meterDemoContext(meterId: string, societyId?: string): Pro
       rejected: d.rejected,
       rejectionReason: d.rejectionReason,
     })),
-    periods: periodComparisons(hourly, currentBaseline, { dayKwh: m.lastDayKwh, monthKwh: m.lastMonthKwh, readAt: m.lastReadAt }, now, exclusionFromDevices(c.devices)),
+    periods: periodComparisons(hourly, currentBaseline, { dayKwh: m.lastDayKwh, monthKwh: m.lastMonthKwh, readAt: m.lastReadAt }, now, exclusionFromDevices(c.devices, "monitoring")),
   };
 }

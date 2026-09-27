@@ -16,6 +16,7 @@ export function EditAreaForm({
   method,
   note,
   circuitRepresented,
+  circuitDemoLights = 0,
 }: {
   id: string;
   siteSurveyId: string;
@@ -24,6 +25,8 @@ export function EditAreaForm({
   note: string | null;
   /** What the candidate circuit for this light type represents today, if one exists (shown before any edit). */
   circuitRepresented: number | null;
+  /** The demo lights on that circuit — the inventory total includes them, the full installation does not. */
+  circuitDemoLights?: number;
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(String(count));
@@ -50,7 +53,7 @@ export function EditAreaForm({
           type="button"
           className="text-xs font-semibold"
           style={{ color: "var(--accent)" }}
-          title={circuitRepresented != null ? `The circuit represents ${circuitRepresented.toLocaleString("en-IN")} today; it follows the corrected total.` : undefined}
+          title={circuitRepresented != null ? `The circuit's full installation is ${circuitRepresented.toLocaleString("en-IN")} (+ ${circuitDemoLights.toLocaleString("en-IN")} demo lights) today; it follows the corrected total, less the demo lights.` : undefined}
           onClick={() => setOpen(true)}
         >
           Edit count

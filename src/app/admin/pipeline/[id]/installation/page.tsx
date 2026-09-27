@@ -3,6 +3,8 @@ import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { keptAtDemoOf } from "@/lib/circuit-load";
+import { circuitLabelOf } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { loadDealProgress } from "@/lib/pipeline-facts";
@@ -30,6 +32,8 @@ import {
   ProjectSetupForm,
   RaiseBlockerForm,
   CorrectDatesControl,
+  KeptOutcomeCard,
+  type KeptLine,
   ReopenBatchControl,
   ResolveBlockerControls,
   SkipGateForm,
@@ -54,6 +58,39 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   const demoMode = await isDemoMode();
   const canCorrectDates = demoMode ? isField : isOps;
   const todayIso = new Date().toISOString().slice(0, 10);
+  // Every line on this deal's circuits that kept fixtures at the demo.
+  const keptCircuits = await db.circuit.findMany({
+    where: { siteSurvey: { pipelineId: (await params).id }, voidedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: {
+      location: true,
+      lightType: true,
+      devices: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          count: true,
+          excludedFromCalculation: true,
+          replacementCount: true,
+          keptReplacedCount: true,
+          keptRemovedCount: true,
+          keptRecordedAt: true,
+          deviceType: { select: { name: true } },
+        },
+      },
+    },
+  });
+  const keptLines: KeptLine[] = keptCircuits.flatMap((c) =>
+    c.devices
+      .filter((d) => keptAtDemoOf(d) > 0)
+      .map((d) => ({
+        deviceId: d.id,
+        circuitLabel: circuitLabelOf(c.location, c.lightType),
+        name: d.deviceType.name,
+        kept: keptAtDemoOf(d),
+        recorded: d.keptRecordedAt ? { replaced: d.keptReplacedCount ?? 0, removed: d.keptRemovedCount ?? 0 } : null,
+      })),
+  );
 
   const { id } = await params;
   const pipeline = await db.pipeline.findUnique({
@@ -608,6 +645,18 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 );
               })}
             </div>
+          </Card>
+        )}
+
+        {/* ── Fixtures kept during the demo (2026-09-27) ── */}
+        {keptLines.length > 0 && (
+          <Card className="p-5">
+            <CardTitle>Fixtures kept during the demo</CardTitle>
+            {isField ? (
+              <KeptOutcomeCard pipelineId={pipeline.id} lines={keptLines} live={!demoMode} />
+            ) : (
+              <p className="text-sm text-[var(--text-muted)]">Recorded by the field team at the full installation.</p>
+            )}
           </Card>
         )}
 

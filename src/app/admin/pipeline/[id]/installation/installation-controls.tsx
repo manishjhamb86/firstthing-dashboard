@@ -13,6 +13,7 @@ import {
   correctBatchDates,
   correctCertificateDate,
   raiseBlocker,
+  recordKeptOutcome,
   reopenBatch,
   resolveBlocker,
   signCompletionCertificate,
@@ -843,5 +844,160 @@ export function CorrectDatesControl(
       </div>
       {error && <ErrorText>{error}</ErrorText>}
     </form>
+  );
+}
+
+export type KeptLine = {
+  deviceId: string;
+  circuitLabel: string;
+  name: string;
+  /** Fixtures this line kept at the demo. */
+  kept: number;
+  recorded: { replaced: number; removed: number } | null;
+};
+
+/**
+ * What became of the fixtures kept during the demo (2026-09-27). Closed to a
+ * summary once recorded; the form asks, per line, whether they are still on
+ * the circuit and — if so — how many were replaced with energy-saving lights.
+ * From the billing start: replaced ones are no longer deducted, ones taken off
+ * come off the before side only, the rest stay deducted as at the demo.
+ */
+export function KeptOutcomeCard({ pipelineId, lines, live }: { pipelineId: string; lines: KeptLine[]; live: boolean }) {
+  const recorded = lines.every((l) => l.recorded);
+  const [open, setOpen] = useState(!recorded);
+  const [rows, setRows] = useState(() =>
+    Object.fromEntries(
+      lines.map((l) => [
+        l.deviceId,
+        {
+          still: l.recorded ? l.recorded.removed === 0 : true,
+          replaced: String(l.recorded ? l.recorded.replaced : l.kept),
+        },
+      ]),
+    ) as Record<string, { still: boolean; replaced: string }>,
+  );
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  const outcome = (l: KeptLine) => {
+    if (!l.recorded) return "not recorded — still deducted as at the demo";
+    const { replaced, removed } = l.recorded;
+    const stillKept = l.kept - replaced - removed;
+    const parts = [
+      replaced > 0 ? `${replaced} replaced with energy-saving lights` : null,
+      removed > 0 ? `${removed} taken off the circuit` : null,
+      stillKept > 0 ? `${stillKept} still kept` : null,
+    ].filter(Boolean);
+    return parts.join(" · ");
+  };
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-[var(--text-muted)]">
+        During the demo these fixtures were left on the circuit and deducted from its saving. Record what became of
+        them at the full installation — from the billing start, replaced ones count in full and are no longer
+        deducted.
+      </p>
+      {!open ? (
+        <>
+          <ul className="space-y-1 text-sm">
+            {lines.map((l) => (
+              <li key={l.deviceId}>
+                <span className="font-medium">{l.circuitLabel}</span> · {l.kept} × {l.name}: {outcome(l)}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
+            Change what was recorded
+          </button>
+        </>
+      ) : (
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(undefined);
+            startTransition(async () => {
+              const r = await recordKeptOutcome(pipelineId, {
+                reason,
+                lines: lines.map((l) => ({
+                  deviceId: l.deviceId,
+                  stillOnCircuit: rows[l.deviceId].still,
+                  replacedCount: rows[l.deviceId].still ? Number(rows[l.deviceId].replaced) : 0,
+                })),
+              });
+              if (r && "error" in r) setError(r.error);
+              else setOpen(false);
+            });
+          }}
+        >
+          {lines.map((l) => {
+            const r = rows[l.deviceId];
+            const set = (patch: Partial<typeof r>) => setRows((cur) => ({ ...cur, [l.deviceId]: { ...cur[l.deviceId], ...patch } }));
+            return (
+              <fieldset key={l.deviceId} className="rounded-[var(--r-md)] border border-[var(--border)] p-3">
+                <legend className="px-1 text-sm font-semibold">
+                  {l.circuitLabel} · {l.kept} × {l.name} kept at the demo
+                </legend>
+                <div className="flex flex-wrap gap-4 text-sm">
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name={`still-${l.deviceId}`} checked={r.still} onChange={() => set({ still: true })} />
+                    Still on the circuit
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name={`still-${l.deviceId}`} checked={!r.still} onChange={() => set({ still: false })} />
+                    Taken off the circuit
+                  </label>
+                </div>
+                {r.still ? (
+                  <Field
+                    label="How many were replaced with energy-saving lights?"
+                    htmlFor={`kept-replaced-${l.deviceId}`}
+                    hint={`0 to ${l.kept}. For something that is not a light (a fan, a TV), or lights kept as they were, 0 — those stay deducted.`}
+                  >
+                    <input
+                      id={`kept-replaced-${l.deviceId}`}
+                      className="field field-auto w-28 num"
+                      type="number"
+                      min={0}
+                      max={l.kept}
+                      value={r.replaced}
+                      onChange={(e) => set({ replaced: e.target.value })}
+                      required
+                    />
+                  </Field>
+                ) : (
+                  <p className="mt-2 text-xs text-[var(--text-muted)]">
+                    The meter no longer sees them, so their share comes off the before figure only.
+                  </p>
+                )}
+              </fieldset>
+            );
+          })}
+          {recorded && (
+            <Field
+              label={live ? "Why it is being changed" : "Why (optional in demo mode)"}
+              htmlFor="kept-reason"
+              hint="Kept with the previous record."
+            >
+              <input id="kept-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} />
+            </Field>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+              {pending ? "Saving…" : "Save"}
+            </button>
+            {recorded && (
+              <button type="button" className="btn-ghost btn-sm" onClick={() => { setOpen(false); setError(undefined); }}>
+                Cancel
+              </button>
+            )}
+          </div>
+          {error && <ErrorText>{error}</ErrorText>}
+        </form>
+      )}
+    </div>
   );
 }

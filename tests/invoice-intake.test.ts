@@ -39,8 +39,8 @@ describe("classifyLine — service vs other (FEAT-109-AC-5)", () => {
 
 describe("proposeCircuit — by light count (ASSUM-31)", () => {
   const circuits = [
-    { circuitId: "b", label: "Basement", representedLightCount: 736, lightType: "basement" },
-    { circuitId: "l", label: "Lift Lobby", representedLightCount: 1_153, lightType: "lift-lobby" },
+    { circuitId: "b", label: "Basement", lightCount: 736, lightType: "basement" },
+    { circuitId: "l", label: "Lift Lobby", lightCount: 1_153, lightType: "lift-lobby" },
   ];
   it("matches an exact count", () => {
     expect(proposeCircuit({ qty: 736, description: "…" }, circuits).circuitId).toBe("b");
@@ -58,8 +58,8 @@ describe("proposeCircuit — by light count (ASSUM-31)", () => {
   });
   it("marks two identical counts ambiguous unless the description settles it", () => {
     const twins = [
-      { circuitId: "a", label: "Tower A basement", representedLightCount: 500, lightType: "basement" },
-      { circuitId: "c", label: "Tower C basement", representedLightCount: 500, lightType: "basement" },
+      { circuitId: "a", label: "Tower A basement", lightCount: 500, lightType: "basement" },
+      { circuitId: "c", label: "Tower C basement", lightCount: 500, lightType: "basement" },
     ];
     expect(proposeCircuit({ qty: 500, description: "for the month" }, twins).ambiguous).toBe(true);
     expect(proposeCircuit({ qty: 500, description: "Tower C basement lighting" }, twins).circuitId).toBe("c");
@@ -169,9 +169,9 @@ describe("isIsoDate", () => {
 
 describe("FEAT-109-AC-11 — one invoice line billing two circuits of one type", () => {
   const towers = [
-    { circuitId: "lla", label: "Lift Lobby A–D", representedLightCount: 1_786, lightType: "lift-lobby" },
-    { circuitId: "lle", label: "Lift Lobby E", representedLightCount: 466, lightType: "lift-lobby" },
-    { circuitId: "b", label: "Basement", representedLightCount: 1_444, lightType: "basement" },
+    { circuitId: "lla", label: "Lift Lobby A–D", lightCount: 1_786, lightType: "lift-lobby" },
+    { circuitId: "lle", label: "Lift Lobby E", lightCount: 466, lightType: "lift-lobby" },
+    { circuitId: "b", label: "Basement", lightCount: 1_444, lightType: "basement" },
   ];
   const line = { lineNo: 2, qty: 2_252, amount: 44_480.16, circuitId: null, applyCountForward: false };
 

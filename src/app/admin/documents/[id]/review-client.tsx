@@ -410,9 +410,9 @@ export function ExtractionReview({
             />
           </Field>
           <Field
-            label="Represented count"
+            label="Full installation"
             htmlFor="fx-rep"
-            hint={`Society-wide lights of this type — at least the ${metered} on this circuit`}
+            hint={`Lights of this type fitted across the society after the agreement — NOT counting the ${metered} on this demo circuit`}
           >
             <input
               id="fx-rep"

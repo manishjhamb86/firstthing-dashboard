@@ -4,7 +4,7 @@ import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { ErrorText, Field } from "@/components/ui";
 import { uploadFileToS3 } from "@/lib/upload-to-s3";
-import { activateContract, markAgreementStep, prepareAgreement, uploadExecutedAgreement } from "./actions";
+import { activateContract, correctAgreementDates, markAgreementStep, prepareAgreement, uploadExecutedAgreement } from "./actions";
 
 export function PrepareAgreementButton({ pipelineId }: { pipelineId: string }) {
   const [error, setError] = useState<string | undefined>();
@@ -203,5 +203,112 @@ export function ActivateContractForm({ pipelineId }: { pipelineId: string }) {
         {pending ? "Activating…" : "Activate the contract"}
       </button>
     </div>
+  );
+}
+
+type AgreementDateKey = "prepared" | "printed" | "notarized" | "signed" | "uploaded" | "activated" | "termStart" | "termEnd";
+
+/**
+ * Every date on the agreement and its contract, corrected together and
+ * checked once (2026-09-27). Closed until asked for. A step that has not
+ * happened is not offered — record it with its own control first.
+ */
+export function AgreementDatesControl({
+  pipelineId,
+  dates,
+  today,
+  live,
+}: {
+  pipelineId: string;
+  /** YYYY-MM-DD for each step that has happened; null for one that has not. */
+  dates: Record<AgreementDateKey, string | null>;
+  today: string;
+  live: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [values, setValues] = useState(dates);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
+        Correct the dates
+      </button>
+    );
+  }
+
+  const fields: [AgreementDateKey, string][] = [
+    ["prepared", "Prepared"],
+    ["printed", "Printed"],
+    ["notarized", "Notarised"],
+    ["signed", "Signed"],
+    ["uploaded", "Executed scan uploaded"],
+    ["activated", "Contract activated"],
+    ["termStart", "Term starts"],
+    ["termEnd", "Term ends"],
+  ];
+
+  return (
+    <form
+      className="mt-3 space-y-3 rounded-[var(--r-md)] border border-[var(--border)] p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(undefined);
+        startTransition(async () => {
+          const v = (k: AgreementDateKey) => values[k] ?? undefined;
+          const r = await correctAgreementDates(pipelineId, {
+            prepared: values.prepared ?? "",
+            printed: v("printed"),
+            notarized: v("notarized"),
+            signed: v("signed"),
+            uploaded: v("uploaded"),
+            activated: v("activated"),
+            termStart: v("termStart"),
+            termEnd: v("termEnd"),
+            reason,
+          });
+          if (r && "error" in r) setError(r.error);
+          else setOpen(false);
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-2">
+        {fields
+          .filter(([k]) => dates[k] !== null)
+          .map(([k, label]) => (
+            <Field key={k} label={label} htmlFor={`agr-${k}`}>
+              <input
+                id={`agr-${k}`}
+                className="field"
+                type="date"
+                max={k === "termEnd" ? undefined : today}
+                value={values[k] ?? ""}
+                onChange={(e) => setValues((cur) => ({ ...cur, [k]: e.target.value }))}
+                required
+              />
+            </Field>
+          ))}
+      </div>
+      {dates.termStart !== null && (
+        <p className="text-xs text-[var(--text-muted)]">
+          Where no completion certificate is recorded, the term start is when billing starts — monitoring and published
+          months follow it.
+        </p>
+      )}
+      <Field label={live ? "Why they are being corrected" : "Why (optional in demo mode)"} htmlFor="agr-reason" hint="Kept with the old dates.">
+        <input id="agr-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Typed up after the fact; the agreement was executed earlier." />
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+          {pending ? "Saving…" : "Save the correction"}
+        </button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => { setOpen(false); setError(undefined); setValues(dates); }}>
+          Cancel
+        </button>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </form>
   );
 }

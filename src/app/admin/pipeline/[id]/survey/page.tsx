@@ -1,6 +1,7 @@
 import { SurveyDateControl } from "@/components/survey-date-control";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled } from "@/lib/light-population";
 import { Card, CardTitle, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
 import { LightingInventoryForm } from "./lighting-inventory-form";
@@ -92,6 +93,14 @@ export default async function SiteSurveyPage({
       },
     },
   });
+
+  // The demo lights per circuit, read with the rule's own select (the query
+  // above reads the LATEST demo; the rule needs the first) — 2026-09-27.
+  const demoLightRows = await db.circuit.findMany({
+    where: { id: { in: circuits.map((c) => c.id) } },
+    select: { id: true, ...DEMO_LIGHTS_SELECT },
+  });
+  const demoLightsOf = new Map(demoLightRows.map((r) => [r.id, demoLightsInstalled(r)]));
 
   // Why each candidate stands where it does, read from the checklist the
   // surveyor actually filled in rather than re-derived per render site.
@@ -297,9 +306,9 @@ export default async function SiteSurveyPage({
           {
             label: "Lights",
             value: backfilledSurvey
-              ? circuits.reduce((n, c) => n + c.representedLightCount, 0).toLocaleString("en-IN")
+              ? circuits.reduce((n, c) => n + c.representedLightCount + (demoLightsOf.get(c.id) ?? 0), 0).toLocaleString("en-IN")
               : totalLights.toLocaleString("en-IN"),
-            detail: backfilledSurvey ? "represented by the circuits" : "whole society",
+            detail: backfilledSurvey ? "full installation + demo, from the circuits" : "whole society",
           },
           {
             label: "Light types",
@@ -395,6 +404,10 @@ export default async function SiteSurveyPage({
                             circuitRepresented={
                               circuits.find((c) => c.lightType === a.lightType)?.representedLightCount ?? null
                             }
+                            circuitDemoLights={(() => {
+                              const c = circuits.find((x) => x.lightType === a.lightType);
+                              return c ? (demoLightsOf.get(c.id) ?? 0) : 0;
+                            })()}
                           />
                           <DeleteAreaButton id={a.id} siteSurveyId={siteSurvey.id} />
                         </div>

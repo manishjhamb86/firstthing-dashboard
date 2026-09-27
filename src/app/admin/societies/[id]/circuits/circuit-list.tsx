@@ -14,7 +14,9 @@ type Circuit = {
   location: string | null;
   lightType: string;
   meteredLightCount: number;
+  /** The full installation — not counting the demo lights (2026-09-27). */
   representedLightCount: number;
+  demoLights: number;
   wattage: number;
   workingHours: number | null;
   workingHoursEffectiveAt: Date | null;
@@ -51,8 +53,10 @@ export function CircuitList({
                 </Link>
                 <p className="text-[var(--text-muted)]">
                   {c.lightType} · {SERVICE_LINE_LABEL[c.serviceLine] ?? c.serviceLine} ·{" "}
-                  <span className="num">{c.meteredLightCount}</span> lights (
-                  <span className="num">{c.representedLightCount}</span> represented) ·{" "}
+                  <span className="num">{c.meteredLightCount}</span> metered ·{" "}
+                  <span className="num">{(c.representedLightCount + c.demoLights).toLocaleString("en-IN")}</span> installed (
+                  <span className="num">{c.representedLightCount.toLocaleString("en-IN")}</span> full +{" "}
+                  <span className="num">{c.demoLights.toLocaleString("en-IN")}</span> demo) ·{" "}
                   <span className="num">{c.wattage}</span>W
                   {c.workingHours != null && (
                     <>

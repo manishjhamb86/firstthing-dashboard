@@ -94,7 +94,7 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
   const summary = periodSavingsSummary(
     baseline,
     days.map((d) => ({ kWh: d.kWh, excluded: d.excludedAt !== null })),
-    exclusionFromDevices(circuit.devices),
+    exclusionFromDevices(circuit.devices, "monitoring"),
   );
   if (summary.savingsPct === null) return { state: "unknown", reason: "no days have been recorded yet" };
 

@@ -42,32 +42,3 @@ export function inventoryCountFor(
   return hit ? hit.lights : null;
 }
 
-/**
- * CON-11's extrapolation base must exceed the circuit's own lights.
- *
- * The user's own rule, stated 2026-09-08: "represented lights is always more
- * then circuit light". A metered circuit is a SAMPLE of a light type across
- * the society — that is what makes extrapolating from it meaningful — so an
- * equal count means the demo circuit is the whole population, which is not a
- * demo. Equal was previously accepted, and it is exactly what shipped: a
- * circuit representing 50 of 50 has an extrapolation factor of 1 and prices
- * the offer as though the society had 50 lights.
- *
- * Below the metered count is refused for the older reason: a factor under 1
- * is not physically meaningful.
- */
-export function refuseRepresentedCount(
-  represented: number,
-  metered: number,
-): string | null {
-  if (!Number.isFinite(represented) || !Number.isInteger(represented) || represented <= 0) {
-    return "Represented count must be a whole number of lights.";
-  }
-  if (represented < metered) {
-    return `Represented count cannot be below the ${metered} lights actually on the circuit.`;
-  }
-  if (represented === metered) {
-    return `The represented count is every light of this type across the society, so it is always more than the ${metered} on the metered circuit — the fee is computed by extrapolating from this circuit to that population. Equal figures would price the offer as though the demo circuit were the whole society.`;
-  }
-  return null;
-}

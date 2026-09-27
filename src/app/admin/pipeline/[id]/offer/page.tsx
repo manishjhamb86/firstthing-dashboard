@@ -5,10 +5,11 @@ import { inventoryCountFor } from "@/lib/light-type";
 import { RepresentedCountForm } from "@/app/admin/societies/[id]/circuits/[circuitId]/represented-count-form";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled } from "@/lib/light-population";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { BENCHMARK_SOURCE_LABEL, OFFER_STATUS, statusMeta } from "@/lib/status-maps";
-import type { OfferCircuitTerm } from "@/lib/offer";
+import { termPricedLights, type OfferCircuitTerm } from "@/lib/offer";
 import { offerBaseRows, worksheetInputsFromTerms } from "@/lib/offer-base";
 import { OfferForm, type OfferFormDefaults } from "./offer-form";
 import { OfferDatesForm } from "./offer-dates-form";
@@ -71,7 +72,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
           areas: { select: { lightType: true, count: true } },
           circuits: {
             where: { voidedAt: null },
-            select: { id: true, lightType: true, meteredLightCount: true, representedLightCount: true },
+            select: { id: true, lightType: true, representedLightCount: true, ...DEMO_LIGHTS_SELECT },
           },
         },
       },
@@ -100,7 +101,13 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
     inventoryTotals.set(a.lightType, e);
   }
   const inventory = [...inventoryTotals.values()];
-  const liveCircuits = new Map((pipeline.siteSurvey?.circuits ?? []).map((c) => [c.id, c]));
+  const liveCircuits = new Map(
+    (pipeline.siteSurvey?.circuits ?? []).map((c) => [c.id, { ...c, demoLights: demoLightsInstalled(c) }]),
+  );
+  // An offer term's count is the full installation (2026-09-27); offers
+  // written before that stored full installation + demo lights. Either reading
+  // of the same figure matches — only a count that is neither has moved on.
+  const termMatches = (term: number, full: number, demo: number) => term === full || term === full + demo;
   // Correcting is refused once an offer has been issued — a counter-offer is
   // what versions a change the society has already been shown — so the control
   // is offered only while this one is still a draft.
@@ -110,7 +117,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
     current != null &&
     (current.circuitTerms as OfferCircuitTerm[]).some((c) => {
       const live = liveCircuits.get(c.circuitId);
-      return live != null && live.representedLightCount !== c.representedLightCount;
+      return live != null && !termMatches(c.representedLightCount, live.representedLightCount, live.demoLights);
     });
 
   return (
@@ -171,7 +178,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 <div>
                   <dt className="lbl">Lights as per agreement</dt>
                   <dd className="num">
-                    {(current.circuitTerms as OfferCircuitTerm[]).reduce((n, c) => n + c.representedLightCount, 0).toLocaleString("en-IN")}
+                    {(current.circuitTerms as OfferCircuitTerm[]).reduce((n, c) => n + termPricedLights(c), 0).toLocaleString("en-IN")}
                   </dd>
                 </div>
                 <div>
@@ -346,7 +353,14 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                         {c.location && <span className="text-[var(--text-muted)]"> · {c.location}</span>}
                       </td>
                       <td className="num">{c.meteredLightCount}</td>
-                      <td className="num">{c.representedLightCount.toLocaleString("en-IN")}</td>
+                      <td className="num">
+                        {termPricedLights(c).toLocaleString("en-IN")}
+                        {c.demoLightCount ? (
+                          <span className="block text-xs text-[var(--text-subtle)]">
+                            {c.representedLightCount.toLocaleString("en-IN")} full + {c.demoLightCount.toLocaleString("en-IN")} demo
+                          </span>
+                        ) : null}
+                      </td>
                       <td className="num">
                         {c.preInstallKwhPerDay != null ? `${kwh(c.preInstallKwhPerDay)}/day` : "—"}
                         {c.preInstallBasis && (
@@ -375,26 +389,28 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 // had worked; the offer is a snapshot by design (INV-02) and
                 // has to be regenerated to re-price.
                 const corrected =
-                  live != null && live.representedLightCount !== c.representedLightCount;
-                const stale = inv !== null && inv !== c.representedLightCount;
+                  live != null && !termMatches(c.representedLightCount, live.representedLightCount, live.demoLights);
+                // The survey counts every light of the type, demo lights included.
+                const stale =
+                  inv !== null && inv !== c.representedLightCount && inv !== c.representedLightCount + (live?.demoLights ?? 0);
                 if (!corrected && !stale) return null;
                 return (
                   <div key={`fix-${c.circuitId}`} className="mt-4 space-y-2">
                     {corrected ? (
                       <>
                         <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
-                          {c.lightType} now represents{" "}
+                          {c.lightType}&apos;s full installation is now{" "}
                           <span className="num">
                             {live!.representedLightCount.toLocaleString("en-IN")}
                           </span>{" "}
-                          lights, but this offer was priced on{" "}
+                          lights (plus {live!.demoLights.toLocaleString("en-IN")} demo), but this offer was priced on{" "}
                           <span className="num">
                             {c.representedLightCount.toLocaleString("en-IN")}
                           </span>
                           . An offer keeps saying what it was priced on, so regenerate it to
                           re-price on the corrected figure.
                         </p>
-                        {inv !== null && inv !== live!.representedLightCount && (
+                        {inv !== null && inv !== live!.representedLightCount + live!.demoLights && (
                           <p className="text-sm text-[var(--text-muted)]">
                             The site survey counted{" "}
                             <span className="num">{inv.toLocaleString("en-IN")}</span> of this type
@@ -408,16 +424,17 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                         <span className="num">
                           {c.representedLightCount.toLocaleString("en-IN")}
                         </span>{" "}
-                        represented lights, but the site survey counted{" "}
+                        full-installation lights, but the site survey counted{" "}
                         <span className="num">{inv!.toLocaleString("en-IN")}</span> of this type
-                        across the society. The fee is computed on the represented figure.
+                        across the society, demo lights included. The fee is computed on the full
+                        installation plus the demo lights.
                       </p>
                     )}
                     {mayCorrect && live && !corrected && (
                       <RepresentedCountForm
                         circuitId={live.id}
                         current={live.representedLightCount}
-                        meteredLightCount={live.meteredLightCount}
+                        demoLights={live.demoLights}
                         inventoryCount={inv}
                       />
                     )}

@@ -1,5 +1,6 @@
 "use server";
 
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { servedUntil } from "@/lib/deal-close";
 import { revalidatePath } from "next/cache";
 import { formatDate } from "@/lib/format-date";
@@ -173,6 +174,8 @@ export async function runCalculation(input: {
       // survey's pipeline, the same path the band alert already walks. A
       // circuit must never bill under a sibling part's terms.
       siteSurvey: { select: { pipelineId: true } },
+      devices: { select: { count: true, replacementCount: true, excludedFromCalculation: true } },
+      demos: DEMO_LIGHTS_SELECT.demos,
     },
   });
   const partByPipeline = new Map(parts.map((p) => [p.contract.pipelineId, p]));
@@ -303,7 +306,8 @@ export async function runCalculation(input: {
         circuitId: circuit.id,
         lightType: circuit.lightType,
         meteredLightCount,
-        representedLightCount: circuit.representedLightCount,
+        // Billed on every light installed: full installation + demo lights (2026-09-27).
+        representedLightCount: totalLights(circuit.representedLightCount, demoLightsInstalled(circuit)),
         benchmarkSavingsPct: circuit.benchmarkSavingsPct,
         baselineKwhPerDay: baseline,
         // On a lump-sum part this is a placeholder: the agreed amount is for
@@ -311,7 +315,7 @@ export async function runCalculation(input: {
         // collected, below. Deriving it here from a share the contract does
         // not have would put an invented figure on a fee line.
         contractedMonthlyFee: contractedFeeForCircuit({
-          representedLightCount: circuit.representedLightCount,
+          representedLightCount: totalLights(circuit.representedLightCount, demoLightsInstalled(circuit)),
           meteredLightCount,
           baselineKwhPerDay: baseline,
           daysInMonth,

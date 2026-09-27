@@ -1,3 +1,4 @@
+import { describeLights } from "@/lib/light-population";
 import { Letterhead } from "@/components/letterhead";
 import { monthLabel, shortDate } from "@/lib/format-date";
 import { SAVINGS_BAND_META, SAVINGS_WARN_BELOW } from "@/lib/circuit-load";
@@ -38,7 +39,7 @@ export function MonthlySavingsSheet({ s }: { s: SavingsReportSnapshot }) {
           <br />
           {s.circuitLabel} circuit ·{" "}
           {s.meteredLightCount.toLocaleString("en-IN")} metered lights of{" "}
-          {s.representedLightCount.toLocaleString("en-IN")} represented
+          {describeLights(s.representedLightCount, s.demoLights ?? 0)} across the society
         </p>
       </div>
       <div className="report-period">

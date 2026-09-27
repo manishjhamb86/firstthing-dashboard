@@ -90,7 +90,7 @@ export function OfferForm({
         // A fresh sheet starts on the HIGHER of demo and theoretical (the user's rule).
         basis:
           d?.preInstallBasis ??
-          defaultPreInstallBasis({ preInstallBaseline: r.preInstallBaseline, meteredLightCount: r.meteredLightCount, agreedLightCount: lights, wattagePerLight: watts, hoursPerDay: hours }),
+          defaultPreInstallBasis({ preInstallBaseline: r.preInstallBaseline, meteredLightCount: r.meteredLightCount, agreedLightCount: lights, demoLightCount: r.demoLightCount, wattagePerLight: watts, hoursPerDay: hours }),
         watts: watts != null ? (Math.round(watts * 100) / 100).toString() : "",
         hours: hours != null ? (Math.round(hours * 100) / 100).toString() : "",
         // Typed per MONTH (user-asked 2026-09-15); the module works per day.
@@ -126,6 +126,7 @@ export function OfferForm({
           preInstallBaseline: r.preInstallBaseline,
           demoBenchmarkSavingsPct: r.demoBenchmarkSavingsPct,
           agreedLightCount: Number(s?.lights),
+          demoLightCount: r.demoLightCount,
           agreedBenchmarkSavingsPct: Number(s?.pct),
           preInstallBasis: s?.basis ?? "demo",
           wattagePerLight: s?.watts === "" || s?.watts == null ? null : Number(s.watts),
@@ -248,7 +249,15 @@ export function OfferForm({
                     </span>
                   </p>
                   <div className="grid gap-3 sm:grid-cols-3">
-                    <Field label="Lights as per agreement" htmlFor={`of-l-${c.circuitId}`} hint="The population the fee is priced on.">
+                    <Field
+                      label="Full installation — lights to install"
+                      htmlFor={`of-l-${c.circuitId}`}
+                      hint={
+                        c.demoLightCount
+                          ? `Not counting the ${c.demoLightCount} demo lights already installed — priced on ${(Number(r?.lights) || 0) + c.demoLightCount} in all.`
+                          : "The population the fee is priced on."
+                      }
+                    >
                       <input
                         id={`of-l-${c.circuitId}`}
                         type="number"

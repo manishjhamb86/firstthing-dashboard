@@ -1,3 +1,4 @@
+import { termPricedLights } from "@/lib/offer";
 import { formatDate } from "@/lib/format-date";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { reportTitle } from "@/lib/report-title";
@@ -103,7 +104,7 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
             <tr>
               <th>Light type</th>
               <th>Metered lights</th>
-              <th>Lights represented</th>
+              <th>Lights covered</th>
               <th>Benchmark savings</th>
             </tr>
           </thead>
@@ -115,7 +116,10 @@ export default async function AgreementPrintPage({ params }: { params: Promise<{
                   {c.location ? ` · ${c.location}` : ""}
                 </td>
                 <td className="num">{c.meteredLightCount}</td>
-                <td className="num">{c.representedLightCount}</td>
+                <td className="num">
+                  {termPricedLights(c).toLocaleString("en-IN")}
+                  {c.demoLightCount ? ` (${c.representedLightCount.toLocaleString("en-IN")} full installation + ${c.demoLightCount.toLocaleString("en-IN")} demo)` : ""}
+                </td>
                 <td className="num">{c.benchmarkSavingsPct.toFixed(2)}%</td>
               </tr>
             ))}

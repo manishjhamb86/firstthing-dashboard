@@ -17,6 +17,7 @@ import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices } from "@/lib/circuit-loa
 import { servedUntil } from "@/lib/deal-close";
 import { db } from "@/lib/db";
 import { effectiveBaselineAt, effectiveLightCountAt } from "@/lib/benchmark-rescale";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { circuitLabelOf } from "@/lib/circuit-label";
 import type { CircuitMonthReadings, InvoiceMonthPart } from "@/lib/invoice-month";
 import type { CircuitOption } from "@/lib/invoice-intake";
@@ -64,16 +65,24 @@ export async function loadInvoiceMonthContext(input: {
     include: {
       rescaleEvents: { orderBy: { effectiveDate: "asc" } },
       devices: { select: EXCLUSION_DEVICE_SELECT },
+      demos: DEMO_LIGHTS_SELECT.demos,
       siteSurvey: { select: { pipelineId: true } },
       meterDevice: { select: { id: true } },
     },
     orderBy: [{ location: "asc" }, { lightType: "asc" }],
   });
 
+  // An invoice bills every light FirsThing installed of a type: the full
+  // installation AND the demo lights (2026-09-27). The stored count is the
+  // full installation alone, so the demo lights are added back wherever a
+  // billed count is compared with the record.
+  const lightsOf = (c: (typeof circuits)[number]) =>
+    totalLights(c.representedLightCount, demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos: c.demos, devices: c.devices }));
+
   const circuitOptions: CircuitOption[] = circuits.map((c) => ({
     circuitId: c.id,
     label: circuitLabelOf(c.location, c.lightType),
-    representedLightCount: c.representedLightCount,
+    lightCount: lightsOf(c),
     lightType: c.lightType,
   }));
 
@@ -140,11 +149,11 @@ export async function loadInvoiceMonthContext(input: {
           circuitId: c.id,
           lightType: c.lightType,
           meteredLightCount: effectiveLightCountAt(c.meteredLightCount, events, to),
-          representedLightCount: c.representedLightCount,
+          representedLightCount: lightsOf(c),
           baselineKwhPerDay: effectiveBaselineAt(c.preInstallBaseline, events, to),
           benchmarkSavingsPct: override ?? c.benchmarkSavingsPct,
           benchmarkSource: override !== null ? "override" : c.benchmarkSavingsPct !== null ? "demo" : "none",
-          exclusion: exclusionFromDevices(c.devices),
+          exclusion: exclusionFromDevices(c.devices, "monitoring"),
         };
       }),
     });

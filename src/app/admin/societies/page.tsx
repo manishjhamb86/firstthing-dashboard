@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { PageHeader, Stat, StatRow } from "@/components/ui";
 import { loadSocietyStandings } from "@/lib/society-standing-loader";
 import type { SocietyRow } from "@/lib/society-list";
@@ -38,7 +39,7 @@ export default async function SocietiesPage({
         // What each society's live circuits stand in for, and how many there
         // are — one live-circuit array, so the two columns cannot disagree
         // about what still exists (a removed circuit is in neither).
-        circuits: { where: { voidedAt: null }, select: { representedLightCount: true } },
+        circuits: { where: { voidedAt: null }, select: { representedLightCount: true, ...DEMO_LIGHTS_SELECT } },
       },
     }),
     // When billing started, whether anything was paid, and so what each
@@ -51,7 +52,8 @@ export default async function SocietiesPage({
     name: s.name,
     location: s.location,
     flatCount: s.flatCount,
-    lights: s.circuits.length === 0 ? null : s.circuits.reduce((n, c) => n + c.representedLightCount, 0),
+    // Every light installed: full installation + demo lights (2026-09-27).
+    lights: s.circuits.length === 0 ? null : s.circuits.reduce((n, c) => n + totalLights(c.representedLightCount, demoLightsInstalled(c)), 0),
     circuits: s.circuits.length,
     serviceLines: s.engagements.map((e) => `${e.serviceLine}:${e.status}`),
     status: s.status,

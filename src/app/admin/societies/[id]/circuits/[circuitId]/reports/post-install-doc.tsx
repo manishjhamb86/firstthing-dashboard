@@ -1,3 +1,4 @@
+import { describeLights } from "@/lib/light-population";
 import { ExclusionNote } from "@/components/exclusion-note";
 import { Letterhead } from "@/components/letterhead";
 import { formatDate, shortDate } from "@/lib/format-date";
@@ -62,7 +63,7 @@ export function PostInstallDoc({ report, backHref }: { report: Report; backHref:
               <br />
               {circuit.location || circuit.lightType} circuit ·{" "}
               {(report.demo?.meteredLightCount ?? circuit.meteredLightCount).toLocaleString("en-IN")} metered lights of{" "}
-              {circuit.representedLightCount.toLocaleString("en-IN")} represented
+              {describeLights(circuit.representedLightCount, report.demoLights)} across the society
             </p>
           </div>
           <div className="report-period">

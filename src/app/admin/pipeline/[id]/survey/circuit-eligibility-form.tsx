@@ -138,12 +138,18 @@ export function CircuitEligibilityForm({
   // have 200 lights"). The survey's own inventory already knows the answer;
   // nothing had ever compared the two.
   const inventoryCount = inventoryCountFor(lightType, inventory);
-  const representedNum = Number(representedLightCount);
+  // The stored figure is the FULL INSTALLATION (2026-09-27): the inventory
+  // counts every light of the type, and this circuit's own lights become the
+  // demo lights, so they come off. Suggested until the operator types.
+  const demoHere = complete.filter((l) => !l.excluded).reduce((s, l) => s + (Number(l.count) || 0), 0);
+  const suggestedFull = inventoryCount !== null ? Math.max(0, inventoryCount - demoHere) : null;
+  const fullValue = representedTouched || suggestedFull === null ? representedLightCount : String(suggestedFull);
+  const representedNum = Number(fullValue);
   const representedMismatch =
     inventoryCount !== null &&
-    representedLightCount.trim() !== "" &&
+    fullValue.trim() !== "" &&
     Number.isFinite(representedNum) &&
-    representedNum !== inventoryCount;
+    representedNum + demoHere !== inventoryCount;
 
   function submit() {
     startTransition(async () => {
@@ -160,7 +166,7 @@ export function CircuitEligibilityForm({
         serviceLine,
         lightType,
         location,
-        representedLightCount: Number(representedLightCount),
+        representedLightCount: Number(fullValue),
         lines: payload,
         workingHours: workingHours.trim() === "" ? undefined : Number(workingHours),
         wifiReachable: checks.wifiReachable ?? false,
@@ -201,10 +207,8 @@ export function CircuitEligibilityForm({
                 setLightType(e.target.value);
                 // CON-11's extrapolation base is a fact the survey has already
                 // recorded, so it is offered rather than asked for again.
-                if (!representedTouched) {
-                  const n = inventoryCountFor(e.target.value, inventory);
-                  setRepresentedLightCount(n === null ? "" : String(n));
-                }
+                // The full installation follows from the inventory until typed
+                // (see fullValue).
               }}
               disabled={pending}
               className="field"
@@ -225,19 +229,19 @@ export function CircuitEligibilityForm({
             />
           </Field>
           <Field
-            label="Represented count (society-wide)"
+            label="Full installation (excluding this circuit's lights)"
             htmlFor="cand-represented"
             hint={
               inventoryCount === null
-                ? "Every light of this type across the society — the population this circuit's benchmark is extrapolated to"
-                : `The inventory above counted ${inventoryCount.toLocaleString("en-IN")} of this type across the society`
+                ? "The lights of this type the full installation will fit across the society, not counting this demo circuit's own — together they are what the society is billed on"
+                : `The inventory counted ${inventoryCount.toLocaleString("en-IN")} of this type; ${demoHere.toLocaleString("en-IN")} are on this circuit and become the demo lights`
             }
           >
             <input
               id="cand-represented"
               type="number"
               min="1"
-              value={representedLightCount}
+              value={fullValue}
               onChange={(e) => {
                 setRepresentedTouched(true);
                 setRepresentedLightCount(e.target.value);
@@ -553,17 +557,17 @@ export function CircuitEligibilityForm({
         {representedMismatch && (
           <div className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
             <p>
-              This circuit would represent{" "}
-              <span className="num">{representedNum.toLocaleString("en-IN")}</span> lights while the
+              <span className="num">{representedNum.toLocaleString("en-IN")}</span> full installation +{" "}
+              <span className="num">{demoHere.toLocaleString("en-IN")}</span> on this circuit ={" "}
+              <span className="num">{(representedNum + demoHere).toLocaleString("en-IN")}</span>, while the
               inventory counted{" "}
               <span className="num">{inventoryCount!.toLocaleString("en-IN")}</span> of this type
               across the society.
             </p>
             <p className="mt-1">
-              The monthly fee is computed on the represented count, not on the lights
-              actually metered — so this is the figure the society is billed against. Deliberate
-              when this deal covers only part of the society&apos;s lighting; otherwise use the
-              inventory&apos;s figure.
+              The monthly fee is computed on the two together, not on the lights actually metered —
+              so this is the figure the society is billed against. Deliberate when this deal covers
+              only part of the society&apos;s lighting; otherwise use the inventory&apos;s figure.
             </p>
           </div>
         )}
@@ -645,7 +649,7 @@ export function CircuitEligibilityForm({
             lightType.trim() === "" ||
             complete.length === 0 ||
             complete.length !== lines.length ||
-            representedLightCount.trim() === "" ||
+            fullValue.trim() === "" ||
             (waiveLightCount && waiveReason.trim() === "")
           }
           className="btn-primary"

@@ -22,8 +22,14 @@ export type WorksheetCircuitInput = {
   preInstallBaseline: number | null;
   /** What the demo measured — null when there was no demo. */
   demoBenchmarkSavingsPct: number | null;
-  /** Lights to install as per the agreement — the population the fee is priced on (CON-11). */
+  /** Lights to install as per the agreement — the FULL INSTALLATION, not counting the demo lights (2026-09-27). */
   agreedLightCount: number;
+  /**
+   * The demo lights already installed on this circuit. They are not part of
+   * the full installation but they save and are billed all the same, so the
+   * population the offer is priced on is agreed + demo (2026-09-27).
+   */
+  demoLightCount?: number;
   /** The benchmark the offer carries; equals the demo figure unless negotiated. */
   agreedBenchmarkSavingsPct: number;
   /**
@@ -76,20 +82,25 @@ export type WorksheetTotals = {
 
 export type Worksheet = { circuits: WorksheetCircuit[]; totals: WorksheetTotals };
 
-/** The demo's per-light baseline scaled to the agreed population — never a society-wide average (CON-11). */
-export function demoBasisKwhPerDay(c: Pick<WorksheetCircuitInput, "preInstallBaseline" | "meteredLightCount" | "agreedLightCount">): number | null {
+/** Every light the offer is priced on: the full installation plus the demo lights. */
+export function pricedLightCount(c: Pick<WorksheetCircuitInput, "agreedLightCount" | "demoLightCount">): number {
+  return c.agreedLightCount + (c.demoLightCount ?? 0);
+}
+
+/** The demo's per-light baseline scaled to the priced population — never a society-wide average (CON-11). */
+export function demoBasisKwhPerDay(c: Pick<WorksheetCircuitInput, "preInstallBaseline" | "meteredLightCount" | "agreedLightCount" | "demoLightCount">): number | null {
   if (c.preInstallBaseline == null || !(c.meteredLightCount > 0)) return null;
-  return (c.preInstallBaseline / c.meteredLightCount) * c.agreedLightCount;
+  return (c.preInstallBaseline / c.meteredLightCount) * pricedLightCount(c);
 }
 
 /** lights × watts × hours ÷ 1000 — what the old fittings draw on paper. */
-export function theoreticalBasisKwhPerDay(c: Pick<WorksheetCircuitInput, "wattagePerLight" | "hoursPerDay" | "agreedLightCount">): number | null {
+export function theoreticalBasisKwhPerDay(c: Pick<WorksheetCircuitInput, "wattagePerLight" | "hoursPerDay" | "agreedLightCount" | "demoLightCount">): number | null {
   if (!(c.wattagePerLight != null && c.wattagePerLight > 0) || !(c.hoursPerDay != null && c.hoursPerDay > 0)) return null;
-  return (c.agreedLightCount * c.wattagePerLight * c.hoursPerDay) / 1000;
+  return (pricedLightCount(c) * c.wattagePerLight * c.hoursPerDay) / 1000;
 }
 
 /** The basis a fresh worksheet starts on: the higher of the two computed figures, the user's rule. */
-export function defaultPreInstallBasis(c: Pick<WorksheetCircuitInput, "preInstallBaseline" | "meteredLightCount" | "agreedLightCount" | "wattagePerLight" | "hoursPerDay">): PreInstallBasis {
+export function defaultPreInstallBasis(c: Pick<WorksheetCircuitInput, "preInstallBaseline" | "meteredLightCount" | "agreedLightCount" | "demoLightCount" | "wattagePerLight" | "hoursPerDay">): PreInstallBasis {
   const demo = demoBasisKwhPerDay(c);
   const theo = theoreticalBasisKwhPerDay(c);
   if (demo == null && theo == null) return "custom";
@@ -171,7 +182,7 @@ export type WorksheetBlocker =
 
 export const WORKSHEET_BLOCKER_MESSAGE: Record<WorksheetBlocker, string> = {
   "no-circuits": "There is no circuit to price this offer on.",
-  "invalid-light-count": "Every light type needs the number of lights the agreement installs — a whole number above zero.",
+  "invalid-light-count": "Every light type needs the number of lights the full installation fits, not counting the demo lights — a whole number above zero.",
   "invalid-benchmark": "The agreed savings percentage has to sit inside the 60–80% band on every light type.",
   "not-derivable":
     "A light type has no pre-installation consumption on the basis chosen — pick the demo's figure, give the wattage and hours for the theoretical one, or type a value.",

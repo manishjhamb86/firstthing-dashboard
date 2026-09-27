@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled } from "@/lib/light-population";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { CircuitList } from "./circuit-list";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -27,6 +28,7 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
   const circuits = await db.circuit.findMany({
     where: { societyId: id, voidedAt: null },
     orderBy: { createdAt: "asc" },
+    include: { devices: { select: DEMO_LIGHTS_SELECT.devices.select }, demos: DEMO_LIGHTS_SELECT.demos },
   });
 
   // FEAT-040-AC-2 is "no ad-hoc creation here", not "give no direction".
@@ -103,8 +105,9 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
       ) : (
         <div className="max-w-none">
           <CircuitList
-            circuits={circuits.map((c) => ({
+            circuits={circuits.map(({ devices, demos, ...c }) => ({
               ...c,
+              demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices }),
               canRemove: removal.get(c.id)?.canRemove ?? false,
               blockLabel: removal.get(c.id)?.blockLabel ?? null,
             }))}

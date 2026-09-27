@@ -1,5 +1,6 @@
 "use server";
 
+import { demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
@@ -90,7 +91,13 @@ export async function collectDemoReportInput(pipelineId: string) {
       // light-count change on the circuit (French Apartment: 55 -> 76 from
       // 01-08-2026) does not reach back into a demo run before it.
       meteredLightCount: counted.length > 0 && (figures.meteredLightCount ?? 0) > 0 ? figures.meteredLightCount! : c.meteredLightCount,
-      representedLightCount: c.representedLightCount,
+      // Every light of this type FirsThing installed: the full installation
+      // plus the demo lights (2026-09-27) — the population the demo's saving
+      // is extrapolated to, and what the society is billed on.
+      representedLightCount: totalLights(
+        c.representedLightCount,
+        demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos: c.demos, devices: c.devices }),
+      ),
       wattage: c.wattage,
       preInstallBaseline: counted.length > 0 ? figures.baseline : c.preInstallBaseline,
       postInstallAverage: counted.length > 0 ? figures.postAverage : null,

@@ -4,6 +4,7 @@
 // property the agreement print route (FEAT-029) was built on.
 
 import { db } from "@/lib/db";
+import { demoLightsInstalled } from "@/lib/light-population";
 import { currentDemoOf } from "@/lib/circuit-figures";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import {
@@ -97,6 +98,10 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
   // Fixtures left on the circuit unreplaced: their draw comes off both the
   // before and after figures before any saving is stated (2026-09-26).
   const exclusion = exclusionFromDevices(circuit.devices);
+  // The monthly report is monitoring: what the full installation recorded
+  // about the kept fixtures applies (2026-09-27). The demo's reports keep the
+  // deduction as it was at the demo.
+  const monitoringExclusion = exclusionFromDevices(circuit.devices, "monitoring");
 
   type Row = {
     date: Date;
@@ -158,8 +163,14 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
     preAverage !== null && theoretical !== null ? varianceAgainstTheoretical(preAverage, theoretical) : null;
   const effBaselineNow = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, new Date());
 
+  // Full installation + demo lights (2026-09-27): the stored count is the full
+  // installation alone.
+  const demoLights = demoLightsInstalled({ meteredLightCount: circuit.meteredLightCount, demos: circuit.demos, devices: circuit.devices });
+
   return {
     circuit,
+    demoLights,
+    monitoringExclusion,
     society: circuit.society,
     demo,
     demos: circuit.demos.map((d) => ({ id: d.id, sequence: d.sequence, rejected: d.rejected })),
@@ -227,7 +238,9 @@ export type SavingsReportSnapshot = {
   societyLocation: string;
   circuitLabel: string;
   meteredLightCount: number;
+  /** The full installation — not counting the demo lights. */
   representedLightCount: number;
+  demoLights: number;
   benchmarkSavingsPct: number | null;
   month: string;
   baselineKwhPerDay: number | null;
@@ -248,11 +261,12 @@ export async function buildMonthlySnapshot(
     circuitLabel: report.circuit.location || report.circuit.lightType,
     meteredLightCount: report.circuit.meteredLightCount,
     representedLightCount: report.circuit.representedLightCount,
+    demoLights: report.demoLights,
     benchmarkSavingsPct: report.circuit.benchmarkSavingsPct,
     month,
     baselineKwhPerDay: report.effBaselineNow,
     days,
-    summary: summarize(report.effBaselineNow, days, report.exclusion),
+    summary: summarize(report.effBaselineNow, days, report.monitoringExclusion),
     fee: await circuitFeeLineFor(report.circuit.id, month),
     generatedAt: new Date().toISOString(),
   };

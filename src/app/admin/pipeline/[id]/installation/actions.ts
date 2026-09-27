@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdmin, requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logChange } from "@/lib/change-log";
+import { keptAtDemoOf } from "@/lib/circuit-load";
 import { refuseDateCorrector, refuseInstallationDates } from "@/lib/installation-dates";
 import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
 import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
@@ -931,4 +932,117 @@ export async function listSocietyPortalAccounts(societyId: string) {
     select: { id: true, name: true, email: true, portalAuthority: true },
     orderBy: { name: "asc" },
   });
+}
+
+// ── Fixtures kept during the demo, recorded at the full installation ─────
+//
+// 2026-09-27, user-specified: the demo's deduction for kept fixtures holds for
+// the demo only. At the full installation each kept line is recorded — still
+// on the circuit? if so, how many were replaced with energy-saving lights —
+// and from the billing start the monitoring figures read that: replaced ones
+// are not deducted, ones taken off the circuit come off the before side only,
+// the rest stay deducted as before. The demo's own figures never change.
+
+export async function recordKeptOutcome(
+  pipelineId: string,
+  input: { lines: { deviceId: string; stillOnCircuit: boolean; replacedCount: number }[]; reason: string },
+) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." };
+  const perms = admin.permissions;
+  const isField = perms.includes("manage_survey");
+  const isOps = isField && perms.includes("manage_pipeline");
+  if (!isField) return { error: "Recording what became of the kept fixtures is field or operations work." };
+
+  const ids = input.lines.map((l) => l.deviceId);
+  const devices = await db.circuitDevice.findMany({
+    where: { id: { in: ids }, circuit: { voidedAt: null, siteSurvey: { pipelineId } } },
+    select: {
+      id: true,
+      circuitId: true,
+      count: true,
+      excludedFromCalculation: true,
+      replacementCount: true,
+      keptReplacedCount: true,
+      keptRemovedCount: true,
+      keptRecordedAt: true,
+    },
+  });
+  if (devices.length !== ids.length) return { error: "A fixture line was not found on this deal's circuits." };
+
+  // A first recording is data entry. Changing one already recorded is a
+  // correction: free in demo mode, operations with a reason once live.
+  if (devices.some((d) => d.keptRecordedAt)) {
+    const refusal = refuseDateCorrector({ demo: await isDemoMode(), isField, isOps, reason: input.reason });
+    if (refusal) {
+      logger.warn("installation.kept_outcome_refused", { actorId: admin.id, pipelineId, refusal });
+      return { error: refusal.replace("installation dates are", "a recorded outcome is").replace("the date is", "it is") };
+    }
+  }
+
+  const byId = new Map(devices.map((d) => [d.id, d]));
+  const writes: { id: string; circuitId: string; replaced: number; removed: number; old: { replaced: number | null; removed: number | null } }[] = [];
+  for (const l of input.lines) {
+    const d = byId.get(l.deviceId)!;
+    const kept = keptAtDemoOf(d);
+    if (kept <= 0) return { error: "That line kept no fixtures at the demo." };
+    const replaced = l.stillOnCircuit ? l.replacedCount : 0;
+    if (!Number.isInteger(replaced) || replaced < 0 || replaced > kept) {
+      return { error: `Replaced must be a whole number from 0 to the ${kept} kept.` };
+    }
+    writes.push({
+      id: d.id,
+      circuitId: d.circuitId,
+      replaced,
+      removed: l.stillOnCircuit ? 0 : kept,
+      old: { replaced: d.keptReplacedCount, removed: d.keptRemovedCount },
+    });
+  }
+
+  const now = new Date();
+  await db.$transaction(async (tx) => {
+    for (const w of writes) {
+      await tx.circuitDevice.update({
+        where: { id: w.id },
+        data: { keptReplacedCount: w.replaced, keptRemovedCount: w.removed, keptRecordedAt: now, keptRecordedById: admin.id },
+      });
+      await logChange(tx, {
+        entity: "circuit_device",
+        entityId: w.id,
+        circuitId: w.circuitId,
+        kind: "edit",
+        field: "keptOutcome",
+        oldValue: w.old,
+        newValue: { replaced: w.replaced, removed: w.removed },
+        reason: input.reason.trim() || null,
+        actorId: admin.id,
+      });
+    }
+  });
+
+  // Every monitoring figure reads the outcome: re-project the days' flags and
+  // re-derive published months from the billing start.
+  const project = await db.installationProject.findUnique({
+    where: { pipelineId },
+    select: { certificate: { select: { billingStartDate: true } } },
+  });
+  const fromPeriod = project?.certificate?.billingStartDate.toISOString().slice(0, 7) ?? "2000-01";
+  for (const circuitId of new Set(writes.map((w) => w.circuitId))) {
+    try {
+      await projectCircuitMonitoring(circuitId, admin.id);
+      await rederiveInvoiceMonthsAfterRescale(circuitId, fromPeriod, admin.id);
+    } catch (err) {
+      logger.error("installation.kept_outcome_followup_failed", { pipelineId, circuitId, error: String(err) });
+    }
+  }
+
+  logger.info("installation.kept_outcome_recorded", {
+    actorId: admin.id,
+    pipelineId,
+    lines: writes.map((w) => ({ deviceId: w.id, replaced: w.replaced, removed: w.removed })),
+  });
+  revalidatePath(pathFor(pipelineId));
+  revalidatePath("/portal");
+  revalidatePath("/portal/electricity");
+  return { ok: true as const };
 }

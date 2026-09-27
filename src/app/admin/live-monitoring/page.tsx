@@ -48,7 +48,7 @@ export default async function LiveMonitoringPage() {
     const summary = periodSavingsSummary(
       baseline,
       days.map((d) => ({ kWh: d.kWh, excluded: d.excludedAt !== null })),
-      exclusionFromDevices(c.devices),
+      exclusionFromDevices(c.devices, "monitoring"),
     );
     const last = days.length > 0 ? days[days.length - 1].date : null;
 

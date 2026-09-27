@@ -2,7 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireAdminPermission } from "@/lib/admin-permissions";
+import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
+import { isDemoMode } from "@/lib/demo-mode";
+import { logChange } from "@/lib/change-log";
+import { refuseDateCorrector } from "@/lib/installation-dates";
+import { refuseAgreementDates } from "@/lib/agreement-dates";
+import { startOfDayUTC } from "@/lib/step-dates";
+import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
+import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
 import { refuseOrderedDate } from "@/lib/step-dates";
 import { KYC_TYPE_LABEL } from "@/lib/kyc";
@@ -268,4 +275,196 @@ export async function activateContract(pipelineId: string, termStart: string) {
   revalidatePath(`/admin/pipeline/${pipelineId}/agreement`);
   revalidatePath(`/admin/societies/${pipeline.societyId}`);
   return {};
+}
+
+// ── Date corrections (2026-09-27, user-asked) ────────────────────────────
+//
+// Every date on the agreement and its contract, corrected together and
+// checked once against the result. Demo mode: free (a reason is optional).
+// Once live: operations only, with a reason — the "special request". Every old
+// value goes to the change log. The term start is the billing start when no
+// completion certificate says otherwise, so moving it re-projects monitoring
+// and re-derives published months; it cannot move past a month already
+// released to the society (GATE-02).
+
+type AgreementDateInput = {
+  prepared: string;
+  printed?: string;
+  notarized?: string;
+  signed?: string;
+  uploaded?: string;
+  activated?: string;
+  termStart?: string;
+  termEnd?: string;
+  reason: string;
+};
+
+export async function correctAgreementDates(pipelineId: string, input: AgreementDateInput) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." };
+  const perms = admin.permissions;
+  const refusal0 = refuseDateCorrector({
+    demo: await isDemoMode(),
+    isField: perms.includes("manage_pipeline"),
+    isOps: perms.includes("manage_pipeline") && perms.includes("manage_survey"),
+    reason: input.reason,
+  });
+  if (refusal0) {
+    logger.warn("agreement.date_correction_refused", { actorId: admin.id, pipelineId, refusal: refusal0 });
+    return { error: refusal0.replace("installation dates are", "agreement dates are") };
+  }
+
+  const agreement = await db.agreement.findUnique({
+    where: { pipelineId },
+    include: { offer: { select: { respondedAt: true } } },
+  });
+  if (!agreement) return { error: "There is no agreement to correct." };
+  const contract = await db.contract.findUnique({ where: { pipelineId }, include: { versions: { orderBy: { version: "asc" } } } });
+  const certificate = await db.completionCertificate.findFirst({ where: { project: { pipelineId } }, select: { id: true } });
+
+  const day = (s: string | undefined): Date | null | { error: string } => {
+    if (s === undefined || s === "") return null;
+    const v = new Date(`${s}T00:00:00.000Z`);
+    return Number.isNaN(v.getTime()) ? { error: `Unreadable date: ${s}.` } : v;
+  };
+  const parsed = {
+    prepared: day(input.prepared),
+    printed: day(input.printed),
+    notarized: day(input.notarized),
+    signed: day(input.signed),
+    uploaded: day(input.uploaded),
+    activated: day(input.activated),
+    termStart: day(input.termStart),
+    termEnd: day(input.termEnd),
+  };
+  for (const v of Object.values(parsed)) if (v && "error" in v) return v;
+  const get = (k: keyof typeof parsed) => parsed[k] as Date | null;
+  if (!get("prepared")) return { error: "The agreement needs its prepared date." };
+  // A step that has happened keeps a date; one that has not stays empty.
+  const keep = (current: Date | null, next: Date | null, label: string) => {
+    if (current && !next) return { error: `The ${label} date cannot be cleared here — only corrected.` };
+    if (!current && next) return { error: `The agreement has not been ${label} yet — record that step first.` };
+    return null;
+  };
+  for (const [cur, next, label] of [
+    [agreement.printedAt, get("printed"), "printed"],
+    [agreement.notarizedAt, get("notarized"), "notarised"],
+    [agreement.signedAt, get("signed"), "signed"],
+    [agreement.uploadedAt, get("uploaded"), "uploaded"],
+    [contract?.activatedAt ?? null, get("activated"), "activated"],
+  ] as const) {
+    const e = keep(cur, next, label);
+    if (e) return e;
+  }
+  if (contract && (!get("termStart") || !get("termEnd"))) return { error: "The contract's term needs both dates." };
+
+  const refusal = refuseAgreementDates({
+    today: new Date(),
+    offerAcceptedOn: agreement.offer.respondedAt,
+    prepared: get("prepared")!,
+    printed: get("printed"),
+    notarized: get("notarized"),
+    signed: get("signed"),
+    uploaded: get("uploaded"),
+    activated: get("activated"),
+    termStart: contract ? get("termStart") : null,
+    termEnd: contract ? get("termEnd") : null,
+  });
+  if (refusal) {
+    logger.warn("agreement.date_correction_refused", { actorId: admin.id, pipelineId, refusal });
+    return { error: refusal };
+  }
+
+  const same = (a: Date | null | undefined, b: Date | null) =>
+    (a ? startOfDayUTC(a).getTime() : null) === (b ? b.getTime() : null);
+  const agreementChanges: [string, Date | null, Date | null][] = (
+    [
+      ["preparedAt", agreement.preparedAt, get("prepared")],
+      ["printedAt", agreement.printedAt, get("printed")],
+      ["notarizedAt", agreement.notarizedAt, get("notarized")],
+      ["signedAt", agreement.signedAt, get("signed")],
+      ["uploadedAt", agreement.uploadedAt, get("uploaded")],
+    ] as [string, Date | null, Date | null][]
+  ).filter(([, a, b]) => !same(a, b));
+  const contractChanges: [string, Date | null, Date | null][] = contract
+    ? (
+        [
+          ["activatedAt", contract.activatedAt, get("activated")],
+          ["termStart", contract.termStart, get("termStart")],
+          ["termEnd", contract.termEnd, get("termEnd")],
+        ] as [string, Date | null, Date | null][]
+      ).filter(([, a, b]) => !same(a, b))
+    : [];
+  if (agreementChanges.length === 0 && contractChanges.length === 0) return { error: "Nothing has changed." };
+
+  const startMoves = contract && contractChanges.some(([f]) => f === "termStart");
+  const newStart = get("termStart");
+  const month = (x: Date) => x.toISOString().slice(0, 7);
+  const circuits = await db.circuit.findMany({ where: { siteSurvey: { pipelineId }, voidedAt: null }, select: { id: true } });
+  // Without a certificate the term start is the billing start: it cannot move
+  // past a month already released to the society.
+  if (startMoves && !certificate && newStart && contract && newStart.getTime() > contract.termStart.getTime() && circuits.length > 0) {
+    const released = await db.circuitFeeLine.findFirst({
+      where: {
+        circuitId: { in: circuits.map((c) => c.id) },
+        calculation: { status: "released", supersededById: null, period: { gte: month(contract.termStart), lt: month(newStart) } },
+      },
+      select: { calculation: { select: { period: true } } },
+    });
+    if (released) {
+      return { error: `${released.calculation.period} has already been billed and released to the society. The term cannot start after a month it was already billed for.` };
+    }
+  }
+
+  const reason = input.reason.trim() || null;
+  await db.$transaction(async (tx) => {
+    if (agreementChanges.length > 0) {
+      await tx.agreement.update({
+        where: { id: agreement.id },
+        data: Object.fromEntries(agreementChanges.map(([f, , b]) => [f, b])),
+      });
+      for (const [f, a, b] of agreementChanges) {
+        await logChange(tx, { entity: "agreement", entityId: agreement.id, kind: "edit", field: f, oldValue: a, newValue: b, reason, actorId: admin.id });
+      }
+    }
+    if (contract && contractChanges.length > 0) {
+      await tx.contract.update({
+        where: { id: contract.id },
+        data: Object.fromEntries(contractChanges.map(([f, , b]) => [f, b])),
+      });
+      for (const [f, a, b] of contractChanges) {
+        await logChange(tx, { entity: "contract", entityId: contract.id, kind: "edit", field: f, oldValue: a, newValue: b, reason, actorId: admin.id });
+      }
+      // Version 1 of the terms starts with the term; a later amendment keeps
+      // its own date.
+      const v1 = contract.versions[0];
+      if (startMoves && newStart && v1 && same(v1.effectiveFrom, startOfDayUTC(contract.termStart))) {
+        await tx.contractTermVersion.update({ where: { id: v1.id }, data: { effectiveFrom: newStart } });
+        await logChange(tx, { entity: "contract_term_version", entityId: v1.id, kind: "edit", field: "effectiveFrom", oldValue: v1.effectiveFrom, newValue: newStart, reason, actorId: admin.id });
+      }
+    }
+  });
+
+  if (startMoves && !certificate && contract && newStart) {
+    const fromPeriod = month(contract.termStart < newStart ? contract.termStart : newStart);
+    for (const c of circuits) {
+      try {
+        await projectCircuitMonitoring(c.id, admin.id);
+        await rederiveInvoiceMonthsAfterRescale(c.id, fromPeriod, admin.id);
+      } catch (err) {
+        logger.error("agreement.term_start_followup_failed", { pipelineId, circuitId: c.id, error: String(err) });
+      }
+    }
+  }
+
+  logger.info("agreement.dates_corrected", {
+    actorId: admin.id,
+    pipelineId,
+    agreement: agreementChanges.map(([f, a, b]) => ({ f, from: a?.toISOString() ?? null, to: b?.toISOString() ?? null })),
+    contract: contractChanges.map(([f, a, b]) => ({ f, from: a?.toISOString() ?? null, to: b?.toISOString() ?? null })),
+  });
+  revalidatePath(`/admin/pipeline/${pipelineId}/agreement`);
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  revalidatePath("/portal");
+  return { ok: true as const };
 }

@@ -46,7 +46,8 @@ export function classifyLine(input: { hsn: string; description: string; proposal
 export type CircuitOption = {
   circuitId: string;
   label: string;
-  representedLightCount: number;
+  /** The lights an invoice bills on this circuit: full installation + demo lights (2026-09-27). */
+  lightCount: number;
   lightType: string;
 };
 
@@ -69,7 +70,7 @@ export type CircuitProposal = {
  */
 export function proposeCircuit(line: { qty: number | null; description: string }, circuits: CircuitOption[]): CircuitProposal {
   if (line.qty === null || circuits.length === 0) return { circuitId: null, why: "No light count to match on.", ambiguous: false };
-  const exact = circuits.filter((c) => c.representedLightCount === line.qty);
+  const exact = circuits.filter((c) => c.lightCount === line.qty);
   if (exact.length === 1) return { circuitId: exact[0].circuitId, why: `Matches ${exact[0].label}'s ${line.qty.toLocaleString("en-IN")} lights exactly.`, ambiguous: false };
   if (exact.length > 1) {
     const scored = exact.map((c) => ({ c, score: mentionScore(line.description, c) })).sort((a, b) => b.score - a.score);
@@ -79,14 +80,14 @@ export function proposeCircuit(line: { qty: number | null; description: string }
     return { circuitId: null, why: `${exact.length} circuits record ${line.qty.toLocaleString("en-IN")} lights — pick one.`, ambiguous: true };
   }
   const near = circuits
-    .map((c) => ({ c, diff: Math.abs(c.representedLightCount - line.qty!) / Math.max(c.representedLightCount, 1) }))
+    .map((c) => ({ c, diff: Math.abs(c.lightCount - line.qty!) / Math.max(c.lightCount, 1) }))
     .filter((x) => x.diff <= 0.02)
     .sort((a, b) => a.diff - b.diff);
   if (near.length === 1 || (near.length > 1 && near[0].diff < near[1].diff)) {
     const hit = near[0].c;
     return {
       circuitId: hit.circuitId,
-      why: `Nearest: ${hit.label} records ${hit.representedLightCount.toLocaleString("en-IN")} lights against ${line.qty.toLocaleString("en-IN")} billed.`,
+      why: `Nearest: ${hit.label} records ${hit.lightCount.toLocaleString("en-IN")} lights against ${line.qty.toLocaleString("en-IN")} billed.`,
       ambiguous: false,
     };
   }
@@ -99,7 +100,7 @@ export function proposeCircuit(line: { qty: number | null; description: string }
     for (let j = i + 1; j < circuits.length; j++) {
       const a = circuits[i];
       const b = circuits[j];
-      if (a.lightType === b.lightType && a.representedLightCount + b.representedLightCount === line.qty) pairs.push([a, b]);
+      if (a.lightType === b.lightType && a.lightCount + b.lightCount === line.qty) pairs.push([a, b]);
     }
   }
   if (pairs.length === 1) {
@@ -107,7 +108,7 @@ export function proposeCircuit(line: { qty: number | null; description: string }
     return {
       circuitId: null,
       split: [a.circuitId, b.circuitId],
-      why: `${a.label} (${a.representedLightCount.toLocaleString("en-IN")}) and ${b.label} (${b.representedLightCount.toLocaleString("en-IN")}) add up to the ${line.qty.toLocaleString("en-IN")} billed — one line, both circuits.`,
+      why: `${a.label} (${a.lightCount.toLocaleString("en-IN")}) and ${b.label} (${b.lightCount.toLocaleString("en-IN")}) add up to the ${line.qty.toLocaleString("en-IN")} billed — one line, both circuits.`,
       ambiguous: false,
     };
   }

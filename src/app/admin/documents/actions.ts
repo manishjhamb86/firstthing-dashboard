@@ -1,5 +1,6 @@
 "use server";
 
+import { refuseFullInstallationCount } from "@/lib/light-population";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -492,9 +493,9 @@ export async function createCircuitFromDocument(input: {
   if (usable.length === 0) return { error: "Record at least one fixture line — the inventory is what everything downstream compares against." };
   const metered = usable.filter((f) => f.retrofitted).reduce((n, f) => n + f.count, 0);
   if (metered === 0) return { error: "At least one fixture has to be the one being retrofitted." };
-  if (!Number.isFinite(input.representedLightCount) || input.representedLightCount < metered) {
-    return { error: `Represented count must be at least the ${metered} lights on this circuit.` };
-  }
+  // The full installation, not counting this circuit's own (demo) lights (2026-09-27).
+  const fullRefusal = refuseFullInstallationCount(input.representedLightCount);
+  if (fullRefusal) return { error: fullRefusal };
 
   // A second report of a circuit the society already has (2026-08-26). Checked
   // here, on the server, before anything is written — the client cannot see

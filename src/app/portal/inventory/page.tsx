@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
@@ -32,11 +33,13 @@ export default async function PortalInventoryPage() {
         lightType: true,
         // When the lights went in: the latest counted demo's replacement day
         // (2026-09-26 — the replacement belongs to the demo now).
+        // Every live demo, first by sequence: the first is the initial demo
+        // (its lights are the demo lights), and the latest counted one's
+        // replacement day is when the lights went in.
         demos: {
-          where: { voidedAt: null, rejected: false, lightReplacementDate: { not: null } },
-          orderBy: { lightReplacementDate: "desc" },
-          take: 1,
-          select: { lightReplacementDate: true },
+          where: { voidedAt: null },
+          orderBy: { sequence: "asc" },
+          select: { meteredLightCount: true, rejected: true, lightReplacementDate: true },
         },
         meteredLightCount: true,
         representedLightCount: true,
@@ -69,7 +72,12 @@ export default async function PortalInventoryPage() {
   ]);
   const circuits = circuitRows.map(({ demos, ...c }) => ({
     ...c,
-    lightReplacementDate: demos[0]?.lightReplacementDate ?? null,
+    lightReplacementDate:
+      demos
+        .filter((d) => !d.rejected && d.lightReplacementDate)
+        .map((d) => d.lightReplacementDate!)
+        .sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
+    demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices: c.devices }),
   }));
 
   // What counts as a FirsThing-installed fitting: a line with a recorded
@@ -112,13 +120,14 @@ export default async function PortalInventoryPage() {
    * billing run read, and it counts only circuits whose replacement has
    * actually been recorded.
    */
+  // Installed = the full installation PLUS the demo lights (2026-09-27,
+  // user-specified): the demo lights went in before the full installation and
+  // are not part of it, but they are FirsThing's lights at the society all
+  // the same.
   const installedRows = circuits.filter((c) => c.lightReplacementDate && meteredOf(c) > 0);
-  const societyLights = installedRows.reduce(
-    (s, c) => s + Math.max(c.representedLightCount, meteredOf(c)),
-    0,
-  );
-  const meteredLights = installedRows.reduce((s, c) => s + meteredOf(c), 0);
-  const extrapolated = societyLights > meteredLights;
+  const societyLights = installedRows.reduce((s, c) => s + totalLights(c.representedLightCount, c.demoLights), 0);
+  const demoLights = installedRows.reduce((s, c) => s + c.demoLights, 0);
+  const fullLights = installedRows.reduce((s, c) => s + c.representedLightCount, 0);
   const sensors = tanks.filter((t) => t.hasLevelSignal);
 
   const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0;
@@ -142,11 +151,9 @@ export default async function PortalInventoryPage() {
               value={societyLights.toLocaleString("en-IN")}
               label="LED lights installed"
               detail={
-                extrapolated
-                  ? `across your society · ${meteredLights.toLocaleString("en-IN")} on ${
-                      circuits.length === 1 ? "the metered circuit" : "metered circuits"
-                    }`
-                  : `across ${circuits.length} circuit${circuits.length === 1 ? "" : "s"}`
+                fullLights > 0
+                  ? `${fullLights.toLocaleString("en-IN")} in the full installation + ${demoLights.toLocaleString("en-IN")} from the demo`
+                  : `${demoLights.toLocaleString("en-IN")} from the demo`
               }
             />
             <KpiBubble icon={Zap} tone="info" value={String(meters.length)} label="Smart meters" detail="watching your circuits" />
@@ -166,8 +173,8 @@ export default async function PortalInventoryPage() {
                   .filter((c) => c.devices.length > 0)
                   .map((c) => {
                     const metered = meteredOf(c);
-                    const society = Math.max(c.representedLightCount, metered);
-                    const standsIn = c.lightReplacementDate && metered > 0 && society > metered;
+                    const society = totalLights(c.representedLightCount, c.demoLights);
+                    const standsIn = c.lightReplacementDate && metered > 0 && c.representedLightCount > 0;
                     return (
                       <div key={c.id}>
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -180,9 +187,10 @@ export default async function PortalInventoryPage() {
                                 <span className="num font-bold" style={{ color: "var(--text)" }}>
                                   {society.toLocaleString("en-IN")}
                                 </span>{" "}
-                                installed across your society ·{" "}
-                                <span className="num">{metered.toLocaleString("en-IN")}</span> on the
-                                metered circuit
+                                installed ·{" "}
+                                <span className="num">{c.representedLightCount.toLocaleString("en-IN")}</span> full
+                                installation +{" "}
+                                <span className="num">{c.demoLights.toLocaleString("en-IN")}</span> demo
                               </>
                             ) : metered > 0 ? (
                               <>
@@ -237,14 +245,15 @@ export default async function PortalInventoryPage() {
                     );
                   })}
               </div>
-              {extrapolated && (
+              {fullLights > 0 && (
                 // Said plainly, because the two numbers on this card have
                 // different evidence behind them and presenting them
                 // identically is what INV-02 exists to stop.
                 <p className="mt-4 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                  The society-wide figure is the population each metered circuit stands in for — the
-                  same basis your bill is computed on. The lines beneath it are the fittings on the
-                  metered circuit itself, which is what the readings are taken from.
+                  Installed is the full installation plus the demo lights — the demo lights went in first
+                  and are not part of the full installation, and together they are what your bill is
+                  computed on. The lines beneath are the fittings on the metered circuit itself, which is
+                  what the readings are taken from.
                 </p>
               )}
             </Card>

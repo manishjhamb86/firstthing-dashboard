@@ -62,7 +62,7 @@ function proposeReview(x: ExtractedInvoice, societyId: string | null, circuits: 
       split: proposal?.split
         ? proposal.split.map((id) => ({
             circuitId: id,
-            lights: circuits.find((c) => c.circuitId === id)?.representedLightCount ?? null,
+            lights: circuits.find((c) => c.circuitId === id)?.lightCount ?? null,
             applyCountForward: false,
           }))
         : undefined,

@@ -267,17 +267,34 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
                             {c.representedLightCount > c.lightCount && (
                               <>
                                 {" "}
-                                — standing in for {c.representedLightCount.toLocaleString("en-IN")}{" "}
-                                across your society
+                                · {c.representedLightCount.toLocaleString("en-IN")} across your society (
+                                {c.fullInstallation.toLocaleString("en-IN")} full installation +{" "}
+                                {c.demoLights.toLocaleString("en-IN")} demo)
                               </>
                             )}
                           </span>
                           <LightCountHistory stages={c.lightHistory} />
+                          {/* What the demo left out, and what the full
+                              installation recorded about it — said plainly so
+                              a change in the figures never reads as a mistake
+                              (2026-09-27, user-asked). */}
+                          {c.keptStory && (
+                            <div
+                              className="mt-2 rounded-[var(--r-md)] border px-3 py-2 text-[12.5px] leading-relaxed"
+                              style={{ borderColor: "var(--border-subtle)" }}
+                            >
+                              <p style={{ color: "var(--text-muted)" }}>{c.keptStory.atDemo}</p>
+                              <p className="mt-1" style={{ color: "var(--text)" }}>
+                                {c.monitoringFrom ? `From ${formatDate(new Date(`${c.monitoringFrom}T00:00:00Z`))} — ` : ""}
+                                {c.keptStory.afterFull}
+                              </p>
+                            </div>
+                          )}
                           <ExclusionNote
                             exclusion={c.exclusion}
                             before={c.baselineNow}
                             after={c.monthDailyAvg}
-                            title="Why the saving leaves some lights out"
+                            title="Why this month's saving leaves some fixtures out"
                             className="mt-2"
                           />
                         </td>

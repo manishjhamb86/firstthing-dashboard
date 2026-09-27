@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
+import { demoLightsInstalled, describeLights, totalLights } from "@/lib/light-population";
 import { isDemoMode } from "@/lib/demo-mode";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
@@ -280,7 +281,11 @@ export default async function CircuitDetailPage({
     surveyTotals.set(a.lightType, e);
   }
   const surveyInventoryCount = inventoryCountFor(circuit.lightType, [...surveyTotals.values()]);
-  const representedMismatch = surveyInventoryCount !== null && surveyInventoryCount !== circuit.representedLightCount;
+  // The survey counts every light of the type, the demo circuit's included;
+  // the circuit stores the full installation, which does not (2026-09-27).
+  const demoLights = demoLightsInstalled({ meteredLightCount: circuit.meteredLightCount, demos: circuit.demos, devices: circuit.devices });
+  const allLights = totalLights(circuit.representedLightCount, demoLights);
+  const representedMismatch = surveyInventoryCount !== null && surveyInventoryCount !== allLights;
   const surveyHref = pipelineId ? `/admin/pipeline/${pipelineId}/survey` : null;
 
   // One period of the chosen demo, as the readings panel reads it.
@@ -337,7 +342,7 @@ export default async function CircuitDetailPage({
       <PageHeader
         backHref={`/admin/societies/${id}/circuits`}
         title={circuit.location || circuit.lightType}
-        subtitle={`${circuit.lightType} · ${circuit.meteredLightCount} metered of ${circuit.representedLightCount} represented`}
+        subtitle={`${circuit.lightType} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLights)}`}
         chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
       />
 
@@ -350,11 +355,12 @@ export default async function CircuitDetailPage({
       <div className="mb-6 space-y-2">
         {representedMismatch && (
           <p className="text-sm" style={{ color: "var(--warn-fg)" }}>
-            This circuit represents{" "}
-            <span className="num">{circuit.representedLightCount.toLocaleString("en-IN")}</span>{" "}
-            lights, but the site survey counted{" "}
+            This circuit records{" "}
+            <span className="num">{allLights.toLocaleString("en-IN")}</span> lights (
+            <span className="num">{circuit.representedLightCount.toLocaleString("en-IN")}</span> full installation +{" "}
+            <span className="num">{demoLights.toLocaleString("en-IN")}</span> demo), but the site survey counted{" "}
             <span className="num">{surveyInventoryCount!.toLocaleString("en-IN")}</span> of this
-            type across the society. The monthly fee is computed on the represented figure.
+            type across the society. The monthly fee is computed on the recorded figure.
           </p>
         )}
         {/* Only where the figure is actually wrong. A correction control on
@@ -366,7 +372,7 @@ export default async function CircuitDetailPage({
           <RepresentedCountForm
             circuitId={circuit.id}
             current={circuit.representedLightCount}
-            meteredLightCount={circuit.meteredLightCount}
+            demoLights={demoLights}
             inventoryCount={surveyInventoryCount}
           />
         )}

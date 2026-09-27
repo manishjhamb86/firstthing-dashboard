@@ -472,14 +472,14 @@ export function ReviewForm({
                                       aria-label={`Line ${l.lineNo} circuit ${i + 1}`}
                                       onChange={(ev) => {
                                         const id = ev.target.value;
-                                        const rec = circuitOptions.find((c) => c.circuitId === id)?.representedLightCount ?? null;
+                                        const rec = circuitOptions.find((c) => c.circuitId === id)?.lightCount ?? null;
                                         setSplitEntry(l.lineNo, i, { circuitId: id, lights: e.lights ?? rec, applyCountForward: false });
                                       }}
                                     >
                                       <option value="">Choose a circuit…</option>
                                       {circuitOptions.map((c) => (
                                         <option key={c.circuitId} value={c.circuitId}>
-                                          {c.label} · {num(c.representedLightCount)} lights
+                                          {c.label} · {num(c.lightCount)} lights
                                         </option>
                                       ))}
                                     </select>
@@ -555,7 +555,7 @@ export function ReviewForm({
                               <option value="">{review.societyId ? (circuitOptions.length ? "Choose the circuit this line bills…" : "This society has no circuits yet") : "Confirm the society first"}</option>
                               {circuitOptions.map((c) => (
                                 <option key={c.circuitId} value={c.circuitId}>
-                                  {c.label} · {num(c.representedLightCount)} lights
+                                  {c.label} · {num(c.lightCount)} lights
                                 </option>
                               ))}
                             </select>
@@ -580,7 +580,7 @@ export function ReviewForm({
                                       circuitId: null,
                                       applyCountForward: false,
                                       split: [
-                                        { circuitId: x.circuitId ?? "", lights: first?.representedLightCount ?? null, applyCountForward: false },
+                                        { circuitId: x.circuitId ?? "", lights: first?.lightCount ?? null, applyCountForward: false },
                                         { circuitId: "", lights: null, applyCountForward: false },
                                       ],
                                     };

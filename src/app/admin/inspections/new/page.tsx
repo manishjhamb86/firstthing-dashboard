@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { PageHeader } from "@/components/ui";
 import { isoDateTimeLocal } from "@/lib/format-date";
@@ -19,7 +20,7 @@ export default async function NewInspectionPage({
 
   const { societyId } = await searchParams;
   const now = new Date();
-  const [societies, circuits] = await Promise.all([
+  const [societies, circuitRows] = await Promise.all([
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
     db.circuit.findMany({
       where: { voidedAt: null },
@@ -29,11 +30,16 @@ export default async function NewInspectionPage({
         societyId: true,
         location: true,
         lightType: true,
-        meteredLightCount: true,
         representedLightCount: true,
+        ...DEMO_LIGHTS_SELECT,
       },
     }),
   ]);
+  // An inspection walks every light installed: full installation + demo lights (2026-09-27).
+  const circuits = circuitRows.map(({ demos, devices, ...c }) => ({
+    ...c,
+    representedLightCount: totalLights(c.representedLightCount, demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices })),
+  }));
 
   return (
     <>

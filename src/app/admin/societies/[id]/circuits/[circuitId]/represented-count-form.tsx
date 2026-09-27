@@ -21,12 +21,13 @@ import { ErrorText } from "@/components/ui";
 export function RepresentedCountForm({
   circuitId,
   current,
-  meteredLightCount,
+  demoLights,
   inventoryCount,
 }: {
   circuitId: string;
+  /** The full installation on record — not counting the demo lights (2026-09-27). */
   current: number;
-  meteredLightCount: number;
+  demoLights: number;
   /** What this survey's own inventory counted for this light type, if it has one. */
   inventoryCount: number | null;
 }) {
@@ -39,7 +40,7 @@ export function RepresentedCountForm({
   if (!open) {
     return (
       <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>
-        Correct the represented count
+        Correct the full installation count
       </button>
     );
   }
@@ -47,24 +48,25 @@ export function RepresentedCountForm({
   return (
     <div className="space-y-2.5 text-sm max-w-md">
       <p className="text-xs text-[var(--text-muted)]">
-        Every light of this type across the society — the population this circuit&apos;s benchmark is
-        extrapolated to. The monthly fee is computed on this figure, not on the{" "}
-        <span className="num">{meteredLightCount.toLocaleString("en-IN")}</span> lights actually
-        metered.
+        The lights of this type fitted in the full installation, NOT counting the{" "}
+        <span className="num">{demoLights.toLocaleString("en-IN")}</span> demo lights already in before it.
+        The monthly fee is computed on the two together.
         {inventoryCount !== null && (
           <>
             {" "}
             The site survey&apos;s inventory counted{" "}
-            <span className="num">{inventoryCount.toLocaleString("en-IN")}</span> of this type.
+            <span className="num">{inventoryCount.toLocaleString("en-IN")}</span> of this type, demo lights
+            included — a full installation of{" "}
+            <span className="num">{Math.max(0, inventoryCount - demoLights).toLocaleString("en-IN")}</span>.
           </>
         )}
       </p>
       <label className="block" htmlFor="rep-count">
-        <span className="lbl">Represented count</span>
+        <span className="lbl">Full installation (excluding the demo lights)</span>
         <input
           id="rep-count"
           type="number"
-          min={meteredLightCount}
+          min={1}
           className="field mt-1"
           value={value}
           onChange={(e) => setValue(e.target.value)}

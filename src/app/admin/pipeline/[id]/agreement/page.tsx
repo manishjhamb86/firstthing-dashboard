@@ -5,12 +5,14 @@ import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { CONTRACT_STATUS, statusMeta } from "@/lib/status-maps";
 import { publicS3Url } from "@/lib/s3";
 import {
   ActivateContractForm,
+  AgreementDatesControl,
   ExecutedUploadForm,
   PrepareAgreementButton,
   StepButton,
@@ -32,6 +34,11 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
     session.user.adminPermissions.includes("manage_pipeline");
 
   const { id } = await params;
+  // Correcting a recorded date (2026-09-27): free before go-live, operations
+  // with a reason after — the action re-checks either way.
+  const demoMode = await isDemoMode();
+  const canCorrectDates = demoMode ? session.user.adminPermissions.includes("manage_pipeline") : canEdit;
+  const iso = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : null);
   const pipeline = await db.pipeline.findUnique({
     where: { id },
     include: {
@@ -133,6 +140,25 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
               Prepared {formatDate(agreement.preparedAt)} by{" "}
               {agreement.preparedBy.name ?? agreement.preparedBy.email}.
             </p>
+            {canCorrectDates && (
+              <div className="mb-4">
+                <AgreementDatesControl
+                  pipelineId={pipeline.id}
+                  today={new Date().toISOString().slice(0, 10)}
+                  live={!demoMode}
+                  dates={{
+                    prepared: iso(agreement.preparedAt),
+                    printed: iso(agreement.printedAt),
+                    notarized: iso(agreement.notarizedAt),
+                    signed: iso(agreement.signedAt),
+                    uploaded: iso(agreement.uploadedAt),
+                    activated: iso(contract?.activatedAt ?? null),
+                    termStart: iso(contract?.termStart ?? null),
+                    termEnd: iso(contract?.termEnd ?? null),
+                  }}
+                />
+              </div>
+            )}
             <div className="overflow-x-auto">
               <table className="tbl">
                 <tbody>

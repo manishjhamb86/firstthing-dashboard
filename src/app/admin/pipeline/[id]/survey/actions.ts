@@ -1,5 +1,6 @@
 "use server";
 
+import { DEMO_LIGHTS_SELECT, demoLightsInstalled, fullFromTotal, refuseFullInstallationCount } from "@/lib/light-population";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
@@ -11,7 +12,7 @@ import {
   MIN_METERED_LIGHTS,
   outstandingCriteria,
 } from "@/lib/circuit-eligibility";
-import { lightTypeKey, refuseRepresentedCount } from "@/lib/light-type";
+import { lightTypeKey } from "@/lib/light-type";
 
 // FEAT-006: whole-society lighting inventory by area, distinct from the
 // single sample Circuit metered for the benchmark (CON-11).
@@ -102,7 +103,7 @@ export async function updateLightingInventoryArea(
     // inventory can be describing.
     const live = await tx.circuit.findMany({
       where: { siteSurveyId, voidedAt: null },
-      select: { id: true, lightType: true, location: true, meteredLightCount: true, representedLightCount: true },
+      select: { id: true, lightType: true, location: true, representedLightCount: true, ...DEMO_LIGHTS_SELECT },
     });
     const byType = live.filter((c) => lightTypeKey(c.lightType) === lightTypeKey(row.lightType));
     const circuits = byType.length > 0 ? byType : live.length === 1 ? live : [];
@@ -116,30 +117,31 @@ export async function updateLightingInventoryArea(
       return;
     }
     const c = circuits[0];
-    if (c.representedLightCount === total) return;
-    if (refuseRepresentedCount(total, c.meteredLightCount)) {
-      circuitNote = `The circuit still represents ${c.representedLightCount.toLocaleString("en-IN")} — ${refuseRepresentedCount(total, c.meteredLightCount)}`;
-      return;
-    }
+    // The inventory counts every light of the type, the demo circuit's
+    // included; the circuit stores the full installation, which does not
+    // (2026-09-27).
+    const full = fullFromTotal(total, demoLightsInstalled(c));
+    if (c.representedLightCount === full) return;
     const d = new Date();
     const effectiveFrom = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-    await tx.circuit.update({ where: { id: c.id }, data: { representedLightCount: total } });
+    await tx.circuit.update({ where: { id: c.id }, data: { representedLightCount: full } });
     await tx.representedCountChange.create({
       data: {
         circuitId: c.id,
         previousCount: c.representedLightCount,
-        nextCount: total,
+        nextCount: full,
         effectiveFrom,
-        reason: `Lighting inventory corrected on the site survey (${row.area}: ${row.count} → ${input.count}).`,
+        reason: `Lighting inventory corrected on the site survey (${row.area}: ${row.count} → ${input.count}); full installation = ${total} counted − ${total - full} demo lights.`,
         recordedById: actor.id,
       },
     });
-    applied = { from: c.representedLightCount, to: total };
+    applied = { from: c.representedLightCount, to: full };
     logger.info("circuit.represented_count_applied_from_inventory", {
       actorId: actor.id,
       circuitId: c.id,
       previous: c.representedLightCount,
-      next: total,
+      next: full,
+      inventoryTotal: total,
       effectiveFrom,
     });
   });
@@ -247,7 +249,7 @@ export async function submitCircuitCandidate(input: {
   const connectedLoadW = input.lines.reduce((s, l) => s + l.count * l.wattage, 0);
   const wattage = connectedLoadW / meteredLightCount;
 
-  const repRefusal = refuseRepresentedCount(input.representedLightCount, meteredLightCount);
+  const repRefusal = refuseFullInstallationCount(input.representedLightCount);
   if (repRefusal) return { error: repRefusal };
 
   // CON-16's "no non-installation appliances share this circuit" was removed

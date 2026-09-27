@@ -3047,6 +3047,18 @@ model CircuitDevice {
   replacedAt         DateTime? @map("replaced_at")
   replacedById       String?   @map("replaced_by_id")
 
+  // What became of the fixtures KEPT on this line during the demo (the whole
+  // line when excluded, else count − replacementCount), recorded at the full
+  // installation (2026-09-27, user-specified). Null = not recorded: the demo's
+  // deduction carries on. From the billing start, `keptReplacedCount` of them
+  // count as replaced (nothing deducted) and `keptRemovedCount` are off the
+  // circuit (deducted from the before side only); the rest stay kept. The
+  // demo's own figures never read these — they are what the demo measured.
+  keptReplacedCount Int?      @map("kept_replaced_count")
+  keptRemovedCount  Int?      @map("kept_removed_count")
+  keptRecordedAt    DateTime? @map("kept_recorded_at")
+  keptRecordedById  String?   @map("kept_recorded_by_id")
+
   // Backfill provenance. The inventory normally freezes at light replacement,
   // because it is the record the replacement was judged against. A circuit
   // that was commissioned BEFORE this system existed has no such record to

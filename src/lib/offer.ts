@@ -6,7 +6,14 @@ export type OfferCircuitTerm = {
   lightType: string;
   location: string | null;
   meteredLightCount: number;
+  /**
+   * Lights to install. On offers written from 2026-09-27 this is the FULL
+   * INSTALLATION and `demoLightCount` says how many demo lights are priced
+   * alongside it; older offers have no `demoLightCount` and this is the total.
+   */
   representedLightCount: number;
+  /** The demo lights priced alongside the full installation (offers from 2026-09-27). */
+  demoLightCount?: number;
   benchmarkSavingsPct: number;
   preInstallBaseline: number;
   projectedSavedKwhPerDay: number;
@@ -171,4 +178,9 @@ export function projectedMonthlyFee(input: {
   const days = input.daysInMonth ?? 30;
   const monthlySavedValue = input.projectedSavedKwhPerDay * days * input.unitElectricityRate;
   return monthlySavedValue * ((100 - (input.societyRevenueSharePct ?? 0)) / 100);
+}
+
+/** Every light an offer term was priced on: the full installation plus its demo lights (a total on older offers). */
+export function termPricedLights(t: Pick<OfferCircuitTerm, "representedLightCount" | "demoLightCount">): number {
+  return t.representedLightCount + (t.demoLightCount ?? 0);
 }

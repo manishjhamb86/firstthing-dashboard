@@ -355,11 +355,22 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                       <td className="num">{c.meteredLightCount}</td>
                       <td className="num">
                         {termPricedLights(c).toLocaleString("en-IN")}
-                        {c.demoLightCount ? (
-                          <span className="block text-xs text-[var(--text-subtle)]">
-                            {c.representedLightCount.toLocaleString("en-IN")} full + {c.demoLightCount.toLocaleString("en-IN")} demo
-                          </span>
-                        ) : null}
+                        {(() => {
+                          // Offers from 2026-09-27 carry their demo lights; an older
+                          // one stored the total, which is split here when it is
+                          // the circuit's full installation + demo lights.
+                          const live = liveCircuits.get(c.circuitId);
+                          const demo =
+                            c.demoLightCount ??
+                            (live && c.representedLightCount === live.representedLightCount + live.demoLights ? live.demoLights : null);
+                          if (!demo) return null;
+                          const full = c.demoLightCount != null ? c.representedLightCount : c.representedLightCount - demo;
+                          return (
+                            <span className="block text-xs text-[var(--text-subtle)]">
+                              {full.toLocaleString("en-IN")} full installation + {demo.toLocaleString("en-IN")} demo
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td className="num">
                         {c.preInstallKwhPerDay != null ? `${kwh(c.preInstallKwhPerDay)}/day` : "—"}

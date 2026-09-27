@@ -114,10 +114,12 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
     select: {
       id: true,
       state: true,
+      meteredLightCount: true,
       preInstallBaseline: true,
       benchmarkSavingsPct: true,
       benchmarkOverridePct: true,
       benchmarkOverrideReason: true,
+      rescaleEvents: { where: { voidedAt: null }, select: { id: true } },
       demos: { include: demoFactsInclude },
       devices: { select: excludedDevicesSelect },
     },
@@ -159,6 +161,19 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
   if (anyAccepted) {
     data.preInstallBaseline = figures.baseline;
     data.benchmarkSavingsPct = figures.benchmark.pct;
+    // The baseline is the draw of the lights the demos metered, so the
+    // circuit's metered count follows it (2026-09-27, user-caught: Aditya Mega
+    // City still read the 91 typed in from its agreement after a demo metered
+    // 100). Once a light-count change is on record the count is that entry's
+    // to decide (INV-07), so it is left alone.
+    if (
+      figures.meteredLightCount !== null &&
+      figures.meteredLightCount > 0 &&
+      figures.meteredLightCount !== circuit.meteredLightCount &&
+      circuit.rescaleEvents.length === 0
+    ) {
+      data.meteredLightCount = figures.meteredLightCount;
+    }
   } else if (override && circuit.benchmarkSavingsPct !== override.pct) {
     data.benchmarkSavingsPct = override.pct;
   }

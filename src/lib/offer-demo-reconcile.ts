@@ -85,6 +85,10 @@ export async function reconcileOfferWithDemos(tx: Tx, circuitId: string, actorId
     if (!matches) allMatch = false;
     if (measured === null) return t;
     const out: ReconciledTerm = { ...t, demoBenchmarkSavingsPct: measured, reconciledFromDemo: true };
+    // The metered lights are what the demo metered, not the figure the offer
+    // was typed with (2026-09-27, user-caught). The agreed population and
+    // price are untouched.
+    if (m?.lights && m.lights > 0) out.meteredLightCount = m.lights;
     // The agreed population's pre-install draw, from the demo's baseline per
     // light — only where the offer had none of its own, or it came from here.
     if (m && m.baseline !== null && m.lights && (t.preInstallKwhPerDay == null || t.preInstallBasis === "demo")) {

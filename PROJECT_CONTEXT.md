@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-22 (MS-08 closed — docs reconciled against the invoice-first pivot, no code change)
+2026-09-29 (Android field app: decided and planned on branch `android-app`, not started — see `docs/engineering/19-field-app.md`)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6900,6 +6900,39 @@ matching FEAT-048/053/054's own established style) rather than leaving MS-08 loo
 confirm each claim rather than trusting the pre-written note. `tsc`/`lint`/`pnpm test`
 (950)/`pnpm build` all still clean (nothing touched `src/`). Not deployed — nothing here changes
 runtime behavior.
+
+## Android field app: decided and planned, not started (2026-09-29) — user-asked
+
+**Where to resume: `docs/engineering/19-field-app.md`, branch `android-app`.** The branch was cut
+from `master`; merging `portal-redesign` into it was a no-op, because that branch (local and origin)
+already sits at `master`'s commit `bb870a3`.
+
+**The decision.** The Android app for the field team is an installable web app (a PWA) at
+`/field` inside the same Next.js app. It is not a native app. This confirms ASSUM-12 / ADR-002 and
+changes no blueprint document. The user asked for a recommendation "based on our use case — our
+main purpose is to serve our in-field team". The reasons:
+- the field work is forms, photos, scanning and checklists, and the stock scanner already proves
+  the camera path in production;
+- every rule already lives in `src/lib` and the Server Actions, and a second native client is the
+  biggest drift risk available;
+- one deploy updates every phone, with no second release train for a one-person team.
+
+**Research findings that shape the build:**
+- Chrome on Android supports one-off Background Sync, but it cannot be relied on alone, so the
+  outbox also drains on open, visibility change and `online`.
+- IndexedDB is evicted under storage pressure unless `navigator.storage.persist()` is granted, and
+  Chrome grants that mostly to installed apps. So installing is the durability mechanism, which
+  refines `05-field.md` §0.7's "no install required".
+- A Play Store listing stays possible later as a Trusted Web Activity (Bubblewrap), with no rewrite.
+- Capacitor is the fallback if background photo upload proves unreliable on real phones.
+
+**Not yet done:**
+- step 0, reconciling `05-field.md` (specified 2026-08-13) against everything since: demos per
+  circuit, kept fixtures, tasks/schedule, inspections, inventory scanning, meters, correctable dates;
+- the six open questions in §9 of the plan.
+
+This Mac has no Java runtime and no Android SDK. They are needed only for the optional Play Store
+package.
 
 ## Current Phase (archived application — history)
 

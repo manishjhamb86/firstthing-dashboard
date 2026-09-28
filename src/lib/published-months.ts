@@ -32,6 +32,12 @@ export type PublishedMonthRow = {
   /** The % the lines rest on, weighted by each line's saved kWh. */
   savingsPct: number | null;
   readingsNotes: string[];
+  /**
+   * False when the month holds no fee lines — none of its invoice lines
+   * could be derived when it was submitted. Such a month has no figures,
+   * and is left out rather than shown to the society as a ₹0 saving.
+   */
+  derived?: boolean;
 };
 
 export type PublishedMonth = {
@@ -77,7 +83,7 @@ export function publishedMonthOf(r: PublishedMonthRow): PublishedMonth {
 
 /** Newest month first; one entry per period — the caller passes only live versions. */
 export function summarisePublished(rows: PublishedMonthRow[]): PublishedSummary {
-  const months = rows.map(publishedMonthOf).sort((a, b) => (a.period < b.period ? 1 : a.period > b.period ? -1 : 0));
+  const months = rows.filter((r) => r.derived !== false).map(publishedMonthOf).sort((a, b) => (a.period < b.period ? 1 : a.period > b.period ? -1 : 0));
   const latest = months[0] ?? null;
   const sinceStart =
     months.length === 0

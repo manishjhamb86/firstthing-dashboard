@@ -37,6 +37,7 @@ export const publishedMonthsFor = cache(async (societyId: string): Promise<Publi
       fee: c.subtotal,
       lineBases: c.feeLines.map((l) => l.basis),
       savingsPct: weightedSavingsPct(c.feeLines.map((l) => ({ savedKwh: l.savedKwh, pct: l.measuredSavingsPct }))),
+      derived: c.feeLines.length > 0,
       readingsNotes: (snap?.lines ?? []).map((l) => l.readingsNote).filter((n): n is string => !!n),
     });
   }

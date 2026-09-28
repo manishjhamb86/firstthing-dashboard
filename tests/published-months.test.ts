@@ -55,6 +55,16 @@ describe("FEAT-111 — a published month, in the society's own terms", () => {
     expect(s.sinceStart).toBeNull();
   });
 
+  it("a month with no derived lines is left out, never shown as a ₹0 saving", () => {
+    const s = summarisePublished([
+      row({ period: "2026-08", totalSavedValue: 0, fee: 0, totalSavedKwh: 0, derived: false }),
+      row({ period: "2026-07", totalSavedValue: 1_000, fee: 400, totalSavedKwh: 100 }),
+    ]);
+    expect(s.latest?.period).toBe("2026-07");
+    expect(s.sinceStart?.months).toBe(1);
+    expect(summarisePublished([row({ period: "2026-08", derived: false })]).latest).toBeNull();
+  });
+
   it("weights the savings % by the consumption behind each line", () => {
     // 600 kWh saved at 60% (base 1000) and 80 saved at 80% (base 100) → 680/1100 = 61.8%, not 70%.
     expect(weightedSavingsPct([{ savedKwh: 600, pct: 60 }, { savedKwh: 80, pct: 80 }])).toBeCloseTo(61.818, 2);

@@ -8248,3 +8248,16 @@ eight dates moved together, v1 followed, live blank-reason refused), dev data re
 deadlock 8/8. 1,121 unit tests, `tsc`/`lint`/`build` clean. **One environment note**: restarting the
 dev server dropped the `DEMO_MODE=true` it had been started with — dev ran in live mode until
 restarted with it. Restart dev with `DEMO_MODE=true`.
+
+## A published month with no figures read as a ₹0 saving (2026-09-28) — user-caught on Arihant Ambar
+
+Arihant Ambar's portal showed "₹0 saved · August 2026 · 0 kWh". All 12 of its released
+invoice-first months were submitted on 2026-09-25 while its contract/certificate dates did not yet
+cover them, so every invoice line was "not derivable" and each month stored ₹0 with **no fee
+lines**. The later date correction re-derives months found **through their fee lines**, so these
+were never found. Fixed: `invoice-rederive.ts` also finds released months through their invoice's
+own service lines (`underivedMonthsBilling`), rebuilds a fee-line-less month from those lines, and
+`rederiveUnderivedMonthsForSociety` repairs one society in one call. The portal leaves a month with
+no derived lines out of its summary (`derived: false`) rather than showing ₹0. August's invoice line
+separately points at the Basement circuit voided on 2026-09-16 ("older circuit") and needs repointing
+to its replacement before it can derive. Not yet deployed or repaired on stage.

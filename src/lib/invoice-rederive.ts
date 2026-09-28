@@ -82,24 +82,40 @@ async function rederiveOneMonth(calculationId: string, actorId: string, trigger:
   // superseded this exact row between the candidate query and here.
   if (!calc || calc.source !== "invoice" || calc.status !== "released" || calc.supersededById !== null) return null;
 
-  const oldBasisByCircuit = new Map(calc.feeLines.map((l) => [l.circuitId, l.basis]));
-  const serviceLines = calc.feeLines.map((l, i) => ({
-    lineNo: i + 1,
-    circuitId: l.circuitId,
-    lightsBilled: l.invoiceLightCount ?? l.representedLightCount,
-    amount: l.amount,
-  }));
-
-  const ctx = await loadInvoiceMonthContext({ societyId: calc.societyId, serviceLine: calc.serviceLine, period: calc.period });
-  const derived = deriveInvoiceMonth({ period: calc.period, parts: ctx.parts, lines: serviceLines, readingsByCircuit: ctx.readingsByCircuit });
-
-  if (trigger === "readings" ? !anyLineImprovedToMeasured(oldBasisByCircuit, derived.lines) : !linesMateriallyChanged(calc.feeLines, derived.lines)) return null;
-
-  const invoice = await db.billingInvoice.findFirst({ where: { monthlyCalculationId: calc.id, voidedAt: null } });
+  const invoice = await db.billingInvoice.findFirst({
+    where: { monthlyCalculationId: calc.id, voidedAt: null },
+    include: { lines: { where: { kind: "service", circuitId: { not: null } }, orderBy: { lineNo: "asc" } } },
+  });
   // Nothing to re-point a live figure onto — the same fact the release
   // queue's own belt-and-braces check would refuse on; leave the month as
   // it stands rather than versioning a bill with no live invoice.
   if (!invoice) return null;
+
+  const oldBasisByCircuit = new Map(calc.feeLines.map((l) => [l.circuitId, l.basis]));
+  // A month submitted while none of its lines could be derived (the
+  // contract's dates were wrong at the time — Arihant Ambar, 2026-09-28)
+  // holds no fee lines at all, so the invoice's own service lines are what
+  // it is rebuilt from. Otherwise the fee lines carry any split already made.
+  const serviceLines =
+    calc.feeLines.length > 0
+      ? calc.feeLines.map((l, i) => ({
+          lineNo: i + 1,
+          circuitId: l.circuitId,
+          lightsBilled: l.invoiceLightCount ?? l.representedLightCount,
+          amount: l.amount,
+        }))
+      : invoice.lines.map((l) => ({ lineNo: l.lineNo, circuitId: l.circuitId!, lightsBilled: l.qty, amount: l.amount }));
+
+  const ctx = await loadInvoiceMonthContext({ societyId: calc.societyId, serviceLine: calc.serviceLine, period: calc.period });
+  const derived = deriveInvoiceMonth({ period: calc.period, parts: ctx.parts, lines: serviceLines, readingsByCircuit: ctx.readingsByCircuit });
+
+  const changed =
+    calc.feeLines.length === 0
+      ? derived.lines.length > 0
+      : trigger === "readings"
+        ? anyLineImprovedToMeasured(oldBasisByCircuit, derived.lines)
+        : linesMateriallyChanged(calc.feeLines, derived.lines);
+  if (!changed) return null;
 
   const daysInMonth = daysInPeriod(calc.period);
   const singlePart = derived.lines.length > 0 && new Set(derived.lines.map((l) => l.contractId)).size === 1;
@@ -228,6 +244,52 @@ async function rederiveOneMonth(calculationId: string, actorId: string, trigger:
 }
 
 /**
+ * Live, released, invoice-sourced months whose invoice bills `circuitId`
+ * but which hold no fee lines — submitted while the line could not be
+ * derived. Found through the invoice's lines, since there is no fee line to
+ * find them by.
+ */
+async function underivedMonthsBilling(circuitId: string, fromPeriod?: string): Promise<string[]> {
+  const rows = await db.billingInvoiceLine.findMany({
+    where: {
+      circuitId,
+      kind: "service",
+      invoice: {
+        voidedAt: null,
+        calculation: {
+          source: "invoice",
+          status: "released",
+          supersededById: null,
+          feeLines: { none: {} },
+          ...(fromPeriod ? { period: { gte: fromPeriod } } : {}),
+        },
+      },
+    },
+    select: { invoice: { select: { monthlyCalculationId: true } } },
+  });
+  return [...new Set(rows.map((r) => r.invoice.monthlyCalculationId))];
+}
+
+/**
+ * Re-derives every live, released, invoice-sourced month of a society that
+ * holds no fee lines — the repair for months submitted before their
+ * contract's dates were right.
+ */
+export async function rederiveUnderivedMonthsForSociety(societyId: string, actorId: string): Promise<{ rederivedCalculationIds: string[] }> {
+  const calcs = await db.monthlyCalculation.findMany({
+    where: { societyId, source: "invoice", status: "released", supersededById: null, feeLines: { none: {} } },
+    select: { id: true },
+    orderBy: { period: "asc" },
+  });
+  const rederivedCalculationIds: string[] = [];
+  for (const c of calcs) {
+    const newId = await rederiveOneMonth(c.id, actorId, "rescale");
+    if (newId) rederivedCalculationIds.push(newId);
+  }
+  return { rederivedCalculationIds };
+}
+
+/**
  * Called after a reading commit for `circuitId`, from either convergence
  * point ADR-011 names. Resolves every live, released, invoice-sourced month
  * this circuit still has an `agreed` line on and re-derives each.
@@ -238,9 +300,10 @@ export async function rederiveInvoiceMonthsForCircuit(circuitId: string, actorId
     select: { monthlyCalculationId: true },
     distinct: ["monthlyCalculationId"],
   });
+  const ids = new Set([...candidates.map((c) => c.monthlyCalculationId), ...(await underivedMonthsBilling(circuitId))]);
   const rederivedCalculationIds: string[] = [];
-  for (const c of candidates) {
-    const newId = await rederiveOneMonth(c.monthlyCalculationId, actorId);
+  for (const id of ids) {
+    const newId = await rederiveOneMonth(id, actorId);
     if (newId) rederivedCalculationIds.push(newId);
   }
   return { rederivedCalculationIds };
@@ -257,9 +320,10 @@ export async function rederiveInvoiceMonthsAfterRescale(circuitId: string, fromP
     select: { monthlyCalculationId: true },
     distinct: ["monthlyCalculationId"],
   });
+  const ids = new Set([...candidates.map((c) => c.monthlyCalculationId), ...(await underivedMonthsBilling(circuitId, fromPeriod))]);
   const rederivedCalculationIds: string[] = [];
-  for (const c of candidates) {
-    const newId = await rederiveOneMonth(c.monthlyCalculationId, actorId, "rescale");
+  for (const id of ids) {
+    const newId = await rederiveOneMonth(id, actorId, "rescale");
     if (newId) rederivedCalculationIds.push(newId);
   }
   return { rederivedCalculationIds };

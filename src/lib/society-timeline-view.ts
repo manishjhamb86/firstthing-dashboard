@@ -114,7 +114,9 @@ export function buildTimelineView(root: Branch, issues: Issue[], requests: Map<s
       const state: RowState = worst ?? (s.recordOnly && s.date ? "record" : s.date ? "ok" : "later");
       const span = s.end !== undefined ? spanLabel(s.date, s.end) : null;
       const gap = s.recordOnly ? null : gapLabel(prev, s.date);
-      if (s.date && !s.recordOnly) prev = s.end ?? s.date;
+      // A period the next step follows (readings) counts from its end; a term that
+      // runs into the future counts from its start.
+      if (s.date && !s.recordOnly) prev = s.futureOk ? s.date : s.end ?? s.date;
       const chip =
         s.chip ??
         (state === "bad"

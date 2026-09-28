@@ -8321,3 +8321,25 @@ requests pending with the dates unchanged; accepted → contract activation move
 whose date moved underneath closed as superseded; permission revoked behind the open form and a
 self-approval both refused by the server with their log lines. Phone width: no horizontal scroll.
 38 new unit tests; 1,160 total, `tsc`/`lint`/`build` clean. Not deployed to stage.
+
+**Dates are checked from the end back, and a billed deal is anchored on its first invoice
+(2026-09-28, the user's rule).** "The source of truth will always be the first invoice — it tells
+you from which day billing started; everything before that should be dated before it", then "for
+everything else check dates from the last step's date", then "always in reverse order, whether
+billed or not". So `checkSocietyChronology` now also walks every branch **backwards**: each dated
+step must be on or before the step after it, and when two disagree the **earlier** one is named —
+the later date is trusted, and the walk keeps comparing against it so one bad date is named once.
+The trusted end is:
+- **a billed deal** — the day its first invoice bills from (`firstBillingDay`: the invoiced month's
+  1st, or where that month was billed in part, the day its billed days begin, from the
+  calculation's `proratedDays`/`daysInMonth`). It is its own row, "Billing started (first
+  invoice)", marked *Source of truth* and never flagged; a demo under the deal is walked back from
+  it too; anything after it (a termination) must not fall before it; and the certificate's billing
+  start must equal it (`anchor.billing-start-early` covers the side the walk cannot);
+- **anything else** — the branch's latest dated step.
+The first invoice is found through the invoice's fee lines and printed lines whose circuits belong
+to the deal. Record-time stamps and undated steps take no part. The declared pair rules follow the
+same direction: by default they now name the earlier step of a pair (so "meter before the survey"
+names the survey). The contract term moved after billing start in a deal's list, since the term
+starts when billing does. Verified on Hyde Park with a July-2025 invoice billed 26 of 31 days: the
+anchor reads 06-07-2025, and the lead and survey typed up on 28-09-2026 are the two dates named.

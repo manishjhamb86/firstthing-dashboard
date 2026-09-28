@@ -90,7 +90,8 @@ export type Issue = {
 // `error` rules are the ones the correction actions already enforce;
 // `warning` rules are the gaps the research found, which ship as "Check"
 // until stage data is clean (GitHub's Evaluate-before-Active idea). `flag`
-// says which of the two rows carries the message.
+// says which of the two rows carries the message; by default the earlier one,
+// since dates are trusted from the end back.
 
 export type Rule = {
   id: string;
@@ -103,6 +104,11 @@ export type Rule = {
   /** The rule in words, appended to the two dates. */
   words: string;
 };
+
+const BILLING_START_WORDS = "Billing starts on the day the first invoice bills from — correct the certificate to match it.";
+
+/** The slot of a billed deal's anchor step: the day its first invoice bills from. */
+export const FIRST_INVOICE_SLOT = "firstInvoice";
 
 const AGREEMENT_CHAIN = ["agreementPrepared", "agreementPrinted", "agreementNotarized", "agreementSigned", "agreementUploaded"];
 
@@ -151,6 +157,11 @@ export const CHRONOLOGY_RULES: Rule[] = [
   { id: "deal.certificate-work", scope: "deal", later: "certificate", earlier: "installWork.end", severity: "error", words: "The certificate is signed on or after the last day's work." },
   { id: "deal.certificate-signed", scope: "deal", later: "certificate", earlier: "agreementSigned", severity: "warning", words: "The installation certificate is signed after the agreement." },
   { id: "deal.terminated-term", scope: "deal", later: "terminated", earlier: "term", severity: "warning", words: "A contract ends on or after its term starts." },
+
+  // A billed deal's certificate must start billing on the first invoice's day.
+  // "Later than it" is caught by the ordering pass below; "earlier" is not, since
+  // a step may come before the invoice — so this one is stated on its own.
+  { id: "anchor.billing-start-early", scope: "deal", later: "billingStart", earlier: "firstInvoice", severity: "error", flag: "later", words: BILLING_START_WORDS },
 ];
 
 // ── Checking ───────────────────────────────────────────────────────────────
@@ -187,6 +198,31 @@ function walk(b: Branch, path: Branch[], visit: (b: Branch, path: Branch[]) => v
   for (const c of b.children) walk(c, here, visit);
 }
 
+/** A billed deal's anchor step, looked up through a branch's ancestors. */
+function anchorAbove(path: Branch[]): Step | null {
+  for (let i = path.length - 2; i >= 0; i--) {
+    const hit = allSteps(path[i]).find((s) => s.slot === FIRST_INVOICE_SLOT && s.date);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+function orderIssue(s: Step, other: Step, relation: "after" | "before"): Issue {
+  const anchored = other.slot === FIRST_INVOICE_SLOT;
+  const tail = anchored
+    ? relation === "after"
+      ? "The first invoice fixes the day billing started; every step before billing is dated on or before it."
+      : "Nothing that follows billing can be dated before billing started."
+    : "Each step is dated on or before the step that follows it.";
+  return {
+    stepId: s.id,
+    kind: "order",
+    severity: "error",
+    key: `seq:${s.id}`,
+    message: `${s.label} on ${formatDate(s.date)} is ${relation} ${other.label.toLowerCase()} on ${formatDate(other.date)}. ${tail}`,
+  };
+}
+
 export function forEachStep(root: Branch, fn: (s: Step, b: Branch) => void) {
   walk(root, [], (b) => allSteps(b).forEach((s) => fn(s, b)));
 }
@@ -214,7 +250,9 @@ export function checkSocietyChronology(root: Branch, today: Date, rules: Rule[] 
       const a = dayOf(later.date);
       const b = dayOf(earlier.date);
       if (rule.strict ? a > b : a >= b) continue;
-      const flagLater = (rule.flag ?? "later") === "later";
+      // Dates are trusted from the end back (the user's rule, 2026-09-28): when a
+      // pair disagrees the EARLIER step is the one named, unless a rule says otherwise.
+      const flagLater = (rule.flag ?? "earlier") === "later";
       const [mine, other] = flagLater ? [later, earlier] : [earlier, later];
       const relation = flagLater ? (a === b ? "the same day as" : "before") : a === b ? "the same day as" : "after";
       const subject = mine.label.charAt(0).toUpperCase() + mine.label.slice(1);
@@ -225,6 +263,47 @@ export function checkSocietyChronology(root: Branch, today: Date, rules: Rule[] 
         key: `${rule.id}:${mine.step.id}`,
         message: `${subject} on ${formatDate(mine.date)} is ${relation} ${other.label.toLowerCase()} on ${formatDate(other.date)}. ${rule.words}`,
       });
+    }
+  });
+
+  // ── Order, checked in reverse (2026-09-28, user's rule) ───────────────────
+  // Each step is dated on or before the step after it, walked from the end back.
+  // The end is trusted: for a billed deal it is the first invoice's billing day
+  // (the source of truth — never flagged), otherwise the branch's latest dated
+  // step. When two steps disagree the EARLIER one is flagged, and the walk keeps
+  // comparing against the trusted date, so one bad date is named once rather
+  // than making everything before it look wrong. A demo under a billed deal is
+  // walked back from its deal's invoice day. Steps after billing started (a
+  // termination) must not fall before it.
+  const hasError = (stepId: string) => issues.some((i) => i.stepId === stepId && i.severity === "error");
+  walk(root, [], (branch, path) => {
+    if (branch.struck) return;
+    const seq = allSteps(branch).filter((s) => s.date && !s.recordOnly);
+    const ownAnchor = seq.findIndex((s) => s.slot === FIRST_INVOICE_SLOT);
+    const inherited = ownAnchor < 0 && branch.kind === "demo" ? anchorAbove(path) : null;
+
+    let before = seq;
+    let next: Step | null = null;
+    if (ownAnchor >= 0) {
+      before = seq.slice(0, ownAnchor);
+      const anchor = seq[ownAnchor];
+      next = anchor;
+      for (const s of seq.slice(ownAnchor + 1)) {
+        if (dayOf(s.date!) < dayOf(anchor.date!) && !hasError(s.id)) push(orderIssue(s, anchor, "before"));
+      }
+    } else if (inherited) {
+      next = inherited;
+    } else {
+      next = seq[seq.length - 1] ?? null;
+      before = seq.slice(0, -1);
+    }
+    for (let i = before.length - 1; i >= 0 && next; i--) {
+      const s = before[i];
+      if (dayOf(s.date!) > dayOf(next.date!)) {
+        if (!hasError(s.id)) push(orderIssue(s, next, "after"));
+      } else {
+        next = s;
+      }
     }
   });
 
@@ -389,4 +468,21 @@ export function locate(root: Branch, ref: EditRef): { label: string; path: strin
     }
   });
   return out;
+}
+
+export type FirstInvoice = { number: string; period: string; startsOn: Date; basis: string };
+
+/**
+ * The day a deal's billing started, read from its first invoice: the first of
+ * the invoiced month, or — when that month was billed in part (CON-22's first
+ * month) — the day the billed days begin, counted back from the month's end.
+ */
+export function firstBillingDay(period: string, proratedDays: number | null, daysInMonth: number | null): { startsOn: Date; basis: string } {
+  const [y, m] = period.split("-").map(Number);
+  if (proratedDays && daysInMonth && proratedDays > 0 && proratedDays < daysInMonth) {
+    const startsOn = new Date(Date.UTC(y, m - 1, daysInMonth - proratedDays + 1));
+    return { startsOn, basis: `${proratedDays} of ${daysInMonth} days billed, so billing ran from ${formatDate(startsOn)}` };
+  }
+  const startsOn = new Date(Date.UTC(y, m - 1, 1));
+  return { startsOn, basis: `a full month billed, so billing ran from ${formatDate(startsOn)}` };
 }

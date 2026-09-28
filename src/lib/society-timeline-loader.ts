@@ -3,7 +3,7 @@ import { dealLabel } from "@/lib/deal-scope";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { formatDate, monthLabel } from "@/lib/format-date";
 import { surveyHappenedAt } from "@/lib/step-dates";
-import type { Branch, Step } from "@/lib/society-chronology";
+import { FIRST_INVOICE_SLOT, firstBillingDay, type Branch, type FirstInvoice, type Step } from "@/lib/society-chronology";
 
 /**
  * Reads one society's whole chronology into the tree the chronology module
@@ -129,9 +129,30 @@ export async function loadSocietyTimeline(societyId: string) {
       dueDate: true,
       status: true,
       releasedAt: true,
-      calculation: { select: { period: true, serviceLine: true } },
+      calculation: { select: { period: true, serviceLine: true, proratedDays: true, daysInMonth: true, feeLines: { select: { circuitId: true } } } },
+      lines: { select: { circuitId: true } },
     },
   });
+
+  // The first invoice of each deal: the one whose lines bill that deal's circuits
+  // for the earliest month. It fixes the day billing started (the user's rule).
+  const dealOfCircuit = new Map<string, string>();
+  for (const p of society.pipelines) for (const c of p.siteSurvey?.circuits ?? []) dealOfCircuit.set(c.id, p.id);
+  const firstInvoiceOf = new Map<string, FirstInvoice>();
+  for (const inv of invoices) {
+    const circuitIds = [...inv.calculation.feeLines.map((f) => f.circuitId), ...inv.lines.map((l) => l.circuitId)];
+    const deals = new Set(circuitIds.flatMap((id) => (id && dealOfCircuit.has(id) ? [dealOfCircuit.get(id)!] : [])));
+    for (const dealId of deals) {
+      const have = firstInvoiceOf.get(dealId);
+      if (!have || inv.calculation.period < have.period) {
+        firstInvoiceOf.set(dealId, {
+          number: inv.number,
+          period: inv.calculation.period,
+          ...firstBillingDay(inv.calculation.period, inv.calculation.proratedDays, inv.calculation.daysInMonth),
+        });
+      }
+    }
+  }
 
   const today = new Date();
   const rootCtx = { branchId: `society:${society.id}` };
@@ -174,7 +195,7 @@ export async function loadSocietyTimeline(societyId: string) {
     };
 
     for (const p of deals) {
-      lineBranch.children.push(buildDeal(p));
+      lineBranch.children.push(buildDeal(p, firstInvoiceOf.get(p.id) ?? null));
     }
 
     const lineInvoices = invoices.filter((i) => i.calculation.serviceLine === line);
@@ -277,7 +298,7 @@ type DemoRow = {
   scheduledEvents: { startAt: Date }[];
 };
 
-function buildDeal(p: DealRow): Branch {
+function buildDeal(p: DealRow, firstInvoice: FirstInvoice | null): Branch {
   const ctx = { branchId: `deal:${p.id}` };
   const surveyed = surveyHappenedAt({ visitAt: p.scheduledEvents[0]?.startAt ?? null, rowCreatedAt: p.siteSurvey?.createdAt ?? null });
   const closedLost = p.stage === "closed_lost";
@@ -379,9 +400,6 @@ function buildDeal(p: DealRow): Branch {
     if (k.activatedAt) {
       after.push(step(ctx, { slot: "contractActivated", label: "Contract activated", date: k.activatedAt, edit: { field: "contract.activatedAt", entityId: p.id } }));
     }
-    after.push(
-      step(ctx, { slot: "term", label: "Contract term", date: k.termStart, end: k.termEnd, futureOk: true, edit: { field: "contract.term", entityId: p.id } }),
-    );
   }
   const proj = p.installationProject;
   if (proj) {
@@ -409,6 +427,23 @@ function buildDeal(p: DealRow): Branch {
         }),
       );
     }
+  }
+  // The term starts when billing does, so it reads after the certificate.
+  if (k) {
+    after.push(
+      step(ctx, { slot: "term", label: "Contract term", date: k.termStart, end: k.termEnd, futureOk: true, edit: { field: "contract.term", entityId: p.id } }),
+    );
+  }
+  if (firstInvoice) {
+    after.push(
+      step(ctx, {
+        slot: FIRST_INVOICE_SLOT,
+        label: "Billing started (first invoice)",
+        date: firstInvoice.startsOn,
+        chip: { text: "Source of truth", tone: "info" },
+        note: `Invoice ${firstInvoice.number} for ${monthLabel(firstInvoice.period)} — ${firstInvoice.basis}. Every step before billing is checked back from this day.`,
+      }),
+    );
   }
   if (k?.terminatedOn) {
     after.push(step(ctx, { slot: "terminated", label: "Contract ended (last served day)", date: k.terminatedOn, note: k.terminationReason }));

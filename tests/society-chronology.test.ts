@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   checkSocietyChronology,
+  firstBillingDay,
   currentValue,
   gapLabel,
   locate,
@@ -141,16 +142,16 @@ describe("checkSocietyChronology on the Hyde Park timeline", () => {
 });
 
 describe("rules", () => {
-  it("reads a parent's step from a child: a meter before the survey is out of order", () => {
+  it("reads a parent's step from a child: a meter before the survey names the survey, the earlier step", () => {
     const t = withProposal(hydePark(), { field: "demo.meterInstalledAt", entityId: "demo1" }, "2025-03-01")!;
-    const i = checkSocietyChronology(t, today).find((x) => x.stepId === "demo:1:meter");
-    expect(i?.message).toMatch(/The meter goes in on or after the survey/);
+    const i = checkSocietyChronology(t, today).find((x) => x.stepId === "deal:1:survey" && x.kind === "order");
+    expect(i?.message).toMatch(/^Site survey done on 03-03-2025 is after meter installed on 01-03-2025\. The meter goes in on or after the survey/);
   });
 
   it("checks the agreement chain in order, skipping steps with no date", () => {
     const t = withProposal(hydePark(), { field: "agreement.signedAt", entityId: "p1" }, "2025-06-01")!;
     const msgs = checkSocietyChronology(t, today).filter((x) => x.stepId === "deal:1:agreement").map((x) => x.message);
-    expect(msgs.some((m) => m.startsWith("Signed on 01-06-2025 is before prepared on 07-06-2025"))).toBe(true);
+    expect(msgs.some((m) => m.startsWith("Prepared on 07-06-2025 is after signed on 01-06-2025"))).toBe(true);
   });
 
   it("flags a completed step dated in the future", () => {
@@ -253,5 +254,159 @@ describe("buildTimelineView", () => {
     const view = buildTimelineView(tree, [], new Map([["agreement.signedAt|p1", [req]]]));
     const agreement = view.children[0].children[0].after.find((r) => r.label === "Agreement signed");
     expect(agreement?.requests).toEqual([req]);
+  });
+});
+
+describe("order, walked back from the last step (2026-09-28, user's rule)", () => {
+  /** A bare deal: lead, meeting, decision, then whatever `after` holds. */
+  function deal(steps: Omit<Step, "id">[], after: Omit<Step, "id">[] = [], children: Branch[] = []): Branch {
+    return {
+      id: "society:x",
+      kind: "society",
+      title: "Society",
+      name: "X",
+      steps: [],
+      children: [
+        {
+          id: "deal:x",
+          kind: "deal",
+          title: "Deal",
+          name: "Lighting",
+          steps: steps.map((s) => step("deal:x", s)),
+          after: after.map((s) => step("deal:x", s)),
+          children,
+        },
+      ],
+    };
+  }
+  // Which steps are named out of order, by whichever rule named them first.
+  const ids = (t: Branch) => [...new Set(checkSocietyChronology(t, today).filter((i) => i.kind === "order").map((i) => i.stepId))];
+
+  it("an unbilled deal is checked back from its latest dated step, flagging the earlier step of a pair", () => {
+    // Stage's shape: the lead typed up in September for a meeting held in June.
+    const t = deal([
+      { slot: "lead", label: "Lead logged", date: d("2026-09-28") },
+      { slot: "meeting", label: "Demo meeting held", date: d("2025-06-07") },
+      { slot: "decided", label: "Proposal decided", date: d("2025-06-10") },
+    ]);
+    const issues = checkSocietyChronology(t, today).filter((i) => i.kind === "order");
+    expect([...new Set(issues.map((i) => i.stepId))]).toEqual(["deal:x:lead"]);
+  });
+
+  it("names the pair no rule covers in the ordering pass's own words", () => {
+    const t = deal([
+      { slot: "surveyAssigned", label: "Survey assigned", date: d("2025-05-01") },
+      { slot: "offerIssued", label: "Offer issued", date: d("2025-04-01") },
+    ]);
+    const [i] = checkSocietyChronology(t, today).filter((x) => x.key.startsWith("seq:"));
+    expect(i.message).toBe(
+      "Survey assigned on 01-05-2025 is after offer issued on 01-04-2025. Each step is dated on or before the step that follows it.",
+    );
+  });
+
+  it("trusts the later dates: an early date makes the steps before it the ones named", () => {
+    const t = deal([
+      { slot: "lead", label: "Lead logged", date: d("2025-03-01") },
+      { slot: "meeting", label: "Demo meeting held", date: d("2025-03-02") },
+      { slot: "decided", label: "Proposal decided", date: d("2024-01-01") },
+      { slot: "surveyAssigned", label: "Survey assigned", date: d("2025-03-10") },
+    ]);
+    // The decision is not wrong by this pass (it is before what follows);
+    // the lead and meeting are after the decision, so they are the ones named.
+    expect(ids(t)).toEqual(["deal:x:meeting", "deal:x:lead"]);
+  });
+
+  it("a billed deal is walked back from the first invoice's day, which is never itself flagged", () => {
+    const t = deal(
+      [
+        { slot: "lead", label: "Lead logged", date: d("2025-08-01") },
+        { slot: "meeting", label: "Demo meeting held", date: d("2025-03-03") },
+      ],
+      [
+        { slot: "offerIssued", label: "Offer issued", date: d("2025-06-07") },
+        { slot: "certificate", label: "Installation certificate signed", date: d("2025-07-05") },
+        { slot: "billingStart", label: "Billing starts", date: d("2025-07-06") },
+        { slot: "firstInvoice", label: "Billing started (first invoice)", date: d("2025-07-06") },
+      ],
+    );
+    const issues = checkSocietyChronology(t, today);
+    // The lead is after the meeting that follows it; nothing is flagged on the invoice.
+    expect(issues.filter((i) => i.severity === "error").map((i) => i.stepId)).toEqual(["deal:x:lead"]);
+  });
+
+  it("a step after the invoice day is flagged against the invoice", () => {
+    const t = deal(
+      [{ slot: "lead", label: "Lead logged", date: d("2025-03-03") }],
+      [
+        { slot: "offerIssued", label: "Offer issued", date: d("2025-08-01") },
+        { slot: "firstInvoice", label: "Billing started (first invoice)", date: d("2025-07-06") },
+      ],
+    );
+    const [i] = checkSocietyChronology(t, today).filter((x) => x.key.startsWith("seq:"));
+    expect(i.stepId).toBe("deal:x:offerIssued");
+    expect(i.message).toMatch(/after billing started \(first invoice\) on 06-07-2025\. The first invoice fixes the day billing started/);
+  });
+
+  it("the certificate's billing start must be the invoice's day, whichever side it is on", () => {
+    const late = deal([], [
+      { slot: "billingStart", label: "Billing starts", date: d("2026-09-27") },
+      { slot: "firstInvoice", label: "Billing started (first invoice)", date: d("2025-07-06") },
+    ]);
+    const early = deal([], [
+      { slot: "billingStart", label: "Billing starts", date: d("2025-07-01") },
+      { slot: "firstInvoice", label: "Billing started (first invoice)", date: d("2025-07-06") },
+    ]);
+    expect(checkSocietyChronology(late, today).filter((i) => i.severity === "error").map((i) => i.stepId)).toEqual(["deal:x:billingStart"]);
+    expect(checkSocietyChronology(early, today).find((i) => i.stepId === "deal:x:billingStart")?.message).toMatch(
+      /Billing starts on the day the first invoice bills from/,
+    );
+  });
+
+  it("a demo under a billed deal is walked back from the deal's invoice day", () => {
+    const demo: Branch = {
+      id: "demo:y",
+      kind: "demo",
+      title: "Demo 1",
+      name: "63 lights",
+      steps: [
+        step("demo:y", { slot: "meter", label: "Meter installed", date: d("2025-03-03") }),
+        step("demo:y", { slot: "replaced", label: "Lights replaced", date: d("2025-09-01") }),
+      ],
+      children: [],
+    };
+    const t = deal([], [{ slot: "firstInvoice", label: "Billing started (first invoice)", date: d("2025-07-06") }], [demo]);
+    expect(ids(t)).toEqual(["demo:y:replaced"]);
+  });
+
+  it("nothing after billing started may fall before it", () => {
+    const t = deal([], [
+      { slot: "firstInvoice", label: "Billing started (first invoice)", date: d("2025-07-06") },
+      { slot: "terminated", label: "Contract ended (last served day)", date: d("2025-05-01") },
+    ]);
+    const [i] = checkSocietyChronology(t, today).filter((x) => x.key.startsWith("seq:"));
+    expect(i.stepId).toBe("deal:x:terminated");
+    expect(i.message).toMatch(/is before billing started/);
+  });
+
+  it("a record-time stamp and an undated step take no part", () => {
+    const t = deal([
+      { slot: "lead", label: "Lead logged", date: d("2025-03-01") },
+      { slot: "decided", label: "Proposal decided", date: null },
+      { slot: "reportShared", label: "Demo report shared", date: d("2024-01-01"), recordOnly: "Stamped." },
+      { slot: "offerIssued", label: "Offer issued", date: d("2025-03-05") },
+    ]);
+    expect(ids(t)).toEqual([]);
+  });
+});
+
+describe("firstBillingDay", () => {
+  it("a full first month bills from the 1st", () => {
+    expect(firstBillingDay("2025-07", null, null).startsOn).toEqual(d("2025-07-01"));
+  });
+  it("a part first month bills from the day its billed days begin", () => {
+    // 26 of 31 days billed in July → billing ran from the 6th.
+    const r = firstBillingDay("2025-07", 26, 31);
+    expect(r.startsOn).toEqual(d("2025-07-06"));
+    expect(r.basis).toBe("26 of 31 days billed, so billing ran from 06-07-2025");
   });
 });

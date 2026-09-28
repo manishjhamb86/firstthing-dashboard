@@ -1,7 +1,7 @@
 import type { AdminPermission } from "@prisma/client";
 
 /**
- * The five grants, each with the one line that says what it actually buys.
+ * The grants, each with the one line that says what it actually buys.
  *
  * They used to be bare nouns — "Manage pipeline", "Manage survey" — which
  * reads as jargon next to a team called Sales / Marketing and produced the
@@ -46,5 +46,14 @@ export const PERMISSION_OPTIONS: {
     value: "release_billing",
     label: "Release billing",
     scope: "Release a calculated month to the society. Deliberately separate from running the month.",
+  },
+  // Added 2026-09-28 with the society timeline. After go-live a recorded date
+  // changes only by request, and someone else decides it — never the person
+  // who asked. Accepting applies the date through the same correction the
+  // operations screens use, so an approver is normally an operations lead.
+  {
+    value: "approve_date_changes",
+    label: "Approve date changes",
+    scope: "Accept or reject another admin's request to correct a recorded date on a society's timeline.",
   },
 ];

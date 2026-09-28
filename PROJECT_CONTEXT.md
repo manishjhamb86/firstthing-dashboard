@@ -8261,3 +8261,63 @@ own service lines (`underivedMonthsBilling`), rebuilds a fee-line-less month fro
 no derived lines out of its summary (`derived: false`) rather than showing ₹0. August's invoice line
 separately points at the Basement circuit voided on 2026-09-16 ("older circuit") and needs repointing
 to its replacement before it can derive. Not yet deployed or repaired on stage.
+
+## Society timeline: one checked chronology per society, and date changes by request after go-live (2026-09-28) — user-designed
+
+Built from `docs/research/reports/Society lifecycle timeline design.md` and the reviewed design
+artifact ("Society Timeline"). `/admin/societies/[id]/timeline` (linked from the society header)
+shows every recorded date as an indented tree — society → service line → deal → circuit → demo, and
+billing months per line — with the date on a left rail, a glyph **and** a word per state, the gap
+to the step before, and a summary bar whose counts jump to their rows.
+
+**One rule table, checked over the whole society.** `src/lib/society-chronology.ts` declares every
+ordering rule once (`CHRONOLOGY_RULES`: later ≥ earlier, day precision, looked up through the
+tree's ancestors so a parallel deal or demo is only ever checked against its parent) and
+`checkSocietyChronology` returns: out of order (the rules the correction actions already enforce —
+error), check (the gaps the research found — warning, promote once stage data is clean), in the
+future, not recorded (no date while a later step has one; otherwise "not reached"), borrowed (≈, a
+date read from another record). **Where the design and the research differ, the design wins**: the
+demo report's share date and the gate passes are record time (stamped when typed in), shown with
+that note and never checked, so "offer before shared report" and "gate pass vs meter" are not
+rules. `refuseProposal` judges a change by the errors it ADDS, never ones already there.
+
+**Edits go through the action that owns the date** (`timeline/apply-date.ts`): the lead's dates via
+`updateLeadDetails`, the proposal via `correctProposalDate`, the survey via `correctSurveyDate`, a
+demo's via its step actions, the offer via `correctOfferDates`, the agreement/contract via
+`correctAgreementDates`, the certificate via `correctCertificateDate` — so each keeps its own checks,
+authority and side effects (billing start, re-derived months, demo figures). Where that action keeps
+no reason, the timeline writes a `timeline_correction` ChangeLog row with it. Three stamped dates
+had no correction path and are written directly with a ChangeLog row: service-line enrolment,
+survey assignment, replacement assignment (the design's own out-of-order example). Not editable from
+the timeline yet (link to their pages instead): installation days, gate passes, report share,
+KYC, billing.
+
+**Before go-live (demo mode)** a row opens an inline editor; reason optional. **After go-live**
+nobody edits from the timeline: "Request a change" creates a `DateChangeRequest` (migration
+`20260928120000_date_change_requests`) holding the value the requester saw and the one asked for,
+with a required reason. The live value stays in force. One pending request per date (partial
+unique index + a refusal in words). A different admin holding the new **`approve_date_changes`**
+permission accepts or rejects it (`/admin/timeline/requests`, and on the society's timeline);
+accepting re-checks that the date is still what the requester saw — otherwise the request closes as
+`superseded` — re-checks the chronology, and applies through the same owning action as the
+approver, with a reason naming the request. Because those actions require operations after go-live,
+**an approver is in practice an operations lead**. No self-approval and no approval without the
+permission — both refused at the decision and logged (`timeline.accept_refused`). Pure rules:
+`src/lib/date-change-request.ts`.
+
+**Open decisions for the user** (from the research, not settled here):
+- The operations screens still allow a live direct correction with a reason (`refuseDateCorrector`).
+  Only the timeline is request-only. Whether that stays as a break-glass path is the user's call.
+- Whether the audit trail must meet India's accounting edit-log rule ("cannot be disabled", 8 years).
+  Demo mode's purge still deletes a removed demo's ChangeLog rows; it must not survive into live use
+  for anything billed.
+
+**Verified** on a scratch Postgres built from every migration (19 societies) plus a Hyde Park demo
+fixture carrying the design's dates: the out-of-order crew assignment is flagged with both dates and
+the rule, fixed in demo mode to 15-03-2025 (ChangeLog old → new with reason); an out-of-order
+replacement date refused in the rule's words, DB unchanged. Live: blank reason refused; three
+requests pending with the dates unchanged; accepted → contract activation moved through
+`correctAgreementDates` with a ChangeLog reason naming the request; rejected with a note; a request
+whose date moved underneath closed as superseded; permission revoked behind the open form and a
+self-approval both refused by the server with their log lines. Phone width: no horizontal scroll.
+38 new unit tests; 1,160 total, `tsc`/`lint`/`build` clean. Not deployed to stage.

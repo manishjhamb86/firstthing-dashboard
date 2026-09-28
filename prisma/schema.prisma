@@ -50,6 +50,11 @@ enum AdminPermission {
   // authority — so this is a real separation, not ceremony.
   release_billing
 
+  // Maker–checker for recorded dates after go-live (2026-09-28): accepts or
+  // rejects another admin's date change request. Never one's own — refused
+  // at the decision, not just hidden.
+  approve_date_changes
+
   @@map("admin_permission")
 }
 
@@ -362,6 +367,7 @@ model Society {
   tickets                 Ticket[]
   inspections             Inspection[]
   fmEngagements           SocietyFmEngagement[]
+  dateChangeRequests      DateChangeRequest[]
 
   @@map("societies")
 }
@@ -565,6 +571,9 @@ model AdminUser {
   // Monthly inspection checklist (2026-09-12)
   inspectionsFiled  Inspection[] @relation("InspectionFiledBy")
   inspectionsVoided Inspection[] @relation("InspectionVoidedBy")
+
+  dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
+  dateChangesDecided   DateChangeRequest[] @relation("DateChangeDecidedBy")
 
   @@map("admin_users")
 }
@@ -1177,6 +1186,58 @@ model ChangeLog {
   @@index([circuitId, at])
   @@index([meterId, at])
   @@map("change_log")
+}
+
+/// A request to correct a recorded date after go-live (2026-09-28). The live
+/// value stays in force until a DIFFERENT admin accepts it; accepting re-checks
+/// that the date is still what the requester saw (else `superseded`) and then
+/// applies it through the same correction action a direct edit uses, which
+/// writes the ChangeLog row naming this request. At most one pending request
+/// per date — a partial unique index in the migration (`WHERE status =
+/// 'pending'`) this schema cannot express. Rows are never deleted.
+model DateChangeRequest {
+  id         String  @id @default(cuid())
+  societyId  String  @map("society_id")
+  pipelineId String? @map("pipeline_id")
+  demoId     String? @map("demo_id")
+
+  /// A key of TIMELINE_FIELDS (src/lib/timeline-fields.ts) and the row it is on.
+  field    String
+  entityId String @map("entity_id")
+  /// Where it sits, as read when raised: "Lighting — Basement › Demo 1".
+  context  String
+  /// `YYYY-MM-DD` or `YYYY-MM-DD/YYYY-MM-DD`: what the requester saw, and asked for.
+  fromValue String? @map("from_value")
+  toValue   String  @map("to_value")
+  reason    String
+  /// Rule warnings the requester was shown and went ahead with.
+  warnings  String[] @default([])
+
+  status        DateChangeStatus @default(pending)
+  requestedById String           @map("requested_by_id")
+  requestedAt   DateTime         @default(now()) @map("requested_at")
+  decidedById   String?          @map("decided_by_id")
+  decidedAt     DateTime?        @map("decided_at")
+  decisionNote  String?          @map("decision_note")
+  appliedAt     DateTime?        @map("applied_at")
+
+  society     Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  requestedBy AdminUser  @relation("DateChangeRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   AdminUser? @relation("DateChangeDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([societyId, status])
+  @@index([status, requestedAt])
+  @@map("date_change_requests")
+}
+
+enum DateChangeStatus {
+  pending
+  approved
+  rejected
+  withdrawn
+  superseded
+
+  @@map("date_change_status")
 }
 
 model BenchmarkRescaleEvent {

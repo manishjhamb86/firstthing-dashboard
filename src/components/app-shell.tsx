@@ -21,6 +21,7 @@ import {
   Settings,
   Package,
   ListChecks,
+  History,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -92,6 +93,9 @@ export function AppShell({
     ]),
     ...group("societies", "Societies", Building2, [
       { href: "/admin/societies", label: "Societies", icon: Building2 },
+      // Every society's checked chronology, and the date change requests
+      // (2026-09-28). Any admin may read it, like each society's own timeline.
+      { href: "/admin/timeline", label: "Timeline", icon: History },
       // The monthly per-society motion-sensor checklist (2026-09-12) — field
       // work, same gate as gate passes and benchmark rescale entry.
       showField && { href: "/admin/inspections", label: "Inspections", icon: ClipboardCheck },

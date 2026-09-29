@@ -683,3 +683,30 @@ both arriving with who counted each; completion refused naming the area; the off
 phone leaving it out of the total; keeping 30 with a reason voided 34 with the decision recorded;
 re-counting a counted area asked first and cancelling saved nothing; completion then accepted and
 downstream reads seeing only live rows. 8a's suite 27/27 and every earlier field suite still pass.
+
+### 16c. Built: circuit selection per light type (2026-09-29)
+
+- The office's candidate rules moved, unchanged, into `src/lib/circuit-candidate-core.ts`
+  (`recordCandidateAs`); the office action is a shell around it, and so is the phone's path.
+- `/field/survey/[pipelineId]/circuits` (SCR-012): one card per light type, generated from the live
+  inventory, stating the lights it will represent. A candidate records the panel and its place,
+  the fittings on the circuit from the device catalog (wattage prefilled), the three remaining
+  CON-16 checks one by one, the **typicality answer** (required: "same fixtures, hours, switching?")
+  and **a photo of the panel** (required). Under 50 lights it saves and says it will wait on an
+  operations exception; a failed check saves it as ineligible, kept on record, and asks for
+  another candidate. A type can be marked **no eligible circuit** with what was found
+  (`SurveyTypeOutcome`). The section completes only when every type has an outcome.
+- The **represented count is not typed on the phone**: it is the type's surveyed total less the
+  lights on this circuit (the demo's own lights), from the live inventory. A circuit that holds
+  every light of its type is refused — it has to be a sample.
+- **Survey photos**: a new document type (`Documents/{Society}/{YYYY-MM}/Surveys/…`), keys
+  deterministic per survey, subject and number (`surveyPhotoKey`), accepted only when issued for
+  that subject. The worker's multi-photo upload is now general: an item names what its photos are
+  for (`upload`), and the installation day uses the same path. Worker v9.
+
+**Verified** `field-survey-c.mjs` 20/20: offline, a staircase candidate with its fitting, checks,
+typicality (a one-word answer refused) and a panel photo (none refused), and the basement marked
+as having no eligible circuit; back online, the circuit eligible representing 300 − 60 = 240 with
+its fitting line, the photo keyed to the circuit and in the bucket, the basement's reason stored;
+the server refusing a candidate with no photo, a forged photo key, and a circuit that is the whole
+type; the section completing. Installation, inspection and the two earlier survey suites still pass.

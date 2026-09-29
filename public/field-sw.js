@@ -30,7 +30,7 @@
  * Bump VERSION when this file's caching behaviour changes.
  */
 
-const VERSION = "v8";
+const VERSION = "v9";
 const STATIC_CACHE = `ft-field-static-${VERSION}`;
 const PAGE_CACHE = `ft-field-pages-${VERSION}`;
 const OFFLINE_URL = "/field-offline.html";
@@ -272,22 +272,21 @@ async function send(db, item) {
       });
       return { outcome: r.outcome, error: r.json?.error ?? null, result: r.json?.result ?? null };
     }
-    if (item.kind === "installation.day") {
-      // A day's photos go up first, one at a time; each key is saved on the
-      // item as it lands, so a dropped connection resumes from the next
-      // photo. The keys are deterministic, so re-sending one overwrites it.
-      const ids = item.photoIds || [];
+    // Items carrying several photos (an installation day, a survey circuit, a
+    // pump-room unit…): the photos go up first, one at a time; each key is saved
+    // on the item as it lands, so a dropped connection resumes from the next
+    // photo. The keys are deterministic, so re-sending one overwrites it. The
+    // item says what its photos are for in `upload`; an installation day
+    // predates that and is described by its planned day.
+    const upload = item.upload || (item.kind === "installation.day" ? { purpose: "installation", plannedDayId: item.payload.plannedDayId } : null);
+    if (upload && Array.isArray(item.photoIds)) {
+      const ids = item.photoIds;
       const keys = Array.isArray(item.uploadedKeys) ? [...item.uploadedKeys] : [];
       for (let i = 0; i < ids.length; i++) {
         if (keys[i]) continue;
         const photo = await getPhoto(db, ids[i]);
         if (!photo) return { outcome: "refused", error: "A photo is no longer on this phone." };
-        const url = await postJson("/api/field/upload-url", {
-          purpose: "installation",
-          plannedDayId: item.payload.plannedDayId,
-          index: i,
-          contentType: photo.contentType,
-        });
+        const url = await postJson("/api/field/upload-url", { ...upload, index: i, contentType: photo.contentType });
         if (url.outcome !== "done") return { outcome: url.outcome, error: url.json?.error ?? null };
         const put = await fetch(url.json.uploadUrl, { method: "PUT", body: photo.blob, headers: { "Content-Type": photo.contentType }, signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
         if (!put.ok) return { outcome: "retry", error: "A photo upload did not finish." };

@@ -42,6 +42,8 @@ export type OutboxItem = {
   photoIds?: string[];
   /** Keys of the photos already uploaded, written by the service worker. */
   uploadedKeys?: (string | null)[];
+  /** What the photos are for, sent with each upload-URL request (purpose and subject). */
+  upload?: Record<string, string>;
 };
 
 export type StoredPhoto = { id: string; blob: Blob; contentType: string; fileName: string };

@@ -32,7 +32,10 @@ export type DocType =
   // An invoice filed as a document instead of becoming a month of record
   // (2026-09-25) — e.g. a society with no contract or circuit on record, whose
   // bills are kept and shown but have nothing to derive a savings month from.
-  | "invoiceCopy";
+  | "invoiceCopy"
+  // Photos taken on the site survey (2026-09-29): the entrance, an area, a
+  // circuit's panel, a pump-room unit, a logbook page.
+  | "surveyPhoto";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
@@ -48,6 +51,7 @@ const DOC_TYPE_FOLDER: Record<DocType, string> = {
   inspectionEvidence: "Inspections",
   nonServiceInvoice: "Invoices",
   invoiceCopy: "Invoices",
+  surveyPhoto: "Surveys",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -64,6 +68,7 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
   inspectionEvidence: "SignedChecklist",
   nonServiceInvoice: "OtherInvoice",
   invoiceCopy: "Invoice",
+  surveyPhoto: "SurveyPhoto",
 };
 
 function slugifySociety(name: string): string {

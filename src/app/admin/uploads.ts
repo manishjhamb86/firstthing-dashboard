@@ -42,6 +42,9 @@ const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline" | "manage_survey"> 
   // here only so DocType stays exhaustive.
   nonServiceInvoice: "manage_pipeline",
   invoiceCopy: "manage_pipeline",
+  // Presigned by the field app's own upload route, keyed per survey subject —
+  // listed here only so DocType stays exhaustive.
+  surveyPhoto: "manage_survey",
 };
 
 export async function getUploadUrl(input: {

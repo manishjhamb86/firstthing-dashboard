@@ -10,6 +10,7 @@ import {
   parseDemoMeterPayload,
   parseDemoReplacementPayload,
   parseAreaPayload,
+  parseCircuitPayload,
   parseEnvelope,
   parseSurveyMemberPayload,
   parseSurveyProfilePayload,
@@ -25,6 +26,8 @@ import { applyUnitMove } from "@/lib/inventory-move";
 import { fileInspection } from "@/lib/inspection-file";
 import {
   addInventoryRowAs,
+  markTypeUnresolvableAs,
+  recordFieldCandidateAs,
   removeInventoryRowAs,
   settleContestAs,
   updateInventoryRowAs,
@@ -354,6 +357,20 @@ async function applySettle(actor: Actor, payload: unknown): Promise<Applied> {
   return "error" in r ? { error: r.error } : { result: { voided: r.voided } };
 }
 
+async function applyCircuit(actor: Actor, payload: unknown): Promise<Applied> {
+  const input = parseCircuitPayload(payload);
+  if ("error" in input) return input;
+  const r = await recordFieldCandidateAs(actor, input);
+  return "error" in r ? { error: r.error } : { result: { circuitId: r.circuitId, state: r.state } };
+}
+
+async function applyUnresolvable(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  if (typeof o.surveyId !== "string" || typeof o.lightType !== "string") return { error: "Which light type?" };
+  const r = await markTypeUnresolvableAs(actor, { surveyId: o.surveyId, lightType: o.lightType, reason: typeof o.reason === "string" ? o.reason : "" });
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
 const OUTSIDE: Partial<Record<OutboxKind, (actor: Actor, payload: unknown) => Promise<Applied>>> = {
   "demo.meter": applyDemoMeter,
   "demo.replacement": applyDemoReplacement,
@@ -368,4 +385,6 @@ const OUTSIDE: Partial<Record<OutboxKind, (actor: Actor, payload: unknown) => Pr
   "survey.area_update": applyAreaUpdate,
   "survey.area_remove": applyAreaRemove,
   "survey.settle": applySettle,
+  "survey.circuit": applyCircuit,
+  "survey.unresolvable": applyUnresolvable,
 };

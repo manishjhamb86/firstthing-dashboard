@@ -37,6 +37,8 @@ export const OUTBOX_KINDS = [
   "survey.area_update",
   "survey.area_remove",
   "survey.settle",
+  "survey.circuit",
+  "survey.unresolvable",
 ] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 
@@ -408,6 +410,51 @@ export function parseAreaPayload(p: unknown): FieldAreaPayload | { error: string
     count: Number(o.count),
     method: method as FieldAreaPayload["method"],
     note: str(o.note),
+  };
+}
+
+export type FieldCircuitPayload = {
+  surveyId: string;
+  circuitId: string;
+  lightType: string;
+  location: string;
+  lines: { deviceTypeId: string; count: number; wattage: number; hoursPerDay: number; excludedFromCalculation: boolean }[];
+  workingHours: number | null;
+  wifiReachable: boolean;
+  fixturesUnder15ft: boolean;
+  notOnDrivewayOrRamp: boolean;
+  typicalityNote: string;
+  photoKeys: string[];
+};
+
+export function parseCircuitPayload(p: unknown): FieldCircuitPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.surveyId)) return { error: "The survey this belongs to is missing." };
+  if (!UUID_RE.test(str(o.circuitId))) return { error: "The circuit has no valid id." };
+  if (!str(o.lightType).trim()) return { error: "Which light type does this circuit represent?" };
+  const lines = (Array.isArray(o.lines) ? o.lines : []).map((raw) => {
+    const l = (raw ?? {}) as Record<string, unknown>;
+    return {
+      deviceTypeId: str(l.deviceTypeId),
+      count: Number(l.count),
+      wattage: Number(l.wattage),
+      hoursPerDay: Number(l.hoursPerDay),
+      excludedFromCalculation: l.excludedFromCalculation === true,
+    };
+  });
+  const wh = num(o.workingHours);
+  return {
+    surveyId: str(o.surveyId),
+    circuitId: str(o.circuitId),
+    lightType: str(o.lightType),
+    location: str(o.location),
+    lines,
+    workingHours: wh,
+    wifiReachable: o.wifiReachable === true,
+    fixturesUnder15ft: o.fixturesUnder15ft === true,
+    notOnDrivewayOrRamp: o.notOnDrivewayOrRamp === true,
+    typicalityNote: str(o.typicalityNote),
+    photoKeys: Array.isArray(o.photoKeys) ? o.photoKeys.filter((k): k is string => typeof k === "string") : [],
   };
 }
 

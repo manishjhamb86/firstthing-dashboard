@@ -2,9 +2,14 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { normaliseMobile, refuseMember } from "@/lib/society-members";
+import { buildDocumentKey } from "@/lib/document-keys";
+import { lightTypeKey } from "@/lib/light-type";
+import { fullFromTotal } from "@/lib/light-population";
+import { recordCandidateAs, type CandidateLine } from "@/lib/circuit-candidate-core";
 import {
   areaDisplay,
   areaKeyOf,
+  circuitGaps,
   contestedAreas,
   FIELD_AREA_TYPES,
   inventoryGaps,
@@ -248,8 +253,21 @@ async function inventoryGapsFor(surveyId: string): Promise<string[]> {
   return inventoryGaps(rows, await contestedAreaNames(surveyId));
 }
 async function circuitGapsFor(surveyId: string): Promise<string[]> {
-  void surveyId;
-  return ["Circuits are selected on the office screen for now."];
+  const [rows, circuits, outcomes] = await Promise.all([
+    liveInventory(surveyId),
+    db.circuit.findMany({ where: { siteSurveyId: surveyId, voidedAt: null }, select: { lightType: true, state: true } }),
+    db.surveyTypeOutcome.findMany({ where: { siteSurveyId: surveyId }, select: { lightTypeKey: true } }),
+  ]);
+  const types = new Map<string, string>();
+  for (const r of rows) types.set(lightTypeKey(r.lightType), r.lightType);
+  // A type is resolved by a circuit recorded for it — eligible, or waiting on
+  // an exception — or by being marked unresolvable. An ineligible candidate is
+  // evidence, not an outcome: another circuit is needed.
+  const resolved = new Set<string>([
+    ...circuits.filter((c) => c.state !== "ineligible").map((c) => lightTypeKey(c.lightType)),
+    ...outcomes.map((o) => o.lightTypeKey),
+  ]);
+  return circuitGaps({ inventoryTypes: [...types].map(([key, label]) => ({ key, label })), resolvedTypeKeys: resolved });
 }
 async function pumpRoomGapsFor(surveyId: string): Promise<string[]> {
   void surveyId;
@@ -500,4 +518,149 @@ export async function settleContestAs(actor: SurveyActor, input: { surveyId: str
   });
   logger.info("survey.contest_settled", { actorId: actor.id, surveyId: input.surveyId, areaKey: input.areaKey, kept: keep, voided: losers.length });
   return { ok: true, voided: losers.length };
+}
+
+// ── survey photos ────────────────────────────────────────────────────────
+
+/** The most photos one survey subject (the site, a circuit, a pump unit…) may carry. */
+export const MAX_SUBJECT_PHOTOS = 12;
+export type PhotoSubject = "site" | "area" | "circuit" | "pump_unit" | "logbook";
+
+/**
+ * A survey photo's S3 key — deterministic per survey, subject and number, so a
+ * photo re-sent after a dropped connection overwrites itself, and checkable,
+ * so the sync route accepts only keys it would itself have issued. The period
+ * is the survey's own month (it documents the survey visit).
+ */
+export function surveyPhotoKey(input: { societyName: string; surveyCreatedAt: Date; surveyId: string; subject: PhotoSubject; subjectKey: string; index: number }): string {
+  return buildDocumentKey({
+    society: input.societyName,
+    month: input.surveyCreatedAt.toISOString().slice(0, 7),
+    docType: "surveyPhoto",
+    dateLabel: input.subject,
+    identifier: `${input.subjectKey || input.surveyId}-${input.index + 1}`,
+    extension: "jpg",
+  });
+}
+
+/** Record photos already uploaded for a subject, refusing any key this app did not issue. */
+export async function attachSurveyPhotos(input: {
+  surveyId: string;
+  subject: PhotoSubject;
+  subjectKey: string;
+  keys: string[];
+  month?: string | null;
+  actorId: string;
+}): Promise<Done> {
+  if (input.keys.length === 0) return { ok: true };
+  if (input.keys.length > MAX_SUBJECT_PHOTOS) return { error: `At most ${MAX_SUBJECT_PHOTOS} photos here.` };
+  const survey = await db.siteSurvey.findUnique({ where: { id: input.surveyId }, select: { createdAt: true, pipeline: { select: { society: { select: { name: true } } } } } });
+  if (!survey) return { error: "That survey no longer exists." };
+  const issued = new Set(
+    Array.from({ length: MAX_SUBJECT_PHOTOS }, (_, index) =>
+      surveyPhotoKey({ societyName: survey.pipeline.society.name, surveyCreatedAt: survey.createdAt, surveyId: input.surveyId, subject: input.subject, subjectKey: input.subjectKey, index }),
+    ),
+  );
+  if (input.keys.some((k) => !issued.has(k))) return { error: "A photo was not uploaded for this part of the survey." };
+  await db.surveyPhoto.createMany({
+    data: input.keys.map((key) => ({ siteSurveyId: input.surveyId, subject: input.subject, subjectKey: input.subjectKey, month: input.month ?? null, key, takenById: input.actorId })),
+    skipDuplicates: true,
+  });
+  return { ok: true };
+}
+
+// ── SCR-012 — circuit selection per light type ───────────────────────────
+
+export type FieldCandidateInput = {
+  surveyId: string;
+  circuitId: string;
+  lightType: string;
+  location: string;
+  lines: CandidateLine[];
+  workingHours: number | null;
+  wifiReachable: boolean;
+  fixturesUnder15ft: boolean;
+  notOnDrivewayOrRamp: boolean;
+  typicalityNote: string;
+  photoKeys: string[];
+};
+
+/**
+ * A candidate circuit recorded on the phone, through the office's own
+ * candidate rules (circuit-candidate-core.ts). The phone adds what the spec
+ * asks of the field: a typicality answer and a photo of the panel. The
+ * represented count is not typed — it is the type's surveyed total less the
+ * lights on this circuit (the demo's own lights), from the live inventory.
+ */
+export async function recordFieldCandidateAs(actor: SurveyActor, input: FieldCandidateInput): Promise<Done<{ circuitId: string; state: string }>> {
+  const g = await surveyForWrite(actor, input.surveyId, "circuits");
+  if (g.error !== undefined) return { error: g.error };
+  const existing = await db.circuit.findUnique({ where: { id: input.circuitId }, select: { siteSurveyId: true, state: true } });
+  if (existing) {
+    if (existing.siteSurveyId !== input.surveyId) return { error: "That circuit belongs to another survey." };
+    const photos = await attachSurveyPhotos({ surveyId: input.surveyId, subject: "circuit", subjectKey: input.circuitId, keys: input.photoKeys, actorId: actor.id });
+    if ("error" in photos) return photos;
+    return { ok: true, circuitId: input.circuitId, state: existing.state };
+  }
+  if (input.typicalityNote.trim().length < 20) {
+    return { error: "Ops can't check this from a desk — describe why this circuit represents the rest (at least a sentence)." };
+  }
+  if (input.photoKeys.length === 0) return { error: "Photograph the panel — the installer finds the circuit by it." };
+  if (!input.location.trim()) return { error: "Name the panel and where it is, so the installer finds it." };
+
+  const typeKey = lightTypeKey(input.lightType);
+  const surveyed = (await liveInventory(input.surveyId)).filter((r) => lightTypeKey(r.lightType) === typeKey).reduce((n, r) => n + r.count, 0);
+  const metered = input.lines.reduce((n, l) => n + (Number.isFinite(l.count) ? l.count : 0), 0);
+  const represented = fullFromTotal(surveyed, metered);
+  if (surveyed === 0) return { error: `No ${input.lightType} lights are in the inventory — count them first; the circuit represents them.` };
+  if (represented <= 0) return { error: `The inventory counts ${surveyed} ${input.lightType} lights and this circuit alone has ${metered} — recount the inventory; the circuit is a sample of the rest.` };
+
+  const pipeline = await db.pipeline.findUnique({ where: { id: g.survey.pipelineId }, select: { societyId: true, serviceLine: true } });
+  if (!pipeline) return { error: "That deal no longer exists." };
+  const r = await recordCandidateAs(actor, {
+    siteSurveyId: input.surveyId,
+    societyId: pipeline.societyId,
+    serviceLine: pipeline.serviceLine,
+    lightType: input.lightType,
+    location: input.location,
+    representedLightCount: represented,
+    lines: input.lines,
+    workingHours: input.workingHours ?? undefined,
+    wifiReachable: input.wifiReachable,
+    fixturesUnder15ft: input.fixturesUnder15ft,
+    notOnDrivewayOrRamp: input.notOnDrivewayOrRamp,
+    circuitId: input.circuitId,
+    typicalityNote: input.typicalityNote,
+  });
+  if ("error" in r) return { error: r.error };
+  const photos = await attachSurveyPhotos({ surveyId: input.surveyId, subject: "circuit", subjectKey: input.circuitId, keys: input.photoKeys, actorId: actor.id });
+  if ("error" in photos) return photos;
+  await db.$transaction(async (tx) => {
+    await joinSurveyVisit(tx, input.surveyId, pipeline.societyId, actor.id);
+    await touchSection(tx, input.surveyId, "circuits", actor.id);
+  });
+  return { ok: true, circuitId: r.circuitId, state: r.state };
+}
+
+/**
+ * No eligible circuit for a light type, with what was found (SCR-012). The
+ * office decides — leave the type out, or approve an exception — and neither
+ * may be silent. Setting it again replaces the reason.
+ */
+export async function markTypeUnresolvableAs(actor: SurveyActor, input: { surveyId: string; lightType: string; reason: string }): Promise<Done> {
+  const g = await surveyForWrite(actor, input.surveyId, "circuits");
+  if (g.error !== undefined) return { error: g.error };
+  if (input.reason.trim().length < 10) return { error: "Say what you found — the office decides from this." };
+  const key = lightTypeKey(input.lightType);
+  await db.surveyTypeOutcome.upsert({
+    where: { siteSurveyId_lightTypeKey: { siteSurveyId: input.surveyId, lightTypeKey: key } },
+    create: { siteSurveyId: input.surveyId, lightType: input.lightType.trim(), lightTypeKey: key, reason: input.reason.trim(), recordedById: actor.id },
+    update: { reason: input.reason.trim(), recordedById: actor.id },
+  });
+  await db.$transaction(async (tx) => {
+    await joinSurveyVisit(tx, input.surveyId, g.survey.pipeline.societyId, actor.id);
+    await touchSection(tx, input.surveyId, "circuits", actor.id);
+  });
+  logger.info("survey.type_unresolvable", { actorId: actor.id, surveyId: input.surveyId, lightType: input.lightType });
+  return { ok: true };
 }

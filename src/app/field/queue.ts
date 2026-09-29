@@ -7,7 +7,7 @@ export function newItem(
   kind: OutboxItem["kind"],
   payload: unknown,
   label: string,
-  extra: Partial<Pick<OutboxItem, "photoIds">> = {},
+  extra: Partial<Pick<OutboxItem, "photoIds" | "upload">> = {},
 ): OutboxItem {
   return { id: crypto.randomUUID(), kind, payload, label, createdAt: Date.now(), refusals: 0, failures: 0, lastError: null, state: "pending", ...extra };
 }

@@ -7,6 +7,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { presignInspectionEvidence } from "@/lib/inspection-file";
 import { batchPhotoKey, MAX_DAY_PHOTOS } from "@/lib/installation-core";
+import { MAX_SUBJECT_PHOTOS, surveyPhotoKey, type PhotoSubject } from "@/lib/survey-core";
 
 /**
  * An upload URL for a photo the phone has been holding (05-field.md §0.3).
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
     | { inspectionItemId?: unknown; fileName?: unknown; contentType?: unknown; purpose?: unknown; plannedDayId?: unknown; index?: unknown }
     | null;
   if (body?.purpose === "installation") return installationPhoto(actor.id, body);
+  if (body?.purpose === "survey") return surveyPhoto(actor.id, body as Record<string, unknown>);
 
   const itemId = typeof body?.inspectionItemId === "string" ? body.inspectionItemId : "";
   const contentType = typeof body?.contentType === "string" ? body.contentType : "";
@@ -81,5 +83,29 @@ async function installationPhoto(actorId: string, body: { plannedDayId?: unknown
   const key = batchPhotoKey({ societyName: day.project.society.name, plannedDate: day.plannedDate, plannedDayId, index });
   const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType }), { expiresIn: 300 });
   logger.info("field.photo_presigned", { actorId, plannedDayId, key });
+  return NextResponse.json({ uploadUrl, key });
+}
+
+const PHOTO_SUBJECTS: PhotoSubject[] = ["site", "area", "circuit", "pump_unit", "logbook"];
+
+/** A photo taken on the survey, keyed to its survey, subject and number (survey-core.ts surveyPhotoKey). */
+async function surveyPhoto(actorId: string, body: Record<string, unknown>) {
+  const contentType = typeof body.contentType === "string" ? body.contentType : "";
+  if (!contentType.startsWith("image/")) return NextResponse.json({ error: "Only a photo can be uploaded here." }, { status: 422 });
+  const index = Number(body.index);
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_SUBJECT_PHOTOS) {
+    return NextResponse.json({ error: `At most ${MAX_SUBJECT_PHOTOS} photos here.` }, { status: 422 });
+  }
+  const subject = String(body.subject ?? "") as PhotoSubject;
+  if (!PHOTO_SUBJECTS.includes(subject)) return NextResponse.json({ error: "Unknown photo subject." }, { status: 422 });
+  const surveyId = typeof body.surveyId === "string" ? body.surveyId : "";
+  const subjectKey = typeof body.subjectKey === "string" ? body.subjectKey.slice(0, 80) : "";
+  const survey = surveyId
+    ? await db.siteSurvey.findUnique({ where: { id: surveyId }, select: { createdAt: true, pipeline: { select: { society: { select: { name: true } } } } } })
+    : null;
+  if (!survey) return NextResponse.json({ error: "That survey no longer exists." }, { status: 422 });
+  const key = surveyPhotoKey({ societyName: survey.pipeline.society.name, surveyCreatedAt: survey.createdAt, surveyId, subject, subjectKey, index });
+  const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType }), { expiresIn: 300 });
+  logger.info("field.photo_presigned", { actorId, surveyId, subject, key });
   return NextResponse.json({ uploadUrl, key });
 }

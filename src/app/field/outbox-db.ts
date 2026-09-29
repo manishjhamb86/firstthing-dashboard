@@ -11,7 +11,7 @@
  *   outbox  keyPath "seq" (auto) — one row per piece of work to send, in order
  *     { seq, id (uuid made here), kind, payload, label, createdAt,
  *       refusals, failures, lastError, state: "pending" | "blocked",
- *       photoId? }
+ *       photoId?, photoIds?, uploadedKeys? }
  *   photos  keyPath "id" — processed photos waiting for upload
  *     { id, blob, contentType, fileName }
  *   drafts  keyPath "key" — a form in progress, so a closed tab loses nothing
@@ -26,7 +26,15 @@ export type OutboxState = "pending" | "blocked";
 export type OutboxItem = {
   seq?: number;
   id: string;
-  kind: "inspection.file" | "inspection.photo" | "stock.move" | "demo.meter" | "demo.replacement";
+  kind:
+    | "inspection.file"
+    | "inspection.photo"
+    | "stock.move"
+    | "demo.meter"
+    | "demo.replacement"
+    | "installation.day"
+    | "installation.blocker"
+    | "installation.certificate";
   payload: unknown;
   /** What the person reads in the waiting list. */
   label: string;
@@ -36,6 +44,10 @@ export type OutboxItem = {
   lastError: string | null;
   state: OutboxState;
   photoId?: string;
+  /** Several photos (an installation day), uploaded in order before the item. */
+  photoIds?: string[];
+  /** Keys of the photos already uploaded, written by the service worker. */
+  uploadedKeys?: (string | null)[];
 };
 
 export type StoredPhoto = { id: string; blob: Blob; contentType: string; fileName: string };
@@ -110,6 +122,7 @@ export async function discardItem(seq: number): Promise<void> {
     );
     for (const r of doomed) {
       if (r.photoId) tx.objectStore("photos").delete(r.photoId);
+      for (const id of r.photoIds ?? []) tx.objectStore("photos").delete(id);
       outbox.delete(r.seq!);
     }
   }

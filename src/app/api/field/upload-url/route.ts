@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { s3, S3_BUCKET } from "@/lib/s3";
 import { presignInspectionEvidence } from "@/lib/inspection-file";
+import { batchPhotoKey, MAX_DAY_PHOTOS } from "@/lib/installation-core";
 
 /**
  * An upload URL for a photo the phone has been holding (05-field.md §0.3).
@@ -17,7 +21,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "This account may no longer file field work." }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => null)) as { inspectionItemId?: unknown; fileName?: unknown; contentType?: unknown } | null;
+  const body = (await req.json().catch(() => null)) as
+    | { inspectionItemId?: unknown; fileName?: unknown; contentType?: unknown; purpose?: unknown; plannedDayId?: unknown; index?: unknown }
+    | null;
+  if (body?.purpose === "installation") return installationPhoto(actor.id, body);
+
   const itemId = typeof body?.inspectionItemId === "string" ? body.inspectionItemId : "";
   const contentType = typeof body?.contentType === "string" ? body.contentType : "";
   const fileName = typeof body?.fileName === "string" ? body.fileName : "photo.jpg";
@@ -45,5 +53,33 @@ export async function POST(req: Request) {
     contentType,
   });
   logger.info("field.photo_presigned", { actorId: actor.id, inspectionId, key });
+  return NextResponse.json({ uploadUrl, key });
+}
+
+/**
+ * A photo of an installation day's work (FEAT-034-AC-3). The day already
+ * exists on the server — it is planned in the back office — so the photo is
+ * tied to the planned day directly, and its key is the deterministic one the
+ * sync route will accept for that day (installation-core.ts batchPhotoKey).
+ */
+async function installationPhoto(actorId: string, body: { plannedDayId?: unknown; index?: unknown; contentType?: unknown }) {
+  const contentType = typeof body.contentType === "string" ? body.contentType : "";
+  if (!contentType.startsWith("image/")) return NextResponse.json({ error: "Only a photo can be uploaded here." }, { status: 422 });
+  const index = Number(body.index);
+  if (!Number.isInteger(index) || index < 0 || index >= MAX_DAY_PHOTOS) {
+    return NextResponse.json({ error: `A day carries at most ${MAX_DAY_PHOTOS} photos.` }, { status: 422 });
+  }
+  const plannedDayId = typeof body.plannedDayId === "string" ? body.plannedDayId : "";
+  const day = plannedDayId
+    ? await db.installationPlannedDay.findUnique({
+        where: { id: plannedDayId },
+        select: { plannedDate: true, project: { select: { society: { select: { name: true } } } } },
+      })
+    : null;
+  if (!day) return NextResponse.json({ error: "That installation day is no longer planned." }, { status: 422 });
+
+  const key = batchPhotoKey({ societyName: day.project.society.name, plannedDate: day.plannedDate, plannedDayId, index });
+  const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType }), { expiresIn: 300 });
+  logger.info("field.photo_presigned", { actorId, plannedDayId, key });
   return NextResponse.json({ uploadUrl, key });
 }

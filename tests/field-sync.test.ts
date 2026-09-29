@@ -4,6 +4,9 @@ import {
   classifyReply,
   parseEnvelope,
   parseInspectionPayload,
+  parseInstallationDayPayload,
+  parseBlockerPayload,
+  parseCertificatePayload,
   parseDemoMeterPayload,
   parseDemoReplacementPayload,
   parseMovePayload,
@@ -112,5 +115,36 @@ describe("demo step payloads", () => {
     if ("error" in r) throw new Error(r.error);
     expect(r.lines[0]).toEqual({ lineId: "l1", replacementTypeId: "t1", count: 55, wattage: 18, exclude: false });
     expect(parseDemoReplacementPayload({ demoId: "d1", replacedOn: "soon" })).toHaveProperty("error");
+  });
+});
+
+describe("installation payloads (19-field-app.md §15)", () => {
+  it("reads a day, treating blank counts as zero", () => {
+    const r = parseInstallationDayPayload({
+      pipelineId: "p",
+      plannedDayId: "d",
+      installedCount: "40",
+      removedFittingsCount: "",
+      skippedCount: 2,
+      skippedReason: "ceiling damp",
+      workedOn: "2026-09-26",
+      photoKeys: ["k1", 7, "k2"],
+    });
+    expect(r).toMatchObject({ installedCount: 40, removedFittingsCount: 0, skippedCount: 2, photoKeys: ["k1", "k2"] });
+  });
+  it("refuses a day with no work date or a fractional count", () => {
+    expect(parseInstallationDayPayload({ pipelineId: "p", plannedDayId: "d", installedCount: 1 })).toHaveProperty("error");
+    expect(parseInstallationDayPayload({ pipelineId: "p", plannedDayId: "d", installedCount: 1.5, workedOn: "2026-09-26" })).toHaveProperty("error");
+  });
+  it("reads a blocker and refuses an unknown type", () => {
+    expect(parseBlockerPayload({ pipelineId: "p", type: "count_discrepancy", detail: "x", discoveredLightCount: "90" })).toMatchObject({
+      discoveredLightCount: 90,
+      affectedDate: null,
+    });
+    expect(parseBlockerPayload({ pipelineId: "p", type: "weather", detail: "x" })).toHaveProperty("error");
+  });
+  it("reads a certificate and refuses an unreadable date", () => {
+    expect(parseCertificatePayload({ pipelineId: "p", signedAt: "2026-09-28", signatoryName: "A", signatoryRole: "Secretary" })).toMatchObject({ signedAt: "2026-09-28" });
+    expect(parseCertificatePayload({ pipelineId: "p", signedAt: "28/09/2026" })).toHaveProperty("error");
   });
 });

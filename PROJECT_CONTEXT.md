@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-29 (Android field app: shell, offline outbox, offline inspection, offline stock scanning and a demo's on-site steps built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–14)
+2026-09-29 (Android field app: shell, offline outbox, offline inspection, offline stock scanning, a demo's on-site steps and installation days built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–15)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -7003,6 +7003,23 @@ package.
   emptied. A generation counter now stops it.
 - Verified 21/21 offline→online on a disposable demo (rows, receipts, replay, a server refusal),
   plus shell 32/32, inspection 27/27, scan 17/17; 1,191 unit tests.
+
+**Same day — step 7: installation days, blockers and the certificate with no signal** (plan §15).
+- `/field/installation/[pipelineId]` records a day (counts, skipped with reason, up to 12 photos,
+  the work date), raises a blocker, and — for the operations lead only — saves the completion
+  certificate; all queued. The office's four acts moved into `src/lib/installation-core.ts`, shared
+  by its Server Actions and the sync route. Added on both: a certificate cannot be dated in the
+  future.
+- Photos go up before the day, one at a time with progress saved; keys are deterministic per
+  planned day and number, and the route accepts only keys it issued for that day.
+- A retry after a lost reply is recognised as the account's own earlier success rather than
+  refused as "already submitted/signed"; the blocker commits with its receipt.
+- My work (and the back office's Field work) now shows an installation to the crew assigned its
+  days, not only to the surveyor.
+- Verified 26/26 offline→online (rows, bucket objects, replays, a forged key, a 403, the
+  certificate refused until ready then applied on its own retry), the office path 4/4, and every
+  earlier field suite; 1,195 unit tests. Test photos remain under
+  `Documents/Print_Back_Co/2026-09/Installation/` (PutObject-only credentials).
 
 ## Current Phase (archived application — history)
 

@@ -40,7 +40,11 @@ export async function loadFieldWork(actorId: string, mineOnly: boolean): Promise
     db.pipeline.findMany({
       where: {
         stage: { notIn: ["closed_lost"] },
-        ...(mineOnly ? { surveyOwnerId: actorId } : {}),
+        // Mine = the survey I hold, or an installation with a day assigned to
+        // me — the crew doing the days is often not the surveyor.
+        ...(mineOnly
+          ? { OR: [{ surveyOwnerId: actorId }, { installationProject: { plannedDays: { some: { assignedToId: actorId } } } }] }
+          : {}),
       },
       include: {
         society: { select: { id: true, name: true, location: true } },
@@ -96,6 +100,7 @@ export async function loadFieldWork(actorId: string, mineOnly: boolean): Promise
         href: p.installationProject
           ? `/admin/pipeline/${p.id}/installation`
           : `/admin/pipeline/${p.id}/survey`,
+        fieldHref: p.installationProject ? `/field/installation/${p.id}` : undefined,
         societyName: p.society.name,
         societyLocation: p.society.location,
         serviceLine: dealLabel(p.serviceLine, p.dealScope),

@@ -30,7 +30,7 @@
  * Bump VERSION when this file's caching behaviour changes.
  */
 
-const VERSION = "v6";
+const VERSION = "v7";
 const STATIC_CACHE = `ft-field-static-${VERSION}`;
 const PAGE_CACHE = `ft-field-pages-${VERSION}`;
 const OFFLINE_URL = "/field-offline.html";
@@ -199,6 +199,7 @@ async function removeItem(db, item) {
   const tx = db.transaction(["outbox", "photos"], "readwrite");
   tx.objectStore("outbox").delete(item.seq);
   if (item.photoId) tx.objectStore("photos").delete(item.photoId);
+  for (const id of item.photoIds || []) tx.objectStore("photos").delete(id);
   await new Promise((r, j) => { tx.oncomplete = r; tx.onerror = () => j(tx.error); });
 }
 
@@ -263,6 +264,32 @@ async function send(db, item) {
         kind: "inspection.photo",
         payload: { inspectionItemId: item.payload.inspectionItemId, key: url.json.key },
       });
+      return { outcome: r.outcome, error: r.json?.error ?? null, result: r.json?.result ?? null };
+    }
+    if (item.kind === "installation.day") {
+      // A day's photos go up first, one at a time; each key is saved on the
+      // item as it lands, so a dropped connection resumes from the next
+      // photo. The keys are deterministic, so re-sending one overwrites it.
+      const ids = item.photoIds || [];
+      const keys = Array.isArray(item.uploadedKeys) ? [...item.uploadedKeys] : [];
+      for (let i = 0; i < ids.length; i++) {
+        if (keys[i]) continue;
+        const photo = await getPhoto(db, ids[i]);
+        if (!photo) return { outcome: "refused", error: "A photo is no longer on this phone." };
+        const url = await postJson("/api/field/upload-url", {
+          purpose: "installation",
+          plannedDayId: item.payload.plannedDayId,
+          index: i,
+          contentType: photo.contentType,
+        });
+        if (url.outcome !== "done") return { outcome: url.outcome, error: url.json?.error ?? null };
+        const put = await fetch(url.json.uploadUrl, { method: "PUT", body: photo.blob, headers: { "Content-Type": photo.contentType } });
+        if (!put.ok) return { outcome: "retry", error: "A photo upload did not finish." };
+        keys[i] = url.json.key;
+        item.uploadedKeys = keys;
+        await putItem(db, item);
+      }
+      const r = await postJson("/api/field/sync", { id: item.id, kind: item.kind, payload: { ...item.payload, photoKeys: keys.slice(0, ids.length) } });
       return { outcome: r.outcome, error: r.json?.error ?? null, result: r.json?.result ?? null };
     }
     const r = await postJson("/api/field/sync", { id: item.id, kind: item.kind, payload: item.payload });

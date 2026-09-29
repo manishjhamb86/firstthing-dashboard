@@ -1,6 +1,6 @@
 # Field app (SUR-02 on Android) — decision and build plan
 
-**Status:** Steps 1, 3, 4, 5 and 6 built; step 2's read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
+**Status:** Steps 1, 3–7 built; step 2's read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
 **Decided:** 2026-09-29 · **Owner:** Yugesh
 
 This file is where the Android field app resumes. It records what was decided on 2026-09-29, why,
@@ -21,11 +21,13 @@ rules and screens) and ADR-002.
   - step 3, the outbox;
   - step 4, the monthly inspection filed with no signal;
   - step 5, stock scanning and one move for a scanned pile, with no signal;
-  - step 6, a demo's meter install with its load test and its light replacement, with no signal.
+  - step 6, a demo's meter install with its load test and its light replacement, with no signal;
+  - step 7, an installation day with its photos, blockers, and the completion certificate, with no
+    signal.
 
-  §11–§14 say what exists and how it was verified.
+  §11–§15 say what exists and how it was verified.
 - **§9 Q1 was not answered.** Inspection went first, as this plan recommended.
-- **Next**: step 7, installation day capture and the completion certificate. Step 0's
+- **Next**: step 8, the survey — the hardest, with multi-person area claims. Step 0's
   reconciliation of `05-field.md` is still owed, and §14 records one scope call it should confirm
   (demo periods and readings stay in the back office).
 
@@ -510,3 +512,65 @@ generation is never kept. Worker version v6.
 - Fixtures removed and confirmed by count, the meter's assignment cleared back to none.
 - Regression: shell 32/32 (twice), inspection 27/27, scan 17/17.
 - 1,191 unit tests; `tsc`/`lint`/`build` clean. No schema change.
+
+---
+
+## 15. Step 7 — installation days, blockers and the certificate with no signal (2026-09-29)
+
+**What the phone does.** `/field/installation/[pipelineId]` is the crew's screen for one
+installation:
+- every planned day with its review-gate state as the office last knew it, and the gate's reason
+  when a day is blocked;
+- **Record a day** — installed, old fittings removed, skipped (with the reason the office requires),
+  where exactly, the date of the work, and up to 12 photos taken with the camera and previewed on
+  the phone. A past day with no photos asks why, as the desk does;
+- **Raise a blocker** — its kind, a description, the area and day affected, and for a count
+  discrepancy the count found on site;
+- **Completion certificate** — offered only to the operations lead, as at the desk. It lists what
+  the office last knew is not ready, and can be saved anyway; the office checks again when it
+  arrives.
+
+All three are queued: `installation.day`, `installation.blocker`, `installation.certificate`.
+
+**One set of rules.** Starting a day, submitting it, raising a blocker and signing the certificate
+moved into `src/lib/installation-core.ts`, called by both the back office's Server Actions and the
+sync route. The phone's day is one act (`recordDayAs`): open the day's batch through the review
+gate, judged when the work reaches the office, then submit it. One rule was added on both paths: a
+certificate cannot be dated in the future.
+
+**Photos travel before the day.** The service worker uploads a day's photos one at a time, saving
+each key on the item as it lands, so a dropped connection resumes at the next photo. The keys are
+deterministic per planned day and photo number (`batchPhotoKey`): a photo sent twice overwrites
+itself rather than leaving a second object this app cannot delete, and the sync route accepts only
+keys it would itself have issued for that day.
+
+**Idempotency.** The blocker is one insert, so it commits with its receipt. The day and the
+certificate run their own transactions and a second attempt would be refused ("already
+submitted", "already signed"), so after a lost reply the route recognises its own earlier success
+— the same account's same counts and photos, or the same signatory and date — and answers it as
+applied.
+
+**Also changed:**
+- **My work shows an installation to the crew assigned its days**, not only to whoever ran the
+  survey. The back office's Field work page shares that loader and changes the same way.
+- The discard prompt named every non-inspection item "this photo"; it now names each kind.
+
+**Verified:**
+- `field-install.mjs` 26/26 at Pixel 7 size on a disposable deal and project with two planned days
+  assigned to the inspector:
+  - the page was kept on the phone for a crew member who holds a day but not the survey;
+  - with no signal: skipped lights refused without a reason, two photos previewed, day 1 saved and
+    gone from the open days, a count-discrepancy blocker saved, the certificate not offered to a
+    field account, nothing at the office;
+  - back online: day 1 awaiting the society exactly as typed with two photos keyed to the planned
+    day and present in the bucket as JPEGs, the blocker with its count, two receipts;
+  - a replay, and a retry under a fresh id after a "lost reply", both answered without a second
+    batch; a photo key the office never issued refused; a field account's certificate refused 403;
+  - operations: the certificate was refused while days were unapproved and the blocker open, its
+    reason shown on the phone, nothing signed; once the office made it ready, the same saved item
+    applied on its own retry — signed 28-09, billing from 29-09 (2 days), the deal in billing.
+- `office-install.mjs`: the back office starts and submits a day through the shared core.
+- Regression: shell 32/32, inspection 27/27, scan 17/17, demo 21/21. Fixtures removed by count.
+- 1,195 unit tests; `tsc`/`lint`/`build` clean. No schema change.
+- The test photos remain in the bucket under `Documents/Print_Back_Co/2026-09/Installation/` —
+  the app's credentials cannot delete an object, the standing limitation.

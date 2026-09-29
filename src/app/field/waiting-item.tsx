@@ -26,12 +26,17 @@ export function WaitingItem({ item }: { item: OutboxItem }) {
   }
 
   async function discard() {
-    const isInspection = item.kind === "inspection.file";
-    const ok = confirm(
-      isInspection
-        ? "Discard this inspection? It has not reached the office, and it (with its photo) will be deleted from this phone."
-        : "Discard this photo? It will be deleted from this phone.",
-    );
+    const what: Record<OutboxItem["kind"], string> = {
+      "inspection.file": "Discard this inspection? It has not reached the office, and it (with its photo) will be deleted from this phone.",
+      "inspection.photo": "Discard this photo? It will be deleted from this phone.",
+      "stock.move": "Discard this move? It has not reached the office, and nothing will be moved.",
+      "demo.meter": "Discard this meter install? It has not reached the office.",
+      "demo.replacement": "Discard this light replacement? It has not reached the office.",
+      "installation.day": "Discard this day's record? It has not reached the office, and its photos will be deleted from this phone.",
+      "installation.blocker": "Discard this blocker? It has not reached the office.",
+      "installation.certificate": "Discard this certificate? It has not reached the office.",
+    };
+    const ok = confirm(what[item.kind]);
     if (!ok) return;
     setBusy(true);
     await discardItem(item.seq!);

@@ -19,7 +19,16 @@
  *   retry     — network or server trouble. Try again later, no strike.
  */
 
-export const OUTBOX_KINDS = ["inspection.file", "inspection.photo", "stock.move", "demo.meter", "demo.replacement"] as const;
+export const OUTBOX_KINDS = [
+  "inspection.file",
+  "inspection.photo",
+  "stock.move",
+  "demo.meter",
+  "demo.replacement",
+  "installation.day",
+  "installation.blocker",
+  "installation.certificate",
+] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 
 /** Refusals before an item blocks the queue (05-field.md §0.1 "Poison item"). */
@@ -190,6 +199,90 @@ export function parseDemoReplacementPayload(p: unknown): FieldDemoReplacementPay
     });
   }
   return { demoId: str(o.demoId), replacedOn: str(o.replacedOn), lines };
+}
+
+/**
+ * One installation day, as the crew records it (installation-core.ts
+ * recordDayAs). The photos travel as keys the service worker filled in after
+ * uploading them; the route checks each is a key it issued for this day.
+ */
+export type FieldInstallationDayPayload = {
+  pipelineId: string;
+  plannedDayId: string;
+  installedCount: number;
+  removedFittingsCount: number;
+  skippedCount: number;
+  skippedReason: string;
+  locationDetail: string;
+  workedOn: string; // YYYY-MM-DD
+  photosWaivedReason: string;
+  photoKeys: string[];
+};
+
+const count = (v: unknown) => (v === "" || v === null || v === undefined ? 0 : Number(v));
+
+export function parseInstallationDayPayload(p: unknown): FieldInstallationDayPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.pipelineId) || !str(o.plannedDayId)) return { error: "The installation day this belongs to is missing." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.workedOn))) return { error: "Pick the day the work was done." };
+  const installedCount = count(o.installedCount);
+  const removedFittingsCount = count(o.removedFittingsCount);
+  const skippedCount = count(o.skippedCount);
+  for (const [n, label] of [[installedCount, "installed"], [removedFittingsCount, "removed"], [skippedCount, "skipped"]] as const) {
+    if (!Number.isInteger(n) || n < 0) return { error: `The ${label} count must be a whole number.` };
+  }
+  const photoKeys = Array.isArray(o.photoKeys) ? o.photoKeys.filter((k): k is string => typeof k === "string") : [];
+  return {
+    pipelineId: str(o.pipelineId),
+    plannedDayId: str(o.plannedDayId),
+    installedCount,
+    removedFittingsCount,
+    skippedCount,
+    skippedReason: str(o.skippedReason),
+    locationDetail: str(o.locationDetail),
+    workedOn: str(o.workedOn),
+    photosWaivedReason: str(o.photosWaivedReason),
+    photoKeys,
+  };
+}
+
+export const BLOCKER_TYPES = ["stock_shortage", "access_denied", "site_condition", "count_discrepancy", "equipment_fault"] as const;
+export type FieldBlockerType = (typeof BLOCKER_TYPES)[number];
+
+export type FieldBlockerPayload = {
+  pipelineId: string;
+  type: FieldBlockerType;
+  areaKey: string;
+  detail: string;
+  affectedDate: string | null;
+  discoveredLightCount: number | null;
+};
+
+export function parseBlockerPayload(p: unknown): FieldBlockerPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.pipelineId)) return { error: "The installation this belongs to is missing." };
+  if (!(BLOCKER_TYPES as readonly string[]).includes(str(o.type))) return { error: "Pick what kind of blocker it is." };
+  const affected = str(o.affectedDate);
+  if (affected && !/^\d{4}-\d{2}-\d{2}$/.test(affected)) return { error: "Unreadable affected date." };
+  const found = o.discoveredLightCount === null || o.discoveredLightCount === "" || o.discoveredLightCount === undefined ? null : Number(o.discoveredLightCount);
+  if (found !== null && (!Number.isInteger(found) || found < 0)) return { error: "The count found on site must be a whole number." };
+  return {
+    pipelineId: str(o.pipelineId),
+    type: str(o.type) as FieldBlockerType,
+    areaKey: str(o.areaKey),
+    detail: str(o.detail),
+    affectedDate: affected || null,
+    discoveredLightCount: found,
+  };
+}
+
+export type FieldCertificatePayload = { pipelineId: string; signedAt: string; signatoryName: string; signatoryRole: string };
+
+export function parseCertificatePayload(p: unknown): FieldCertificatePayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.pipelineId)) return { error: "The installation this belongs to is missing." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.signedAt))) return { error: "Pick the day the certificate was signed." };
+  return { pipelineId: str(o.pipelineId), signedAt: str(o.signedAt), signatoryName: str(o.signatoryName), signatoryRole: str(o.signatoryRole) };
 }
 
 export type SendOutcome = "done" | "refused" | "sign_in" | "retry";

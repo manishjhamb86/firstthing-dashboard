@@ -4,6 +4,9 @@ import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import {
+  parseBlockerPayload,
+  parseCertificatePayload,
+  parseInstallationDayPayload,
   parseDemoMeterPayload,
   parseDemoReplacementPayload,
   parseEnvelope,
@@ -15,6 +18,7 @@ import {
 import { recordDemoMeterAs, recordDemoReplacementAs } from "@/lib/demo-step-core";
 import { applyUnitMove } from "@/lib/inventory-move";
 import { fileInspection } from "@/lib/inspection-file";
+import { batchPhotoKey, MAX_DAY_PHOTOS, raiseBlockerAs, recordDayAs, signCertificateAs } from "@/lib/installation-core";
 
 /**
  * The field app's sync endpoint (docs/engineering/19-field-app.md §4.1;
@@ -55,7 +59,16 @@ async function apply(
     return { done: r.done, failed: r.failed };
   }
 
-  if (env.kind === "demo.meter" || env.kind === "demo.replacement") {
+  // installation.blocker — one insert, so it commits with its receipt.
+  if (env.kind === "installation.blocker") {
+    const input = parseBlockerPayload(env.payload);
+    if ("error" in input) return input;
+    const r = await raiseBlockerAs(actor, input.pipelineId, { ...input, batchId: null, photoKeys: [] }, tx);
+    if ("error" in r) return r;
+    return { blockerId: r.blockerId };
+  }
+
+  if (env.kind !== "inspection.photo") {
     return { error: "Handled before the transaction." }; // unreachable: see POST
   }
 
@@ -147,6 +160,33 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, result });
   }
 
+  // The installation day and the completion certificate (installation-core.ts)
+  // run their own transactions too, so they are applied first and receipted
+  // after, like the demo steps. Neither simply SETS a value: a day submitted
+  // twice is refused as "already submitted", a certificate as "already
+  // signed". So when a reply was lost after the act committed, the route
+  // recognises its own earlier success — the same account's same record —
+  // and answers it as applied instead of refusing the phone's retry.
+  if (env.kind === "installation.day" || env.kind === "installation.certificate") {
+    const applied = env.kind === "installation.day" ? await applyDay(actor, env.payload) : await applyCertificate(actor, env.payload);
+    if ("error" in applied) {
+      logger.warn("field.sync_refused", { actorId: actor.id, itemId: env.id, kind: env.kind, reason: applied.error });
+      return NextResponse.json({ error: applied.error }, { status: applied.status ?? 422 });
+    }
+    const result = applied.result;
+    try {
+      await db.fieldSyncReceipt.create({ data: { id: env.id, actorId: actor.id, kind: env.kind, result } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const again = await replay();
+        if (again) return again;
+      }
+      throw err;
+    }
+    logger.info("field.sync_applied", { actorId: actor.id, itemId: env.id, kind: env.kind, result });
+    return NextResponse.json({ ok: true, result });
+  }
+
   try {
     const out = await db.$transaction(async (tx) => {
       const result = await apply(tx, actor, env);
@@ -171,4 +211,78 @@ export async function POST(req: Request) {
     logger.error("field.sync_failed", { actorId: actor.id, itemId: env.id, kind: env.kind, message: String(err) });
     return NextResponse.json({ error: "Something went wrong on our side. It will be sent again." }, { status: 500 });
   }
+}
+
+type Applied = { result: Prisma.JsonObject } | { error: string; status?: number };
+
+async function applyDay(actor: Actor, payload: unknown): Promise<Applied> {
+  const input = parseInstallationDayPayload(payload);
+  if ("error" in input) return input;
+  const day = await db.installationPlannedDay.findUnique({
+    where: { id: input.plannedDayId },
+    select: {
+      plannedDate: true,
+      project: { select: { pipelineId: true, society: { select: { name: true } } } },
+      batches: { select: { id: true, state: true, submittedById: true, installedCount: true, skippedCount: true, removedFittingsCount: true, photoKeys: true } },
+    },
+  });
+  if (!day || day.project.pipelineId !== input.pipelineId) return { error: "That planned day is not part of this installation." };
+
+  // Only photos this route's own upload URL could have produced for this day.
+  if (input.photoKeys.length > MAX_DAY_PHOTOS) return { error: `A day carries at most ${MAX_DAY_PHOTOS} photos.` };
+  const issued = new Set(
+    Array.from({ length: MAX_DAY_PHOTOS }, (_, index) =>
+      batchPhotoKey({ societyName: day.project.society.name, plannedDate: day.plannedDate, plannedDayId: input.plannedDayId, index }),
+    ),
+  );
+  if (input.photoKeys.some((k) => !issued.has(k))) return { error: "A photo was not uploaded for this day." };
+
+  const already = day.batches.find((b) => b.state !== "draft");
+  if (
+    already &&
+    already.submittedById === actor.id &&
+    already.installedCount === input.installedCount &&
+    already.skippedCount === input.skippedCount &&
+    already.removedFittingsCount === input.removedFittingsCount &&
+    JSON.stringify(already.photoKeys ?? []) === JSON.stringify(input.photoKeys)
+  ) {
+    return { result: { batchId: already.id, alreadyRecorded: true } };
+  }
+
+  const r = await recordDayAs(actor, input.pipelineId, input.plannedDayId, {
+    installedCount: input.installedCount,
+    removedFittingsCount: input.removedFittingsCount,
+    skippedCount: input.skippedCount,
+    skippedReason: input.skippedReason,
+    locationDetail: input.locationDetail,
+    photoKeys: input.photoKeys,
+    photosWaivedReason: input.photosWaivedReason || undefined,
+    workedOn: input.workedOn,
+  });
+  if ("error" in r) return { error: r.error };
+  return { result: { batchId: r.batchId } };
+}
+
+async function applyCertificate(actor: Actor, payload: unknown): Promise<Applied> {
+  // The certificate is the operations lead's act (FEAT-037-AC-4), as at the desk.
+  if (!actor.permissions.includes("manage_pipeline")) {
+    return { error: "Signing the completion certificate is an operations lead action.", status: 403 };
+  }
+  const input = parseCertificatePayload(payload);
+  if ("error" in input) return input;
+  const existing = await db.completionCertificate.findFirst({
+    where: { project: { pipelineId: input.pipelineId } },
+    select: { id: true, recordedById: true, signatoryName: true, signedAt: true },
+  });
+  if (
+    existing &&
+    existing.recordedById === actor.id &&
+    existing.signatoryName === input.signatoryName.trim() &&
+    existing.signedAt.toISOString().slice(0, 10) === input.signedAt
+  ) {
+    return { result: { certificateId: existing.id, alreadyRecorded: true } };
+  }
+  const r = await signCertificateAs(actor, input.pipelineId, { ...input, signatureKey: null });
+  if ("error" in r) return { error: r.error };
+  return { result: { pipelineId: input.pipelineId } };
 }

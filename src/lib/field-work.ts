@@ -51,7 +51,7 @@ export async function loadFieldWork(actorId: string, mineOnly: boolean): Promise
       include: {
         society: { select: { id: true, name: true, location: true } },
         surveyOwner: { select: { id: true, name: true, email: true } },
-        siteSurvey: { select: { id: true, areas: { select: { id: true } } } },
+        siteSurvey: { select: { id: true, areas: { where: { voidedAt: null }, select: { id: true } } } },
         installationProject: { select: { id: true, state: true } },
         // The visit lives on the schedule, not on the deal — one module for
         // every appointment (the user's call, 2026-08-25).

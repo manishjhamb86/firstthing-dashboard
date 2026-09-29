@@ -3,6 +3,11 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { normaliseMobile, refuseMember } from "@/lib/society-members";
 import {
+  areaDisplay,
+  areaKeyOf,
+  contestedAreas,
+  FIELD_AREA_TYPES,
+  inventoryGaps,
   coordinatesPlausible,
   profileGaps,
   refuseSurveyWrite,
@@ -54,29 +59,31 @@ export async function surveyForWrite(actor: SurveyActor, surveyId: string, secti
  * not an owner). Anyone who writes to the survey from the field joins it.
  */
 export async function joinSurveyVisit(tx: Tx, surveyId: string, societyId: string, actorId: string): Promise<string> {
-  let visit = await tx.fieldVisit.findFirst({ where: { sourceType: "SiteSurvey", sourceId: surveyId }, select: { id: true } });
-  if (!visit) {
-    visit = await tx.fieldVisit.create({
-      data: { type: "survey", sourceType: "SiteSurvey", sourceId: surveyId, societyId, state: "in_progress" },
-      select: { id: true },
-    });
-  }
-  await tx.fieldVisitParticipant.upsert({
-    where: { fieldVisitId_userId: { fieldVisitId: visit.id, userId: actorId } },
-    create: { fieldVisitId: visit.id, userId: actorId, acceptedAt: new Date() },
-    update: {},
+  // One visit per survey, by construction: its id is derived from the survey,
+  // and both inserts skip a row that is already there. Two phones syncing at
+  // the same moment can then never make two visits, or fail on each other.
+  const id = `sv-${surveyId}`;
+  await tx.fieldVisit.createMany({
+    data: [{ id, type: "survey", sourceType: "SiteSurvey", sourceId: surveyId, societyId, state: "in_progress" }],
+    skipDuplicates: true,
   });
-  return visit.id;
+  await tx.fieldVisitParticipant.createMany({
+    data: [{ fieldVisitId: id, userId: actorId, acceptedAt: new Date() }],
+    skipDuplicates: true,
+  });
+  return id;
 }
 
-/** Move a section from not started to in progress; leave any other state alone. */
+/** Move a section from not started to in progress; leave any other state alone. Race-free. */
 export async function touchSection(tx: Tx, surveyId: string, section: SurveySection, actorId: string) {
-  const row = await tx.surveySection.findUnique({ where: { siteSurveyId_section: { siteSurveyId: surveyId, section } } });
-  if (!row) {
-    await tx.surveySection.create({ data: { siteSurveyId: surveyId, section, state: "in_progress", updatedById: actorId } });
-  } else if (row.state === "not_started") {
-    await tx.surveySection.update({ where: { id: row.id }, data: { state: "in_progress", updatedById: actorId } });
-  }
+  await tx.surveySection.createMany({
+    data: [{ siteSurveyId: surveyId, section, state: "in_progress", updatedById: actorId }],
+    skipDuplicates: true,
+  });
+  await tx.surveySection.updateMany({
+    where: { siteSurveyId: surveyId, section, state: "not_started" },
+    data: { state: "in_progress", updatedById: actorId },
+  });
 }
 
 // ── SCR-010 — profile & access ───────────────────────────────────────────
@@ -237,8 +244,8 @@ export async function sectionGaps(surveyId: string, section: SurveySection): Pro
 
 // Filled in with their sections (8b–8d).
 async function inventoryGapsFor(surveyId: string): Promise<string[]> {
-  void surveyId;
-  return ["The lighting inventory is recorded on the office screen for now."];
+  const rows = await liveInventory(surveyId);
+  return inventoryGaps(rows, await contestedAreaNames(surveyId));
 }
 async function circuitGapsFor(surveyId: string): Promise<string[]> {
   void surveyId;
@@ -280,10 +287,10 @@ export async function setSectionAs(
 
 // ── team and submission ──────────────────────────────────────────────────
 
-/** Areas counted by two people, by name (filled in with the inventory, 8b). */
+/** Areas counted by two people, by name — never summed, never merged (§0.1b). */
 export async function contestedAreaNames(surveyId: string): Promise<string[]> {
-  void surveyId;
-  return [];
+  const rows = await liveInventory(surveyId);
+  return [...contestedAreas(rows).values()].map((list) => list[0].area);
 }
 
 /** Teammates (not the actor) whose phones last reported unsent work for this survey. */
@@ -362,4 +369,135 @@ export async function querySectionAs(actor: SurveyActor, input: { surveyId: stri
   });
   logger.info("survey.section_queried", { actorId: actor.id, surveyId: input.surveyId, section: input.section });
   return { ok: true };
+}
+
+// ── SCR-011 — the lighting inventory, and area claims (§0.1b) ────────────
+
+const AREA_TYPE_LABEL = new Map(FIELD_AREA_TYPES);
+
+/** The live inventory rows with their area keys (a settled contest's losing rows are voided). */
+export async function liveInventory(surveyId: string) {
+  const rows = await db.lightingInventoryArea.findMany({
+    where: { siteSurveyId: surveyId, voidedAt: null },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, area: true, areaType: true, label: true, lightType: true, count: true, method: true, note: true, countedById: true },
+  });
+  return rows.map((r) => ({ ...r, areaKey: areaKeyOf(r.areaType, r.label, r.area) }));
+}
+
+export type InventoryRowInput = {
+  surveyId: string;
+  rowId: string;
+  areaType: string;
+  label: string;
+  lightType: string;
+  count: number;
+  method: "walked" | "records" | "estimated";
+  note: string;
+};
+
+function refuseRow(input: Omit<InventoryRowInput, "surveyId" | "rowId">): string | null {
+  if (!AREA_TYPE_LABEL.has(input.areaType)) return "Which area is this?";
+  if (input.label.length > 40) return "Keep the area's name under 40 characters.";
+  if (!input.lightType.trim()) return "Which type of lighting is this? It decides which circuit represents it.";
+  if (!Number.isInteger(input.count) || input.count < 0) return "A count can't be negative.";
+  if (input.count === 0) return "Zero lights? Remove the area instead — we only record areas that exist.";
+  if (input.count > 20000) return "That count is not believable for one area.";
+  if (!["walked", "records", "estimated"].includes(input.method)) return "How was this counted?";
+  if (input.method === "estimated" && !input.note.trim()) return "Say how the estimate was made — ops will see this.";
+  return null;
+}
+
+/**
+ * An area counted on the phone. The row records who counted it — that is the
+ * claim. Counting an area someone else has counted is allowed (the phone warns
+ * first); the area is then contested until one count is chosen. The id is
+ * made on the phone, so a replay finds the row instead of adding it twice.
+ */
+export async function addInventoryRowAs(actor: SurveyActor, input: InventoryRowInput): Promise<Done<{ rowId: string; contested: boolean }>> {
+  const g = await surveyForWrite(actor, input.surveyId, "inventory");
+  if (g.error !== undefined) return { error: g.error };
+  const existing = await db.lightingInventoryArea.findUnique({ where: { id: input.rowId }, select: { siteSurveyId: true } });
+  if (existing) {
+    if (existing.siteSurveyId !== input.surveyId) return { error: "That row belongs to another survey." };
+    return { ok: true, rowId: input.rowId, contested: false };
+  }
+  const refusal = refuseRow(input);
+  if (refusal) return { error: refusal };
+  const area = areaDisplay(AREA_TYPE_LABEL.get(input.areaType)!, input.label, "");
+  await db.$transaction(async (tx) => {
+    await tx.lightingInventoryArea.create({
+      data: {
+        id: input.rowId,
+        siteSurveyId: input.surveyId,
+        area,
+        areaType: input.areaType,
+        label: input.label.trim() || null,
+        lightType: input.lightType.trim(),
+        count: input.count,
+        method: input.method,
+        note: input.note.trim() || null,
+        countedById: actor.id,
+      },
+    });
+    await joinSurveyVisit(tx, input.surveyId, g.survey.pipeline.societyId, actor.id);
+    await touchSection(tx, input.surveyId, "inventory", actor.id);
+  });
+  const key = areaKeyOf(input.areaType, input.label, area);
+  const contested = contestedAreas(await liveInventory(input.surveyId)).has(key);
+  logger.info("survey.area_counted", { actorId: actor.id, surveyId: input.surveyId, rowId: input.rowId, area, count: input.count, method: input.method, contested });
+  return { ok: true, rowId: input.rowId, contested };
+}
+
+/** Correct a row's count, type, method or note (sets values; a replay changes nothing). */
+export async function updateInventoryRowAs(
+  actor: SurveyActor,
+  input: { surveyId: string; rowId: string; lightType: string; count: number; method: "walked" | "records" | "estimated"; note: string },
+): Promise<Done> {
+  const g = await surveyForWrite(actor, input.surveyId, "inventory");
+  if (g.error !== undefined) return { error: g.error };
+  const row = await db.lightingInventoryArea.findUnique({ where: { id: input.rowId }, select: { siteSurveyId: true, areaType: true, label: true, voidedAt: true } });
+  if (!row || row.siteSurveyId !== input.surveyId || row.voidedAt) return { error: "That area is no longer on the survey." };
+  const refusal = refuseRow({ areaType: row.areaType ?? "other", label: row.label ?? "", lightType: input.lightType, count: input.count, method: input.method, note: input.note });
+  if (refusal) return { error: refusal };
+  await db.lightingInventoryArea.update({
+    where: { id: input.rowId },
+    data: { lightType: input.lightType.trim(), count: input.count, method: input.method, note: input.note.trim() || null },
+  });
+  logger.info("survey.area_corrected", { actorId: actor.id, surveyId: input.surveyId, rowId: input.rowId, count: input.count });
+  return { ok: true };
+}
+
+/** Remove an area row on a draft survey. Removing one already gone is not an error. */
+export async function removeInventoryRowAs(actor: SurveyActor, input: { surveyId: string; rowId: string }): Promise<Done> {
+  const g = await surveyForWrite(actor, input.surveyId, "inventory");
+  if (g.error !== undefined) return { error: g.error };
+  const row = await db.lightingInventoryArea.findUnique({ where: { id: input.rowId }, select: { siteSurveyId: true } });
+  if (!row) return { ok: true };
+  if (row.siteSurveyId !== input.surveyId) return { error: "That row belongs to another survey." };
+  await db.lightingInventoryArea.delete({ where: { id: input.rowId } });
+  logger.info("survey.area_removed", { actorId: actor.id, surveyId: input.surveyId, rowId: input.rowId });
+  return { ok: true };
+}
+
+/**
+ * Settle a contested area (§0.1b "Reconciliation"): keep one person's count and
+ * void the others' rows with the stated reason. Never a sum, never a merge.
+ * The voided rows stay on record, and who chose is recorded.
+ */
+export async function settleContestAs(actor: SurveyActor, input: { surveyId: string; areaKey: string; keepCountedBy: string; reason: string }): Promise<Done<{ voided: number }>> {
+  const g = await surveyForWrite(actor, input.surveyId, "inventory");
+  if (g.error !== undefined) return { error: g.error };
+  if (input.reason.trim().length < 5) return { error: "Say why this count is the right one — it is kept with the decision." };
+  const contest = contestedAreas(await liveInventory(input.surveyId)).get(input.areaKey);
+  if (!contest) return { ok: true, voided: 0 }; // already settled (a replay, or a teammate did it)
+  const keep = input.keepCountedBy;
+  if (!contest.some((r) => (r.countedById ?? "office") === keep)) return { error: "Choose one of the counts recorded for this area." };
+  const losers = contest.filter((r) => (r.countedById ?? "office") !== keep).map((r) => r.id);
+  await db.lightingInventoryArea.updateMany({
+    where: { id: { in: losers } },
+    data: { voidedAt: new Date(), voidedById: actor.id, voidReason: `Contested area settled: ${input.reason.trim()}` },
+  });
+  logger.info("survey.contest_settled", { actorId: actor.id, surveyId: input.surveyId, areaKey: input.areaKey, kept: keep, voided: losers.length });
+  return { ok: true, voided: losers.length };
 }

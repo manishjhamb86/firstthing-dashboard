@@ -9,6 +9,7 @@ import {
   parseInstallationDayPayload,
   parseDemoMeterPayload,
   parseDemoReplacementPayload,
+  parseAreaPayload,
   parseEnvelope,
   parseSurveyMemberPayload,
   parseSurveyProfilePayload,
@@ -22,6 +23,12 @@ import {
 import { recordDemoMeterAs, recordDemoReplacementAs } from "@/lib/demo-step-core";
 import { applyUnitMove } from "@/lib/inventory-move";
 import { fileInspection } from "@/lib/inspection-file";
+import {
+  addInventoryRowAs,
+  removeInventoryRowAs,
+  settleContestAs,
+  updateInventoryRowAs,
+} from "@/lib/survey-core";
 import { addCommitteeMemberAs, saveProfileAs, setPrimaryContactAs, setSectionAs, submitSurveyAs } from "@/lib/survey-core";
 import { batchPhotoKey, MAX_DAY_PHOTOS, raiseBlockerAs, recordDayAs, signCertificateAs } from "@/lib/installation-core";
 
@@ -138,7 +145,13 @@ export async function POST(req: Request) {
   // exactly the back office's.
   const outside = OUTSIDE[env.kind];
   if (outside) {
-    const applied = await outside(actor, env.payload);
+    let applied: Applied;
+    try {
+      applied = await outside(actor, env.payload);
+    } catch (err) {
+      logger.error("field.sync_failed", { actorId: actor.id, itemId: env.id, kind: env.kind, message: String(err) });
+      return NextResponse.json({ error: "Something went wrong on our side. It will be sent again." }, { status: 500 });
+    }
     if ("error" in applied) {
       logger.warn("field.sync_refused", { actorId: actor.id, itemId: env.id, kind: env.kind, reason: applied.error });
       return NextResponse.json({ error: applied.error }, { status: applied.status ?? 422 });
@@ -313,6 +326,34 @@ async function applySurveySubmit(actor: Actor, payload: unknown): Promise<Applie
   return "error" in r ? { error: r.error } : { result: { ok: true } };
 }
 
+async function applyArea(actor: Actor, payload: unknown): Promise<Applied> {
+  const input = parseAreaPayload(payload);
+  if ("error" in input) return input;
+  const r = await addInventoryRowAs(actor, input);
+  return "error" in r ? { error: r.error } : { result: { rowId: r.rowId, contested: r.contested } };
+}
+
+async function applyAreaUpdate(actor: Actor, payload: unknown): Promise<Applied> {
+  const input = parseAreaPayload(payload);
+  if ("error" in input) return input;
+  const r = await updateInventoryRowAs(actor, input);
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+async function applyAreaRemove(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  if (typeof o.surveyId !== "string" || typeof o.rowId !== "string") return { error: "Which area?" };
+  const r = await removeInventoryRowAs(actor, { surveyId: o.surveyId, rowId: o.rowId });
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+async function applySettle(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  if (typeof o.surveyId !== "string" || typeof o.areaKey !== "string" || typeof o.keepCountedBy !== "string") return { error: "Which count is kept?" };
+  const r = await settleContestAs(actor, { surveyId: o.surveyId, areaKey: o.areaKey, keepCountedBy: o.keepCountedBy, reason: typeof o.reason === "string" ? o.reason : "" });
+  return "error" in r ? { error: r.error } : { result: { voided: r.voided } };
+}
+
 const OUTSIDE: Partial<Record<OutboxKind, (actor: Actor, payload: unknown) => Promise<Applied>>> = {
   "demo.meter": applyDemoMeter,
   "demo.replacement": applyDemoReplacement,
@@ -323,4 +364,8 @@ const OUTSIDE: Partial<Record<OutboxKind, (actor: Actor, payload: unknown) => Pr
   "survey.primary": applySurveyPrimary,
   "survey.section": applySurveySection,
   "survey.submit": applySurveySubmit,
+  "survey.area": applyArea,
+  "survey.area_update": applyAreaUpdate,
+  "survey.area_remove": applyAreaRemove,
+  "survey.settle": applySettle,
 };

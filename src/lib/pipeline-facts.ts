@@ -15,7 +15,7 @@ import { bestKycAcross, kycCounts, kycStarted } from "./kyc-society";
 export const DEAL_PROGRESS_INCLUDE = {
   // team as well: the deal page names which team is holding the survey.
   surveyOwner: { select: { id: true, name: true, email: true, team: true } },
-  siteSurvey: { include: { areas: { select: { id: true } } } },
+  siteSurvey: { include: { areas: { where: { voidedAt: null }, select: { id: true } } } },
   demoReports: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
   // KYC is a society fact (kyc-society.ts): every deal's rows, not just this one's.
   // `include`, not `select`: pages spread this alongside their own use of the society row.

@@ -1,6 +1,7 @@
 import { SurveyDateControl } from "@/components/survey-date-control";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { areaKeyOf, contestedAreas } from "@/lib/survey-shell";
 import { DEMO_LIGHTS_SELECT, demoLightsInstalled } from "@/lib/light-population";
 import { Card, CardTitle, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
@@ -51,7 +52,7 @@ export default async function SiteSurveyPage({
         orderBy: { startAt: "asc" },
         take: 1,
       },
-      siteSurvey: { include: { areas: { orderBy: { createdAt: "asc" } } } },
+      siteSurvey: { include: { areas: { where: { voidedAt: null }, orderBy: { createdAt: "asc" }, include: { countedBy: { select: { name: true, email: true } } } } } },
     },
   });
   if (!pipeline || !pipeline.siteSurvey) notFound();
@@ -121,6 +122,9 @@ export default async function SiteSurveyPage({
     pipeline.surveyOwnerId !== null &&
     (pipeline.surveyOwnerId === session.user.id || canApproveException);
   const totalLights = siteSurvey.areas.reduce((sum, a) => sum + a.count, 0);
+  const contestedNames = [
+    ...contestedAreas(siteSurvey.areas.map((a) => ({ ...a, areaKey: areaKeyOf(a.areaType, a.label, a.area) }))).values(),
+  ].map((list) => list[0].area);
 
   // The survey's two steps, so their headings can say where the work is
   // rather than sitting at "Step 1"/"Step 2" whatever has happened. Step 2
@@ -349,6 +353,11 @@ export default async function SiteSurveyPage({
             ) : undefined
           }
         />
+        {contestedNames.length > 0 && (
+          <div className="mb-3 rounded-[var(--r-md)] border p-3 text-sm" style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}>
+            Counted by two people, so the totals below include both counts until one is chosen on the phone: {contestedNames.join(", ")}.
+          </div>
+        )}
         {siteSurvey.areas.length === 0 ? (
           <div className="mb-4">
             {backfilledSurvey ? (
@@ -380,7 +389,10 @@ export default async function SiteSurveyPage({
               <tbody>
                 {siteSurvey.areas.map((a) => (
                   <tr key={a.id}>
-                    <td className="font-medium">{a.area}</td>
+                    <td className="font-medium">
+                      {a.area}
+                      {a.countedBy && <span className="block text-xs text-[var(--text-muted)]">Counted by {a.countedBy.name ?? a.countedBy.email}</span>}
+                    </td>
                     <td className="text-[var(--text-muted)]">{a.lightType}</td>
                     <td className="num">{a.count}</td>
                     <td>

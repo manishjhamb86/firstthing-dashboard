@@ -97,7 +97,7 @@ export async function setUpInstallationProject(
     include: {
       contract: true,
       society: true,
-      siteSurvey: { include: { areas: true } },
+      siteSurvey: { include: { areas: { where: { voidedAt: null } } } },
       installationProject: true,
     },
   });

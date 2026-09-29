@@ -31,7 +31,7 @@ export async function collectDemoReportInput(pipelineId: string) {
       society: true,
       siteSurvey: {
         include: {
-          areas: true,
+          areas: { where: { voidedAt: null } },
           // The demo's circuits are the ones selected during this survey
           // (FEAT-007) — not every circuit the society has.
           circuits: {

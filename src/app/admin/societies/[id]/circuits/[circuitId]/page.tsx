@@ -115,7 +115,7 @@ export default async function CircuitDetailPage({
               },
             },
           },
-          areas: { select: { lightType: true, count: true } },
+          areas: { where: { voidedAt: null }, select: { lightType: true, count: true } },
         },
       },
       rescaleEvents: { orderBy: { effectiveDate: "asc" }, include: { recordedBy: true, voidedBy: true } },

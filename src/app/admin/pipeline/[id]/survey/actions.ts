@@ -110,7 +110,7 @@ export async function updateLightingInventoryArea(
       data: { count: input.count, method: input.method, note: input.note?.trim() || null },
     });
     const total = (
-      await tx.lightingInventoryArea.aggregate({ where: { siteSurveyId, lightType: row.lightType }, _sum: { count: true } })
+      await tx.lightingInventoryArea.aggregate({ where: { siteSurveyId, lightType: row.lightType, voidedAt: null }, _sum: { count: true } })
     )._sum.count ?? 0;
     // The inventory's light type and the candidate's are two free-text
     // fields ("Surface Light 12W" on one, "Lift Lobby and Staircase" on the

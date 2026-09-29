@@ -654,3 +654,32 @@ teammate's phone reporting unsent work and submission naming them until it arriv
 reasons, submission from the phone, the society's location filled, the lock refusing a field write,
 operations still able to write, and a queried section — only that one — reopened. Inventory,
 circuits and pump room can only be flagged until 8b–8d build them.
+
+### 16b. Built: the lighting inventory with area claims (2026-09-29)
+
+- `/field/survey/[pipelineId]/inventory` (SCR-011): the running total (a live region), the per-type
+  roll-up labelled as the extrapolation base with a warning below 50 lights of a type, each area
+  with its count, type, method (walked · society's records · estimated, the last needing a note)
+  and who counted it, a confirmation above 2,000 in one area, and complete / flag.
+- **The claim is the row itself**: every row records who counted it. Counting an area someone else
+  counted asks first, naming them and when. Two people's counts of one area — made offline, both
+  sent — are both kept and the area is **contested**: left out of the total (the screen says so),
+  shown side by side, and settled by choosing one count with a reason. The other rows are voided,
+  not deleted, with who decided and why. The inventory cannot complete, nor the survey submit,
+  while an area is contested. The office's survey page names contested areas and who counted each.
+- Every read of the inventory elsewhere (offer, installation, demo report, deal facts, field work,
+  the circuit page) now skips voided rows.
+- **Two defects found by running two phones at once, fixed:**
+  - the first write to a section by two phones at the same moment failed the second on the unique
+    key (a 500, then a minute's backoff). Section rows and the visit's team are now inserted with
+    "skip if present", and the survey's visit has an id derived from the survey, so two phones can
+    never make two visits;
+  - a request the service worker started just as the signal went could hang and hold the whole
+    queue. Its requests now time out (30 s; 2 min for photo uploads). Worker v8.
+  An unexpected error in the sync route now answers a logged 500 with a sentence.
+
+**Verified** `field-survey-b.mjs` 17/17: two phones offline counting one staircase (30 and 34),
+both arriving with who counted each; completion refused naming the area; the office warned; the
+phone leaving it out of the total; keeping 30 with a reason voided 34 with the decision recorded;
+re-counting a counted area asked first and cancelling saved nothing; completion then accepted and
+downstream reads seeing only live rows. 8a's suite 27/27 and every earlier field suite still pass.

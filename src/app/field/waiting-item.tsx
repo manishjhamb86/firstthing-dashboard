@@ -40,6 +40,10 @@ export function WaitingItem({ item }: { item: OutboxItem }) {
       "survey.primary": "Discard this primary-contact change?",
       "survey.section": "Discard this section change?",
       "survey.submit": "Discard the submission? The survey stays open.",
+      "survey.area": "Discard this area's count? It has not reached the office.",
+      "survey.area_update": "Discard this correction?",
+      "survey.area_remove": "Discard removing this area? It stays on the survey.",
+      "survey.settle": "Discard this decision? The area stays contested.",
     };
     const ok = confirm(what[item.kind]);
     if (!ok) return;

@@ -30,7 +30,7 @@
  * Bump VERSION when this file's caching behaviour changes.
  */
 
-const VERSION = "v7";
+const VERSION = "v8";
 const STATIC_CACHE = `ft-field-static-${VERSION}`;
 const PAGE_CACHE = `ft-field-pages-${VERSION}`;
 const OFFLINE_URL = "/field-offline.html";
@@ -233,12 +233,18 @@ function outcomeOf(status) {
   return "retry";
 }
 
+// A request that hangs (started just as the signal went) would hold the one
+// drain — and so every item behind it — until the browser gave up. Cap it.
+const SYNC_TIMEOUT_MS = 30000;
+const UPLOAD_TIMEOUT_MS = 120000;
+
 async function postJson(path, body) {
   const res = await fetch(path, {
     method: "POST",
     credentials: "same-origin",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
   });
   let json = null;
   try { json = await res.json(); } catch { /* no body */ }
@@ -257,7 +263,7 @@ async function send(db, item) {
         contentType: photo.contentType,
       });
       if (url.outcome !== "done") return { outcome: url.outcome, error: url.json?.error ?? null };
-      const put = await fetch(url.json.uploadUrl, { method: "PUT", body: photo.blob, headers: { "Content-Type": photo.contentType } });
+      const put = await fetch(url.json.uploadUrl, { method: "PUT", body: photo.blob, headers: { "Content-Type": photo.contentType }, signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
       if (!put.ok) return { outcome: "retry", error: "The photo upload did not finish." };
       const r = await postJson("/api/field/sync", {
         id: item.id,
@@ -283,7 +289,7 @@ async function send(db, item) {
           contentType: photo.contentType,
         });
         if (url.outcome !== "done") return { outcome: url.outcome, error: url.json?.error ?? null };
-        const put = await fetch(url.json.uploadUrl, { method: "PUT", body: photo.blob, headers: { "Content-Type": photo.contentType } });
+        const put = await fetch(url.json.uploadUrl, { method: "PUT", body: photo.blob, headers: { "Content-Type": photo.contentType }, signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS) });
         if (!put.ok) return { outcome: "retry", error: "A photo upload did not finish." };
         keys[i] = url.json.key;
         item.uploadedKeys = keys;

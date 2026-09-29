@@ -33,6 +33,10 @@ export const OUTBOX_KINDS = [
   "survey.primary",
   "survey.section",
   "survey.submit",
+  "survey.area",
+  "survey.area_update",
+  "survey.area_remove",
+  "survey.settle",
 ] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 
@@ -375,6 +379,35 @@ export function parseSurveySectionPayload(p: unknown): FieldSurveySectionPayload
     section: str(o.section) as FieldSurveySectionPayload["section"],
     state: str(o.state) as FieldSurveySectionPayload["state"],
     reason: str(o.reason),
+  };
+}
+
+export type FieldAreaPayload = {
+  surveyId: string;
+  rowId: string;
+  areaType: string;
+  label: string;
+  lightType: string;
+  count: number;
+  method: "walked" | "records" | "estimated";
+  note: string;
+};
+
+export function parseAreaPayload(p: unknown): FieldAreaPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.surveyId)) return { error: "The survey this belongs to is missing." };
+  if (!UUID_RE.test(str(o.rowId))) return { error: "The area has no valid id." };
+  const method = str(o.method);
+  if (!["walked", "records", "estimated"].includes(method)) return { error: "How was this counted?" };
+  return {
+    surveyId: str(o.surveyId),
+    rowId: str(o.rowId),
+    areaType: str(o.areaType),
+    label: str(o.label),
+    lightType: str(o.lightType),
+    count: Number(o.count),
+    method: method as FieldAreaPayload["method"],
+    note: str(o.note),
   };
 }
 

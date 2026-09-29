@@ -98,7 +98,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     include: {
       society: true,
       contract: true,
-      siteSurvey: { include: { areas: true } },
+      siteSurvey: { include: { areas: { where: { voidedAt: null } } } },
       installationProject: {
         include: {
           onlooker: true,

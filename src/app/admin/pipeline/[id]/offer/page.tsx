@@ -69,7 +69,7 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
       // what the offer's represented figures are checked against.
       siteSurvey: {
         select: {
-          areas: { select: { lightType: true, count: true } },
+          areas: { where: { voidedAt: null }, select: { lightType: true, count: true } },
           circuits: {
             where: { voidedAt: null },
             select: { id: true, lightType: true, representedLightCount: true, ...DEMO_LIGHTS_SELECT },

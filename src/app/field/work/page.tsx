@@ -31,6 +31,14 @@ export default async function WorkPage() {
         </p>
       </header>
 
+      <Link href="/field/inspections" className="card flex items-center justify-between p-4 mb-4 min-h-[56px]">
+        <span>
+          <span className="font-semibold block">Monthly inspections</span>
+          <span className="text-[var(--text-muted)]">File one — works with no signal.</span>
+        </span>
+        <span aria-hidden className="font-semibold" style={{ color: "var(--accent-deep)" }}>→</span>
+      </Link>
+
       {rows.length === 0 ? (
         <EmptyState title={mineOnly ? "Nothing assigned to you" : "No field work yet"}>
           A survey or a light replacement appears here once it is assigned to you.

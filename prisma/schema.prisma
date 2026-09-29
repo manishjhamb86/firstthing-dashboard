@@ -570,6 +570,7 @@ model AdminUser {
 
   // Monthly inspection checklist (2026-09-12)
   inspectionsFiled  Inspection[] @relation("InspectionFiledBy")
+  fieldSyncReceipts FieldSyncReceipt[]
   inspectionsVoided Inspection[] @relation("InspectionVoidedBy")
 
   dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
@@ -4347,4 +4348,25 @@ model FmEmployment {
   @@index([mobile])
   @@index([societyMemberId])
   @@map("fm_employments")
+}
+
+/// Idempotency for the field app's offline outbox (docs/engineering/19-field-app.md
+/// §4.1, 2026-09-29). Every item a phone queues carries an id the PHONE made;
+/// the first time the server applies it, the outcome is stored here in the same
+/// transaction as the work. A retry — the phone lost the reply, the tab was
+/// closed mid-send, background sync fired twice — finds the receipt and gets
+/// the same answer back instead of filing the inspection a second time.
+model FieldSyncReceipt {
+  /// The device-generated UUID of the outbox item.
+  id        String   @id
+  actorId   String   @map("actor_id")
+  kind      String
+  /// What the item produced — e.g. { inspectionId } — returned verbatim on replay.
+  result    Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  actor AdminUser @relation(fields: [actorId], references: [id])
+
+  @@index([actorId])
+  @@map("field_sync_receipts")
 }

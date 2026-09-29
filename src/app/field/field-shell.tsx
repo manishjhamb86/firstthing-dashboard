@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { CalendarCheck, ClipboardList, ScanLine, Menu } from "lucide-react";
+import { OutboxProvider, useOutbox } from "./outbox-provider";
 
 // Bottom navigation, thumb-reachable (05-field.md §0.4: "never a top-right
 // button — this surface is used one-handed"). Four tabs, every one a real
@@ -34,21 +35,45 @@ export function useOnline(): boolean {
 }
 
 export function FieldShell({ children }: { children: ReactNode }) {
+  // The provider also registers the service worker, which keeps the pages
+  // this phone has opened and sends saved work. Scoped to /field only.
+  return (
+    <OutboxProvider>
+      <ShellFrame>{children}</ShellFrame>
+    </OutboxProvider>
+  );
+}
+
+/**
+ * The header chip — the one line that answers "is my work safe?". Saved on
+ * this phone vs sent to the office is the distinction 05-field.md §0.1 says
+ * the field surface always shows; a blocked item is loud, never a count that
+ * quietly stops moving.
+ */
+function syncChip(online: boolean, o: ReturnType<typeof useOutbox>): { tone: string; label: string; href?: string } {
+  if (o.blocked > 0) return { tone: "bad", label: `${o.blocked} need${o.blocked === 1 ? "s" : ""} attention`, href: "/field/more" };
+  if (o.signInNeeded && o.pending > 0) return { tone: "warn", label: "Sign in to send", href: "/field/more" };
+  if (o.pending > 0) {
+    return online ? { tone: "info", label: `Sending ${o.pending}…`, href: "/field/more" } : { tone: "warn", label: `${o.pending} saved on phone`, href: "/field/more" };
+  }
+  return online ? { tone: "ok", label: "All sent" } : { tone: "warn", label: "No signal" };
+}
+
+function ShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const online = useOnline();
-
-  // The service worker keeps the pages this phone has opened, so a crew in a
-  // basement can still read them. Scoped to /field only.
-  useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/field-sw.js", { scope: "/field", updateViaCache: "none" }).catch(() => {
-      // A failed registration leaves the app working online; nothing to tell
-      // the person here — More shows whether the phone copy is active.
-    });
-  }, []);
+  const outbox = useOutbox();
+  const chip = syncChip(online, outbox);
 
   const active = (href: string, exact?: boolean) =>
     exact ? pathname === href : pathname === href || pathname.startsWith(`${href}/`);
+
+  const chipEl = (
+    <span role="status" className={`chip chip-${chip.tone}`}>
+      <span className="chip-dot" aria-hidden />
+      {chip.label}
+    </span>
+  );
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--surface-sunken)]">
@@ -59,17 +84,13 @@ export function FieldShell({ children }: { children: ReactNode }) {
         {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
         <img src="/icon.svg" alt="" className="h-8 w-8" />
         <span className="text-[17px] font-semibold flex-1">FirsThing Field</span>
-        {/* Saved-on-this-phone vs sent-to-the-office is the distinction the
-            field surface always shows (05-field.md §0.1). Until the outbox
-            lands this is the connection alone, stated plainly. */}
-        <span
-          role="status"
-          className={`chip ${online ? "chip-ok" : "chip-warn"}`}
-          aria-label={online ? "Online" : "No signal"}
-        >
-          <span className="chip-dot" aria-hidden />
-          {online ? "Online" : "No signal"}
-        </span>
+        {chip.href ? (
+          <Link href={chip.href} aria-label={`${chip.label} — see what is waiting`}>
+            {chipEl}
+          </Link>
+        ) : (
+          chipEl
+        )}
       </header>
 
       {!online && (
@@ -77,7 +98,15 @@ export function FieldShell({ children }: { children: ReactNode }) {
           className="px-4 py-2 text-[15px]"
           style={{ background: "var(--warn-bg)", color: "var(--warn-fg)", borderBottom: "1px solid var(--warn-line)" }}
         >
-          No signal. Pages you have already opened on this phone still work.
+          No signal. Work you save is kept on this phone and sent when the signal returns.
+        </div>
+      )}
+      {online && outbox.signInNeeded && outbox.pending > 0 && (
+        <div
+          className="px-4 py-2 text-[15px]"
+          style={{ background: "var(--warn-bg)", color: "var(--warn-fg)", borderBottom: "1px solid var(--warn-line)" }}
+        >
+          Your session has ended. <Link href={`/login?callbackUrl=${encodeURIComponent(pathname)}`} className="underline font-semibold">Sign in again</Link> to send {outbox.pending} saved {outbox.pending === 1 ? "item" : "items"} — they are kept on this phone.
         </div>
       )}
 

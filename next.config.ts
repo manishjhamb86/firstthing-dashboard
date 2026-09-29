@@ -27,7 +27,14 @@ const nextConfig: NextConfig = {
         headers: [
           { key: "Content-Type", value: "application/javascript; charset=utf-8" },
           { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
-          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+          // A CSP delivered with a worker script governs the worker's OWN
+          // fetches. The worker uploads photos straight to S3 by presigned
+          // PUT, so connect-src must reach the bucket — the guide's bare
+          // default-src 'self' silently blocked every photo (found by the e2e).
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'self'; script-src 'self'; connect-src 'self' https://*.amazonaws.com",
+          },
         ],
       },
     ];

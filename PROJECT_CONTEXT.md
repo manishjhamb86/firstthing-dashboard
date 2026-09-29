@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-29 (Android field app: installable shell + Today/My work/Scan built on branch `android-app` — see `docs/engineering/19-field-app.md` §11)
+2026-09-29 (Android field app: shell, offline outbox and offline inspection built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–12)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6952,6 +6952,26 @@ package.
 - Verified 32/32 against a production build at Pixel 7 size, including network-off behaviour and
   both refusals. 1,178 unit tests; `tsc`/`lint`/`build` clean. No schema change.
 - Next is step 3, the outbox.
+
+**Same day — steps 3 and 4: the outbox, and the monthly inspection with no signal** (plan §12).
+- Work is saved to IndexedDB first and sent by the service worker, the one sender, which also runs
+  from Background Sync. Items go strictly in order.
+- Each item carries a device UUID. **`FieldSyncReceipt`** (migration `20260929120000`, additive) is
+  written in the same transaction as the work, so a retry never files twice.
+- Replies:
+  - 401 means sign in again, with no strike;
+  - a refusal is a strike, and three strikes block the queue loudly, naming the office's reason,
+    with Try again or Discard;
+  - anything else is retried on a 15 s → 5 min backoff.
+- Sign-out is refused while anything is waiting, and otherwise wipes the phone.
+- The inspection files through `fileInspection`, which runs inspection.ts's own refusals.
+- **A real bug fixed for the back office too:** visit times are stored wall-clock but were checked
+  against the UTC instant, so a correctly typed time was refused as "in the future" for 5½ hours
+  every day. `inspectionNow()` is India's wall clock, and both paths use it.
+- **Found by the e2e:** the service-worker CSP from Next's guide blocked the worker's photo uploads
+  to S3. `connect-src` now allows the bucket.
+- Verified 27/27 offline→online (asserted on rows and log lines), plus step 1's 32/32 and
+  1,186 unit tests. `tsc`/`lint`/`build` clean.
 
 ## Current Phase (archived application — history)
 

@@ -3,6 +3,7 @@ import { Card } from "@/components/ui";
 import { teamMeta } from "@/lib/admin-teams";
 import { requireFieldPage } from "../access";
 import { FieldSignOut, PhoneStatus } from "./phone-status";
+import { WaitingToSend } from "./waiting-to-send";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "More" };
@@ -21,13 +22,15 @@ export default async function MorePage() {
         <p className="text-[var(--text-muted)]">{teamMeta(me.team).label}</p>
       </Card>
 
+      <WaitingToSend />
+
       <PhoneStatus />
 
       <Card className="p-2 mb-4">
         <Link href="/admin/tasks" className="flex items-center min-h-[48px] px-2 font-semibold">
           Tasks
         </Link>
-        <Link href="/admin/inspections" className="flex items-center min-h-[48px] px-2 font-semibold border-t border-[var(--border-subtle)]">
+        <Link href="/field/inspections" className="flex items-center min-h-[48px] px-2 font-semibold border-t border-[var(--border-subtle)]">
           Inspections
         </Link>
         <Link href="/admin" className="flex items-center min-h-[48px] px-2 font-semibold border-t border-[var(--border-subtle)]">

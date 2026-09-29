@@ -14,11 +14,8 @@
 // its two summary figures once the visit is actually done.
 
 import { revalidatePath } from "next/cache";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
-import { s3, S3_BUCKET } from "@/lib/s3";
-import { buildDocumentKey } from "@/lib/document-keys";
+import { inspectionNow, presignInspectionEvidence } from "@/lib/inspection-file";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
@@ -87,7 +84,7 @@ export async function startInspection(
 
   const refusal = refuseInspectionStart(
     { area, period: input.period, inspectedAt, inspectorName, inspectorContact },
-    { now: new Date(), existingActiveForSlot: existing !== null && existing.voidedAt === null },
+    { now: inspectionNow(), existingActiveForSlot: existing !== null && existing.voidedAt === null },
   );
   if (refusal) {
     logger.warn("inspection.start_refused", { actorId: admin.id, societyId: input.societyId, reason: refusal });
@@ -144,20 +141,13 @@ export async function getInspectionEvidenceUploadUrl(input: {
   // A finalised inspection stays editable (user's call 2026-09-16), so the
   // signed-checklist photo can be added or replaced after the fact too.
 
-  const extension = (input.fileName.split(".").pop() ?? "jpg").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
-  const key = buildDocumentKey({
-    society: inspection.society.name,
-    month: inspection.period,
-    docType: "inspectionEvidence",
-    dateLabel: inspection.period,
-    identifier: input.inspectionId,
-    extension,
+  const { uploadUrl, key } = await presignInspectionEvidence({
+    inspectionId: input.inspectionId,
+    societyName: inspection.society.name,
+    period: inspection.period,
+    fileName: input.fileName,
+    contentType: input.contentType,
   });
-  const uploadUrl = await getSignedUrl(
-    s3,
-    new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: input.contentType }),
-    { expiresIn: 300 },
-  );
   logger.info("inspection.evidence_presigned", { actorId: admin.id, inspectionId: input.inspectionId, key });
   return { uploadUrl, key };
 }

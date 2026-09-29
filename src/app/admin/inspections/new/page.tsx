@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { db } from "@/lib/db";
-import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
+import { loadInspectionChoices } from "@/lib/inspection-choices";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { PageHeader } from "@/components/ui";
 import { isoDateTimeLocal } from "@/lib/format-date";
+import { inspectionNow } from "@/lib/inspection-file";
 import { NewInspectionForm } from "./new-inspection-form";
 
 export const dynamic = "force-dynamic";
@@ -19,27 +19,9 @@ export default async function NewInspectionPage({
   if (!actor?.permissions.includes("manage_survey")) redirect("/admin");
 
   const { societyId } = await searchParams;
-  const now = new Date();
-  const [societies, circuitRows] = await Promise.all([
-    db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
-    db.circuit.findMany({
-      where: { voidedAt: null },
-      orderBy: { location: "asc" },
-      select: {
-        id: true,
-        societyId: true,
-        location: true,
-        lightType: true,
-        representedLightCount: true,
-        ...DEMO_LIGHTS_SELECT,
-      },
-    }),
-  ]);
-  // An inspection walks every light installed: full installation + demo lights (2026-09-27).
-  const circuits = circuitRows.map(({ demos, devices, ...c }) => ({
-    ...c,
-    representedLightCount: totalLights(c.representedLightCount, demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices })),
-  }));
+  // India's wall clock: the terms a typed visit time is stored in.
+  const now = inspectionNow();
+  const { societies, circuits } = await loadInspectionChoices();
 
   return (
     <>

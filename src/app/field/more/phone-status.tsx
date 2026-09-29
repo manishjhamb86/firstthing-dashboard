@@ -3,6 +3,8 @@
 import { useEffect, useState, useTransition } from "react";
 import { Card } from "@/components/ui";
 import { logoutAction } from "@/app/logout-actions";
+import { DB_NAME, listOutbox } from "../outbox-db";
+import { useOutbox } from "../outbox-provider";
 
 // What this phone holds for the app (docs/engineering/19-field-app.md §3–4):
 // whether it is installed, whether Chrome has agreed not to clear its saved
@@ -141,28 +143,53 @@ function Row({ ok, label }: { ok: boolean; label: string }) {
  * person's work, and a signed-out phone should not open them from its cache
  * (05-field.md §0.7: signing out purges cached society data).
  *
- * The rule that sign-out is refused while unsent work exists arrives with the
- * outbox (19-field-app.md §8 step 3) — there is nothing unsent to protect yet.
+ * Refused while anything is waiting to send (05-field.md §0.7): signing out
+ * clears the phone, and unsent work would go with it. The check is made
+ * again against the store itself at the moment of signing out, not only
+ * against what this screen last showed.
  */
 export function FieldSignOut() {
   const [pending, start] = useTransition();
+  const outbox = useOutbox();
+  const [refused, setRefused] = useState<number | null>(null);
+  const waiting = outbox.items.length;
 
   function signOut() {
     start(async () => {
+      const still = (await listOutbox().catch(() => [])).length;
+      if (still > 0) {
+        setRefused(still);
+        return;
+      }
       await clearKeptPages();
+      // The drafts store may hold a half-typed inspection — society data that
+      // must not stay on a signed-out phone.
+      await new Promise<void>((resolve) => {
+        const r = indexedDB.deleteDatabase(DB_NAME);
+        r.onsuccess = r.onerror = r.onblocked = () => resolve();
+      });
       await logoutAction();
     });
   }
 
+  const blockedCount = refused ?? (waiting > 0 ? waiting : null);
+
   return (
-    <button
-      type="button"
-      onClick={signOut}
-      disabled={pending}
-      className="w-full min-h-[48px] rounded-full border border-[var(--border)] bg-[var(--surface)] font-semibold"
-    >
-      {pending ? "Signing out…" : "Sign out"}
-    </button>
+    <div className="space-y-2">
+      {blockedCount !== null && (
+        <p role="alert" className="card p-3" style={{ background: "var(--warn-bg)", color: "var(--warn-fg)", borderColor: "var(--warn-line)" }}>
+          {blockedCount} saved {blockedCount === 1 ? "item has" : "items have"} not reached the office yet. Signing out would delete {blockedCount === 1 ? "it" : "them"} from this phone — send {blockedCount === 1 ? "it" : "them"} first.
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={signOut}
+        disabled={pending || waiting > 0}
+        className="w-full min-h-[48px] rounded-full border border-[var(--border)] bg-[var(--surface)] font-semibold disabled:opacity-60"
+      >
+        {pending ? "Signing out…" : "Sign out"}
+      </button>
+    </div>
   );
 }
 

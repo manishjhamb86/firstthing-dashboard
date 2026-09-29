@@ -1,6 +1,6 @@
 # Field app (SUR-02 on Android) — decision and build plan
 
-**Status:** Step 1 built, step 2 read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
+**Status:** Steps 1, 3 and 4 built; step 2's read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
 **Decided:** 2026-09-29 · **Owner:** Yugesh
 
 This file is where the Android field app resumes. It records what was decided on 2026-09-29, why,
@@ -15,10 +15,16 @@ rules and screens) and ADR-002.
 - **Branch:** `android-app`, created from `master`. `portal-redesign` was merged into it as asked;
   the merge was a no-op because `portal-redesign` (local and `origin`) already pointed at the same
   commit as `master` (`bb870a3`).
-- **Built so far (2026-09-29)**: step 1, the installable shell, and step 2's online read path.
-  §11 says what exists and how it was verified.
-- **Next**: step 3, the outbox. §9 Q1 (v1 scope) should be answered before step 4 picks the first
-  offline form. Step 0's reconciliation of `05-field.md` is still owed.
+- **Built so far (2026-09-29)**:
+  - step 1, the installable shell;
+  - step 2's online read path;
+  - step 3, the outbox;
+  - step 4, the monthly inspection filed with no signal.
+
+  §11 and §12 say what exists and how it was verified.
+- **§9 Q1 was not answered.** Inspection went first, as this plan recommended.
+- **Next**: step 5, scan and collect-for-a-move offline, or step 6, the circuit/demo steps. Which
+  comes next is the user's call. Step 0's reconciliation of `05-field.md` is still owed.
 
 ---
 
@@ -320,3 +326,63 @@ Each step ends clean and is verified per CLAUDE.md:
   home screen is a full load, so this only matters in tests.
 - The dev DB tunnel can drop mid-run and presents as a hung login. Check the server log before
   debugging the app.
+
+
+## 12. Steps 3 and 4 — the outbox, and the inspection offline (2026-09-29)
+
+**The outbox (step 3).**
+
+| Piece | Where | Notes |
+|---|---|---|
+| Phone store | `src/app/field/outbox-db.ts` | IndexedDB `ft-field` v1 with three stores: `outbox` (ordered by `seq`, each item with a device UUID, `refusals`, `failures`, `lastError`, `state` pending/blocked), `photos` (processed blobs), and `drafts` (a form in progress). The same layout is written in `public/field-sw.js`; change both together. |
+| Sender | `public/field-sw.js` | The one place items are sent from. It is asked by the app ("drain") and by Background Sync (`ft-outbox`). Items go strictly in order and sending stops at the first that cannot be sent. A reply is read as `classifyReply` reads it: 2xx done, 401 sign in (no strike), 400/403/409/422 refused (a strike; three strikes blocks the queue), anything else retried. A photo goes as upload-url → PUT to S3 → attach. |
+| Triggers | `src/app/field/outbox-provider.tsx` | Sends on open, when signal returns, when the app becomes visible, after a save, and on a backoff of 15 s doubling to a 5-minute cap (`retryDelayMs`). Background Sync is registered, but it is never the only trigger. The provider also warms the core pages and their scripts once a session. |
+| Server | `src/app/api/field/sync`, `src/app/api/field/upload-url` | Route Handlers that check access from the row. A **`FieldSyncReceipt`** (migration `20260929120000`, additive) is written in the same transaction as the work, so a replay returns the stored result and files nothing twice. A race between two sends is caught by the primary key and answered as a replay. Log lines: `field.sync_applied`, `field.sync_refused`, `field.sync_replayed`, `field.photo_presigned`. |
+| Rules | `src/lib/field-sync.ts` | Envelope and payload shapes, `classifyReply`, `retryDelayMs`, `afterRefusal`. 8 unit cases. |
+| Screens | `field-shell.tsx`, `waiting-item.tsx`, `more/` | The header chip reads **All sent / Sending N… / N saved on phone / N need attention / Sign in to send**. More lists everything waiting. A blocked item shows the office's own reason, with **Try again** and **Discard** (an inspection is discarded with its photo). Sign-out is **refused while anything is waiting**; otherwise it clears the kept pages and deletes the phone store. |
+
+**The inspection offline (step 4).**
+- `/field/inspections/new` files a whole inspection in one go: header, faulty fixtures, total,
+  representative, notes and the signed-checklist photo. On the phone no server can claim the slot in
+  between, so the back office's two acts arrive together.
+- The server runs `fileInspection` (`src/lib/inspection-file.ts`), which is **the same refusals
+  from `inspection.ts` in the same order**: a third entry point to one decision.
+- The form's choices come from `loadInspectionChoices`, now shared with the back office's form.
+- The draft is kept on the phone as it is typed, and the photo is processed on the phone first
+  (`photo.ts`).
+- `/field/inspections` lists what this person filed and what is still on the phone.
+
+**Fixed along the way (the back office too).** A typed visit time is stored wall-clock, but
+"is this in the future?" was checked against the server's real instant. Every correctly typed visit
+was therefore refused for the 5½ hours India is ahead of UTC, and the back office's form defaulted
+to the UTC clock. `inspectionNow()` is India's wall clock, and both paths use it. Verified: a visit
+at the current IST minute is filed, and one an hour ahead is refused.
+
+**Found by the e2e, fixed:** the service worker's CSP from Next's guide (`default-src 'self'`)
+governs the worker's own fetches, and it silently blocked every photo upload to S3. It now allows
+`connect-src 'self' https://*.amazonaws.com`.
+
+**Verified**: 27/27 on a production build at Pixel 7 size, asserted on database rows and log lines.
+- The warm-up kept the form on the phone before it was ever opened.
+- With the network off:
+  - the form opens and fills;
+  - a photo is taken and previewed;
+  - a reload brings the draft and photo back;
+  - saving shows "2 saved on phone" while the database holds nothing;
+  - sign-out is refused and says why.
+- Back online, the inspection and its photo arrived by themselves:
+  - stored exactly as typed, fixture included;
+  - two receipts;
+  - the photo under `Documents/…/Inspections/` as a re-encoded JPEG;
+  - the header reads "All sent" and sign-out is allowed again.
+- A replay of the same item filed nothing twice.
+- A duplicate slot:
+  - was refused by the server with a `field.sync_refused` line;
+  - blocked after three tries with "1 needs attention" and the office's reason;
+  - filed nothing, and Discard cleared it.
+- Sign-out left no kept pages and no phone store. There were no console errors.
+- Step 1's suite still passes, 32/32.
+
+Test rows were removed and confirmed by count.
+
+**Not yet:** a 401 mid-queue was not driven end to end. The rule is unit-tested and the banner exists.

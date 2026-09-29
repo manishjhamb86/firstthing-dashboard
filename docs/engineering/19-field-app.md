@@ -1,6 +1,6 @@
 # Field app (SUR-02 on Android) — decision and build plan
 
-**Status:** Planned, not started · **Branch:** `android-app` (from `master` at `bb870a3`) ·
+**Status:** Step 1 built, step 2 read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
 **Decided:** 2026-09-29 · **Owner:** Yugesh
 
 This file is where the Android field app resumes. It records what was decided on 2026-09-29, why,
@@ -15,9 +15,10 @@ rules and screens) and ADR-002.
 - **Branch:** `android-app`, created from `master`. `portal-redesign` was merged into it as asked;
   the merge was a no-op because `portal-redesign` (local and `origin`) already pointed at the same
   commit as `master` (`bb870a3`).
-- **Nothing is built yet.** The next action is §8 step 0 (reconcile the screen list), then step 1
-  (the installable shell).
-- **Before writing code**, answer the open questions in §9 that block the step being started.
+- **Built so far (2026-09-29)**: step 1, the installable shell, and step 2's online read path.
+  §11 says what exists and how it was verified.
+- **Next**: step 3, the outbox. §9 Q1 (v1 scope) should be answered before step 4 picks the first
+  offline form. Step 0's reconciliation of `05-field.md` is still owed.
 
 ---
 
@@ -269,3 +270,53 @@ Each step ends clean and is verified per CLAUDE.md:
 - Testing on a real phone during development: run `pnpm dev` and open it from the phone over the
   LAN, or use stage. A service worker needs HTTPS or `localhost`, so real-phone testing of offline
   behaviour happens on stage, or through a tunnel with TLS.
+
+---
+
+## 11. What is built (2026-09-29)
+
+**Step 1 — the installable shell.**
+
+| Piece | Where | Notes |
+|---|---|---|
+| Manifest | `public/field.webmanifest` | `id`/`start_url`/`scope` = `/field`, standalone, portrait, chrome colour. Linked from `src/app/field/layout.tsx` only, so the back office never installs as "FirsThing Field". |
+| Icons | `src/app/field-icon/[size]/route.tsx` | PNG 192/512 plus a maskable 512, drawn by `next/og` from the FT monogram. Outside `/field` on purpose: the browser fetches manifest icons without the session. |
+| Service worker | `public/field-sw.js` | Hand-written (Serwist needs webpack). Scope `/field`. `/_next/static` cache-first; `/field` pages network-first, with the last copy kept for no signal and never a sign-in redirect kept; a page never opened → `public/field-offline.html`. A `clear` message empties the kept pages. `next.config.ts` serves it `no-store`. |
+| Gate | `src/app/field/access.ts`, `src/proxy.ts` | `/field` is admin-only in the proxy (optimistic); every page re-checks from the row. **§9 Q2 answered provisionally**: any account holding `manage_survey` (engineering, inspection, operations by default). Others go to `/admin`, logged `field.access_refused`. |
+| Shell | `src/app/field/field-shell.tsx` | Chrome top bar with an Online / No signal chip and banner; bottom tabs Today · Work · Scan · More, 60px targets, 15px text. Registers the worker. |
+| More | `src/app/field/more/` | Account; "This phone" (installed? saved data protected? offline copy active? MB used); an Install button where Chrome offers one, otherwise the menu instruction; **Keep saved data safe** calls `navigator.storage.persist()` from a tap; sign-out clears the kept pages before signing out. |
+
+**Step 2 — the read path, online.**
+- **Today** (`/field`): the person's own open `ScheduledEvent`s, meaning visits, replacement days,
+  meetings and tasks, split into not closed out / today / next 7 days. "Today" is India's wall-clock
+  date (`src/lib/field-today.ts`, 7 unit cases). Each entry has a tap-to-call button when a contact
+  phone is on it, and a warning card links to My work when jobs have no visit booked.
+- **My work** (`/field/work`): the same rows as the back office's Field work page. The loader was
+  moved into `src/lib/field-work.ts` so both read one query.
+- **Scan** (`/field/scan`): the existing scanner component (`ScanClient`), reused, not copied.
+- `scheduleEventHref()` in `src/lib/schedule.ts` is now shared by Tasks and Today.
+
+**Not yet:**
+- Tapping a job still opens its back-office screen, which is outside the app's scope, so the
+  installed app shows it with a browser bar.
+- No data is downloaded for offline use beyond the pages already opened. The IndexedDB records
+  store and the outbox are step 3.
+- Sign-out is not yet blocked by unsent work, because nothing can be unsent yet.
+
+**Verified**: 32/32 in a production build (`pnpm start`) at Pixel 7 size.
+- Manifest and icons are served without a session; the worker is served `no-store`.
+- The worker is active with scope `/field` and controls the page after a full load.
+- With the network off, Today and My work open from the phone, the header says No signal, and a
+  page never opened shows the offline page.
+- Sign-out empties the kept pages and `/field` then needs sign-in again.
+- Sales and finance are refused, with log lines.
+- Scan opens inside the app.
+- The back office's Field work links to the app and carries no manifest.
+- There is no sideways scroll on any tab, and no console errors.
+
+**Two lessons for later steps:**
+- Sign-in reaches `/field` by client-side navigation. That page is still the `/login` document,
+  outside the worker's scope, so it is not controlled until the next full load. A launch from the
+  home screen is a full load, so this only matters in tests.
+- The dev DB tunnel can drop mid-run and presents as a hung login. Check the server log before
+  debugging the app.

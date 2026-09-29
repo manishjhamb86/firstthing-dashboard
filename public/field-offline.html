@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1C2434">
+<title>No signal · FirsThing Field</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #F6F9FC; color: #2A3547;
+    font: 16px/1.5 ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 340px; padding: 24px 16px; text-align: center; }
+  h1 { font-size: 20px; margin: 16px 0 8px; }
+  p { color: #5A6A85; margin: 0 0 20px; }
+  button {
+    min-height: 48px; padding: 0 24px; border: 0; border-radius: 24px;
+    background: #2C4AE2; color: #FFFFFF; font: 600 16px ui-sans-serif, sans-serif; cursor: pointer;
+  }
+  .mark { width: 56px; height: 56px; }
+</style>
+</head>
+<body>
+<main>
+  <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
+    <rect x="6" y="6" width="88" height="88" rx="20" fill="#2E9E68"/>
+    <path d="M 36 36 L 36 67 M 36 36 L 67 36 M 36 52 L 53 52" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    <path d="M 60 36 L 60 67 M 60 28 L 60 36" stroke="#FFFFFF" stroke-width="9" stroke-linecap="round" fill="none"/>
+    <circle cx="60" cy="23" r="8.5" fill="#B8E23F"/>
+  </svg>
+  <h1>No signal</h1>
+  <p>This page has not been opened on this phone before, so there is no copy of it here. Pages you have already opened still work — go back, or try again once you have signal.</p>
+  <button type="button" onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>

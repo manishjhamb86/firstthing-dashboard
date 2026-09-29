@@ -5,6 +5,9 @@ import { ROLE_HOME, isRole } from "@/lib/roles";
 // Route-prefix -> roles allowed. `null` would mean any authenticated role.
 const ROUTE_ROLES: Record<string, string[] | null> = {
   "/admin": ["admin"],
+  // The field app (2026-09-29): internal accounts only. Which ones may use
+  // it (manage_survey) is decided per page from the row, in field/access.ts.
+  "/field": ["admin"],
   "/portal": ["office_bearer", "committee", "manager"],
 };
 

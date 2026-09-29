@@ -17,6 +17,21 @@ const nextConfig: NextConfig = {
     // to be able to carry the file.
     serverActions: { bodySizeLimit: "25mb" },
   },
+  // The field app's service worker (docs/engineering/19-field-app.md). Never
+  // cached by the browser's HTTP cache, so a new version reaches phones on
+  // their next visit — Next's own PWA guide's headers for sw.js.
+  async headers() {
+    return [
+      {
+        source: "/field-sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -129,3 +129,25 @@ export function timeLabel(startAt: Date, endAt: Date | null): string {
 export function eventTitle(kind: ScheduleKind, societyName: string): string {
   return `${SCHEDULE_KIND[kind].verb} · ${societyName}`;
 }
+
+/**
+ * Where an entry opens — the screen its work is done on. Shared by the Tasks
+ * page and the field app's Today (2026-09-29) so the two cannot send the same
+ * appointment to different places. Null when there is no screen of its own
+ * (a plain task, or a deal step with nothing to point at).
+ */
+export function scheduleEventHref(e: {
+  id: string;
+  kind: ScheduleKind;
+  pipelineId: string | null;
+  circuitId: string | null;
+  societyId: string | null;
+}): string | null {
+  if (e.kind === "meeting") return `/admin/schedule?open=${e.id}#ev-${e.id}`;
+  if (e.kind === "task") return null;
+  if (e.pipelineId) {
+    return e.kind === "survey_visit" ? `/admin/pipeline/${e.pipelineId}/survey` : `/admin/pipeline/${e.pipelineId}`;
+  }
+  if (e.circuitId && e.societyId) return `/admin/societies/${e.societyId}/circuits/${e.circuitId}`;
+  return null;
+}

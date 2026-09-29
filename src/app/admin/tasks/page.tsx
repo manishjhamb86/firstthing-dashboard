@@ -4,7 +4,7 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
-import { SCHEDULE_KIND, timeLabel } from "@/lib/schedule";
+import { SCHEDULE_KIND, scheduleEventHref, timeLabel } from "@/lib/schedule";
 import { TASK_STATE_LABEL, taskState } from "@/lib/tasks";
 import { TasksClient, type TaskRow } from "./tasks-client";
 
@@ -68,18 +68,7 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       createdBy: e.createdBy.name ?? e.createdBy.email,
       societyId: e.society?.id ?? "",
       society: e.society?.name ?? null,
-      href:
-        e.kind === "meeting"
-          ? `/admin/schedule?open=${e.id}#ev-${e.id}`
-          : e.kind === "task"
-          ? null
-          : e.pipelineId
-            ? e.kind === "survey_visit"
-              ? `/admin/pipeline/${e.pipelineId}/survey`
-              : `/admin/pipeline/${e.pipelineId}`
-            : e.circuitId && e.societyId
-              ? `/admin/societies/${e.societyId}/circuits/${e.circuitId}`
-              : null,
+      href: scheduleEventHref(e),
       closedNote:
         e.status === "done"
           ? `Done ${e.completedAt ? formatDate(e.completedAt) : ""}${e.completedById ? ` by ${completers.get(e.completedById) ?? "—"}` : ""}${e.completionNote ? ` — ${e.completionNote}` : ""}`

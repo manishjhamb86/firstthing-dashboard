@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-29 (Android field app: decided and planned on branch `android-app`, not started — see `docs/engineering/19-field-app.md`)
+2026-09-29 (Android field app: installable shell + Today/My work/Scan built on branch `android-app` — see `docs/engineering/19-field-app.md` §11)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6933,6 +6933,25 @@ main purpose is to serve our in-field team". The reasons:
 
 This Mac has no Java runtime and no Android SDK. They are needed only for the optional Play Store
 package.
+
+**Same day — step 1 and step 2's read path built** (full detail in the plan's §11).
+- `/field` is its own surface: a manifest linked from its layout only, `next/og` PNG icons, and a
+  hand-written service worker scoped to `/field`. The worker runs network-first for pages, keeps the
+  last copy for no signal, never keeps a sign-in redirect, shows an offline page for a page never
+  opened, and clears the kept pages on sign-out.
+- Access is `manage_survey`, from the row (plan §9 Q2, answered provisionally), and a refusal is
+  logged `field.access_refused`.
+- Screens: Today, My work, Scan and More.
+  - Today reads the person's own schedule in India's wall-clock date (`src/lib/field-today.ts`).
+  - My work uses a loader now shared with the back office's Field work page
+    (`src/lib/field-work.ts`).
+  - Scan reuses the existing scanner.
+  - More shows install status, whether saved data is protected (`storage.persist()` asked for on a
+    tap), and whether the offline copy is active.
+- `scheduleEventHref()` is shared by Tasks and Today.
+- Verified 32/32 against a production build at Pixel 7 size, including network-off behaviour and
+  both refusals. 1,178 unit tests; `tsc`/`lint`/`build` clean. No schema change.
+- Next is step 3, the outbox.
 
 ## Current Phase (archived application — history)
 

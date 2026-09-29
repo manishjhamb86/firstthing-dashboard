@@ -4,6 +4,8 @@ import {
   classifyReply,
   parseEnvelope,
   parseInspectionPayload,
+  parseDemoMeterPayload,
+  parseDemoReplacementPayload,
   parseMovePayload,
   parsePhotoPayload,
   retryDelayMs,
@@ -93,5 +95,22 @@ describe("parseMovePayload", () => {
   });
   it("is a known outbox kind", () => {
     expect(parseEnvelope({ id: ID, kind: "stock.move", payload: good })).not.toHaveProperty("error");
+  });
+});
+
+describe("demo step payloads", () => {
+  it("reads a meter install, no meter meaning an old paper demo", () => {
+    expect(parseDemoMeterPayload({ demoId: "d1", meterId: "m1", installedOn: "2026-09-20", displayedLoad: "1840" })).toEqual({
+      demoId: "d1", meterId: "m1", installedOn: "2026-09-20", displayedLoad: 1840,
+    });
+    expect(parseDemoMeterPayload({ demoId: "d1", meterId: "", installedOn: "2026-09-20", displayedLoad: "" })).toMatchObject({ meterId: null, displayedLoad: null });
+    expect(parseDemoMeterPayload({ demoId: "d1", installedOn: "20-09-2026" })).toHaveProperty("error");
+    expect(parseDemoMeterPayload({ demoId: "d1", installedOn: "2026-09-20", displayedLoad: "lots" })).toHaveProperty("error");
+  });
+  it("reads a replacement with its lines, exclusion strictly boolean", () => {
+    const r = parseDemoReplacementPayload({ demoId: "d1", replacedOn: "2026-09-25", lines: [{ lineId: "l1", replacementTypeId: "t1", count: "55", wattage: "18", exclude: "yes" }] });
+    if ("error" in r) throw new Error(r.error);
+    expect(r.lines[0]).toEqual({ lineId: "l1", replacementTypeId: "t1", count: 55, wattage: 18, exclude: false });
+    expect(parseDemoReplacementPayload({ demoId: "d1", replacedOn: "soon" })).toHaveProperty("error");
   });
 });

@@ -19,7 +19,7 @@
  *   retry     — network or server trouble. Try again later, no strike.
  */
 
-export const OUTBOX_KINDS = ["inspection.file", "inspection.photo", "stock.move"] as const;
+export const OUTBOX_KINDS = ["inspection.file", "inspection.photo", "stock.move", "demo.meter", "demo.replacement"] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 
 /** Refusals before an item blocks the queue (05-field.md §0.1 "Poison item"). */
@@ -147,6 +147,49 @@ export function parseMovePayload(p: unknown): FieldMovePayload | { error: string
     circuitId: str(o.circuitId),
     reason: str(o.reason),
   };
+}
+
+/** The meter install and load test for one demo (demo-step-core.ts recordDemoMeterAs). */
+export type FieldDemoMeterPayload = {
+  demoId: string;
+  meterId: string | null;
+  installedOn: string; // YYYY-MM-DD
+  displayedLoad: number | null;
+};
+
+export function parseDemoMeterPayload(p: unknown): FieldDemoMeterPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.demoId)) return { error: "The demo this belongs to is missing." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.installedOn))) return { error: "Pick the day the meter went in." };
+  const meterId = str(o.meterId) || null;
+  const load = o.displayedLoad === null || o.displayedLoad === "" || o.displayedLoad === undefined ? null : Number(o.displayedLoad);
+  if (load !== null && !Number.isFinite(load)) return { error: "The displayed load must be a number of watts." };
+  return { demoId: str(o.demoId), meterId, installedOn: str(o.installedOn), displayedLoad: load };
+}
+
+export type FieldReplacementLine = { lineId: string; replacementTypeId: string; count: number; wattage: number; exclude: boolean };
+
+/** The light replacement for one demo (demo-step-core.ts recordDemoReplacementAs). */
+export type FieldDemoReplacementPayload = { demoId: string; replacedOn: string; lines: FieldReplacementLine[] };
+
+export function parseDemoReplacementPayload(p: unknown): FieldDemoReplacementPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.demoId)) return { error: "The demo this belongs to is missing." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.replacedOn))) return { error: "Pick the day the last light was replaced." };
+  const raw = Array.isArray(o.lines) ? o.lines : [];
+  const lines: FieldReplacementLine[] = [];
+  for (const r of raw) {
+    const l = (r ?? {}) as Record<string, unknown>;
+    if (!str(l.lineId)) return { error: "A fixture line is missing its id." };
+    lines.push({
+      lineId: str(l.lineId),
+      replacementTypeId: str(l.replacementTypeId),
+      count: Number(l.count),
+      wattage: Number(l.wattage),
+      exclude: l.exclude === true,
+    });
+  }
+  return { demoId: str(o.demoId), replacedOn: str(o.replacedOn), lines };
 }
 
 export type SendOutcome = "done" | "refused" | "sign_in" | "retry";

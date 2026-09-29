@@ -47,7 +47,7 @@ export default async function WorkPage() {
         <ul className="space-y-2">
           {rows.map((r) => (
             <li key={r.key}>
-              <Link href={r.href} className="card block p-4 min-h-[48px]">
+              <Link href={r.fieldHref ?? r.href} className="card block p-4 min-h-[48px]">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-semibold">{r.societyName}</p>

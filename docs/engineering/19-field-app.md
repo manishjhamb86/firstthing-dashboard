@@ -1,6 +1,6 @@
 # Field app (SUR-02 on Android) — decision and build plan
 
-**Status:** Steps 1, 3, 4 and 5 built; step 2's read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
+**Status:** Steps 1, 3, 4, 5 and 6 built; step 2's read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
 **Decided:** 2026-09-29 · **Owner:** Yugesh
 
 This file is where the Android field app resumes. It records what was decided on 2026-09-29, why,
@@ -20,12 +20,14 @@ rules and screens) and ADR-002.
   - step 2's online read path;
   - step 3, the outbox;
   - step 4, the monthly inspection filed with no signal;
-  - step 5, stock scanning and one move for a scanned pile, with no signal.
+  - step 5, stock scanning and one move for a scanned pile, with no signal;
+  - step 6, a demo's meter install with its load test and its light replacement, with no signal.
 
-  §11, §12 and §13 say what exists and how it was verified.
+  §11–§14 say what exists and how it was verified.
 - **§9 Q1 was not answered.** Inspection went first, as this plan recommended.
-- **Next**: step 6, the circuit/demo steps, or step 7, installation day capture. Which comes next
-  is the user's call. Step 0's reconciliation of `05-field.md` is still owed.
+- **Next**: step 7, installation day capture and the completion certificate. Step 0's
+  reconciliation of `05-field.md` is still owed, and §14 records one scope call it should confirm
+  (demo periods and readings stay in the back office).
 
 ---
 
@@ -439,3 +441,72 @@ Worker version is v4.
 - The inspection suite passed 27/27 three runs in a row after the warm-up fix; step 1's suite passed
   32/32.
 - 1,189 unit tests; `tsc`/`lint`/`build` clean. No schema change.
+
+---
+
+## 14. Step 6 — a demo's on-site steps with no signal (2026-09-29)
+
+**What the phone does.** `/field/demo/[demoId]` is the crew's screen for one demo:
+- the booked replacement day, the crew, and a tap-to-call for the society's contact;
+- what the office already has on record (meter, load test, replacement);
+- **Meter & load test** — the meter, the day it went in, and the load it shows. The phone works out
+  the difference against the demo's lights (the same `expectedDisplayedLoadW` the back office uses)
+  and says whether it is inside ±10%, before anything is sent;
+- **Light replacement** — the day the last light went in and, per fixture line, what replaced it,
+  how many and at what wattage, or "not replaced — exclude from the benchmark". A partial count
+  states how many are kept.
+
+Both are saved on the phone and queued as `demo.meter` and `demo.replacement`. The replacement
+opens once the meter is on record **or saved on this phone**, so a crew can do both in one basement
+visit; the queue sends them in order, so the meter always reaches the office first.
+
+**One set of rules.** The two steps' bodies moved out of the circuit page's Server Actions into
+`src/lib/demo-step-core.ts` (`recordDemoMeterAs`, `recordDemoReplacementAs`). The back office's
+actions and the sync route both call them, so the phone is refused for exactly what the desk is:
+a locked (shared) demo, a meter already elsewhere, a replacement before the meter, a line replaced
+by a device not in its compatibility list, and so on. The core takes an account rather than reading
+the session, and it lives in a lib module because a `"use server"` file exposes every export to the
+browser.
+
+**Receipts for these two kinds are written after the work, not in the same transaction.** The
+cores run their own transactions (the meter step writes the meter's history, the replacement
+re-derives the circuit's figures). A retry that races a finished one is caught by the receipt's
+unique id and answered as a replay; both steps set values rather than add them, so running one
+twice leaves the same row.
+
+**"Saved — check this."** An out-of-tolerance load test is not a refusal: the office keeps it, as
+the desk does, so an override can be recorded against it. The reply carries the warning, the
+worker keeps it with the sent item, and More → Recently sent shows it instead of "Reached the
+office".
+
+**On the phone before it is needed.** My work links a replacement job to this screen, and the
+field layout hands the person's own job pages to the warm-up, which re-runs whenever that list
+changes. A demo assigned this morning opens in the basement without ever having been opened.
+
+**Scope call, for step 0 to confirm.** The plan listed "readings for the demo periods". They were
+left in the back office on purpose: a demo's days come from the meter's own hourly store, and
+accepting them — or typing a paper demo's days — is a desk review of figures a benchmark rests on,
+not site work. Setting the pre/post periods stays there for the same reason. The gate pass stays
+online-only, as planned.
+
+**Also fixed: a sign-out race in the worker.** A warm-up still running when a person signed out
+could put a page back into the cache just after sign-out emptied it, leaving the last person's page
+on a shared phone. Sign-out now bumps a generation counter, and a page fetched under an older
+generation is never kept. Worker version v6.
+
+**Verified:**
+- `field-demo.mjs` 21/21 at Pixel 7 size, on a disposable circuit, demo, fixture line, booked day
+  and an unassigned meter:
+  - the warm-up kept the demo page without it being opened, and My work links to it;
+  - with no signal the page opened with the contact, the load test read 15.0% off for 460 W against
+    400 W, the replacement opened off the meter saved on the phone, and 18 of 20 read "2 kept";
+  - nothing reached the office until the signal came back; then both steps arrived in order,
+    stored as typed (meter, date, 460 W, 15.0%, replacement day, 18 × the compatible device), with
+    the meter's history entry and two receipts;
+  - More showed "Saved — check this";
+  - a replayed item returned the stored result and changed nothing; a replacement dated before the
+    meter was refused by the server with 422 and nothing changed;
+  - the back office's circuit page shows the replacement recorded from the phone.
+- Fixtures removed and confirmed by count, the meter's assignment cleared back to none.
+- Regression: shell 32/32 (twice), inspection 27/27, scan 17/17.
+- 1,191 unit tests; `tsc`/`lint`/`build` clean. No schema change.

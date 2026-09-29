@@ -3,7 +3,16 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { parseEnvelope, parseInspectionPayload, parseMovePayload, parsePhotoPayload, type Envelope } from "@/lib/field-sync";
+import {
+  parseDemoMeterPayload,
+  parseDemoReplacementPayload,
+  parseEnvelope,
+  parseInspectionPayload,
+  parseMovePayload,
+  parsePhotoPayload,
+  type Envelope,
+} from "@/lib/field-sync";
+import { recordDemoMeterAs, recordDemoReplacementAs } from "@/lib/demo-step-core";
 import { applyUnitMove } from "@/lib/inventory-move";
 import { fileInspection } from "@/lib/inspection-file";
 
@@ -44,6 +53,10 @@ async function apply(
     const r = await applyUnitMove(tx, actor.id, input);
     if ("error" in r) return r;
     return { done: r.done, failed: r.failed };
+  }
+
+  if (env.kind === "demo.meter" || env.kind === "demo.replacement") {
+    return { error: "Handled before the transaction." }; // unreachable: see POST
   }
 
   // inspection.photo — the photo of the signed paper form, uploaded after the
@@ -98,6 +111,41 @@ export async function POST(req: Request) {
 
   const seen = await replay();
   if (seen) return seen;
+
+  // The two on-site demo steps (demo-step-core.ts) run their own
+  // transactions — the meter step plans and rewrites the meter's history — so
+  // here the STEP comes first and the receipt after, not inside one
+  // transaction. Both only SET values (a date, a load, per-line counts): a
+  // replay that slips past the receipt, because a reply was lost after the
+  // step committed, sets the same values again — no second history entry, one
+  // extra change-log line. The rules are exactly the back office's.
+  if (env.kind === "demo.meter" || env.kind === "demo.replacement") {
+    const parsed = env.kind === "demo.meter" ? parseDemoMeterPayload(env.payload) : parseDemoReplacementPayload(env.payload);
+    if ("error" in parsed) {
+      logger.warn("field.sync_refused", { actorId: actor.id, itemId: env.id, kind: env.kind, reason: parsed.error });
+      return NextResponse.json({ error: parsed.error }, { status: 422 });
+    }
+    const out =
+      env.kind === "demo.meter"
+        ? await recordDemoMeterAs(actor, parsed as Parameters<typeof recordDemoMeterAs>[1])
+        : await recordDemoReplacementAs(actor, parsed as Parameters<typeof recordDemoReplacementAs>[1]);
+    if (out.error) {
+      logger.warn("field.sync_refused", { actorId: actor.id, itemId: env.id, kind: env.kind, reason: out.error });
+      return NextResponse.json({ error: out.error }, { status: 422 });
+    }
+    const result: Prisma.JsonObject = { ok: true, ...(out.warning ? { warning: out.warning } : {}) };
+    try {
+      await db.fieldSyncReceipt.create({ data: { id: env.id, actorId: actor.id, kind: env.kind, result } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        const again = await replay();
+        if (again) return again;
+      }
+      throw err;
+    }
+    logger.info("field.sync_applied", { actorId: actor.id, itemId: env.id, kind: env.kind, result });
+    return NextResponse.json({ ok: true, result });
+  }
 
   try {
     const out = await db.$transaction(async (tx) => {

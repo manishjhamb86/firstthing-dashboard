@@ -34,11 +34,11 @@ export function useOnline(): boolean {
   );
 }
 
-export function FieldShell({ children }: { children: ReactNode }) {
+export function FieldShell({ children, jobUrls = [] }: { children: ReactNode; jobUrls?: string[] }) {
   // The provider also registers the service worker, which keeps the pages
   // this phone has opened and sends saved work. Scoped to /field only.
   return (
-    <OutboxProvider>
+    <OutboxProvider jobUrls={jobUrls}>
       <ShellFrame>{children}</ShellFrame>
     </OutboxProvider>
   );

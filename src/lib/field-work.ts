@@ -19,6 +19,8 @@ import { SERVICE_LINE_LABEL } from "./status-maps";
 export type WorkRow = {
   key: string;
   href: string;
+  /** Where the field app opens this job, when it has its own screen for it. */
+  fieldHref?: string;
   societyName: string;
   societyLocation: string;
   serviceLine: string;
@@ -115,6 +117,7 @@ export async function loadFieldWork(actorId: string, mineOnly: boolean): Promise
       return {
         key: `d-${d.id}`,
         href: `/admin/societies/${c.societyId}/circuits/${c.id}?demo=${d.id}`,
+        fieldHref: `/field/demo/${d.id}`,
         societyName: c.society.name,
         societyLocation: c.society.location,
         serviceLine: SERVICE_LINE_LABEL[c.serviceLine] ?? c.serviceLine,

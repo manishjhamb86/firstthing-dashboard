@@ -30,11 +30,15 @@
  * Bump VERSION when this file's caching behaviour changes.
  */
 
-const VERSION = "v4";
+const VERSION = "v6";
 const STATIC_CACHE = `ft-field-static-${VERSION}`;
 const PAGE_CACHE = `ft-field-pages-${VERSION}`;
 const OFFLINE_URL = "/field-offline.html";
 const BLOCK_AFTER_REFUSALS = 3;
+// Bumped by sign-out. A page fetched before sign-out must not be kept after it:
+// a warm-up still in flight when the cache is emptied would otherwise put the
+// last person's page back on a shared phone.
+let generation = 0;
 
 // ── install / activate ────────────────────────────────────────────────
 
@@ -68,10 +72,10 @@ function isFieldPath(pathname) {
   return pathname === "/field" || pathname.startsWith("/field/");
 }
 
-async function keepPage(path, res) {
+async function keepPage(path, res, gen = generation) {
   // Keep only a real page for this address — never a redirect to sign-in,
   // never an error page standing in for the real one.
-  if (!res.ok || res.redirected) return;
+  if (!res.ok || res.redirected || gen !== generation) return;
   const cache = await caches.open(PAGE_CACHE);
   await cache.put(path, res);
 }
@@ -87,6 +91,7 @@ async function keepPage(path, res) {
  * names the client chunks a page loads inside its inline flight data.
  */
 async function warmPage(path) {
+  const gen = generation;
   const res = await fetch(path, { credentials: "same-origin", cache: "no-store" });
   if (!res.ok || res.redirected) return false;
   const html = await res.clone().text();
@@ -107,8 +112,8 @@ async function warmPage(path) {
     }),
   );
   if (got.includes(false)) return false; // the next warm-up tries again
-  await keepPage(path, res);
-  return true;
+  await keepPage(path, res, gen);
+  return gen === generation;
 }
 
 self.addEventListener("fetch", (event) => {
@@ -135,10 +140,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (req.mode === "navigate" && isFieldPath(url.pathname)) {
+    const gen = generation;
     event.respondWith(
       fetch(req)
         .then((res) => {
-          keepPage(url.pathname, res.clone());
+          keepPage(url.pathname, res.clone(), gen);
           return res;
         })
         .catch(() =>
@@ -207,6 +213,7 @@ async function recordSent(db, item, result) {
     at: Date.now(),
     done: result && typeof result.done === "number" ? result.done : undefined,
     problems: result && Array.isArray(result.failed) ? result.failed : [],
+    warning: result && typeof result.warning === "string" ? result.warning : undefined,
   });
   const all = await reqP(store.getAll());
   all.sort((a, b) => b.at - a.at);
@@ -327,6 +334,7 @@ self.addEventListener("message", (event) => {
   const reply = (msg) => { if (event.ports && event.ports[0]) event.ports[0].postMessage(msg); };
 
   if (data.type === "clear") {
+    generation += 1;
     event.waitUntil(caches.delete(PAGE_CACHE).then(() => reply({ cleared: true })));
   } else if (data.type === "drain") {
     event.waitUntil(drain().then(() => reply({ drained: true })));

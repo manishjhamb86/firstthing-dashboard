@@ -25,11 +25,14 @@ export function RecentlySent() {
                 <StatusChip tone="warn">
                   {s.done ?? 0} done · {s.problems.length} not
                 </StatusChip>
+              ) : s.warning ? (
+                <StatusChip tone="warn">Saved — check this</StatusChip>
               ) : (
                 <StatusChip tone="ok">Reached the office</StatusChip>
               )}
             </div>
             <p className="text-[var(--text-muted)]">{formatInstant(new Date(s.at))}</p>
+            {s.warning && <p style={{ color: "var(--warn-fg)" }}>{s.warning}</p>}
             {s.problems.length > 0 && (
               <ul className="mt-1 space-y-1" style={{ color: "var(--warn-fg)" }}>
                 {s.problems.slice(0, 20).map((p, i) => (

@@ -76,7 +76,7 @@ function ask(worker: ServiceWorker, message: object, timeoutMs: number): Promise
   });
 }
 
-export function OutboxProvider({ children }: { children: ReactNode }) {
+export function OutboxProvider({ children, jobUrls = [] }: { children: ReactNode; jobUrls?: string[] }) {
   const [items, setItems] = useState<OutboxItem[]>([]);
   const [sent, setSent] = useState<SentRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -161,24 +161,26 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
     };
   }, [items, signInNeeded, sendNow]);
 
-  // Keep the core pages on the phone — once per session, with signal.
+  // Keep the core pages, and this person's own on-site jobs, on the phone —
+  // once per session with signal, and again whenever a job is added.
+  const warmKey = [...WARM_URLS, ...jobUrls].join("|");
   useEffect(() => {
     if (!navigator.onLine) return;
     try {
-      if (sessionStorage.getItem("ft-field-warmed")) return;
+      if (sessionStorage.getItem("ft-field-warmed") === warmKey) return;
     } catch {
       /* storage blocked: warm anyway */
     }
     void activeWorker().then(async (w) => {
       if (!w) return;
-      await ask(w, { type: "warm", urls: WARM_URLS }, 60_000);
+      await ask(w, { type: "warm", urls: warmKey.split("|") }, 60_000);
       try {
-        sessionStorage.setItem("ft-field-warmed", "1");
+        sessionStorage.setItem("ft-field-warmed", warmKey);
       } catch {
         /* fine */
       }
     });
-  }, []);
+  }, [warmKey]);
 
   const pending = items.filter((i) => i.state === "pending").length;
   const blocked = items.filter((i) => i.state === "blocked").length;

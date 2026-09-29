@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { loadFieldWork } from "@/lib/field-work";
 import { requireFieldPage } from "./access";
 import { FieldShell } from "./field-shell";
 
@@ -23,6 +24,10 @@ export const viewport: Viewport = {
 
 export default async function FieldLayout({ children }: { children: React.ReactNode }) {
   // Every page below checks again; a layout is not an auth boundary.
-  await requireFieldPage();
-  return <FieldShell>{children}</FieldShell>;
+  const admin = await requireFieldPage();
+  // The person's own on-site jobs are kept on the phone too, so the demo they
+  // are walking to opens in a basement even if it was never opened before.
+  const work = await loadFieldWork(admin.id, true);
+  const jobUrls = work.flatMap((r) => (r.fieldHref ? [r.fieldHref] : []));
+  return <FieldShell jobUrls={jobUrls}>{children}</FieldShell>;
 }

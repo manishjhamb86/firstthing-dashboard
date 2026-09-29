@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-29 (Android field app: shell, offline outbox, offline inspection and offline stock scanning built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–13)
+2026-09-29 (Android field app: shell, offline outbox, offline inspection, offline stock scanning and a demo's on-site steps built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–14)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6985,6 +6985,24 @@ package.
   offline as "This page couldn't load". Pages are now kept only after every `/_next/static` asset
   they name is stored.
 - Verified 17/17 (scan, with a stock fixture) and 27/27 ×3 (inspection), plus 32/32 (step 1).
+
+**Same day — step 6: a demo's on-site steps with no signal** (plan §14).
+- `/field/demo/[demoId]` records the meter install with its load test (worked out on the phone)
+  and the light replacement per fixture line, both queued; the replacement opens off a meter saved
+  on the phone, and the queue sends them in order. My work links a replacement job there, and the
+  person's own job pages join the warm-up.
+- The two steps moved into `src/lib/demo-step-core.ts`, called by both the back office's actions
+  and the sync route, so the phone is refused for exactly what the desk is. Receipts for these
+  kinds are written after the work (the cores run their own transactions); a race is answered as a
+  replay, and both steps set values.
+- An out-of-tolerance load test is saved, not refused: the reply carries the warning and More shows
+  "Saved — check this".
+- Readings and the demo periods stay in the back office (a desk review of figures a benchmark rests
+  on) — recorded as a scope call for step 0 to confirm.
+- Fixed in the worker: a warm-up in flight at sign-out could re-cache a page after the cache was
+  emptied. A generation counter now stops it.
+- Verified 21/21 offline→online on a disposable demo (rows, receipts, replay, a server refusal),
+  plus shell 32/32, inspection 27/27, scan 17/17; 1,191 unit tests.
 
 ## Current Phase (archived application — history)
 

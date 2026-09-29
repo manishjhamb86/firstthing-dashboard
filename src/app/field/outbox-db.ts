@@ -26,7 +26,7 @@ export type OutboxState = "pending" | "blocked";
 export type OutboxItem = {
   seq?: number;
   id: string;
-  kind: "inspection.file" | "inspection.photo" | "stock.move";
+  kind: "inspection.file" | "inspection.photo" | "stock.move" | "demo.meter" | "demo.replacement";
   payload: unknown;
   /** What the person reads in the waiting list. */
   label: string;
@@ -171,6 +171,8 @@ export type SentRecord = {
   at: number;
   done?: number;
   problems: { code: string; error: string }[];
+  /** Saved, but the office flagged something to look at (an out-of-tolerance load test). */
+  warning?: string;
 };
 
 export async function listSent(): Promise<SentRecord[]> {

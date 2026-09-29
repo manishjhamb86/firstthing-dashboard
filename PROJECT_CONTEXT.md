@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-29 (Android field app: shell, offline outbox, offline inspection, offline stock scanning, a demo's on-site steps and installation days built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–15)
+2026-09-29 (Android field app on branch `android-app`: shell, offline outbox, inspection, stock scanning, a demo's on-site steps, installation days and the full site survey — see `docs/engineering/19-field-app.md` §11–16e)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -7068,6 +7068,14 @@ package.
 suites pass, 1,215 unit tests pass, and `tsc`/`lint`/`build` are clean. Test photos remain in the
 bucket under `Documents/Print_Back_Co/…/Surveys/` (the credentials are PutObject-only, so they
 cannot be deleted).
+
+**Same day — step 0, done last: the blueprint reconciled with what was built** (plan §17).
+`05-field.md` opens with a dated amendment: the v1 screens as built, the gate pass, commissioning
+monitor and benchmark result left to the back office, and each departure from the spec's surface
+rules (no autosave on blur, pages kept rather than per-visit data downloads, no 7-day purge, no
+superseded revisions, the inventory row as the area claim, installing as the storage guarantee,
+no per-visit scoping of links). Thirteen screens carry a `scope_note` in `docs/backlog.yaml`;
+validator unchanged. §9's open questions are distribution, push, retention and session length.
 
 ## Current Phase (archived application — history)
 

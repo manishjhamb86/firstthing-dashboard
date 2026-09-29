@@ -900,6 +900,7 @@ screens:
   - id: SCR-171
     name: "My visits (field home)"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29 as the field app's Today and My work (/field); see 05-field.md's 2026-09-29 amendment."
     type: page
     features: [FEAT-017, FEAT-096]
     priority: 1
@@ -912,6 +913,7 @@ screens:
   - id: SCR-010
     name: "Survey: society profile & access"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29 (/field/survey/.../profile); the committee is written into the society's member register."
     type: page
     features: [FEAT-005, FEAT-096]
     priority: 1
@@ -924,6 +926,7 @@ screens:
   - id: SCR-011
     name: "Survey: lighting inventory by area"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29; the inventory row's counter is the area claim, and a contested area is settled with a reason before submission."
     type: page
     features: [FEAT-006]
     priority: 1
@@ -936,6 +939,7 @@ screens:
   - id: SCR-012
     name: "Survey: circuit selection per light type"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29; typicality answer and panel photo required, a type can be marked as having no eligible circuit."
     type: page
     features: [FEAT-007]
     priority: 1
@@ -948,6 +952,7 @@ screens:
   - id: SCR-013
     name: "Survey: pump audit & logbook capture"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29; units generated from the room's structure, logbook pages tagged with a chosen month."
     type: page
     features: [FEAT-008, FEAT-009]
     priority: 1
@@ -960,6 +965,7 @@ screens:
   - id: SCR-020
     name: "Meter install & load validation"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29 as a demo's meter-install step on the phone."
     type: page
     features: [FEAT-011, FEAT-094]
     priority: 1
@@ -972,6 +978,7 @@ screens:
   - id: SCR-021
     name: "Gate pass (incl. provisional release)"
     surface: "SUR-02"
+    scope_note: "2026-09-29: stays on the back office; not built on the phone."
     type: page
     features: [FEAT-097]
     priority: 1
@@ -984,6 +991,7 @@ screens:
   - id: SCR-022
     name: "Commissioning monitor (window progress)"
     surface: "SUR-02"
+    scope_note: "2026-09-29: stays on the back office; readings and demo periods are a desk review."
     type: page
     features: [FEAT-012, FEAT-014]
     priority: 1
@@ -996,6 +1004,7 @@ screens:
   - id: SCR-023
     name: "Demo installation / light replacement"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29 as a demo's replacement step, replaced or kept per fixture line."
     type: page
     features: [FEAT-013]
     priority: 1
@@ -1008,6 +1017,7 @@ screens:
   - id: SCR-024
     name: "Benchmark result & out-of-range review"
     surface: "SUR-02"
+    scope_note: "2026-09-29: stays on the back office."
     type: page
     features: [FEAT-014, FEAT-015]
     priority: 1
@@ -1020,6 +1030,7 @@ screens:
   - id: SCR-061
     name: "Daily batch capture"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29 (/field/installation/...), photos uploaded before the day is sent."
     type: page
     features: [FEAT-034]
     priority: 1
@@ -1032,6 +1043,7 @@ screens:
   - id: SCR-064
     name: "Completion certificate"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29; offered to operations only."
     type: page
     features: [FEAT-037]
     priority: 1
@@ -1074,6 +1086,7 @@ screens:
   - id: SCR-140
     name: "Routine inspection checklist"
     surface: "SUR-02"
+    scope_note: "Built 2026-09-29 as the monthly inspection on the phone."
     type: page
     features: [FEAT-078, FEAT-079]
     priority: 2

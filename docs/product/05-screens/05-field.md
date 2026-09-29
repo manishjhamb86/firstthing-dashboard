@@ -1,6 +1,6 @@
 # SUR-02 field — mobile web, offline-tolerant
-**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Draft — all 12 priority-1 specified, mockups pending
-**Last updated:** 2026-08-13
+**Product:** FirsThing Platform · **Phase:** 5 — Screens · **Status:** Built as the field app (`/field`, branch `android-app`) — see the 2026-09-29 amendment below
+**Last updated:** 2026-09-29
 
 The only surface that runs where the network doesn't. Everything here is captured in a basement, a
 pump room, a stairwell or a car park, one-handed, on a personal phone, by someone who will not come
@@ -13,6 +13,67 @@ Global rules: [`00-global-patterns.md`](00-global-patterns.md). Visual system:
 **Screens (12 priority 1):** SCR-171, 010, 011, 012, 013, 020, 021, 022, 023, 024, 061, 064.
 **Also on this surface (priority 2):** SCR-065, 111, 132, 140, 141, 142. **Related:** SCR-223
 (offline & sync-pending, specified in `06-cross-cutting.md`).
+
+---
+
+## Amendment 2026-09-29 — what the field app built, and where it departs from this spec
+
+This spec was written on 2026-08-13. The field app (`/field`, an installable web app; decision and
+build log in [`../../engineering/19-field-app.md`](../../engineering/19-field-app.md)) was built
+against it on 2026-09-29, after six weeks of back-office changes. Where the two differ, **the
+built app is the record** and the difference is listed here, per AGENTS.md's rule that scope
+changes go through the blueprint. The screen sections below are left as written.
+
+**The v1 screen list, as built**
+
+| Spec | Built as | Offline |
+|---|---|---|
+| SCR-171 My visits | Split in two: **Today** (the person's own schedule for the day, India's date) and **My work** (surveys, replacement days, installation days assigned to them), plus **Scan** and **More** (install state, storage protection, what is waiting to send, recently sent and refused) | Read from the last kept copy |
+| SCR-010–013 Survey | Built as specified, with the survey shell: per-section state, submission, the lock, and the office querying a section back open | Yes |
+| SCR-020 Meter install & load test, SCR-023 Light replacement | Built as the on-site steps of a **demo** (per-demo commissioning, 2026-09-26), replacement recorded per fixture line as replaced or kept | Yes |
+| SCR-021 Gate pass | **Not on the phone.** Stays on the back office | — |
+| SCR-022 Commissioning monitor, SCR-024 Benchmark result | **Not on the phone.** Readings, demo periods and the benchmark are a desk review of figures a bill rests on | — |
+| SCR-061 Daily batch capture, SCR-064 Completion certificate | Built; the certificate is offered to operations only | Yes |
+| SCR-140 Routine inspection checklist (priority 2) | Built as the monthly inspection: start, fixtures, finalise, signed-checklist photo | Yes |
+| — (not in this spec) | **Stock scanning**: open a unit, or collect units for one move | Yes |
+| SCR-065, 111, 132, 141, 142 (priority 2) | Not built | — |
+
+**Departures from the surface rules (§0)**
+
+- **Saving (§0.1 Autosave).** There is no autosave on blur. Each form has a save that writes to the
+  phone first; that save never fails for want of signal. What reaches the office is one queued item
+  per save.
+- **The queue (§0.1).** Built as specified: one ordered per-device queue, 15 s → 5 min backoff, a
+  refused item blocks the queue after three strikes and names the office's reason with *Try again*
+  or *Discard*. Each item carries an id made on the phone, and the server keeps a receipt in the
+  same transaction as the work, so a retry never files twice.
+- **What downloads (§0.1).** The pages of the person's own work are kept on the phone when they
+  open the app with signal, and open from that copy with none. There is no separate data download
+  per visit.
+- **Retention (§0.1).** The 7-day purge of synced data is **not built** (open question in
+  `19-field-app.md` §9). Signing out wipes the phone.
+- **Conflict (§0.1).** No superseded-revision history for field edits: a later save replaces an
+  earlier one. Where the office has acted (a survey submitted), the phone's write is refused, and
+  the refusal is the poison item §0.1 describes.
+- **Several people, one visit (§0.1b, ADR-007).** The advisory `FieldVisitAreaClaim` table is not
+  used for the survey. Each inventory row records who counted it, and that row *is* the claim: a
+  second person's count of the same area keeps both rows and marks the area contested. It is left
+  out of the total and settled by choosing one count with a reason; the other rows are voided,
+  never summed or merged. Submission is refused while an area is contested, or while a teammate's
+  phone reports unsent work (the phone reports its count).
+- **Survey additions.** The committee is written into the society's member register (2026-09-25),
+  under that register's rules. A circuit candidate needs a typicality answer (20+ characters) and a
+  photo of its panel. A light type can be marked as having no eligible circuit, with what was
+  found. The represented count is derived (the type's surveyed total less the demo's own lights),
+  never typed on the phone.
+- **Device (§0.7).** "No install required" is refined: installing is how the phone's saved work
+  survives storage pressure, because Chrome grants persistent storage mostly to installed apps. The
+  app works in the browser; More says whether saved work is protected.
+- **Role (§0.7).** Access is the `manage_survey` permission, read from the account row. My work
+  lists only the person's own assignments, but a field account can open another survey by its
+  link — narrower scoping is not built.
+- **Session (§0.7).** Unchanged from the rest of the product; a field-specific length is an open
+  question.
 
 ---
 
@@ -1243,20 +1304,20 @@ finance should confirm that is acceptable.
 
 **Rendered mockups:** https://claude.ai/code/artifact/74300664-e56c-4ae3-80ee-8a7e85c4edb5 — every screen below, each with its full state set.
 
-| Screen | Spec | Mockup | Blueprint |
+| Screen | Spec | Mockup | Built (2026-09-29) |
 |---|---|---|---|
-| SCR-171 my visits | ✅ | ✅ | — |
-| SCR-010 survey: society profile & access | ✅ | ✅ | — |
-| SCR-011 survey: lighting inventory | ✅ | ✅ | — |
-| SCR-012 survey: circuit selection | ✅ | ✅ | — |
-| SCR-013 survey: pump audit & logbook | ✅ | ✅ | — |
-| SCR-020 meter install & load validation | ✅ | ✅ | — |
-| SCR-021 gate pass | ✅ | ✅ | — |
-| SCR-022 commissioning monitor | ✅ | ✅ | — |
-| SCR-023 demo installation | ✅ | ✅ | — |
-| SCR-024 benchmark result | ✅ | ✅ | — |
-| SCR-061 daily batch capture | ✅ | ✅ | — |
-| SCR-064 completion certificate | ✅ | ✅ | — |
+| SCR-171 my visits | ✅ | ✅ | ✅ as Today + My work |
+| SCR-010 survey: society profile & access | ✅ | ✅ | ✅ |
+| SCR-011 survey: lighting inventory | ✅ | ✅ | ✅ |
+| SCR-012 survey: circuit selection | ✅ | ✅ | ✅ |
+| SCR-013 survey: pump audit & logbook | ✅ | ✅ | ✅ |
+| SCR-020 meter install & load validation | ✅ | ✅ | ✅ (demo step) |
+| SCR-021 gate pass | ✅ | ✅ | back office only |
+| SCR-022 commissioning monitor | ✅ | ✅ | back office only |
+| SCR-023 demo installation | ✅ | ✅ | ✅ (demo step) |
+| SCR-024 benchmark result | ✅ | ✅ | back office only |
+| SCR-061 daily batch capture | ✅ | ✅ | ✅ |
+| SCR-064 completion certificate | ✅ | ✅ | ✅ |
 
 **The field surface is complete for priority 1.** FLOW-02 (survey), FLOW-03 (commissioning) and
 FLOW-07 (installation) all have their field side specified, and every one hands off to a back-office

@@ -772,3 +772,23 @@ answering a removed one refused. The three earlier survey suites still pass.
 - proposing a new device from the phone;
 - approving the light-count exception on the phone, at capture time (operations still approve it on
   the office's survey page).
+
+## 17. Step 0 — the reconciliation, done after the build (2026-09-29)
+
+Step 0 was planned first and done last: the build answered most of what it would have asked.
+`docs/product/05-screens/05-field.md` now opens with a dated amendment listing the v1 screens as
+built, the screens left to the back office (gate pass, commissioning monitor, benchmark result),
+and each place the app departs from the spec's surface rules. The thirteen screens involved carry a
+`scope_note` in `docs/backlog.yaml` (validator unchanged at the existing 16 errors / 264 warnings).
+
+**§9, where it stands**
+
+1. v1 scope — answered by the build: inspections, tasks, scanning, the demo's on-site steps,
+   installation days and the full survey.
+2. Who uses it — provisionally `manage_survey`, from the account row. Not built: limiting a field
+   account to its own assigned surveys (My work lists only those, but a link opens any).
+3. Distribution — open.
+4. Push notifications — open (step 9).
+5. Cache retention — open; the 7-day purge is not built, sign-out wipes the phone.
+6. Session length for field accounts — open.
+

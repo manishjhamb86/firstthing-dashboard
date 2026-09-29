@@ -5,6 +5,7 @@ import { Card } from "@/components/ui";
 import { logoutAction } from "@/app/logout-actions";
 import { DB_NAME, listOutbox } from "../outbox-db";
 import { useOutbox } from "../outbox-provider";
+import { stopPushOnThisPhone } from "./notifications-card";
 
 // What this phone holds for the app (docs/engineering/19-field-app.md §3–4):
 // whether it is installed, whether Chrome has agreed not to clear its saved
@@ -161,6 +162,8 @@ export function FieldSignOut() {
         setRefused(still);
         return;
       }
+      // A shared phone must not keep notifying the person who left.
+      await stopPushOnThisPhone();
       await clearKeptPages();
       // The drafts store may hold a half-typed inspection — society data that
       // must not stay on a signed-out phone.

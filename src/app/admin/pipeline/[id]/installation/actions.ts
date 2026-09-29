@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { notifyInstallationDays } from "@/lib/push-notify";
 import { db } from "@/lib/db";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdmin, requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
@@ -161,6 +162,16 @@ export async function setUpInstallationProject(
   });
   if (dayRows.some((d) => !d.areaKey)) return { error: "Every planned day needs an area." };
 
+  // Who held a day before this publish — a replan must not re-notify them.
+  const before = new Set(
+    (
+      await db.installationPlannedDay.findMany({
+        where: { project: { pipelineId }, assignedToId: { not: null } },
+        select: { assignedToId: true },
+      })
+    ).map((d) => d.assignedToId as string),
+  );
+
   const project = await db.$transaction(async (tx) => {
     const created = await tx.installationProject.upsert({
       where: { pipelineId },
@@ -203,6 +214,14 @@ export async function setUpInstallationProject(
     contractedLightCount: input.contractedLightCount,
     surveyedLightCount: surveyed,
   });
+
+  const after = new Map<string, Date>();
+  for (const d of dayRows) {
+    if (!d.assignedToId) continue;
+    const seen = after.get(d.assignedToId);
+    if (!seen || d.plannedDate < seen) after.set(d.assignedToId, d.plannedDate);
+  }
+  await notifyInstallationDays({ pipelineId, before, after, byId: session.user.id });
 
   revalidatePath(pathFor(pipelineId));
   return { ok: true as const };

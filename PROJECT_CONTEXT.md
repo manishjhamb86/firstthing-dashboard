@@ -7077,6 +7077,21 @@ superseded revisions, the inventory row as the area claim, installing as the sto
 no per-visit scoping of links). Thirteen screens carry a `scope_note` in `docs/backlog.yaml`;
 validator unchanged. §9's open questions are distribution, push, retention and session length.
 
+**Same day — the §9 answers, push notifications and clearing old work** (plan §17–18). The user:
+Add to Home screen (no Play Store), push for new assignments and meter alerts, clear synced work
+after 7 days, the same session as the back office.
+- **Clearing:** the worker stamps kept pages and, after each warm-up, removes pages no longer in the
+  person's work that were kept over 7 days ago, and old "recently sent" notes. Unsent work is never
+  touched. Worker v10.
+- **Push:** `web-push` (Next's PWA guide), VAPID keys per environment in `.env.local`,
+  `PushSubscription` (migration `20260929160000`, additive), `/api/field/push`, More →
+  Notifications. Sent on survey, replacement, installation-day and task assignment, and on a meter
+  alert to its owner; never for self-assignment. Best effort, 10 s timeout per phone (a push
+  endpoint that never answered hung the worker's caller in the e2e), gone subscriptions removed.
+- Verified: push 13/13 against a local HTTPS stand-in (signed, encrypted, 410 cleanup, meter alert
+  once, shown on the phone), retention 8/8, earlier field suites unchanged, 1,224 unit tests.
+- **Stage needs** its own VAPID keys added to `.env.local` before notifications can be turned on.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

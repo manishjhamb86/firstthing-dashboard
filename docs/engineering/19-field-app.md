@@ -787,8 +787,63 @@ and each place the app departs from the spec's surface rules. The thirteen scree
    installation days and the full survey.
 2. Who uses it — provisionally `manage_survey`, from the account row. Not built: limiting a field
    account to its own assigned surveys (My work lists only those, but a link opens any).
-3. Distribution — open.
-4. Push notifications — open (step 9).
-5. Cache retention — open; the 7-day purge is not built, sign-out wipes the phone.
-6. Session length for field accounts — open.
+3. Distribution — **Add to Home screen** (the user's call, 2026-09-29). No Play Store package; §6's
+   TWA stays unscheduled.
+4. Push notifications — **yes: new assignments and meter alerts** (the user's call). Built, §18.
+5. Cache retention — **clear after 7 days** (the user's call). Built, §18.
+6. Session length for field accounts — **the same as the back office** (the user's call). No change.
+
+## 18. Step 9 and the retention rule — push notifications, and clearing old work (2026-09-29)
+
+**Clearing old work (§9 Q5).** The worker stamps each page it keeps with when it kept it
+(`x-ft-kept-at`). After every warm-up it removes pages that are not in the work set it was just
+given and were last kept over 7 days ago, and "recently sent" notes older than 7 days. The outbox,
+its photos and drafts are never touched. The rule's tested twin is `isStaleKeptPage` in
+`src/lib/field-sync.ts`. Worker v10.
+
+**Push notifications (§9 Q4).**
+- **Library:** `web-push`, the one Next's PWA guide uses
+  (`node_modules/next/dist/docs/01-app/02-guides/progressive-web-apps.md`). New dependency, with
+  `@types/web-push`.
+- **Keys:** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`, one pair per environment
+  (`npx web-push generate-vapid-keys`), kept in `.env.local`. With no keys the switch says
+  "not set up".
+- **Storage:** `PushSubscription` (migration `20260929160000_push_subscriptions`, additive), one row
+  per browser subscription, keyed by its endpoint, so a shared phone re-subscribing moves the row
+  to whoever is signed in. `/api/field/push` saves and removes it (field accounts only, https
+  endpoints only).
+- **The switch:** More → Notifications. Permission is asked on the tap. Blocked and unsupported
+  browsers are told what to do. Signing out removes the phone's subscription.
+- **Sending** (`src/lib/push.ts`): best effort — it never throws into the act that caused it, has a
+  10-second timeout per phone (found by the e2e: a push endpoint that never answered hung the
+  caller, which for meter alerts is the worker's hourly poll), and removes a subscription the push
+  service reports gone (404/410).
+- **What is sent** (`push-messages.ts` for the wording, `push-notify.ts` for the moments):
+  - a survey assigned;
+  - a replacement assigned;
+  - installation days newly given to someone (a replan does not re-notify);
+  - a task assigned;
+  - a meter alert opened, to the meter's owner (on opening only, never while it stays open).
+
+  Nobody is told about work they gave themselves. A notification names the work and opens its page;
+  no figures.
+
+**Verified:**
+- `field-push.mjs` 13/13, against a local HTTPS stand-in for the push service:
+  - the switch, and its blocked state;
+  - the route's two refusals;
+  - a task push arriving signed and encrypted (aes128gcm, TTL one day);
+  - `last_sent_at` recorded;
+  - nothing sent for self-assignment;
+  - a 410 removing the subscription;
+  - a meter alert notifying its owner exactly once;
+  - a push delivered to the phone's worker shown as a notification.
+- `field-retention.mjs` 8/8.
+- Shell, outbox, scan, survey-a, installation and demo suites still pass; 1,224 unit tests.
+
+**Limits:**
+- Chrome refuses push in incognito, so a real subscription was not exercised headless. The survey,
+  replacement and installation-day moments share the sender the task and meter moments proved, but
+  were not each driven end to end.
+- **Stage needs** its own VAPID keys in `.env.local`, and the migration (the deploy runs it).
 

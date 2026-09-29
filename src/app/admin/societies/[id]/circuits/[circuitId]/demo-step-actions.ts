@@ -12,6 +12,7 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { notifyReplacementAssigned } from "@/lib/push-notify";
 import { db } from "@/lib/db";
 import type { Tx } from "@/lib/tx";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -475,6 +476,7 @@ export async function assignDemoReplacement(input: { demoId: string; toId: strin
     await finish(tx, demo.circuitId, admin.id);
   });
   logger.info("demo.replacement_assigned", { demoId: demo.id, toId: input.toId, byId: admin.id });
+  if (input.toId !== demo.replacementOwnerId) await notifyReplacementAssigned({ demoId: demo.id, toId: input.toId, byId: admin.id });
   revalidatePath(pathOf(demo));
   revalidatePath("/admin/schedule");
   return { ok: true };

@@ -7,6 +7,7 @@
 // step; a person can still mark one done here, but not edit or cancel it.
 
 import { revalidatePath } from "next/cache";
+import { notifyTaskAssigned } from "@/lib/push-notify";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -54,6 +55,7 @@ export async function createTask(input: TaskInput): Promise<Result> {
     },
   });
   logger.info("task.created", { actorId: actor.id, taskId: t.id, assigneeId: input.assigneeId, due: input.due });
+  await notifyTaskAssigned({ taskId: t.id, toId: input.assigneeId, byId: actor.id });
   // Onto the assignee's Google calendar straight away; the sweep retries a failure.
   await syncCalendarEventQuietly(t.id);
   refresh();
@@ -131,6 +133,7 @@ export async function updateTask(id: string, input: TaskInput): Promise<Result> 
     },
   });
   logger.info("task.updated", { actorId: r.actor.id, taskId: id, assigneeId: input.assigneeId });
+  await notifyTaskAssigned({ taskId: id, toId: input.assigneeId, byId: r.actor.id, previousToId: r.task.assigneeId });
   await syncCalendarEventQuietly(id);
   refresh();
   return {};

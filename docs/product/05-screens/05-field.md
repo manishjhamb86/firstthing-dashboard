@@ -50,8 +50,11 @@ changes go through the blueprint. The screen sections below are left as written.
 - **What downloads (§0.1).** The pages of the person's own work are kept on the phone when they
   open the app with signal, and open from that copy with none. There is no separate data download
   per visit.
-- **Retention (§0.1).** The 7-day purge of synced data is **not built** (open question in
-  `19-field-app.md` §9). Signing out wipes the phone.
+- **Retention (§0.1).** Built as the user confirmed (2026-09-29): a kept page that is no longer
+  part of the person's work goes 7 days after it was last kept, as do "recently sent" notes.
+  Unsent work is never removed. Signing out wipes the phone.
+- **Notifications** (the user's call, 2026-09-29). Push for new work assigned to the person and for
+  alerts on meters they own, turned on from More; no figures on a lock screen.
 - **Conflict (§0.1).** No superseded-revision history for field edits: a later save replaces an
   earlier one. Where the office has acted (a survey submitted), the phone's write is refused, and
   the refusal is the poison item §0.1 describes.
@@ -72,8 +75,8 @@ changes go through the blueprint. The screen sections below are left as written.
 - **Role (§0.7).** Access is the `manage_survey` permission, read from the account row. My work
   lists only the person's own assignments, but a field account can open another survey by its
   link — narrower scoping is not built.
-- **Session (§0.7).** Unchanged from the rest of the product; a field-specific length is an open
-  question.
+- **Session (§0.7).** The same as the back office (the user's call, 2026-09-29). Distribution is
+  Add to Home screen; no Play Store package.
 
 ---
 

@@ -486,6 +486,22 @@ export function retryDelayMs(failedAttempts: number): number {
   return Math.min(cap, base * 2 ** failedAttempts);
 }
 
+/** How long a kept page, or a "recently sent" note, stays once nothing needs it. */
+export const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Retention (05-field.md §0.1, the user's call 2026-09-29): a kept page goes
+ * once it is no longer part of the person's work AND was last kept over
+ * 7 days ago. A page with no stamp predates the rule and is left alone. This
+ * is public/field-sw.js purgeStale's rule — keep the two in step. It is never
+ * applied to unsent work, which the worker keeps in other stores.
+ */
+export function isStaleKeptPage(keptAt: number | null, inCurrentWork: boolean, now: number): boolean {
+  if (inCurrentWork) return false;
+  if (keptAt === null || !Number.isFinite(keptAt) || keptAt <= 0) return false;
+  return now - keptAt > RETENTION_MS;
+}
+
 /** After a refusal: keep trying, or block the queue and say so. */
 export function afterRefusal(refusals: number): "retry" | "block" {
   return refusals >= BLOCK_AFTER_REFUSALS ? "block" : "retry";

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   afterRefusal,
   classifyReply,
+  isStaleKeptPage,
+  RETENTION_MS,
   parseEnvelope,
   parseInspectionPayload,
   parseInstallationDayPayload,
@@ -146,5 +148,22 @@ describe("installation payloads (19-field-app.md §15)", () => {
   it("reads a certificate and refuses an unreadable date", () => {
     expect(parseCertificatePayload({ pipelineId: "p", signedAt: "2026-09-28", signatoryName: "A", signatoryRole: "Secretary" })).toMatchObject({ signedAt: "2026-09-28" });
     expect(parseCertificatePayload({ pipelineId: "p", signedAt: "28/09/2026" })).toHaveProperty("error");
+  });
+});
+
+describe("retention (05-field.md §0.1, 2026-09-29)", () => {
+  const now = Date.UTC(2026, 8, 29);
+  it("keeps a page that is still part of the person's work, however old", () => {
+    expect(isStaleKeptPage(now - 30 * RETENTION_MS, true, now)).toBe(false);
+  });
+  it("keeps a page outside the work set for its first 7 days", () => {
+    expect(isStaleKeptPage(now - RETENTION_MS + 1000, false, now)).toBe(false);
+  });
+  it("removes a page outside the work set kept over 7 days ago", () => {
+    expect(isStaleKeptPage(now - RETENTION_MS - 1000, false, now)).toBe(true);
+  });
+  it("leaves a page with no stamp alone", () => {
+    expect(isStaleKeptPage(null, false, now)).toBe(false);
+    expect(isStaleKeptPage(Number.NaN, false, now)).toBe(false);
   });
 });

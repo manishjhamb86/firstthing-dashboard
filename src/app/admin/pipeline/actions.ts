@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { notifySurveyAssigned } from "@/lib/push-notify";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPermission } from "@/lib/admin-permissions";
@@ -910,6 +911,7 @@ export async function assignSurveyOwner(input: { pipelineId: string; toId: strin
     toId: input.toId,
     byId: actor.id,
   });
+  if (input.toId !== pipeline.surveyOwnerId) await notifySurveyAssigned({ pipelineId: input.pipelineId, toId: input.toId, byId: actor.id });
   revalidatePath(`/admin/pipeline/${input.pipelineId}`);
   return {};
 }

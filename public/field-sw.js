@@ -24,13 +24,24 @@
  *
  * 3. SIGN-OUT. "clear" empties the kept pages — they carry this person's work.
  *
+ * 4. RETENTION (05-field.md §0.1, the user's call 2026-09-29): a kept page
+ *    that is no longer part of this person's work, and was last kept more
+ *    than 7 days ago, is removed after each warm-up; so is a "recently sent"
+ *    note older than 7 days. Unsent work — the outbox, its photos, drafts —
+ *    is never removed here, at any age. The rule is src/lib/field-sync.ts
+ *    isStaleKeptPage; keep the two in step.
+ *
+ * 5. PUSH. A notification from the office opens the page it names.
+ *
  * The IndexedDB layout ("ft-field" v2: outbox / photos / drafts / sent) is the one
  * in src/app/field/outbox-db.ts. Change both together.
  *
  * Bump VERSION when this file's caching behaviour changes.
  */
 
-const VERSION = "v9";
+const VERSION = "v10";
+const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const KEPT_AT = "x-ft-kept-at";
 const STATIC_CACHE = `ft-field-static-${VERSION}`;
 const PAGE_CACHE = `ft-field-pages-${VERSION}`;
 const OFFLINE_URL = "/field-offline.html";
@@ -76,8 +87,49 @@ async function keepPage(path, res, gen = generation) {
   // Keep only a real page for this address — never a redirect to sign-in,
   // never an error page standing in for the real one.
   if (!res.ok || res.redirected || gen !== generation) return;
+  // Stamp when it was kept, so retention can tell a page left behind by a
+  // finished visit from one still in use.
+  const headers = new Headers(res.headers);
+  headers.set(KEPT_AT, String(Date.now()));
+  const stamped = new Response(await res.blob(), { status: res.status, statusText: res.statusText, headers });
+  if (gen !== generation) return;
   const cache = await caches.open(PAGE_CACHE);
-  await cache.put(path, res);
+  await cache.put(path, stamped);
+}
+
+/**
+ * Remove kept pages that are no longer this person's work and were last kept
+ * over 7 days ago, and "recently sent" notes older than 7 days. `current` is
+ * the work set the app just asked to keep — only a page OUTSIDE it can go.
+ */
+async function purgeStale(current) {
+  const now = Date.now();
+  const keep = new Set(current);
+  const cache = await caches.open(PAGE_CACHE);
+  let removed = 0;
+  for (const req of await cache.keys()) {
+    const path = new URL(req.url).pathname;
+    if (keep.has(path)) continue;
+    const res = await cache.match(req);
+    const keptAt = Number(res && res.headers.get(KEPT_AT));
+    // A page with no stamp predates retention; treat it as kept now, so it
+    // gets its full 7 days rather than going at once.
+    if (!Number.isFinite(keptAt) || keptAt <= 0) continue;
+    if (now - keptAt > RETENTION_MS) {
+      await cache.delete(req);
+      removed += 1;
+    }
+  }
+  const db = await openDb();
+  try {
+    const tx = db.transaction("sent", "readwrite");
+    const store = tx.objectStore("sent");
+    for (const s of await reqP(store.getAll())) if (now - s.at > RETENTION_MS) store.delete(s.id);
+    await new Promise((r, j) => { tx.oncomplete = r; tx.onerror = () => j(tx.error); });
+  } finally {
+    db.close();
+  }
+  return removed;
 }
 
 /**
@@ -371,10 +423,50 @@ self.addEventListener("message", (event) => {
   } else if (data.type === "drain") {
     event.waitUntil(drain().then(() => reply({ drained: true })));
   } else if (data.type === "warm" && Array.isArray(data.urls)) {
+    const urls = data.urls.filter(isFieldPath);
     event.waitUntil(
-      Promise.all(data.urls.filter(isFieldPath).map((u) => warmPage(u).catch(() => false))).then((r) =>
-        reply({ warmed: r.filter(Boolean).length }),
-      ),
+      Promise.all(urls.map((u) => warmPage(u).catch(() => false))).then(async (r) => {
+        const purged = await purgeStale(urls).catch(() => 0);
+        reply({ warmed: r.filter(Boolean).length, purged });
+      }),
     );
   }
+});
+
+// ── push ──────────────────────────────────────────────────────────────
+
+self.addEventListener("push", (event) => {
+  let msg = {};
+  try {
+    msg = event.data ? event.data.json() : {};
+  } catch {
+    msg = { title: "FirsThing Field", body: event.data ? event.data.text() : "" };
+  }
+  event.waitUntil(
+    self.registration.showNotification(msg.title || "FirsThing Field", {
+      body: msg.body || "",
+      tag: msg.tag || undefined,
+      icon: "/field-icon/192",
+      badge: "/field-icon/192",
+      data: { url: typeof msg.url === "string" && msg.url.startsWith("/") ? msg.url : "/field" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || "/field";
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+      for (const c of all) {
+        if (new URL(c.url).origin === self.location.origin && "focus" in c) {
+          await c.focus();
+          if ("navigate" in c) return c.navigate(url).catch(() => self.clients.openWindow(url));
+          return;
+        }
+      }
+      return self.clients.openWindow(url);
+    })(),
+  );
 });

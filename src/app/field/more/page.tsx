@@ -5,6 +5,8 @@ import { requireFieldPage } from "../access";
 import { FieldSignOut, PhoneStatus } from "./phone-status";
 import { WaitingToSend } from "./waiting-to-send";
 import { RecentlySent } from "./recently-sent";
+import { NotificationsCard } from "./notifications-card";
+import { vapidPublicKey } from "@/lib/push";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "More" };
@@ -28,6 +30,8 @@ export default async function MorePage() {
       <RecentlySent />
 
       <PhoneStatus />
+
+      <NotificationsCard vapidKey={vapidPublicKey()} />
 
       <Card className="p-2 mb-4">
         <Link href="/admin/tasks" className="flex items-center min-h-[48px] px-2 font-semibold">

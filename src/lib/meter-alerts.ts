@@ -1,4 +1,5 @@
 import type { MeterAlertKind, Prisma } from "@prisma/client";
+import { notifyMeterAlert } from "@/lib/push-notify";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 
@@ -48,6 +49,9 @@ export async function openAlert(input: {
     throw err;
   }
   logger.warn("meter.alert_opened", { meterId: input.meterId, kind: input.kind, message: input.message });
+  // Tell the person who looks after this meter (19-field-app.md §18). Only on
+  // the transition — a meter staying down does not re-notify every hour.
+  await notifyMeterAlert({ meterId: input.meterId, kind: input.kind });
   return { opened: true };
 }
 

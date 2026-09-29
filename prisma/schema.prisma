@@ -579,6 +579,7 @@ model AdminUser {
   // Monthly inspection checklist (2026-09-12)
   inspectionsFiled  Inspection[]       @relation("InspectionFiledBy")
   fieldSyncReceipts FieldSyncReceipt[]
+  pushSubscriptions PushSubscription[]
   inspectionsVoided Inspection[]       @relation("InspectionVoidedBy")
 
   dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
@@ -4592,4 +4593,25 @@ model FieldSyncReceipt {
 
   @@index([actorId])
   @@map("field_sync_receipts")
+}
+
+/// A phone that asked to be told about new work and meter alerts (the field
+/// app, 19-field-app.md §18, the user's call 2026-09-29). One row per browser
+/// subscription; the push service's endpoint is its identity. Removed when the
+/// push service says the subscription is gone (404/410) or the person turns
+/// notifications off.
+model PushSubscription {
+  id         String    @id @default(cuid())
+  adminId    String    @map("admin_id")
+  endpoint   String    @unique
+  p256dh     String
+  auth       String
+  userAgent  String?   @map("user_agent")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  lastSentAt DateTime? @map("last_sent_at")
+
+  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+
+  @@index([adminId])
+  @@map("push_subscriptions")
 }

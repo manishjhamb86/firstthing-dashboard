@@ -7021,6 +7021,54 @@ package.
   earlier field suite; 1,195 unit tests. Test photos remain under
   `Documents/Print_Back_Co/2026-09/Installation/` (PutObject-only credentials).
 
+**Same day — step 8: the site survey on the phone** (plan §16–16e). The user chose:
+- **Scope: "the full spec shell."** All four sections: profile and access, the lighting inventory,
+  circuit selection, and the pump room with its logbook. Each section has its own state; the survey
+  is submitted, and after that it is locked.
+- **Double counting: "area claims."**
+
+**What was built:**
+- **Migration** `20260929140000_survey_shell` (additive):
+  - `SiteSurvey.status` (draft → submitted), with the profile fields;
+  - `SurveySection`, `SurveyPhoto`, `SurveyTypeOutcome`, `PumpRoomAudit` and `PumpRoomUnit`;
+  - on inventory rows, who counted them and a soft void;
+  - `Circuit.typicalityNote`;
+  - `SocietyMember.primaryContact`, one per society;
+  - two new positions: security in charge and electrician.
+- **The lock** (`refuseSurveyWrite`) covers the phone and the office. A draft is open. After
+  submission the field team is read-only except in a section the office has queried, which
+  reopens that section only. Operations can still write. A survey filled in at the desk is never
+  submitted, so it never locks.
+- **The committee** is written into the society's member register, under the register's rules.
+- **Location:** the surveyed location is copied to the society when the society has none.
+- **Submission** is refused while an area is contested or while a teammate's phone still holds
+  unsent work. It names the teammate.
+- **Area claims.** Two phones' counts of one area are both kept and marked contested, left out of
+  the total, and never summed or merged. They are settled by choosing one count with a reason; the
+  other rows are voided. Every read of the inventory elsewhere now skips voided rows.
+- **Circuits.** The office's candidate rules moved into `circuit-candidate-core.ts`, shared by the
+  office and the phone. The phone also requires a typicality answer and a panel photo, and a light
+  type can be marked as having no eligible circuit. The represented count is derived, never
+  typed: the type's total less the demo's own lights.
+- **The pump room.** Its structure generates a list of units, each with its own photo. The logbook
+  pages are tagged with the month they cover, which the surveyor picks.
+- **Survey photos** are filed at `Documents/{Society}/{YYYY-MM}/Surveys/…`, with keys issued per
+  subject.
+- **The office's review.** The office's survey page shows everything above. Operations can query
+  a section, which is refused on the server without the permission and logged.
+
+**Two defects found by running two phones at once, fixed:**
+- two first writes to a section at the same moment failed on the unique key (a 500, then a
+  minute's backoff); inserts now skip rows already present, and the survey's visit has a
+  deterministic id;
+- a worker request could hang as the signal dropped and hold the whole queue; requests now time
+  out (worker v9).
+
+**Verified** 27/27, 17/17, 20/20, 19/19 and 16/16 across the five survey slices. All earlier field
+suites pass, 1,215 unit tests pass, and `tsc`/`lint`/`build` are clean. Test photos remain in the
+bucket under `Documents/Print_Back_Co/…/Surveys/` (the credentials are PutObject-only, so they
+cannot be deleted).
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

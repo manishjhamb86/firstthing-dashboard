@@ -735,3 +735,40 @@ without one refused by name), the section waiting on the logbook until a page wa
 back online, the structure, all 7 answers, a photo for each fitted unit and the logbook page with
 its month, each with its own key and in the bucket; removing the tank leaving 5 units, and
 answering a removed one refused. The three earlier survey suites still pass.
+
+### 16e. Built: the office's review of a field survey (2026-09-29)
+
+- The office's survey page (`/admin/pipeline/[id]/survey`) opens with a **Field survey** card when
+  the phone has worked on the survey (`field-review.tsx`). A survey filled in at the desk has no
+  section rows, so the card does not appear and the page is unchanged. The card shows:
+  - whether the survey was submitted, when, and by whom;
+  - each section's state; a flagged section's reason, a queried one's note, and an unfinished one's
+    first gaps;
+  - any areas still contested;
+  - the profile and access: the address, the pin with its accuracy (or "entered by hand"), the
+    primary contact, the gate contact, the access hours and notice, and the election;
+  - each phone-recorded circuit's typicality answer and panel photos, and every light type marked
+    as having no eligible circuit, with its reason and who recorded it;
+  - the pump room: its structure, each unit's answer with its photos, and the logbook months with
+    their pages.
+- **Query this section** (operations, on a submitted survey): the control stays closed until asked
+  for, and a note is required. It calls `querySectionAs`, so it is refused on the server for anyone
+  without both permissions, and the refusal is logged `survey.query_refused`. The section reopens
+  on every phone with "The office asks: …" pinned at its top. The other sections stay read-only. A
+  queried section is not offered a second query.
+
+**Verified** `field-survey-e.mjs` 16/16:
+- on a submitted fixture, every part of the card showed;
+- the query was refused once `manage_pipeline` was removed behind the open form: nothing was written
+  and the refusal was logged;
+- with the permission back, the query stored its note;
+- the phone showed the question, with the inventory open again and the pump room still read-only;
+- a field account saw the review but was offered no query.
+
+8a's suite passes 27/27.
+
+**Step 8 is complete.** Not built:
+- SCR-010's optional site photos;
+- proposing a new device from the phone;
+- approving the light-count exception on the phone, at capture time (operations still approve it on
+  the office's survey page).

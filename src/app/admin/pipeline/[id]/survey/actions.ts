@@ -7,7 +7,7 @@ import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import { eligibilityState, outstandingCriteria } from "@/lib/circuit-eligibility";
 import { lightTypeKey } from "@/lib/light-type";
-import { surveyForWrite } from "@/lib/survey-core";
+import { querySectionAs, surveyForWrite } from "@/lib/survey-core";
 import { recordCandidateAs, type CandidateLine } from "@/lib/circuit-candidate-core";
 
 /**
@@ -356,5 +356,22 @@ export async function correctCircuitEligibility(
     note,
   });
   revalidatePath("/admin/pipeline");
+  return {};
+}
+
+/**
+ * The office queries a section of a submitted field survey (05-field.md §0.5,
+ * SCR-014's "query a count"): that section only reopens on every team
+ * member's phone, with the note pinned at its top.
+ */
+export async function querySurveySection(pipelineId: string, surveyId: string, section: "profile" | "inventory" | "circuits" | "pump_room", note: string) {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session has ended. Sign in again." };
+  const r = await querySectionAs(actor, { surveyId, section, note });
+  if ("error" in r) {
+    logger.warn("survey.query_refused", { actorId: actor.id, surveyId, section, reason: r.error });
+    return { error: r.error };
+  }
+  revalidatePath(`/admin/pipeline/${pipelineId}/survey`);
   return {};
 }

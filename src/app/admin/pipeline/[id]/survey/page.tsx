@@ -2,6 +2,7 @@ import { SurveyDateControl } from "@/components/survey-date-control";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { areaKeyOf, contestedAreas } from "@/lib/survey-shell";
+import { FieldSurveyReview } from "./field-review";
 import { DEMO_LIGHTS_SELECT, demoLightsInstalled } from "@/lib/light-population";
 import { Card, CardTitle, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, statusMeta } from "@/lib/status-maps";
@@ -226,6 +227,8 @@ export default async function SiteSurveyPage({
           />
         </div>
       )}
+
+      {pipeline.siteSurvey && <FieldSurveyReview pipelineId={pipeline.id} surveyId={pipeline.siteSurvey.id} canQuery={canApproveException} />}
 
       {/* The survey is somebody's job once it has been handed to them. Anyone
           else recording it — operations especially, which is never blocked —

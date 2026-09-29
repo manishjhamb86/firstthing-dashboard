@@ -785,8 +785,9 @@ and each place the app departs from the spec's surface rules. The thirteen scree
 
 1. v1 scope — answered by the build: inspections, tasks, scanning, the demo's on-site steps,
    installation days and the full survey.
-2. Who uses it — provisionally `manage_survey`, from the account row. Not built: limiting a field
-   account to its own assigned surveys (My work lists only those, but a link opens any).
+2. Who uses it — `manage_survey`, from the account row. A survey link stays open to any field
+   account (the user's call, 2026-09-29), so teammates who are not its named owner can help count;
+   My work still lists only the person's own assignments.
 3. Distribution — **Add to Home screen** (the user's call, 2026-09-29). No Play Store package; §6's
    TWA stays unscheduled.
 4. Push notifications — **yes: new assignments and meter alerts** (the user's call). Built, §18.

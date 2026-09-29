@@ -73,8 +73,9 @@ changes go through the blueprint. The screen sections below are left as written.
   survives storage pressure, because Chrome grants persistent storage mostly to installed apps. The
   app works in the browser; More says whether saved work is protected.
 - **Role (§0.7).** Access is the `manage_survey` permission, read from the account row. My work
-  lists only the person's own assignments, but a field account can open another survey by its
-  link — narrower scoping is not built.
+  lists only the person's own assignments; a field account can open another survey by its link,
+  **deliberately** (the user's call, 2026-09-29): teammates who help count a survey without being
+  its named owner must be able to reach it, and the area-claim model depends on them.
 - **Session (§0.7).** The same as the back office (the user's call, 2026-09-29). Distribution is
   Add to Home screen; no Play Store package.
 

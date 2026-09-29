@@ -28,6 +28,6 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // The person's own on-site jobs are kept on the phone too, so the demo they
   // are walking to opens in a basement even if it was never opened before.
   const work = await loadFieldWork(admin.id, true);
-  const jobUrls = work.flatMap((r) => (r.fieldHref ? [r.fieldHref] : []));
+  const jobUrls = work.flatMap((r) => r.fieldPages ?? (r.fieldHref ? [r.fieldHref] : []));
   return <FieldShell jobUrls={jobUrls}>{children}</FieldShell>;
 }

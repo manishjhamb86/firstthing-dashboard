@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { retryDelayMs } from "@/lib/field-sync";
 import { listOutbox, listSent, type OutboxItem, type SentRecord } from "./outbox-db";
 
@@ -181,6 +181,47 @@ export function OutboxProvider({ children, jobUrls = [] }: { children: ReactNode
       }
     });
   }, [warmKey]);
+
+  // Tell the office how much each survey still has on this phone, so a
+  // teammate submitting it is told who to chase (§0.1b). Surveys reported
+  // before and now clear are reported as zero, once.
+  const surveyCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const i of items) {
+      const sid = (i.payload as { surveyId?: unknown } | null)?.surveyId;
+      if (typeof sid === "string") out[sid] = (out[sid] ?? 0) + 1;
+    }
+    return JSON.stringify(out);
+  }, [items]);
+  useEffect(() => {
+    if (!loaded || !navigator.onLine) return;
+    let known: string[] = [];
+    try {
+      known = JSON.parse(sessionStorage.getItem("ft-survey-reported") ?? "[]");
+    } catch {
+      /* storage blocked */
+    }
+    const counts = JSON.parse(surveyCounts) as Record<string, number>;
+    for (const k of known) if (!(k in counts)) counts[k] = 0;
+    if (Object.keys(counts).length === 0) return;
+    void fetch("/api/field/presence", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pending: counts }),
+    })
+      .then((r) => {
+        if (!r.ok) return;
+        try {
+          sessionStorage.setItem("ft-survey-reported", JSON.stringify(Object.keys(counts).filter((k) => counts[k] > 0)));
+        } catch {
+          /* fine */
+        }
+      })
+      .catch(() => {
+        /* no signal: the next change tries again */
+      });
+  }, [surveyCounts, loaded]);
 
   const pending = items.filter((i) => i.state === "pending").length;
   const blocked = items.filter((i) => i.state === "blocked").length;

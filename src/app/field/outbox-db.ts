@@ -1,5 +1,7 @@
 "use client";
 
+import type { OutboxKind } from "@/lib/field-sync";
+
 /**
  * The phone's own store for the field app (05-field.md §0.1 "Local-first,
  * always"): work is written HERE first, and only then sent.
@@ -26,15 +28,7 @@ export type OutboxState = "pending" | "blocked";
 export type OutboxItem = {
   seq?: number;
   id: string;
-  kind:
-    | "inspection.file"
-    | "inspection.photo"
-    | "stock.move"
-    | "demo.meter"
-    | "demo.replacement"
-    | "installation.day"
-    | "installation.blocker"
-    | "installation.certificate";
+  kind: OutboxKind;
   payload: unknown;
   /** What the person reads in the waiting list. */
   label: string;

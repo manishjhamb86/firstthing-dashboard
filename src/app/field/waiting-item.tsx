@@ -35,6 +35,11 @@ export function WaitingItem({ item }: { item: OutboxItem }) {
       "installation.day": "Discard this day's record? It has not reached the office, and its photos will be deleted from this phone.",
       "installation.blocker": "Discard this blocker? It has not reached the office.",
       "installation.certificate": "Discard this certificate? It has not reached the office.",
+      "survey.profile": "Discard this profile change? It has not reached the office.",
+      "survey.member": "Discard this committee member? They have not reached the office.",
+      "survey.primary": "Discard this primary-contact change?",
+      "survey.section": "Discard this section change?",
+      "survey.submit": "Discard the submission? The survey stays open.",
     };
     const ok = confirm(what[item.kind]);
     if (!ok) return;

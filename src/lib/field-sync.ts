@@ -28,6 +28,11 @@ export const OUTBOX_KINDS = [
   "installation.day",
   "installation.blocker",
   "installation.certificate",
+  "survey.profile",
+  "survey.member",
+  "survey.primary",
+  "survey.section",
+  "survey.submit",
 ] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 
@@ -283,6 +288,94 @@ export function parseCertificatePayload(p: unknown): FieldCertificatePayload | {
   if (!str(o.pipelineId)) return { error: "The installation this belongs to is missing." };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.signedAt))) return { error: "Pick the day the certificate was signed." };
   return { pipelineId: str(o.pipelineId), signedAt: str(o.signedAt), signatoryName: str(o.signatoryName), signatoryRole: str(o.signatoryRole) };
+}
+
+// ── the survey shell (19-field-app.md §16) ──
+
+const num = (v: unknown): number | null => (v === "" || v === null || v === undefined ? null : Number(v));
+
+export type FieldSurveyProfilePayload = {
+  surveyId: string;
+  address: string;
+  latitude: number | null;
+  longitude: number | null;
+  accuracyM: number | null;
+  manual: boolean;
+  rwaMemberCount: number | null;
+  nextElectionDate: string | null;
+  gateContactName: string;
+  gateContactPhone: string;
+  accessHours: string;
+  noticeRequired: "none" | "same_day" | "days" | "";
+  noticeDays: number | null;
+  parkingNotes: string;
+  passIdNotes: string;
+};
+
+export function parseSurveyProfilePayload(p: unknown): FieldSurveyProfilePayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.surveyId)) return { error: "The survey this belongs to is missing." };
+  const lat = num(o.latitude);
+  const lng = num(o.longitude);
+  if ((lat === null) !== (lng === null)) return { error: "A location needs both a latitude and a longitude." };
+  const notice = str(o.noticeRequired);
+  if (notice && !["none", "same_day", "days"].includes(notice)) return { error: "Unknown notice requirement." };
+  return {
+    surveyId: str(o.surveyId),
+    address: str(o.address),
+    latitude: lat,
+    longitude: lng,
+    accuracyM: num(o.accuracyM),
+    manual: o.manual === true,
+    rwaMemberCount: num(o.rwaMemberCount),
+    nextElectionDate: str(o.nextElectionDate) || null,
+    gateContactName: str(o.gateContactName),
+    gateContactPhone: str(o.gateContactPhone),
+    accessHours: str(o.accessHours),
+    noticeRequired: notice as FieldSurveyProfilePayload["noticeRequired"],
+    noticeDays: num(o.noticeDays),
+    parkingNotes: str(o.parkingNotes),
+    passIdNotes: str(o.passIdNotes),
+  };
+}
+
+export type FieldSurveyMemberPayload = { surveyId: string; memberId: string; name: string; mobile: string; email: string; positionId: string; primary: boolean };
+
+export function parseSurveyMemberPayload(p: unknown): FieldSurveyMemberPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.surveyId)) return { error: "The survey this belongs to is missing." };
+  if (!UUID_RE.test(str(o.memberId))) return { error: "The member has no valid id." };
+  return {
+    surveyId: str(o.surveyId),
+    memberId: str(o.memberId),
+    name: str(o.name),
+    mobile: str(o.mobile),
+    email: str(o.email),
+    positionId: str(o.positionId),
+    primary: o.primary === true,
+  };
+}
+
+export const SURVEY_SECTION_KEYS = ["profile", "inventory", "circuits", "pump_room"] as const;
+
+export type FieldSurveySectionPayload = {
+  surveyId: string;
+  section: (typeof SURVEY_SECTION_KEYS)[number];
+  state: "complete" | "flagged" | "in_progress";
+  reason: string;
+};
+
+export function parseSurveySectionPayload(p: unknown): FieldSurveySectionPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.surveyId)) return { error: "The survey this belongs to is missing." };
+  if (!(SURVEY_SECTION_KEYS as readonly string[]).includes(str(o.section))) return { error: "Unknown survey section." };
+  if (!["complete", "flagged", "in_progress"].includes(str(o.state))) return { error: "Unknown section state." };
+  return {
+    surveyId: str(o.surveyId),
+    section: str(o.section) as FieldSurveySectionPayload["section"],
+    state: str(o.state) as FieldSurveySectionPayload["state"],
+    reason: str(o.reason),
+  };
 }
 
 export type SendOutcome = "done" | "refused" | "sign_in" | "retry";

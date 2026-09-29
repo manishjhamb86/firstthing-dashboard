@@ -10,6 +10,10 @@ import {
   parseDemoMeterPayload,
   parseDemoReplacementPayload,
   parseEnvelope,
+  parseSurveyMemberPayload,
+  parseSurveyProfilePayload,
+  parseSurveySectionPayload,
+  type OutboxKind,
   parseInspectionPayload,
   parseMovePayload,
   parsePhotoPayload,
@@ -18,6 +22,7 @@ import {
 import { recordDemoMeterAs, recordDemoReplacementAs } from "@/lib/demo-step-core";
 import { applyUnitMove } from "@/lib/inventory-move";
 import { fileInspection } from "@/lib/inspection-file";
+import { addCommitteeMemberAs, saveProfileAs, setPrimaryContactAs, setSectionAs, submitSurveyAs } from "@/lib/survey-core";
 import { batchPhotoKey, MAX_DAY_PHOTOS, raiseBlockerAs, recordDayAs, signCertificateAs } from "@/lib/installation-core";
 
 /**
@@ -69,7 +74,7 @@ async function apply(
   }
 
   if (env.kind !== "inspection.photo") {
-    return { error: "Handled before the transaction." }; // unreachable: see POST
+    return { error: "Handled before the transaction." }; // unreachable: see OUTSIDE
   }
 
   // inspection.photo — the photo of the signed paper form, uploaded after the
@@ -125,50 +130,15 @@ export async function POST(req: Request) {
   const seen = await replay();
   if (seen) return seen;
 
-  // The two on-site demo steps (demo-step-core.ts) run their own
-  // transactions — the meter step plans and rewrites the meter's history — so
-  // here the STEP comes first and the receipt after, not inside one
-  // transaction. Both only SET values (a date, a load, per-line counts): a
-  // replay that slips past the receipt, because a reply was lost after the
-  // step committed, sets the same values again — no second history entry, one
-  // extra change-log line. The rules are exactly the back office's.
-  if (env.kind === "demo.meter" || env.kind === "demo.replacement") {
-    const parsed = env.kind === "demo.meter" ? parseDemoMeterPayload(env.payload) : parseDemoReplacementPayload(env.payload);
-    if ("error" in parsed) {
-      logger.warn("field.sync_refused", { actorId: actor.id, itemId: env.id, kind: env.kind, reason: parsed.error });
-      return NextResponse.json({ error: parsed.error }, { status: 422 });
-    }
-    const out =
-      env.kind === "demo.meter"
-        ? await recordDemoMeterAs(actor, parsed as Parameters<typeof recordDemoMeterAs>[1])
-        : await recordDemoReplacementAs(actor, parsed as Parameters<typeof recordDemoReplacementAs>[1]);
-    if (out.error) {
-      logger.warn("field.sync_refused", { actorId: actor.id, itemId: env.id, kind: env.kind, reason: out.error });
-      return NextResponse.json({ error: out.error }, { status: 422 });
-    }
-    const result: Prisma.JsonObject = { ok: true, ...(out.warning ? { warning: out.warning } : {}) };
-    try {
-      await db.fieldSyncReceipt.create({ data: { id: env.id, actorId: actor.id, kind: env.kind, result } });
-    } catch (err) {
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
-        const again = await replay();
-        if (again) return again;
-      }
-      throw err;
-    }
-    logger.info("field.sync_applied", { actorId: actor.id, itemId: env.id, kind: env.kind, result });
-    return NextResponse.json({ ok: true, result });
-  }
-
-  // The installation day and the completion certificate (installation-core.ts)
-  // run their own transactions too, so they are applied first and receipted
-  // after, like the demo steps. Neither simply SETS a value: a day submitted
-  // twice is refused as "already submitted", a certificate as "already
-  // signed". So when a reply was lost after the act committed, the route
-  // recognises its own earlier success — the same account's same record —
-  // and answers it as applied instead of refusing the phone's retry.
-  if (env.kind === "installation.day" || env.kind === "installation.certificate") {
-    const applied = env.kind === "installation.day" ? await applyDay(actor, env.payload) : await applyCertificate(actor, env.payload);
+  // Kinds whose act runs its own transactions (the demo steps, the
+  // installation day and certificate, the survey shell): the act comes first
+  // and the receipt after, not inside one transaction. Each handler makes a
+  // lost-reply retry harmless — it either only SETS values, or recognises the
+  // account's own earlier success and answers it as applied. The rules are
+  // exactly the back office's.
+  const outside = OUTSIDE[env.kind];
+  if (outside) {
+    const applied = await outside(actor, env.payload);
     if ("error" in applied) {
       logger.warn("field.sync_refused", { actorId: actor.id, itemId: env.id, kind: env.kind, reason: applied.error });
       return NextResponse.json({ error: applied.error }, { status: applied.status ?? 422 });
@@ -286,3 +256,71 @@ async function applyCertificate(actor: Actor, payload: unknown): Promise<Applied
   if ("error" in r) return { error: r.error };
   return { result: { pipelineId: input.pipelineId } };
 }
+
+async function applyDemoMeter(actor: Actor, payload: unknown): Promise<Applied> {
+  const parsed = parseDemoMeterPayload(payload);
+  if ("error" in parsed) return parsed;
+  const out = await recordDemoMeterAs(actor, parsed);
+  if (out.error) return { error: out.error };
+  return { result: { ok: true, ...(out.warning ? { warning: out.warning } : {}) } };
+}
+
+async function applyDemoReplacement(actor: Actor, payload: unknown): Promise<Applied> {
+  const parsed = parseDemoReplacementPayload(payload);
+  if ("error" in parsed) return parsed;
+  const out = await recordDemoReplacementAs(actor, parsed);
+  if (out.error) return { error: out.error };
+  return { result: { ok: true } };
+}
+
+// ── the survey shell (survey-core.ts) ──
+
+async function applySurveyProfile(actor: Actor, payload: unknown): Promise<Applied> {
+  const input = parseSurveyProfilePayload(payload);
+  if ("error" in input) return input;
+  const r = await saveProfileAs(actor, input);
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+async function applySurveyMember(actor: Actor, payload: unknown): Promise<Applied> {
+  const input = parseSurveyMemberPayload(payload);
+  if ("error" in input) return input;
+  const r = await addCommitteeMemberAs(actor, input);
+  return "error" in r ? { error: r.error } : { result: { memberId: r.memberId } };
+}
+
+async function applySurveyPrimary(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  if (typeof o.surveyId !== "string" || typeof o.memberId !== "string") return { error: "Which member is the primary contact?" };
+  const r = await setPrimaryContactAs(actor, { surveyId: o.surveyId, memberId: o.memberId });
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+async function applySurveySection(actor: Actor, payload: unknown): Promise<Applied> {
+  const input = parseSurveySectionPayload(payload);
+  if ("error" in input) return input;
+  const r = await setSectionAs(actor, input);
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+async function applySurveySubmit(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  if (typeof o.surveyId !== "string") return { error: "Which survey?" };
+  // A lost reply: the survey this account submitted is answered as applied.
+  const s = await db.siteSurvey.findUnique({ where: { id: o.surveyId }, select: { status: true, submittedById: true } });
+  if (s?.status === "submitted" && s.submittedById === actor.id) return { result: { alreadySubmitted: true } };
+  const r = await submitSurveyAs(actor, o.surveyId);
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+const OUTSIDE: Partial<Record<OutboxKind, (actor: Actor, payload: unknown) => Promise<Applied>>> = {
+  "demo.meter": applyDemoMeter,
+  "demo.replacement": applyDemoReplacement,
+  "installation.day": applyDay,
+  "installation.certificate": applyCertificate,
+  "survey.profile": applySurveyProfile,
+  "survey.member": applySurveyMember,
+  "survey.primary": applySurveyPrimary,
+  "survey.section": applySurveySection,
+  "survey.submit": applySurveySubmit,
+};

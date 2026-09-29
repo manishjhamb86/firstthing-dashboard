@@ -389,7 +389,7 @@ export default async function SiteSurveyPage({
                           Estimated{a.note ? ` — ${a.note}` : ""}
                         </span>
                       ) : (
-                        <span className="text-xs text-[var(--text-muted)]">Walked</span>
+                        <span className="text-xs text-[var(--text-muted)]">{a.method === "records" ? "Society records" : "Walked"}</span>
                       )}
                     </td>
                     {canEdit && (

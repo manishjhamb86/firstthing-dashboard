@@ -165,8 +165,6 @@ enum CircuitState {
 // actively-flagged anomaly (FEAT-012-AC-5) by presence/status rather than
 // a third enum value.
 
-
-
 // FEAT-011/CON-18 — one instance of the cross-cutting gate-pass component
 // (09-architecture.md §5, ADR-006): an itemized equipment list signed,
 // photographed, and backend-approved before PER-04 leaves site. `kind` is
@@ -301,6 +299,8 @@ enum PipelineStage {
 // built) rather than looking identical to a walked count.
 enum LightCountMethod {
   walked
+  /// From the society's own records.
+  records
   estimated
 
   @@map("light_count_method")
@@ -512,15 +512,15 @@ model AdminUser {
   scheduledEventsCreated      ScheduledEvent[]            @relation("ScheduledEventCreatedBy")
   pipelinesLogged             Pipeline[]                  @relation("PipelineLoggedBy")
 
-  circuitsCreated               Circuit[]               @relation("CircuitCreatedBy")
-  circuitsVoided                Circuit[]               @relation("CircuitVoidedBy")
-  demoResultsResolved           DemoResultReview[]      @relation("DemoResultResolvedBy")
-  gatePassSubmissions           GatePass[]              @relation("GatePassSubmittedBy")
-  gatePassApprovals             GatePass[]              @relation("GatePassApprovedBy")
-  circuitDevicesReplaced        CircuitDevice[]         @relation("CircuitDeviceReplacedBy")
-  circuitDevicesRecorded        CircuitDevice[]         @relation("CircuitDeviceRecordedBy")
-  benchmarkRescalesRecorded     BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
-  benchmarkRescalesVoided       BenchmarkRescaleEvent[] @relation("BenchmarkRescaleVoidedBy")
+  circuitsCreated           Circuit[]               @relation("CircuitCreatedBy")
+  circuitsVoided            Circuit[]               @relation("CircuitVoidedBy")
+  demoResultsResolved       DemoResultReview[]      @relation("DemoResultResolvedBy")
+  gatePassSubmissions       GatePass[]              @relation("GatePassSubmittedBy")
+  gatePassApprovals         GatePass[]              @relation("GatePassApprovedBy")
+  circuitDevicesReplaced    CircuitDevice[]         @relation("CircuitDeviceReplacedBy")
+  circuitDevicesRecorded    CircuitDevice[]         @relation("CircuitDeviceRecordedBy")
+  benchmarkRescalesRecorded BenchmarkRescaleEvent[] @relation("BenchmarkRescaleRecordedBy")
+  benchmarkRescalesVoided   BenchmarkRescaleEvent[] @relation("BenchmarkRescaleVoidedBy")
 
   // MS-05
   demoReportsShared  DemoReport[]      @relation("DemoReportSharedBy")
@@ -549,16 +549,24 @@ model AdminUser {
   contractTermsRecorded    ContractTermVersion[]    @relation("ContractTermRecordedBy")
 
   // MS-06
-  fieldVisitsJoined    FieldVisitParticipant[]  @relation("FieldVisitParticipant")
-  areaClaimsMade       FieldVisitAreaClaim[]    @relation("AreaClaimClaimedBy")
-  areaClaimsResolved   FieldVisitAreaClaim[]    @relation("AreaClaimResolvedBy")
-  projectsCreated      InstallationProject[]    @relation("InstallationProjectCreatedBy")
-  gateSkipsApproved    InstallationProject[]    @relation("GateSkipApprovedBy")
-  plannedDaysAssigned  InstallationPlannedDay[] @relation("PlannedDayAssignee")
-  batchesSubmitted     InstallationBatch[]      @relation("BatchSubmittedBy")
-  blockersRaised       InstallationBlocker[]    @relation("BlockerRaisedBy")
-  blockersResolved     InstallationBlocker[]    @relation("BlockerResolvedBy")
-  certificatesRecorded CompletionCertificate[]  @relation("CertificateRecordedBy")
+  fieldVisitsJoined     FieldVisitParticipant[]  @relation("FieldVisitParticipant")
+  surveysSubmitted      SiteSurvey[]             @relation("SurveySubmittedBy")
+  surveySectionsTouched SurveySection[]          @relation("SurveySectionUpdatedBy")
+  surveyPhotosTaken     SurveyPhoto[]            @relation("SurveyPhotoTakenBy")
+  surveyTypeOutcomes    SurveyTypeOutcome[]      @relation("SurveyTypeOutcomeBy")
+  pumpRoomsUpdated      PumpRoomAudit[]          @relation("PumpRoomUpdatedBy")
+  pumpUnitsUpdated      PumpRoomUnit[]           @relation("PumpUnitUpdatedBy")
+  inventoryCounted      LightingInventoryArea[]  @relation("InventoryCountedBy")
+  inventoryVoided       LightingInventoryArea[]  @relation("InventoryVoidedBy")
+  areaClaimsMade        FieldVisitAreaClaim[]    @relation("AreaClaimClaimedBy")
+  areaClaimsResolved    FieldVisitAreaClaim[]    @relation("AreaClaimResolvedBy")
+  projectsCreated       InstallationProject[]    @relation("InstallationProjectCreatedBy")
+  gateSkipsApproved     InstallationProject[]    @relation("GateSkipApprovedBy")
+  plannedDaysAssigned   InstallationPlannedDay[] @relation("PlannedDayAssignee")
+  batchesSubmitted      InstallationBatch[]      @relation("BatchSubmittedBy")
+  blockersRaised        InstallationBlocker[]    @relation("BlockerRaisedBy")
+  blockersResolved      InstallationBlocker[]    @relation("BlockerResolvedBy")
+  certificatesRecorded  CompletionCertificate[]  @relation("CertificateRecordedBy")
 
   // MS-07
   rawReadingsUploaded RawReadingFile[]     @relation("RawReadingUploadedBy")
@@ -569,9 +577,9 @@ model AdminUser {
   deviceTypesApproved DeviceType[]         @relation("DeviceTypeApprovedBy")
 
   // Monthly inspection checklist (2026-09-12)
-  inspectionsFiled  Inspection[] @relation("InspectionFiledBy")
+  inspectionsFiled  Inspection[]       @relation("InspectionFiledBy")
   fieldSyncReceipts FieldSyncReceipt[]
-  inspectionsVoided Inspection[] @relation("InspectionVoidedBy")
+  inspectionsVoided Inspection[]       @relation("InspectionVoidedBy")
 
   dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
   dateChangesDecided   DateChangeRequest[] @relation("DateChangeDecidedBy")
@@ -844,11 +852,203 @@ model SiteSurvey {
   pipelineId String   @unique @map("pipeline_id")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  pipeline Pipeline                @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  areas    LightingInventoryArea[]
-  circuits Circuit[]
+  // The survey shell (05-field.md §0.5; 19-field-app.md §16). A survey the
+  // office fills in by hand stays a draft for ever and nothing locks it.
+  status        SiteSurveyStatus @default(draft)
+  submittedAt   DateTime?        @map("submitted_at")
+  submittedById String?          @map("submitted_by_id")
+
+  // SCR-010 — the society profile & access, as captured on site.
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  locationAccuracyM Float?    @map("location_accuracy_m")
+  /// The pin was placed or moved by hand rather than read from the device.
+  locationManual    Boolean   @default(false) @map("location_manual")
+  rwaMemberCount    Int?      @map("rwa_member_count")
+  nextElectionDate  DateTime? @map("next_election_date")
+  gateContactName   String?   @map("gate_contact_name")
+  gateContactPhone  String?   @map("gate_contact_phone")
+  accessHours       String?   @map("access_hours")
+  /// none | same_day | days
+  noticeRequired    String?   @map("notice_required")
+  noticeDays        Int?      @map("notice_days")
+  parkingNotes      String?   @map("parking_notes")
+  passIdNotes       String?   @map("pass_id_notes")
+
+  pipeline     Pipeline                @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  submittedBy  AdminUser?              @relation("SurveySubmittedBy", fields: [submittedById], references: [id])
+  areas        LightingInventoryArea[]
+  circuits     Circuit[]
+  sections     SurveySection[]
+  photos       SurveyPhoto[]
+  typeOutcomes SurveyTypeOutcome[]
+  pumpRoom     PumpRoomAudit?
 
   @@map("site_surveys")
+}
+
+enum SiteSurveyStatus {
+  draft
+  submitted
+
+  @@map("site_survey_status")
+}
+
+enum SurveySectionKey {
+  profile
+  inventory
+  circuits
+  pump_room
+
+  @@map("survey_section_key")
+}
+
+enum SurveySectionState {
+  not_started
+  in_progress
+  complete
+  /// Deliberately incomplete, with a reason (a locked pump room, no committee today).
+  flagged
+  /// Reopened by the office after submission — this section only may be edited.
+  queried
+
+  @@map("survey_section_state")
+}
+
+/// One per survey and section — the state the shell index and the office read.
+model SurveySection {
+  id           String             @id @default(cuid())
+  siteSurveyId String             @map("site_survey_id")
+  section      SurveySectionKey
+  state        SurveySectionState @default(not_started)
+  flagReason   String?            @map("flag_reason")
+  queryNote    String?            @map("query_note")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+  updatedById  String?            @map("updated_by_id")
+
+  siteSurvey SiteSurvey @relation(fields: [siteSurveyId], references: [id], onDelete: Cascade)
+  updatedBy  AdminUser? @relation("SurveySectionUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([siteSurveyId, section])
+  @@map("survey_sections")
+}
+
+/// site | area | circuit | pump_unit | logbook
+enum SurveyPhotoSubject {
+  site
+  area
+  circuit
+  pump_unit
+  logbook
+
+  @@map("survey_photo_subject")
+}
+
+/// Every photo taken on a survey. The key is deterministic per subject and
+/// number, so a photo sent twice overwrites itself.
+model SurveyPhoto {
+  id           String             @id @default(cuid())
+  siteSurveyId String             @map("site_survey_id")
+  subject      SurveyPhotoSubject
+  /// The inventory row, circuit or pump unit key the photo belongs to; "" for the site.
+  subjectKey   String             @default("") @map("subject_key")
+  /// Logbook pages only: the month the page records (YYYY-MM), chosen, never inferred.
+  month        String?
+  key          String             @unique
+  takenById    String             @map("taken_by_id")
+  createdAt    DateTime           @default(now()) @map("created_at")
+
+  siteSurvey SiteSurvey @relation(fields: [siteSurveyId], references: [id], onDelete: Cascade)
+  takenBy    AdminUser  @relation("SurveyPhotoTakenBy", fields: [takenById], references: [id])
+
+  @@index([siteSurveyId, subject, subjectKey])
+  @@map("survey_photos")
+}
+
+/// A light type for which no eligible circuit could be found (SCR-012), with
+/// what was found. The office decides: leave the type out, or approve an exception.
+model SurveyTypeOutcome {
+  id           String   @id @default(cuid())
+  siteSurveyId String   @map("site_survey_id")
+  lightType    String   @map("light_type")
+  lightTypeKey String   @map("light_type_key")
+  reason       String
+  recordedById String   @map("recorded_by_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  siteSurvey SiteSurvey @relation(fields: [siteSurveyId], references: [id], onDelete: Cascade)
+  recordedBy AdminUser  @relation("SurveyTypeOutcomeBy", fields: [recordedById], references: [id])
+
+  @@unique([siteSurveyId, lightTypeKey])
+  @@map("survey_type_outcomes")
+}
+
+// ── SCR-013 — pump room audit & logbook (2026-09-29) ────────────────────
+
+enum PumpUnitCategory {
+  flow_meter
+  pressure_switch
+  vfd
+  energy_meter
+  float_switch
+  actuator_valve
+
+  @@map("pump_unit_category")
+}
+
+enum PumpUnitCondition {
+  working
+  working_with_faults
+  not_working
+  unknown
+
+  @@map("pump_unit_condition")
+}
+
+/// The room's structure (pass 1). The unit list is generated from it.
+model PumpRoomAudit {
+  id                   String   @id @default(cuid())
+  siteSurveyId         String   @unique @map("site_survey_id")
+  pumpType             String?  @map("pump_type")
+  pumpHp               Float?   @map("pump_hp")
+  pumpCount            Int?     @map("pump_count")
+  feedPipe             String?  @map("feed_pipe")
+  outflowPipe          String?  @map("outflow_pipe")
+  /// per_pump | shared — how VFDs are arranged, when there are any.
+  vfdArrangement       String?  @map("vfd_arrangement")
+  /// [{ name, tanks: [{ type, capacityL }] }]
+  towers               Json     @default("[]")
+  logbookNotMaintained Boolean  @default(false) @map("logbook_not_maintained")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+  updatedById          String?  @map("updated_by_id")
+
+  siteSurvey SiteSurvey     @relation(fields: [siteSurveyId], references: [id], onDelete: Cascade)
+  updatedBy  AdminUser?     @relation("PumpRoomUpdatedBy", fields: [updatedById], references: [id])
+  units      PumpRoomUnit[]
+
+  @@map("pump_room_audits")
+}
+
+/// One piece of pump-room equipment (pass 2), keyed by where it is:
+/// "float_switch:t1:k2", "vfd:p3", "flow_meter:room".
+model PumpRoomUnit {
+  id          String             @id @default(cuid())
+  auditId     String             @map("audit_id")
+  unitKey     String             @map("unit_key")
+  category    PumpUnitCategory
+  installed   Boolean?
+  brand       String?
+  model       String?
+  condition   PumpUnitCondition?
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  updatedById String?            @map("updated_by_id")
+
+  audit     PumpRoomAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  updatedBy AdminUser?    @relation("PumpUnitUpdatedBy", fields: [updatedById], references: [id])
+
+  @@unique([auditId, unitKey])
+  @@map("pump_room_units")
 }
 
 // FEAT-006 — whole-society count by area, distinct from the single sample
@@ -865,7 +1065,19 @@ model LightingInventoryArea {
   note         String? // required in the app layer when method = estimated (FEAT-006-AC-6)
   createdAt    DateTime         @default(now()) @map("created_at")
 
+  // The field survey (19-field-app.md §16): the kind of area and its own
+  // name, and who counted it — what an area claim is made of.
+  areaType    String?   @map("area_type")
+  label       String?
+  countedById String?   @map("counted_by_id")
+  // Voided when a contested area is settled in favour of another person's count.
+  voidedAt    DateTime? @map("voided_at")
+  voidedById  String?   @map("voided_by_id")
+  voidReason  String?   @map("void_reason")
+
   siteSurvey SiteSurvey @relation(fields: [siteSurveyId], references: [id], onDelete: Cascade)
+  countedBy  AdminUser? @relation("InventoryCountedBy", fields: [countedById], references: [id])
+  voidedBy   AdminUser? @relation("InventoryVoidedBy", fields: [voidedById], references: [id])
 
   @@index([siteSurveyId])
   @@map("lighting_inventory_areas")
@@ -933,20 +1145,23 @@ model Circuit {
   // creator may remove an untouched candidate, ops may remove one with
   // commissioning work, and nobody may remove one already billed on a
   // released invoice (GATE-02).
-  voidedAt   DateTime? @map("voided_at")
-  voidedById String?   @map("voided_by_id")
-  voidReason String?   @map("void_reason")
+  voidedAt       DateTime? @map("voided_at")
+  voidedById     String?   @map("voided_by_id")
+  /// SCR-012: why this circuit represents the other lights of its type — same
+  /// fixtures, hours, switching. Nothing in the system can check it.
+  typicalityNote String?   @map("typicality_note")
+  voidReason     String?   @map("void_reason")
 
-  society                  Society                  @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  siteSurvey               SiteSurvey?              @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
-  createdBy                AdminUser?               @relation("CircuitCreatedBy", fields: [createdById], references: [id])
-  voidedBy                 AdminUser?               @relation("CircuitVoidedBy", fields: [voidedById], references: [id])
-  scheduledEvents          ScheduledEvent[]
-  gatePasses               GatePass[]
-  rescaleEvents            BenchmarkRescaleEvent[]
-  demoResultReviews        DemoResultReview[]
-  demos                    CircuitDemo[]
-  publishedSavingsReports  PublishedSavingsReport[]
+  society                 Society                  @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  siteSurvey              SiteSurvey?              @relation(fields: [siteSurveyId], references: [id], onDelete: SetNull)
+  createdBy               AdminUser?               @relation("CircuitCreatedBy", fields: [createdById], references: [id])
+  voidedBy                AdminUser?               @relation("CircuitVoidedBy", fields: [voidedById], references: [id])
+  scheduledEvents         ScheduledEvent[]
+  gatePasses              GatePass[]
+  rescaleEvents           BenchmarkRescaleEvent[]
+  demoResultReviews       DemoResultReview[]
+  demos                   CircuitDemo[]
+  publishedSavingsReports PublishedSavingsReport[]
 
   // MS-07
   rawReadingFiles         RawReadingFile[]
@@ -1203,13 +1418,13 @@ model DateChangeRequest {
   demoId     String? @map("demo_id")
 
   /// A key of TIMELINE_FIELDS (src/lib/timeline-fields.ts) and the row it is on.
-  field    String
-  entityId String @map("entity_id")
+  field     String
+  entityId  String   @map("entity_id")
   /// Where it sits, as read when raised: "Lighting — Basement › Demo 1".
-  context  String
+  context   String
   /// `YYYY-MM-DD` or `YYYY-MM-DD/YYYY-MM-DD`: what the requester saw, and asked for.
-  fromValue String? @map("from_value")
-  toValue   String  @map("to_value")
+  fromValue String?  @map("from_value")
+  toValue   String   @map("to_value")
   reason    String
   /// Rule warnings the requester was shown and went ahead with.
   warnings  String[] @default([])
@@ -1759,6 +1974,7 @@ model ContractTermVersion {
 // same tables and shouldn't have to introduce them later.
 enum FieldVisitType {
   installation_day
+  survey
 
   @@map("field_visit_type")
 }
@@ -1809,11 +2025,15 @@ model FieldVisit {
 }
 
 model FieldVisitParticipant {
-  id           String    @id @default(cuid())
-  fieldVisitId String    @map("field_visit_id")
-  userId       String    @map("user_id")
-  joinedAt     DateTime  @default(now()) @map("joined_at")
-  acceptedAt   DateTime? @map("accepted_at")
+  id                String    @id @default(cuid())
+  fieldVisitId      String    @map("field_visit_id")
+  userId            String    @map("user_id")
+  joinedAt          DateTime  @default(now()) @map("joined_at")
+  acceptedAt        DateTime? @map("accepted_at")
+  /// What this person's phone last reported still waiting to send for this
+  /// visit, and when — so a teammate's submission can name who to chase.
+  pendingCount      Int?      @map("pending_count")
+  pendingReportedAt DateTime? @map("pending_reported_at")
 
   fieldVisit FieldVisit @relation(fields: [fieldVisitId], references: [id], onDelete: Cascade)
   user       AdminUser  @relation("FieldVisitParticipant", fields: [userId], references: [id], onDelete: Cascade)
@@ -4257,6 +4477,9 @@ model SocietyMember {
 
   /// Their portal login, when one was created from this record.
   profileId String? @unique @map("profile_id")
+
+  /// The person offers, reports and invoices go to — one current member per society.
+  primaryContact Boolean @default(false) @map("primary_contact")
 
   createdAt   DateTime @default(now()) @map("created_at")
   createdById String   @map("created_by_id")

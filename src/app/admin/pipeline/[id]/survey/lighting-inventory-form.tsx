@@ -10,7 +10,7 @@ async function action(_prev: string | undefined, formData: FormData) {
     area: formData.get("area") as string,
     lightType: formData.get("lightType") as string,
     count: Number(formData.get("count")),
-    method: formData.get("method") as "walked" | "estimated",
+    method: formData.get("method") as "walked" | "records" | "estimated",
     note: formData.get("note") as string,
   });
   return result?.error;
@@ -23,7 +23,7 @@ export function LightingInventoryForm({ siteSurveyId }: { siteSurveyId: string }
   const [area, setArea] = useState("");
   const [lightType, setLightType] = useState("");
   const [count, setCount] = useState("0");
-  const [method, setMethod] = useState<"walked" | "estimated">("walked");
+  const [method, setMethod] = useState<"walked" | "records" | "estimated">("walked");
   const [note, setNote] = useState("");
 
   return (
@@ -71,10 +71,11 @@ export function LightingInventoryForm({ siteSurveyId }: { siteSurveyId: string }
               id="inv-method"
               name="method"
               value={method}
-              onChange={(e) => setMethod(e.target.value as "walked" | "estimated")}
+              onChange={(e) => setMethod(e.target.value as "walked" | "records" | "estimated")}
               className="field"
             >
               <option value="walked">Walked count</option>
+              <option value="records">From the society&apos;s records</option>
               <option value="estimated">Estimated</option>
             </select>
           </Field>

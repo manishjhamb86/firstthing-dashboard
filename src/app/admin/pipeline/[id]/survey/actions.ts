@@ -13,6 +13,19 @@ import {
   outstandingCriteria,
 } from "@/lib/circuit-eligibility";
 import { lightTypeKey } from "@/lib/light-type";
+import { surveyForWrite } from "@/lib/survey-core";
+
+/**
+ * The survey lock (19-field-app.md §16): once a survey has been submitted from
+ * the field, a field account may not change it here either — only in a section
+ * the office has queried. Operations, reviewing it, still may.
+ */
+async function lockRefusal(siteSurveyId: string, section: "inventory" | "circuits"): Promise<string | null> {
+  const actor = await resolveAdmin();
+  if (!actor) return "Your session has ended. Sign in again.";
+  const g = await surveyForWrite(actor, siteSurveyId, section);
+  return g.error ?? null;
+}
 
 // FEAT-006: whole-society lighting inventory by area, distinct from the
 // single sample Circuit metered for the benchmark (CON-11).
@@ -21,10 +34,12 @@ export async function addLightingInventoryArea(input: {
   area: string;
   lightType: string;
   count: number;
-  method: "walked" | "estimated";
+  method: "walked" | "records" | "estimated";
   note?: string;
 }) {
   await requireAdminPermission("manage_survey");
+  const locked = await lockRefusal(input.siteSurveyId, "inventory");
+  if (locked) return { error: locked };
 
   if (!input.area.trim() || !input.lightType.trim()) return { error: "Area and light type are required." };
   if (!Number.isFinite(input.count) || input.count < 0 || !Number.isInteger(input.count)) {
@@ -63,7 +78,7 @@ export async function addLightingInventoryArea(input: {
 export async function updateLightingInventoryArea(
   id: string,
   siteSurveyId: string,
-  input: { count: number; method: "walked" | "estimated"; note?: string },
+  input: { count: number; method: "walked" | "records" | "estimated"; note?: string },
 ): Promise<{ error?: string; circuit?: { from: number; to: number } | null; circuitNote?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -73,6 +88,8 @@ export async function updateLightingInventoryArea(
   }
   const row = await db.lightingInventoryArea.findUnique({ where: { id } });
   if (!row || row.siteSurveyId !== siteSurveyId) return { error: "That inventory row no longer exists." };
+  const locked = await lockRefusal(siteSurveyId, "inventory");
+  if (locked) return { error: locked };
   if (!Number.isFinite(input.count) || input.count < 0 || !Number.isInteger(input.count)) {
     return { error: "Count must be a non-negative whole number." };
   }
@@ -160,6 +177,8 @@ export async function updateLightingInventoryArea(
 
 export async function deleteLightingInventoryArea(id: string, siteSurveyId: string) {
   await requireAdminPermission("manage_survey");
+  const locked = await lockRefusal(siteSurveyId, "inventory");
+  if (locked) return { error: locked };
   await db.lightingInventoryArea.delete({ where: { id } });
   logger.info("survey.lighting_inventory_area_removed", { siteSurveyId, rowId: id });
   revalidatePath(`/admin/pipeline`);
@@ -210,6 +229,8 @@ export async function submitCircuitCandidate(input: {
   lightCountExceptionReason?: string;
 }) {
   const session = await requireAdminPermission("manage_survey");
+  const locked = await lockRefusal(input.siteSurveyId, "circuits");
+  if (locked) return { error: locked };
 
   if (!input.lines || input.lines.length === 0) {
     return { error: "Record at least one device line — the circuit's inventory is what everything downstream compares against." };

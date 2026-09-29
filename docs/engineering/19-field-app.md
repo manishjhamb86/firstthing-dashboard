@@ -574,3 +574,83 @@ applied.
 - 1,195 unit tests; `tsc`/`lint`/`build` clean. No schema change.
 - The test photos remain in the bucket under `Documents/Print_Back_Co/2026-09/Installation/` —
   the app's credentials cannot delete an object, the standing limitation.
+
+---
+
+## 16. Step 8 — the survey shell: design (2026-09-29, the user's call)
+
+**Decided by the user (2026-09-29):**
+- **Scope: the full spec shell.** All four sections — society profile & access (SCR-010), lighting
+  inventory (SCR-011), circuit selection (SCR-012), pump room audit & logbook (SCR-013) — plus
+  per-section state, submission, and the survey read-only for everyone once submitted.
+- **Double counting: area claims.** Each inventory row records who counted it; counting an area
+  someone else counted warns first; two phones that counted one area offline mark it **contested**,
+  and it is settled — one count chosen, with a reason — before the survey can be submitted.
+  Contested rows are never summed, deduplicated or silently merged.
+
+**Reconciled against what exists (step 0, for the survey only).** `05-field.md` was specified on
+2026-08-13; where the live app has since moved, the live app wins and the spec is amended:
+
+| Spec (2026-08-13) | Live app since | Built as |
+|---|---|---|
+| SCR-010's committee list lives on the survey because no `Society` row exists yet | A society exists from the lead onward, with a member register and managed positions (2026-09-25) | The committee is written **into the society's member register**. The register's rules win: a mobile number is required, the same mobile twice among current members is refused. "Primary contact" is a new flag on the member (one per society). Security in-charge and Electrician join the positions list. |
+| Coordinates on the survey, promoted on signing | `Society.latitude/longitude` exist | Captured on the survey (with accuracy and whether the pin was moved by hand) and copied to the society at submission when the society has none. |
+| SCR-012 with the original five CON-16 criteria | "Shared appliances" removed 2026-08-26 (kept fixtures instead); device lines from the catalog; the capture-time exception | The phone uses the office candidate's rules through a shared core. Added from the spec: the **typicality answer** (required) and a **panel photo** (required). A light type can be marked **unresolvable** with a reason. |
+| A survey-level `status` | None exists; the office survey is edited freely | `SiteSurvey.status` draft → submitted. After submission every survey write — phone and office — is refused, except in a section the office has **queried**, which reopens that section only. A survey the office fills in by hand is never submitted and so never locked: nothing changes for it. |
+| Inventory method walked / estimated | Same | Adds **from the society's records**. Estimated still needs a note. |
+| SCR-013 | No model at all | New: the room's structure, the generated per-unit list, per-unit photos, and the month-tagged logbook. |
+
+**Schema** (one additive migration):
+- `SiteSurvey` gains `status`, `submittedAt/ById`, and the SCR-010 fields (address, coordinates and
+  accuracy, pin moved by hand, RWA member count, next election, gate contact, access hours, notice,
+  parking, pass/ID).
+- `SurveySection` — one row per survey and section: state (not started / in progress / complete /
+  flagged / queried), the flag reason, the office's query note.
+- `SurveyPhoto` — every survey photo: site, area row, circuit panel, pump unit, logbook page (with
+  its month). Keys are deterministic per subject and number, as for installation days.
+- `LightingInventoryArea` gains `areaType`, `label`, `countedById`, and a soft void (the losing
+  side of a settled contest). Every read of the inventory filters voided rows.
+- `SurveyTypeOutcome` — a light type marked unresolvable, with the reason.
+- `Circuit.typicalityNote`.
+- `PumpRoomAudit` (the structure, no-access and logbook-not-maintained) and `PumpRoomUnit` (one per
+  generated unit: installed, brand, model, condition).
+- `FieldVisitType.survey`; `FieldVisitParticipant` gains the phone's last reported pending count, so
+  submission can name a teammate whose phone still holds work.
+- `SocietyMember.primaryContact`.
+
+**Idempotency.** Rows the phone creates carry ids made on the phone, so a replay finds the row
+instead of making a second one; section and profile saves set values. Photos use the day-photo
+pattern: uploaded first, keys issued per subject and checked on arrival.
+
+**Build order:** 8a schema, shell, submission and the lock, and SCR-010 · 8b SCR-011 with claims ·
+8c SCR-012 · 8d SCR-013 · 8e the office's review of a submitted survey (sections, contests, gaps,
+query a section).
+
+### 16a. Built: the shell, the lock, and the society profile (2026-09-29)
+
+- Migration `20260929140000_survey_shell` (additive): everything in the schema list above, plus a
+  partial unique index — one current primary contact per society — and the two new positions.
+- `src/lib/survey-shell.ts` (pure, 11 cases): sections, what completes the profile, the lock
+  (`refuseSurveyWrite`: a draft is open; after submission the field team is read-only except in a
+  queried section; operations, reviewing, may still correct), submission blockers, and area keys and
+  contests for 8b.
+- `src/lib/survey-core.ts`: saving the profile, adding a committee member into the register (the id
+  made on the phone), moving the primary mark, setting a section (complete refused with each gap
+  named; flagged needs a reason), submitting (sections, contests, teammates' unsent work; the
+  society takes the surveyed location when it has none), the office's query, and the phone's
+  pending-count report (`/api/field/presence`). Anyone who writes to a survey joins its visit.
+- The office's survey actions obey the same lock for field accounts.
+- The sync route now runs every "act first, receipt after" kind from one table (`OUTSIDE`): the
+  demo steps, the installation day and certificate, and the five survey kinds.
+- Phone: `/field/survey/[pipelineId]` (the four sections, their states, submission) and `/profile`
+  (location from the phone or by hand, address, the committee with the primary mark, governance,
+  access), all kept for offline through the warm-up. The office's inventory form gained the third
+  count method, "from the society's records".
+- The phone's item kinds now come from the one list in `field-sync.ts`.
+
+**Verified** `field-survey-a.mjs` 27/27: offline capture, the committee in the register exactly as
+typed with the primary mark moved not duplicated, a duplicate mobile refused by the server, a
+teammate's phone reporting unsent work and submission naming them until it arrived, flagging with
+reasons, submission from the phone, the society's location filled, the lock refusing a field write,
+operations still able to write, and a queried section — only that one — reopened. Inventory,
+circuits and pump room can only be flagged until 8b–8d build them.

@@ -21,7 +21,7 @@ export function EditAreaForm({
   id: string;
   siteSurveyId: string;
   count: number;
-  method: "walked" | "estimated";
+  method: "walked" | "records" | "estimated";
   note: string | null;
   /** What the candidate circuit for this light type represents today, if one exists (shown before any edit). */
   circuitRepresented: number | null;
@@ -30,7 +30,7 @@ export function EditAreaForm({
 }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(String(count));
-  const [m, setM] = useState<"walked" | "estimated">(method);
+  const [m, setM] = useState<"walked" | "records" | "estimated">(method);
   const [n, setN] = useState(note ?? "");
   const [error, setError] = useState<string | undefined>();
   const [saved, setSaved] = useState<{ count: number; circuit: { from: number; to: number } | null; note?: string } | null>(null);
@@ -75,8 +75,9 @@ export function EditAreaForm({
         onChange={(e) => setValue(e.target.value)}
         disabled={pending}
       />
-      <select aria-label="Corrected count method" className="field field-auto" value={m} onChange={(e) => setM(e.target.value as "walked" | "estimated")} disabled={pending}>
+      <select aria-label="Corrected count method" className="field field-auto" value={m} onChange={(e) => setM(e.target.value as "walked" | "records" | "estimated")} disabled={pending}>
         <option value="walked">Walked</option>
+        <option value="records">Society records</option>
         <option value="estimated">Estimated</option>
       </select>
       {m === "estimated" && (

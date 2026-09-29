@@ -21,6 +21,8 @@ export type WorkRow = {
   href: string;
   /** Where the field app opens this job, when it has its own screen for it. */
   fieldHref?: string;
+  /** Every field-app page this job needs on the phone before the visit (the warm-up). */
+  fieldPages?: string[];
   societyName: string;
   societyLocation: string;
   serviceLine: string;
@@ -100,7 +102,15 @@ export async function loadFieldWork(actorId: string, mineOnly: boolean): Promise
         href: p.installationProject
           ? `/admin/pipeline/${p.id}/installation`
           : `/admin/pipeline/${p.id}/survey`,
-        fieldHref: p.installationProject ? `/field/installation/${p.id}` : undefined,
+        fieldHref: p.installationProject
+          ? `/field/installation/${p.id}`
+          : p.siteSurvey
+            ? `/field/survey/${p.id}`
+            : undefined,
+        fieldPages:
+          !p.installationProject && p.siteSurvey
+            ? ["", "/profile", "/inventory", "/circuits", "/pump-room"].map((s) => `/field/survey/${p.id}${s}`)
+            : undefined,
         societyName: p.society.name,
         societyLocation: p.society.location,
         serviceLine: dealLabel(p.serviceLine, p.dealScope),

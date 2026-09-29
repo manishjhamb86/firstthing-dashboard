@@ -26,6 +26,10 @@ import { applyUnitMove } from "@/lib/inventory-move";
 import { fileInspection } from "@/lib/inspection-file";
 import {
   addInventoryRowAs,
+  addLogbookPagesAs,
+  recordPumpUnitAs,
+  savePumpStructureAs,
+  setLogbookNotMaintainedAs,
   markTypeUnresolvableAs,
   recordFieldCandidateAs,
   removeInventoryRowAs,
@@ -371,6 +375,68 @@ async function applyUnresolvable(actor: Actor, payload: unknown): Promise<Applie
   return "error" in r ? { error: r.error } : { result: { ok: true } };
 }
 
+// ── the pump room (SCR-013) ──
+
+const txt = (v: unknown) => (typeof v === "string" ? v : "");
+const numOrNull = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
+const keysOf = (v: unknown) => (Array.isArray(v) ? v.filter((k): k is string => typeof k === "string") : []);
+
+async function applyPumpStructure(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  const st = (o.structure ?? {}) as Record<string, unknown>;
+  const towers = (Array.isArray(st.towers) ? st.towers : []).map((raw) => {
+    const t = (raw ?? {}) as Record<string, unknown>;
+    return {
+      name: txt(t.name),
+      tanks: (Array.isArray(t.tanks) ? t.tanks : []).map((k) => ({ type: txt((k as Record<string, unknown>)?.type), capacityL: numOrNull((k as Record<string, unknown>)?.capacityL) })),
+    };
+  });
+  const vfd = txt(st.vfdArrangement);
+  const r = await savePumpStructureAs(actor, {
+    surveyId: txt(o.surveyId),
+    structure: {
+      pumpType: txt(st.pumpType),
+      pumpHp: numOrNull(st.pumpHp),
+      pumpCount: numOrNull(st.pumpCount),
+      feedPipe: txt(st.feedPipe),
+      outflowPipe: txt(st.outflowPipe),
+      vfdArrangement: vfd === "per_pump" || vfd === "shared" ? vfd : "",
+      towers,
+    },
+  });
+  return "error" in r ? { error: r.error } : { result: { units: r.units } };
+}
+
+const CONDITION_VALUES = ["working", "working_with_faults", "not_working", "unknown"] as const;
+
+async function applyPumpUnit(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  const cond = txt(o.condition);
+  const r = await recordPumpUnitAs(actor, {
+    surveyId: txt(o.surveyId),
+    unitKey: txt(o.unitKey),
+    installed: o.installed === true,
+    brand: txt(o.brand),
+    model: txt(o.model),
+    condition: (CONDITION_VALUES as readonly string[]).includes(cond) ? (cond as (typeof CONDITION_VALUES)[number]) : null,
+    photoKeys: keysOf(o.photoKeys),
+    photoBatch: txt(o.photoBatch),
+  });
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+async function applyLogbook(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  const r = await setLogbookNotMaintainedAs(actor, { surveyId: txt(o.surveyId), notMaintained: o.notMaintained === true });
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
+async function applyLogbookPage(actor: Actor, payload: unknown): Promise<Applied> {
+  const o = (payload ?? {}) as Record<string, unknown>;
+  const r = await addLogbookPagesAs(actor, { surveyId: txt(o.surveyId), month: txt(o.month), photoKeys: keysOf(o.photoKeys), photoBatch: txt(o.photoBatch) });
+  return "error" in r ? { error: r.error } : { result: { ok: true } };
+}
+
 const OUTSIDE: Partial<Record<OutboxKind, (actor: Actor, payload: unknown) => Promise<Applied>>> = {
   "demo.meter": applyDemoMeter,
   "demo.replacement": applyDemoReplacement,
@@ -387,4 +453,8 @@ const OUTSIDE: Partial<Record<OutboxKind, (actor: Actor, payload: unknown) => Pr
   "survey.settle": applySettle,
   "survey.circuit": applyCircuit,
   "survey.unresolvable": applyUnresolvable,
+  "survey.pump_structure": applyPumpStructure,
+  "survey.pump_unit": applyPumpUnit,
+  "survey.logbook": applyLogbook,
+  "survey.logbook_page": applyLogbookPage,
 };

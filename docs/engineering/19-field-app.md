@@ -710,3 +710,28 @@ as having no eligible circuit; back online, the circuit eligible representing 30
 its fitting line, the photo keyed to the circuit and in the bucket, the basement's reason stored;
 the server refusing a candidate with no photo, a forged photo key, and a circuit that is the whole
 type; the section completing. Installation, inspection and the two earlier survey suites still pass.
+
+### 16d. Built: the pump room audit and logbook (2026-09-29)
+
+- `src/lib/pump-room.ts` (pure, 9 cases): the room's structure (pass 1: pump type, HP 0.5–200,
+  count 1–20, feed and outflow pipes, VFD per pump or shared, towers with their tanks), the unit
+  list it generates (flow meter, pressure switch and energy meter for the room; a VFD per pump or
+  one shared; a float switch and an actuator valve per tank, named "Tower B, Tank 2"), what each
+  unit's answer needs (not fitted ends the row; fitted needs brand, model, condition and a photo,
+  named by the unit), the 13 logbook months, and what completes the section.
+- `/field/survey/[pipelineId]/pump-room` (SCR-013): pass 1 collapses to a summary once saved; pass
+  2 groups the generated units by category with a running "N of M recorded"; "Same as…" copies
+  brand, model and condition from an answered unit while its photo stays its own; the logbook has
+  a 13-month strip, a month chosen for each page (never inferred), and "the room keeps no logbook"
+  as an answer; the section completes, or is flagged "no access" with a reason. Large targets.
+- Changing the structure adds the rows it now implies and removes the ones it no longer does (the
+  phone warns before an answered row goes); answering a removed unit is refused.
+- A unit or a logbook month can be photographed in more than one sitting, so each sitting's photos
+  carry a batch id in their key — a second sitting never overwrites the first.
+
+**Verified** `field-survey-d.mjs` 19/19: offline, a 250 HP pump refused, the room generating
+7 units, every unit answered (a copied VFD still needing its own photo, a fitted float switch
+without one refused by name), the section waiting on the logbook until a page was photographed;
+back online, the structure, all 7 answers, a photo for each fitted unit and the logbook page with
+its month, each with its own key and in the bucket; removing the tank leaving 5 units, and
+answering a removed one refused. The three earlier survey suites still pass.

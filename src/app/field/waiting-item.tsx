@@ -46,6 +46,10 @@ export function WaitingItem({ item }: { item: OutboxItem }) {
       "survey.settle": "Discard this decision? The area stays contested.",
       "survey.circuit": "Discard this circuit and its panel photos? It has not reached the office.",
       "survey.unresolvable": "Discard this? The light type stays unresolved.",
+      "survey.pump_structure": "Discard this change to the pump room's structure?",
+      "survey.pump_unit": "Discard this unit's answer and its photos?",
+      "survey.logbook": "Discard this logbook answer?",
+      "survey.logbook_page": "Discard these logbook photos?",
     };
     const ok = confirm(what[item.kind]);
     if (!ok) return;

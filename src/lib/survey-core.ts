@@ -7,6 +7,15 @@ import { lightTypeKey } from "@/lib/light-type";
 import { fullFromTotal } from "@/lib/light-population";
 import { recordCandidateAs, type CandidateLine } from "@/lib/circuit-candidate-core";
 import {
+  generateUnits,
+  logbookMonths,
+  pumpRoomGaps,
+  refuseStructure,
+  type Condition,
+  type PumpStructure,
+  type UnitAnswer,
+} from "@/lib/pump-room";
+import {
   areaDisplay,
   areaKeyOf,
   circuitGaps,
@@ -270,8 +279,8 @@ async function circuitGapsFor(surveyId: string): Promise<string[]> {
   return circuitGaps({ inventoryTypes: [...types].map(([key, label]) => ({ key, label })), resolvedTypeKeys: resolved });
 }
 async function pumpRoomGapsFor(surveyId: string): Promise<string[]> {
-  void surveyId;
-  return ["The pump room audit is not built yet — flag it if the room was not surveyed."];
+  const room = await loadPumpRoom(surveyId);
+  return pumpRoomGaps({ structure: room.structure, answers: room.answers, logbookNotMaintained: room.logbookNotMaintained, logbookPages: room.logbookPages.length });
 }
 
 /**
@@ -522,6 +531,9 @@ export async function settleContestAs(actor: SurveyActor, input: { surveyId: str
 
 // ── survey photos ────────────────────────────────────────────────────────
 
+/** One sitting's photos of a subject that can be photographed again later (a pump unit, a logbook month). */
+export const PHOTO_BATCH_RE = /^[a-z0-9]{6,12}$/;
+
 /** The most photos one survey subject (the site, a circuit, a pump unit…) may carry. */
 export const MAX_SUBJECT_PHOTOS = 12;
 export type PhotoSubject = "site" | "area" | "circuit" | "pump_unit" | "logbook";
@@ -663,4 +675,131 @@ export async function markTypeUnresolvableAs(actor: SurveyActor, input: { survey
   });
   logger.info("survey.type_unresolvable", { actorId: actor.id, surveyId: input.surveyId, lightType: input.lightType });
   return { ok: true };
+}
+
+// ── SCR-013 — pump room audit & logbook ──────────────────────────────────
+
+/** The room as recorded: its structure, each unit's answer (with its photo count), the logbook. */
+export async function loadPumpRoom(surveyId: string) {
+  const [audit, photos] = await Promise.all([
+    db.pumpRoomAudit.findUnique({ where: { siteSurveyId: surveyId }, include: { units: true } }),
+    db.surveyPhoto.findMany({ where: { siteSurveyId: surveyId, subject: { in: ["pump_unit", "logbook"] } }, select: { subject: true, subjectKey: true, month: true, key: true } }),
+  ]);
+  const unitPhotos = new Map<string, number>();
+  // A unit's photos are keyed "{unitKey}.{batch}" — one batch per sitting, so a
+  // later sitting's photos never overwrite an earlier one's.
+  for (const p of photos) {
+    if (p.subject !== "pump_unit") continue;
+    const unitKey = p.subjectKey.slice(0, p.subjectKey.lastIndexOf("."));
+    unitPhotos.set(unitKey, (unitPhotos.get(unitKey) ?? 0) + 1);
+  }
+  const structure: PumpStructure | null = audit
+    ? {
+        pumpType: audit.pumpType ?? "",
+        pumpHp: audit.pumpHp,
+        pumpCount: audit.pumpCount,
+        feedPipe: audit.feedPipe ?? "",
+        outflowPipe: audit.outflowPipe ?? "",
+        vfdArrangement: (audit.vfdArrangement ?? "") as PumpStructure["vfdArrangement"],
+        towers: (audit.towers ?? []) as PumpStructure["towers"],
+      }
+    : null;
+  const answers = new Map<string, UnitAnswer>(
+    (audit?.units ?? []).map((u) => [
+      u.unitKey,
+      { installed: u.installed, brand: u.brand ?? "", model: u.model ?? "", condition: (u.condition as Condition | null) ?? null, photos: unitPhotos.get(u.unitKey) ?? 0 },
+    ]),
+  );
+  return {
+    structure,
+    answers,
+    logbookNotMaintained: audit?.logbookNotMaintained ?? false,
+    logbookPages: photos.filter((p) => p.subject === "logbook").map((p) => ({ month: p.month ?? "", key: p.key })),
+  };
+}
+
+/**
+ * Pass 1 — the room's structure. Sets values; the generated unit rows follow
+ * it: rows the new structure implies are added, rows it no longer implies are
+ * removed (the phone warns before that drops an answered one).
+ */
+export async function savePumpStructureAs(actor: SurveyActor, input: { surveyId: string; structure: PumpStructure }): Promise<Done<{ units: number }>> {
+  const g = await surveyForWrite(actor, input.surveyId, "pump_room");
+  if (g.error !== undefined) return { error: g.error };
+  const refusal = refuseStructure(input.structure);
+  if (refusal) return { error: refusal };
+  const s = input.structure;
+  const units = generateUnits(s);
+  await db.$transaction(async (tx) => {
+    const data = {
+      pumpType: s.pumpType.trim(),
+      pumpHp: s.pumpHp,
+      pumpCount: s.pumpCount,
+      feedPipe: s.feedPipe.trim(),
+      outflowPipe: s.outflowPipe.trim(),
+      vfdArrangement: s.vfdArrangement || null,
+      towers: s.towers.map((t) => ({ name: t.name.trim(), tanks: t.tanks.map((k) => ({ type: k.type.trim(), capacityL: k.capacityL })) })),
+      updatedById: actor.id,
+    };
+    const audit = await tx.pumpRoomAudit.upsert({ where: { siteSurveyId: input.surveyId }, create: { siteSurveyId: input.surveyId, ...data }, update: data });
+    await tx.pumpRoomUnit.createMany({
+      data: units.map((u) => ({ auditId: audit.id, unitKey: u.unitKey, category: u.category })),
+      skipDuplicates: true,
+    });
+    await tx.pumpRoomUnit.deleteMany({ where: { auditId: audit.id, unitKey: { notIn: units.map((u) => u.unitKey) } } });
+    await joinSurveyVisit(tx, input.surveyId, g.survey.pipeline.societyId, actor.id);
+    await touchSection(tx, input.surveyId, "pump_room", actor.id);
+  });
+  logger.info("survey.pump_structure_saved", { actorId: actor.id, surveyId: input.surveyId, units: units.length });
+  return { ok: true, units: units.length };
+}
+
+/** Pass 2 — one unit: fitted or not, and when fitted its brand, model, condition and photos. */
+export async function recordPumpUnitAs(
+  actor: SurveyActor,
+  input: { surveyId: string; unitKey: string; installed: boolean; brand: string; model: string; condition: Condition | null; photoKeys: string[]; photoBatch: string },
+): Promise<Done> {
+  const g = await surveyForWrite(actor, input.surveyId, "pump_room");
+  if (g.error !== undefined) return { error: g.error };
+  const audit = await db.pumpRoomAudit.findUnique({ where: { siteSurveyId: input.surveyId }, select: { id: true } });
+  if (!audit) return { error: "Record the room first — how many pumps, towers and tanks." };
+  const unit = await db.pumpRoomUnit.findUnique({ where: { auditId_unitKey: { auditId: audit.id, unitKey: input.unitKey } } });
+  if (!unit) return { error: "That unit is no longer in the room's structure — the tank or pump count changed." };
+  if (input.installed) {
+    if (!input.brand.trim() || !input.model.trim()) return { error: "Brand and model — read it off the label, or write 'label unreadable'." };
+    if (!input.condition) return { error: "What condition is it in?" };
+  }
+  if (input.photoKeys.length > 0 && !PHOTO_BATCH_RE.test(input.photoBatch)) return { error: "The photos have no valid batch." };
+  const photos = await attachSurveyPhotos({ surveyId: input.surveyId, subject: "pump_unit", subjectKey: `${input.unitKey}.${input.photoBatch}`, keys: input.photoKeys, actorId: actor.id });
+  if ("error" in photos) return photos;
+  await db.pumpRoomUnit.update({
+    where: { id: unit.id },
+    data: input.installed
+      ? { installed: true, brand: input.brand.trim(), model: input.model.trim(), condition: input.condition, updatedById: actor.id }
+      : { installed: false, brand: null, model: null, condition: null, updatedById: actor.id },
+  });
+  logger.info("survey.pump_unit_recorded", { actorId: actor.id, surveyId: input.surveyId, unitKey: input.unitKey, installed: input.installed, photos: input.photoKeys.length });
+  return { ok: true };
+}
+
+/** "Logbook not maintained" — an answer, not an empty state (FEAT-009 AC-2). Reversible. */
+export async function setLogbookNotMaintainedAs(actor: SurveyActor, input: { surveyId: string; notMaintained: boolean }): Promise<Done> {
+  const g = await surveyForWrite(actor, input.surveyId, "pump_room");
+  if (g.error !== undefined) return { error: g.error };
+  await db.pumpRoomAudit.upsert({
+    where: { siteSurveyId: input.surveyId },
+    create: { siteSurveyId: input.surveyId, logbookNotMaintained: input.notMaintained, updatedById: actor.id },
+    update: { logbookNotMaintained: input.notMaintained, updatedById: actor.id },
+  });
+  return { ok: true };
+}
+
+/** Logbook pages for one month — the month chosen, never inferred (CON-25). */
+export async function addLogbookPagesAs(actor: SurveyActor, input: { surveyId: string; month: string; photoKeys: string[]; photoBatch: string }): Promise<Done> {
+  const g = await surveyForWrite(actor, input.surveyId, "pump_room");
+  if (g.error !== undefined) return { error: g.error };
+  if (!logbookMonths(new Date()).includes(input.month)) return { error: "Which month is this page? This month or one of the 12 before it." };
+  if (input.photoKeys.length === 0) return { error: "Photograph the page." };
+  if (!PHOTO_BATCH_RE.test(input.photoBatch)) return { error: "The photos have no valid batch." };
+  return attachSurveyPhotos({ surveyId: input.surveyId, subject: "logbook", subjectKey: `${input.month}.${input.photoBatch}`, keys: input.photoKeys, month: input.month, actorId: actor.id });
 }

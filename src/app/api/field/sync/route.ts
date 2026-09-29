@@ -3,7 +3,8 @@ import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { parseEnvelope, parseInspectionPayload, parsePhotoPayload, type Envelope } from "@/lib/field-sync";
+import { parseEnvelope, parseInspectionPayload, parseMovePayload, parsePhotoPayload, type Envelope } from "@/lib/field-sync";
+import { applyUnitMove } from "@/lib/inventory-move";
 import { fileInspection } from "@/lib/inspection-file";
 
 /**
@@ -27,11 +28,22 @@ async function apply(
   tx: Prisma.TransactionClient,
   actor: Actor,
   env: Envelope,
-): Promise<Record<string, string> | { error: string }> {
+): Promise<Prisma.JsonObject | { error: string }> {
   if (env.kind === "inspection.file") {
     const input = parseInspectionPayload(env.payload);
     if ("error" in input) return input;
     return fileInspection(tx, actor, input);
+  }
+
+  // stock.move — a scanned pile of units, moved once. Each unit is judged on
+  // its own by the back office's own lifecycle; the refused ones are named in
+  // the result (which the phone shows) and the rest still move.
+  if (env.kind === "stock.move") {
+    const input = parseMovePayload(env.payload);
+    if ("error" in input) return input;
+    const r = await applyUnitMove(tx, actor.id, input);
+    if ("error" in r) return r;
+    return { done: r.done, failed: r.failed };
   }
 
   // inspection.photo — the photo of the signed paper form, uploaded after the

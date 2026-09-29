@@ -13,16 +13,15 @@ import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { retailNameKey } from "@/lib/retail-customer";
+import { applyUnitMove, moveDestination, type MoveResult as UnitMoveResult } from "@/lib/inventory-move";
 import {
   MOVE_LABEL,
   batchCode,
   nextBatchSeq,
-  nextState,
   refuseQuantityMove,
   balanceAt,
   unitCode,
   type MoveKind,
-  type UnitStatus,
   refuseUnitCost,
 } from "@/lib/inventory";
 
@@ -291,33 +290,18 @@ export async function receiveDelivery(input: {
 // ---------------------------------------------------------------------------
 
 /** The site location for a society — created the first time anything is deployed there. */
-async function siteFor(societyId: string): Promise<string | null> {
-  const existing = await db.stockLocation.findUnique({ where: { societyId } });
-  if (existing) return existing.id;
-  const society = await db.society.findUnique({ where: { id: societyId }, select: { name: true, location: true } });
-  if (!society) return null;
-  const created = await db.stockLocation.create({ data: { kind: "site", name: society.name, address: society.location, societyId } });
-  return created.id;
-}
-
 /** Where a move is going: an office, or a society's site. */
 async function destination(kind: MoveKind, input: { toOfficeId: string; societyId: string }): Promise<{ id: string } | { error: string } | null> {
-  if (kind === "deploy") {
-    if (!input.societyId) return { error: "Choose the society it is deployed at." };
-    const id = await siteFor(input.societyId);
-    return id ? { id } : { error: "That society no longer exists." };
-  }
-  if (kind === "transfer" || kind === "return_to_office") {
-    const office = input.toOfficeId ? await db.stockLocation.findUnique({ where: { id: input.toOfficeId } }) : null;
-    if (!office || office.kind !== "office") return { error: "Choose the office." };
-    return { id: office.id };
-  }
-  return null;
+  return moveDestination(db, kind, input);
 }
 
-export type MoveResult = { done: number; failed: { code: string; error: string }[] };
+export type MoveResult = UnitMoveResult;
 
-/** Move serialized units — by code. Each unit is checked on its own; a refused one is named. */
+/**
+ * Move serialized units — by code. Each unit is checked on its own; a refused
+ * one is named. The rules live in src/lib/inventory-move.ts, shared with the
+ * field app's queued move; the whole move is one transaction.
+ */
 export async function moveUnits(input: {
   codes: string[];
   kind: MoveKind;
@@ -329,59 +313,11 @@ export async function moveUnits(input: {
 }): Promise<MoveResult> {
   const admin = await requireStockStaff();
   if (!admin) return { done: 0, failed: [{ code: "", error: REFUSED }] };
-  const on = day(input.on);
-  if (!on || !notFuture(on)) return { done: 0, failed: [{ code: "", error: "Enter the date it happened (not in the future)." }] };
-  if (["mark_faulty", "scrap", "lost", "return_to_supplier"].includes(input.kind) && !input.reason.trim())
-    return { done: 0, failed: [{ code: "", error: "Say why — it is kept with the record." }] };
-  const dest = await destination(input.kind, input);
-  if (dest && "error" in dest) return { done: 0, failed: [{ code: "", error: dest.error }] };
-
-  const codes = [...new Set(input.codes.map((c) => c.trim().toUpperCase()).filter(Boolean))];
-  const units = await db.inventoryUnit.findMany({ where: { code: { in: codes } }, include: { location: { select: { kind: true } } } });
-  const failed: MoveResult["failed"] = codes.filter((c) => !units.some((u) => u.code === c)).map((c) => ({ code: c, error: "No unit has this code." }));
-  let done = 0;
-  for (const u of units) {
-    const t = nextState(u.status as UnitStatus, input.kind);
-    if ("error" in t) {
-      failed.push({ code: u.code, error: t.error });
-      continue;
-    }
-    const toId = t.to === "keep" ? u.locationId : t.to === "none" ? null : dest && "id" in dest ? dest.id : null;
-    if (input.kind === "transfer" && toId === u.locationId) {
-      failed.push({ code: u.code, error: "It is already at that office." });
-      continue;
-    }
-    await db.$transaction([
-      db.stockMovement.create({
-        data: {
-          kind: input.kind,
-          on,
-          itemTypeId: u.itemTypeId,
-          batchId: u.batchId,
-          unitId: u.id,
-          quantity: 1,
-          fromLocationId: t.to === "keep" ? null : u.locationId,
-          toLocationId: t.to === "keep" ? null : toId,
-          circuitId: input.kind === "deploy" ? input.circuitId || null : null,
-          reason: input.reason.trim() || null,
-          recordedById: admin.id,
-        },
-      }),
-      db.inventoryUnit.update({
-        where: { id: u.id },
-        data: {
-          status: t.status,
-          locationId: toId,
-          circuitId: input.kind === "deploy" ? input.circuitId || null : t.status === "deployed" ? u.circuitId : null,
-          deployedOn: input.kind === "deploy" ? on : t.status === "deployed" || t.status === "faulty" ? u.deployedOn : null,
-        },
-      }),
-    ]);
-    done += 1;
-  }
-  logger.info("inventory.units_moved", { actorId: admin.id, kind: input.kind, requested: codes.length, done, failed: failed.length });
+  const r = await db.$transaction((tx) => applyUnitMove(tx, admin.id, input));
+  if ("error" in r) return { done: 0, failed: [{ code: "", error: r.error }] };
+  logger.info("inventory.units_moved", { actorId: admin.id, kind: input.kind, requested: input.codes.length, done: r.done, failed: r.failed.length });
   revalidatePath("/admin/inventory");
-  return { done, failed };
+  return r;
 }
 
 /** Move part of a quantity or length batch out of one location. */

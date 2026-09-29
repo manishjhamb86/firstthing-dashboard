@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-29 (Android field app: shell, offline outbox and offline inspection built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–12)
+2026-09-29 (Android field app: shell, offline outbox, offline inspection and offline stock scanning built on branch `android-app` — see `docs/engineering/19-field-app.md` §11–13)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -6972,6 +6972,19 @@ package.
   to S3. `connect-src` now allows the bucket.
 - Verified 27/27 offline→online (asserted on rows and log lines), plus step 1's 32/32 and
   1,186 unit tests. `tsc`/`lint`/`build` clean.
+
+**Same day — step 5: stock scanning with no signal** (plan §13).
+- The per-unit move rules moved into `src/lib/inventory-move.ts`, shared by the back office's
+  `moveUnits` and the phone's queued `stock.move`. The back office's move is now one transaction;
+  before, each unit had its own, so a crash could leave a move half-applied.
+- The scanner (`ScanClient`) takes `lookup` and `recordMove` hooks. The back office is unchanged.
+  On the phone, codes scanned with no signal are marked "Checked when sent", and the move is queued.
+- A partly refused move still moves the rest. The worker keeps what the office said in a new `sent`
+  store (IndexedDB v2), and More → Recently sent names every refused code with its reason.
+- **Warm-up defect, found by repeated runs:** a page could be kept without its scripts and open
+  offline as "This page couldn't load". Pages are now kept only after every `/_next/static` asset
+  they name is stored.
+- Verified 17/17 (scan, with a stock fixture) and 27/27 ×3 (inspection), plus 32/32 (step 1).
 
 ## Current Phase (archived application — history)
 

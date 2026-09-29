@@ -19,7 +19,7 @@
  *   retry     — network or server trouble. Try again later, no strike.
  */
 
-export const OUTBOX_KINDS = ["inspection.file", "inspection.photo"] as const;
+export const OUTBOX_KINDS = ["inspection.file", "inspection.photo", "stock.move"] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 
 /** Refusals before an item blocks the queue (05-field.md §0.1 "Poison item"). */
@@ -109,6 +109,44 @@ export function parsePhotoPayload(p: unknown): FieldPhotoPayload | { error: stri
   if (typeof o.inspectionItemId !== "string" || !UUID_RE.test(o.inspectionItemId)) return { error: "The photo is not tied to an inspection." };
   if (typeof o.key !== "string" || !o.key.startsWith("Documents/")) return { error: "The photo was not uploaded." };
   return { inspectionItemId: o.inspectionItemId, key: o.key };
+}
+
+/** The moves a scanned pile of units can take (the back office's unit kinds). */
+export const UNIT_MOVE_KINDS = ["deploy", "return_to_office", "transfer", "mark_faulty", "repair", "return_to_supplier", "scrap", "lost"] as const;
+export type UnitMoveKind = (typeof UNIT_MOVE_KINDS)[number];
+
+export type FieldMovePayload = {
+  codes: string[];
+  kind: UnitMoveKind;
+  on: string; // YYYY-MM-DD
+  toOfficeId: string;
+  societyId: string;
+  circuitId: string;
+  reason: string;
+};
+
+/**
+ * A pile of scanned units, moved once (the scanner's "collect for a move").
+ * Shape only; whether each unit may move is inventory.ts's nextState, applied
+ * unit by unit on arrival — a refused unit is named and the rest still move.
+ */
+export function parseMovePayload(p: unknown): FieldMovePayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  const codes = Array.isArray(o.codes) ? o.codes.filter((c): c is string => typeof c === "string" && c.trim() !== "") : [];
+  if (codes.length === 0) return { error: "Scan at least one unit." };
+  if (codes.length > 500) return { error: "At most 500 units in one move." };
+  const kind = str(o.kind);
+  if (!(UNIT_MOVE_KINDS as readonly string[]).includes(kind)) return { error: "Choose what happened." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.on))) return { error: "Enter the date it happened." };
+  return {
+    codes,
+    kind: kind as UnitMoveKind,
+    on: str(o.on),
+    toOfficeId: str(o.toOfficeId),
+    societyId: str(o.societyId),
+    circuitId: str(o.circuitId),
+    reason: str(o.reason),
+  };
 }
 
 export type SendOutcome = "done" | "refused" | "sign_in" | "retry";

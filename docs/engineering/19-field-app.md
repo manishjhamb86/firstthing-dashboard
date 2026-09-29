@@ -1,6 +1,6 @@
 # Field app (SUR-02 on Android) — decision and build plan
 
-**Status:** Steps 1, 3 and 4 built; step 2's read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
+**Status:** Steps 1, 3, 4 and 5 built; step 2's read path built (2026-09-29) · **Branch:** `android-app` (from `master` at `bb870a3`) ·
 **Decided:** 2026-09-29 · **Owner:** Yugesh
 
 This file is where the Android field app resumes. It records what was decided on 2026-09-29, why,
@@ -19,12 +19,13 @@ rules and screens) and ADR-002.
   - step 1, the installable shell;
   - step 2's online read path;
   - step 3, the outbox;
-  - step 4, the monthly inspection filed with no signal.
+  - step 4, the monthly inspection filed with no signal;
+  - step 5, stock scanning and one move for a scanned pile, with no signal.
 
-  §11 and §12 say what exists and how it was verified.
+  §11, §12 and §13 say what exists and how it was verified.
 - **§9 Q1 was not answered.** Inspection went first, as this plan recommended.
-- **Next**: step 5, scan and collect-for-a-move offline, or step 6, the circuit/demo steps. Which
-  comes next is the user's call. Step 0's reconciliation of `05-field.md` is still owed.
+- **Next**: step 6, the circuit/demo steps, or step 7, installation day capture. Which comes next
+  is the user's call. Step 0's reconciliation of `05-field.md` is still owed.
 
 ---
 
@@ -386,3 +387,55 @@ governs the worker's own fetches, and it silently blocked every photo upload to 
 Test rows were removed and confirmed by count.
 
 **Not yet:** a 401 mid-queue was not driven end to end. The rule is unit-tested and the banner exists.
+
+
+## 13. Step 5 — scanning stock with no signal (2026-09-29)
+
+- **One move rule, three callers.** The per-unit logic moved out of the Server Action into
+  `src/lib/inventory-move.ts`:
+  - `applyUnitMove` is inventory.ts's `nextState` per unit, plus a ledger row and the unit's new
+    state;
+  - `refuseUnitMove` is the whole-move check (date, reason);
+  - `moveDestination` and `siteFor` are shared too.
+
+  The back office's `moveUnits` now runs it in **one transaction**; before, each unit had its own,
+  so a crash could leave a move half-applied. The phone's queued move runs it inside the same
+  transaction as its sync receipt.
+- **The scanner is shared, with two hooks** (`ScanClient`: `lookup`, `recordMove`). The back
+  office passes neither and is unchanged. The field app's `FieldScan`:
+  - looks a code up only with signal. With none, the code is kept and marked **"Checked when
+    sent"**;
+  - saves the move as a `stock.move` outbox item. The screen says "Saved on this phone — N units".
+- **Nothing refused is silently lost.** A move of forty units where two cannot move still moves the
+  other 38. The worker records what the office said for each sent item in a new `sent` store
+  (IndexedDB **v2**, in both `outbox-db.ts` and `field-sw.js`, keeping the last 30). More → **Recently
+  sent** shows "38 done · 2 not" and names each refused code with its reason.
+- A whole-move refusal, such as a future date or no destination, is a 422: the item counts a strike
+  and blocks after three, like any other.
+- `/field/scan` joins the warm-up, so Scan opens with no signal.
+
+**A defect in the warm-up, found by repeated runs and fixed.** Going offline while the warm-up was
+still running could leave a page in the cache without the scripts it needs. It then opened as
+"This page couldn't load". Now:
+- the warm-up collects every `/_next/static/…` path in the page, including the chunks named in
+  Next's inline data;
+- it stores the page **last**, only once every asset is stored. A kept page always works, and one
+  that is not ready gets the offline page.
+
+Worker version is v4.
+
+**Verified:**
+- `field-scan.mjs` 17/17 with a labelled stock fixture (two movable units, one scrapped, one code
+  that is nobody's):
+  - with no signal, all four scanned and marked "Checked when sent", one deploy saved, nothing
+    moved;
+  - back online, the two good units were deployed at the society's site with two ledger rows by the
+    inspector;
+  - the scrapped unit was untouched, the receipt names the two refused, and More shows
+    "2 done · 2 not" with each reason;
+  - the online lookup is immediate;
+  - the back office scanner returned a unit through the shared code.
+- The fixture was removed and confirmed by count.
+- The inspection suite passed 27/27 three runs in a row after the warm-up fix; step 1's suite passed
+  32/32.
+- 1,189 unit tests; `tsc`/`lint`/`build` clean. No schema change.

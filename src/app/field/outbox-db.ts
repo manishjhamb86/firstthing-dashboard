@@ -4,7 +4,7 @@
  * The phone's own store for the field app (05-field.md §0.1 "Local-first,
  * always"): work is written HERE first, and only then sent.
  *
- * IndexedDB "ft-field", version 1 — THE SAME LAYOUT is read by the service
+ * IndexedDB "ft-field", version 2 — THE SAME LAYOUT is read by the service
  * worker (public/field-sw.js), which is the one place items are sent from.
  * Change one, change both, and bump the version in both.
  *
@@ -19,14 +19,14 @@
  */
 
 export const DB_NAME = "ft-field";
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 export type OutboxState = "pending" | "blocked";
 
 export type OutboxItem = {
   seq?: number;
   id: string;
-  kind: "inspection.file" | "inspection.photo";
+  kind: "inspection.file" | "inspection.photo" | "stock.move";
   payload: unknown;
   /** What the person reads in the waiting list. */
   label: string;
@@ -48,6 +48,7 @@ export function openFieldDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains("outbox")) db.createObjectStore("outbox", { keyPath: "seq", autoIncrement: true });
       if (!db.objectStoreNames.contains("photos")) db.createObjectStore("photos", { keyPath: "id" });
       if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts", { keyPath: "key" });
+      if (!db.objectStoreNames.contains("sent")) db.createObjectStore("sent", { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -156,4 +157,25 @@ export async function clearDraft(key: string): Promise<void> {
   tx.objectStore("drafts").delete(key);
   await done(tx);
   db.close();
+}
+
+/**
+ * What reached the office, with what it said. A move of forty units where two
+ * could not move still moves the other thirty-eight — this is where the phone
+ * keeps the two, so they are not silently lost. Written by the service worker.
+ */
+export type SentRecord = {
+  id: string;
+  label: string;
+  kind: OutboxItem["kind"];
+  at: number;
+  done?: number;
+  problems: { code: string; error: string }[];
+};
+
+export async function listSent(): Promise<SentRecord[]> {
+  const db = await openFieldDb();
+  const rows = await all<SentRecord>(db.transaction("sent", "readonly").objectStore("sent"));
+  db.close();
+  return rows.sort((a, b) => b.at - a.at);
 }

@@ -4,11 +4,12 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip } from "@/components/ui";
 import { codeFromScan } from "@/lib/inventory";
-import { MoveUnitsForm, type MoveContext } from "../move-forms";
+import { MoveUnitsForm, type MoveContext, type RecordMove } from "../move-forms";
 import { lookupScanned } from "../actions";
 
 type Mode = "open" | "collect";
-type Row = { code: string; found?: boolean; item?: string; status?: string; location?: string | null };
+type Row = { code: string; found?: boolean; item?: string; status?: string; location?: string | null; unchecked?: boolean };
+type Info = { code: string; found: boolean; item?: string; status?: string; location?: string | null };
 
 type Detector = { detect: (src: CanvasImageSource) => Promise<Array<{ rawValue: string }>> };
 
@@ -27,7 +28,21 @@ const STATUS_LABEL: Record<string, string> = {
  * A code seen again within two seconds is the same sticker still in view, not
  * a second scan.
  */
-export function ScanClient({ ctx }: { ctx: MoveContext }) {
+export function ScanClient({
+  ctx,
+  lookup,
+  recordMove,
+}: {
+  ctx: MoveContext;
+  /**
+   * How a code is looked up. The field app's returns null with no signal: the
+   * code is kept, marked "checked when sent", and the office checks each unit
+   * when the move arrives (2026-09-29). Default: ask the office now.
+   */
+  lookup?: (codes: string[]) => Promise<Info[] | null>;
+  /** How the move is recorded — the field app queues it on the phone. */
+  recordMove?: RecordMove;
+}) {
   const router = useRouter();
   const video = useRef<HTMLVideoElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -63,11 +78,17 @@ export function ScanClient({ ctx }: { ctx: MoveContext }) {
       setMoved(null);
       setRows((r) => (r.some((x) => x.code === code) ? r : [{ code }, ...r]));
       startTransition(async () => {
-        const [info] = await lookupScanned([code]);
-        if (info) setRows((r) => r.map((x) => (x.code === code ? { ...x, ...info } : x)));
+        let found: Info[] | null = null;
+        try {
+          found = await (lookup ?? lookupScanned)([code]);
+        } catch {
+          found = null;
+        }
+        const info = found?.[0];
+        setRows((r) => r.map((x) => (x.code === code ? (info ? { ...x, ...info, unchecked: false } : { ...x, unchecked: true }) : x)));
       });
     },
-    [router],
+    [router, lookup],
   );
 
   useEffect(() => {
@@ -134,7 +155,9 @@ export function ScanClient({ ctx }: { ctx: MoveContext }) {
     return () => clearTimeout(t);
   }, [flash]);
 
-  const movable = rows.filter((r) => r.found).map((r) => r.code);
+  // A code that could not be checked (no signal) can still go in a queued
+  // move — the office checks each unit when it arrives and names any refused.
+  const movable = rows.filter((r) => r.found || (recordMove && r.unchecked)).map((r) => r.code);
   const chip = (active: boolean) => (active ? { background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)" } : undefined);
 
   return (
@@ -195,7 +218,9 @@ export function ScanClient({ ctx }: { ctx: MoveContext }) {
             {rows.map((r) => (
               <li key={r.code} className="flex flex-wrap items-center gap-2 py-2 text-[13px]">
                 <span className="num font-semibold">{r.code}</span>
-                {r.found === undefined ? (
+                {r.unchecked ? (
+                  <StatusChip tone="neu">Checked when sent</StatusChip>
+                ) : r.found === undefined ? (
                   <span style={{ color: "var(--text-subtle)" }}>Looking up…</span>
                 ) : r.found ? (
                   <>
@@ -217,7 +242,13 @@ export function ScanClient({ ctx }: { ctx: MoveContext }) {
           <MoveUnitsForm
             codes={movable}
             ctx={ctx}
+            record={recordMove}
             onDone={(r) => {
+              if (r.queued) {
+                setMoved(`Saved on this phone — ${r.done} unit${r.done === 1 ? "" : "s"}. Sent to the office by itself; anything it cannot move is listed under More.`);
+                setRows((x) => x.filter((y) => !movable.includes(y.code)));
+                return;
+              }
               setMoved(`${r.done} recorded.${r.failed.length ? ` ${r.failed.length} could not be moved — they are still in the list.` : ""}`);
               const failed = new Set(r.failed.map((f) => f.code));
               setRows((x) => x.filter((y) => failed.has(y.code) || !y.found));

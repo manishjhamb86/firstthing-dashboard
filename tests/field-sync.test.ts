@@ -4,6 +4,7 @@ import {
   classifyReply,
   parseEnvelope,
   parseInspectionPayload,
+  parseMovePayload,
   parsePhotoPayload,
   retryDelayMs,
 } from "@/lib/field-sync";
@@ -74,5 +75,23 @@ describe("retry and blocking", () => {
   it("blocks the queue on the third refusal, not before", () => {
     expect(afterRefusal(2)).toBe("retry");
     expect(afterRefusal(3)).toBe("block");
+  });
+});
+
+describe("parseMovePayload", () => {
+  const good = { codes: ["B2609-001-00001", " ", "B2609-001-00002"], kind: "deploy", on: "2026-09-29", societyId: "soc-1" };
+  it("keeps the scanned codes and fills absent destinations as empty", () => {
+    const r = parseMovePayload(good);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.codes).toEqual(["B2609-001-00001", "B2609-001-00002"]);
+    expect(r).toMatchObject({ kind: "deploy", toOfficeId: "", circuitId: "", reason: "" });
+  });
+  it("refuses an empty pile, an unknown move and a bad date", () => {
+    expect(parseMovePayload({ ...good, codes: [] })).toHaveProperty("error");
+    expect(parseMovePayload({ ...good, kind: "receive" })).toHaveProperty("error");
+    expect(parseMovePayload({ ...good, on: "29-09-2026" })).toHaveProperty("error");
+  });
+  it("is a known outbox kind", () => {
+    expect(parseEnvelope({ id: ID, kind: "stock.move", payload: good })).not.toHaveProperty("error");
   });
 });

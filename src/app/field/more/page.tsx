@@ -4,6 +4,7 @@ import { teamMeta } from "@/lib/admin-teams";
 import { requireFieldPage } from "../access";
 import { FieldSignOut, PhoneStatus } from "./phone-status";
 import { WaitingToSend } from "./waiting-to-send";
+import { RecentlySent } from "./recently-sent";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "More" };
@@ -23,6 +24,8 @@ export default async function MorePage() {
       </Card>
 
       <WaitingToSend />
+
+      <RecentlySent />
 
       <PhoneStatus />
 

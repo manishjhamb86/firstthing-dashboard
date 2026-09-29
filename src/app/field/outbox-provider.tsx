@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { retryDelayMs } from "@/lib/field-sync";
-import { listOutbox, type OutboxItem } from "./outbox-db";
+import { listOutbox, listSent, type OutboxItem, type SentRecord } from "./outbox-db";
 
 /**
  * What the phone is holding, and the one way to send it (05-field.md §0.1).
@@ -15,10 +15,12 @@ import { listOutbox, type OutboxItem } from "./outbox-db";
  */
 
 /** The app's core pages, kept on the phone so they open with no signal. */
-const WARM_URLS = ["/field", "/field/work", "/field/inspections", "/field/inspections/new", "/field/more"];
+const WARM_URLS = ["/field", "/field/work", "/field/scan", "/field/inspections", "/field/inspections/new", "/field/more"];
 
 type Outbox = {
   items: OutboxItem[];
+  /** What reached the office lately, and what it said. */
+  sent: SentRecord[];
   pending: number;
   blocked: number;
   /** The last send found the session gone: the person must sign in again. */
@@ -76,13 +78,16 @@ function ask(worker: ServiceWorker, message: object, timeoutMs: number): Promise
 
 export function OutboxProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<OutboxItem[]>([]);
+  const [sent, setSent] = useState<SentRecord[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [signInNeeded, setSignInNeeded] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      setItems(await listOutbox());
+      const [rows, done] = await Promise.all([listOutbox(), listSent()]);
+      setItems(rows);
+      setSent(done);
     } catch {
       setItems([]);
     }
@@ -105,11 +110,12 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
   // First look, and the first send.
   useEffect(() => {
     let alive = true;
-    listOutbox()
-      .catch(() => [] as OutboxItem[])
-      .then((rows) => {
+    Promise.all([listOutbox(), listSent()])
+      .catch(() => [[], []] as [OutboxItem[], SentRecord[]])
+      .then(([rows, done]) => {
         if (!alive) return;
         setItems(rows);
+        setSent(done);
         setLoaded(true);
         if (navigator.onLine) void sendNow();
       });
@@ -178,6 +184,6 @@ export function OutboxProvider({ children }: { children: ReactNode }) {
   const blocked = items.filter((i) => i.state === "blocked").length;
 
   return (
-    <Ctx.Provider value={{ items, pending, blocked, signInNeeded, loaded, refresh, sendNow }}>{children}</Ctx.Provider>
+    <Ctx.Provider value={{ items, sent, pending, blocked, signInNeeded, loaded, refresh, sendNow }}>{children}</Ctx.Provider>
   );
 }

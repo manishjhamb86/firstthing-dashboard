@@ -6,6 +6,17 @@ import { ErrorText, Field } from "@/components/ui";
 import { MOVE_LABEL, type MoveKind } from "@/lib/inventory";
 import { moveQuantity, moveUnits } from "./actions";
 
+/** How a move is recorded: straight to the office (the default), or queued on a phone. */
+export type RecordMove = (input: {
+  codes: string[];
+  kind: MoveKind;
+  on: string;
+  toOfficeId: string;
+  societyId: string;
+  circuitId: string;
+  reason: string;
+}) => Promise<{ done: number; failed: { code: string; error: string }[]; queued?: boolean }>;
+
 export type MoveContext = {
   offices: { id: string; name: string }[];
   societies: { id: string; name: string; circuits: { id: string; label: string }[] }[];
@@ -76,25 +87,28 @@ export function MoveUnitsForm({
   codes,
   ctx,
   onDone,
+  record,
 }: {
   codes: string[];
   ctx: MoveContext;
   /** Called with the outcome when anything was recorded — the caller may unmount this form. */
-  onDone?: (r: { done: number; failed: { code: string; error: string }[] }) => void;
+  onDone?: (r: { done: number; failed: { code: string; error: string }[]; queued?: boolean }) => void;
+  /** The field app queues the move on the phone instead (2026-09-29). */
+  record?: RecordMove;
 }) {
   const router = useRouter();
   const [kind, setKind] = useState<MoveKind>("deploy");
   const [v, setV] = useState({ toOfficeId: "", societyId: "", circuitId: "", on: ctx.today, reason: "" });
-  const [result, setResult] = useState<{ done: number; failed: { code: string; error: string }[] } | null>(null);
+  const [result, setResult] = useState<{ done: number; failed: { code: string; error: string }[]; queued?: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit() {
     setResult(null);
     startTransition(async () => {
-      const r = await moveUnits({ codes, kind, ...v });
+      const r: Awaited<ReturnType<RecordMove>> = await (record ?? moveUnits)({ codes, kind, ...v });
       setResult(r);
       if (r.done > 0) {
-        router.refresh();
+        if (!r.queued) router.refresh();
         onDone?.(r);
       }
     });

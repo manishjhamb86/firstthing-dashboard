@@ -24,13 +24,13 @@
  *
  * 3. SIGN-OUT. "clear" empties the kept pages — they carry this person's work.
  *
- * The IndexedDB layout ("ft-field" v1: outbox / photos / drafts) is the one
+ * The IndexedDB layout ("ft-field" v2: outbox / photos / drafts / sent) is the one
  * in src/app/field/outbox-db.ts. Change both together.
  *
  * Bump VERSION when this file's caching behaviour changes.
  */
 
-const VERSION = "v2";
+const VERSION = "v4";
 const STATIC_CACHE = `ft-field-static-${VERSION}`;
 const PAGE_CACHE = `ft-field-pages-${VERSION}`;
 const OFFLINE_URL = "/field-offline.html";
@@ -76,26 +76,38 @@ async function keepPage(path, res) {
   await cache.put(path, res);
 }
 
-/** Cache a page and every hashed script and stylesheet its HTML loads. */
+/**
+ * Cache a page and every hashed script and stylesheet it needs — and the page
+ * LAST, only once all of those are in. A page kept without its scripts opens
+ * offline as "This page couldn't load" (found by the e2e: going offline while
+ * the warm-up was still running). Now a page in the cache always works, and a
+ * page that is not ready yet gets the plain offline page instead.
+ *
+ * The scan covers the whole HTML, not only src/href attributes: Next also
+ * names the client chunks a page loads inside its inline flight data.
+ */
 async function warmPage(path) {
   const res = await fetch(path, { credentials: "same-origin", cache: "no-store" });
   if (!res.ok || res.redirected) return false;
   const html = await res.clone().text();
-  await keepPage(path, res);
   const assets = new Set();
-  for (const m of html.matchAll(/(?:src|href)="(\/_next\/static\/[^"]+)"/g)) assets.add(m[1]);
+  for (const m of html.matchAll(/\/_next\/static\/[A-Za-z0-9_\-./~%@]+\.(?:js|css|woff2?)/g)) assets.add(m[0]);
   const cache = await caches.open(STATIC_CACHE);
-  await Promise.all(
+  const got = await Promise.all(
     [...assets].map(async (a) => {
-      if (await cache.match(a)) return;
+      if (await cache.match(a)) return true;
       try {
         const r = await fetch(a);
-        if (r.ok) await cache.put(a, r);
+        if (!r.ok) return false;
+        await cache.put(a, r);
+        return true;
       } catch {
-        /* the next warm-up tries again */
+        return false;
       }
     }),
   );
+  if (got.includes(false)) return false; // the next warm-up tries again
+  await keepPage(path, res);
   return true;
 }
 
@@ -145,12 +157,13 @@ self.addEventListener("fetch", (event) => {
 
 function openDb() {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open("ft-field", 1);
+    const req = indexedDB.open("ft-field", 2);
     req.onupgradeneeded = () => {
       const db = req.result;
       if (!db.objectStoreNames.contains("outbox")) db.createObjectStore("outbox", { keyPath: "seq", autoIncrement: true });
       if (!db.objectStoreNames.contains("photos")) db.createObjectStore("photos", { keyPath: "id" });
       if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts", { keyPath: "key" });
+      if (!db.objectStoreNames.contains("sent")) db.createObjectStore("sent", { keyPath: "id" });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -180,6 +193,24 @@ async function removeItem(db, item) {
   const tx = db.transaction(["outbox", "photos"], "readwrite");
   tx.objectStore("outbox").delete(item.seq);
   if (item.photoId) tx.objectStore("photos").delete(item.photoId);
+  await new Promise((r, j) => { tx.oncomplete = r; tx.onerror = () => j(tx.error); });
+}
+
+/** Keep what the office said about a sent item; only the last 30 are kept. */
+async function recordSent(db, item, result) {
+  const tx = db.transaction("sent", "readwrite");
+  const store = tx.objectStore("sent");
+  store.put({
+    id: item.id,
+    label: item.label,
+    kind: item.kind,
+    at: Date.now(),
+    done: result && typeof result.done === "number" ? result.done : undefined,
+    problems: result && Array.isArray(result.failed) ? result.failed : [],
+  });
+  const all = await reqP(store.getAll());
+  all.sort((a, b) => b.at - a.at);
+  for (const old of all.slice(30)) store.delete(old.id);
   await new Promise((r, j) => { tx.oncomplete = r; tx.onerror = () => j(tx.error); });
 }
 
@@ -225,10 +256,10 @@ async function send(db, item) {
         kind: "inspection.photo",
         payload: { inspectionItemId: item.payload.inspectionItemId, key: url.json.key },
       });
-      return { outcome: r.outcome, error: r.json?.error ?? null };
+      return { outcome: r.outcome, error: r.json?.error ?? null, result: r.json?.result ?? null };
     }
     const r = await postJson("/api/field/sync", { id: item.id, kind: item.kind, payload: item.payload });
-    return { outcome: r.outcome, error: r.json?.error ?? null };
+    return { outcome: r.outcome, error: r.json?.error ?? null, result: r.json?.result ?? null };
   } catch {
     return { outcome: "retry", error: "No signal." };
   }
@@ -251,8 +282,9 @@ function drain() {
       for (;;) {
         const item = await firstItem(db);
         if (!item || item.state === "blocked") break;
-        const { outcome, error } = await send(db, item);
+        const { outcome, error, result } = await send(db, item);
         if (outcome === "done") {
+          await recordSent(db, item, result);
           await removeItem(db, item);
           await tell({ type: "outbox-changed" });
           continue;

@@ -20,6 +20,7 @@ import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { formatDate, formatInstant, monthLabel } from "@/lib/format-date";
+import { monitoringStart } from "@/lib/monitoring";
 import { TankLevelBar } from "@/components/tank-visual";
 import { EditSocietyForm } from "./edit-society-form";
 import { loadDealProgress } from "@/lib/pipeline-facts";
@@ -58,7 +59,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   ]);
   const fmCanEdit = !!viewer && (viewer.permissions.includes("manage_users") || viewer.permissions.includes("manage_pipeline"));
 
-  const [accounts, engagements, pipelines, circuitCount, waterTanks] = await Promise.all([
+  const [accounts, engagements, pipelines, circuitCount, contracts, waterTanks] = await Promise.all([
     db.profile.findMany({ where: { societyId: id, isActive: true }, orderBy: { name: "asc" } }),
     db.engagement.findMany({ where: { societyId: id }, orderBy: { createdAt: "asc" } }),
     // An engagement records that the society is engaged on a service line;
@@ -80,6 +81,19 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       },
     }),
     db.circuit.count({ where: { societyId: id, voidedAt: null } }),
+    // Billing start, per deal (2026-09-30, user-asked: "there is no billing
+    // start date mentioned anywhere on society dashboard and contract
+    // starting period"). One contract per pipeline (unique), so a plain
+    // findMany keyed by pipelineId is a direct lookup.
+    db.contract.findMany({
+      where: { societyId: id },
+      select: {
+        pipelineId: true,
+        termStart: true,
+        termEnd: true,
+        pipeline: { select: { installationProject: { select: { certificate: { select: { billingStartDate: true } } } } } },
+      },
+    }),
     // Water tank monitoring (2026-08-25): the tanks assigned to this society,
     // the same rows its portal renders.
     db.waterTank.findMany({
@@ -90,6 +104,21 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   // CON-24 as amended (2026-08-31): a line is delivered in PARTS, each part
   // its own deal — so a line maps to a LIST of deals now, never to one.
   const dealsFor = (line: string) => pipelines.filter((p) => (p.serviceLine as string) === line);
+
+  // Billing start per deal — one contract per pipeline (unique).
+  const billingByPipeline = new Map(
+    contracts.map((c) => [
+      c.pipelineId,
+      {
+        termStart: c.termStart,
+        termEnd: c.termEnd,
+        billingStart: monitoringStart({
+          certificateBillingStart: c.pipeline.installationProject?.certificate?.billingStartDate ?? null,
+          contractTermStart: c.termStart,
+        }),
+      },
+    ]),
+  );
 
   // What to actually do next, per open deal — resolved from the same
   // sequencing module every other screen uses.
@@ -302,18 +331,31 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                             "Not enrolled — enrolment follows a lead"
                           )
                         ) : lineDeals.length === 1 ? (
-                          <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="underline">
-                            Open the deal →
-                          </Link>
+                          <>
+                            <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="underline">
+                              Open the deal →
+                            </Link>
+                            {billingByPipeline.get(lineDeals[0].id)?.billingStart && (
+                              <span className="block">
+                                Billing since {formatDate(billingByPipeline.get(lineDeals[0].id)!.billingStart!)}
+                              </span>
+                            )}
+                          </>
                         ) : lineDeals.length > 1 ? (
                           // Each part is its own deal; the scope is what
                           // tells them apart.
-                          <span className="flex flex-wrap gap-x-3 gap-y-0.5">
-                            {lineDeals.map((d) => (
-                              <Link key={d.id} href={`/admin/pipeline/${d.id}`} className="underline">
-                                {d.dealScope ?? "Unnamed part"} →
-                              </Link>
-                            ))}
+                          <span className="flex flex-col gap-0.5">
+                            {lineDeals.map((d) => {
+                              const billing = billingByPipeline.get(d.id);
+                              return (
+                                <span key={d.id}>
+                                  <Link href={`/admin/pipeline/${d.id}`} className="underline">
+                                    {d.dealScope ?? "Unnamed part"} →
+                                  </Link>
+                                  {billing?.billingStart && ` · billing since ${formatDate(billing.billingStart)}`}
+                                </span>
+                              );
+                            })}
                           </span>
                         ) : (
                           <>

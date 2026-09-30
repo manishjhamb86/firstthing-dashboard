@@ -5,7 +5,7 @@ import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, monthLabel } from "@/lib/format-date";
 import { DownloadInvoiceButton } from "./download-button";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +14,14 @@ export const metadata = { title: "Billing" };
 const rupees = (n: number) =>
   `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const rupeesWhole = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+
+// The billed period, and — for a partial month — how many of its days this
+// invoice actually covers (user-asked, 2026-09-30: "under every invoice
+// section, number of days that invoice was billed for").
+function periodLine(period: string, proratedDays: number | null, daysInMonth: number | null) {
+  if (proratedDays === null || daysInMonth === null || proratedDays === daysInMonth) return monthLabel(period);
+  return `${monthLabel(period)} · billed for ${proratedDays} of ${daysInMonth} days`;
+}
 
 const STATUS_META: Record<string, { label: string; tone: "ok" | "warn" | "bad" }> = {
   released: { label: "Pending", tone: "warn" },
@@ -39,7 +47,10 @@ export default async function PortalBillingPage() {
     // `status != attached` let it through (user-caught 2026-09-16: "bills
     // show up whether released to society or not").
     where: { calculation: { societyId: viewer.societyId, releasedAt: { not: null } }, voidedAt: null },
-    include: { calculation: { select: { period: true } }, payments: { select: { amount: true, tdsAmount: true } } },
+    include: {
+      calculation: { select: { period: true, proratedDays: true, daysInMonth: true } },
+      payments: { select: { amount: true, tdsAmount: true } },
+    },
     orderBy: { issueDate: "desc" },
   });
 
@@ -69,8 +80,9 @@ export default async function PortalBillingPage() {
                   <p className="text-[15px] font-extrabold">Latest invoice</p>
                   <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
                 </div>
-                <p className="num text-[13.5px]" style={{ color: "var(--text-subtle)" }}>
-                  {latest.number} · {latest.calculation.period}
+                <p className="text-[13.5px]" style={{ color: "var(--text-subtle)" }}>
+                  <span className="num">{latest.number}</span> ·{" "}
+                  {periodLine(latest.calculation.period, latest.calculation.proratedDays, latest.calculation.daysInMonth)}
                 </p>
                 <p className="num mt-1 text-[34px] font-extrabold leading-none tracking-[-0.02em]">
                   {rupees(latest.amount)}
@@ -111,7 +123,9 @@ export default async function PortalBillingPage() {
                       <div>
                         <p className="num text-[14px] font-semibold">{inv.number}</p>
                         <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                          {inv.calculation.period} · {rupees(inv.amount)}
+                          {periodLine(inv.calculation.period, inv.calculation.proratedDays, inv.calculation.daysInMonth)}
+                          {" · "}
+                          {rupees(inv.amount)}
                         </p>
                       </div>
                       <div className="flex items-center gap-3">

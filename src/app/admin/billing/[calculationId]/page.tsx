@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, monthLabel } from "@/lib/format-date";
 import { settledTotal } from "@/lib/payment";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -8,6 +8,7 @@ import { CALCULATION_STATUS, SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { canRelease, isOps, requireBillingReader } from "../access";
 import { refuseRelease } from "@/lib/invoice-reconciliation";
 import { arrearsStateOf } from "@/lib/arrears";
+import { monitoringStart } from "@/lib/monitoring";
 import { InvoicePanel } from "./invoice-panel";
 
 // MS-08 / FEAT-048 — one month's run, line by line.
@@ -101,6 +102,50 @@ export default async function CalculationPage({
     }>
   ).filter((pt) => pt && typeof pt.deal === "string");
 
+  // Billing start (2026-09-30, user-asked): "there is no billing start date
+  // mentioned anywhere". Resolved the one way this whole codebase resolves it
+  // — the completion certificate's own date, else the contract's term start
+  // (monitoringStart(), the same function the societies list and invoice-
+  // month-loader both read) — for every contract this month billed under.
+  const contractIds = Array.from(
+    new Set(
+      [calc.contractTermVersion?.contractId, ...snapshotParts.map((p) => p.contractId)].filter(
+        (x): x is string => !!x,
+      ),
+    ),
+  );
+  const contracts = contractIds.length
+    ? await db.contract.findMany({
+        where: { id: { in: contractIds } },
+        select: {
+          id: true,
+          termStart: true,
+          termEnd: true,
+          pipeline: { select: { installationProject: { select: { certificate: { select: { billingStartDate: true } } } } } },
+        },
+      })
+    : [];
+  const billingFacts = contracts.map((c) => ({
+    contractId: c.id,
+    termStart: c.termStart,
+    termEnd: c.termEnd,
+    billingStart: monitoringStart({
+      certificateBillingStart: c.pipeline.installationProject?.certificate?.billingStartDate ?? null,
+      contractTermStart: c.termStart,
+    }),
+  }));
+  // Whether this circuit-owning contract's very first invoice is THIS
+  // calculation, so the page can say "first invoice" rather than leave the
+  // reader to work it out from the period alone.
+  const earliestReleasedPeriod = contractIds.length
+    ? await db.monthlyCalculation.findFirst({
+        where: { societyId: calc.societyId, serviceLine: calc.serviceLine, releasedAt: { not: null } },
+        orderBy: { period: "asc" },
+        select: { period: true },
+      })
+    : null;
+  const isFirstInvoice = earliestReleasedPeriod?.period === calc.period;
+
   const meta = CALCULATION_STATUS[calc.status];
   const outOfBand = calc.feeLines.filter((l) => l.complianceResult === "out_of_band");
   const approaching = calc.feeLines.filter((l) => l.approaching && l.complianceResult === "in_band");
@@ -183,26 +228,58 @@ export default async function CalculationPage({
       </StatRow>
 
       {/* CON-22 / FEAT-051 — a partial month says so in words, not just by
-          being a smaller number than last month's. */}
-      {calc.proratedDays !== null && calc.daysInMonth !== null && (
-        <Card className="mb-6 p-6">
-          <CardTitle>Prorated month</CardTitle>
-          <p className="text-sm text-[var(--text-muted)]">
-            This month bills <strong className="num">{calc.proratedDays}</strong> of{" "}
-            <strong className="num">{calc.daysInMonth}</strong> days — billing starts the day after
-            the completion certificate was signed. Every fee line below is scaled by{" "}
-            <span className="num">
-              {calc.proratedDays}/{calc.daysInMonth}
-            </span>
-            ; the figure is computed, never entered.
+          being a smaller number than last month's, and the period + when
+          billing started are always stated — not just implied by the page's
+          own subtitle (user-caught 2026-09-30: "there is no invoice period
+          mentioned... there is no billing start date mentioned anywhere"). */}
+      <Card className="mb-6 p-6">
+        <CardTitle>Billing period</CardTitle>
+        <p className="text-sm text-[var(--text-muted)]">
+          <strong>{monthLabel(calc.period)}</strong>
+          {isFirstInvoice && " — the first invoice released for this deal"}
+          {calc.proratedDays !== null && calc.daysInMonth !== null && (
+            <>
+              {" · bills "}
+              <strong className="num">{calc.proratedDays}</strong> of{" "}
+              <strong className="num">{calc.daysInMonth}</strong> day
+              {calc.daysInMonth === 1 ? "" : "s"}
+              {calc.proratedDays !== calc.daysInMonth
+                ? // A genuine partial month — worth naming that it is one, and
+                  // that the figure below is computed, never typed in.
+                  ` — a partial month; every fee line is scaled by ${calc.proratedDays}/${calc.daysInMonth}, the figure computed, never entered.`
+                : "."}
+            </>
+          )}
+        </p>
+        {billingFacts.length > 0 && (
+          <p className="mt-2 text-sm text-[var(--text-muted)]">
+            {billingFacts.length === 1
+              ? "Billing on this contract started "
+              : "Billing started "}
+            {billingFacts.map((f, i) => (
+              <span key={f.contractId}>
+                {i > 0 && "; "}
+                {billingFacts.length > 1 && `contract ${i + 1}: `}
+                <strong>{f.billingStart ? formatDate(f.billingStart) : "not recorded"}</strong>
+              </span>
+            ))}
+            {calc.proratedDays !== null &&
+              calc.daysInMonth !== null &&
+              calc.proratedDays === calc.daysInMonth &&
+              !isFirstInvoice &&
+              " — this is a later, full calendar month, not this contract's first."}
           </p>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {calc.status !== "held" && (
         <InvoicePanel
           calculationId={calc.id}
           calculationStatus={calc.status}
+          periodLabel={monthLabel(calc.period)}
+          isFirstInvoice={isFirstInvoice}
+          proratedDays={calc.proratedDays}
+          daysInMonth={calc.daysInMonth}
           canRelease={canRelease(gate.actor)}
           isOps={isOps(gate.actor)}
           releaseBlockedReason={releaseBlockedReason}

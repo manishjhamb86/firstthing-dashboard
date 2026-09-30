@@ -100,6 +100,10 @@ export type VoidedInvoice = {
 export function InvoicePanel({
   calculationId,
   calculationStatus,
+  periodLabel,
+  isFirstInvoice,
+  proratedDays,
+  daysInMonth,
   invoice,
   canRelease,
   releaseBlockedReason,
@@ -112,6 +116,14 @@ export function InvoicePanel({
    *  whichever paid state the invoice is in (an invoice-first month paid at
    *  intake is `paid` from the start; CON-47). */
   calculationStatus: string;
+  /** "September 2025" — the calendar month this invoice bills, stated inside
+   *  the Invoice card itself (user-asked, 2026-09-30: "under every invoice
+   *  section, number of days that invoice was billed for"), not left to the
+   *  page's own subtitle or a separate card the reader has to connect. */
+  periodLabel: string;
+  isFirstInvoice: boolean;
+  proratedDays: number | null;
+  daysInMonth: number | null;
   invoice: InvoiceState;
   /** Whether the viewer holds PER-08 (the accountant) — release is offered
    *  to no one else, including ops (CON-33). */
@@ -290,6 +302,19 @@ export function InvoicePanel({
   return (
     <Card className="mb-6 p-6">
       <CardTitle>Invoice</CardTitle>
+      <p className="mb-3 text-[13px]" style={{ color: "var(--text-subtle)" }}>
+        Billing period <strong>{periodLabel}</strong>
+        {isFirstInvoice && " · this deal's first invoice"}
+        {proratedDays !== null && daysInMonth !== null && (
+          <>
+            {" · billed for "}
+            <span className="num font-semibold">
+              {proratedDays} of {daysInMonth}
+            </span>
+            {` day${daysInMonth === 1 ? "" : "s"}`}
+          </>
+        )}
+      </p>
       {error && (
         <div className="mb-3">
           <ErrorText>{error}</ErrorText>

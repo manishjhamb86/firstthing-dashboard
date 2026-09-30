@@ -10,6 +10,7 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { CONTRACT_STATUS, statusMeta } from "@/lib/status-maps";
 import { publicS3Url } from "@/lib/s3";
+import { monitoringStart } from "@/lib/monitoring";
 import {
   ActivateContractForm,
   AgreementDatesControl,
@@ -44,6 +45,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
     include: {
       agreement: { include: { offer: true, preparedBy: true, uploadedBy: true } },
       contract: { include: { versions: { orderBy: { version: "desc" } }, activatedBy: true } },
+      installationProject: { select: { certificate: { select: { billingStartDate: true } } } },
       // GATE-01's two preconditions, so the empty state can say which one is
       // missing instead of describing both as prose.
       offers: { orderBy: { version: "desc" }, take: 1, select: { status: true } },
@@ -56,6 +58,15 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
   const contract = pipeline.contract;
   const contractStatus = contract ? statusMeta(CONTRACT_STATUS, contract.status) : null;
   const currentTerms = contract?.versions[0] ?? null;
+  // Billing start (2026-09-30, user-asked) — the completion certificate's
+  // own date once one exists, else the contract's term start; the two can
+  // differ, so both are worth stating rather than only the term.
+  const billingStart = contract
+    ? monitoringStart({
+        certificateBillingStart: pipeline.installationProject?.certificate?.billingStartDate ?? null,
+        contractTermStart: contract.termStart,
+      })
+    : null;
   const offerAccepted = pipeline.offers[0]?.status === "accepted";
   // Across every deal of the society — KYC is a society fact (kyc-society.ts).
   const { total: kycTotal, resolved: kycSettled } = kycCounts(
@@ -254,6 +265,13 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
                 Activated {formatDate(contract.activatedAt)} by{" "}
                 {contract.activatedBy?.name ?? contract.activatedBy?.email ?? "—"} · term{" "}
                 {formatDate(contract.termStart)} → {formatDate(contract.termEnd)}
+                {billingStart && billingStart.getTime() !== contract.termStart.getTime() && (
+                  <>
+                    {" · billing actually starts "}
+                    {formatDate(billingStart)}
+                    {" (the completion certificate's date, not the term's)"}
+                  </>
+                )}
               </p>
               {currentTerms && (
                 <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 text-sm">

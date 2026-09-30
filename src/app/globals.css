@@ -1858,6 +1858,11 @@ textarea.field {
 .tl-glyph[data-state="record"] { border-color: var(--text-subtle); color: var(--text-subtle); }
 .tl-tree ol { list-style: none; margin: 0; padding: 0; }
 .tl-branch { margin-top: 12px; }
+/* The society's own row sits straight under the toolbar: the branch margin and
+   the steps' own top margin stacked into a gap larger than any gap between
+   rows, so the first row read as floating (user-caught 2026-09-30). */
+.tl-tree > ol > .tl-branch { margin-top: 0; }
+.tl-tree > ol > .tl-branch > ol:first-child { margin-top: 0; }
 .tl-bhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 9px 12px; border-radius: 10px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); cursor: pointer; list-style: none; }
 .tl-bhead::-webkit-details-marker { display: none; }
 .tl-chev { width: 18px; display: inline-grid; place-items: center; color: var(--text-subtle); transition: transform 0.15s; }
@@ -1890,7 +1895,9 @@ details[open] > .tl-bhead .tl-chev { transform: rotate(90deg); }
 .tl-chain > * { padding: 1px 7px; border-radius: 6px; background: var(--surface-sunken); border: 1px solid var(--border-subtle); font: inherit; color: inherit; }
 .tl-chain button { cursor: pointer; }
 .tl-chain button:hover { border-color: var(--accent-line); color: var(--accent); }
-.tl-act { padding-top: 7px; }
+/* Centred on the row's first line (glyph and label): 7px put the button's
+   middle 4px below them. */
+.tl-act { padding-top: 3px; }
 .tl-editor { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--accent-line); background: var(--accent-subtle); border-radius: 10px; max-width: 560px; }
 .tl-editor .row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .tl-editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--text-muted); }

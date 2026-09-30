@@ -20,6 +20,8 @@
  * voids or emails anything in Zoho, and the scopes it asks for are READ.
  */
 
+import { logger } from "@/lib/logger";
+
 export const ZOHO_SCOPES = "ZohoInvoice.invoices.READ,ZohoInvoice.settings.READ";
 
 const DATA_CENTERS: Record<string, { accounts: string; api: string }> = {
@@ -67,19 +69,25 @@ type TokenReply = { access_token?: string; refresh_token?: string; expires_in?: 
 
 async function tokenCall(dataCenter: string, params: Record<string, string>): Promise<TokenReply> {
   await paced();
-  const res = await fetch(`${dc(dataCenter).accounts}/oauth/v2/token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(params).toString(),
-    signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
-  });
+  // Zoho's own documentation passes these in the query string of the POST
+  // (accounts/protocol/oauth/self-client/authorization-code-flow). A
+  // form-encoded body was refused with "invalid_code" on the live account
+  // (2026-09-30), so the documented form is used. The URL carries the secret:
+  // it is never logged.
+  const url = `${dc(dataCenter).accounts}/oauth/v2/token?${new URLSearchParams(params).toString()}`;
+  const res = await fetch(url, { method: "POST", signal: AbortSignal.timeout(CALL_TIMEOUT_MS) });
   const json = (await res.json().catch(() => ({}))) as TokenReply;
-  if (!res.ok || json.error) throw new ZohoError(tokenErrorSentence(json.error ?? `HTTP ${res.status}`), res.status);
+  if (!res.ok || json.error) {
+    const code = json.error ?? `HTTP ${res.status}`;
+    // Zoho's own word, so a failure says which of its causes it was.
+    logger.warn("zoho.token_refused", { dataCenter, grantType: params.grant_type, zohoError: code, status: res.status });
+    throw new ZohoError(tokenErrorSentence(code), res.status);
+  }
   return json;
 }
 
 function tokenErrorSentence(code: string): string {
-  if (code === "invalid_code") return "Zoho refused the grant code — it is single-use and expires in minutes. Generate a new one and paste it straight away.";
+  if (code === "invalid_code") return "Zoho refused the grant code (invalid_code). It works once and only for the minutes chosen when it was generated, and only with the client id and secret of the same Self Client. Generate a new one and paste it straight away.";
   if (code === "invalid_client" || code === "invalid_client_secret") return "Zoho does not recognise that client id and secret together — copy both again from the Self Client's Client Secret tab.";
   if (code === "invalid_token") return "Zoho no longer accepts the saved connection (the refresh token was revoked). Reconnect with a new grant code.";
   return `Zoho refused the sign-in (${code}).`;

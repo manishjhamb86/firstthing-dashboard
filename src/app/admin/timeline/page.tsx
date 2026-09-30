@@ -58,9 +58,14 @@ export default async function TimelineIndexPage() {
         subtitle="Every society's recorded dates, checked in order — back from the first invoice once a deal is billed."
         chip={withProblems > 0 ? <StatusChip tone="bad">{withProblems} with dates to fix</StatusChip> : undefined}
         action={
-          <Link href="/admin/timeline/requests" className="btn-secondary btn-sm">
-            Date change requests{pendingTotal > 0 ? ` · ${pendingTotal} waiting` : ""}
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <a href="/admin/timeline/export" className="btn-outline btn-sm">
+              Download all (CSV)
+            </a>
+            <Link href="/admin/timeline/requests" className="btn-secondary btn-sm">
+              Date change requests{pendingTotal > 0 ? ` · ${pendingTotal} waiting` : ""}
+            </Link>
+          </div>
         }
       />
 

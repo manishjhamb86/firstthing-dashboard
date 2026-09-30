@@ -545,6 +545,7 @@ model AdminUser {
   invoicePaymentsConfirmed BillingInvoice[]         @relation("InvoicePaymentConfirmedBy")
   invoiceMismatchesAcked   BillingInvoice[]         @relation("InvoiceMismatchAckBy")
   invoicesVoided           BillingInvoice[]         @relation("InvoiceVoidedBy")
+  retailInvoicesVoided     RetailInvoice[]          @relation("RetailInvoiceVoidedBy")
   representedCountChanges  RepresentedCountChange[] @relation("RepresentedCountChangeBy")
   invoiceIntakes           InvoiceIntake[]          @relation("InvoiceIntakeUploadedBy")
   paymentsRecorded         Payment[]                @relation("PaymentRecordedBy")
@@ -738,6 +739,8 @@ model ScheduledEvent {
   circuitId  String? @map("circuit_id")
   /// The demo a replacement day belongs to (2026-09-26 — every demo walks its own steps).
   demoId     String? @map("demo_id")
+  /// A task about a retail customer rather than a society (2026-09-30).
+  retailCustomerId String? @map("retail_customer_id")
 
   /// Tasks (2026-09-25): what is to be done, how urgent, and how it ended.
   description    String?
@@ -774,12 +777,13 @@ model ScheduledEvent {
 
   attendees ScheduledEventAttendee[]
 
-  assignee  AdminUser    @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
-  createdBy AdminUser    @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
-  society   Society?     @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  pipeline  Pipeline?    @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  circuit   Circuit?     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  demo      CircuitDemo? @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  assignee      AdminUser       @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
+  createdBy     AdminUser       @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
+  society       Society?        @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  pipeline      Pipeline?       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  circuit       Circuit?        @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  demo          CircuitDemo?    @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  retailCustomer RetailCustomer? @relation(fields: [retailCustomerId], references: [id], onDelete: Cascade)
 
   @@index([assigneeId, startAt])
   @@index([startAt])
@@ -4210,14 +4214,19 @@ model RetailCustomer {
   createdAt   DateTime @default(now()) @map("created_at")
   createdById String   @map("created_by_id")
 
-  society  Society?        @relation(fields: [societyId], references: [id], onDelete: SetNull)
-  invoices RetailInvoice[]
+  society         Society?         @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  invoices        RetailInvoice[]
+  /// Tasks about this customer (2026-09-30) — the same ScheduledEvent rows
+  /// every other task is, just scoped here instead of to a society.
+  scheduledEvents ScheduledEvent[]
 
   @@map("retail_customers")
 }
 
-/// One retail sale's invoice, read back from the Zoho PDF through invoice
-/// intake. Never feeds a savings figure or society billing (INV-02).
+/// One retail sale's invoice — read back from a Zoho PDF through invoice
+/// intake, fetched from Zoho Invoice directly, or entered by hand on the
+/// customer's own page (2026-09-30) when there is no PDF yet. Never feeds a
+/// savings figure or society billing (INV-02).
 model RetailInvoice {
   id            String    @id @default(cuid())
   customerId    String    @map("customer_id")
@@ -4229,14 +4238,16 @@ model RetailInvoice {
   subtotal      Float?
   taxAmount     Float?    @map("tax_amount")
   total         Float
+  /// Kept for rows filed before RetailPayment existed, and as the quick
+  /// "advance taken" record (2026-09-25) — a hand-entered invoice's real
+  /// settlement is read from its `payments`, never from these two alone.
   paid          Boolean   @default(false)
   paidOn        DateTime? @map("paid_on")
-  /// An advance taken from the customer before or with the invoice
-  /// (2026-09-25); what is still owed is total − advance.
   advanceAmount Float?    @map("advance_amount")
   advanceOn     DateTime? @map("advance_on")
-  s3Key         String    @map("s3_key")
-  fileName      String    @map("file_name")
+  /// Null on an invoice entered by hand with no PDF yet (2026-09-30).
+  s3Key         String?   @map("s3_key")
+  fileName      String?   @map("file_name")
 
   createdAt   DateTime @default(now()) @map("created_at")
   createdById String   @map("created_by_id")
@@ -4245,11 +4256,34 @@ model RetailInvoice {
   voidedById String?   @map("voided_by_id")
   voidReason String?   @map("void_reason")
 
-  customer RetailCustomer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  customer RetailCustomer  @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  payments RetailPayment[]
+  voidedBy AdminUser?      @relation("RetailInvoiceVoidedBy", fields: [voidedById], references: [id])
 
   @@index([customerId])
   @@index([invoiceNumber])
   @@map("retail_invoices")
+}
+
+/// A payment recorded against a retail invoice (2026-09-30) — several may
+/// land against one invoice (an advance, then a balance), so this is a
+/// ledger, not a single paid flag. Deliberately lighter than the society
+/// billing Payment model (no TDS, no cheque-copy upload): a retail sale is a
+/// one-off, not a recurring subscription with its own arrears clock.
+model RetailPayment {
+  id          String       @id @default(cuid())
+  invoiceId   String       @map("invoice_id")
+  amount      Float
+  method      PaymentMethod
+  paidOn      DateTime     @map("paid_on")
+  reference   String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  createdById String       @map("created_by_id")
+
+  invoice RetailInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("retail_payments")
 }
 
 // ---------------------------------------------------------------------------

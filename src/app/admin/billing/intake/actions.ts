@@ -14,7 +14,7 @@ import { DEMO_LIGHTS_SELECT, demoLightsInstalled, fullFromTotal } from "@/lib/li
 // `submitIntake` re-derives everything from that confirmed review inside
 // the transaction — the client's preview is never trusted.
 
-import { normaliseGstin, refuseRetailCustomer, retailNameKey } from "@/lib/retail-customer";
+import { normaliseGstin, refuseRetailCustomer, retailInvoiceKey, retailNameKey } from "@/lib/retail-customer";
 import { bulkActionsFor } from "@/lib/intake-bulk";
 import { releaseCalculation } from "../[calculationId]/invoice-actions";
 import { duplicateRefuses, findDuplicateInvoice, type InvoiceDuplicate } from "@/lib/invoice-duplicate";
@@ -798,9 +798,12 @@ async function fileRetailInvoice(
   } catch {
     return { error: "The uploaded file could not be read back from storage. Upload it again." };
   }
-  const slug = customer.name.trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "Customer";
-  const ident = (review.invoiceNumber.trim() || intake.id).replace(/[^a-zA-Z0-9-]+/g, "_");
-  const key = `Documents/Retail/${slug}/${review.period}/${slug}_RetailInvoice_${ident}.pdf`;
+  const key = retailInvoiceKey({
+    customerName: customer.name,
+    period: review.period,
+    invoiceNumber: review.invoiceNumber || intake.id,
+    extension: "pdf",
+  });
   await s3.send(new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, Body: bytes, ContentType: "application/pdf" }));
 
   const day = (s: string) => (/^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00Z`) : null);

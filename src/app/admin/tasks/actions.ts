@@ -25,6 +25,10 @@ type TaskInput = {
   time: string;
   priority: "low" | "normal" | "high";
   societyId: string;
+  /** Set only at creation, from the retail customer's own page — a task's
+   *  customer link is not reassigned by the general edit form, which knows
+   *  nothing about it. */
+  retailCustomerId?: string;
 };
 
 function refresh() {
@@ -52,6 +56,7 @@ export async function createTask(input: TaskInput): Promise<Result> {
       assigneeId: input.assigneeId,
       createdById: actor.id,
       societyId: input.societyId || null,
+      retailCustomerId: input.retailCustomerId || null,
     },
   });
   logger.info("task.created", { actorId: actor.id, taskId: t.id, assigneeId: input.assigneeId, due: input.due });

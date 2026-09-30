@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { requireBillingOps } from "../billing/access";
+import { retailInvoicePaidTotal } from "@/lib/retail-customer";
 import { NewRetailCustomerButton } from "./new-retail-customer";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export default async function RetailCustomersPage() {
       orderBy: { name: "asc" },
       include: {
         society: { select: { name: true } },
-        invoices: { where: { voidedAt: null }, select: { total: true, paid: true, advanceAmount: true } },
+        invoices: { where: { voidedAt: null }, select: { total: true, advanceAmount: true, payments: { select: { amount: true } } } },
       },
     }),
     db.society.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -56,7 +57,7 @@ export default async function RetailCustomersPage() {
               <tbody>
                 {customers.map((c) => {
                   const billed = c.invoices.reduce((n, i) => n + i.total, 0);
-                  const unpaid = c.invoices.filter((i) => !i.paid).reduce((n, i) => n + i.total - (i.advanceAmount ?? 0), 0);
+                  const unpaid = c.invoices.reduce((n, i) => n + Math.max(0, i.total - retailInvoicePaidTotal(i, i.payments)), 0);
                   return (
                     <tr key={c.id}>
                       <td>

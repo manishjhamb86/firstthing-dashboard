@@ -72,7 +72,7 @@ export function parseValue(v: string | null | undefined, range: boolean): { from
   return { from, to };
 }
 
-/** A value for a person: DD-MM-YYYY, or DD-MM-YYYY → DD-MM-YYYY. */
+/** A value for a person: DD-Mon-YYYY, or DD-Mon-YYYY → DD-Mon-YYYY. */
 export function valueLabel(v: string | null | undefined): string {
   if (!v) return "No date";
   return v

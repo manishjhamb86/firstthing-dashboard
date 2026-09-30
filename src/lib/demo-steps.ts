@@ -12,6 +12,7 @@
  * the deal map and every other reader of `Circuit.state` keep working.
  */
 import type { DealStep, StepStatus } from "@/lib/deal-progress";
+import { formatDate, formatDateTime } from "./format-date";
 
 export type DemoStepFacts = {
   /** The circuit passed its eligibility checklist (a circuit-level fact). */
@@ -49,12 +50,9 @@ export type DemoStepKey =
 export type DemoStep = DealStep & { key: DemoStepKey };
 
 function fmt(d: Date): string {
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  const date = `${day}-${month}-${d.getUTCFullYear()}`;
-  return hh === "00" && mm === "00" ? date : `${date} · ${hh}:${mm}`;
+  // One formatter for every date a person reads (format-date.ts); a date with
+  // no time on it (UTC midnight) reads as the day alone.
+  return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 ? formatDate(d) : formatDateTime(d);
 }
 
 export function demoDoneFlags(f: DemoStepFacts): Record<DemoStepKey, boolean> {

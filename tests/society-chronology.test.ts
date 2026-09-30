@@ -103,8 +103,8 @@ describe("checkSocietyChronology on the Hyde Park timeline", () => {
     const [i] = byStep("demo:1:replacementAssigned");
     expect(i.kind).toBe("order");
     expect(i.severity).toBe("error");
-    expect(i.message).toContain("26-09-2026");
-    expect(i.message).toContain("23-03-2025");
+    expect(i.message).toContain("26-Sep-2026");
+    expect(i.message).toContain("23-Mar-2025");
     expect(i.message).toContain("The crew is assigned on or before the day the lights are replaced.");
   });
 
@@ -112,7 +112,7 @@ describe("checkSocietyChronology on the Hyde Park timeline", () => {
     const [i] = byStep("line:1:enrolled");
     expect(i.kind).toBe("check");
     expect(i.severity).toBe("warning");
-    expect(i.message).toMatch(/after lead logged on 03-03-2025/);
+    expect(i.message).toMatch(/after lead logged on 03-Mar-2025/);
   });
 
   it("marks the undated proposal decision and survey assignment as not recorded — later steps have dates", () => {
@@ -145,13 +145,13 @@ describe("rules", () => {
   it("reads a parent's step from a child: a meter before the survey names the survey, the earlier step", () => {
     const t = withProposal(hydePark(), { field: "demo.meterInstalledAt", entityId: "demo1" }, "2025-03-01")!;
     const i = checkSocietyChronology(t, today).find((x) => x.stepId === "deal:1:survey" && x.kind === "order");
-    expect(i?.message).toMatch(/^Site survey done on 03-03-2025 is after meter installed on 01-03-2025\. The meter goes in on or after the survey/);
+    expect(i?.message).toMatch(/^Site survey done on 03-Mar-2025 is after meter installed on 01-Mar-2025\. The meter goes in on or after the survey/);
   });
 
   it("checks the agreement chain in order, skipping steps with no date", () => {
     const t = withProposal(hydePark(), { field: "agreement.signedAt", entityId: "p1" }, "2025-06-01")!;
     const msgs = checkSocietyChronology(t, today).filter((x) => x.stepId === "deal:1:agreement").map((x) => x.message);
-    expect(msgs.some((m) => m.startsWith("Prepared on 07-06-2025 is after signed on 01-06-2025"))).toBe(true);
+    expect(msgs.some((m) => m.startsWith("Prepared on 07-Jun-2025 is after signed on 01-Jun-2025"))).toBe(true);
   });
 
   it("flags a completed step dated in the future", () => {
@@ -187,7 +187,7 @@ describe("a proposed change", () => {
     expect(currentValue(hydePark(), { field: "offer.issuedAt", entityId: "nope" }).found).toBe(false);
   });
 
-  it("accepts the fix the design proposes (15-03-2025) — it clears the error", () => {
+  it("accepts the fix the design proposes (15-Mar-2025) — it clears the error", () => {
     expect(refuseProposal(hydePark(), ref, "2025-03-15", today)).toBeNull();
     const t = withProposal(hydePark(), ref, "2025-03-15")!;
     expect(checkSocietyChronology(t, today).some((x) => x.stepId === "demo:1:replacementAssigned")).toBe(false);
@@ -242,15 +242,15 @@ describe("buildTimelineView", () => {
     const demoRows = line.children[0].children[0].children[0].steps;
     expect(demoRows.find((r) => r.label.startsWith("Replacement"))).toMatchObject({ state: "bad", chip: { text: "Out of order" } });
     expect(demoRows.find((r) => r.label === "Gate passes approved")?.state).toBe("record");
-    expect(demoRows.find((r) => r.label === "Before-installation readings")).toMatchObject({ dateText: "04-03-2025", endText: "09-03-2025", edit: { value: "2025-03-04/2025-03-09", range: true } });
+    expect(demoRows.find((r) => r.label === "Before-installation readings")).toMatchObject({ dateText: "04-Mar-2025", endText: "09-Mar-2025", edit: { value: "2025-03-04/2025-03-09", range: true } });
     expect(line.counts).toEqual({ bad: 1, warn: 1, missing: 2 });
     const survey = line.children[0].steps.find((r) => r.label === "Site survey done");
-    expect(survey).toMatchObject({ state: "info", dateText: "≈ 03-03-2025" });
+    expect(survey).toMatchObject({ state: "info", dateText: "≈ 03-Mar-2025" });
   });
 
   it("shows an open request on the row it is about, chain items included", () => {
     const tree = hydePark();
-    const req = { id: "r1", from: "07-06-2025", to: "05-06-2025", reason: "x", by: "Y", at: "now", mine: false };
+    const req = { id: "r1", from: "07-Jun-2025", to: "05-Jun-2025", reason: "x", by: "Y", at: "now", mine: false };
     const view = buildTimelineView(tree, [], new Map([["agreement.signedAt|p1", [req]]]));
     const agreement = view.children[0].children[0].after.find((r) => r.label === "Agreement signed");
     expect(agreement?.requests).toEqual([req]);
@@ -300,7 +300,7 @@ describe("order, walked back from the last step (2026-09-28, user's rule)", () =
     ]);
     const [i] = checkSocietyChronology(t, today).filter((x) => x.key.startsWith("seq:"));
     expect(i.message).toBe(
-      "Survey assigned on 01-05-2025 is after offer issued on 01-04-2025. Each step is dated on or before the step that follows it.",
+      "Survey assigned on 01-May-2025 is after offer issued on 01-Apr-2025. Each step is dated on or before the step that follows it.",
     );
   });
 
@@ -344,7 +344,7 @@ describe("order, walked back from the last step (2026-09-28, user's rule)", () =
     );
     const [i] = checkSocietyChronology(t, today).filter((x) => x.key.startsWith("seq:"));
     expect(i.stepId).toBe("deal:x:offerIssued");
-    expect(i.message).toMatch(/after billing started \(first invoice\) on 06-07-2025\. The first invoice fixes the day billing started/);
+    expect(i.message).toMatch(/after billing started \(first invoice\) on 06-Jul-2025\. The first invoice fixes the day billing started/);
   });
 
   it("the certificate's billing start must be the invoice's day, whichever side it is on", () => {
@@ -407,6 +407,6 @@ describe("firstBillingDay", () => {
     // 26 of 31 days billed in July → billing ran from the 6th.
     const r = firstBillingDay("2025-07", 26, 31);
     expect(r.startsOn).toEqual(d("2025-07-06"));
-    expect(r.basis).toBe("26 of 31 days billed, so billing ran from 06-07-2025");
+    expect(r.basis).toBe("26 of 31 days billed, so billing ran from 06-Jul-2025");
   });
 });

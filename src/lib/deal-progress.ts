@@ -1,3 +1,4 @@
+import { formatDate, formatDateTime } from "./format-date";
 // The deal spine, as a sequence the screens can actually show.
 //
 // User-reported defect (2026-08-15): the pipeline page rendered every stage
@@ -575,12 +576,9 @@ export type CircuitFactsForSteps = {
 };
 
 function formatVisitDay(d: Date): string {
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  const date = `${day}-${month}-${d.getUTCFullYear()}`;
-  return hh === "00" && mm === "00" ? date : `${date} · ${hh}:${mm}`;
+  // One formatter for every date a person reads (format-date.ts); a date with
+  // no time on it (UTC midnight) reads as the day alone.
+  return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 ? formatDate(d) : formatDateTime(d);
 }
 
 export function circuitSteps(c: CircuitFactsForSteps): DealStep[] {

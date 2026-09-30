@@ -110,9 +110,9 @@ export type DatePredecessor = { label: string; date: Date | null };
 
 /**
  * Dates inside a refusal read the way every date in this product reads —
- * DD-MM-YYYY, from the one formatter (user-asked 2026-09-08: "at different
+ * DD-Mon-YYYY, from the one formatter (user-asked 2026-09-08: "at different
  * places the format of date is different... use it as a rule or centralised
- * function"). An ISO string in a sentence beside a DD-MM-YYYY card is how
+ * function"). An ISO string in a sentence beside a DD-Mon-YYYY card is how
  * "the survey is 07-07" and "the survey is 2026-09-07" ended up looking like
  * two different facts about the same thing.
  */

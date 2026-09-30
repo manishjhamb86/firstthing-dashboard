@@ -59,7 +59,7 @@ describe("timeline values", () => {
     expect(parseValue("04-03-2025", false)).toBeNull();
   });
   it("reads DD-MM-YYYY", () => {
-    expect(valueLabel("2025-03-04/2025-03-09")).toBe("04-03-2025 → 09-03-2025");
+    expect(valueLabel("2025-03-04/2025-03-09")).toBe("04-Mar-2025 → 09-Mar-2025");
     expect(valueLabel(null)).toBe("No date");
   });
 });

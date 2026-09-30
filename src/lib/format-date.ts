@@ -24,7 +24,14 @@
  *  · the printed reports, which use their own deliberately compact in-table
  *    day labels (`dayShort`, "Wed 10") so a month fits one sheet.
  *
- * How a date reads in this product: DD-MM-YYYY.
+ * How a date reads in this product: DD-Mon-YYYY — "26-Aug-2026".
+ *
+ * It was DD-MM-YYYY until 2026-09-30, when the user asked for the month as a
+ * word: "otherwise it's very confusing sometimes which is month and which is
+ * day" — 07-09-2026 reads as 7 September to one person and July 9 to another.
+ * The month names are fixed English abbreviations, NOT a locale's: en-GB's
+ * short name for September is "Sept" in current ICU, and the product must not
+ * render one month differently from the other eleven.
  *
  * Every date in this schema is stored at UTC midnight and was being rendered
  * with `.toISOString().slice(0, 10)` — ISO order, which reads as a machine
@@ -41,13 +48,17 @@ export function isoDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+function dmy(day: number, monthIndex: number, year: number | string): string {
+  return `${String(day).padStart(2, "0")}-${MONTHS[monthIndex]}-${year}`;
+}
+
 export function formatDate(d: Date | string | null | undefined): string {
   if (d == null) return "—";
   const date = typeof d === "string" ? new Date(d) : d;
   if (Number.isNaN(date.getTime())) return "—";
-  const day = String(date.getUTCDate()).padStart(2, "0");
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${day}-${month}-${date.getUTCFullYear()}`;
+  return dmy(date.getUTCDate(), date.getUTCMonth(), date.getUTCFullYear());
 }
 
 /**
@@ -109,7 +120,7 @@ export function formatInstant(d: Date | string | null | undefined): string {
     hour12: false,
   }).formatToParts(date);
   const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-  return `${get("day")}-${get("month")}-${get("year")} · ${get("hour")}:${get("minute")}`;
+  return `${dmy(Number(get("day")), Number(get("month")) - 1, get("year"))} · ${get("hour")}:${get("minute")}`;
 }
 
 /** "2 minutes ago" / "1h 43m ago" — how stale a reading is, in words. */
@@ -142,11 +153,11 @@ export function longDate(d: Date | string | null | undefined): string {
   return date.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", ...UTC });
 }
 
-/** "8 Sep 2026" — a document's "generated on" line, where space is tight. */
+/** A document's "generated on" line — the product's one date format, since 2026-09-30. */
 export function shortDate(d: Date | string | null | undefined): string {
   const date = asDate(d);
   if (!date) return "—";
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", ...UTC });
+  return formatDate(date);
 }
 
 /** "September 2026" from a Date or a "YYYY-MM" period. */

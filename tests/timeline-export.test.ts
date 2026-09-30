@@ -89,7 +89,7 @@ describe("flattenTimelineForExport", () => {
     const rows = flattenTimelineForExport("Test Society", root, checkSocietyChronology(root, today));
     const row = rows.find((r) => r.step === "Site survey visited");
     expect(row?.status).toBe("In order");
-    expect(row?.date).toBe("01-01-2026");
+    expect(row?.date).toBe("01-Jan-2026");
   });
 });
 

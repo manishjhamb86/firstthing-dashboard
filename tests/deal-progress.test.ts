@@ -686,7 +686,7 @@ describe("the replacement is handed to a crew before it is recorded", () => {
       replacementScheduledAt: new Date("2026-08-27T10:30:00.000Z"),
     });
     const summary = steps.find((s) => s.key === "assign-replacement")!.summary;
-    expect(summary).toBe("Installation Team · 27-08-2026 · 10:30");
+    expect(summary).toBe("Installation Team · 27-Aug-2026 · 10:30");
   });
 
   it("names the missing day rather than reading as finished", () => {

@@ -141,8 +141,13 @@ export default async function NotificationsPage() {
                     border: `1px solid ${notificationTone(n.kind) === "bad" ? "var(--bad-line)" : "var(--warn-line)"}`,
                   }}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-                    <div className="min-w-0 flex-1">
+                  {/* A phone-width card stacks the info and the actions as
+                      two full-width blocks rather than sharing one wrapped
+                      row with them — the row-based layout let "Acknowledge"
+                      render on top of the status chip on a narrow viewport
+                      (user-caught on stage, 2026-09-30). */}
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                    <div className="min-w-0 sm:flex-1">
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <StatusChip tone={notificationTone(n.kind)}>
                           {KIND_LABEL[n.kind] ?? n.kind}
@@ -167,7 +172,7 @@ export default async function NotificationsPage() {
                         {n.ownerLabel ? ` · ${n.ownerLabel} to chase` : " · nobody named to chase it"}
                       </p>
                     </div>
-                    <div className="flex shrink-0 items-center gap-3">
+                    <div className="flex items-center gap-3 sm:shrink-0">
                       {canAck && !n.acknowledgedAt && isAcknowledgeable(n.kind) && (
                         <AcknowledgeButton alertId={n.id} />
                       )}

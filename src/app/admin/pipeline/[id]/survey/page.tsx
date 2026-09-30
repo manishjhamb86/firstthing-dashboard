@@ -1,4 +1,3 @@
-import { SurveyDateControl } from "@/components/survey-date-control";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { areaKeyOf, contestedAreas } from "@/lib/survey-shell";
@@ -216,17 +215,6 @@ export default async function SiteSurveyPage({
         title="Site survey"
         subtitle={pipeline.society.location}
       />
-
-      {pipeline.siteSurvey && (
-        <div className="mb-5">
-          <SurveyDateControl
-            pipelineId={pipeline.id}
-            surveyDate={(visit?.startAt ?? pipeline.siteSurvey.createdAt).toISOString().slice(0, 10)}
-            label={visit ? "the site survey visit" : "the site survey"}
-            canCorrect={canApproveException}
-          />
-        </div>
-      )}
 
       {pipeline.siteSurvey && <FieldSurveyReview pipelineId={pipeline.id} surveyId={pipeline.siteSurvey.id} canQuery={canApproveException} />}
 

@@ -50,6 +50,8 @@ export function WaitingItem({ item }: { item: OutboxItem }) {
       "survey.pump_unit": "Discard this unit's answer and its photos?",
       "survey.logbook": "Discard this logbook answer?",
       "survey.logbook_page": "Discard these logbook photos?",
+      "help.report": "Discard this help report? It has not reached the office, and its screenshot, photos and voice note will be deleted from this phone.",
+      "help.reply": "Discard this reply? It has not reached the office.",
     };
     const ok = confirm(what[item.kind]);
     if (!ok) return;

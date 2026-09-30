@@ -7129,6 +7129,50 @@ Migration `20260930090000_zoho_invoice` is additive: `zoho_invoice_config`, thre
 
 **Not yet run against the real account:** it needs the Self Client's id, secret and a fresh grant code. The verification left a few small test PDFs under `Invoices/_intake/` (PutObject-only credentials).
 
+## Help from the field app: report, AI triage, team help desk (2026-09-30) — user-asked
+
+A **Help** button on every field-app screen lets the in-house team ask how to do something, report something not working, or tell the office something on site is stopping their work. Design and decisions are in `docs/engineering/21-field-help.md`.
+
+**The user's choices:**
+- field (phone) app only;
+- Gemini on the current key, with Claude possible later;
+- a site blocker goes to whoever assigned the task, plus operations;
+- bugs stay in the app only (the GitHub repo is public and third-party);
+- bugs go to admins with a new **"Receives bug reports"** switch;
+- voice is dictation on Android and a recorded voice note on iPhone, which Gemini transcribes.
+
+**How it works:**
+- **Screenshot.** Tapping Help first renders the app screen to an image with `modern-screenshot` (MIT, about 190 KB; chosen over html2canvas, which is 3.4 MB and handles modern CSS poorly). The capture is cropped to the viewport and excludes the Help UI. Only the app is captured.
+- **The report.** It holds what's wrong (typed or dictated), a voice note, up to 4 camera photos, an optional one of the person's own tasks, and the page's recent errors.
+- **Sending.** The report is saved on the phone as the outbox kind `help.report`, so a report from a basement with no signal still arrives. Attachments go first to the private `Help/{itemId}/` prefix and are served by signed links.
+- **AI triage.** The sync route runs `runHelpTriage` after its reply (next/server `after`), and the worker's `help_triage_sweep` retries every 10 minutes.
+  - Gemini is sent the field-app guide (`src/lib/help-guide.ts`), the screenshot, photos and audio. It returns a category, a title, a reply to the person and a transcript.
+  - `routeHelp` (pure) decides who is told, from the category — never the model. The reporter is never notified of their own report.
+  - When Gemini cannot read a report, it goes to operations unread rather than being lost.
+  - The AI never changes data.
+- **Phone screens:** More → My help requests, with the chat. A reply reopens an answered question.
+- **Back office:** `/admin/help` "Team help desk", with the screenshot, photos, voice note, errors, the task and the chat. Reply, change the category (re-routed by the same rule), take it up, or resolve (a note is required). Acting is for operations, bug receivers and recipients.
+- **Notifications.** Open reports are on the bell. Pushes go to recipients and to the reporter.
+
+Migration `20260930120000_field_help` is additive.
+
+**Verified** 20/20 against the dev database with real Gemini readings, on a phone-sized browser:
+- the screenshot is taken;
+- both reports reached the office through the phone's queue;
+- "Save does nothing" was read as a bug and sent to the bug receiver only;
+- the basement leakage, with a photo and a task, was read as a blocker and sent to the task's assigner and operations;
+- the AI's reply is in the chat;
+- the reporter's reply arrived;
+- the office saw the screenshot via a signed link, replied, and resolving without a note was refused;
+- a responder moved off operations behind the open page was refused by the server and logged;
+- open reports are on the bell.
+
+1,260 unit tests (15 new); `tsc` and `lint` clean.
+
+**Not tested in a real browser:** dictation and voice recording, which need a real phone's microphone.
+
+**Found while testing:** the S3 bucket's CORS rule allows uploads only from `localhost:3005` and stage, so the field app's photo uploads fail from any other local port.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

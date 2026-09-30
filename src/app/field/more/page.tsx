@@ -37,6 +37,9 @@ export default async function MorePage() {
         <Link href="/admin/tasks" className="flex items-center min-h-[48px] px-2 font-semibold">
           Tasks
         </Link>
+        <Link href="/field/more/help" className="flex items-center min-h-[48px] px-2 font-semibold border-t border-[var(--border-subtle)]">
+          My help requests
+        </Link>
         <Link href="/field/inspections" className="flex items-center min-h-[48px] px-2 font-semibold border-t border-[var(--border-subtle)]">
           Inspections
         </Link>

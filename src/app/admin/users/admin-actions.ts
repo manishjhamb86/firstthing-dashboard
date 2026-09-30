@@ -21,6 +21,7 @@ export async function createAdminUser(input: {
   password: string;
   permissions: AdminPermission[];
   team: AdminTeam;
+  receivesBugReports?: boolean;
 }) {
   const session = await requireAdminPermission("manage_admins");
 
@@ -45,6 +46,7 @@ export async function createAdminUser(input: {
       passwordHash,
       permissions: input.permissions,
       team: input.team,
+      receivesBugReports: input.receivesBugReports ?? false,
       createdById: session.user.id,
     },
   });
@@ -65,6 +67,7 @@ export async function updateAdminUser(input: {
   permissions: AdminPermission[];
   isActive: boolean;
   team?: AdminTeam;
+  receivesBugReports?: boolean;
 }) {
   const session = await requireAdminPermission("manage_admins");
 
@@ -83,10 +86,12 @@ export async function updateAdminUser(input: {
   await db.adminUser.update({
     where: { id: input.id },
     data: {
-      ...(input.team ? { team: input.team } : {}), name: input.name.trim() || null, permissions: input.permissions, isActive: input.isActive },
+      ...(input.team ? { team: input.team } : {}),
+      ...(input.receivesBugReports !== undefined ? { receivesBugReports: input.receivesBugReports } : {}),
+      name: input.name.trim() || null, permissions: input.permissions, isActive: input.isActive },
   });
 
-  logger.info("admin_user.updated", { actorId: session.user.id, targetId: input.id, permissions: input.permissions, isActive: input.isActive });
+  logger.info("admin_user.updated", { actorId: session.user.id, targetId: input.id, permissions: input.permissions, isActive: input.isActive, receivesBugReports: input.receivesBugReports });
   revalidatePath("/admin/users");
   return {};
 }

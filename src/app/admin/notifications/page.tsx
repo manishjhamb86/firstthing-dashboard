@@ -14,6 +14,7 @@ const KIND_LABEL: Record<string, string> = {
   billing_suspended: "Suspended",
   inspection_overdue: "Inspection not filed",
   ticket_open: "Society request",
+  help_open: "Field help request",
 };
 
 // "offline"/"billing_suspended"/an unrecognised future kind default to the
@@ -26,6 +27,7 @@ const CALM_KINDS = new Set([
   "billing_overdue",
   "inspection_overdue",
   "ticket_open",
+  "help_open",
 ]);
 function notificationTone(kind: string): "bad" | "warn" {
   return CALM_KINDS.has(kind) ? "warn" : "bad";
@@ -39,6 +41,7 @@ function notificationActionLabel(kind: string): string {
   if (kind.startsWith("billing_")) return "Open bill →";
   if (kind === "inspection_overdue") return "File it →";
   if (kind === "savings_out_of_band") return "Open circuit →";
+  if (kind === "help_open") return "Open request →";
   return "Open meter →";
 }
 

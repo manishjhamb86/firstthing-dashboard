@@ -25,6 +25,7 @@ export type AdminListRow = {
   removed: boolean;
   permissions: AdminPermission[];
   team: AdminTeam;
+  receivesBugReports: boolean;
 };
 
 const LABEL = new Map(PERMISSION_OPTIONS.map((p) => [p.value, p.label]));
@@ -61,6 +62,7 @@ function AdminForm({
     editing?.permissions ?? TEAM_PERMISSIONS[editing?.team ?? "sales"],
   );
   const [isActive, setIsActive] = useState(editing?.isActive ?? true);
+  const [receivesBugReports, setReceivesBugReports] = useState(editing?.receivesBugReports ?? false);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
 
@@ -88,8 +90,8 @@ function AdminForm({
     setError(undefined);
     startTransition(async () => {
       const result = isEdit
-        ? await updateAdminUser({ id: editing.id, name, permissions: perms, isActive, team })
-        : await createAdminUser({ email, name, password, permissions: perms, team });
+        ? await updateAdminUser({ id: editing.id, name, permissions: perms, isActive, team, receivesBugReports })
+        : await createAdminUser({ email, name, password, permissions: perms, team, receivesBugReports });
       if (result && "error" in result && result.error) setError(result.error);
       else onClose();
     });
@@ -222,6 +224,16 @@ function AdminForm({
         )}
       </fieldset>
 
+      <label className="flex items-start gap-2 text-sm">
+        <input type="checkbox" className="mt-1" checked={receivesBugReports} onChange={(e) => setReceivesBugReports(e.target.checked)} disabled={pending} />
+        <span>
+          Receives bug reports
+          <span className="block text-xs" style={{ color: "var(--text-muted)" }}>
+            Bugs the field team reports with the Help button are sent to this account. Changes nothing else about its access.
+          </span>
+        </span>
+      </label>
+
       {isEdit && (
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} disabled={pending} />
@@ -339,7 +351,7 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
                     disabled={pending}
                     onClick={() =>
                       act(r.id, () =>
-                        updateAdminUser({ id: r.id, name: r.name ?? "", permissions: r.permissions, isActive: !r.isActive, team: r.team }),
+                        updateAdminUser({ id: r.id, name: r.name ?? "", permissions: r.permissions, isActive: !r.isActive, team: r.team, receivesBugReports: r.receivesBugReports }),
                       )
                     }
                   >

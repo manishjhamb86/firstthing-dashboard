@@ -89,6 +89,7 @@ export default async function UsersPage() {
                 removed: a.deletedAt !== null,
                 permissions: a.permissions,
                 team: a.team,
+                receivesBugReports: a.receivesBugReports,
               }))}
             />
           )}

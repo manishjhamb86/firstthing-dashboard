@@ -295,6 +295,35 @@ const openTicketNotifications = cache(async (): Promise<Notification[]> => {
   }));
 });
 
+/**
+ * Field Help reports waiting on a person (docs/engineering/21-field-help.md):
+ * a bug, a blocker on site, a suggestion, a question the AI could not answer,
+ * or one the AI could not read at all. An answered question stays out — the
+ * AI's answer IS the attention; a reply from the reporter brings it back.
+ */
+const openHelpNotifications = cache(async (): Promise<Notification[]> => {
+  const rows = await db.helpReport.findMany({
+    where: { status: "open" },
+    orderBy: { createdAt: "asc" },
+    include: { reporter: { select: { name: true, email: true } } },
+  });
+  return rows.map((r) => ({
+    id: r.id,
+    kind: "help_open",
+    message: `${r.reporter.name ?? r.reporter.email} asked for help: ${r.title ?? (r.description.slice(0, 60) || "voice note")}`,
+    openedAt: r.createdAt.toISOString(),
+    closedAt: null,
+    closedReason: null,
+    acknowledgedAt: null,
+    raiseCount: 1,
+    subject: r.title ?? "Help request",
+    societyName: null,
+    circuitLabel: null,
+    ownerLabel: null,
+    href: `/admin/help/${r.id}`,
+  }));
+});
+
 function toNotification(a: Row): Notification {
   const circuit = a.circuit ?? a.meter?.circuit ?? null;
   const owner = a.meter?.owner ?? a.circuit?.meterDevice?.owner ?? null;
@@ -343,18 +372,20 @@ export const unreadNotificationCount = cache(async (): Promise<number> => {
 
 /** Everything still open, worst-first by age. */
 export const openNotifications = cache(async (): Promise<Notification[]> => {
-  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications] =
+  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications, helpNotifications] =
     await Promise.all([
       db.meterAlert.findMany({ where: { closedAt: null }, orderBy: { openedAt: "asc" }, include }),
       openInvoiceNotifications(),
       openInspectionOverdueNotifications(),
       openTicketNotifications(),
+      openHelpNotifications(),
     ]);
   return [
     ...alertRows.map(toNotification),
     ...invoiceNotifications,
     ...inspectionNotifications,
     ...ticketNotifications,
+    ...helpNotifications,
   ].sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
 });
 

@@ -8,6 +8,7 @@ import { s3, S3_BUCKET } from "@/lib/s3";
 import { presignInspectionEvidence } from "@/lib/inspection-file";
 import { batchPhotoKey, MAX_DAY_PHOTOS } from "@/lib/installation-core";
 import { MAX_SUBJECT_PHOTOS, surveyPhotoKey, type PhotoSubject } from "@/lib/survey-core";
+import { helpAttachmentKey } from "@/lib/help-report";
 
 /**
  * An upload URL for a photo the phone has been holding (05-field.md §0.3).
@@ -27,6 +28,7 @@ export async function POST(req: Request) {
     | null;
   if (body?.purpose === "installation") return installationPhoto(actor.id, body);
   if (body?.purpose === "survey") return surveyPhoto(actor.id, body as Record<string, unknown>);
+  if (body?.purpose === "help") return helpAttachment(actor.id, body as Record<string, unknown>);
 
   const itemId = typeof body?.inspectionItemId === "string" ? body.inspectionItemId : "";
   const contentType = typeof body?.contentType === "string" ? body.contentType : "";
@@ -107,5 +109,22 @@ async function surveyPhoto(actorId: string, body: Record<string, unknown>) {
   const key = surveyPhotoKey({ societyName: survey.pipeline.society.name, surveyCreatedAt: survey.createdAt, surveyId, subject, subjectKey, index });
   const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType }), { expiresIn: 300 });
   logger.info("field.photo_presigned", { actorId, surveyId, subject, key });
+  return NextResponse.json({ uploadUrl, key });
+}
+
+/**
+ * A Help report's screenshot, photo or voice note (21-field-help.md), keyed to
+ * the report's outbox item under the PRIVATE Help/ prefix — a screenshot can
+ * show a society's figures. The report itself does not exist yet (it is sent
+ * after its attachments), so the key is derived from the item's own id and the
+ * sync route accepts only keys under that id.
+ */
+async function helpAttachment(actorId: string, body: Record<string, unknown>) {
+  const contentType = typeof body.contentType === "string" ? body.contentType : "";
+  const itemId = typeof body.itemId === "string" ? body.itemId : "";
+  const key = helpAttachmentKey(itemId, Number(body.index), contentType);
+  if (typeof key !== "string") return NextResponse.json({ error: key.error }, { status: 422 });
+  const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: contentType }), { expiresIn: 300 });
+  logger.info("field.photo_presigned", { actorId, purpose: "help", key });
   return NextResponse.json({ uploadUrl, key });
 }

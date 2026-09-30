@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { CalendarCheck, ClipboardList, ScanLine, Menu } from "lucide-react";
 import { OutboxProvider, useOutbox } from "./outbox-provider";
+import { HelpButton, type HelpTask } from "./help-button";
 
 // Bottom navigation, thumb-reachable (05-field.md §0.4: "never a top-right
 // button — this surface is used one-handed"). Four tabs, every one a real
@@ -34,12 +35,12 @@ export function useOnline(): boolean {
   );
 }
 
-export function FieldShell({ children, jobUrls = [] }: { children: ReactNode; jobUrls?: string[] }) {
+export function FieldShell({ children, jobUrls = [], helpTasks = [] }: { children: ReactNode; jobUrls?: string[]; helpTasks?: HelpTask[] }) {
   // The provider also registers the service worker, which keeps the pages
   // this phone has opened and sends saved work. Scoped to /field only.
   return (
     <OutboxProvider jobUrls={jobUrls}>
-      <ShellFrame>{children}</ShellFrame>
+      <ShellFrame helpTasks={helpTasks}>{children}</ShellFrame>
     </OutboxProvider>
   );
 }
@@ -59,7 +60,7 @@ function syncChip(online: boolean, o: ReturnType<typeof useOutbox>): { tone: str
   return online ? { tone: "ok", label: "All sent" } : { tone: "warn", label: "No signal" };
 }
 
-function ShellFrame({ children }: { children: ReactNode }) {
+function ShellFrame({ children, helpTasks }: { children: ReactNode; helpTasks: HelpTask[] }) {
   const pathname = usePathname();
   const online = useOnline();
   const outbox = useOutbox();
@@ -111,6 +112,8 @@ function ShellFrame({ children }: { children: ReactNode }) {
       )}
 
       <main className="flex-1 w-full max-w-xl mx-auto px-4 pt-4 pb-28 text-[15px]">{children}</main>
+
+      <HelpButton tasks={helpTasks} />
 
       <nav
         aria-label="Field app"

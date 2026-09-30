@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -38,6 +38,9 @@ import {
 } from "@/lib/survey-core";
 import { addCommitteeMemberAs, saveProfileAs, setPrimaryContactAs, setSectionAs, submitSurveyAs } from "@/lib/survey-core";
 import { batchPhotoKey, MAX_DAY_PHOTOS, raiseBlockerAs, recordDayAs, signCertificateAs } from "@/lib/installation-core";
+import { attachmentsByRole, MAX_DESCRIPTION, parseHelpReport, statusAfterReporterReply } from "@/lib/help-report";
+import { runHelpTriage } from "@/lib/help-triage";
+import { sendPush } from "@/lib/push";
 
 /**
  * The field app's sync endpoint (docs/engineering/19-field-app.md §4.1;
@@ -85,6 +88,49 @@ async function apply(
     const r = await raiseBlockerAs(actor, input.pipelineId, { ...input, batchId: null, photoKeys: [] }, tx);
     if ("error" in r) return r;
     return { blockerId: r.blockerId };
+  }
+
+  // help.report — a Help report from the field app (21-field-help.md). Its
+  // attachments are already up under Help/{itemId}/; the AI reads it after
+  // the reply is sent (see POST).
+  if (env.kind === "help.report") {
+    const input = parseHelpReport(env.id, env.payload);
+    if ("error" in input) return input;
+    // A task is named only if it is really theirs; otherwise the report still
+    // goes, just not tied to it.
+    const task = input.taskEventId
+      ? await tx.scheduledEvent.findFirst({ where: { id: input.taskEventId, assigneeId: actor.id }, select: { id: true } })
+      : null;
+    const files = attachmentsByRole(input);
+    const report = await tx.helpReport.create({
+      data: {
+        reporterId: actor.id,
+        description: input.description,
+        page: input.page,
+        pageTitle: input.pageTitle,
+        clientInfo: (input.clientInfo ?? undefined) as Prisma.InputJsonValue | undefined,
+        screenshotKey: files.screenshotKey,
+        voiceKey: files.voiceKey,
+        photoKeys: files.photoKeys,
+        taskEventId: task?.id ?? null,
+      },
+    });
+    return { reportId: report.id };
+  }
+
+  // help.reply — the reporter answering in their report's chat. A reply to an
+  // answered question means the answer did not do it: it goes back to a person.
+  if (env.kind === "help.reply") {
+    const o = (env.payload ?? {}) as Record<string, unknown>;
+    const reportId = typeof o.reportId === "string" ? o.reportId : "";
+    const body = typeof o.body === "string" ? o.body.trim().slice(0, MAX_DESCRIPTION) : "";
+    if (!body) return { error: "Write a reply first." };
+    const report = await tx.helpReport.findUnique({ where: { id: reportId }, select: { reporterId: true, status: true } });
+    if (!report || report.reporterId !== actor.id) return { error: "That help request is not yours." };
+    const message = await tx.helpMessage.create({ data: { reportId, author: "reporter", adminId: actor.id, body } });
+    const status = statusAfterReporterReply(report.status);
+    if (status !== report.status) await tx.helpReport.update({ where: { id: reportId }, data: { status, resolvedAt: null } });
+    return { reportId, messageId: message.id, reopened: status !== report.status };
   }
 
   if (env.kind !== "inspection.photo") {
@@ -190,6 +236,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: out.error }, { status: 422 });
     }
     logger.info("field.sync_applied", { actorId: actor.id, itemId: env.id, kind: env.kind, result: out });
+    if (env.kind === "help.report" && typeof out.reportId === "string") {
+      const reportId = out.reportId;
+      // The AI reads it after the phone has its answer; the sweep retries a miss.
+      after(() => runHelpTriage(reportId).then(() => undefined, (err) => logger.error("help.triage_crashed", { reportId, error: String(err) })));
+    }
+    if (env.kind === "help.reply" && typeof out.reportId === "string") {
+      const reportId = out.reportId;
+      after(async () => {
+        const r = await db.helpReport.findUnique({ where: { id: reportId }, select: { routedToIds: true, title: true } });
+        const operations = r && r.routedToIds.length === 0 ? (await db.adminUser.findMany({ where: { team: "operations", isActive: true }, select: { id: true } })).map((a) => a.id) : [];
+        const to = [...(r?.routedToIds ?? []), ...operations].filter((id) => id !== actor.id);
+        if (to.length) await sendPush(to, { title: "Reply on a help request", body: r?.title ?? "A field help request", url: `/admin/help/${reportId}`, tag: `help:${reportId}` });
+      });
+    }
     return NextResponse.json({ ok: true, result: out });
   } catch (err) {
     // Two sends of one item raced: the loser's receipt insert hits the

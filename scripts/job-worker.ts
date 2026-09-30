@@ -8,6 +8,7 @@ import { arrearsStateOf, shouldFireSuspension } from "../src/lib/arrears";
 import { runIntakeExtraction } from "../src/lib/invoice-intake-extract";
 import { runCalendarSweep } from "../src/lib/calendar-sync";
 import { runZohoSync } from "../src/lib/zoho-invoice-sync";
+import { runHelpTriageSweep } from "../src/lib/help-triage";
 import { settledTotal } from "../src/lib/payment";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
@@ -68,6 +69,14 @@ const CALENDAR_SYNC_INTERVAL_MS = 5 * 60 * 1000;
  */
 const ZOHO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const ZOHO_SYNC_LIMIT = 100;
+
+/**
+ * Field Help reports (2026-09-30): a report is read by the AI the moment it
+ * arrives; this pass retries the ones it could not read (a model at its daily
+ * limit, an error). Ten minutes, a few at a time, so a quota wall is not
+ * hammered.
+ */
+const HELP_TRIAGE_INTERVAL_MS = 10 * 60 * 1000;
 
 /**
  * Nothing this writes persists an actor as a foreign key (confirmed by
@@ -157,6 +166,9 @@ async function processJob(job: { id: string; type: string }) {
       break;
     case "zoho_invoice_sync":
       await runZohoInvoiceSync();
+      break;
+    case "help_triage_sweep":
+      await runHelpTriagePass();
       break;
     case "demo_relock_sweep":
       await runDemoRelockSweep();
@@ -437,6 +449,27 @@ async function runZohoInvoiceSync() {
   }
 }
 
+async function runHelpTriagePass() {
+  try {
+    const r = await runHelpTriageSweep(5);
+    if (r.done || r.failed) logger.info("job.help_triage_ran", r);
+  } catch (err) {
+    logger.warn("job.help_triage_failed", { error: String(err) });
+  } finally {
+    const existing = await db.job.findFirst({ where: { type: "help_triage_sweep", status: "pending" } });
+    if (existing) logger.warn("job.help_triage_duplicate_suppressed", { existingJobId: existing.id });
+    else await db.job.create({ data: { type: "help_triage_sweep", runAt: new Date(Date.now() + HELP_TRIAGE_INTERVAL_MS) } });
+  }
+}
+
+async function ensureHelpTriageScheduled() {
+  const existing = await db.job.findFirst({ where: { type: "help_triage_sweep", status: { in: ["pending", "running"] } } });
+  if (!existing) {
+    await db.job.create({ data: { type: "help_triage_sweep", runAt: new Date() } });
+    logger.info("job.help_triage_seeded", {});
+  }
+}
+
 async function scheduleZohoInvoiceSync(runAt: Date) {
   const existing = await db.job.findFirst({ where: { type: "zoho_invoice_sync", status: "pending" } });
   if (existing) {
@@ -648,6 +681,7 @@ async function main() {
   await ensureInvoiceIntakeSweepScheduled();
   await ensureCalendarSyncScheduled();
   await ensureZohoInvoiceSyncScheduled();
+  await ensureHelpTriageScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

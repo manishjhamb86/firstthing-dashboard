@@ -43,6 +43,8 @@ export const OUTBOX_KINDS = [
   "survey.pump_unit",
   "survey.logbook",
   "survey.logbook_page",
+  "help.report",
+  "help.reply",
 ] as const;
 export type OutboxKind = (typeof OUTBOX_KINDS)[number];
 

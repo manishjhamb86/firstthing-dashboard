@@ -105,6 +105,9 @@ export function AppShell({
       // society surface, not a deal one.
       showPipeline && { href: "/admin/documents", label: "Documents", icon: FileText },
       showSupport && { href: "/admin/tickets", label: "Support tickets", icon: LifeBuoy },
+      // What the field team sends with the Help button (2026-09-30). Everyone
+      // may read it; acting is for operations, bug receivers and recipients.
+      { href: "/admin/help", label: "Team help desk", icon: LifeBuoy },
       // Facility management companies and their people (2026-09-25).
       (showUsers || showPipeline) && { href: "/admin/facility-management", label: "Facility management", icon: Building2 },
     ]),

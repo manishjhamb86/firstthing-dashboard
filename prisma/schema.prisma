@@ -213,6 +213,8 @@ enum JobType {
   demo_relock_sweep
   // 2026-09-30: fetch new and changed invoices from Zoho Invoice into intake.
   zoho_invoice_sync
+  // 2026-09-30: read field help reports the AI has not read yet.
+  help_triage_sweep
 
   @@map("job_type")
 }
@@ -453,18 +455,21 @@ model Profile {
 // ever be minted by a row existing here; a Profile row can never carry admin
 // access, by construction rather than by a role check that could be bypassed.
 model AdminUser {
-  id           String            @id @default(cuid())
-  email        String            @unique
-  passwordHash String            @map("password_hash")
-  name         String?
-  isActive     Boolean           @default(true) @map("is_active")
+  id                 String            @id @default(cuid())
+  email              String            @unique
+  passwordHash       String            @map("password_hash")
+  name               String?
+  isActive           Boolean           @default(true) @map("is_active")
   /// PER-01 by default: every pre-existing account was an ops account.
-  team         AdminTeam         @default(operations)
-  permissions  AdminPermission[]
+  team               AdminTeam         @default(operations)
+  permissions        AdminPermission[]
   // DEMO_MODE's per-account switch. The env var is the master gate — with
   // it unset this column can never turn anything on, and no toggle renders.
   // Default false so a missing choice reads as normal mode.
-  demoMode     Boolean           @default(false) @map("demo_mode")
+  demoMode           Boolean           @default(false) @map("demo_mode")
+  /// Receives the bug tickets the field team raises from the Help button
+  /// (2026-09-30, the user's choice). Changes nothing else about access.
+  receivesBugReports Boolean           @default(false) @map("receives_bug_reports")
 
   themePreference Theme?   @map("theme_preference")
   createdById     String?  @map("created_by_id")
@@ -508,6 +513,9 @@ model AdminUser {
   tankApiConfigUpdated        TankApiConfig[]             @relation("TankApiConfigUpdatedBy")
   googleCalendarConfigUpdated GoogleCalendarConfig[]      @relation("GoogleCalendarConfigUpdatedBy")
   zohoInvoiceConfigUpdated    ZohoInvoiceConfig[]         @relation("ZohoInvoiceConfigUpdatedBy")
+  helpReportsRaised           HelpReport[]                @relation("HelpReportReporter")
+  helpReportsResolved         HelpReport[]                @relation("HelpReportResolvedBy")
+  helpMessages                HelpMessage[]               @relation("HelpMessageAuthor")
   fmCompaniesCreated          FacilityManagementCompany[] @relation("FmCompanyCreatedBy")
   fmEngagementsRecorded       SocietyFmEngagement[]       @relation("FmEngagementRecordedBy")
   fmEmploymentsRecorded       FmEmployment[]              @relation("FmEmploymentRecordedBy")
@@ -734,11 +742,11 @@ model ScheduledEvent {
   /// anything on the deal spine, the circuit for commissioning work that
   /// happens on one metered circuit (the light replacement day).
   /// Optional since tasks (2026-09-25): an office task need not be about a society.
-  societyId  String? @map("society_id")
-  pipelineId String? @map("pipeline_id")
-  circuitId  String? @map("circuit_id")
+  societyId        String? @map("society_id")
+  pipelineId       String? @map("pipeline_id")
+  circuitId        String? @map("circuit_id")
   /// The demo a replacement day belongs to (2026-09-26 — every demo walks its own steps).
-  demoId     String? @map("demo_id")
+  demoId           String? @map("demo_id")
   /// A task about a retail customer rather than a society (2026-09-30).
   retailCustomerId String? @map("retail_customer_id")
 
@@ -775,14 +783,15 @@ model ScheduledEvent {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  attendees ScheduledEventAttendee[]
+  attendees   ScheduledEventAttendee[]
+  helpReports HelpReport[]
 
-  assignee      AdminUser       @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
-  createdBy     AdminUser       @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
-  society       Society?        @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  pipeline      Pipeline?       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
-  circuit       Circuit?        @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  demo          CircuitDemo?    @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  assignee       AdminUser       @relation("ScheduledEventAssignee", fields: [assigneeId], references: [id])
+  createdBy      AdminUser       @relation("ScheduledEventCreatedBy", fields: [createdById], references: [id])
+  society        Society?        @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  pipeline       Pipeline?       @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  circuit        Circuit?        @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  demo           CircuitDemo?    @relation(fields: [demoId], references: [id], onDelete: Cascade)
   retailCustomer RetailCustomer? @relation(fields: [retailCustomerId], references: [id], onDelete: Cascade)
 
   @@index([assigneeId, startAt])
@@ -4271,14 +4280,14 @@ model RetailInvoice {
 /// billing Payment model (no TDS, no cheque-copy upload): a retail sale is a
 /// one-off, not a recurring subscription with its own arrears clock.
 model RetailPayment {
-  id          String       @id @default(cuid())
-  invoiceId   String       @map("invoice_id")
+  id          String        @id @default(cuid())
+  invoiceId   String        @map("invoice_id")
   amount      Float
   method      PaymentMethod
-  paidOn      DateTime     @map("paid_on")
+  paidOn      DateTime      @map("paid_on")
   reference   String?
-  createdAt   DateTime     @default(now()) @map("created_at")
-  createdById String       @map("created_by_id")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  createdById String        @map("created_by_id")
 
   invoice RetailInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
@@ -4691,4 +4700,120 @@ model PushSubscription {
 
   @@index([adminId])
   @@map("push_subscriptions")
+}
+
+// ---------------------------------------------------------------------------
+// Help from the field app (2026-09-30, docs/engineering/21-field-help.md).
+// ---------------------------------------------------------------------------
+
+enum HelpCategory {
+  /// How to do something — answered in the chat.
+  question
+  /// Something in the app not working as it should — to the bug receivers.
+  bug
+  /// Something on site stopping the work — to the task's assigner and operations.
+  blocker
+  /// "I expected X here" — logged for operations.
+  suggestion
+
+  @@map("help_category")
+}
+
+enum HelpStatus {
+  /// Arrived; the AI has not read it yet.
+  new
+  /// Waiting on a person in the back office.
+  open
+  /// The AI answered a question; nobody else needs to act unless the reporter replies.
+  answered
+  /// Someone in the back office has taken it up.
+  in_progress
+  resolved
+
+  @@map("help_status")
+}
+
+enum HelpAiState {
+  pending
+  done
+  /// Could not be read (every model at its limit, or an error); the sweep retries.
+  failed
+
+  @@map("help_ai_state")
+}
+
+enum HelpAuthor {
+  reporter
+  ai
+  staff
+
+  @@map("help_author")
+}
+
+/// One report from the field app's Help button.
+model HelpReport {
+  id            String   @id @default(cuid())
+  reporterId    String   @map("reporter_id")
+  /// What the person typed or dictated (may be empty when a voice note carries it).
+  description   String   @default("")
+  /// Gemini's transcript of the voice note (iPhone).
+  transcript    String?
+  /// The field-app page they were on, and its title.
+  page          String
+  pageTitle     String?  @map("page_title")
+  /// What the phone added: recent page errors, app version, screen size.
+  clientInfo    Json?    @map("client_info")
+  /// Private keys under Help/{id}/ — served by signed links only.
+  screenshotKey String?  @map("screenshot_key")
+  photoKeys     String[] @default([]) @map("photo_keys")
+  voiceKey      String?  @map("voice_key")
+  /// The task it is about, when the person named one.
+  taskEventId   String?  @map("task_event_id")
+
+  category       HelpCategory?
+  /// "ai" or "staff" — who last set the category.
+  categorySource String?       @map("category_source")
+  title          String?
+  status         HelpStatus    @default(new)
+  /// Everyone notified about it (admin ids).
+  routedToIds    String[]      @default([]) @map("routed_to_ids")
+
+  aiState    HelpAiState @default(pending) @map("ai_state")
+  aiAttempts Int         @default(0) @map("ai_attempts")
+  aiError    String?     @map("ai_error")
+  aiReadAt   DateTime?   @map("ai_read_at")
+
+  resolvedAt     DateTime? @map("resolved_at")
+  resolvedById   String?   @map("resolved_by_id")
+  resolutionNote String?   @map("resolution_note")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  reporter   AdminUser       @relation("HelpReportReporter", fields: [reporterId], references: [id])
+  resolvedBy AdminUser?      @relation("HelpReportResolvedBy", fields: [resolvedById], references: [id])
+  task       ScheduledEvent? @relation(fields: [taskEventId], references: [id], onDelete: SetNull)
+  messages   HelpMessage[]
+
+  @@index([status, createdAt])
+  @@index([reporterId, createdAt])
+  @@index([aiState])
+  @@map("help_reports")
+}
+
+/// The chat on a report: the reporter, the AI and back-office staff.
+model HelpMessage {
+  id        String     @id @default(cuid())
+  reportId  String     @map("report_id")
+  author    HelpAuthor
+  /// Set for the reporter and staff; null for the AI.
+  adminId   String?    @map("admin_id")
+  body      String
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  report HelpReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  admin  AdminUser? @relation("HelpMessageAuthor", fields: [adminId], references: [id])
+
+  @@index([reportId, createdAt])
+  @@map("help_messages")
 }

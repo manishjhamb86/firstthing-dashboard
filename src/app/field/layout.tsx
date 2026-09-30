@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { loadFieldWork } from "@/lib/field-work";
+import { db } from "@/lib/db";
+import { formatDate } from "@/lib/format-date";
 import { requireFieldPage } from "./access";
 import { FieldShell } from "./field-shell";
 
@@ -29,5 +31,17 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // are walking to opens in a basement even if it was never opened before.
   const work = await loadFieldWork(admin.id, true);
   const jobUrls = work.flatMap((r) => r.fieldPages ?? (r.fieldHref ? [r.fieldHref] : []));
-  return <FieldShell jobUrls={jobUrls}>{children}</FieldShell>;
+  // The Help sheet offers the person's own open tasks, so a blocker can name one.
+  const open = await db.scheduledEvent.findMany({
+    where: { assigneeId: admin.id, status: "scheduled" },
+    orderBy: { startAt: "asc" },
+    take: 30,
+    select: { id: true, title: true, startAt: true, society: { select: { name: true } } },
+  });
+  const helpTasks = open.map((e) => ({ id: e.id, title: e.society && !e.title.includes(e.society.name) ? `${e.title} — ${e.society.name}` : e.title, when: formatDate(e.startAt) }));
+  return (
+    <FieldShell jobUrls={jobUrls} helpTasks={helpTasks}>
+      {children}
+    </FieldShell>
+  );
 }

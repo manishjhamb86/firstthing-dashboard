@@ -398,7 +398,18 @@ function buildDeal(p: DealRow, firstInvoice: FirstInvoice | null): Branch {
   const k = p.contract;
   if (k) {
     if (k.activatedAt) {
-      after.push(step(ctx, { slot: "contractActivated", label: "Contract activated", date: k.activatedAt, edit: { field: "contract.activatedAt", entityId: p.id } }));
+      after.push(
+        step(ctx, {
+          slot: "contractActivated",
+          label: "Contract activated",
+          date: k.activatedAt,
+          // Activated at signing or on the first billing day — not tied to the
+          // installation days listed after it (society-chronology.ts).
+          outsideSequence: true,
+          note: "Checked against the signature and the day billing starts, not against installation.",
+          edit: { field: "contract.activatedAt", entityId: p.id },
+        }),
+      );
     }
   }
   const proj = p.installationProject;

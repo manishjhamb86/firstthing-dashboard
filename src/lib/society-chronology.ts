@@ -44,6 +44,14 @@ export type Step = {
   recordOnly?: string | null;
   /** The date is taken from another record — shown with "≈" and this note. */
   borrowed?: string | null;
+  /**
+   * A step with no fixed place in the order: checked only by its own rules,
+   * never against the step listed next to it. Contract activation is one
+   * (2026-09-30, user-caught on Hyde Park): it can happen when the agreement
+   * is signed or on the first day of billing, so its only rules are "on or
+   * after the signature" and "on or before billing starts".
+   */
+  outsideSequence?: boolean;
   note?: string | null;
   chip?: { text: string; tone: "ok" | "warn" | "bad" | "info" | "neu" } | null;
   /** Dated sub-steps that read as one row: the agreement's prepared → uploaded. */
@@ -148,7 +156,9 @@ export const CHRONOLOGY_RULES: Rule[] = [
       words: "The agreement is prepared, printed, notarised, signed and uploaded in that order.",
     })),
   ),
-  { id: "deal.activated-signed", scope: "deal", later: "contractActivated", earlier: "agreementSigned", severity: "error", words: "The contract is activated on or after the agreement is signed." },
+  { id: "deal.activated-signed", scope: "deal", later: "contractActivated", earlier: "agreementSigned", severity: "error", flag: "later", words: "The contract is activated on or after the agreement is signed." },
+  { id: "deal.activated-billing", scope: "deal", later: "billingStart", earlier: "contractActivated", severity: "error", flag: "earlier", words: "The contract is activated on or before the day billing starts." },
+  { id: "deal.activated-invoice", scope: "deal", later: FIRST_INVOICE_SLOT, earlier: "contractActivated", severity: "error", flag: "earlier", words: "The contract is activated on or before the day the first invoice bills from." },
   { id: "deal.term-range", scope: "deal", later: "term.end", earlier: "term", strict: true, severity: "error", words: "A contract term ends after it starts." },
   { id: "deal.term-signed", scope: "deal", later: "term", earlier: "agreementSigned", severity: "warning", words: "A contract term starts on or after the agreement is signed." },
 
@@ -278,7 +288,7 @@ export function checkSocietyChronology(root: Branch, today: Date, rules: Rule[] 
   const hasError = (stepId: string) => issues.some((i) => i.stepId === stepId && i.severity === "error");
   walk(root, [], (branch, path) => {
     if (branch.struck) return;
-    const seq = allSteps(branch).filter((s) => s.date && !s.recordOnly);
+    const seq = allSteps(branch).filter((s) => s.date && !s.recordOnly && !s.outsideSequence);
     const ownAnchor = seq.findIndex((s) => s.slot === FIRST_INVOICE_SLOT);
     const inherited = ownAnchor < 0 && branch.kind === "demo" ? anchorAbove(path) : null;
 

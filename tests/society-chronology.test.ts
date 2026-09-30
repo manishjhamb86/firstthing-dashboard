@@ -410,3 +410,45 @@ describe("firstBillingDay", () => {
     expect(r.basis).toBe("26 of 31 days billed, so billing ran from 06-Jul-2025");
   });
 });
+
+describe("contract activation has no fixed place in the order (2026-09-30, Hyde Park)", () => {
+  const d = (iso: string) => new Date(`${iso}T00:00:00Z`);
+  const deal = (activated: string) => ({
+    id: "root",
+    kind: "society" as const,
+    title: "Society",
+    name: "Hyde Park",
+    steps: [],
+    children: [
+      {
+        id: "deal",
+        kind: "deal" as const,
+        title: "Deal",
+        name: "Lighting",
+        steps: [],
+        children: [],
+        after: [
+          { id: "deal:agreement", slot: "agreement", label: "Agreement signed", date: d("2025-06-07"), chain: [{ slot: "agreementSigned", label: "Signed", date: d("2025-06-07") }] },
+          { id: "deal:contractActivated", slot: "contractActivated", label: "Contract activated", date: d(activated), outsideSequence: true },
+          { id: "deal:installWork", slot: "installWork", label: "Installation days worked and approved", date: d("2025-07-03"), end: d("2025-07-05") },
+          { id: "deal:certificate", slot: "certificate", label: "Installation certificate signed", date: d("2025-07-05") },
+          { id: "deal:billingStart", slot: "billingStart", label: "Billing starts", date: d("2025-07-06"), futureOk: true },
+        ],
+      },
+    ],
+  });
+  const issuesFor = (activated: string) => checkSocietyChronology(deal(activated) as never, d("2026-09-30")).filter((i) => i.stepId === "deal:contractActivated");
+
+  it("activated on the first day of billing is in order, though the installation days are listed after it", () => {
+    expect(issuesFor("2025-07-06")).toEqual([]);
+  });
+  it("activated at the signature is in order too", () => {
+    expect(issuesFor("2025-06-07")).toEqual([]);
+  });
+  it("activated after billing starts is out of order", () => {
+    expect(issuesFor("2025-07-10").map((i) => i.message).join(" ")).toMatch(/on or before the day billing starts/);
+  });
+  it("activated before the agreement is signed is out of order", () => {
+    expect(issuesFor("2025-06-01").length).toBeGreaterThan(0);
+  });
+});

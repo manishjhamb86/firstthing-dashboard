@@ -116,7 +116,9 @@ export function buildTimelineView(root: Branch, issues: Issue[], requests: Map<s
       const gap = s.recordOnly ? null : gapLabel(prev, s.date);
       // A period the next step follows (readings) counts from its end; a term that
       // runs into the future counts from its start.
-      if (s.date && !s.recordOnly) prev = s.futureOk ? s.date : s.end ?? s.date;
+      // A step outside the order (contract activation) is not what the next
+      // step's gap is measured from.
+      if (s.date && !s.recordOnly && !s.outsideSequence) prev = s.futureOk ? s.date : s.end ?? s.date;
       const chip =
         s.chip ??
         (state === "bad"

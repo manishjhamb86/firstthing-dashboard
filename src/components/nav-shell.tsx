@@ -74,6 +74,8 @@ export function NavShell({
   navLabel = "Menu",
   footerNote,
   extras,
+  settings,
+  mobileStatus,
   mobileTabBar,
   children,
 }: {
@@ -83,8 +85,18 @@ export function NavShell({
   /** The sidebar's section heading — the society's name, on the portal. */
   navLabel?: string;
   footerNote: string;
-  /** Anything that sits beside the theme switcher (the demo toggle, on admin). */
+  /** Always in the header, on every width (the notification bell). */
   extras?: ReactNode;
+  /**
+   * Controls that sit beside the theme switcher from `sm` up and move into
+   * the account menu on a phone (the demo toggle, on admin). A 390px header
+   * cannot hold a menu button, the wordmark, a demo switch, the bell, three
+   * theme buttons and the avatar — they crushed the logo to nothing
+   * (user-caught on stage, 2026-09-30).
+   */
+  settings?: ReactNode;
+  /** A small phone-only marker beside the wordmark (demo mode on, on admin). */
+  mobileStatus?: ReactNode;
   /**
    * A persistent bottom tab bar for phones, in place of the hamburger drawer
    * — the portal's own mockup canvas uses this pattern, admin does not (the
@@ -219,9 +231,12 @@ export function NavShell({
     });
 
   const identity = (
-    <div className="flex items-center gap-3">
+    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+      <div className="hidden sm:flex items-center gap-3">{settings}</div>
       {extras}
-      <ThemeSwitcher current={theme} surface="content" />
+      <div className="hidden sm:block">
+        <ThemeSwitcher current={theme} surface="content" />
+      </div>
       <div aria-hidden className="h-6 w-px hidden sm:block" style={{ background: "var(--border)" }} />
       <div className="relative flex items-center gap-2.5">
         {/*
@@ -259,7 +274,12 @@ export function NavShell({
             <p className="text-[13px] font-semibold truncate" title={email}>
               {email}
             </p>
-            <div className="mt-2 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <span className="text-xs text-[var(--text-muted)]">Theme</span>
+              <ThemeSwitcher current={theme} surface="content" />
+            </div>
+            {settings && <div className="mt-2 flex flex-wrap items-center gap-2">{settings}</div>}
+            <div className="mt-3 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
               <SignOutButton
                 className="text-[13px] font-medium hover:opacity-80"
                 style={{ color: "var(--text-muted)" }}
@@ -309,22 +329,23 @@ export function NavShell({
           }}
         >
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex min-w-0 items-center gap-3">
               {!mobileTabBar && (
                 <button
                   type="button"
                   onClick={() => setOpen((v) => !v)}
                   aria-expanded={open}
                   aria-label="Toggle navigation menu"
-                  className="lg:hidden flex h-9 w-9 items-center justify-center rounded-[var(--r-sm)] border"
+                  className="lg:hidden flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] border"
                   style={{ borderColor: "var(--border)", color: "var(--text-muted)" }}
                 >
                   {open ? <X size={18} strokeWidth={1.75} /> : <Menu size={18} strokeWidth={1.75} />}
                 </button>
               )}
-              <span className="lg:hidden">
-                <BrandMark variant={headerBrandVariant} className="h-6" />
+              <span className="lg:hidden shrink-0">
+                <BrandMark variant={headerBrandVariant} className="h-6 w-auto max-w-none" />
               </span>
+              {mobileStatus && <span className="sm:hidden shrink-0">{mobileStatus}</span>}
             </div>
             {identity}
           </div>

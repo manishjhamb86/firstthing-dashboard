@@ -163,11 +163,19 @@ export function AppShell({
       email={email}
       items={items}
       footerNote="FirsThing · verified savings"
-      extras={
-        <>
-          {demoAvailable && <DemoModeToggle on={demoMode} surface="content" />}
-          <NotificationBell count={unreadCount} />
-        </>
+      extras={<NotificationBell count={unreadCount} />}
+      settings={demoAvailable ? <DemoModeToggle on={demoMode} surface="content" /> : undefined}
+      // On a phone the toggle lives in the account menu, so the header still
+      // has to say the mode it is in — the toggle is the only thing that does.
+      mobileStatus={
+        demoAvailable && demoMode ? (
+          <span
+            className="rounded-[var(--r-pill)] border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em]"
+            style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+          >
+            Demo
+          </span>
+        ) : undefined
       }
     >
       {/* No demo ribbon here. Two stacked amber bars — this one and whatever

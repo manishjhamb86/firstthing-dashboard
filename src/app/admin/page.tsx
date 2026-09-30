@@ -333,8 +333,8 @@ export default async function AdminHomePage() {
                     <thead>
                       <tr>
                         <th>Society</th>
-                        <th>Service line</th>
-                        <th>Owner</th>
+                        <th className="hidden sm:table-cell">Service line</th>
+                        <th className="hidden sm:table-cell">Owner</th>
                         <th>Stage</th>
                       </tr>
                     </thead>
@@ -347,9 +347,14 @@ export default async function AdminHomePage() {
                               <Link href={`/admin/pipeline/${p.id}`} className="font-medium hover:underline">
                                 {p.society.name}
                               </Link>
+                              {/* On a phone the two middle columns fold under the name,
+                                  so the stage stays on screen without scrolling. */}
+                              <p className="sm:hidden mt-0.5 text-xs text-[var(--text-muted)]">
+                                {dealLabel(p.serviceLine, p.dealScope)} · {p.salesOwner.name ?? p.salesOwner.email}
+                              </p>
                             </td>
-                            <td className="text-[var(--text-muted)]">{dealLabel(p.serviceLine, p.dealScope)}</td>
-                            <td className="text-[var(--text-muted)]">
+                            <td className="hidden sm:table-cell text-[var(--text-muted)]">{dealLabel(p.serviceLine, p.dealScope)}</td>
+                            <td className="hidden sm:table-cell text-[var(--text-muted)]">
                               {p.salesOwner.name ?? p.salesOwner.email}
                             </td>
                             <td>

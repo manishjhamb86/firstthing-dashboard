@@ -64,7 +64,10 @@ export function PageHeader({
           </div>
           {subtitle && <p className="mt-1 text-[var(--text-muted)]">{subtitle}</p>}
         </div>
-        {action && <div className="shrink-0 max-w-full">{action}</div>}
+        {/* Below sm the action takes its own line: beside the title it kept
+            its width and squeezed the title to "Portfo…" (user-caught on
+            stage, 2026-09-30). */}
+        {action && <div className="w-full sm:w-auto sm:shrink-0 max-w-full">{action}</div>}
       </div>
     </header>
   );

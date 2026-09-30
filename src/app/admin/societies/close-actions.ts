@@ -10,7 +10,8 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { dealLabel } from "@/lib/deal-scope";
-import { planClose, refuseClose, refuseReopen, type ClosingDeal } from "@/lib/deal-close";
+import { planClose, refuseClose, type ClosingDeal } from "@/lib/deal-close";
+import { reopenRefusal } from "@/lib/deal-close-loader";
 
 type Result = { error?: string; done?: string };
 
@@ -121,20 +122,6 @@ export async function rejectSociety(societyId: string, reason: string, lastServe
   revalidatePath(`/admin/societies/${societyId}`);
   revalidatePath("/admin/societies");
   return { done: "Society rejected." };
-}
-
-/** Why a deal cannot be reopened, reading its contract's released months. */
-async function reopenRefusal(pipelineId: string): Promise<string | null> {
-  const deal = await db.pipeline.findUnique({
-    where: { id: pipelineId },
-    select: { societyId: true, serviceLine: true, contract: { select: { terminatedOn: true } } },
-  });
-  if (!deal?.contract?.terminatedOn) return null;
-  const released = await db.monthlyCalculation.findMany({
-    where: { societyId: deal.societyId, serviceLine: deal.serviceLine, status: "released" },
-    select: { period: true },
-  });
-  return refuseReopen({ terminatedOn: deal.contract.terminatedOn, releasedPeriods: released.map((r) => r.period) });
 }
 
 async function reopenOne(pipelineId: string) {

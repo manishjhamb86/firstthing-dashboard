@@ -1,6 +1,6 @@
 import { isDemoMode } from "@/lib/demo-mode";
 import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
-import { closePreview } from "@/lib/deal-close-loader";
+import { closePreview, reopenRefusal } from "@/lib/deal-close-loader";
 import { PIPELINE_STAGE } from "@/lib/status-maps";
 import { dealLabel } from "@/lib/deal-scope";
 import { notFound, redirect } from "next/navigation";
@@ -88,6 +88,11 @@ export default async function PipelineDetailPage({
   const todayIso = new Date().toISOString().slice(0, 10);
   const closeDialog = isOps ? await closePreview({ id }, new Date(`${todayIso}T00:00:00Z`)) : null;
   const terminatedOn = (await db.contract.findUnique({ where: { pipelineId: id }, select: { terminatedOn: true } }))?.terminatedOn ?? null;
+  // Read before rendering, not after a click — see reopenRefusal's own
+  // comment for why. Skipped when the society itself is rejected, since
+  // that refusal is shown first and this one would never be reached.
+  const reopenBlocker =
+    isOps && pipeline.stage === "closed_lost" && !pipeline.society.closedAt ? await reopenRefusal(pipeline.id) : null;
   const ownerName = pipeline.salesOwner.name ?? pipeline.salesOwner.email;
   // Who the field work is on, and whether the next step is this account's to
   // take at all.
@@ -189,7 +194,22 @@ export default async function PipelineDetailPage({
               <p className="mt-0.5">Contract terminated — last day billed {formatDate(terminatedOn)}.</p>
             )}
           </div>
-          {isOps && <ReopenButton mode="deal" id={pipeline.id} />}
+          {/* A deal closed alongside its society's own rejection cannot be
+              reopened on its own — reopenDeal refuses it, naming the
+              society, so offering the button here was a click that always
+              failed (user-reported, screenshot, 2026-09-30). Point at the
+              one place it can actually be done instead of offering a dead
+              end. */}
+          {isOps &&
+            (pipeline.society.closedAt ? (
+              <Link href={`/admin/societies/${pipeline.societyId}`} className="text-[13px] font-semibold underline">
+                The whole society is rejected — reopen it there →
+              </Link>
+            ) : reopenBlocker ? (
+              <p className="max-w-xs text-right text-[13px]">{reopenBlocker}</p>
+            ) : (
+              <ReopenButton mode="deal" id={pipeline.id} />
+            ))}
         </div>
       )}
 

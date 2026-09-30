@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { SocietyFmCard } from "./fm-card";
 import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
-import { closePreview } from "@/lib/deal-close-loader";
+import { closePreview, societyReopenBlocker } from "@/lib/deal-close-loader";
 import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { db } from "@/lib/db";
@@ -51,6 +51,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
     include: { pipelines: { select: { kycRequirements: { select: { pipelineId: true, type: true, status: true, updatedAt: true } } } } },
   });
   if (!society) notFound();
+
+  // Read before rendering, not after a click — reopenBlockers can only ever
+  // refuse once a rejection's own deal has a month billed and released past
+  // its termination, and offering Reopen anyway is exactly the dead end
+  // reported on this screen (screenshot, 2026-09-30).
+  const reopenBlocker = isOps ? await societyReopenBlocker(society.id, society.closedAt) : null;
 
   // Facility management (2026-09-25): who runs it now and before.
   const [fmSpans, fmCompanies] = await Promise.all([
@@ -216,7 +222,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
               its portal accounts keep read access.
             </p>
           </div>
-          {isOps && <ReopenButton mode="society" id={society.id} />}
+          {isOps &&
+            (reopenBlocker ? (
+              <p className="max-w-xs text-right text-[13px]">{reopenBlocker}</p>
+            ) : (
+              <ReopenButton mode="society" id={society.id} />
+            ))}
         </div>
       )}
 

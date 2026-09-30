@@ -7,6 +7,7 @@ import { pollMeters } from "../src/lib/meter-poll";
 import { arrearsStateOf, shouldFireSuspension } from "../src/lib/arrears";
 import { runIntakeExtraction } from "../src/lib/invoice-intake-extract";
 import { runCalendarSweep } from "../src/lib/calendar-sync";
+import { runZohoSync } from "../src/lib/zoho-invoice-sync";
 import { settledTotal } from "../src/lib/payment";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
@@ -59,6 +60,14 @@ const INVOICE_INTAKE_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
  * catch-all, so five minutes is the longest anything waits.
  */
 const CALENDAR_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+
+/**
+ * Zoho Invoice (2026-09-30, the user's choice: a button plus every 6 hours).
+ * Up to 100 new invoices a pass — two paced calls each, well inside Zoho's
+ * 100-a-minute and 1,000-a-day allowances; a longer backlog carries over.
+ */
+const ZOHO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const ZOHO_SYNC_LIMIT = 100;
 
 /**
  * Nothing this writes persists an actor as a foreign key (confirmed by
@@ -145,6 +154,9 @@ async function processJob(job: { id: string; type: string }) {
       break;
     case "calendar_sync":
       await runCalendarSync();
+      break;
+    case "zoho_invoice_sync":
+      await runZohoInvoiceSync();
       break;
     case "demo_relock_sweep":
       await runDemoRelockSweep();
@@ -413,6 +425,35 @@ async function runCalendarSync() {
   }
 }
 
+async function runZohoInvoiceSync() {
+  try {
+    const r = await runZohoSync({ limit: ZOHO_SYNC_LIMIT });
+    if (!r) logger.info("job.zoho_invoice_sync_skipped", { reason: "not_connected_or_paused" });
+  } catch (err) {
+    // Logged and recorded on the config by runZohoSync; the chain continues.
+    logger.warn("job.zoho_invoice_sync_failed", { error: String(err) });
+  } finally {
+    await scheduleZohoInvoiceSync(new Date(Date.now() + ZOHO_SYNC_INTERVAL_MS));
+  }
+}
+
+async function scheduleZohoInvoiceSync(runAt: Date) {
+  const existing = await db.job.findFirst({ where: { type: "zoho_invoice_sync", status: "pending" } });
+  if (existing) {
+    logger.warn("job.zoho_invoice_sync_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "zoho_invoice_sync", runAt } });
+}
+
+async function ensureZohoInvoiceSyncScheduled() {
+  const existing = await db.job.findFirst({ where: { type: "zoho_invoice_sync", status: { in: ["pending", "running"] } } });
+  if (!existing) {
+    await db.job.create({ data: { type: "zoho_invoice_sync", runAt: new Date() } });
+    logger.info("job.zoho_invoice_sync_seeded", {});
+  }
+}
+
 async function scheduleCalendarSync(runAt: Date) {
   const existing = await db.job.findFirst({ where: { type: "calendar_sync", status: "pending" } });
   if (existing) {
@@ -606,6 +647,7 @@ async function main() {
   await ensureArrearsSweepScheduled();
   await ensureInvoiceIntakeSweepScheduled();
   await ensureCalendarSyncScheduled();
+  await ensureZohoInvoiceSyncScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

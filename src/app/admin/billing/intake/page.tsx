@@ -8,6 +8,7 @@ import { requireBillingOps } from "../access";
 import { intakeViewOf, submittedDisplayStatus } from "@/lib/intake-list";
 import { CALCULATION_STATUS } from "@/lib/status-maps";
 import { IntakeClient, type IntakeRow } from "./intake-client";
+import { ZohoFetchButton } from "./zoho-fetch-button";
 
 // SCR-093 — Invoice intake (CON-47 / FEAT-109). A dropzone and the list of
 // every invoice in flight, each row saying whether the machine or a person
@@ -138,11 +139,14 @@ export default async function IntakePage({
       // review's own confirmed values, the same ones the server re-checks.
       hasSociety: !!review?.societyId,
       hasPeriod: !!review?.period && /^\d{4}-\d{2}$/.test(review.period),
+      fromZoho: i.zohoInvoiceId !== null,
+      zohoChanged: i.zohoChangedAt !== null && i.status !== "submitted",
     };
   });
 
   // The header's count reads the same rule as the chips (src/lib/intake-list).
   const needsReview = rows.filter((r) => intakeViewOf(r.status) === "review").length;
+  const zoho = await db.zohoInvoiceConfig.findUnique({ where: { id: "singleton" }, select: { enabled: true, lastSyncAt: true, lastSyncSummary: true, lastError: true } });
 
   return (
     <>
@@ -151,11 +155,19 @@ export default async function IntakePage({
         subtitle="Drop this month's Zoho invoices — or the whole backfill. Each file becomes a row; confirm the row and it goes to the accountant."
         chip={needsReview > 0 ? <StatusChip tone="warn">{needsReview} need review</StatusChip> : undefined}
         action={
-          <Link href="/admin/billing" className="btn-ghost">
-            Billing board
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            {zoho?.enabled && <ZohoFetchButton />}
+            <Link href="/admin/billing" className="btn-ghost">
+              Billing board
+            </Link>
+          </div>
         }
       />
+      {zoho?.enabled && (zoho.lastSyncAt || zoho.lastError) && (
+        <p className="-mt-4 mb-5 text-[12.5px]" style={{ color: zoho.lastError ? "var(--bad-fg)" : "var(--text-muted)" }}>
+          Zoho{zoho.lastSyncAt ? `, last fetched ${timeAgo(zoho.lastSyncAt)}` : ""}: {zoho.lastError ?? zoho.lastSyncSummary}
+        </p>
+      )}
       <IntakeClient rows={rows} initialFilters={filters} canRelease={gate.actor.permissions.includes("release_billing")} />
       <Card className="mt-5 p-5 text-[12.5px]" >
         <p style={{ color: "var(--text-muted)" }}>

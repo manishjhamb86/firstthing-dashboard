@@ -154,6 +154,8 @@ export function AppShell({
       (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
       // Operations-only page; shown under the same broad flag, the page redirects anyone else.
       showUsers && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },
+      // Operations-only page, same pattern (2026-09-30).
+      showUsers && { href: "/admin/settings/zoho", label: "Zoho Invoice", icon: Receipt },
     ]),
   ];
 

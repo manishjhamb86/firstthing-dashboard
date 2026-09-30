@@ -211,6 +211,8 @@ enum JobType {
   calendar_sync
   // 2026-09-26: a demo unlocked for correction relocks after 24 hours.
   demo_relock_sweep
+  // 2026-09-30: fetch new and changed invoices from Zoho Invoice into intake.
+  zoho_invoice_sync
 
   @@map("job_type")
 }
@@ -505,6 +507,7 @@ model AdminUser {
   ewelinkConfigsUpdated       EwelinkApiConfig[]          @relation("EwelinkApiConfigUpdatedBy")
   tankApiConfigUpdated        TankApiConfig[]             @relation("TankApiConfigUpdatedBy")
   googleCalendarConfigUpdated GoogleCalendarConfig[]      @relation("GoogleCalendarConfigUpdatedBy")
+  zohoInvoiceConfigUpdated    ZohoInvoiceConfig[]         @relation("ZohoInvoiceConfigUpdatedBy")
   fmCompaniesCreated          FacilityManagementCompany[] @relation("FmCompanyCreatedBy")
   fmEngagementsRecorded       SocietyFmEngagement[]       @relation("FmEngagementRecordedBy")
   fmEmploymentsRecorded       FmEmployment[]              @relation("FmEmploymentRecordedBy")
@@ -805,6 +808,37 @@ model ScheduledEventAttendee {
 
 /// The Google Workspace service account the calendar sync acts through
 /// (2026-09-25). Singleton; the private key is write-only on screen.
+/// Zoho Invoice, read only (2026-09-30): a Self Client's id and secret, the
+/// refresh token its one-time grant code was exchanged for, and the
+/// organisation whose invoices are fetched into intake. The secret and the
+/// refresh token are write-only — the settings screen never receives them.
+model ZohoInvoiceConfig {
+  id                   String    @id @default("singleton")
+  /// Zoho's data-centre suffix: "in" for accounts.zoho.in / zohoapis.in.
+  dataCenter           String    @default("in") @map("data_center")
+  organizationId       String    @map("organization_id")
+  organizationName     String?   @map("organization_name")
+  clientId             String    @map("client_id")
+  clientSecret         String    @map("client_secret")
+  refreshToken         String    @map("refresh_token")
+  accessToken          String?   @map("access_token")
+  accessTokenExpiresAt DateTime? @map("access_token_expires_at")
+  /// Only invoices dated on or after this are fetched; null fetches all.
+  importFrom           DateTime? @map("import_from") @db.Date
+  enabled              Boolean   @default(true)
+  updatedById          String?   @map("updated_by_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  lastOkAt             DateTime? @map("last_ok_at")
+  lastError            String?   @map("last_error")
+  lastSyncAt           DateTime? @map("last_sync_at")
+  /// What the last sync did, for the settings and intake screens.
+  lastSyncSummary      String?   @map("last_sync_summary")
+
+  updatedBy AdminUser? @relation("ZohoInvoiceConfigUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("zoho_invoice_config")
+}
+
 model GoogleCalendarConfig {
   id                String    @id @default("singleton")
   clientEmail       String    @map("client_email")
@@ -3103,6 +3137,15 @@ model InvoiceIntake {
 
   discardedAt   DateTime? @map("discarded_at")
   discardReason String?   @map("discard_reason")
+
+  /// Set when the invoice came from Zoho Invoice's API (2026-09-30) rather
+  /// than a PDF upload: its id there, and Zoho's own last-modified time when
+  /// it was fetched, so a later change in Zoho is noticed rather than missed.
+  zohoInvoiceId      String?   @unique @map("zoho_invoice_id")
+  zohoLastModifiedAt DateTime? @map("zoho_last_modified_at")
+  /// Zoho's last-modified time seen by the latest sync, when it is newer than
+  /// the one fetched — the row says "changed in Zoho since it was fetched".
+  zohoChangedAt      DateTime? @map("zoho_changed_at")
 
   uploadedBy AdminUser @relation("InvoiceIntakeUploadedBy", fields: [uploadedById], references: [id])
   society    Society?  @relation(fields: [societyId], references: [id], onDelete: SetNull)

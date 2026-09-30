@@ -7092,6 +7092,43 @@ after 7 days, the same session as the back office.
   once, shown on the phone), retention 8/8, earlier field suites unchanged, 1,224 unit tests.
 - **Stage needs** its own VAPID keys added to `.env.local` before notifications can be turned on.
 
+## Zoho Invoice feeds Invoice intake (2026-09-30) — user-asked
+
+Invoices raised in Zoho Invoice are fetched into Invoice intake, with their PDFs. Each arrives with its figures already filled from Zoho's own record, so there is no upload and no document read. Design and decisions are in `docs/engineering/20-zoho-invoice.md`.
+
+**The user's choices:**
+- Zoho **Invoice** (not Books), on India's data centre (organisation `60070829320`);
+- feed intake, rather than only listing the invoices;
+- a **Fetch from Zoho** button plus an automatic fetch every 6 hours.
+
+**How it works:**
+- **Client.** `src/lib/zoho-invoice.ts` is read only by construction, with READ scopes only. It connects through a Self Client: the one-time grant code is exchanged for a refresh token. Calls are paced 700 ms apart, and a 429 waits once and retries.
+- **Mapping.** `src/lib/zoho-invoice-map.ts` (pure, 10 cases) turns Zoho's record into the same `ExtractedInvoice` a PDF read produces. Each figure's source names the Zoho field. The month comes from a custom field, then the reference, notes and lines, never the invoice date. Zoho's payment status is proposed, and the operator confirms it.
+- **Shared step.** `storeExtraction` was split out of `runIntakeExtraction`, so both ways in propose the same review.
+- **Sync.** `src/lib/zoho-invoice-sync.ts`:
+  - skips drafts and voids, and numbers already on record;
+  - links a PDF-uploaded row that has the same number, and fills it if it was never read;
+  - flags an invoice changed in Zoho after fetching, without applying the change.
+- **Fetch limits.** The button fetches up to 25 invoices, the job up to 100 per pass (`zoho_invoice_sync`).
+- **Refetch.** "Fetch again from Zoho" on the review page replaces the review, after a confirmation.
+- **Settings.** Settings → Zoho Invoice is operations only and works as save-and-test. The secret and refresh token are write-only.
+
+Migration `20260930090000_zoho_invoice` is additive: `zoho_invoice_config`, three columns on `invoice_intakes`, and one job type.
+
+**Verified** 21/21 in a browser against a local Zoho stand-in (`ZOHO_BASE_OVERRIDE`, test-only):
+- a wrong secret and a spent code are refused in words, with nothing saved;
+- a non-operations save is refused by the server, with the team changed behind the open form, and logged;
+- the secret and refresh token never reach the page;
+- of five invoices, the draft and the void stay in Zoho;
+- a sent invoice arrives read (society, month, total, unpaid, PDF stored), and a paid one proposes paid on its payment date;
+- a PDF-uploaded row with the same number is filled on its own row;
+- a second pass fetches nothing;
+- a change in Zoho is flagged, not applied, and "Fetch again" takes Zoho's current figures.
+
+1,239 unit tests; `tsc`, `lint` and `build` clean.
+
+**Not yet run against the real account:** it needs the Self Client's id, secret and a fresh grant code. The verification left a few small test PDFs under `Invoices/_intake/` (PutObject-only credentials).
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

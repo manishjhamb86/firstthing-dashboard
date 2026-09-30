@@ -7,6 +7,7 @@ import { formatInstant } from "@/lib/format-date";
 import { BackButton } from "@/components/back-button";
 import { INTAKE_LIST_PATH, INTAKE_LIST_RETURN_KEY } from "@/lib/intake-list";
 import { PageHeader, StatusChip } from "@/components/ui";
+import { ZohoRefetch } from "./zoho-refetch";
 import type { ExtractedInvoice } from "@/lib/invoice-extract";
 import type { Review } from "@/lib/invoice-intake";
 import { requireBillingOps } from "../../access";
@@ -91,8 +92,15 @@ export default async function IntakeReviewPage({ params }: { params: Promise<{ i
             <StatusChip tone="warn">Awaiting review</StatusChip>
           )
         }
-        subtitle={`${intake.fileName} · ${(intake.fileSize / 1024).toFixed(0)} KB · uploaded by ${intake.uploadedBy.name ?? intake.uploadedBy.email}, ${formatInstant(intake.uploadedAt)}`}
+        subtitle={
+          intake.zohoInvoiceId
+            ? `Fetched from Zoho Invoice by ${intake.uploadedBy.name ?? intake.uploadedBy.email}, ${formatInstant(intake.uploadedAt)} — figures are Zoho's own; the PDF is Zoho's copy.`
+            : `${intake.fileName} · ${(intake.fileSize / 1024).toFixed(0)} KB · uploaded by ${intake.uploadedBy.name ?? intake.uploadedBy.email}, ${formatInstant(intake.uploadedAt)}`
+        }
       />
+      {intake.zohoInvoiceId && (
+        <ZohoRefetch intakeId={intake.id} changedAt={intake.zohoChangedAt ? formatInstant(intake.zohoChangedAt) : null} />
+      )}
       <ReviewForm
         intakeId={intake.id}
         fileName={intake.fileName}

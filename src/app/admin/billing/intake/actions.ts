@@ -30,6 +30,7 @@ import { buildDocumentKey } from "@/lib/document-keys";
 import { fileStoredDocumentForSociety } from "@/app/admin/documents/actions";
 import { sniffKind } from "@/lib/file-signature";
 import { INTAKE_SERVICE_LINE, runIntakeExtraction } from "@/lib/invoice-intake-extract";
+import { describeSync, refetchZohoIntake, runZohoSync } from "@/lib/zoho-invoice-sync";
 import {
   allocateLine,
   arithmeticReport,
@@ -885,4 +886,43 @@ export async function createRetailCustomer(input: {
   logger.info("retail_customer.created", { actorId: ops.actor.id, customerId: created.id, name: created.name });
   revalidatePath("/admin/retail-customers");
   return created;
+}
+
+// ---------------------------------------------------------------------------
+// Zoho Invoice (2026-09-30) — fetch invoices instead of dropping PDFs.
+// ---------------------------------------------------------------------------
+
+/**
+ * One fetch now. Capped at 25 new invoices so the click answers within a
+ * minute or so (each needs two paced calls to Zoho); the rest wait for the
+ * next click or the 6-hourly pass, and the summary says how many.
+ */
+export async function syncZohoNow(): Promise<Result<{ summary: string }>> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  try {
+    const r = await runZohoSync({ actorId: ops.actor.id, limit: 25 });
+    revalidatePath(INTAKE_PATH);
+    if (!r) return { error: "Zoho is not connected, or its fetch is paused — see Settings → Zoho Invoice." };
+    logger.info("intake.zoho_sync_clicked", { actorId: ops.actor.id, fetched: r.fetched, failed: r.failed });
+    return { summary: describeSync(r) };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/** Fetch one invoice again after it changed in Zoho — replaces its review. */
+export async function refetchFromZoho(intakeId: string): Promise<Result> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  try {
+    await refetchZohoIntake(intakeId, ops.actor.id);
+    logger.info("intake.zoho_refetched", { actorId: ops.actor.id, intakeId });
+    revalidatePath(INTAKE_PATH);
+    revalidatePath(`${INTAKE_PATH}/${intakeId}`);
+    return {};
+  } catch (err) {
+    logger.warn("intake.zoho_refetch_failed", { actorId: ops.actor.id, intakeId, error: String(err) });
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
 }

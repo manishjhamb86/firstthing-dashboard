@@ -61,6 +61,10 @@ export type IntakeRow = {
   /** The review's own confirmed society and month — what filing is keyed on. */
   hasSociety: boolean;
   hasPeriod: boolean;
+  /** Fetched from Zoho Invoice rather than dropped as a PDF (2026-09-30). */
+  fromZoho: boolean;
+  /** Changed in Zoho since it was fetched — fetch it again from its page. */
+  zohoChanged: boolean;
 };
 
 type View = IntakeView | "all";
@@ -670,8 +674,13 @@ export function IntakeClient({
                         </p>
                         <p className="truncate text-[12px]" style={{ color: "var(--text-subtle)" }}>
                           {r.invoiceNumber ? `${r.fileName} · ` : ""}
-                          {(r.fileSize / 1024).toFixed(0)} KB · {r.uploadedAgo} · {r.uploadedBy}
+                          {r.fromZoho ? "from Zoho" : `${(r.fileSize / 1024).toFixed(0)} KB`} · {r.uploadedAgo} · {r.uploadedBy}
                         </p>
+                        {r.zohoChanged && (
+                          <p className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
+                            Changed in Zoho since it was fetched
+                          </p>
+                        )}
                         <p className="text-[12px] md:hidden" style={{ color: "var(--text-subtle)" }}>
                           {r.society ?? "Society not confirmed"} · {r.period ?? "month not confirmed"}
                         </p>

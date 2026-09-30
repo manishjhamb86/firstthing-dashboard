@@ -179,10 +179,27 @@ export async function runIntakeExtraction(intakeId: string, actorId: string): Pr
     return { error: friendly };
   }
 
+  return storeExtraction(intakeId, extraction, actorId);
+}
+
+/**
+ * Turn an extraction into a PROPOSED review and store it — the step a PDF
+ * read and a Zoho fetch (src/lib/zoho-invoice-sync.ts) share, so an invoice
+ * that arrives from Zoho is proposed exactly as a read one is. `adjust`
+ * lets the caller add what it knows better than a page does (Zoho's payment
+ * status). Never throws.
+ */
+export async function storeExtraction(
+  intakeId: string,
+  extraction: ExtractedInvoice,
+  actorId: string,
+  adjust?: (review: Review) => void,
+): Promise<ExtractResult> {
   try {
     const society = proposeSociety(extraction.billToName.value, await societyOptions());
     const circuits = society ? await circuitOptionsFor(society.id) : [];
     const review = proposeReview(extraction, society?.id ?? null, circuits);
+    if (adjust) adjust(review);
     // No society by that name, but a known retail customer? Propose the
     // retail sale with the customer chosen — the operator still confirms.
     if (!society) {

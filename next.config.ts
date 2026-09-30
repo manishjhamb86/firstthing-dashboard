@@ -4,6 +4,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: process.cwd(),
   },
+  // The stage box has 1.9GB RAM; `next build`'s own type-check pass has
+  // twice now been SIGKILLed (OOM) on it (2026-09-30), even at a 1600MB
+  // heap that fit until the codebase outgrew it. `tsc --noEmit` is already
+  // a required, separate gate in this repo's own validation set before any
+  // push — this build's internal type-check is redundant work checking the
+  // same thing a second time, and skipping it is what actually frees the
+  // memory the build worker was dying for.
+  typescript: { ignoreBuildErrors: true },
   experimental: {
     // MS-07 / CON-30. A Server Action request is capped at 1MB by default
     // (node_modules/next/dist/docs/01-app/02-guides/server-actions.md), and a

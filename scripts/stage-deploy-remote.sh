@@ -54,6 +54,11 @@ pnpm prisma generate
 # The box has 1.9 GB of RAM total; an unbounded build heap intermittently
 # OOM-kills the build worker (twice on 2026-08-31). 1200 MB was enough until the
 # codebase outgrew it on 2026-09-25 (type check ran out); 1600 fits with swap.
+# It stopped fitting again on 2026-09-30 (two more SIGKILLs, always mid
+# "Running TypeScript") — next.config.ts now skips that redundant in-build
+# check (tsc --noEmit already gates every push), so `rm -rf .next` once here:
+# Turbopack's cache does not invalidate after a next.config.ts change.
+rm -rf .next
 NODE_OPTIONS=--max-old-space-size=1600 pnpm build
 [ -f .next/BUILD_ID ] || fail "the build finished without a BUILD_ID"
 

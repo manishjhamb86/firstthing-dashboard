@@ -30,6 +30,35 @@ import { circuitLabelOf } from "@/lib/meter-view";
  */
 export const REARM_AFTER_MS = 24 * 60 * 60 * 1000;
 
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+/** Start of the IST calendar month `monthsAgo` months before `now`, as the
+ *  UTC-midnight instant a stored reading's own calendar-day label uses. */
+function istMonthStart(now: Date, monthsAgo: number): Date {
+  const ist = new Date(now.getTime() + IST_OFFSET_MS);
+  return new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth() - monthsAgo, 1));
+}
+
+/**
+ * Which of a circuit's readings the band is judged over (2026-10-02,
+ * user-caught) — the current IST calendar month so far, matching the
+ * granularity billing itself uses, not every day since monitoring began.
+ * Averaging the whole history let a real 14-day anomaly (one circuit
+ * drawing 5x its usual load) vanish into seven months of good performance,
+ * while that same month's own invoice measured 24.7% against a 67%
+ * benchmark — exactly the "fine here, out of band on the invoice"
+ * contradiction this module's own doc comment rules out. Falls back to the
+ * month just elapsed while a new one is still too young to have a reading
+ * of its own, so the band is never judged on zero days.
+ */
+export function bandWindowReadings<T extends { date: Date }>(readings: T[], now: Date, monitoringStart: Date): T[] {
+  const monthStart = new Date(Math.max(istMonthStart(now, 0).getTime(), monitoringStart.getTime()));
+  const current = readings.filter((r) => r.date.getTime() >= monthStart.getTime());
+  if (current.length > 0) return current;
+  const prevStart = new Date(Math.max(istMonthStart(now, 1).getTime(), monitoringStart.getTime()));
+  return readings.filter((r) => r.date.getTime() >= prevStart.getTime() && r.date.getTime() < monthStart.getTime());
+}
+
 export type BandVerdict =
   | { state: "unknown"; reason: string }
   | { state: "in_band"; measuredPct: number; benchmarkPct: number; tolerancePct: number }
@@ -89,7 +118,7 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
   if (!start) return { state: "unknown", reason: "billing has not started for this circuit" };
 
   const now = new Date();
-  const days = circuit.meterReadings.filter((r) => r.date.getTime() >= start.getTime());
+  const days = bandWindowReadings(circuit.meterReadings, now, start);
   const baseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, now);
   const summary = periodSavingsSummary(
     baseline,
@@ -117,7 +146,7 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
     deviationPct,
     days: days.filter((d) => d.excludedAt === null).length,
     message:
-      `${circuit.society.name} · ${label} is measuring ${summary.savingsPct.toFixed(1)}% savings ` +
+      `${circuit.society.name} · ${label} is measuring ${summary.savingsPct.toFixed(1)}% savings this month ` +
       `against an agreed ${circuit.benchmarkSavingsPct.toFixed(1)}% — ${Math.abs(deviationPct).toFixed(1)} points short, ` +
       `beyond the contract's ±${tolerancePct}% tolerance.`,
   };

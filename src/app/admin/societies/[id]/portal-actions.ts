@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import type { PortalAuthority } from "@prisma/client";
 import { db } from "@/lib/db";
-import { requireAdminPermission } from "@/lib/admin-permissions";
+import { requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 
 // FEAT-086 (portal-side accounts) + FEAT-108-AC-8 (empty state + creation
@@ -53,6 +53,29 @@ export async function createPortalAccount(input: {
     portalAuthority: input.portalAuthority,
   });
   revalidatePath(`/admin/societies/${input.societyId}`);
+  return {};
+}
+
+// The back office's own reset, for when the society's own "shown once"
+// handover (portal/actions.ts) was missed, lost, or never happened — a
+// member locked out with no way back in otherwise (user-asked, 2026-10-01).
+// Same "typed, never generated, shown back once" shape as the portal's own
+// self-service account creation, so the two don't read as two conventions.
+export async function resetPortalPassword(id: string, societyId: string, newPassword: string) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." };
+  if (!admin.permissions.includes("manage_users")) {
+    return { error: "Resetting a portal account's password is operations' own action." };
+  }
+  if (newPassword.length < 8) return { error: "Password must be at least 8 characters." };
+
+  const target = await db.profile.findUnique({ where: { id }, select: { id: true, societyId: true, email: true } });
+  if (!target || target.societyId !== societyId) return { error: "That account is no longer on record." };
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await db.profile.update({ where: { id }, data: { passwordHash } });
+  logger.info("portal_account.password_reset", { actorId: admin.id, societyId, targetId: id });
+  revalidatePath(`/admin/societies/${societyId}`);
   return {};
 }
 

@@ -16,6 +16,7 @@ import {
 import { StatusControl } from "./status-control";
 import { AddPortalAccountButton } from "./add-portal-account-button";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
+import { ResetPortalPasswordButton } from "./reset-portal-password-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
@@ -537,7 +538,10 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                       {a.portalAuthority ? PORTAL_AUTHORITY_LABEL[a.portalAuthority] : "—"} · {a.email}
                     </p>
                   </div>
-                  <DeactivatePortalButton profileId={a.id} societyId={society.id} />
+                  <div className="flex items-center gap-4">
+                    <ResetPortalPasswordButton profileId={a.id} societyId={society.id} label={a.name ?? a.email} />
+                    <DeactivatePortalButton profileId={a.id} societyId={society.id} />
+                  </div>
                 </li>
               ))}
             </ul>

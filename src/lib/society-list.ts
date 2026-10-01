@@ -96,7 +96,7 @@ export function sortSocieties(rows: readonly SocietyRow[], key: SortKey, dir: So
 }
 
 /** Every word of the query must appear in the name or location, any order. */
-export function matchesQuery(r: SocietyRow, query: string): boolean {
+export function matchesQuery(r: { name: string; location: string }, query: string): boolean {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length === 0) return true;
   const hay = `${r.name} ${r.location}`.toLowerCase();

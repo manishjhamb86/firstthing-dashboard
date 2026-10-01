@@ -313,12 +313,16 @@ function buildDeal(p: DealRow, firstInvoice: FirstInvoice | null): Branch {
       date: p.proposalDecidedAt,
       expected: true,
       chip: p.proposalOutcome && p.proposalOutcome !== "agreed" ? { text: p.proposalOutcome === "declined" ? "Declined" : "Undecided", tone: "neu" } : null,
-      edit: p.proposalDecidedAt ? { field: "pipeline.proposalDecidedAt", entityId: p.id } : null,
+      // Not gated on the date existing (2026-10-01, user-asked): the row
+      // already renders with "it happened, record when" once later steps
+      // show it did — the edit control has to be offered for exactly that
+      // case, not only once there's an existing value to correct.
+      edit: { field: "pipeline.proposalDecidedAt", entityId: p.id },
     }),
   ];
   if (agreed || p.surveyAssignedAt || p.siteSurvey) {
     steps.push(
-      step(ctx, { slot: "surveyAssigned", label: "Survey assigned", date: p.surveyAssignedAt, expected: true, edit: p.surveyAssignedAt ? { field: "pipeline.surveyAssignedAt", entityId: p.id } : null }),
+      step(ctx, { slot: "surveyAssigned", label: "Survey assigned", date: p.surveyAssignedAt, expected: true, edit: { field: "pipeline.surveyAssignedAt", entityId: p.id } }),
       step(ctx, {
         slot: "survey",
         label: "Site survey done",

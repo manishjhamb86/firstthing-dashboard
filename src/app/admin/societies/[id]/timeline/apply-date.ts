@@ -62,7 +62,7 @@ export async function applyTimelineDate(i: ApplyInput): Promise<Result> {
 
     case "pipeline.surveyAssignedAt": {
       const p = await db.pipeline.findUnique({ where: { id: i.entityId }, select: { id: true, surveyAssignedAt: true } });
-      if (!p?.surveyAssignedAt) return { error: "The survey has not been assigned yet — assign it on the deal first." };
+      if (!p) return { error: "That deal is no longer on record." };
       await db.$transaction(async (tx) => {
         await tx.pipeline.update({ where: { id: p.id }, data: { surveyAssignedAt: parsed.from } });
         await logChange(tx, { entity: "pipeline", entityId: p.id, kind: "edit", field: "surveyAssignedAt", oldValue: iso(p.surveyAssignedAt), newValue: day, reason: reason || null, actorId: i.actorId });

@@ -361,9 +361,10 @@ export async function correctProposalDate(
     },
   });
   if (!pipeline) return { error: "Deal not found." };
-  if (!pipeline.proposalDecidedAt) {
-    return { error: "This deal has no recorded proposal decision to correct." };
-  }
+  // A decision that was never timestamped is written here too, not just a
+  // wrong one corrected (2026-10-01, user-asked: the timeline flags exactly
+  // this case — later steps have dates, this one doesn't, so it happened and
+  // nobody recorded when) — demo mode already gates who may do either.
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(decidedOn)) return { error: "Pick a valid decision date." };
   const decided = new Date(`${decidedOn}T00:00:00.000Z`);
@@ -409,7 +410,7 @@ export async function correctProposalDate(
   logger.info("pipeline.proposal_date_corrected", {
     actorId: actor.id,
     pipelineId,
-    from: pipeline.proposalDecidedAt.toISOString().slice(0, 10),
+    from: pipeline.proposalDecidedAt?.toISOString().slice(0, 10) ?? null,
     to: decidedOn,
     surveyMoved: pipeline.siteSurvey !== null,
   });

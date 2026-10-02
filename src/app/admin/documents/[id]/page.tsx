@@ -9,6 +9,8 @@ import { publicS3Url } from "@/lib/s3";
 import { EXTRACTABLE_TYPES, type ExtractedDocument } from "@/lib/document-extract";
 import { ExtractionReview } from "./review-client";
 import { AgreementTerms } from "./agreement-terms";
+import { UnfileButton } from "./unfile-button";
+import { WithdrawButton } from "../withdraw-button";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +35,18 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
   // there are none is exactly the control-that-can-only-refuse this codebase
   // avoids elsewhere (2026-10-02, user-caught on a filed invoice copy).
   const extractable = EXTRACTABLE_TYPES.has(doc.docType);
+  // A filed invoice copy is "nothing to read" by design, but it is not a
+  // dead end: it most likely came from an intake row that was filed instead
+  // of submitted, and that row can be reopened and reconciled against a
+  // circuit properly (user-caught 2026-10-03 — this card used to be a flat
+  // dead end). Only `invoiceCopy`/`nonServiceInvoice` can ever have one.
+  const sourceIntake =
+    !extractable && !doc.voidedAt
+      ? await db.invoiceIntake.findFirst({
+          where: { filedAsDocumentId: doc.id },
+          select: { id: true },
+        })
+      : null;
   const circuits = await db.circuit.count({ where: { societyId: doc.societyId, voidedAt: null } });
   const catalog = await db.deviceType.findMany({
     where: { role: "original", deletedAt: null, active: true, status: { in: ["approved", "proposed"] } },
@@ -105,6 +119,22 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
               <p className="mt-2 text-[13.5px]" style={{ color: "var(--text-muted)" }}>
                 {typeSpec?.operation ?? "This document type has no figures to extract."}
               </p>
+              {sourceIntake && (
+                <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
+                  <p className="mb-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
+                    This was filed as a plain copy instead of a billed month. If it should have been
+                    reconciled against a circuit and billed, reopen it:
+                  </p>
+                  {doc.releasedToSocietyAt ? (
+                    <p className="text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
+                      Already released to the society — withdraw it below first, with a reason, before
+                      it can come back.
+                    </p>
+                  ) : (
+                    <UnfileButton intakeId={sourceIntake.id} />
+                  )}
+                </div>
+              )}
             </Card>
           ) : (
           <ExtractionReview
@@ -173,6 +203,15 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
           <Link href={`/admin/societies/${doc.societyId}/circuits`} className="btn-secondary mt-4 inline-block">
             Circuit registry →
           </Link>
+          {doc.voidedAt ? (
+            <p className="mt-4 text-[12px]" style={{ color: "var(--warn-fg)" }}>
+              Withdrawn — {doc.voidReason}
+            </p>
+          ) : (
+            <div className="mt-4">
+              <WithdrawButton documentId={doc.id} version={doc.version} />
+            </div>
+          )}
         </Card>
       </div>
     </>

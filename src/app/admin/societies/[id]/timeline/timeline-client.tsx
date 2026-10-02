@@ -13,12 +13,30 @@ import { requestDateChange, saveTimelineDate, withdrawDateChange } from "./actio
  * decides. Every state reads in a symbol and a word as well as a colour.
  */
 
-const GLYPH: Record<RowState, string> = { ok: "✓", bad: "✕", warn: "!", none: "–", info: "≈", later: "○", record: "✓" };
+// Drawn, not typed (2026-09-30, user-caught): a character's shape sits
+// differently in the font's box for ✕, !, –, ≈ and ○, so typed glyphs never
+// centre in their circle. Each mark is a path on a 10×10 grid, centred.
+const MARK: Record<RowState, ReactNode> = {
+  ok: <path d="M2.4 5.3 4.3 7.2 7.7 3.2" />,
+  record: <path d="M2.4 5.3 4.3 7.2 7.7 3.2" />,
+  bad: <path d="M3 3 7 7M7 3 3 7" />,
+  warn: (
+    <>
+      <path d="M5 2.4v3.4" />
+      <circle cx="5" cy="7.6" r="0.35" />
+    </>
+  ),
+  none: <path d="M3 5h4" />,
+  info: <path d="M2.4 4c.9-.8 1.7-.8 2.6 0s1.7.8 2.6 0M2.4 6.6c.9-.8 1.7-.8 2.6 0s1.7.8 2.6 0" />,
+  later: <circle cx="5" cy="5" r="1.6" />,
+};
 
 export function Glyph({ state }: { state: RowState }) {
   return (
     <span className="tl-glyph" data-state={state} aria-hidden>
-      {GLYPH[state]}
+      <svg viewBox="0 0 10 10" width="10" height="10" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+        {MARK[state]}
+      </svg>
     </span>
   );
 }

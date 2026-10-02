@@ -8736,4 +8736,29 @@ raw inventory figure.
 
 **Verified**: 3 new unit cases reproducing the exact shape (140-light inventory, 40-light demo:
 19.2 kWh/day, not the stale 67.2) plus the inventory-matches-again and no-inventory-at-all cases.
-`tsc`/`lint`/`pnpm test` (1,271) all clean. Not yet deployed — this branch is not merged.
+`tsc`/`lint`/`pnpm test` (1,271) all clean. Deployed to stage as `7bd4392`.
+
+## The dashboard's current-month figure now follows the last billed one, clearly labelled (2026-10-02) — user-asked
+
+**The ask**: "Portal dashboard should show current month's savings percentage after previous/last
+month's savings percentage. Otherwise the user gets confused as the dashboard shows current month's
+and the user gets last month's savings report and compares with that."
+
+**Confirmed the shape**: the hero's "Savings achieved" tile already reads the latest BILLED/
+RELEASED month (`billed.savingsPct`) when one exists — the right figure, matching what an actual
+released report says. But `energy.month`/`energy.totals` (`portal-energy.ts`) are scoped to "the
+newest month with any counted reading" — i.e. the CURRENT, still-accumulating, not-yet-billed
+month — and nothing on the dashboard ever surfaced that second, more recent number at all. A
+resident reading their last report (last month's figure) had no way to see how the CURRENT month
+was trending, and — per the report — no indication the dashboard's single % was for a specific
+settled period rather than a live, moving one.
+
+**Fixed by adding a second, clearly-labelled line, after the hero** (both the phone and desktop
+layouts share it, same as the existing "since we started" note below it): "`X.X% so far in
+[Month] — not yet billed; last billed month was [Month]`." Shown only when there genuinely is a
+newer month of readings beyond the last billed one (`energy.month !== billed.period`) and a real
+figure exists for it — never a duplicate of the same number restated. The hero itself is
+unchanged — still the official, billed figure, first and primary.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,271, unaffected — no new pure logic, a presentational
+addition reading figures `portal-energy.ts` already computes) all clean.

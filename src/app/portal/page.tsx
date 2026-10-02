@@ -316,6 +316,17 @@ export default async function PortalHomePage() {
           const pctText = pctValue !== null ? `${pctValue.toFixed(1)}%` : "—";
           const healthSummary = healthParts.length > 0 ? healthParts.join(", ") : "no meters or tanks yet";
 
+          // The hero figure above is the latest BILLED month (the one an
+          // actual released report describes). Readings can already run
+          // ahead of that into a newer, not-yet-billed month — shown here,
+          // clearly after and clearly labelled "not yet billed" so a visitor
+          // never mistakes this month's still-moving number for the figure
+          // their last report actually quoted (user-caught, 2026-10-02: "the
+          // dashboard shows current month['s %] and the user gets last
+          // month's report and compares with that").
+          const currentMonthPct = billed && energy.month && energy.month !== billed.period ? energy.totals.savingsPct : null;
+          const currentMonthLabel = energy.month ? monthName(energy.month) : null;
+
           return (
             <>
               {/* Phone layout — the canvas's own Main.dc.html hierarchy
@@ -364,6 +375,14 @@ export default async function PortalHomePage() {
                 />
                 <HealthBubble issues={healthIssues} summary={healthSummary} />
               </div>
+              {currentMonthPct !== null && (
+                <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                  <strong className="num" style={{ color: "var(--text-muted)" }}>
+                    {currentMonthPct.toFixed(1)}%
+                  </strong>{" "}
+                  so far in {currentMonthLabel} — not yet billed; last billed month was {monthLabel}.
+                </p>
+              )}
               {published?.sinceStart && published.sinceStart.months > 1 && (
                 <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
                   ₹{Math.round(published.sinceStart.savedValue).toLocaleString("en-IN")} saved across{" "}

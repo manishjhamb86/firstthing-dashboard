@@ -8615,3 +8615,41 @@ same direction: by default they now name the earlier step of a pair (so "meter b
 names the survey). The contract term moved after billing start in a deal's list, since the term
 starts when billing does. Verified on Hyde Park with a July-2025 invoice billed 26 of 31 days: the
 anchor reads 06-07-2025, and the lead and survey typed up on 28-09-2026 are the two dates named.
+
+## The marketing homepage joins the same app, split by host (2026-10-02) — user-specified
+
+**The ask**: www.firsthing.earth is today a separate static site. The user wants one app: `app.
+firsthing.earth` serves everything this repo already builds, `www.firsthing.earth` serves the
+marketing homepage, with a Login control that sends a visitor to `app.firsthing.earth/login`.
+
+**Visual direction was the one real open question, and the user picked it**: rebuild the page on
+this app's own design tokens (the three-theme palette, `BrandMark`, `.card`/`.btn-*`) rather than
+pixel-matching the old static site's own styling — so the public site and the product read as one
+brand, not two unrelated surfaces.
+
+**The split is a host check in `src/proxy.ts`, ahead of every existing rule.** `MARKETING_HOSTS`
+(`www.firsthing.earth`, the bare apex) rewrites any path on those hosts to `/marketing` — rewritten,
+not redirected, so the address bar still reads the public domain, and ANY path (not just `/`) lands
+there, so a stray `/admin` typed on the public domain never leaks this app's route structure or
+bounces through a login redirect. Every other host — `app.firsthing.earth`, `stage.firsthing.earth`,
+local dev — is completely unaffected; the existing auth/role gating below runs exactly as before.
+`/marketing` itself (`src/app/marketing/page.tsx`) is a plain, public, unauthenticated Server
+Component — no new route needs auth-gating, since it was never added to `ROUTE_ROLES`.
+
+**Content basis**: the live site as fetched 2026-10-02 — hero claim, Who We Are, the EnergiTrack
+solutions list, the three-step How It Works, two Products, three testimonials, and the footer's
+real contact details (`src/lib/company.ts`'s `COMPANY`/`SALES_CONTACTS`, already the single source
+for this). **Two of the live nav items are deliberately not reproduced, stated rather than silently
+dropped**: Analytics points at a separate subdomain (`Analytics.FirsThing.earth`) this app does not
+own, and Basement Parking names a page this pass had no content to recreate from.
+
+**What this change does NOT do, and is not claimed to**: the actual DNS for `www.`/`app.
+firsthing.earth` and the server's reverse-proxy config for the real production cutover are a
+separate, explicit infra step — replacing the company's live public website is exactly the class of
+hard-to-reverse, externally-visible change this session's own standing instruction says to go slow
+on, and neither was touched. Until that cutover, the rewrite is inert on every host it currently
+runs against; the page previews directly at `/marketing` on any already-deployed host (e.g.
+`https://stage.firsthing.earth/marketing`).
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,268, unaffected — no new pure logic, a thin rewrite and a
+presentational page) all clean. Not yet deployed — this branch is not merged.

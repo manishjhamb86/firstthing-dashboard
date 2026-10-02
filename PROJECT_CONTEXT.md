@@ -8697,3 +8697,14 @@ warnings across the fleet for a change nobody asked for.
 
 **Verified**: `tsc`/`lint`/`pnpm test` (1,268, unaffected — no new pure logic, the field is wired
 through generic machinery) all clean. Not yet deployed — this branch is not merged.
+
+## Stage joins the marketing-host list (2026-10-02) — user-caught
+
+**Reported**: `https://stage.firsthing.earth/` landed on `/login` instead of the marketing
+homepage. Correct for the design as shipped — `stage.firsthing.earth` was deliberately left out of
+`MARKETING_HOSTS`, with the homepage only previewable at `/marketing` there — but the user wants
+stage's own root to show what the real domains will once DNS points here, since it is the one host
+actually reachable before that cutover. Added to `MARKETING_HOSTS` in `src/proxy.ts`. Every other
+path on stage — `/admin`, `/portal`, `/login` — is unaffected, same as the production hosts.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,268) all clean.

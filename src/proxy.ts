@@ -35,10 +35,15 @@ function matchRoute(pathname: string): string[] | null | undefined {
 //
 // This is the app-side half of the split. The DNS for `www.`/`app.` and the
 // server's reverse-proxy config are a separate, explicit infra step — not
-// done by this change (see PROJECT_CONTEXT.md). Until that cutover, the page
-// is reachable directly at `/marketing` on any host (e.g. for a stage
-// preview), and this rewrite is inert everywhere it currently runs.
-const MARKETING_HOSTS = new Set(["www.firsthing.earth", "firsthing.earth"]);
+// done by this change (see PROJECT_CONTEXT.md).
+//
+// `stage.firsthing.earth` is listed too (2026-10-02, user-asked): it is the
+// one host actually reachable before that DNS cutover, and its bare `/`
+// should show what the real domains will once they're pointed here, rather
+// than sending every visitor through the ordinary session redirect. Every
+// other path on stage is completely unaffected — `/admin`, `/portal`,
+// `/login` on stage still work exactly as they always have.
+const MARKETING_HOSTS = new Set(["www.firsthing.earth", "firsthing.earth", "stage.firsthing.earth"]);
 
 function hostOf(req: { headers: Headers }): string {
   return (req.headers.get("host") ?? "").toLowerCase().split(":")[0];

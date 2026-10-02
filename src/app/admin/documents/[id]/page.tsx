@@ -130,7 +130,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
                     This was filed as a plain copy instead of a billed month. If it should have been
                     reconciled against a circuit and billed, reopen it:
                   </p>
-                  {doc.releasedToSocietyAt ? (
+                  {doc.releasedToSocietyAt && !doc.voidedAt ? (
                     <p className="text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
                       Already released to the society — withdraw it below first, with a reason, before
                       it can come back.

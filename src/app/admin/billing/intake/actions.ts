@@ -762,7 +762,11 @@ export async function unfileIntake(intakeId: string, reason: string): Promise<Re
     where: { id: intake.filedAsDocumentId },
     select: { releasedToSocietyAt: true, voidedAt: true },
   });
-  if (doc?.releasedToSocietyAt) {
+  // A release that has SINCE been withdrawn is moot — nothing is showing to
+  // the society any more, so there is nothing left to take back (user-caught
+  // 2026-10-03: withdrawing the document first, exactly as this message told
+  // them to, still refused the same way afterward).
+  if (doc?.releasedToSocietyAt && !doc.voidedAt) {
     return {
       error:
         "Already released to the society — withdraw it from the document's own page first if it genuinely needs to come back.",

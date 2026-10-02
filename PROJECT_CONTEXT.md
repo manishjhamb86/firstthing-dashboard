@@ -8640,8 +8640,12 @@ other host — `app.firsthing.earth`, `stage.firsthing.earth`, local dev — is 
 any of this; the existing auth/role gating below runs exactly as before, on every path. `/marketing`
 itself (`src/app/marketing/page.tsx`) is a plain, public, unauthenticated Server Component — no new
 route needs auth-gating, since it was never added to `ROUTE_ROLES`. The page's own Login control
-still points at the literal `app.firsthing.earth/login`, per the original instruction — both hosts
-answer it identically, but the explicit destination was asked for by name and nothing retracted it.
+pointed at the literal `app.firsthing.earth/login` at first, per the original instruction — **corrected
+the same day** once the host split itself was corrected to "one app, reachable whole on either host":
+a hardcoded `app.` destination is a dead link on every host that isn't literally `app.firsthing.earth`
+(stage included, where it sent a visitor to a domain that resolves nowhere) and is unnecessary now
+that `/login` already works identically on whichever host served the marketing page. The three Login
+links are `/login` (relative) instead.
 
 **Content basis**: the live site as fetched 2026-10-02 — hero claim, Who We Are, the EnergiTrack
 solutions list, the three-step How It Works, two Products, three testimonials, and the footer's

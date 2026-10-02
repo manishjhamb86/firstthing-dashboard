@@ -66,7 +66,7 @@ export default async function MarketingHomePage() {
           <a href="#how-it-works" className="hover:text-[var(--text)]">How it works</a>
           <a href="#contact" className="hover:text-[var(--text)]">Contact</a>
         </nav>
-        <a href="https://app.firsthing.earth/login" className="btn-primary btn-sm">
+        <a href="/login" className="btn-primary btn-sm">
           Login
         </a>
       </header>
@@ -94,7 +94,7 @@ export default async function MarketingHomePage() {
             equipment.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <a href="https://app.firsthing.earth/login" className="btn-primary">Login</a>
+            <a href="/login" className="btn-primary">Login</a>
             <a href="#contact" className="btn-outline" style={{ borderColor: "var(--auth-panel-line)", color: "var(--auth-panel-text)" }}>
               Get in touch
             </a>
@@ -228,7 +228,7 @@ export default async function MarketingHomePage() {
                 </li>
               ))}
             </ul>
-            <a href="https://app.firsthing.earth/login" className="btn-primary btn-sm mt-6 inline-flex">
+            <a href="/login" className="btn-primary btn-sm mt-6 inline-flex">
               Login to your dashboard
             </a>
           </div>

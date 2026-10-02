@@ -13,6 +13,7 @@ import {
   savingsPct,
   exclusionFromDevices,
   type Exclusion,
+  expectedDailyKwh,
   theoreticalDailyKwh,
   varianceAgainstTheoretical,
   type SavingsBand,
@@ -94,7 +95,16 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
 
   const demo =
     (demoId ? circuit.demos.find((d) => d.id === demoId) : null) ?? currentDemoOf(circuit.demos) ?? null;
-  const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
+  // A demo's own light count can be corrected (demo mode) without touching
+  // the circuit's inventory — "a demo is measured on the lights it was run
+  // on" — so the report's own theoretical has to follow THAT demo's count,
+  // the same rule the meter's one-time load test already applies, not the
+  // raw inventory total (2026-10-02, user-caught).
+  const theoretical = demo
+    ? expectedDailyKwh({ meteredLightCount: demo.meteredLightCount, wattage: circuit.wattage, workingHours: circuit.workingHours ?? 24, devices: circuit.devices })
+    : circuit.devices.length > 0
+      ? theoreticalDailyKwh(circuit.devices)
+      : null;
   // Fixtures left on the circuit unreplaced: their draw comes off both the
   // before and after figures before any saving is stated (2026-09-26).
   const exclusion = exclusionFromDevices(circuit.devices);

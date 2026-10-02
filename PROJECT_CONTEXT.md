@@ -8708,3 +8708,32 @@ actually reachable before that cutover. Added to `MARKETING_HOSTS` in `src/proxy
 path on stage — `/admin`, `/portal`, `/login` — is unaffected, same as the production hosts.
 
 **Verified**: `tsc`/`lint`/`pnpm test` (1,268) all clean.
+
+## Pre-install readings judged against the demo's count, not the circuit's stale inventory (2026-10-02) — user-caught
+
+**Reported**: on Amrapali Princely Estate's circuit, a demo's light count was corrected 140 → 40
+(the demos table's own "Change," `setDemoLightCount`) and its meter load test correctly updated to
+read "800 W (0.0% from theoretical)" — but the pre-install readings table still showed every day as
+roughly -71% "vs theoretical," for the identical demo.
+
+**Confirmed against the row**: `circuit_devices.count` was still 140 (the raw load inventory —
+`setDemoLightCount` deliberately never touches it, by design, since a demo can legitimately be run
+on fewer lights than the full inventory lists). The meter load test already reads correctly because
+`expectedDisplayedLoadW` keys its figure on the DEMO's own `meteredLightCount` — "a demo is measured
+on the lights it was run on" (2026-09-26's own rule). The readings table's theoretical, independently
+computed in two places (`circuits/[circuitId]/page.tsx` and the printed pre-install report's
+`report-data.ts`), both instead used `theoreticalDailyKwh(circuit.devices)` — the raw, possibly
+stale inventory total — so the same demo was being judged by two different populations on its two
+own screens.
+
+**Fixed with `expectedDailyKwh()`** (`src/lib/circuit-load.ts`), the daily-kWh counterpart of
+`expectedDisplayedLoadW`: when the inventory's own total still matches the demo's count, it uses the
+inventory's detailed per-line breakdown (handles mixed wattages, as the watts version already did);
+otherwise it falls back to `meteredLightCount × wattage × workingHours ÷ 1000` — the same rule,
+extended from the one-time load check to every day of readings. Both call sites (the circuit page
+and the printed report) now pass the specific demo's own count through it, rather than the circuit's
+raw inventory figure.
+
+**Verified**: 3 new unit cases reproducing the exact shape (140-light inventory, 40-light demo:
+19.2 kWh/day, not the stale 67.2) plus the inventory-matches-again and no-inventory-at-all cases.
+`tsc`/`lint`/`pnpm test` (1,271) all clean. Not yet deployed — this branch is not merged.

@@ -4,6 +4,7 @@ import {
   describeExclusion,
   excludedKwhAt,
   exclusionOf,
+  expectedDailyKwh,
   expectedDisplayedLoadW,
   periodSavingsSummary,
   replacedLightCount,
@@ -158,5 +159,30 @@ describe("the meter load test counts every fixture on the circuit", () => {
   it("mixed fixtures add up from the inventory", () => {
     const r = expectedDisplayedLoadW({ meteredLightCount: 100, wattage: 20, devices: [{ count: 93, wattage: 20 }, { count: 7, wattage: 50 }] });
     expect(r).toEqual({ watts: 2210, fromInventory: true });
+  });
+});
+
+describe("pre-install readings are judged against the DEMO's own count (2026-10-02, user-caught)", () => {
+  // Amrapali Princely Estate's demo: the inventory still lists 140 lights
+  // (nobody touched it), but the demo's own meteredLightCount was corrected
+  // to 40 via the demos table's "Change" — the same control the meter load
+  // test already keys off. The readings table must follow the same number.
+  const devices = [{ count: 140, wattage: 20, hoursPerDay: 24 }];
+
+  it("falls back to the demo's count × wattage × hours when it disagrees with the inventory total", () => {
+    const kwh = expectedDailyKwh({ meteredLightCount: 40, wattage: 20, workingHours: 24, devices });
+    expect(kwh).toBeCloseTo(19.2, 10);
+    // Not the stale, inventory-wide figure the bug used to produce.
+    expect(kwh).not.toBeCloseTo(67.2, 1);
+  });
+
+  it("uses the inventory's own per-line breakdown once the demo's count matches it again", () => {
+    const kwh = expectedDailyKwh({ meteredLightCount: 140, wattage: 20, workingHours: 24, devices });
+    expect(kwh).toBeCloseTo(67.2, 10);
+  });
+
+  it("with no inventory at all, still computes from the demo's own count", () => {
+    const kwh = expectedDailyKwh({ meteredLightCount: 40, wattage: 20, workingHours: 24, devices: [] });
+    expect(kwh).toBeCloseTo(19.2, 10);
   });
 });

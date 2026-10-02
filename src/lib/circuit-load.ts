@@ -414,6 +414,31 @@ export function expectedDisplayedLoadW(input: {
   return { watts: input.meteredLightCount * input.wattage, fromInventory: false };
 }
 
+/**
+ * The daily kWh a demo's PRE-INSTALL readings are judged against — the same
+ * rule as `expectedDisplayedLoadW`, extended from the one-time load check to
+ * every day of readings (2026-10-02, user-caught). A demo's own
+ * `meteredLightCount` can be corrected (operations, demo mode) without
+ * touching the circuit's load inventory — "a demo is measured on the lights
+ * it was run on," not necessarily on everything the inventory lists — so a
+ * day's "vs theoretical" figure has to follow the DEMO's count, not the raw
+ * inventory total, or the two screens for the same demo disagree about what
+ * it was even measuring (a corrected 140 → 40 showed 0.0% here and -71% on
+ * the readings table for the identical demo).
+ */
+export function expectedDailyKwh(input: {
+  meteredLightCount: number;
+  wattage: number;
+  workingHours: number;
+  devices: LoadItem[];
+}): number {
+  const lights = input.devices.reduce((n, d) => n + d.count, 0);
+  if (input.devices.length > 0 && lights === input.meteredLightCount) {
+    return theoreticalDailyKwh(input.devices);
+  }
+  return (input.meteredLightCount * input.wattage * input.workingHours) / 1000;
+}
+
 /** The lights actually being replaced — what a saving is attributable to. */
 export function retrofitLightCount(items: LoadItem[]): number {
   return items.filter((i) => !i.excludedFromCalculation).reduce((n, i) => n + i.count, 0);

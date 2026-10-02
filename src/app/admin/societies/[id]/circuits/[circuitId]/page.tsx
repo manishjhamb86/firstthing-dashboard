@@ -32,7 +32,7 @@ import { surveyHappenedAt } from "@/lib/step-dates";
 import { DemoReadingsPanel, type DemoDayDTO } from "./demo-readings-panel";
 import { DemoLockBar } from "./demo-lock-bar";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
-import { exclusionFromDevices, theoreticalDailyKwh } from "@/lib/circuit-load";
+import { exclusionFromDevices, expectedDailyKwh, theoreticalDailyKwh } from "@/lib/circuit-load";
 import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
 import { currentDemoOf, demoFacts, demoFactsInclude, latestAcceptance, LOAD_TOLERANCE_PCT } from "@/lib/circuit-figures";
 import { demoComplete, demoSteps } from "@/lib/demo-steps";
@@ -417,7 +417,9 @@ export default async function CircuitDetailPage({
             <p className="text-sm text-[var(--text-muted)] mb-3">
               Σ count × wattage × hours ÷ 1000 is the theoretical kWh/day. A pre-install reading
               outside ±5% of it is flagged; outside ±10% is a warning — the check that nothing
-              unknown is consuming on this circuit.
+              unknown is consuming on this circuit. A demo whose own light count has been corrected
+              away from this total (the demos table&rsquo;s own &ldquo;Change&rdquo;) is judged
+              against ITS count instead, the same rule the meter&rsquo;s own load test already uses.
             </p>
           </>
         )}
@@ -618,7 +620,12 @@ export default async function CircuitDetailPage({
                         days={r.days}
                         missing={r.missing}
                         accepted={r.accepted}
-                        theoretical={theoretical}
+                        theoretical={expectedDailyKwh({
+                          meteredLightCount: demo.meteredLightCount,
+                          wattage: circuit.wattage,
+                          workingHours: circuit.workingHours ?? 24,
+                          devices: circuit.devices,
+                        })}
                         baseline={facts.preAverage}
                         exclusion={exclusion}
                       />

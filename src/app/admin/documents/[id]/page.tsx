@@ -6,7 +6,7 @@ import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { formatDate, formatInstant } from "@/lib/format-date";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
 import { publicS3Url } from "@/lib/s3";
-import type { ExtractedDocument } from "@/lib/document-extract";
+import { EXTRACTABLE_TYPES, type ExtractedDocument } from "@/lib/document-extract";
 import { ExtractionReview } from "./review-client";
 import { AgreementTerms } from "./agreement-terms";
 
@@ -27,7 +27,12 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
   });
   if (!doc) notFound();
 
-  const label = DOCUMENT_TYPES.find((t) => t.id === doc.docType)?.label ?? doc.docType;
+  const typeSpec = DOCUMENT_TYPES.find((t) => t.id === doc.docType);
+  const label = typeSpec?.label ?? doc.docType;
+  // Offering "Read the figures" only to find out the server already knows
+  // there are none is exactly the control-that-can-only-refuse this codebase
+  // avoids elsewhere (2026-10-02, user-caught on a filed invoice copy).
+  const extractable = EXTRACTABLE_TYPES.has(doc.docType);
   const circuits = await db.circuit.count({ where: { societyId: doc.societyId, voidedAt: null } });
   const catalog = await db.deviceType.findMany({
     where: { role: "original", deletedAt: null, active: true, status: { in: ["approved", "proposed"] } },
@@ -94,6 +99,13 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
               isTheExecutedCopy={isTheExecutedCopy}
               awaitingTermStart={awaitingTermStart}
             />
+          ) : !extractable ? (
+            <Card className="p-6">
+              <CardTitle>Nothing to read here</CardTitle>
+              <p className="mt-2 text-[13.5px]" style={{ color: "var(--text-muted)" }}>
+                {typeSpec?.operation ?? "This document type has no figures to extract."}
+              </p>
+            </Card>
           ) : (
           <ExtractionReview
             documentId={doc.id}

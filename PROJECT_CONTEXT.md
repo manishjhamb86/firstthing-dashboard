@@ -8762,3 +8762,39 @@ unchanged — still the official, billed figure, first and primary.
 
 **Verified**: `tsc`/`lint`/`pnpm test` (1,271, unaffected — no new pure logic, a presentational
 addition reading figures `portal-energy.ts` already computes) all clean.
+
+## Amrapali Princely Estate: a saving over 100%, traced to one stale inventory row, corrected (2026-10-02) — user-caught
+
+**The earlier fix wasn't the whole story.** The pre-install readings bug fixed earlier today
+(`expectedDailyKwh`) was the right code change, but it masked rather than closed the real gap: the
+circuit's load inventory still said 140 lights while the demo's own count had been corrected to 40.
+The user then reported the SAME root cause surfacing a third time — the Light-replacement step's own
+record still read "140 x Tube light 20W / Replaced 40 / Kept 100" — and, worse, a fourth: **the
+demo's own recorded saving read 227.83%**, a figure that is never possible (you cannot save more
+than 100% of what you started with).
+
+**Traced to the exact arithmetic, not guessed.** "100 kept, not replaced" invoked this project's own
+kept-like-lights deduction (2026-09-26: `X = before ÷ lights × kept`), computed against the STALE
+140-light total: `X = 19.14 ÷ 140 × 100 = 13.67`. The saving formula, `(before − after) ÷ (before −
+X)`, then divided by a denominator collapsed to `19.14 − 13.67 = 5.47` — `12.46 ÷ 5.47 = 227.8%`,
+matching the reported figure exactly. The deduction formula itself was never wrong; it was asked a
+question whose premise — "100 more Tube lights are still on this circuit, still drawing power" — was
+false. The circuit's own actual readings (19.14 kWh/day, ~800 W) match 40 lights almost exactly
+(40 × 20 W × 24h ÷ 1000 = 19.2) and are nowhere near what 140 would draw (67.2 kWh/day) — there never
+were 100 more lights to keep.
+
+**The fix was the one row nobody had corrected yet**: `circuit_devices.count`, still 140 while
+`circuit.meteredLightCount`, the demo's own `meteredLightCount`, and the same line's own
+`replacementCount` had all already been corrected to 40 through the app (`setDemoLightCount`, then
+the Light-replacement form's "Save the correction"). Verified by hand first — `planCountCorrection`'s
+own rule means correcting the line to 40 touches nothing else (the circuit and the demo no longer
+"carry" the stale 140, and the replacementCount, already 40, isn't equal to the line's old count so
+is left alone) — then applied through a one-off script
+(`scripts/fix-amrapali-princely-inventory-count.ts`, `--dry-run` first) that imports the REAL
+`resyncCircuitFigures` and `logChange` rather than reimplementing the derivation in SQL. Confirmed
+after: the demo's own `savingsPct` recomputed to **65.09%**, matching the agreed benchmark override
+almost exactly — the number the demo always should have shown.
+
+**A data correction, not a code deploy** — nothing in `src/` changed for this entry; the script is
+checked in for the audit trail, matching this repo's own convention for one-off corrections
+(`scripts/rebuild-demos-and-monitoring.ts` and others already there).

@@ -1,4 +1,4 @@
-import { formatDate } from "@/lib/format-date";
+import { formatDate, isoDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -27,8 +27,10 @@ import {
 } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
 import {
+  AddPlannedDayForm,
   BatchCaptureForm,
   CompletionForm,
+  PlannedDayActions,
   ProjectSetupForm,
   RaiseBlockerForm,
   CorrectDatesControl,
@@ -437,12 +439,20 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       <td>
                         <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip>
                       </td>
-                      <td>
+                      <td className="whitespace-nowrap">
                         {!batch && isField && gate.canStart && (
                           <StartBatchButton pipelineId={pipeline.id} plannedDayId={d.id} />
                         )}
                         {!batch && !gate.canStart && isOps && !project.gateSkipUsedAt && (
                           <SkipGateForm pipelineId={pipeline.id} plannedDayId={d.id} />
+                        )}
+                        {canCorrectDates && !batch?.submittedAt && (
+                          <PlannedDayActions
+                            pipelineId={pipeline.id}
+                            plannedDayId={d.id}
+                            plannedDate={isoDate(d.plannedDate)}
+                            startTime={d.startAt.toISOString().slice(11, 16)}
+                          />
                         )}
                       </td>
                     </tr>
@@ -451,6 +461,9 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
               </tbody>
             </table>
           </div>
+          {canCorrectDates && (
+            <AddPlannedDayForm pipelineId={pipeline.id} areas={[...new Set(project.plannedDays.map((d) => d.areaKey))]} />
+          )}
           {project.plannedDays.some((d) => {
             const previous = project.batches.filter((b) => b.day === d.day - 1);
             return !evaluateDayGate({ previousBatches: gateInputs(previous), startAt: d.startAt, now, ignoreDeadline: demoDeadline }).canStart;

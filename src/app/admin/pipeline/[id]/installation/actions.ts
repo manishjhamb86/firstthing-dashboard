@@ -536,6 +536,141 @@ export async function correctBatchDates(
 }
 
 /**
+ * Correct a day's own PLANNED date — the schedule itself, set at project
+ * setup — not the day's actual work date (correctBatchDates, above, is for
+ * that, and only applies once the day has been submitted). A day planned for
+ * the wrong date blocks real work: the "recorded after the fact, no photos"
+ * waiver only applies once a day's planned date has already passed, so a
+ * typo that leaves a day planned for the future when the crew is really
+ * there today makes it impossible to record without photos nobody took
+ * (user-caught, 2026-10-02 — "allow to edit, that's incorrect").
+ */
+export async function correctPlannedDayDate(
+  pipelineId: string,
+  plannedDayId: string,
+  input: { plannedDate: string; startTime?: string; reason: string },
+) {
+  const who = await dateCorrector(input.reason, pipelineId, "planned_day");
+  if ("error" in who) return who;
+
+  const day = await db.installationPlannedDay.findUnique({
+    where: { id: plannedDayId },
+    include: { project: { select: { pipelineId: true } }, batches: { select: { id: true, submittedAt: true } } },
+  });
+  if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is no longer on record." };
+  if (day.batches.some((b) => b.submittedAt)) {
+    return { error: "This day has already been submitted — correct its work date instead of the plan." };
+  }
+
+  const newDate = parseDay(input.plannedDate, "planned date");
+  if (newDate && "error" in newDate) return newDate;
+  if (!newDate) return { error: "Pick a date." };
+
+  const time = input.startTime?.trim() || "09:00";
+  const newStartAt = new Date(`${input.plannedDate}T${time}:00.000Z`);
+  if (Number.isNaN(newStartAt.getTime())) return { error: "Unreadable start time." };
+
+  await db.$transaction(async (tx) => {
+    await tx.installationPlannedDay.update({ where: { id: plannedDayId }, data: { plannedDate: newDate, startAt: newStartAt } });
+    await logChange(tx, {
+      entity: "installation_planned_day", entityId: plannedDayId, kind: "edit", field: "plannedDate",
+      oldValue: day.plannedDate, newValue: newDate, reason: input.reason.trim() || null, actorId: who.actorId,
+    });
+  });
+
+  logger.info("installation.planned_date_corrected", { actorId: who.actorId, pipelineId, plannedDayId, plannedDate: newDate.toISOString() });
+  revalidatePath(pathFor(pipelineId));
+  return { ok: true as const };
+}
+
+/**
+ * Remove a planned day that was set up wrong (2026-10-02, user-asked:
+ * "also allow to delete a row and reenter again"). Only ever a row nobody has
+ * submitted work against yet — once a batch is submitted, the day IS the
+ * record of what happened, same guard as correctPlannedDayDate. A hard
+ * delete, not a void: nothing downstream (a reading, a payment) can yet rest
+ * on an un-submitted planned day, so there is nothing a struck-through row
+ * would be preserving.
+ */
+export async function deletePlannedDay(pipelineId: string, plannedDayId: string, reason: string) {
+  const who = await dateCorrector(reason, pipelineId, "planned_day");
+  if ("error" in who) return who;
+
+  const day = await db.installationPlannedDay.findUnique({
+    where: { id: plannedDayId },
+    include: { project: { select: { pipelineId: true } }, batches: { select: { id: true, submittedAt: true } } },
+  });
+  if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is no longer on record." };
+  if (day.batches.some((b) => b.submittedAt)) {
+    return { error: "This day has already been submitted — it is the record of what happened, not a plan to delete." };
+  }
+
+  await db.$transaction(async (tx) => {
+    // Batches, Field visits (SetNull on both) survive — only ever reachable
+    // here because neither has been submitted/logged against this day.
+    await tx.installationPlannedDay.delete({ where: { id: plannedDayId } });
+    await logChange(tx, {
+      entity: "installation_planned_day", entityId: plannedDayId, kind: "edit", field: "deleted",
+      oldValue: { day: day.day, areaKey: day.areaKey, plannedDate: day.plannedDate }, newValue: null,
+      reason: reason.trim() || null, actorId: who.actorId,
+    });
+  });
+
+  logger.info("installation.planned_day_deleted", { actorId: who.actorId, pipelineId, plannedDayId, day: day.day, areaKey: day.areaKey });
+  revalidatePath(pathFor(pipelineId));
+  return { ok: true as const };
+}
+
+/** Re-enter a day the same way setup itself creates one — day/area/date/count, matching `PlannedDayInput`. */
+export async function addPlannedDay(pipelineId: string, input: PlannedDayInput & { reason: string }) {
+  const who = await dateCorrector(input.reason, pipelineId, "planned_day");
+  if ("error" in who) return who;
+
+  const project = await db.installationProject.findUnique({ where: { pipelineId }, select: { id: true } });
+  if (!project) return { error: "No installation project is set up for this deal yet." };
+
+  const areaKey = input.areaKey.trim();
+  if (!areaKey) return { error: "Every planned day needs an area." };
+  if (!Number.isInteger(input.day) || input.day < 1) return { error: "Day must be a positive whole number." };
+  if (!Number.isInteger(input.plannedCount) || input.plannedCount <= 0) return { error: "Planned count must be a positive whole number." };
+
+  const startAt = new Date(`${input.plannedDate}T${input.startTime || "09:00"}:00.000Z`);
+  if (Number.isNaN(startAt.getTime())) return { error: "Unreadable date or start time." };
+  const plannedDate = new Date(`${input.plannedDate}T00:00:00.000Z`);
+  if (Number.isNaN(plannedDate.getTime())) return { error: "Unreadable date." };
+
+  const existing = await db.installationPlannedDay.findUnique({
+    where: { projectId_day_areaKey: { projectId: project.id, day: input.day, areaKey } },
+    select: { id: true },
+  });
+  if (existing) return { error: `Day ${input.day} already has a planned entry for ${areaKey} — delete it first, or pick a different day number.` };
+
+  const created = await db.$transaction(async (tx) => {
+    const row = await tx.installationPlannedDay.create({
+      data: {
+        projectId: project.id,
+        day: input.day,
+        plannedDate,
+        startAt,
+        areaKey,
+        plannedCount: input.plannedCount,
+        assignedToId: input.assignedToId || null,
+      },
+    });
+    await logChange(tx, {
+      entity: "installation_planned_day", entityId: row.id, kind: "edit", field: "created",
+      oldValue: null, newValue: { day: row.day, areaKey: row.areaKey, plannedDate: row.plannedDate, plannedCount: row.plannedCount },
+      reason: input.reason.trim() || null, actorId: who.actorId,
+    });
+    return row;
+  });
+
+  logger.info("installation.planned_day_added", { actorId: who.actorId, pipelineId, plannedDayId: created.id, day: created.day, areaKey: created.areaKey });
+  revalidatePath(pathFor(pipelineId));
+  return { ok: true as const, plannedDayId: created.id };
+}
+
+/**
  * Correct the certificate's signature date together with any day's work and
  * approval dates, checked ONCE against the result (2026-09-27, user-caught on
  * Arihant Arden). Correcting them one at a time deadlocked: a certificate

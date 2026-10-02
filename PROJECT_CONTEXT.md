@@ -8886,3 +8886,33 @@ one bundle already covers.
 
 **Verified**: `tsc`/`lint`/`pnpm test` (1,273, +2 new) all clean. Not yet deployed — this branch is
 not merged.
+
+## A planned installation day can be corrected, deleted, or re-entered (2026-10-02) — user-caught
+
+**Reported**: Day 3 of a batch plan was planned for 14-Oct-2026 — in the future — and submitting
+its work was correctly refused for missing photos, since the "recorded after the fact, no photos"
+waiver (2026-09-15) only applies once a day's own planned date has already passed. The real
+problem was the plan itself: the day was set up with the wrong date, with no way to fix it.
+
+**Three new, narrowly-scoped actions in `installation/actions.ts`**, all gated through the existing
+`dateCorrector` helper (demo mode free, live mode ops-only with a reason) and all refusing once ANY
+batch for that day has been submitted — at that point the day IS the record of what happened, not a
+plan, and `correctBatchDates` (already built) is the right tool:
+- **`correctPlannedDayDate`** — edits `InstallationPlannedDay.plannedDate`/`startAt` directly.
+- **`deletePlannedDay`** — a genuine hard delete, not a void: nothing (a reading, a payment) can yet
+  rest on an un-submitted planned day, so there is nothing a struck-through row would be preserving.
+- **`addPlannedDay`** — re-enter a day the same way project setup itself creates one (day/area/date/
+  time/count), reusing `PlannedDayInput`'s own shape; refuses a duplicate `(day, areaKey)` pair.
+
+**Deliberately does not re-check SCR-060's reconciliation** (the plan's total must equal the
+contracted scope) — that is a setup-time invariant for the initial publish, and a single-row
+correction relaxing it is consistent with how `correctBatchDates` also does not re-run every
+invariant that applied at creation.
+
+**UI**: `PlannedDayActions` (a `Modal`, matching this codebase's own "a form that has to fit inside
+a table row will always lose" rule) adds "Correct the date" / "Delete" to each row of the Days
+table, shown only while `canCorrectDates` and the row's own batch hasn't been submitted.
+`AddPlannedDayForm` sits below the table, same gate.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,273, unaffected — no new pure logic; these mirror
+`correctBatchDates`'s own established shape, which has no dedicated unit test either) all clean.

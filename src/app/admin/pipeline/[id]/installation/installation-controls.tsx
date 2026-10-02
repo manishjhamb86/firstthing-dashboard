@@ -10,8 +10,11 @@ import { uploadFileToS3 } from "@/lib/upload-to-s3";
 import { prorateFirstMonth } from "@/lib/billing-start";
 import { BLOCKER_TYPE_LABEL } from "@/lib/status-maps";
 import {
+  addPlannedDay,
   correctBatchDates,
   correctCertificateDate,
+  correctPlannedDayDate,
+  deletePlannedDay,
   raiseBlocker,
   recordKeptOutcome,
   reopenBatch,
@@ -462,6 +465,207 @@ export function SkipGateForm({ pipelineId, plannedDayId }: { pipelineId: string;
         </button>
       </div>
       {error && <ErrorText>{error}</ErrorText>}
+    </form>
+  );
+}
+
+/**
+ * Correct or delete one planned day — only ever offered while nothing has
+ * been submitted against it yet (2026-10-02, user-asked: "allow to edit
+ * that's incorrect" / "also allow to delete a row and reenter again"). A day
+ * planned for the wrong date blocks real work: the no-photos waiver only
+ * applies once a day's planned date has already passed, so a typo that
+ * leaves a day planned for the future when the crew is really there today
+ * made it impossible to record at all.
+ */
+export function PlannedDayActions({
+  pipelineId,
+  plannedDayId,
+  plannedDate,
+  startTime,
+}: {
+  pipelineId: string;
+  plannedDayId: string;
+  /** YYYY-MM-DD */
+  plannedDate: string;
+  /** HH:MM */
+  startTime: string;
+}) {
+  const [open, setOpen] = useState<"date" | "delete" | null>(null);
+  const [date, setDate] = useState(plannedDate);
+  const [time, setTime] = useState(startTime);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  function close() {
+    setOpen(null);
+    setError(undefined);
+    setReason("");
+  }
+
+  return (
+    <span className="inline-flex gap-2">
+      <button type="button" className="btn-ghost btn-sm" onClick={() => { setDate(plannedDate); setTime(startTime); setOpen("date"); }}>
+        Correct the date
+      </button>
+      <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen("delete")}>
+        Delete
+      </button>
+
+      <Modal open={open === "date"} onClose={close} title="Correct the planned date">
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(undefined);
+            startTransition(async () => {
+              const r = await correctPlannedDayDate(pipelineId, plannedDayId, { plannedDate: date, startTime: time, reason });
+              if (r && "error" in r) setError(r.error);
+              else close();
+            });
+          }}
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Date" htmlFor="pd-date">
+              <input id="pd-date" type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} required />
+            </Field>
+            <Field label="Start time" htmlFor="pd-time">
+              <input id="pd-time" type="time" className="field" value={time} onChange={(e) => setTime(e.target.value)} required />
+            </Field>
+          </div>
+          <Field label="Why this is being corrected" htmlFor="pd-reason">
+            <input id="pd-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="The plan was set up with the wrong date." required />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+          <div className="flex gap-2">
+            <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+              {pending ? "Saving…" : "Save the correction"}
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal open={open === "delete"} onClose={close} title="Delete this planned day">
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(undefined);
+            startTransition(async () => {
+              const r = await deletePlannedDay(pipelineId, plannedDayId, reason);
+              if (r && "error" in r) setError(r.error);
+              else close();
+            });
+          }}
+        >
+          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+            Removes this row entirely. Re-enter it with &ldquo;Add a planned day&rdquo; below the
+            table if it was set up wrong rather than genuinely not needed.
+          </p>
+          <Field label="Why this day is being removed" htmlFor="pd-del-reason">
+            <input id="pd-del-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} required />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+          <div className="flex gap-2">
+            <button type="submit" className="btn-danger btn-sm" disabled={pending}>
+              {pending ? "Deleting…" : "Delete"}
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </span>
+  );
+}
+
+/** Re-enter a day after deleting a wrong one — the same fields setup itself asks for, one at a time. */
+export function AddPlannedDayForm({ pipelineId, areas }: { pipelineId: string; areas: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [dayNum, setDayNum] = useState("");
+  const [areaKey, setAreaKey] = useState(areas[0] ?? "");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("09:00");
+  const [count, setCount] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-secondary btn-sm mt-3" onClick={() => setOpen(true)}>
+        Add a planned day
+      </button>
+    );
+  }
+  return (
+    <form
+      className="mt-3 space-y-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(undefined);
+        startTransition(async () => {
+          const r = await addPlannedDay(pipelineId, {
+            day: Number(dayNum),
+            plannedDate: date,
+            startTime: time,
+            areaKey,
+            plannedCount: Number(count),
+            assignedToId: null,
+            reason,
+          });
+          if (r && "error" in r) setError(r.error);
+          else {
+            setOpen(false);
+            setDayNum("");
+            setDate("");
+            setCount("");
+            setReason("");
+          }
+        });
+      }}
+    >
+      <div className="grid gap-3 sm:grid-cols-4">
+        <Field label="Day" htmlFor="apd-day">
+          <input id="apd-day" type="number" min={1} className="field" value={dayNum} onChange={(e) => setDayNum(e.target.value)} required />
+        </Field>
+        <Field label="Area" htmlFor="apd-area">
+          <input id="apd-area" list="apd-areas" className="field" value={areaKey} onChange={(e) => setAreaKey(e.target.value)} required />
+          <datalist id="apd-areas">
+            {areas.map((a) => (
+              <option key={a} value={a} />
+            ))}
+          </datalist>
+        </Field>
+        <Field label="Date" htmlFor="apd-date">
+          <input id="apd-date" type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </Field>
+        <Field label="Start time" htmlFor="apd-time">
+          <input id="apd-time" type="time" className="field" value={time} onChange={(e) => setTime(e.target.value)} required />
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label="Planned count" htmlFor="apd-count">
+          <input id="apd-count" type="number" min={1} className="field" value={count} onChange={(e) => setCount(e.target.value)} required />
+        </Field>
+        <Field label="Why this is being added" htmlFor="apd-reason">
+          <input id="apd-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Re-entered after deleting a day set up with the wrong date." required />
+        </Field>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+      <div className="flex gap-2">
+        <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+          {pending ? "Adding…" : "Add the day"}
+        </button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
     </form>
   );
 }

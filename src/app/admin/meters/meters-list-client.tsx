@@ -177,6 +177,28 @@ export function MetersListClient({
     setError(null);
   }
 
+  // A one-click way back out of a wrong assignment (user-asked, 2026-10-02):
+  // the Reassign dialog already does this (clear the circuit and save), but
+  // that is two dropdowns and a save for what is really one decision — take
+  // this meter off whatever it is on. `assignMeter({ circuitId: null })`
+  // closes its open installation and clears the cached circuit/society
+  // together, the same path the dialog's own "clear and save" takes.
+  function unassign(m: MeterRow) {
+    if (
+      !window.confirm(
+        `Take ${m.name} off ${m.circuitLabel ?? m.societyName ?? "its circuit"}? It stops being watched and alerted on until reassigned.`,
+      )
+    ) {
+      return;
+    }
+    start(async () => {
+      setError(null);
+      const r = await assignMeter({ meterId: m.id, circuitId: null });
+      if (r.error) setError(r.error);
+      else router.refresh();
+    });
+  }
+
   const editingMeter = meters.find((m) => m.id === editing) ?? null;
   // Moving a meter that is already installed somewhere: the old stay closes at
   // the same instant the new one opens, so the reader is told what will happen
@@ -432,6 +454,16 @@ export function MetersListClient({
                           <button type="button" className="btn-ghost btn-sm" onClick={() => openAssign(m)}>
                             {m.circuitId ? "Reassign" : "Assign"}
                           </button>
+                          {m.assigned && (
+                            <button
+                              type="button"
+                              className="btn-ghost btn-sm"
+                              disabled={pending}
+                              onClick={() => unassign(m)}
+                            >
+                              Unassign
+                            </button>
+                          )}
                           <button
                             type="button"
                             className="btn-ghost btn-sm"

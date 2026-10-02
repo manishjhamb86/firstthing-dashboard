@@ -8627,14 +8627,21 @@ this app's own design tokens (the three-theme palette, `BrandMark`, `.card`/`.bt
 pixel-matching the old static site's own styling — so the public site and the product read as one
 brand, not two unrelated surfaces.
 
-**The split is a host check in `src/proxy.ts`, ahead of every existing rule.** `MARKETING_HOSTS`
-(`www.firsthing.earth`, the bare apex) rewrites any path on those hosts to `/marketing` — rewritten,
-not redirected, so the address bar still reads the public domain, and ANY path (not just `/`) lands
-there, so a stray `/admin` typed on the public domain never leaks this app's route structure or
-bounces through a login redirect. Every other host — `app.firsthing.earth`, `stage.firsthing.earth`,
-local dev — is completely unaffected; the existing auth/role gating below runs exactly as before.
-`/marketing` itself (`src/app/marketing/page.tsx`) is a plain, public, unauthenticated Server
-Component — no new route needs auth-gating, since it was never added to `ROUTE_ROLES`.
+**Corrected the same day, from the user's own worked example.** The first cut rewrote EVERY path on
+the public hosts to `/marketing`, which would have broken `www.firsthing.earth/admin` the moment DNS
+pointed there — the user's actual structure is one whole app reachable on EITHER host
+(`www.firsthing.earth/admin`, `/portal` and `app.firsthing.earth/admin`, `/portal` all the same
+routes), with only the bare `/` differing by host. **The split is now a host check in `src/proxy.ts`
+on `pathname === "/"` alone**, ahead of every existing rule — `MARKETING_HOSTS` (`www.firsthing.
+earth`, the bare apex) rewrites just the root to `/marketing`; `/admin`, `/portal`, `/login`,
+`/field` all keep working on either host exactly as they already do, since nothing about them
+changed. Rewritten, not redirected, so the address bar still reads the host the visitor used. Every
+other host — `app.firsthing.earth`, `stage.firsthing.earth`, local dev — is completely unaffected by
+any of this; the existing auth/role gating below runs exactly as before, on every path. `/marketing`
+itself (`src/app/marketing/page.tsx`) is a plain, public, unauthenticated Server Component — no new
+route needs auth-gating, since it was never added to `ROUTE_ROLES`. The page's own Login control
+still points at the literal `app.firsthing.earth/login`, per the original instruction — both hosts
+answer it identically, but the explicit destination was asked for by name and nothing retracted it.
 
 **Content basis**: the live site as fetched 2026-10-02 — hero claim, Who We Are, the EnergiTrack
 solutions list, the three-step How It Works, two Products, three testimonials, and the footer's
@@ -8652,4 +8659,21 @@ runs against; the page previews directly at `/marketing` on any already-deployed
 `https://stage.firsthing.earth/marketing`).
 
 **Verified**: `tsc`/`lint`/`pnpm test` (1,268, unaffected — no new pure logic, a thin rewrite and a
-presentational page) all clean. Not yet deployed — this branch is not merged.
+presentational page) all clean.
+
+## A meter can be taken off a circuit in one click (2026-10-02) — user-asked, from a screenshot
+
+**The ask**: "Also give option to unassign a meter if mistakenly wrong one assigned." The capability
+already existed — opening Reassign, clearing the circuit (and the society filter above it), and
+saving already calls `assignMeter({ circuitId: null })`, which closes the open `MeterInstallation`
+and clears the device's cached circuit/society together — but it took two dropdowns and a save to
+get there, for what is really one decision.
+
+**`meters-list-client.tsx` gains a direct Unassign button**, shown beside Reassign/Read whenever
+`m.assigned` is true, behind the same `window.confirm` guard this codebase already uses for
+similarly reversible-but-consequential actions (the load-inventory line removal, a demo deletion).
+It calls the existing `assignMeter({ meterId, circuitId: null })` — no new server-side logic,
+since the server already handles a bare unassign correctly.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,268, unaffected — no new pure logic) all clean. Not yet
+deployed — this branch is not merged.

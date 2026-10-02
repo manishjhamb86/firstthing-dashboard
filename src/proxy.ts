@@ -20,14 +20,18 @@ function matchRoute(pathname: string): string[] | null | undefined {
   return undefined; // not a protected prefix — left alone
 }
 
-// Host-based split (2026-10-02, user-specified): one app, two public faces.
-// `app.firsthing.earth` (and every other host — dev, stage, a bare IP) keeps
-// everything this file already protects below. `www.firsthing.earth` (and
-// the bare apex, in case DNS sends either there) gets ONLY the marketing
-// homepage, whatever the requested path — so a stray `/admin` typed on the
-// public marketing domain lands on the homepage, not on a login redirect
-// that leaks this app's own route structure to a visitor. Rewritten, not
-// redirected, so the address bar still reads the marketing host.
+// Host-based split (2026-10-02, user-specified, corrected the same day): ONE
+// app, reachable whole on EITHER host. `www.firsthing.earth` and
+// `app.firsthing.earth` both carry the full site — `/admin`, `/portal`,
+// `/login`, `/field` all keep working exactly as below, on either host.
+// The only thing that differs by host is the bare `/`: on the marketing
+// hosts it serves the marketing homepage instead of this file's usual root
+// behaviour (src/app/page.tsx's session-based redirect). Rewritten, not
+// redirected, so the address bar still reads the host the visitor used.
+//
+// (First cut of this rewrote EVERY path on the marketing hosts to the
+// homepage, which would have broken `www.firsthing.earth/admin` — corrected
+// per the user's own worked example the same day it shipped.)
 //
 // This is the app-side half of the split. The DNS for `www.`/`app.` and the
 // server's reverse-proxy config are a separate, explicit infra step — not
@@ -51,7 +55,7 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   const role = req.auth?.user?.role;
 
-  if (MARKETING_HOSTS.has(hostOf(req)) && pathname !== "/marketing") {
+  if (pathname === "/" && MARKETING_HOSTS.has(hostOf(req))) {
     return NextResponse.rewrite(new URL("/marketing", req.url));
   }
 

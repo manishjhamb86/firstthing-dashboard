@@ -441,6 +441,51 @@ export default async function PortalHomePage() {
             </div>
           )}
           <div className="order-4 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
+          {/* Paired with the readings below, not left stranded in the narrow
+              column (user-caught, 2026-10-02: a short monitoring card at the
+              start of a new month left the whole left column far shorter
+              than the right, a visible gap before the full-width report). */}
+          {energy && energy.circuits.length > 0 && (
+            <Card className="p-6">
+              <CardTitle>Your circuits</CardTitle>
+              <div className="flex flex-col gap-3">
+                {energy.circuits.map((c) => (
+                  <div
+                    key={c.id}
+                    className="rounded-[var(--r-sm)] border px-3.5 py-3"
+                    style={{ borderColor: "var(--border-subtle)" }}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[13.5px] font-semibold">
+                          {c.label} · {c.lightCount} LED lights
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                          {c.monthDailyAvg !== null
+                            ? `${c.monthDailyAvg.toFixed(1)} kWh/day over ${c.monthDays} recorded day${c.monthDays === 1 ? "" : "s"}${energy.month ? ` in ${monthName(energy.month)}` : ""}`
+                            : "no readings this month yet"}
+                        </p>
+                      </div>
+                      {c.savingsPct !== null && c.band && (
+                        <StatusChip tone={BAND_TONE[c.band]}>{c.savingsPct.toFixed(1)}% saved</StatusChip>
+                      )}
+                    </div>
+                    <LightCountHistory stages={c.lightHistory} />
+                    {c.keptStory && (
+                      <p className="mt-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
+                        {c.keptStory.afterFull}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-right">
+                <Link href="/portal/electricity" className="text-[13px] font-semibold">
+                  Circuit-wise details →
+                </Link>
+              </p>
+            </Card>
+          )}
           {/* The monitoring period — after full installation, from the billing
               start. Separate from the demo report above, which is the demo's
               own before/after days only. */}
@@ -515,49 +560,6 @@ export default async function PortalHomePage() {
                 View invoice
                 <ChevronRight size={15} aria-hidden />
               </Link>
-            </Card>
-          )}
-          </div>
-          <div className="order-2 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
-          {energy && energy.circuits.length > 0 && (
-            <Card className="p-6">
-              <CardTitle>Your circuits</CardTitle>
-              <div className="flex flex-col gap-3">
-                {energy.circuits.map((c) => (
-                  <div
-                    key={c.id}
-                    className="rounded-[var(--r-sm)] border px-3.5 py-3"
-                    style={{ borderColor: "var(--border-subtle)" }}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-[13.5px] font-semibold">
-                          {c.label} · {c.lightCount} LED lights
-                        </p>
-                        <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                          {c.monthDailyAvg !== null
-                            ? `${c.monthDailyAvg.toFixed(1)} kWh/day over ${c.monthDays} recorded day${c.monthDays === 1 ? "" : "s"}${energy.month ? ` in ${monthName(energy.month)}` : ""}`
-                            : "no readings this month yet"}
-                        </p>
-                      </div>
-                      {c.savingsPct !== null && c.band && (
-                        <StatusChip tone={BAND_TONE[c.band]}>{c.savingsPct.toFixed(1)}% saved</StatusChip>
-                      )}
-                    </div>
-                    <LightCountHistory stages={c.lightHistory} />
-                    {c.keptStory && (
-                      <p className="mt-1.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
-                        {c.keptStory.afterFull}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 text-right">
-                <Link href="/portal/electricity" className="text-[13px] font-semibold">
-                  Circuit-wise details →
-                </Link>
-              </p>
             </Card>
           )}
           </div>

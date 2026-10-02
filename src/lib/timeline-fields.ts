@@ -11,6 +11,7 @@
 import { formatDate } from "@/lib/format-date";
 
 export const TIMELINE_FIELDS = {
+  "society.createdAt": { label: "Society added to FirsThing", range: false, live: true },
   "engagement.createdAt": { label: "Service line enrolled", range: false, live: true },
   "pipeline.createdAt": { label: "Lead logged", range: false, live: true },
   "pipeline.meetingDate": { label: "Demo meeting held", range: false, live: true },

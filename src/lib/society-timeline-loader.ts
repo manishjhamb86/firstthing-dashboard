@@ -162,7 +162,13 @@ export async function loadSocietyTimeline(societyId: string) {
     title: "Society",
     name: society.name,
     steps: [
-      step(rootCtx, { slot: "societyCreated", label: "Society added to FirsThing", date: society.createdAt, recordOnly: null }),
+      step(rootCtx, {
+        slot: "societyCreated",
+        label: "Society added to FirsThing",
+        date: society.createdAt,
+        recordOnly: null,
+        edit: { field: "society.createdAt", entityId: society.id },
+      }),
       ...(society.closedAt
         ? [step(rootCtx, { slot: "societyClosed", label: "Society rejected / terminated", date: society.closedAt, note: society.closedReason })]
         : []),

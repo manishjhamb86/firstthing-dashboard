@@ -8677,3 +8677,23 @@ since the server already handles a bare unassign correctly.
 
 **Verified**: `tsc`/`lint`/`pnpm test` (1,268, unaffected — no new pure logic) all clean. Not yet
 deployed — this branch is not merged.
+
+## The society's own "added" date can be corrected (2026-10-02) — user-asked
+
+**The ask**: "Allow to update the society Added date" — the Timeline's own first row,
+"Society added to FirsThing," read `Society.createdAt` with no edit control.
+
+**`Society.createdAt` is read nowhere else that orders or sorts by it** (checked directly — the
+societies list's own default order is by billing start, not this) — so correcting it carries no
+risk to anything downstream, unlike most of the dates this screen touches. Added to the Timeline's
+existing, fully generic machinery rather than anything new: a `TIMELINE_FIELDS` entry, the step's
+`edit` ref, and an `apply-date.ts` case mirroring `"engagement.createdAt"` exactly (the nearest
+precedent — a plain row stamp with no owning Server Action elsewhere). Demo-mode-free editing,
+live-mode change-request, the chronology refusal check and the permission gate all come for free
+from the screen's own dispatch — nothing else needed touching. No new ordering rule was added
+against it (unlike `enrolled`'s own "on or before the first lead" check) — the backfilled societies'
+real add dates are long predate this system, and inventing a check here risked a wave of new
+warnings across the fleet for a change nobody asked for.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,268, unaffected — no new pure logic, the field is wired
+through generic machinery) all clean. Not yet deployed — this branch is not merged.

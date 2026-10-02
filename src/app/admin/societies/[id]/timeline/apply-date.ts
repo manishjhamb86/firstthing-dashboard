@@ -50,6 +50,16 @@ export async function applyTimelineDate(i: ApplyInput): Promise<Result> {
   const reason = i.reason.trim();
 
   switch (i.field) {
+    case "society.createdAt": {
+      const soc = await db.society.findUnique({ where: { id: i.entityId }, select: { id: true, createdAt: true } });
+      if (!soc) return { error: "That society is no longer on record." };
+      await db.$transaction(async (tx) => {
+        await tx.society.update({ where: { id: soc.id }, data: { createdAt: parsed.from } });
+        await logChange(tx, { entity: "society", entityId: soc.id, kind: "edit", field: "createdAt", oldValue: iso(soc.createdAt), newValue: day, reason: reason || null, actorId: i.actorId });
+      });
+      return {};
+    }
+
     case "engagement.createdAt": {
       const e = await db.engagement.findUnique({ where: { id: i.entityId }, select: { id: true, createdAt: true } });
       if (!e) return { error: "That enrolment is no longer on record." };

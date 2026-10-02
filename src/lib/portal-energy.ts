@@ -233,7 +233,8 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         // in its place (user-asked, 2026-10-02). Reusing classifyDay is
         // deliberate: it is the SAME check the invoice-first stats already
         // apply, so a day cannot read fine here and suspect on the invoice.
-        const cls = classifyDay({ date: r.date.toISOString().slice(0, 10), kWh: r.kWh, intervalCount: r.intervalCount, dataHours: null }, baselineNow ?? 0);
+        const dayBaselineForClassify = effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, r.date);
+        const cls = classifyDay({ date: r.date.toISOString().slice(0, 10), kWh: r.kWh, intervalCount: r.intervalCount, dataHours: null }, dayBaselineForClassify ?? 0);
         return {
           date: r.date.toISOString().slice(0, 10),
           kWh: r.kWh,
@@ -270,20 +271,38 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
     // one already is — it just arrived there by the system's own check
     // rather than an operator's — while staying its OWN flag on `monitoring`
     // so the daily table can say "under review" rather than merely omitting it.
+    // Each day against the baseline in force THAT DAY, not "now" applied
+    // across the whole headline month (2026-10-02, user-caught) — a rescale
+    // landing mid-month must not retroactively inflate or deflate days
+    // measured before it.
+    const dayBaselineAt = (d: Date) => effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, d);
     const s = periodSavingsSummary(
-      baselineNow,
-      monthDaysAll.map((d) => ({ kWh: d.kWh, excluded: d.excluded || d.underReview })),
+      dayBaselineAt,
+      monthDaysAll.map((d) => ({ date: d.date, kWh: d.kWh, excluded: d.excluded || d.underReview })),
       exclusion,
     );
     const counted = monthDaysAll.filter((d) => !d.excluded && !d.underReview).length;
     underReviewDays += monthDaysAll.filter((d) => d.underReview && !d.excluded).length;
-    if (s.averageKwh !== null && baselineNow !== null && counted > 0) {
-      anyMonth = true;
-      totalConsumed += s.averageKwh * counted;
-      // The circuit as it now stands: fixtures taken off it at the full
-      // installation are not in its before figure (2026-09-27).
-      totalBaseline += comparableBaseline(baselineNow, exclusion) * counted;
-      totalReplacedBaseline += (baselineNow - excludedKwhAt(baselineNow, exclusion)) * counted;
+    if (s.averageKwh !== null && counted > 0) {
+      let circuitComparable = 0;
+      let circuitReplaced = 0;
+      let anyDayBaseline = false;
+      for (const d of monthDaysAll) {
+        if (d.excluded || d.underReview) continue;
+        const b = dayBaselineAt(new Date(`${d.date}T00:00:00Z`));
+        if (b === null) continue;
+        anyDayBaseline = true;
+        // The circuit as it now stands: fixtures taken off it at the full
+        // installation are not in its before figure (2026-09-27).
+        circuitComparable += comparableBaseline(b, exclusion);
+        circuitReplaced += b - excludedKwhAt(b, exclusion);
+      }
+      if (anyDayBaseline) {
+        anyMonth = true;
+        totalConsumed += s.averageKwh * counted;
+        totalBaseline += circuitComparable;
+        totalReplacedBaseline += circuitReplaced;
+      }
     }
     return {
       id: c.id,

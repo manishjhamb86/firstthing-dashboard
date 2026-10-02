@@ -24,7 +24,7 @@ import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
-import { storeExtraction } from "@/lib/invoice-intake-extract";
+import { runIntakeExtraction } from "@/lib/invoice-intake-extract";
 import {
   getInvoice,
   getInvoicePdf,
@@ -33,7 +33,7 @@ import {
   ZohoError,
   type ZohoSession,
 } from "@/lib/zoho-invoice";
-import { zohoPaidProposal, zohoStatusFetched, zohoTime, zohoToExtraction } from "@/lib/zoho-invoice-map";
+import { zohoPaidProposal, zohoStatusFetched, zohoTime } from "@/lib/zoho-invoice-map";
 
 export type ZohoSyncSummary = {
   inZoho: number;
@@ -71,6 +71,14 @@ async function storePdf(session: ZohoSession, zohoId: string, number: string, in
   return { key, size: bytes.length, hash: createHash("sha256").update(bytes).digest("hex") };
 }
 
+/**
+ * Fetches the invoice's PDF from Zoho and runs it through the SAME read a
+ * dropped file gets (2026-10-02, user-asked) — Zoho only stands in for the
+ * person picking a file; everything after that, the AI read, the proposed
+ * review, circuit matching, submit and release, is one flow for both. The
+ * one thing a PDF genuinely can't say is answered from Zoho's own record:
+ * its recorded payment status, layered onto the read review afterward.
+ */
 async function fillFromZoho(session: ZohoSession, intakeId: string, zohoId: string, actorId: string) {
   const inv = await getInvoice(session, zohoId);
   const pdf = await storePdf(session, zohoId, inv.invoice_number, intakeId);
@@ -88,7 +96,7 @@ async function fillFromZoho(session: ZohoSession, intakeId: string, zohoId: stri
     },
   });
   const paid = zohoPaidProposal(inv);
-  const r = await storeExtraction(intakeId, zohoToExtraction(inv), actorId, (review) => {
+  const r = await runIntakeExtraction(intakeId, actorId, (review) => {
     review.paid = paid.paid;
     review.paidOn = paid.paidOn;
   });

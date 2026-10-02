@@ -119,10 +119,12 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
 
   const now = new Date();
   const days = bandWindowReadings(circuit.meterReadings, now, start);
-  const baseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, now);
+  // Each day against the baseline in force that day, not "now" applied
+  // across the window — a rescale landing mid-month must not retroactively
+  // move days measured before it (2026-10-02, user-caught).
   const summary = periodSavingsSummary(
-    baseline,
-    days.map((d) => ({ kWh: d.kWh, excluded: d.excludedAt !== null })),
+    (d) => effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, d),
+    days.map((d) => ({ date: d.date, kWh: d.kWh, excluded: d.excludedAt !== null })),
     exclusionFromDevices(circuit.devices, "monitoring"),
   );
   if (summary.savingsPct === null) return { state: "unknown", reason: "no days have been recorded yet" };

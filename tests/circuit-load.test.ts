@@ -433,6 +433,50 @@ describe("periodSavingsSummary", () => {
     expect(s.savingsPct).toBeNull();
     expect(s.warn).toBe(false);
   });
+
+  // 2026-10-02, user-caught: a printed report for August read 72% in its
+  // headline while every one of its own day rows read 45-55%, because the
+  // headline resolved the baseline at GENERATION time (after a 01-Sep
+  // rescale, 15.91 -> 28.12) and applied it across the whole month, while
+  // each day row correctly used that day's own in-force baseline.
+  const rescaleResolver = (effectiveFrom: string, oldBaseline: number, newBaseline: number) => (d: Date) =>
+    d >= new Date(effectiveFrom) ? newBaseline : oldBaseline;
+
+  it("a period entirely BEFORE a later rescale uses the OLD baseline throughout, not the rescaled one", () => {
+    const resolve = rescaleResolver("2026-09-01", 15.91, 28.12);
+    const augustDays = [
+      { date: "2026-08-16", kWh: 7.21 },
+      { date: "2026-08-17", kWh: 7.13 },
+      { date: "2026-08-31", kWh: 9.49 },
+    ];
+    const withResolver = periodSavingsSummary(resolve, augustDays);
+    const withOldBaselineDirectly = periodSavingsSummary(15.91, augustDays);
+    expect(withResolver.savingsPct).toBeCloseTo(withOldBaselineDirectly.savingsPct!, 10);
+    // Not anywhere near the post-rescale (28.12-baseline) figure.
+    const withNewBaselineDirectly = periodSavingsSummary(28.12, augustDays);
+    expect(withResolver.savingsPct).not.toBeCloseTo(withNewBaselineDirectly.savingsPct!, 1);
+  });
+
+  it("a period SPANNING a rescale is weighted by each day's own baseline, never a flat 'now' figure", () => {
+    const resolve = rescaleResolver("2026-09-01", 100, 50);
+    // One day at the old (100) baseline, one at the new (50) baseline, both
+    // with the same 40 kWh reading — the correct aggregate is NOT the same
+    // as plugging the average kWh into either single baseline alone.
+    const days = [
+      { date: "2026-08-31", kWh: 40 }, // (100-40)/100 = 60%
+      { date: "2026-09-02", kWh: 40 }, // (50-40)/50   = 20%
+    ];
+    const s = periodSavingsSummary(resolve, days);
+    // Weighted: saved = (100-40)+(50-40) = 70; comparable baseline = 100+50 = 150.
+    expect(s.savingsPct).toBeCloseTo((70 / 150) * 100, 10); // 46.67%, not (60+20)/2=40%
+  });
+
+  it("a constant resolver reduces to the same figure as passing the baseline directly", () => {
+    const days = [{ date: "2026-08-16", kWh: 7.21 }, { date: "2026-08-20", kWh: 8.0 }];
+    const viaResolver = periodSavingsSummary(() => 15.91, days);
+    const viaNumber = periodSavingsSummary(15.91, days);
+    expect(viaResolver.savingsPct).toBeCloseTo(viaNumber.savingsPct!, 10);
+  });
 });
 
 describe("SONOFF format signature", () => {

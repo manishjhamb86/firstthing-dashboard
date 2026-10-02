@@ -27,7 +27,7 @@ import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildInvoiceKey } from "@/lib/ingest-keys";
 import { buildDocumentKey } from "@/lib/document-keys";
-import { fileStoredDocumentForSociety } from "@/app/admin/documents/actions";
+import { fileStoredDocumentForSociety, voidDocumentVersion } from "@/app/admin/documents/actions";
 import { sniffKind } from "@/lib/file-signature";
 import { INTAKE_SERVICE_LINE, runIntakeExtraction } from "@/lib/invoice-intake-extract";
 import { describeSync, refetchZohoIntake, runZohoSync } from "@/lib/zoho-invoice-sync";
@@ -735,6 +735,56 @@ export async function fileIntakesAsDocuments(intakeIds: string[]): Promise<BulkR
   logger.info("intake.bulk_file_completed", { actorId: ops.actor.id, requested: intakeIds.length, done, failed: failed.length });
   revalidatePath(INTAKE_PATH);
   return { done, failed };
+}
+
+/**
+ * Reverses a "filed as document" submission so the row can be resubmitted
+ * through the real billing pipeline instead (2026-10-02, user-asked) — a
+ * service invoice filed as a plain document copy by mistake has no month of
+ * record behind it: no reconciled fee line, nothing for Billing or "Saved
+ * this month" to read. Withdraws the filed StoredDocument with the stated
+ * reason and reopens the row exactly where a fresh read leaves one — the
+ * operator reviews and submits it normally from there.
+ *
+ * Refused once the document has already reached the society (GATE-02's own
+ * shape): a document the society already holds is not quietly taken back —
+ * withdraw it from the document's own page first, with its own reason, if
+ * that is genuinely what's needed.
+ */
+export async function unfileIntake(intakeId: string, reason: string): Promise<Result> {
+  const ops = await requireBillingOps();
+  if (!ops.ok) return { error: ops.error };
+  if (!reason.trim()) return { error: "Say why this is being unfiled." };
+  const intake = await db.invoiceIntake.findUnique({ where: { id: intakeId } });
+  if (!intake) return { error: "That upload no longer exists." };
+  if (!intake.filedAsDocumentId) return { error: "This row was not filed as a document." };
+  const doc = await db.storedDocument.findUnique({
+    where: { id: intake.filedAsDocumentId },
+    select: { releasedToSocietyAt: true, voidedAt: true },
+  });
+  if (doc?.releasedToSocietyAt) {
+    return {
+      error:
+        "Already released to the society — withdraw it from the document's own page first if it genuinely needs to come back.",
+    };
+  }
+  if (doc && !doc.voidedAt) {
+    const v = await voidDocumentVersion({ documentId: intake.filedAsDocumentId, reason: reason.trim() });
+    if (v.error) return { error: v.error };
+  }
+  await db.invoiceIntake.update({
+    where: { id: intakeId },
+    data: { status: "needs_review", filedAsDocumentId: null, submittedAt: null },
+  });
+  logger.info("intake.unfiled", {
+    actorId: ops.actor.id,
+    intakeId,
+    documentId: intake.filedAsDocumentId,
+    reason: reason.trim(),
+  });
+  revalidatePath(INTAKE_PATH);
+  revalidatePath(`${INTAKE_PATH}/${intakeId}`);
+  return {};
 }
 
 /**

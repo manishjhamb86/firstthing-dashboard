@@ -32,6 +32,7 @@ import {
   releaseIntakesToSociety,
   retryIntake,
   submitReadyBatch,
+  unfileIntake,
   type IntakeDuplicate,
 } from "./actions";
 
@@ -54,8 +55,8 @@ export type IntakeRow = {
   uploadedBy: string;
   note: string | null;
   calculationId: string | null;
-  /** Set only for a non-service invoice's row — filed, not a calculation. */
-  filedSocietyId: string | null;
+  /** The filed StoredDocument's own id — "View document" opens this. */
+  filedDocumentId: string | null;
   /** Set only for a retail sale's row — the customer it was filed against. */
   retailCustomerId: string | null;
   /** The review's own confirmed society and month — what filing is keyed on. */
@@ -131,6 +132,27 @@ export function IntakeClient({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [batchResult, setBatchResult] = useState<{ verb: string; done: number; failed: { fileName: string; error: string }[] } | null>(null);
+
+  // Reverses "filed as document" so the row can be resubmitted as a real
+  // billed month instead (2026-10-02, user-asked).
+  const [unfileTarget, setUnfileTarget] = useState<{ id: string; fileName: string } | null>(null);
+  const [unfileReason, setUnfileReason] = useState("");
+  const [unfilePending, setUnfilePending] = useState(false);
+  const [unfileError, setUnfileError] = useState<string | null>(null);
+  async function confirmUnfile() {
+    if (!unfileTarget) return;
+    setUnfilePending(true);
+    setUnfileError(null);
+    const r = await unfileIntake(unfileTarget.id, unfileReason);
+    setUnfilePending(false);
+    if (r.error) {
+      setUnfileError(r.error);
+      return;
+    }
+    setUnfileTarget(null);
+    setUnfileReason("");
+    router.refresh();
+  }
 
   // The background sweep (job-worker.ts) reads a row on its own timer,
   // independent of any open tab — without this, a row it just started
@@ -712,10 +734,30 @@ export function IntakeClient({
                           <Link href={`/admin/retail-customers/${r.retailCustomerId}`} className="btn-ghost btn-sm">
                             View customer
                           </Link>
-                        ) : (r.status === "submitted_filed_document" || r.status === "submitted_filed_released") && r.filedSocietyId ? (
-                          <Link href={`/admin/documents?societyId=${r.filedSocietyId}`} className="btn-ghost btn-sm">
-                            View document
-                          </Link>
+                        ) : (r.status === "submitted_filed_document" || r.status === "submitted_filed_released") && r.filedDocumentId ? (
+                          <span className="inline-flex items-center gap-1.5">
+                            <Link href={`/admin/documents/${r.filedDocumentId}`} className="btn-ghost btn-sm">
+                              View document
+                            </Link>
+                            {/* Only offered while still unreleased — once a
+                                society has the document, the way back is to
+                                withdraw it from its own page instead, which
+                                the server also says (don't offer a control
+                                that can only refuse). */}
+                            {r.status === "submitted_filed_document" && (
+                              <button
+                                type="button"
+                                className="btn-ghost btn-sm"
+                                onClick={() => {
+                                  setUnfileTarget({ id: r.id, fileName: r.invoiceNumber ?? r.fileName });
+                                  setUnfileReason("");
+                                  setUnfileError(null);
+                                }}
+                              >
+                                Unfile
+                              </button>
+                            )}
+                          </span>
                         ) : r.status === "reading" ? (
                           // Same shape as the "uploaded" branch just below
                           // (a fixed-width disabled button, same gap, same
@@ -837,6 +879,59 @@ export function IntakeClient({
                   : pendingDupes.fresh.length > 0
                     ? "Skip these and upload the rest"
                     : "Skip these"}
+              </button>
+            </div>
+          </>
+        )}
+      </Modal>
+
+      <Modal
+        open={unfileTarget !== null}
+        onClose={() => {
+          if (unfilePending) return;
+          setUnfileTarget(null);
+          setUnfileError(null);
+        }}
+        title="Unfile this invoice"
+        description={
+          unfileTarget
+            ? `Withdraws the filed copy for ${unfileTarget.fileName} and reopens it so it can be reconciled against a circuit and submitted as a real billed month instead — the way Billing and "Saved this month" actually get their figures.`
+            : undefined
+        }
+      >
+        {unfileTarget && (
+          <>
+            <label htmlFor="unfile-reason" className="lbl">
+              Why
+            </label>
+            <input
+              id="unfile-reason"
+              type="text"
+              className="field mt-1"
+              value={unfileReason}
+              onChange={(e) => setUnfileReason(e.target.value)}
+              placeholder="Filed as a document by mistake — should be a billed month"
+            />
+            {unfileError && <ErrorText>{unfileError}</ErrorText>}
+            <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                className="btn-ghost"
+                disabled={unfilePending}
+                onClick={() => {
+                  setUnfileTarget(null);
+                  setUnfileError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={unfilePending || !unfileReason.trim()}
+                onClick={() => void confirmUnfile()}
+              >
+                {unfilePending ? "Unfiling…" : "Unfile"}
               </button>
             </div>
           </>

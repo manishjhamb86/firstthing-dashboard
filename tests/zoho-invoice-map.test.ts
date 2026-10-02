@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { zohoInvoiceMonth, zohoPaidProposal, zohoStatusFetched, zohoTime, zohoToExtraction } from "@/lib/zoho-invoice-map";
+import { zohoInvoiceMonth, zohoPaidProposal, zohoStatusFetched, zohoTime } from "@/lib/zoho-invoice-map";
 import type { ZohoInvoice } from "@/lib/zoho-invoice";
 
 // Shaped on FT/2026-27/055 (Aditya Mega City, July 2026): one service line,
@@ -33,58 +33,6 @@ const INV: ZohoInvoice = {
   custom_fields: [{ label: "Invoice For The Month", value: "July-2026" }],
   last_modified_time: "2026-08-01T10:31:04+0530",
 };
-
-describe("zohoToExtraction", () => {
-  it("carries Zoho's figures exactly, with their source named", () => {
-    const x = zohoToExtraction(INV);
-    expect(x.invoiceNumber.value).toBe("FT/2026-27/055");
-    expect(x.invoiceDate.value).toBe("2026-08-01");
-    expect(x.dueDate.value).toBe("2026-08-16");
-    expect(x.invoiceForMonth.value).toBe("2026-07");
-    expect(x.billToName.value).toBe("Aditya Mega City AOA");
-    expect(x.billToGstin.value).toBe("09AAAAA0000A1Z5");
-    expect(x.billToAddress.value).toBe("Indirapuram, Ghaziabad, Uttar Pradesh, 201014");
-    expect(x.lines).toHaveLength(1);
-    const l = x.lines[0];
-    expect([l.qty.value, l.rate.value, l.discount.value, l.amount.value, l.taxPct.value, l.taxAmount.value]).toEqual([605, 23.23, 4.15, 14050, 18, 2529]);
-    expect(l.hsn).toBe("998599");
-    expect(l.kindProposal).toBe("service");
-    expect(l.description).toBe("Energy Efficiency services — Savings share for 605 lights");
-    expect([x.subtotal.value, x.taxAmount.value, x.taxPct.value, x.total.value, x.balanceDue.value]).toEqual([14050, 2529, 18, 16579, 16579]);
-    expect(x.clarifications).toEqual([]);
-    expect(x.total.sourceText).toBe("Zoho total");
-  });
-
-  it("proposes a goods line (a smart meter) as other, by its HSN", () => {
-    const x = zohoToExtraction({ ...INV, line_items: [{ name: "Smart meter", hsn_or_sac: "90283010", quantity: 1, rate: 3000, item_total: 3000 }] });
-    expect(x.lines[0].kindProposal).toBe("other");
-    expect(x.lines[0].discount.value).toBe(0);
-  });
-
-  it("reads a percentage discount against the line's gross", () => {
-    const x = zohoToExtraction({ ...INV, line_items: [{ name: "x", hsn_or_sac: "998599", quantity: 100, rate: 10, discount: "5%", item_total: 950 }] });
-    expect(x.lines[0].discount.value).toBe(50);
-  });
-
-  it("sums split GST (CGST + SGST) into the line's tax", () => {
-    const x = zohoToExtraction({
-      ...INV,
-      line_items: [{ name: "x", hsn_or_sac: "998599", quantity: 1, rate: 100, item_total: 100, tax_percentage: 18, line_item_taxes: [{ tax_amount: 9 }, { tax_amount: 9 }] }],
-    });
-    expect(x.lines[0].taxAmount.value).toBe(18);
-  });
-
-  it("leaves no single tax rate when lines differ", () => {
-    const x = zohoToExtraction({
-      ...INV,
-      line_items: [
-        { name: "a", hsn_or_sac: "998599", quantity: 1, rate: 1, item_total: 1, tax_percentage: 18 },
-        { name: "b", hsn_or_sac: "9405", quantity: 1, rate: 1, item_total: 1, tax_percentage: 12 },
-      ],
-    });
-    expect(x.taxPct.value).toBeNull();
-  });
-});
 
 describe("zohoInvoiceMonth", () => {
   it("prefers a month custom field, then the reference, notes and lines — never the date", () => {

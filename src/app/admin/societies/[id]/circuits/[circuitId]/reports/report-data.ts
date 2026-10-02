@@ -227,10 +227,14 @@ export function monthsWithData(
   return [...new Set(report.postDays.map((d) => d.date.slice(0, 7)))].sort();
 }
 
-export function summarize(baseline: number | null, days: ReportDay[], ex?: Exclusion) {
+export function summarize(
+  baseline: number | null | ((date: Date) => number | null),
+  days: ReportDay[],
+  ex?: Exclusion,
+) {
   return periodSavingsSummary(
     baseline,
-    days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })),
+    days.map((d) => ({ date: d.date, kWh: d.kWh, excluded: d.excluded })),
     ex,
   );
 }
@@ -265,6 +269,16 @@ export async function buildMonthlySnapshot(
   month: string,
 ): Promise<SavingsReportSnapshot> {
   const days = monthDays(report, month);
+  // The baseline in force DURING the reported month, not at generation time
+  // (2026-10-02, user-caught) — a report run after a later rescale was
+  // headlining August against September's baseline while every one of its
+  // own day rows correctly used August's. `summary` now resolves per day
+  // (`periodSavingsSummary`); the single "Baseline in force" figure shown
+  // alongside it is the baseline as of the last counted day of the month
+  // itself, so the two can never disagree the way they did here.
+  const baselineAt = (d: Date) =>
+    effectiveBaselineAt(report.circuit.preInstallBaseline, report.circuit.rescaleEvents, d);
+  const lastDay = days.length > 0 ? new Date(days[days.length - 1].date) : null;
   return {
     societyName: report.society.name,
     societyLocation: report.society.location,
@@ -274,9 +288,9 @@ export async function buildMonthlySnapshot(
     demoLights: report.demoLights,
     benchmarkSavingsPct: report.circuit.benchmarkSavingsPct,
     month,
-    baselineKwhPerDay: report.effBaselineNow,
+    baselineKwhPerDay: lastDay ? baselineAt(lastDay) : report.effBaselineNow,
     days,
-    summary: summarize(report.effBaselineNow, days, report.monitoringExclusion),
+    summary: summarize(baselineAt, days, report.monitoringExclusion),
     fee: await circuitFeeLineFor(report.circuit.id, month),
     generatedAt: new Date().toISOString(),
   };

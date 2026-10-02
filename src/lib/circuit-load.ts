@@ -846,18 +846,48 @@ export function averageKwh(rows: { kWh: number }[]): number | null {
 /** One warning when a period averages below the contractual floor. */
 export const SAVINGS_WARN_BELOW = 60;
 
+/**
+ * A period's savings, against the baseline IN FORCE ON EACH DAY, not one
+ * "now" figure applied across the whole period (2026-10-02, user-caught: a
+ * printed report for August read 72% in its headline while every one of its
+ * own day rows read 45-55%, because the headline used `effectiveBaselineAt`
+ * at the moment the report was GENERATED — after a 01-Sep rescale — while
+ * each day correctly replayed the baseline as of that day). `baselineAt` may
+ * be a plain number (the pre-existing, still-supported shape — every call
+ * site with no rescale in its window behaves identically) or a resolver,
+ * which this aggregates by SUMMING each day's own numerator and denominator
+ * rather than averaging kWh against one baseline — the same "weighted by
+ * each day's own figure, never a plain average of percentages" rule already
+ * used for `sinceStart`'s overall %. With a constant baseline this reduces
+ * to exactly `savingsPct(baseline, averageKwh, ex)`, so a period that never
+ * crosses a rescale sees no change at all.
+ */
 export function periodSavingsSummary(
-  baseline: number | null,
-  days: { kWh: number; excluded?: boolean }[],
+  baselineAt: number | null | ((date: Date) => number | null),
+  days: { date?: Date | string; kWh: number; excluded?: boolean }[],
   /** What was left on the circuit unreplaced — off both sides (savingsPct). */
   ex?: Exclusion,
 ): { averageKwh: number | null; savingsPct: number | null; band: SavingsBand | null; warn: boolean } {
+  const resolve: (date?: Date | string) => number | null =
+    typeof baselineAt === "function"
+      ? (date) => (date === undefined ? null : baselineAt(typeof date === "string" ? new Date(date) : date))
+      : () => baselineAt;
   const live = days.filter((d) => !d.excluded);
   const avg = averageKwh(live);
-  const pct = avg === null || baseline === null ? null : savingsPct(baseline, avg, ex);
-  if (pct === null) {
+  let savedSum = 0;
+  let replacedSum = 0;
+  for (const d of live) {
+    const b = resolve(d.date);
+    if (b === null) continue;
+    const replaced = b - excludedKwhAt(b, ex);
+    if (replaced <= 0) continue;
+    savedSum += comparableBaseline(b, ex) - d.kWh;
+    replacedSum += replaced;
+  }
+  if (replacedSum <= 0) {
     return { averageKwh: avg, savingsPct: null, band: null, warn: false };
   }
+  const pct = (savedSum / replacedSum) * 100;
   return { averageKwh: avg, savingsPct: pct, band: savingsBand(pct), warn: pct < SAVINGS_WARN_BELOW };
 }
 

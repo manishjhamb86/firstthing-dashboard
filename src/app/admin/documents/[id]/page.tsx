@@ -5,6 +5,7 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { formatDate, formatInstant } from "@/lib/format-date";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
+import { publicS3Url } from "@/lib/s3";
 import type { ExtractedDocument } from "@/lib/document-extract";
 import { ExtractionReview } from "./review-client";
 import { AgreementTerms } from "./agreement-terms";
@@ -117,6 +118,19 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
 
         <Card className="p-6 lg:col-span-4">
           <CardTitle>The file</CardTitle>
+          {/* The thing the whole page is named for — no way to open or
+              download the actual file anywhere else on it (2026-10-02,
+              user-caught, via a filed invoice copy with no extraction step
+              to render). The `Documents/` tree is public-read by design, so
+              this is a direct link, same as the portal's own download. */}
+          <a
+            href={publicS3Url(doc.s3Key)}
+            target="_blank"
+            rel="noreferrer"
+            className="btn-secondary mb-4 inline-block"
+          >
+            View / download the file
+          </a>
           <dl className="text-[13px]">
             {(
               [

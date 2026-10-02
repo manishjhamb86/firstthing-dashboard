@@ -158,8 +158,12 @@ export default async function LiveMonitoringCircuitPage({
   const thisMonth = monthOf(nowIso);
   const lastMonth = monthOf(new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() - 1, 1)).toISOString());
   const thisYear = nowIso.slice(0, 4);
+  // Each day against the baseline in force THAT DAY (INV-07 replay), not a
+  // single "now" figure spanning periods that may cross a rescale (2026-10-02,
+  // user-caught on a printed report whose headline and day rows disagreed).
+  const baselineAt = (d: Date) => effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, d);
   const periodPct = (days: StoredReadingDTO[]) => {
-    const s = periodSavingsSummary(baselineNow, days.map((d) => ({ kWh: d.kWh, excluded: d.excluded })), exclusion);
+    const s = periodSavingsSummary(baselineAt, days.map((d) => ({ date: d.date, kWh: d.kWh, excluded: d.excluded })), exclusion);
     return s.savingsPct === null ? null : { pct: s.savingsPct, band: s.band, days: days.filter((d) => !d.excluded).length };
   };
   const savingsRows = [

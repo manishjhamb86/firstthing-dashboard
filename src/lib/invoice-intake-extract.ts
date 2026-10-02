@@ -149,8 +149,22 @@ async function readWithOneRetry(bytes: Uint8Array): Promise<ExtractedInvoice> {
  * `actorId` is for the log line only — nothing this function writes
  * persists an actor as a foreign key, so the sweep's own synthetic id
  * ("system:invoice-intake-sweep") needs no real AdminUser row behind it.
+ *
+ * `adjust` lets a caller that knows something a PDF can't say add it to the
+ * proposed review — a Zoho-fetched invoice (src/lib/zoho-invoice-sync.ts)
+ * uses it for Zoho's own payment status, the one thing genuinely absent from
+ * the invoice itself. Reading the PDF — even one Zoho handed over, rather
+ * than trusting Zoho's structured fields directly — is deliberate (2026-10-02,
+ * user-asked): "the rest of the process should follow the same flow" as an
+ * uploaded PDF, so a Zoho-fetched invoice gets the identical read, the same
+ * clarifications, and the same circuit-matching a dropped file gets — Zoho
+ * only replaces the person picking a file, not the reading of it.
  */
-export async function runIntakeExtraction(intakeId: string, actorId: string): Promise<ExtractResult> {
+export async function runIntakeExtraction(
+  intakeId: string,
+  actorId: string,
+  adjust?: (review: Review) => void,
+): Promise<ExtractResult> {
   const intake = await db.invoiceIntake.findUnique({ where: { id: intakeId } });
   if (!intake) return { error: "That upload no longer exists." };
   if (intake.status === "submitted") return { error: "This invoice has already been submitted." };
@@ -179,7 +193,7 @@ export async function runIntakeExtraction(intakeId: string, actorId: string): Pr
     return { error: friendly };
   }
 
-  return storeExtraction(intakeId, extraction, actorId);
+  return storeExtraction(intakeId, extraction, actorId, adjust);
 }
 
 /**

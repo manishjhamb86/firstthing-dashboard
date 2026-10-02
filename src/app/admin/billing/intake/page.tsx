@@ -131,9 +131,11 @@ export default async function IntakePage({
       uploadedBy: i.uploadedBy.name ?? i.uploadedBy.email,
       note: i.extractionError ?? null,
       calculationId: i.monthlyCalculationId,
-      // Only set for a non-service invoice's row — where it was filed
-      // instead of submitted as a calculation.
-      filedSocietyId: i.filedAsDocumentId ? i.societyId : null,
+      // The actual filed StoredDocument's own id — "View document" opens
+      // THIS document (2026-10-02, user-caught: the link only carried the
+      // society, landing on the generic upload page with the file nowhere
+      // in sight rather than on the document that was actually filed).
+      filedDocumentId: i.filedAsDocumentId ?? null,
       retailCustomerId: i.retailInvoiceId ? (retailCustomerByInvoice.get(i.retailInvoiceId) ?? null) : null,
       // What the bulk bar's rule reads (src/lib/intake-bulk.ts) — the
       // review's own confirmed values, the same ones the server re-checks.

@@ -24,7 +24,6 @@ export default async function LiveMonitoringPage() {
     session.user.adminPermissions?.includes("manage_pipeline");
   if (!canView) redirect("/admin");
 
-  const now = new Date();
   const circuits = await db.circuit.findMany({
     where: LIVE_MONITORING_WHERE,
     include: {
@@ -44,10 +43,11 @@ export default async function LiveMonitoringPage() {
     // Monitoring days only, from the billing start (2026-09-26).
     const start = starts.get(c.id) ?? null;
     const days = start ? c.meterReadings.filter((r) => r.date.getTime() >= start.getTime()) : [];
-    const baseline = effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, now);
+    // Each day against the baseline in force that day, not "now" applied
+    // across the whole monitoring history (2026-10-02, user-caught).
     const summary = periodSavingsSummary(
-      baseline,
-      days.map((d) => ({ kWh: d.kWh, excluded: d.excludedAt !== null })),
+      (d) => effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, d),
+      days.map((d) => ({ date: d.date, kWh: d.kWh, excluded: d.excludedAt !== null })),
       exclusionFromDevices(c.devices, "monitoring"),
     );
     const last = days.length > 0 ? days[days.length - 1].date : null;

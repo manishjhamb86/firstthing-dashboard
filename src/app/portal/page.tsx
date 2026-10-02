@@ -333,8 +333,15 @@ export default async function PortalHomePage() {
           // dashboard shows current month['s %] and the user gets last
           // month's report and compares with that").
           const billedMonthLabel = billed ? monthName(billed.period) : null;
-          const currentMonthPct = billed && energy.month && energy.month !== billed.period ? energy.totals.savingsPct : null;
+          const currentMonthDistinct = Boolean(billed && energy.month && energy.month !== billed.period);
+          const currentMonthPct = currentMonthDistinct ? energy.totals.savingsPct : null;
           const currentMonthLabel = energy.month ? monthName(energy.month) : null;
+          // A day the system's own check can't trust (CON-45 — a dead meter,
+          // or a saving above what a working one can produce) is never
+          // quietly folded into this figure; it is named instead, and an
+          // admin review is what decides what the month actually says
+          // (user-asked, 2026-10-02).
+          const currentMonthUnderReview = currentMonthDistinct ? energy.totals.underReviewDays : 0;
 
           return (
             <>
@@ -401,13 +408,20 @@ export default async function PortalHomePage() {
                   </Link>
                 </p>
               )}
-              {currentMonthPct !== null && (
-                <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                  <strong className="num" style={{ color: "var(--text-muted)" }}>
-                    {currentMonthPct.toFixed(1)}%
-                  </strong>{" "}
-                  so far in {currentMonthLabel} — not yet billed.
+              {currentMonthUnderReview > 0 ? (
+                <p className="mb-6 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
+                  <strong>Under review</strong> — {currentMonthUnderReview} day{currentMonthUnderReview === 1 ? "" : "s"} of{" "}
+                  {currentMonthLabel} need checking before that month&rsquo;s savings are shown.
                 </p>
+              ) : (
+                currentMonthPct !== null && (
+                  <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                    <strong className="num" style={{ color: "var(--text-muted)" }}>
+                      {currentMonthPct.toFixed(1)}%
+                    </strong>{" "}
+                    so far in {currentMonthLabel} — not yet billed.
+                  </p>
+                )
               )}
 
             </>

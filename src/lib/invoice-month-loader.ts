@@ -32,7 +32,7 @@ export type InvoiceMonthContext = {
   notes: string[];
 };
 
-function periodBounds(period: string): { from: Date; to: Date } {
+export function periodBounds(period: string): { from: Date; to: Date } {
   const [y, m] = period.split("-").map(Number);
   return { from: new Date(Date.UTC(y, m - 1, 1)), to: new Date(Date.UTC(y, m, 1)) };
 }

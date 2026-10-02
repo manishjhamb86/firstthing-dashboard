@@ -6,6 +6,7 @@ import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { lightCountStages, type LightStage } from "@/lib/light-count-history";
 import { comparableBaseline, EXCLUSION_DEVICE_SELECT, excludedKwhAt, keptStory, exclusionFromDevices, type Exclusion, periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
 import { circuitLabelOf } from "@/lib/meter-view";
+import { classifyDay } from "@/lib/invoice-month";
 
 export type MonthTotal = {
   month: string;
@@ -110,7 +111,7 @@ export type PortalCircuit = {
    * installation, not the demo. `baseline` is the one in force that day, so a
    * light-count change moves it from its own date (INV-07).
    */
-  monitoring: { date: string; kWh: number; excluded: boolean; baseline: number | null }[];
+  monitoring: { date: string; kWh: number; excluded: boolean; underReview: boolean; baseline: number | null }[];
   /** Days recorded in the headline month (excluded days not counted). */
   monthDays: number;
   monthKwh: number | null;
@@ -130,6 +131,13 @@ export type PortalEnergy = {
     avoidedKwh: number | null;
     savingsPct: number | null;
     band: SavingsBand | null;
+    /**
+     * Days of the headline month a circuit's own reading reads as untrustworthy
+     * (classifyDay's "suspect"/"offline" — CON-45's own check) and so were held
+     * out of every figure above (2026-10-02, user-asked). The dashboard reads
+     * this to show "under review" rather than a % that quietly excluded them.
+     */
+    underReviewDays: number;
   };
   /**
    * EVERY recorded day, society-wide, oldest first — the chart buckets it
@@ -140,8 +148,14 @@ export type PortalEnergy = {
    * replay), counting only the circuits that actually reported it — summing
    * every circuit's baseline on a day when one was silent would overstate
    * what the old lights would have drawn and inflate the saving.
+   *
+   * `underReview` is true when any contributing circuit's own reading that
+   * day failed CON-45's own plausibility check — its kWh/baseline are held
+   * out of this day's sum (the same treatment as an operator's own
+   * exclusion), and the day reads "under review" rather than as a real
+   * figure or a silent gap.
    */
-  daily: { date: string; kWh: number; baseline: number | null }[];
+  daily: { date: string; kWh: number; baseline: number | null; underReview: boolean }[];
 };
 
 /** The demo's span: its first meter day to its last post-install day. */
@@ -184,13 +198,13 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         // resident's own figures (caught 2026-08-31).
         where: { source: "csv" },
         orderBy: { date: "asc" },
-        select: { date: true, kWh: true, excludedAt: true },
+        select: { date: true, kWh: true, excludedAt: true, intervalCount: true },
       },
     },
   });
 
   const today = new Date();
-  type Day = { date: string; kWh: number; excluded: boolean };
+  type Day = { date: string; kWh: number; excluded: boolean; underReview: boolean };
   // A circuit reaches the resident once its lights are in. Its days are the
   // monitoring rows from the billing start (2026-09-26); before a billing
   // start is known, the days after the lights went in.
@@ -208,14 +222,25 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   );
   const perCircuit = installed.map((c) => {
     const from = starts.get(c.id) ?? c.lightReplacementDate;
+    const baselineNow = effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, today);
     const monitoring: Day[] = c.meterReadings
       .filter((r) => (from ? (starts.get(c.id) ? r.date >= from : r.date > from) : true))
-      .map((r) => ({
-        date: r.date.toISOString().slice(0, 10),
-        kWh: r.kWh,
-        excluded: r.excludedAt !== null,
-      }));
-    const baselineNow = effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, today);
+      .map((r) => {
+        // A day this project's own CON-45 rule already calls untrustworthy
+        // (a dead meter reading zero, or a saving above the bound a working
+        // meter can produce — SAVINGS_SUSPECT_ABOVE) is withheld from the
+        // resident rather than shown as a real figure, with "under review"
+        // in its place (user-asked, 2026-10-02). Reusing classifyDay is
+        // deliberate: it is the SAME check the invoice-first stats already
+        // apply, so a day cannot read fine here and suspect on the invoice.
+        const cls = classifyDay({ date: r.date.toISOString().slice(0, 10), kWh: r.kWh, intervalCount: r.intervalCount, dataHours: null }, baselineNow ?? 0);
+        return {
+          date: r.date.toISOString().slice(0, 10),
+          kWh: r.kWh,
+          excluded: r.excludedAt !== null,
+          underReview: cls === "suspect" || cls === "offline",
+        };
+      });
     return { c, monitoring, baselineNow };
   });
 
@@ -225,7 +250,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   // 1 September was a 10-of-24-hour day, so the page headlined a September
   // with nothing in it).
   const latest = perCircuit
-    .flatMap((p) => p.monitoring.filter((d) => !d.excluded).map((d) => d.date))
+    .flatMap((p) => p.monitoring.filter((d) => !d.excluded && !d.underReview).map((d) => d.date))
     .sort()
     .at(-1);
   const month = latest ? latest.slice(0, 7) : null;
@@ -235,13 +260,23 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   // The baseline of the lights actually replaced — what a saving is a share of.
   let totalReplacedBaseline = 0;
   let anyMonth = false;
+  let underReviewDays = 0;
 
   const rows: PortalCircuit[] = perCircuit.map(({ c, monitoring, baselineNow }) => {
     const monthDaysAll = month ? monitoring.filter((d) => d.date.startsWith(month)) : [];
     const exclusion = exclusionFromDevices(c.devices, "monitoring");
     const demoLights = demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos: c.demos, devices: c.devices });
-    const s = periodSavingsSummary(baselineNow, monthDaysAll, exclusion);
-    const counted = monthDaysAll.filter((d) => !d.excluded).length;
+    // A day under review is held out of the average the same way an excluded
+    // one already is — it just arrived there by the system's own check
+    // rather than an operator's — while staying its OWN flag on `monitoring`
+    // so the daily table can say "under review" rather than merely omitting it.
+    const s = periodSavingsSummary(
+      baselineNow,
+      monthDaysAll.map((d) => ({ kWh: d.kWh, excluded: d.excluded || d.underReview })),
+      exclusion,
+    );
+    const counted = monthDaysAll.filter((d) => !d.excluded && !d.underReview).length;
+    underReviewDays += monthDaysAll.filter((d) => d.underReview && !d.excluded).length;
     if (s.averageKwh !== null && baselineNow !== null && counted > 0) {
       anyMonth = true;
       totalConsumed += s.averageKwh * counted;
@@ -297,17 +332,25 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   // Society-wide daily series: for each recorded day, sum the kWh AND the
   // baselines of the circuits that reported it, so every bucket compares
   // like with like.
-  const byDate = new Map<string, { kWh: number; baseline: number; replacedBaseline: number; missingBaseline: boolean }>();
+  const byDate = new Map<string, { kWh: number; baseline: number; replacedBaseline: number; missingBaseline: boolean; underReview: boolean }>();
   for (const p of perCircuit) {
     const ex = exclusionFromDevices(p.c.devices, "monitoring");
     for (const d of p.monitoring) {
       if (d.excluded) continue;
+      const cur = byDate.get(d.date) ?? { kWh: 0, baseline: 0, replacedBaseline: 0, missingBaseline: false, underReview: false };
+      // A day under review contributes no figure — it marks the date and is
+      // held out of the sum, the same way an excluded day already is, rather
+      // than silently blending an unreliable reading into the total.
+      if (d.underReview) {
+        cur.underReview = true;
+        byDate.set(d.date, cur);
+        continue;
+      }
       const dayBaseline = effectiveBaselineAt(
         p.c.preInstallBaseline,
         p.c.rescaleEvents,
         new Date(`${d.date}T00:00:00Z`),
       );
-      const cur = byDate.get(d.date) ?? { kWh: 0, baseline: 0, replacedBaseline: 0, missingBaseline: false };
       cur.kWh += d.kWh;
       if (dayBaseline === null) cur.missingBaseline = true;
       else {
@@ -324,6 +367,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       kWh: v.kWh,
       baseline: v.missingBaseline ? null : v.baseline,
       replacedBaseline: v.missingBaseline ? null : v.replacedBaseline,
+      underReview: v.underReview,
     }));
 
   // ₹ is FEAT-111's (published-months.ts): the society's rupee figures come
@@ -337,6 +381,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       avoidedKwh: anyMonth ? totalBaseline - totalConsumed : null,
       savingsPct: totalPct,
       band: totalPct !== null ? savingsBand(totalPct) : null,
+      underReviewDays,
     },
     daily,
   };

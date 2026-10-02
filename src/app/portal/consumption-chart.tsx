@@ -32,6 +32,8 @@ export type DailyPoint = {
   baseline: number | null;
   /** The baseline of the lights actually replaced — what a saving is a share of. */
   replacedBaseline?: number | null;
+  /** CON-45's own plausibility check failed this day — shown as "under review", never as a figure. */
+  underReview?: boolean;
 };
 
 type Bucket = "daily" | "weekly" | "monthly" | "yearly" | "overall";
@@ -62,7 +64,7 @@ function labelFor(key: string, bucket: Bucket): string {
   return dayAxis(d);
 }
 
-type Bar = { key: string; label: string; kWh: number; baseline: number | null; replacedBaseline: number | null; days: number };
+type Bar = { key: string; label: string; kWh: number; baseline: number | null; replacedBaseline: number | null; days: number; underReview: boolean };
 
 function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: string } {
   if (days.length === 0) return { bars: [], note: "" };
@@ -83,10 +85,11 @@ function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: str
           ? d.date.slice(0, 7)
           : d.date.slice(0, 4);
 
-  const groups = new Map<string, { kWh: number; baseline: number; replaced: number; anyNull: boolean; days: number }>();
+  const groups = new Map<string, { kWh: number; baseline: number; replaced: number; anyNull: boolean; days: number; underReview: boolean }>();
   for (const d of days) {
     const k = keyOf(d);
-    const g = groups.get(k) ?? { kWh: 0, baseline: 0, replaced: 0, anyNull: false, days: 0 };
+    const g = groups.get(k) ?? { kWh: 0, baseline: 0, replaced: 0, anyNull: false, days: 0, underReview: false };
+    if (d.underReview) g.underReview = true;
     g.kWh += d.kWh;
     if (d.baseline === null) g.anyNull = true;
     else {
@@ -106,6 +109,7 @@ function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: str
       baseline: g.anyNull ? null : g.baseline,
       replacedBaseline: g.anyNull ? null : g.replaced,
       days: g.days,
+      underReview: g.underReview,
     }));
 
   const cap =
@@ -245,7 +249,12 @@ export function ConsumptionChart({
         )}
 
         {bars.map((b, i) => {
-          const bh = Math.max(2, (b.kWh / top) * height);
+          // A day this bucket holds under review is drawn flat and in the
+          // warn colour rather than at its real height — a real-looking bar
+          // for a reading CON-45's own check couldn't trust would be exactly
+          // the "a dead meter reads as 100% savings" mistake this project
+          // keeps fixing, just drawn instead of computed (2026-10-02).
+          const bh = b.underReview ? 2 : Math.max(2, (b.kWh / top) * height);
           return (
             <rect
               key={b.key}
@@ -254,9 +263,14 @@ export function ConsumptionChart({
               width={bw}
               height={bh}
               rx={Math.min(3.5, bw / 2)}
-              fill="var(--chart-mark)"
+              fill={b.underReview ? "var(--warn-fg)" : "var(--chart-mark)"}
+              opacity={b.underReview ? 0.6 : 1}
             >
-              <title>{`${b.label} · ${b.kWh.toFixed(2)} kWh${b.baseline !== null ? ` · before FirsThing ${b.baseline.toFixed(2)} kWh` : ""}`}</title>
+              <title>
+                {b.underReview
+                  ? `${b.label} · under review — a reading could not be trusted`
+                  : `${b.label} · ${b.kWh.toFixed(2)} kWh${b.baseline !== null ? ` · before FirsThing ${b.baseline.toFixed(2)} kWh` : ""}`}
+              </title>
             </rect>
           );
         })}
@@ -281,7 +295,7 @@ export function ConsumptionChart({
             tabIndex={0}
             style={{ cursor: "pointer", outline: "none" }}
           >
-            <title>{`${b.label} · ${b.kWh.toFixed(2)} kWh`}</title>
+            <title>{b.underReview ? `${b.label} · under review` : `${b.label} · ${b.kWh.toFixed(2)} kWh`}</title>
           </rect>
         ))}
 
@@ -312,26 +326,28 @@ export function ConsumptionChart({
             `pointerEvents: none` so it can never itself block the hover
             target underneath it. */}
         {active !== null && hover !== null && (() => {
-          const bh = Math.max(2, (active.kWh / top) * height);
+          const bh = active.underReview ? 2 : Math.max(2, (active.kWh / top) * height);
           const barTopY = height - bh;
           const cx = padLeft + hover * (bw + gap) + bw / 2;
           const savedPct =
             active.baseline !== null && (active.replacedBaseline ?? active.baseline) > 0
               ? ((active.baseline - active.kWh) / (active.replacedBaseline ?? active.baseline)) * 100
               : null;
-          const text =
-            savedPct !== null
+          const text = active.underReview
+            ? `Under review · ${active.label}`
+            : savedPct !== null
               ? `${savedPct.toFixed(0)}% saved · ${active.label}`
               : `${active.kWh.toFixed(1)} kWh · ${active.label}`;
+          const tone = active.underReview ? "warn" : "ok";
           const bubbleW = Math.min(210, Math.max(104, text.length * 6.3 + 24));
           const bx = Math.min(Math.max(cx - bubbleW / 2, padLeft), w - bubbleW);
           const by = Math.max(barTopY - 40, -6);
           return (
             <g style={{ pointerEvents: "none" }}>
-              <line x1={cx} y1={by + 30} x2={cx} y2={barTopY} stroke="var(--ok-fg)" strokeWidth={1} strokeDasharray="2 3" />
-              <circle cx={cx} cy={barTopY} r={4} fill="var(--surface)" stroke="var(--ok-fg)" strokeWidth={2.4} />
-              <rect x={bx} y={by} width={bubbleW} height={30} rx={9} fill="var(--ok-bg)" stroke="var(--ok-line)" />
-              <text x={bx + bubbleW / 2} y={by + 19.5} textAnchor="middle" fontSize={12.5} fontWeight={800} fill="var(--ok-fg)">
+              <line x1={cx} y1={by + 30} x2={cx} y2={barTopY} stroke={`var(--${tone}-fg)`} strokeWidth={1} strokeDasharray="2 3" />
+              <circle cx={cx} cy={barTopY} r={4} fill="var(--surface)" stroke={`var(--${tone}-fg)`} strokeWidth={2.4} />
+              <rect x={bx} y={by} width={bubbleW} height={30} rx={9} fill={`var(--${tone}-bg)`} stroke={`var(--${tone}-line)`} />
+              <text x={bx + bubbleW / 2} y={by + 19.5} textAnchor="middle" fontSize={12.5} fontWeight={800} fill={`var(--${tone}-fg)`}>
                 {text}
               </text>
             </g>
@@ -351,7 +367,19 @@ export function ConsumptionChart({
         }}
         aria-live="polite"
       >
-        {active ? (
+        {active ? active.underReview ? (
+          <>
+            <span className="text-base font-bold" style={{ color: "var(--warn-fg)" }}>
+              Under review
+            </span>
+            <span className="num" style={{ color: "var(--text-muted)" }}>
+              {active.label}
+            </span>
+            <span style={{ color: "var(--text-subtle)" }}>
+              a reading this day could not be trusted — an admin reviews it before it counts.
+            </span>
+          </>
+        ) : (
           <>
             <span className="num text-base font-bold">{active.kWh.toFixed(2)} kWh</span>
             <span className="num" style={{ color: "var(--text-muted)" }}>

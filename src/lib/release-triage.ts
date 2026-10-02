@@ -41,6 +41,14 @@ export type TriageInput = {
   trailingInvoicedMean: number | null;
   /** Any circuit whose line reads `measured` this month but `agreed` last month — a real regression. */
   basisRegressedCircuits: string[];
+  /**
+   * Circuit-days this month CON-45's own check could not trust (a dead
+   * meter, or a saving above the bound a working one can produce) — the
+   * same portal-facing "under review" signal, checked fresh here because new
+   * readings can still land after submission (2026-10-02, user-asked: a
+   * month is never routinely released while a reading in it is unresolved).
+   */
+  flaggedDayCount: number;
 };
 
 export type Triage = { routine: true; reasons: [] } | { routine: false; reasons: string[] };
@@ -64,6 +72,9 @@ export function triageInvoiceMonth(input: TriageInput): Triage {
       const dir = deltaPct > 0 ? "above" : "below";
       reasons.push(`Total is ${Math.abs(Math.round(deltaPct))}% ${dir} the 3-month average`);
     }
+  }
+  if (input.flaggedDayCount > 0) {
+    reasons.push(`${input.flaggedDayCount} day${input.flaggedDayCount === 1 ? "" : "s"} this month could not be trusted by the meter check — resolve before releasing`);
   }
 
   return reasons.length === 0 ? { routine: true, reasons: [] } : { routine: false, reasons };

@@ -15,6 +15,7 @@ import { buildInvoiceKey } from "@/lib/ingest-keys";
 import { reconcileInvoiceAmount, refuseInvoiceAttach, refuseRelease, refuseVoidInvoice } from "@/lib/invoice-reconciliation";
 import { requireAccountant, requireBillingOps } from "../access";
 import { logger } from "@/lib/logger";
+import { sendInvoiceReadyEmail } from "@/lib/invoice-email";
 import { isSettled, refusePayment, settledTotal, type PaymentMethod } from "@/lib/payment";
 
 async function unresolvedDeviationCount(calculationId: string): Promise<number> {
@@ -237,6 +238,9 @@ export async function releaseCalculation(calculationId: string): Promise<{ error
   logger.info("billing.released", { actorId: acc.actor.id, calculationId, invoiceStatus: invoice!.status });
   revalidatePath(`/admin/billing/${calculationId}`);
   revalidatePath("/admin/billing");
+  // Best effort, never on the critical path — a release must never fail or
+  // roll back because email delivery had a problem.
+  await sendInvoiceReadyEmail(invoice!.id).catch((err) => logger.warn("email.invoice_ready_failed", { invoiceId: invoice!.id, error: String(err) }));
   return {};
 }
 

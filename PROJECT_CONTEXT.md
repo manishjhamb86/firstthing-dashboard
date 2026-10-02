@@ -8826,3 +8826,63 @@ simply without restating which month was last billed (the line above it already 
 **Verified**: 1 test updated (`sinceStart`'s shape gained `savingsPct`, asserted exactly — every row
 in that fixture shares one rate, so the weighted total has to equal it). `tsc`/`lint`/`pnpm test`
 (1,271) all clean.
+
+## Email, per-day "under review", and the release gate extended to reading quality (2026-10-02) — user-asked, three answered decisions
+
+**The ask, bundled**: enable sending invoices by email on release; for any month with an unresolved
+reading anomaly, withhold that day's (and that month's) figures from the portal behind "under
+review" until an admin has reviewed it; and when a manual savings-report document exists for a month,
+prefer it over the system-generated one. Three decisions were put to the user first: **AWS SES**
+(not Resend, not a separately-stored credential) for email; the anomaly review **is** the existing
+CON-47 release gate, extended, not a second workflow; and the admin-facing task uses the **existing**
+Tasks screen, not a new queue.
+
+**Email (AWS SES).** `src/lib/ses.ts` — no DB-stored credential, by design: SES reuses the SAME AWS
+account and env-based credential convention `s3.ts` already established (`AWS_REGION`/
+`AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`), needing only its own `ses:SendEmail` IAM grant and a
+verified `SES_FROM_EMAIL` identity — a materially different shape from Zoho/Google Calendar's own
+settings pages, which genuinely need a UI to capture and rotate an OAuth-style credential. A thin
+`/admin/settings/email` page states whether it's configured and offers a test send (operations
+only); no secret is ever stored or shown. `src/lib/invoice-email.ts` sends "your invoice is ready" to
+every portal account of that society holding the `billing` grant (the same set `/portal/billing`
+itself is scoped to), wired into `releaseCalculation` as a best-effort call AFTER the release
+transaction commits — a release must never fail because email had a problem, the same rule push
+notifications already follow. **Deliberately links to `/portal/billing`, never the PDF directly or
+an attachment** — the invoice is stored privately and read back through a short-lived presigned GET
+minted per viewer; embedding one in an email would either go stale or be a standing, forwardable
+link to a private document.
+
+**Per-day and per-month "under review" (`portal-energy.ts`).** Reuses `classifyDay` (CON-45's own
+day-quality check — `suspect`: a saving above the bound a working meter can produce; `offline`: a
+dead-zero day) rather than inventing a fourth anomaly concept alongside the pre-install ±5/10%
+check, the older CSV-ingest `ReadingAnomaly`/`blocksBilling` mechanism, and the invoice-first day
+classification — this is the SAME check the invoice-first stats already apply, so a day cannot read
+fine on the portal and suspect on the bill. A flagged day contributes nothing to any sum (the same
+treatment an operator's own exclusion already gets) and carries its own `underReview` flag through
+to `PortalCircuit.monitoring`, the society-wide `daily` series, and a new `totals.underReviewDays`.
+The dashboard's "this month so far" line (built earlier the same day) now reads "Under review — N
+days… need checking" instead of a % when the headline month has one; the consumption chart
+(`consumption-chart.tsx`) draws a flagged bucket flat and in the warn colour rather than at a real
+height — exactly the "a dead meter reads as 100% savings" mistake this project keeps fixing, just
+drawn instead of computed — with the hover readout and floating callout both saying "under review."
+
+**The release gate, extended (`release-triage.ts`/`release-queue-loader.ts`).** A new
+`flaggedDayCount` check, computed FRESH at triage time (not carried from submission — new readings
+can land after a month is submitted) by re-classifying every fee-line circuit's days for the period
+through the identical `classifyDay` call the portal uses. A month with any flagged day is never
+routinely releasable — SCR-092's own existing guarantee ("needs-review is never bulk-releasable")
+now covers reading quality, not just the total-variance and basis-regression checks it already had.
+`periodBounds` (the period→date-range helper) was exported from `invoice-month-loader.ts` rather than
+reimplemented. 2 new unit cases in `tests/release-triage.test.ts`.
+
+**Not yet built, stated rather than silently dropped**: the PROACTIVE task itself ("the system
+should first create a task for an admin") — the release queue already refuses a flagged month and
+names the reason to whoever opens it, which is the actual safety guarantee, but nothing yet creates
+a Task the moment a flag appears (that write belongs in a new recurring job, matching `arrears_sweep`'s
+own pattern, not inside the release-queue's own read-only loader) — and the manual-report-document
+precedence (StoredDocument over the system-generated report, with figures read FROM the document).
+Both are scoped and ready to build; checking in with the user before continuing given how much this
+one bundle already covers.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,273, +2 new) all clean. Not yet deployed — this branch is
+not merged.

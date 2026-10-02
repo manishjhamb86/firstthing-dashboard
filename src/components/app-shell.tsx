@@ -22,6 +22,7 @@ import {
   Package,
   ListChecks,
   History,
+  Mail,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -159,6 +160,10 @@ export function AppShell({
       showUsers && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },
       // Operations-only page, same pattern (2026-09-30).
       showUsers && { href: "/admin/settings/zoho", label: "Zoho Invoice", icon: Receipt },
+      // Operations-only page (2026-10-02) — credentials are env-only (same
+      // AWS account as S3), this just states whether it's configured and
+      // offers a test send.
+      showUsers && { href: "/admin/settings/email", label: "Email", icon: Mail },
     ]),
   ];
 

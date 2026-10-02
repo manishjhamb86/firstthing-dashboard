@@ -11,6 +11,7 @@ describe("triageInvoiceMonth", () => {
     invoiceTotal: 100_000,
     trailingInvoicedMean: 100_000,
     basisRegressedCircuits: [],
+    flaggedDayCount: 0,
   };
 
   it("calls a clean month routine", () => {
@@ -63,5 +64,15 @@ describe("triageInvoiceMonth", () => {
   it("reports every failing condition, not just the first", () => {
     const t = triageInvoiceMonth({ ...routine, allLinesMapped: false, paidStatusChosen: false, invoiceTotal: 200_000 });
     expect(t.reasons).toHaveLength(3);
+  });
+
+  it("needs review when a day this month could not be trusted by the meter check", () => {
+    const t = triageInvoiceMonth({ ...routine, flaggedDayCount: 2 });
+    expect(t.routine).toBe(false);
+    expect(t.reasons[0]).toBe("2 days this month could not be trusted by the meter check — resolve before releasing");
+  });
+
+  it("singular wording for exactly one flagged day", () => {
+    expect(triageInvoiceMonth({ ...routine, flaggedDayCount: 1 }).reasons[0]).toMatch(/^1 day this month/);
   });
 });

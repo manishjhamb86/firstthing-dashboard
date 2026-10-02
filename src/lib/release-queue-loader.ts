@@ -13,6 +13,9 @@ import { db } from "@/lib/db";
 import { triageInvoiceMonth, type Triage } from "@/lib/release-triage";
 import { weightedSavingsPct } from "@/lib/published-months";
 import { circuitLabelOf } from "@/lib/circuit-label";
+import { periodBounds } from "@/lib/invoice-month-loader";
+import { classifyDay } from "@/lib/invoice-month";
+import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 
 export type QueueLine = { circuitId: string; label: string; basis: "measured" | "agreed"; savingsPct: number };
 
@@ -72,6 +75,26 @@ export async function computeQueueRow(calculationId: string): Promise<QueueRow |
     .filter((l) => prevBasisByCircuit.get(l.circuitId) === "measured" && l.basis === "agreed")
     .map((l) => l.circuitId);
 
+  // Checked fresh, not carried from submission: new readings can land after
+  // a month is submitted, and the portal's own "under review" day is judged
+  // the identical way (classifyDay) — the SAME gate the user asked to extend.
+  const { from, to } = periodBounds(c.period);
+  const circuitIds = c.feeLines.map((l) => l.circuitId);
+  const [flagCircuits, flagReadings] = await Promise.all([
+    db.circuit.findMany({ where: { id: { in: circuitIds } }, select: { id: true, preInstallBaseline: true, rescaleEvents: true } }),
+    db.meterReading.findMany({
+      where: { circuitId: { in: circuitIds }, date: { gte: from, lt: to }, excludedAt: null, source: "csv" },
+      select: { circuitId: true, date: true, kWh: true, intervalCount: true },
+    }),
+  ]);
+  const baselineByCircuit = new Map(flagCircuits.map((fc) => [fc.id, fc]));
+  const flaggedDayCount = flagReadings.filter((r) => {
+    const fc = baselineByCircuit.get(r.circuitId);
+    const baseline = fc ? (effectiveBaselineAt(fc.preInstallBaseline, fc.rescaleEvents, r.date) ?? 0) : 0;
+    const cls = classifyDay({ date: r.date.toISOString().slice(0, 10), kWh: r.kWh, intervalCount: r.intervalCount, dataHours: null }, baseline);
+    return cls === "suspect" || cls === "offline";
+  }).length;
+
   const triage = triageInvoiceMonth({
     // Guaranteed by `submitIntake`'s own gate (openItems()) — nothing edits
     // a submitted review afterward, so these cannot regress. Kept as named
@@ -86,6 +109,7 @@ export async function computeQueueRow(calculationId: string): Promise<QueueRow |
     invoiceTotal: invoice.amount,
     trailingInvoicedMean,
     basisRegressedCircuits,
+    flaggedDayCount,
   });
 
   return {

@@ -46,6 +46,10 @@ describe("FEAT-111 — a published month, in the society's own terms", () => {
       savedKwh: 6_252.22 + 300,
       paidToFirsthing: 14_050 + 1_200,
       societyKeeps: 39_027.78 + 3_000 - (14_050 + 1_200),
+      // Every row shares the same 64% in this fixture, so the weighted
+      // total is exactly 64 — weighting only changes the figure when the
+      // months actually disagree.
+      savingsPct: 64,
     });
   });
 

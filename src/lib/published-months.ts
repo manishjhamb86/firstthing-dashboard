@@ -59,7 +59,15 @@ export type PublishedMonth = {
 export type PublishedSummary = {
   months: PublishedMonth[];
   latest: PublishedMonth | null;
-  sinceStart: { months: number; savedValue: number; savedKwh: number; paidToFirsthing: number; societyKeeps: number } | null;
+  sinceStart: {
+    months: number;
+    savedValue: number;
+    savedKwh: number;
+    paidToFirsthing: number;
+    societyKeeps: number;
+    /** Weighted across every billed month's own kWh, never a plain average of percentages. */
+    savingsPct: number | null;
+  } | null;
 };
 
 export function publishedMonthOf(r: PublishedMonthRow): PublishedMonth {
@@ -88,16 +96,19 @@ export function summarisePublished(rows: PublishedMonthRow[]): PublishedSummary 
   const sinceStart =
     months.length === 0
       ? null
-      : months.reduce(
-          (s, m) => ({
-            months: s.months + 1,
-            savedValue: s.savedValue + m.savedValue,
-            savedKwh: s.savedKwh + m.savedKwh,
-            paidToFirsthing: s.paidToFirsthing + m.paidToFirsthing,
-            societyKeeps: s.societyKeeps + m.societyKeeps,
-          }),
-          { months: 0, savedValue: 0, savedKwh: 0, paidToFirsthing: 0, societyKeeps: 0 },
-        );
+      : {
+          ...months.reduce(
+            (s, m) => ({
+              months: s.months + 1,
+              savedValue: s.savedValue + m.savedValue,
+              savedKwh: s.savedKwh + m.savedKwh,
+              paidToFirsthing: s.paidToFirsthing + m.paidToFirsthing,
+              societyKeeps: s.societyKeeps + m.societyKeeps,
+            }),
+            { months: 0, savedValue: 0, savedKwh: 0, paidToFirsthing: 0, societyKeeps: 0 },
+          ),
+          savingsPct: weightedSavingsPct(months.filter((m) => m.savingsPct !== null).map((m) => ({ savedKwh: m.savedKwh, pct: m.savingsPct! }))),
+        };
   return { months, latest, sinceStart };
 }
 

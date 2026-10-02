@@ -8798,3 +8798,27 @@ almost exactly — the number the demo always should have shown.
 **A data correction, not a code deploy** — nothing in `src/` changed for this entry; the script is
 checked in for the audit trail, matching this repo's own convention for one-off corrections
 (`scripts/rebuild-demos-and-monitoring.ts` and others already there).
+
+## The portal hero became the overall total, not one month (2026-10-02) — user-asked, supersedes this morning's "current month follows last month" entry
+
+**The ask**: "We need to show overall savings here instead of current month" — the dashboard's four-
+tile hero was reading one month's own billed figures (the ₹/kWh/% all scoped to the latest released
+month), which this morning's own "current month follows last month" fix had only partly addressed —
+the headline itself was still per-month, just with the live current month now following it.
+
+**The headline is now `published.sinceStart`** — the total since billing began, already computed
+(`published-months.ts`'s own month-by-month reduce, built for the "₹1,46,969 saved across 3 billed
+months" line that used to sit below the hero) — gaining one thing it didn't have: an overall
+**weighted** savings %, via the module's own pre-existing `weightedSavingsPct()` (weighted by each
+month's own kWh, never a plain average of percentages — the same discipline the per-line version
+already applies). Label reads "Total saved", detail states how many months and what was kept/paid in
+total.
+
+**Nothing is lost, moved below instead**: a "Last billed: [Month] — ₹X (Y%) — month by month →" line
+replaces the now-redundant "₹X saved across N months" note (redundant the moment the total itself
+became the headline), and this morning's "X% so far in [Month] — not yet billed" line stays, now
+simply without restating which month was last billed (the line above it already says so).
+
+**Verified**: 1 test updated (`sinceStart`'s shape gained `savingsPct`, asserted exactly — every row
+in that fixture shares one rate, so the weighted total has to equal it). `tsc`/`lint`/`pnpm test`
+(1,271) all clean.

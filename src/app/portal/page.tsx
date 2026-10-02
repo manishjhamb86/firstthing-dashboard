@@ -279,14 +279,22 @@ export default async function PortalHomePage() {
       */}
       {energy &&
         (() => {
-          const rupeesValue = billed ? billed.savedValue : null;
-          const rupeesDetail = billed
-            ? `You kept ₹${Math.round(billed.societyKeeps).toLocaleString("en-IN")} · paid ₹${Math.round(billed.paidToFirsthing).toLocaleString("en-IN")}`
+          // The headline is the OVERALL total since billing started, not one
+          // month — a society comparing it against a specific report kept
+          // getting the current month's own still-moving figure instead of
+          // the running total (user-asked, 2026-10-02: "we need to show
+          // overall savings here instead of current month"). The latest
+          // BILLED month's own figures move to a line below, alongside the
+          // current, not-yet-billed month's live one — so neither is lost,
+          // the headline is just no longer mistaken for either of them.
+          const sinceStart = published?.sinceStart ?? null;
+          const rupeesValue = sinceStart ? sinceStart.savedValue : null;
+          const rupeesDetail = sinceStart
+            ? `${sinceStart.months} billed month${sinceStart.months === 1 ? "" : "s"} · you kept ₹${Math.round(sinceStart.societyKeeps).toLocaleString("en-IN")} · paid ₹${Math.round(sinceStart.paidToFirsthing).toLocaleString("en-IN")}`
             : "Appears once FirsThing publishes a billed month";
-          const kwhValue = billed ? billed.savedKwh : energy.totals.avoidedKwh;
-          const pctValue = billed ? billed.savingsPct : energy.totals.savingsPct;
-          const kwhDetail = billed ? billed.basisWords : "vs before FirsThing";
-          const monthLabel = billed ? monthName(billed.period) : energy.month ? monthName(energy.month) : null;
+          const kwhValue = sinceStart ? sinceStart.savedKwh : energy.totals.avoidedKwh;
+          const pctValue = sinceStart ? sinceStart.savingsPct : energy.totals.savingsPct;
+          const kwhDetail = sinceStart ? "since billing started" : "vs before FirsThing";
           const healthParts: string[] = [];
           if (meters.length > 0) healthParts.push(`${meters.length} meter${meters.length === 1 ? "" : "s"}`);
           if (tanks.length > 0) healthParts.push(`${tanks.length} tank${tanks.length === 1 ? "" : "s"}`);
@@ -324,6 +332,7 @@ export default async function PortalHomePage() {
           // their last report actually quoted (user-caught, 2026-10-02: "the
           // dashboard shows current month['s %] and the user gets last
           // month's report and compares with that").
+          const billedMonthLabel = billed ? monthName(billed.period) : null;
           const currentMonthPct = billed && energy.month && energy.month !== billed.period ? energy.totals.savingsPct : null;
           const currentMonthLabel = energy.month ? monthName(energy.month) : null;
 
@@ -362,7 +371,7 @@ export default async function PortalHomePage() {
                   icon={ShieldCheck}
                   tone="ok"
                   value={rupeesText}
-                  label={monthLabel ? `Saved · ${monthLabel}` : "Saved this month"}
+                  label={sinceStart ? "Total saved" : "Saved this month"}
                   detail={rupeesDetail}
                 />
                 <KpiBubble icon={Zap} tone="info" value={kwhText} label="Energy saved" detail={kwhDetail} />
@@ -375,21 +384,29 @@ export default async function PortalHomePage() {
                 />
                 <HealthBubble issues={healthIssues} summary={healthSummary} />
               </div>
+              {/* The headline is now the overall total, so the latest
+                  billed month's own figure — what an actual report for
+                  that month states — gets its own line rather than
+                  disappearing into the running total. */}
+              {billed && billedMonthLabel && (
+                <p className={`${currentMonthPct !== null ? "mb-1" : "mb-6"} text-[12.5px]`} style={{ color: "var(--text-subtle)" }}>
+                  Last billed:{" "}
+                  <strong className="num" style={{ color: "var(--text-muted)" }}>
+                    {billedMonthLabel}
+                  </strong>{" "}
+                  — ₹{Math.round(billed.savedValue).toLocaleString("en-IN")}
+                  {billed.savingsPct !== null && ` (${billed.savingsPct.toFixed(1)}%)`} —{" "}
+                  <Link href="/portal/electricity" className="font-semibold underline">
+                    month by month →
+                  </Link>
+                </p>
+              )}
               {currentMonthPct !== null && (
                 <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
                   <strong className="num" style={{ color: "var(--text-muted)" }}>
                     {currentMonthPct.toFixed(1)}%
                   </strong>{" "}
-                  so far in {currentMonthLabel} — not yet billed; last billed month was {monthLabel}.
-                </p>
-              )}
-              {published?.sinceStart && published.sinceStart.months > 1 && (
-                <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                  ₹{Math.round(published.sinceStart.savedValue).toLocaleString("en-IN")} saved across{" "}
-                  {published.sinceStart.months} billed months since we started —{" "}
-                  <Link href="/portal/electricity" className="font-semibold underline">
-                    month by month →
-                  </Link>
+                  so far in {currentMonthLabel} — not yet billed.
                 </p>
               )}
 

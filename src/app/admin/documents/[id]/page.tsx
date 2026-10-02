@@ -40,13 +40,18 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
   // of submitted, and that row can be reopened and reconciled against a
   // circuit properly (user-caught 2026-10-03 — this card used to be a flat
   // dead end). Only `invoiceCopy`/`nonServiceInvoice` can ever have one.
-  const sourceIntake =
-    !extractable && !doc.voidedAt
-      ? await db.invoiceIntake.findFirst({
-          where: { filedAsDocumentId: doc.id },
-          select: { id: true },
-        })
-      : null;
+  //
+  // Looked up REGARDLESS of whether this document is itself already
+  // withdrawn (user-caught, same day): withdrawing the document alone never
+  // touches the intake row — `unfileIntake` already tolerates a pre-voided
+  // document and just resets the row — so excluding the voided case here
+  // left someone who withdrew first with no way back at all.
+  const sourceIntake = !extractable
+    ? await db.invoiceIntake.findFirst({
+        where: { filedAsDocumentId: doc.id },
+        select: { id: true },
+      })
+    : null;
   const circuits = await db.circuit.count({ where: { societyId: doc.societyId, voidedAt: null } });
   const catalog = await db.deviceType.findMany({
     where: { role: "original", deletedAt: null, active: true, status: { in: ["approved", "proposed"] } },

@@ -115,6 +115,7 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
       id: true,
       state: true,
       meteredLightCount: true,
+      lightCountAtDemoLock: true,
       preInstallBaseline: true,
       benchmarkSavingsPct: true,
       benchmarkOverridePct: true,
@@ -197,6 +198,16 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
       state = "eligible";
     }
     if (state !== circuit.state) (data as Record<string, unknown>).state = state;
+
+    // The survey page's own record of what was recorded during the survey
+    // and demo period (2026-10-05, user-asked) — captured ONCE, the first
+    // time the demo locks in, and never touched again: meteredLightCount
+    // keeps moving afterward (a rescale, a demo-count correction), which is
+    // correct for billing but wrong for a screen that is specifically a
+    // historical record of the survey/demo, not a live figure.
+    if (state === "benchmark_confirmed" && circuit.state !== "benchmark_confirmed" && circuit.lightCountAtDemoLock === null) {
+      (data as Record<string, unknown>).lightCountAtDemoLock = (data as { meteredLightCount?: number }).meteredLightCount ?? circuit.meteredLightCount;
+    }
   }
 
   if (Object.keys(data).length > 0) {

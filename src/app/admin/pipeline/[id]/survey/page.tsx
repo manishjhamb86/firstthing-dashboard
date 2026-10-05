@@ -538,8 +538,19 @@ export default async function SiteSurveyPage({
                     <span>
                       <span className="font-medium">{c.lightType}</span>{" "}
                       <span className="text-[var(--text-muted)]">
-                        · <span className="num">{c.meteredLightCount}</span> lights ·{" "}
+                        {/* Once the demo locks in (benchmark confirmed), this
+                            is a frozen record of what the survey/demo
+                            recorded — meteredLightCount keeps moving
+                            afterward (a rescale, a demo-count correction),
+                            correctly, for billing; this screen does not
+                            follow it (2026-10-05, user-asked). */}
+                        · <span className="num">{c.lightCountAtDemoLock ?? c.meteredLightCount}</span> lights ·{" "}
                         <span className="num">{c.wattage}</span>W
+                        {c.lightCountAtDemoLock !== null && (
+                          <span className="ml-1 text-xs" title="Recorded during the survey and demo — a later rescale or correction doesn't change this">
+                            (as recorded)
+                          </span>
+                        )}
                       </span>
                     </span>
                     <span className="flex items-center gap-3">

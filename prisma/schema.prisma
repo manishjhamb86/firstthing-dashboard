@@ -1155,6 +1155,14 @@ model Circuit {
   lightType                     String      @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
   meteredLightCount             Int         @map("metered_light_count")
   representedLightCount         Int         @map("represented_light_count") // scoped to this lightType only — CON-11
+  // The survey page's own record of this candidate (2026-10-05, user-asked):
+  // meteredLightCount is deliberately LIVE — it follows a rescale event or a
+  // demo-count correction, because billing needs the current truth. The
+  // survey screen is a different kind of record, "what was recorded during
+  // the survey and demo period" — so it reads THIS instead, captured once,
+  // the first time the demo locks in (state first reaches benchmark_confirmed),
+  // and never touched again by resyncCircuitFigures.ts afterward.
+  lightCountAtDemoLock           Int?        @map("light_count_at_demo_lock")
   wattage                       Float
   workingHours                  Float?      @map("working_hours") // metadata only, never triggers a rescale — CON-10
   // FEAT-040-AC-5 — when workingHours last changed; recorded so a later

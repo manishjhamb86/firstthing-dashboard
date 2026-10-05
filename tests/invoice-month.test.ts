@@ -99,6 +99,21 @@ describe("day validity — the user's rule (2026-09-15)", () => {
     expect(classifyDay(day(6, 16.0, null, 24), 47.4)).toBe("complete");
   });
 
+  it("prefers the persisted dayClass over its own hours check once a row has been classified (2026-10-05)", () => {
+    // 24 hours of data, but the circuit's own learned operating window
+    // says this day was still missing one of its real on-hours.
+    expect(classifyDay({ ...day(7, 17.0), dayClass: "partial" }, 47.4)).toBe("partial");
+    expect(classifyDay({ ...day(8, 17.0), dayClass: "complete" }, 47.4)).toBe("complete");
+  });
+
+  it("an operator's valid override counts a dayClass-partial day as complete (2026-10-05, user-asked)", () => {
+    expect(classifyDay({ ...day(9, 17.0), dayClass: "partial", validOverride: true }, 47.4)).toBe("complete");
+    // Offline and suspect are never waved through by the override — it only
+    // answers the hours question, not "trust any figure on this row".
+    expect(classifyDay({ ...day(10, 0, 0), dayClass: "partial", validOverride: true }, 47.4)).toBe("offline");
+    expect(classifyDay({ ...day(11, 1.2), dayClass: "partial", validOverride: true }, 47.4)).toBe("suspect");
+  });
+
   it("the user's own example: 4 complete, 7 partial, the rest offline — measures from the 4 and says so", () => {
     const days = [
       ...[1, 2, 3, 4].map((n) => day(n, 18.96)), // 60% saving on each complete day

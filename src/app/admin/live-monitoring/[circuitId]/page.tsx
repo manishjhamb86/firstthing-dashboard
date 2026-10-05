@@ -141,6 +141,11 @@ export default async function LiveMonitoringCircuitPage({
               varianceBand: null,
               savingsPct: pct,
               savingsBand: pct === null ? null : savingsBand(pct),
+              dayClass: r.dayClass,
+              dayClassHoursExpected: r.dayClassHoursExpected,
+              dayClassHoursPresent: r.dayClassHoursPresent,
+              validOverride: r.validOverrideAt !== null,
+              validOverrideReason: r.validOverrideReason,
             };
           });
 

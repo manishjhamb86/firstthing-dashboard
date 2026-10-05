@@ -2399,6 +2399,17 @@ enum ReadingOrigin {
   @@map("reading_origin")
 }
 
+/// A day's own completeness, computed once at write time and read everywhere
+/// an average or extrapolation happens (src/lib/day-validity.ts, 2026-10-05).
+/// `offline`/`suspect` stay dynamic (checked live against the baseline in
+/// force), so only the hours-based half of the question is stored here.
+enum ReadingDayClass {
+  complete
+  partial
+
+  @@map("reading_day_class")
+}
+
 enum ReadingSource {
   csv
   // FEAT-104's scheduled vendor fetch is R1 and nothing writes this value
@@ -2567,6 +2578,25 @@ model MeterReading {
   otherKwh       Float?         @map("other_kwh")
   otherOrigin    ReadingOrigin? @map("other_origin")
   otherRawFileId String?        @map("other_raw_file_id")
+
+  /// Hours-based completeness, written once at projection/commit time
+  /// (src/lib/day-validity.ts) — null on a row not yet classified (pre-
+  /// migration history pending the one-time backfill). `offline`/`suspect`
+  /// are NOT here; they stay a live check against the baseline in force,
+  /// since baking them in would go stale the moment a circuit is rescaled.
+  dayClass             ReadingDayClass? @map("day_class")
+  /// How many of the circuit's EXPECTED hours that day actually had — the
+  /// evidence shown beside the chip ("18 of 24"), not itself the decision.
+  dayClassHoursExpected Int?            @map("day_class_hours_expected")
+  dayClassHoursPresent  Int?            @map("day_class_hours_present")
+
+  /// An operator's explicit confirmation that a day `dayClass` calls
+  /// `partial` should still count (2026-10-05, user-asked) — the one manual
+  /// direction `excludedAt` doesn't cover (that one only ever takes a day
+  /// OUT). `excludedAt` wins if both are set on one row.
+  validOverrideAt     DateTime? @map("valid_override_at")
+  validOverrideById   String?   @map("valid_override_by_id")
+  validOverrideReason String?   @map("valid_override_reason")
 
   circuit Circuit        @relation(fields: [circuitId], references: [id], onDelete: Cascade)
   rawFile RawReadingFile @relation(fields: [rawFileId], references: [id], onDelete: Cascade)

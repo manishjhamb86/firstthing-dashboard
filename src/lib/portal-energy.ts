@@ -198,7 +198,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         // resident's own figures (caught 2026-08-31).
         where: { source: "csv" },
         orderBy: { date: "asc" },
-        select: { date: true, kWh: true, excludedAt: true, intervalCount: true },
+        select: { date: true, kWh: true, excludedAt: true, intervalCount: true, dayClass: true, validOverrideAt: true },
       },
     },
   });
@@ -227,14 +227,26 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       .filter((r) => (from ? (starts.get(c.id) ? r.date >= from : r.date > from) : true))
       .map((r) => {
         // A day this project's own CON-45 rule already calls untrustworthy
-        // (a dead meter reading zero, or a saving above the bound a working
-        // meter can produce — SAVINGS_SUSPECT_ABOVE) is withheld from the
+        // (a dead meter reading zero, a day short of its circuit's own
+        // expected hours — day-validity.ts, 2026-10-05 — or a saving above
+        // the bound a working meter can produce) is withheld from the
         // resident rather than shown as a real figure, with "under review"
         // in its place (user-asked, 2026-10-02). Reusing classifyDay is
         // deliberate: it is the SAME check the invoice-first stats already
-        // apply, so a day cannot read fine here and suspect on the invoice.
+        // apply, so a day cannot read fine here and suspect on the invoice —
+        // and an operator's override on one shows up on both alike.
         const dayBaselineForClassify = effectiveBaselineAt(c.preInstallBaseline, c.rescaleEvents, r.date);
-        const cls = classifyDay({ date: r.date.toISOString().slice(0, 10), kWh: r.kWh, intervalCount: r.intervalCount, dataHours: null }, dayBaselineForClassify ?? 0);
+        const cls = classifyDay(
+          {
+            date: r.date.toISOString().slice(0, 10),
+            kWh: r.kWh,
+            intervalCount: r.intervalCount,
+            dataHours: null,
+            dayClass: r.dayClass,
+            validOverride: r.validOverrideAt !== null,
+          },
+          dayBaselineForClassify ?? 0,
+        );
         return {
           date: r.date.toISOString().slice(0, 10),
           kWh: r.kWh,

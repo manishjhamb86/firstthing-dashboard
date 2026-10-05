@@ -17,6 +17,7 @@ import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, savingsPct, SAVINGS_SUSPECT_ABOVE } from "@/lib/circuit-load";
 import { mergeMonitoringDay, monitoringStart, type Origin } from "@/lib/monitoring";
 import { dayMs } from "@/lib/demo-periods";
+import { classifyDayHours, inferOperatingHours, OPERATING_HOURS_WINDOW_DAYS } from "@/lib/day-validity";
 
 export const PARTIAL_REASON_PREFIX = "Partial day — ";
 
@@ -121,6 +122,32 @@ async function rawFileForImportOnCircuit(importId: string, circuitId: string): P
   return file.id;
 }
 
+/**
+ * Hourly samples for LEARNING the circuit's own operating-hour pattern
+ * (`src/lib/day-validity.ts`) — deliberately unbounded by the billing start,
+ * since a circuit's physical schedule doesn't begin the day billing does; a
+ * meter commissioned months before billing started already shows the real
+ * pattern. Bounded only by the rolling window the learner itself uses.
+ */
+export async function circuitHourlySamples(
+  meterInstallations: { meterId: string; installedAt: Date; removedAt: Date | null }[],
+  today: Date,
+): Promise<{ day: string; hour: number; kWh: number }[]> {
+  const cutoff = new Date(today);
+  cutoff.setUTCDate(cutoff.getUTCDate() - OPERATING_HOURS_WINDOW_DAYS);
+  const out: { day: string; hour: number; kWh: number }[] = [];
+  for (const stay of meterInstallations) {
+    const from = stay.installedAt.getTime() > cutoff.getTime() ? stay.installedAt : cutoff;
+    if (stay.removedAt && stay.removedAt.getTime() <= from.getTime()) continue;
+    const rows = await db.meterHourlyReading.findMany({
+      where: { meterId: stay.meterId, day: { gte: from, ...(stay.removedAt ? { lt: stay.removedAt } : {}) } },
+      select: { day: true, hour: true, kWh: true },
+    });
+    for (const r of rows) out.push({ day: r.day.toISOString().slice(0, 10), hour: r.hour, kWh: r.kWh });
+  }
+  return out;
+}
+
 export async function projectCircuitMonitoring(circuitId: string, actorId: string | null): Promise<ProjectionSummary> {
   const circuit = await db.circuit.findUnique({
     where: { id: circuitId },
@@ -150,27 +177,41 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
   };
   if (!circuit) return summary;
 
-  // Day → total, hours, meter and the import that carried it.
-  const byDay = new Map<number, { kWh: number; hours: number; dataHours: number; meterId: string; importId: string | null }>();
+  const now = new Date();
+
+  // Day → total, hours, meter, the import that carried it, and WHICH hours
+  // actually had data (day-validity.ts, 2026-10-05) — the day-level check
+  // below judges this against the circuit's own learned operating hours,
+  // not a blanket 24.
+  const byDay = new Map<
+    number,
+    { kWh: number; hours: number; dataHours: number; meterId: string; importId: string | null; present: boolean[] }
+  >();
   if (start) {
     for (const stay of circuit.meterInstallations) {
       const from = new Date(Math.max(stay.installedAt.getTime(), dayMs(start)));
       if (stay.removedAt && stay.removedAt.getTime() <= from.getTime()) continue;
       const hours = await db.meterHourlyReading.findMany({
         where: { meterId: stay.meterId, day: { gte: from, ...(stay.removedAt ? { lt: stay.removedAt } : {}) } },
-        select: { day: true, kWh: true, importId: true },
+        select: { day: true, hour: true, kWh: true, importId: true },
       });
       for (const h of hours) {
         const t = dayMs(h.day);
-        const d = byDay.get(t) ?? { kWh: 0, hours: 0, dataHours: 0, meterId: stay.meterId, importId: null };
+        const d = byDay.get(t) ?? { kWh: 0, hours: 0, dataHours: 0, meterId: stay.meterId, importId: null, present: new Array(24).fill(false) as boolean[] };
         d.kWh += h.kWh;
         d.hours += 1;
-        if (h.kWh !== 0) d.dataHours += 1;
+        if (h.kWh !== 0) {
+          d.dataHours += 1;
+          d.present[h.hour] = true;
+        }
         d.importId = d.importId ?? h.importId;
         byDay.set(t, d);
       }
     }
   }
+  const operating = start
+    ? inferOperatingHours(await circuitHourlySamples(circuit.meterInstallations, now), now)
+    : { hours: new Set<number>(), confident: false };
 
   const existing = await db.meterReading.findMany({
     where: { circuitId, source: "csv" },
@@ -187,11 +228,12 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       usedInCalculationId: true,
       excludedAt: true,
       excludedReason: true,
+      validOverrideAt: true,
     },
   });
   const existingByDay = new Map(existing.map((r) => [dayMs(r.date), r]));
-  const now = new Date();
   const baseline = effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, now);
+  const overrideByDay = new Map(existing.filter((r) => r.validOverrideAt !== null).map((r) => [dayMs(r.date), true]));
   // Judged on the replaced lights: what stayed unreplaced comes off both sides.
   const exclusion = exclusionFromDevices(circuit.devices, "monitoring");
   const rawFiles = new Map<string, string>();
@@ -205,7 +247,13 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
     summary.days++;
     const date = new Date(t);
     const kWh = Math.round(d.kWh * 1e6) / 1e6;
-    const partial = d.hours < 24;
+    // Circuit-aware (day-validity.ts, 2026-10-05): judged against the
+    // circuit's own learned operating hours, not a blanket 24 — a
+    // shorter-than-24h circuit's real off-hours reading zero is never
+    // counted as a gap.
+    const hourClass = classifyDayHours({ hourlyPresent: d.present, intervalCount: null }, operating);
+    const partial = hourClass.dayClass === "partial";
+    const overridden = overrideByDay.has(t);
     const pct = !partial && baseline !== null ? savingsPct(baseline, kWh, exclusion) : null;
     const anomalyFlag = pct !== null && (pct > SAVINGS_SUSPECT_ABOVE || pct < 0);
     if (anomalyFlag) summary.flagged++;
@@ -223,9 +271,17 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
         : null,
       { kWh, origin: "meter", rawFileId: "", dataHours: d.dataHours },
     );
-    const partialData = partial
-      ? { excludedAt: now, excludedById: actorId, excludedReason: `${PARTIAL_REASON_PREFIX}${d.hours} of 24 hours in the export` }
-      : {};
+    // An operator's override (2026-10-05) suppresses the auto-exclude
+    // outright — re-projecting must never silently undo a stated exception.
+    const partialData =
+      partial && !overridden
+        ? { excludedAt: now, excludedById: actorId, excludedReason: `${PARTIAL_REASON_PREFIX}${hourClass.hoursPresent} of ${hourClass.hoursExpected} expected hours` }
+        : {};
+    const dayClassData = {
+      dayClass: hourClass.dayClass,
+      dayClassHoursExpected: hourClass.hoursExpected,
+      dayClassHoursPresent: hourClass.hoursPresent,
+    };
     if (action.kind === "create") {
       await db.meterReading.create({
         data: {
@@ -240,11 +296,12 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
           dataHours: d.dataHours,
           anomalyFlag,
           rawFileId: await rawFile(d.importId),
+          ...dayClassData,
           ...partialData,
         },
       });
       summary.created++;
-      if (partial) summary.partialExcluded++;
+      if (partial && !overridden) summary.partialExcluded++;
     } else if (action.kind === "skip") {
       if (action.why === "released") summary.releasedSkipped++;
       else summary.unchanged++;
@@ -256,7 +313,8 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
           data: {
             intervalCount: d.hours,
             dataHours: d.dataHours,
-            ...(partial ? (prior.excludedAt ? {} : partialData) : wasAuto ? { excludedAt: null, excludedById: null, excludedReason: null } : {}),
+            ...dayClassData,
+            ...(partial && !overridden ? (prior.excludedAt ? {} : partialData) : wasAuto ? { excludedAt: null, excludedById: null, excludedReason: null } : {}),
           },
         });
       }
@@ -280,7 +338,8 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
           otherKwh: action.other.kWh,
           otherOrigin: action.other.origin,
           otherRawFileId: action.replaceValue && prior.origin !== "meter" ? prior.rawFileId : undefined,
-          ...(partial
+          ...dayClassData,
+          ...(partial && !overridden
             ? wasAuto || !prior.excludedAt
               ? partialData
               : {}
@@ -290,7 +349,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
         },
       });
       summary.updated++;
-      if (partial) summary.partialExcluded++;
+      if (partial && !overridden) summary.partialExcluded++;
     }
   }
 

@@ -99,6 +99,18 @@ export type DayReading = {
   intervalCount: number | null;
   /** Hours that carried a non-zero reading, from the meter's own hourly store; null when no store covers the day. */
   dataHours: number | null;
+  /**
+   * Written once at projection/commit time (`src/lib/day-validity.ts`),
+   * circuit-aware (a shorter-than-24h circuit's own learned off-hours are
+   * never counted as a gap) — null on a row not yet classified, in which
+   * case `classifyDay` falls back to its own `dataHours < FULL_DAY_HOURS`
+   * check below (2026-10-05).
+   */
+  dayClass?: "complete" | "partial" | null;
+  /** An operator's explicit confirmation that this day counts despite
+   *  `dayClass` reading partial (2026-10-05, user-asked) — the one manual
+   *  direction the exclusion mechanism doesn't cover. */
+  validOverride?: boolean;
 };
 
 export type CircuitMonthReadings = {
@@ -123,8 +135,20 @@ export const MIN_COMPLETE_DAYS_FOR_MEASURED = 4;
 
 export function classifyDay(day: DayReading, baselineKwhPerDay: number, ex?: Exclusion): DayClass {
   if (!(day.kWh > 0)) return "offline";
-  const hours = day.dataHours ?? day.intervalCount;
-  if (hours !== null && hours < FULL_DAY_HOURS) return "partial";
+  if (!day.validOverride) {
+    if (day.dayClass) {
+      // The persisted, circuit-aware answer (2026-10-05) — computed once at
+      // write time against the circuit's own learned operating hours, not
+      // a blanket 24-hour assumption.
+      if (day.dayClass === "partial") return "partial";
+    } else {
+      // No persisted classification yet (a row written before the backfill,
+      // or a caller that hasn't selected the new columns) — the original
+      // hours-based check, unchanged.
+      const hours = day.dataHours ?? day.intervalCount;
+      if (hours !== null && hours < FULL_DAY_HOURS) return "partial";
+    }
+  }
   const savings = baselineKwhPerDay > 0 ? (savingsPct(baselineKwhPerDay, day.kWh, ex) ?? 0) : 0;
   if (savings > SAVINGS_SUSPECT_ABOVE) return "suspect";
   return "complete";

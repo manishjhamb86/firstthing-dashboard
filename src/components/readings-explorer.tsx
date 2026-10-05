@@ -4,7 +4,7 @@ import React, { useMemo, useState, useTransition } from "react";
 import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { EmptyState, ErrorText } from "@/components/ui";
-import { setReadingExclusion } from "@/app/admin/readings/exclusion-actions";
+import { setDayValidOverride, setReadingExclusion } from "@/app/admin/readings/exclusion-actions";
 import { SAVINGS_BAND_META, type SavingsBand, type VarianceBand } from "@/lib/circuit-load";
 
 /** One stored monitoring day, as the explorer lists it. */
@@ -33,6 +33,17 @@ export type StoredReadingDTO = {
   savingsBand: SavingsBand | null;
   /** Non-null when this day can no longer be excluded or re-included. */
   frozenReason?: string | null;
+  /**
+   * Hours-based completeness, judged against the circuit's own operating
+   * hours (`src/lib/day-validity.ts`, 2026-10-05) — null on a row not yet
+   * classified. A `partial` day is auto-excluded unless overridden below.
+   */
+  dayClass?: "complete" | "partial" | null;
+  dayClassHoursExpected?: number | null;
+  dayClassHoursPresent?: number | null;
+  /** An operator's explicit confirmation that this day counts anyway. */
+  validOverride?: boolean;
+  validOverrideReason?: string | null;
 };
 
 /**
@@ -76,6 +87,8 @@ export function ReadingsExplorer({
   const [excluding, setExcluding] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [markingValid, setMarkingValid] = useState<string | null>(null);
+  const [validReason, setValidReason] = useState("");
 
   function toggleExclusion(r: StoredReadingDTO) {
     setError(null);
@@ -93,6 +106,30 @@ export function ReadingsExplorer({
         return;
       }
       setExcluding(null);
+      router.refresh();
+    });
+  }
+
+  /**
+   * The one manual direction `toggleExclusion` doesn't cover: a day the
+   * system auto-classed partial that an operator confirms is fine anyway
+   * (2026-10-05, user-asked). Undoing needs no reason — it's just turning
+   * the override back off, not a fresh judgment call.
+   */
+  function toggleValidOverride(r: StoredReadingDTO) {
+    setError(null);
+    if (!r.validOverride && markingValid !== r.id) {
+      setMarkingValid(r.id);
+      setValidReason("");
+      return;
+    }
+    startTransition(async () => {
+      const result = await setDayValidOverride(r.id, !r.validOverride, r.validOverride ? "" : validReason);
+      if ("error" in result && result.error) {
+        setError(result.error);
+        return;
+      }
+      setMarkingValid(null);
       router.refresh();
     });
   }
@@ -289,14 +326,21 @@ export function ReadingsExplorer({
                   <td className="text-[12px]">
                     <span className="flex flex-wrap gap-x-2">
                       {r.flagged && <span style={{ color: "var(--bad-fg)" }}>Flagged</span>}
-                      {r.excluded && (
+                      {r.validOverride && (
+                        <span title={r.validOverrideReason ?? undefined} style={{ color: "var(--ok-fg)" }}>
+                          Marked valid
+                        </span>
+                      )}
+                      {r.excluded && !r.validOverride && (
                         <span title={r.excludedReason ?? undefined} style={{ color: "var(--warn-fg)" }}>
-                          Excluded
+                          {r.dayClass === "partial" && r.dayClassHoursExpected != null && r.dayClassHoursPresent != null
+                            ? `Partial — ${r.dayClassHoursPresent} of ${r.dayClassHoursExpected} hours`
+                            : "Excluded"}
                         </span>
                       )}
                       {r.superseded && <span className="text-[var(--text-muted)]">Superseded</span>}
                       {r.released && <span style={{ color: "var(--info-fg)" }}>Released</span>}
-                      {!r.flagged && !r.excluded && !r.superseded && !r.released && (
+                      {!r.flagged && !r.excluded && !r.superseded && !r.released && !r.validOverride && (
                         <span className="text-[var(--text-subtle)]">OK</span>
                       )}
                     </span>
@@ -304,14 +348,26 @@ export function ReadingsExplorer({
                   {canEdit && (
                     <td className="text-right">
                       {!r.released && (
-                        <button
-                          type="button"
-                          className="btn-ghost btn-sm"
-                          disabled={pending}
-                          onClick={() => toggleExclusion(r)}
-                        >
-                          {r.excluded ? "Include" : "Exclude"}
-                        </button>
+                        <span className="inline-flex items-center gap-1.5">
+                          {r.dayClass === "partial" && (
+                            <button
+                              type="button"
+                              className="btn-ghost btn-sm"
+                              disabled={pending}
+                              onClick={() => toggleValidOverride(r)}
+                            >
+                              {r.validOverride ? "Undo" : "Mark valid anyway"}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            className="btn-ghost btn-sm"
+                            disabled={pending}
+                            onClick={() => toggleExclusion(r)}
+                          >
+                            {r.excluded ? "Include" : "Exclude"}
+                          </button>
+                        </span>
                       )}
                     </td>
                   )}
@@ -335,6 +391,31 @@ export function ReadingsExplorer({
                         </button>
                         <button type="button" className="btn-ghost btn-sm" disabled={pending}
                           onClick={() => setExcluding(null)}>
+                          Cancel
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+                {markingValid === r.id && !r.validOverride && (
+                  <tr>
+                    <td colSpan={canEdit ? 6 : 5}>
+                      <div className="flex flex-wrap items-center gap-2 py-1">
+                        <input
+                          type="text"
+                          className="field field-auto min-w-[280px]"
+                          placeholder="Why this partial day should still count"
+                          aria-label="Valid-override reason"
+                          value={validReason}
+                          onChange={(e) => setValidReason(e.target.value)}
+                          disabled={pending}
+                        />
+                        <button type="button" className="btn-primary btn-sm" disabled={pending}
+                          onClick={() => toggleValidOverride(r)}>
+                          Mark this day valid
+                        </button>
+                        <button type="button" className="btn-ghost btn-sm" disabled={pending}
+                          onClick={() => setMarkingValid(null)}>
                           Cancel
                         </button>
                       </div>

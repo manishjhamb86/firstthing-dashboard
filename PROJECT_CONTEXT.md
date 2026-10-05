@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-09-29 (Android field app on branch `android-app`: shell, offline outbox, inspection, stock scanning, a demo's on-site steps, installation days and the full site survey — see `docs/engineering/19-field-app.md` §11–16e)
+2026-10-05 (day-level reading validity: one persisted flag, read everywhere, overridable — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -8916,3 +8916,112 @@ table, shown only while `canCorrectDates` and the row's own batch hasn't been su
 
 **Verified**: `tsc`/`lint`/`pnpm test` (1,273, unaffected — no new pure logic; these mirror
 `correctBatchDates`'s own established shape, which has no dedicated unit test either) all clean.
+
+## Day-level reading validity: one persisted flag, read everywhere, overridable (2026-10-05) — user-asked, researched first (Plan mode)
+
+**The ask**: every consumer of meter readings that averages or extrapolates — the dashboard's
+daily/monthly/yearly/overall savings, the monthly report — must first decide which days are
+actually usable, then compute only over those. A 24-hour circuit day missing even one of its 24
+hours is invalid, not "close enough." A circuit that only runs part of the day (~12h street
+lights) must not have its own ordinary off-hours mistaken for missing data. The decision has to be
+a stored flag, not a different on-screen guess in every place that happens to compute it; an
+operator processing the monthly report must be able to override an auto-invalid day back in as a
+stated exception, and that override has to be visible on the resident's own dashboard too — never
+a second, disagreeing number.
+
+**What research found, before writing anything.** `classifyDay()` (`src/lib/invoice-month.ts`,
+2026-09-15) was already the one real day-quality rule — `offline`/`partial`/`suspect`/`complete`
+— but `partial` was hardcoded to `FULL_DAY_HOURS = 24`, with no notion of a circuit running fewer
+hours, and it was **recomputed fresh by every caller**, never stored. `MeterReading.validityFlag`
+already existed in the schema and was **written in exactly one place, read nowhere** — dead.
+`anomalyFlag` was live but **display-only** — nothing that averages or bills ever read it.
+`excludedAt` was the one mechanism genuinely read everywhere, but it only works in ONE direction:
+an operator taking an otherwise-fine day OUT. There was no lever for the opposite case this ask
+needed — a day the system auto-flags invalid that an operator wants to confirm and count anyway.
+A separate, real finding mid-build: `monitoring-projection.ts` (2026-09-26) already auto-excludes
+a meter-projected day under 24 hours via the ordinary `excludedAt` mechanism, tagged with a
+`PARTIAL_REASON_PREFIX` string — this was the existing enforcement point, just hardcoded to 24 and
+with no override; fixing it in place turned out to need less new machinery than first planned.
+
+**Design.** `src/lib/day-validity.ts` (pure): `inferOperatingHours()` learns which hours (0–23) a
+circuit is actually expected to draw power, from its own hourly history over a rolling 90-day
+window — an hour clearing a low bar (>20% of sampled days) is "expected on"; below a 10-day
+minimum sample, or with no hourly history at all, it returns `confident: false` and every caller
+then treats all 24 hours as expected, which is exactly today's behaviour — a new circuit is never
+penalised for lacking history yet. `classifyDayHours()` judges one day's hours-present against
+only the EXPECTED hours (the learned mask, or all 24 when not confident) — missing even one
+expected hour is `partial`; hours genuinely outside the operating window reading zero is never
+counted against the day. A monthly-upload row with no per-hour breakdown is judged by COUNT
+against the circuit's own learned expected-hour total instead of the specific mask.
+
+**Schema** (additive, migration `20261005090000_reading_day_validity`): `MeterReading` gains
+`dayClass` (`complete`/`partial` — a new `ReadingDayClass` enum), `dayClassHoursExpected`/
+`dayClassHoursPresent` (the evidence shown beside the chip), and the one new manual-override
+triple, `validOverrideAt`/`validOverrideById`/`validOverrideReason`. `offline`/`suspect` stay
+dynamic — checked live against the baseline in force that day — since baking them into a stored
+value would go stale the moment a circuit is rescaled; only the hours-based half of the question
+is persisted. `classifyDay()` keeps its exact name and signature (minimal call-site churn): it now
+prefers a row's persisted `dayClass` over recomputing from `dataHours`/`intervalCount` when one
+exists, and an operator's `validOverride` makes a `partial` day count as `complete` — but never
+waves through `offline`/`suspect`, which stay checked regardless (the override answers the hours
+question only, not "trust any figure on this row"). A caller that hasn't selected the new columns
+gets identical behaviour to before — fully backward compatible, rolled out file by file with no
+flag day.
+
+**Written once, read everywhere.** `monitoring-projection.ts` — already the single writer of
+meter-projected `MeterReading` rows — now computes `inferOperatingHours` per circuit (over its
+FULL meter history, deliberately unbounded by the billing start: a meter commissioned months
+before billing began already shows the real pattern) and classifies each day against it, replacing
+the old hardcoded `d.hours < 24`. The existing auto-exclude-on-partial mechanism is kept exactly as
+it was (same `excludedAt`/`PARTIAL_REASON_PREFIX` shape every reader already respects) — just fed
+a circuit-aware answer now, and newly gated on the operator's override: `validOverrideAt` suppresses
+the auto-exclude outright, so a re-projection can never silently undo a stated exception. The
+monthly-upload commit path (`src/app/admin/readings/actions.ts`) writes `dayClass` the same way
+(count-based, no hourly breakdown available) but does **not** gain a new auto-exclude — that stays
+`monitoring-projection.ts`'s behaviour alone, so a historical monthly-upload day that has always
+counted does not newly stop counting just because this shipped.
+
+**The practical effect, found while designing this**: because almost every consumer
+(`invoice-month-loader.ts`, `portal-energy.ts`, `report-data.ts`, live monitoring,
+`savings-band-alerts.ts`) already reads `excludedAt` consistently, fixing the ONE write point
+(`monitoring-projection.ts`) to be circuit-aware already propagates correctly almost everywhere —
+the printed monthly report's own `ExclusionNotes` already prints `excludedReason` verbatim, so the
+new "N of M expected hours" message shows up there with zero changes to the report itself.
+`invoice-month.ts`'s `classifyDay` and `portal-energy.ts`'s "under review" masking (2026-10-02)
+were the two places that needed direct wiring, since neither simply filters by `excludedAt` — they
+distinguish partial/offline/suspect for display, so both now select and pass through the persisted
+`dayClass`/`validOverrideAt` instead of recomputing on the fly.
+
+**New action**: `setDayValidOverride` (`src/app/admin/readings/exclusion-actions.ts`, sibling to
+the existing `setReadingExclusion`, same `manage_survey` gate, same INV-03 billed-day freeze via
+`exclusionRefusal`). Marking a day valid also clears the auto-exclude the partial classification
+set — leaving it would mean the override changed nothing any reader actually checks. A genuine
+MANUAL exclude (not the automatic one) is left untouched: this action overrides the automatic
+classification, not somebody else's separate judgment call.
+
+**UI**: `src/components/readings-explorer.tsx` (the one shared component behind live monitoring's
+readings table) gains a "Partial — N of M hours" status chip and a "Mark valid anyway"/"Undo"
+control beside the existing Exclude/Include button — the working surface an operator already uses
+to process a month's readings, not the printed report (which stays a read-only snapshot of
+whatever state the rows were in when generated, correctly, with no changes needed there).
+
+**Backfill**: `scripts/backfill-day-validity.ts` (`--dry-run` supported), per this repo's own
+one-off-script convention — imports the real `inferOperatingHours`/`classifyDayHours`/
+`projectCircuitMonitoring` rather than reimplementing any of it. Per circuit: if it has meter
+install history, re-runs `projectCircuitMonitoring` (the same authoritative writer ongoing data
+uses, so a backfilled row and a freshly-projected one are computed by identical logic); whatever
+that doesn't reach (monthly-upload/legacy rows) is classified directly, informationally only — no
+new auto-exclude introduced retroactively. Hard-skips any row with `usedInCalculationId` set
+(INV-03), counted and logged, never touched.
+
+**Verified**: new `tests/day-validity.test.ts` (10 cases — the 23-of-24-hours case from the ask, a
+confident 12-hour mask correctly ignoring its own off-hours, the rolling-window boundary, the
+not-enough-history and all-zero-history fallbacks) and new cases in `tests/invoice-month.test.ts`
+(persisted `dayClass` beating the hours fallback; an override counting a `partial` day as
+`complete` while still correctly reading `offline`/`suspect`). `tsc`/`lint`/`pnpm test` (1,283, +12
+new) all clean. The backfill script was run for real against the shared dev database with a small
+disposable fixture (3 monthly-upload-origin rows, one deliberately short — 13 of 24 intervals):
+classified correctly (`partial`, 13 of 24) with no new `excludedAt`, confirmed by direct query,
+fixture removed afterward (dev's `meter_readings` table itself is currently empty — real reading
+history lives on stage, not dev, so this was the only way to exercise the write path pre-deploy).
+Not yet deployed or backfilled on stage — this branch is not merged.

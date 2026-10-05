@@ -17,6 +17,8 @@ import {
 } from "@/lib/reading-normalize";
 import { detectAnomalies } from "@/lib/reading-anomaly";
 import { coverageOf } from "@/lib/reading-coverage";
+import { classifyDayHours, inferOperatingHours } from "@/lib/day-validity";
+import { circuitHourlySamples } from "@/lib/monitoring-projection";
 
 const PATH = "/admin/readings";
 
@@ -382,10 +384,20 @@ export async function commitUpload(
     period,
   );
 
+  // Circuit-aware day completeness (day-validity.ts, 2026-10-05) — no
+  // per-hour breakdown from a plain CSV row, so judged by COUNT against the
+  // circuit's own learned number of expected hours, not the specific mask.
+  const meterInstallations = await db.meterInstallation.findMany({
+    where: { circuitId: file.circuitId },
+    select: { meterId: true, installedAt: true, removedAt: true },
+  });
+  const operating = inferOperatingHours(await circuitHourlySamples(meterInstallations, now), now);
+
   await db.$transaction(async (tx) => {
     for (const day of parsed.days) {
       const key = utcDayOf(day.date).getTime();
       const existing = storedByDay.get(key);
+      const hourClass = classifyDayHours({ hourlyPresent: null, intervalCount: day.intervalCount }, operating);
       // Meter wins (2026-09-26): a day the circuit's meter covers keeps the
       // meter's figure, and this upload's value is kept beside it, never lost.
       const action = mergeMonitoringDay(
@@ -412,6 +424,9 @@ export async function commitUpload(
             source: "csv",
             origin: "monthly_upload",
             rawFileId: file.id,
+            dayClass: hourClass.dayClass,
+            dayClassHoursExpected: hourClass.hoursExpected,
+            dayClassHoursPresent: hourClass.hoursPresent,
           },
         });
         continue;
@@ -431,6 +446,9 @@ export async function commitUpload(
           intervalCount: day.intervalCount,
           origin: "monthly_upload",
           rawFileId: file.id,
+          dayClass: hourClass.dayClass,
+          dayClassHoursExpected: hourClass.hoursExpected,
+          dayClassHoursPresent: hourClass.hoursPresent,
           ...(action.supersede ? { supersededValue: existing.kWh, supersededAt: now, supersededByUserId: ops.session.user.id } : {}),
           otherKwh: action.other.kWh,
           otherOrigin: action.other.origin,

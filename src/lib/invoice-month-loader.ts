@@ -168,7 +168,16 @@ export async function loadInvoiceMonthContext(input: {
   const readingsByCircuit: Record<string, CircuitMonthReadings> = {};
   const readings = await db.meterReading.findMany({
     where: { circuitId: { in: circuits.map((c) => c.id) }, date: { gte: from, lt: to }, excludedAt: null },
-    select: { id: true, circuitId: true, date: true, kWh: true, intervalCount: true, rawFileId: true },
+    select: {
+      id: true,
+      circuitId: true,
+      date: true,
+      kWh: true,
+      intervalCount: true,
+      rawFileId: true,
+      dayClass: true,
+      validOverrideAt: true,
+    },
     orderBy: { date: "asc" },
   });
 
@@ -205,6 +214,8 @@ export async function loadInvoiceMonthContext(input: {
       kWh: r.kWh,
       intervalCount: r.intervalCount,
       dataHours: dataHoursByCircuitDay.get(`${r.circuitId}|${date}`) ?? null,
+      dayClass: r.dayClass,
+      validOverride: r.validOverrideAt !== null,
     });
     bucket.readingIds.push(r.id);
     if (!bucket.rawFileIds.includes(r.rawFileId)) bucket.rawFileIds.push(r.rawFileId);

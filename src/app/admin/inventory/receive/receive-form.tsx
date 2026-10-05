@@ -4,6 +4,7 @@ import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
+import { SerialScanButton } from "@/components/serial-scan";
 import { getSupplierInvoiceUploadUrl, receiveDelivery } from "../actions";
 
 type Item = { id: string; name: string; tracking: "serial" | "length" | "quantity"; unit: string; defaultWarrantyMonths: number | null };
@@ -176,10 +177,18 @@ export function ReceiveForm({
                     <Field
                       label="Manufacturer serials (optional)"
                       htmlFor={`rl-serials-${i}`}
-                      hint="One per line, in the order the units are numbered — a SIM's ICCID, a meter's device id. Leave blank for lights."
+                      hint="One per line, in the order the units are numbered — a SIM's ICCID, a meter's device id. Leave blank for lights, or scan each device's own printed serial as it's unboxed."
                     >
                       <textarea id={`rl-serials-${i}`} className="field font-mono text-[12.5px]" rows={3} value={l.serials} onChange={(e) => setLine(i, { serials: e.target.value })} />
                     </Field>
+                    <div className="mt-2">
+                      <SerialScanButton
+                        label="Scan a serial to add it"
+                        onScan={(code) =>
+                          setLine(i, { serials: l.serials.trim() ? `${l.serials.replace(/\s+$/, "")}\n${code}` : code })
+                        }
+                      />
+                    </div>
                   </div>
                 )}
                 {lines.length > 1 && (

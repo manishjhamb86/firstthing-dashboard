@@ -4,14 +4,13 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, StatusChip } from "@/components/ui";
 import { codeFromScan } from "@/lib/inventory";
+import { useBarcodeScan } from "@/components/barcode-camera";
 import { MoveUnitsForm, type MoveContext, type RecordMove } from "../move-forms";
 import { lookupScanned } from "../actions";
 
 type Mode = "open" | "collect";
 type Row = { code: string; found?: boolean; item?: string; status?: string; location?: string | null; unchecked?: boolean };
 type Info = { code: string; found: boolean; item?: string; status?: string; location?: string | null };
-
-type Detector = { detect: (src: CanvasImageSource) => Promise<Array<{ rawValue: string }>> };
 
 const STATUS_LABEL: Record<string, string> = {
   in_stock: "In stock",
@@ -22,12 +21,6 @@ const STATUS_LABEL: Record<string, string> = {
   lost: "Lost",
 };
 
-/**
- * The camera loop. The browser's own barcode reader where there is one
- * (Chrome on Android); otherwise jsQR, loaded only here and only then (iPhone).
- * A code seen again within two seconds is the same sticker still in view, not
- * a second scan.
- */
 export function ScanClient({
   ctx,
   lookup,
@@ -44,11 +37,7 @@ export function ScanClient({
   recordMove?: RecordMove;
 }) {
   const router = useRouter();
-  const video = useRef<HTMLVideoElement>(null);
-  const canvas = useRef<HTMLCanvasElement>(null);
   const [mode, setMode] = useState<Mode>("collect");
-  const [on, setOn] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<Row[]>([]);
   const [typed, setTyped] = useState("");
   const [flash, setFlash] = useState<string | null>(null);
@@ -56,7 +45,6 @@ export function ScanClient({
   // which unmounts the form and would take its confirmation with it.
   const [moved, setMoved] = useState<string | null>(null);
   const [, startTransition] = useTransition();
-  const lastSeen = useRef<{ code: string; at: number } | null>(null);
   const modeRef = useRef(mode);
   useEffect(() => {
     modeRef.current = mode;
@@ -66,10 +54,6 @@ export function ScanClient({
     (raw: string) => {
       const code = codeFromScan(raw);
       if (!code) return;
-      const now = Date.now();
-      if (lastSeen.current && lastSeen.current.code === code && now - lastSeen.current.at < 2000) return;
-      lastSeen.current = { code, at: now };
-      navigator.vibrate?.(60);
       if (modeRef.current === "open") {
         router.push(`/admin/inventory?code=${encodeURIComponent(code)}`);
         return;
@@ -91,63 +75,7 @@ export function ScanClient({
     [router, lookup],
   );
 
-  useEffect(() => {
-    if (!on) return;
-    let stream: MediaStream | null = null;
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    (async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
-      } catch {
-        setError("The camera could not be opened. Allow camera access for this site, or type the code below.");
-        setOn(false);
-        return;
-      }
-      const v = video.current!;
-      v.srcObject = stream;
-      await v.play().catch(() => {});
-      const Native = (window as unknown as { BarcodeDetector?: new (o: { formats: string[] }) => Detector }).BarcodeDetector;
-      let detector: Detector | null = null;
-      if (Native) {
-        try {
-          detector = new Native({ formats: ["qr_code", "code_128"] });
-        } catch {
-          detector = null;
-        }
-      }
-      const jsQR = detector ? null : (await import("jsqr")).default;
-      const tick = async () => {
-        if (stopped) return;
-        if (v.readyState >= 2 && v.videoWidth) {
-          try {
-            if (detector) {
-              for (const b of await detector.detect(v)) add(b.rawValue);
-            } else if (jsQR) {
-              const c = canvas.current!;
-              const w = Math.min(v.videoWidth, 800);
-              const h = Math.round((v.videoHeight / v.videoWidth) * w);
-              c.width = w;
-              c.height = h;
-              const g = c.getContext("2d", { willReadFrequently: true })!;
-              g.drawImage(v, 0, 0, w, h);
-              const found = jsQR(g.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" });
-              if (found?.data) add(found.data);
-            }
-          } catch {
-            /* a frame that fails to decode is just a frame; keep going */
-          }
-        }
-        timer = setTimeout(tick, 200);
-      };
-      tick();
-    })();
-    return () => {
-      stopped = true;
-      if (timer) clearTimeout(timer);
-      stream?.getTracks().forEach((t) => t.stop());
-    };
-  }, [on, add]);
+  const { videoRef: video, canvasRef: canvas, on, setOn, error, setError } = useBarcodeScan(add);
 
   useEffect(() => {
     if (!flash) return;

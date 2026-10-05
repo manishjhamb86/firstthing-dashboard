@@ -9,6 +9,7 @@ import { warrantyView } from "@/lib/inventory-warranty-view";
 import { circuitLabelOf } from "@/lib/circuit-label";
 import { requireInventoryPage } from "../../access";
 import { MoveUnitsForm } from "../../move-forms";
+import { DeploySerialCheck } from "@/components/deploy-serial-check";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,14 @@ export default async function UnitPage({ params }: { params: Promise<{ code: str
               ))}
             </ol>
           </Card>
+          {/* Scanner-verified install (2026-10-06, user-asked) — serial-
+              tracked items only, and deliberately not for lights, which are
+              also serial-tracked in this schema but are exactly what the
+              user named as out of scope. Shown while the unit is still in
+              stock: once deployed there is nothing left to confirm. */}
+          {status === "in_stock" && unit.itemType.tracking === "serial" && !unit.itemType.deviceTypeId && (
+            <DeploySerialCheck expectedSerial={unit.serialNumber} itemName={unit.itemType.name} />
+          )}
           <Card className="p-5">
             <CardTitle>Record what happened</CardTitle>
             <MoveUnitsForm codes={[unit.code]} ctx={ctx} />

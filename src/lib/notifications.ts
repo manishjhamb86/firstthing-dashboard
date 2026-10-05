@@ -158,6 +158,19 @@ export function inspectionReminderPeriod(now = new Date()): string {
 }
 
 /**
+ * `"YYYY-MM"` for the IST calendar month `now` itself falls in — the still-
+ * open month a society's current-month filing status is judged against
+ * (`src/lib/inspection-intelligence.ts`'s `currentMonthSummary`). Exported
+ * as its own named function, symmetric with `inspectionReminderPeriod`
+ * above, rather than inlining the IST-month arithmetic a second place —
+ * this product's own standing rule that a machine instant is read in IST.
+ */
+export function currentInspectionPeriod(now = new Date()): string {
+  const { year, month } = istMonth(now, 0);
+  return `${year}-${String(month + 1).padStart(2, "0")}`;
+}
+
+/**
  * Which societies owe an inspection for `period`, newest contract set first.
  *
  * Exported so the notification and the inspections page's own "not filed"

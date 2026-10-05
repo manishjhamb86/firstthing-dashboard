@@ -2,9 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { formatDate, monthLabel } from "@/lib/format-date";
-import { inspectionReminderPeriod, societiesMissingInspection } from "@/lib/notifications";
+import { currentInspectionPeriod, inspectionReminderPeriod, societiesMissingInspection } from "@/lib/notifications";
+import {
+  classifyPortfolioFaultRates,
+  currentMonthSummary,
+  type SocietyFaultHistory,
+} from "@/lib/inspection-intelligence";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inspections" };
@@ -31,6 +36,67 @@ export default async function InspectionsPage({
     missingParam && /^\d{4}-\d{2}$/.test(missingParam) ? missingParam : null;
   const missing = missingPeriod ? await societiesMissingInspection(missingPeriod) : [];
   const currentReminderPeriod = inspectionReminderPeriod();
+
+  // ---- The summary header (2026-10-06, user-asked) ----
+  // Current-month status: done / pending / delayed over every society with
+  // an active contract. "Delayed" reuses the SAME overdue-last-period set
+  // the bell's own reminder already computes, so the two can never disagree
+  // about who is genuinely behind versus simply not-yet-visited this month.
+  const activeContracts = await db.contract.findMany({
+    where: { status: "active" },
+    select: { societyId: true },
+    distinct: ["societyId"],
+  });
+  const activeSocietyIds = activeContracts.map((c) => c.societyId);
+  const currentPeriod = currentInspectionPeriod();
+  const doneThisMonthRows =
+    activeSocietyIds.length > 0
+      ? await db.inspection.findMany({
+          where: {
+            societyId: { in: activeSocietyIds },
+            period: currentPeriod,
+            voidedAt: null,
+            totalLightsChecked: { not: null },
+          },
+          select: { societyId: true },
+        })
+      : [];
+  const missingLastPeriod = await societiesMissingInspection(inspectionReminderPeriod());
+  const monthSummary = currentMonthSummary({
+    activeSocietyIds,
+    doneThisMonthIds: new Set(doneThisMonthRows.map((r) => r.societyId)),
+    missingLastMonthIds: new Set(missingLastPeriod.map((m) => m.societyId)),
+  });
+
+  // Portfolio-wide fault-rate history — every finalised inspection on
+  // record, across every society (not only currently-active ones: a
+  // society whose faults contributed to a since-ended engagement is
+  // exactly the "bad experience" case worth surfacing, not something a
+  // narrower scope should quietly drop).
+  const allFinalised = await db.inspection.findMany({
+    where: { voidedAt: null, totalLightsChecked: { not: null } },
+    orderBy: { inspectedAt: "asc" },
+    select: {
+      societyId: true,
+      society: { select: { name: true } },
+      totalLightsChecked: true,
+      _count: { select: { findings: true } },
+    },
+  });
+  const faultHistoryBySociety = new Map<string, SocietyFaultHistory>();
+  for (const insp of allFinalised) {
+    // A total of 0 has no meaningful rate to compute (guards a divide-by-zero
+    // rather than reading a 0-checked visit as either spotless or chronic).
+    if (!insp.totalLightsChecked || insp.totalLightsChecked <= 0) continue;
+    const entry = faultHistoryBySociety.get(insp.societyId) ?? {
+      societyId: insp.societyId,
+      name: insp.society.name,
+      faultRates: [],
+    };
+    entry.faultRates.push(insp._count.findings / insp.totalLightsChecked);
+    faultHistoryBySociety.set(insp.societyId, entry);
+  }
+  const faultSummary = classifyPortfolioFaultRates([...faultHistoryBySociety.values()]);
 
   const inspections = await db.inspection.findMany({
     orderBy: [{ inspectedAt: "desc" }],
@@ -59,6 +125,73 @@ export default async function InspectionsPage({
           ) : undefined
         }
       />
+
+      <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_1fr]">
+        <Card className="p-5">
+          <CardTitle>{monthLabel(`${currentPeriod}-01`)} so far</CardTitle>
+          <StatRow>
+            <Stat label="Done" value={monthSummary.doneCount} tone="ok" detail={`of ${monthSummary.totalActive} active societies`} />
+            <Stat label="Pending" value={monthSummary.pendingCount} tone="accent" detail="not yet visited this month" />
+            <Stat
+              label="Delayed"
+              value={monthSummary.delayedCount}
+              tone={monthSummary.delayedCount > 0 ? "bad" : "accent"}
+              detail="missed last month too"
+            />
+          </StatRow>
+        </Card>
+
+        <Card className="p-5">
+          <CardTitle>Fault pattern, overall</CardTitle>
+          {faultSummary.normalCount + faultSummary.chronicCount === 0 ? (
+            <p className="text-[13px] text-[var(--text-muted)]">
+              No society has enough finalised inspections yet to judge a pattern ({faultSummary.notEnoughHistoryCount} still building history).
+            </p>
+          ) : faultSummary.chronicCount === 0 ? (
+            <p className="text-[13px]">
+              <span className="num font-semibold" style={{ color: "var(--ok-fg)" }}>
+                {faultSummary.normalCount}
+              </span>{" "}
+              societ{faultSummary.normalCount === 1 ? "y has" : "ies have"} a normal inspection pattern overall — nothing alarming.
+              {faultSummary.notEnoughHistoryCount > 0 &&
+                ` ${faultSummary.notEnoughHistoryCount} ${faultSummary.notEnoughHistoryCount === 1 ? "is" : "are"} still building history.`}
+            </p>
+          ) : (
+            <>
+              <p className="mb-2 text-[13px]">
+                <span className="num font-semibold" style={{ color: "var(--ok-fg)" }}>
+                  {faultSummary.normalCount}
+                </span>{" "}
+                normal ·{" "}
+                <span className="num font-semibold" style={{ color: "var(--bad-fg)" }}>
+                  {faultSummary.chronicCount}
+                </span>{" "}
+                society{faultSummary.chronicCount === 1 ? "" : "ies"} with repeated faults every visit, well above the portfolio&rsquo;s own typical rate
+                {faultSummary.notEnoughHistoryCount > 0 &&
+                  ` (${faultSummary.notEnoughHistoryCount} still building history)`}
+                .
+              </p>
+              <ul className="flex flex-col">
+                {faultSummary.chronic.map((c, i) => (
+                  <li
+                    key={c.societyId}
+                    className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-[13px]"
+                    style={i < faultSummary.chronic.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
+                  >
+                    <span className="font-medium">{c.name}</span>
+                    <span className="text-[var(--text-muted)]">
+                      <span className="num" style={{ color: "var(--bad-fg)" }}>
+                        {c.recentFaultRatePct.toFixed(1)}%
+                      </span>{" "}
+                      faulty, last {c.inspectionsConsidered} visits — a real pattern, likely a poor resident experience worth a closer look.
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </Card>
+      </div>
 
       {missingPeriod !== null && (
         <Card className="mb-6 p-6">

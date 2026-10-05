@@ -4,8 +4,9 @@ import React, { useMemo, useState, useTransition } from "react";
 import { formatDate } from "@/lib/format-date";
 import { useRouter } from "next/navigation";
 import { EmptyState, ErrorText } from "@/components/ui";
-import { setDayValidOverride, setReadingExclusion } from "@/app/admin/readings/exclusion-actions";
+import { getHourlyReadings, setDayValidOverride, setReadingExclusion } from "@/app/admin/readings/exclusion-actions";
 import { SAVINGS_BAND_META, type SavingsBand, type VarianceBand } from "@/lib/circuit-load";
+import type { HourReading } from "@/lib/hourly-anomaly";
 
 /** One stored monitoring day, as the explorer lists it. */
 export type StoredReadingDTO = {
@@ -46,6 +47,15 @@ export type StoredReadingDTO = {
   /** An operator's explicit confirmation that this day counts anyway. */
   validOverride?: boolean;
   validOverrideReason?: string | null;
+  /**
+   * Stored per-hour anomaly counts (`src/lib/hourly-anomaly.ts`, 2026-10-06) —
+   * green/yellow/red out of 24, as last computed by the projection. Null on a
+   * row with no hourly breakdown at all (a monthly-upload/legacy day) or one
+   * not yet re-projected since this shipped.
+   */
+  hourlyNormalCount?: number | null;
+  hourlySuspectCount?: number | null;
+  hourlyAnomalyCount?: number | null;
 };
 
 /**
@@ -91,6 +101,34 @@ export function ReadingsExplorer({
   const [error, setError] = useState<string | null>(null);
   const [markingValid, setMarkingValid] = useState<string | null>(null);
   const [validReason, setValidReason] = useState("");
+
+  // The 24-hour breakdown behind one day, fetched on demand and re-derived
+  // fresh every open (2026-10-06, user-asked) — never cached stale across a
+  // re-projection, so a second click after a correction shows the real
+  // current classification rather than whatever the first click happened to see.
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [hourly, setHourly] = useState<HourReading[] | null>(null);
+  const [hourlyError, setHourlyError] = useState<string | null>(null);
+  const [hourlyLoading, setHourlyLoading] = useState(false);
+
+  function toggleExpand(r: StoredReadingDTO) {
+    if (expanded === r.id) {
+      setExpanded(null);
+      return;
+    }
+    setExpanded(r.id);
+    setHourly(null);
+    setHourlyError(null);
+    setHourlyLoading(true);
+    getHourlyReadings(r.id).then((result) => {
+      setHourlyLoading(false);
+      if ("error" in result) {
+        setHourlyError(result.error);
+        return;
+      }
+      setHourly(result.hours);
+    });
+  }
 
   function toggleExclusion(r: StoredReadingDTO) {
     setError(null);
@@ -292,7 +330,28 @@ export function ReadingsExplorer({
               return (
                 <React.Fragment key={r.id}>
                 <tr style={r.excluded ? { opacity: 0.55 } : undefined}>
-                  <td className="num whitespace-nowrap">{formatDate(r.date)}</td>
+                  <td className="num whitespace-nowrap">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:opacity-80"
+                      style={{ font: "inherit", color: "inherit" }}
+                      onClick={() => toggleExpand(r)}
+                      aria-expanded={expanded === r.id}
+                      title="Show the 24 hourly readings behind this day"
+                    >
+                      <svg viewBox="0 0 16 16" aria-hidden style={{ width: 11, height: 11, flexShrink: 0, transform: expanded === r.id ? "rotate(90deg)" : undefined }}>
+                        <path d="M6 3.5 10.5 8 6 12.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                      {formatDate(r.date)}
+                    </button>
+                    {r.hourlyNormalCount != null && (r.hourlySuspectCount ?? 0) + (r.hourlyAnomalyCount ?? 0) > 0 && (
+                      <div className="mt-0.5 flex items-center gap-1.5 text-[10.5px] font-normal">
+                        <HourCountDot tone="ok" count={r.hourlyNormalCount} />
+                        <HourCountDot tone="warn" count={r.hourlySuspectCount ?? 0} />
+                        <HourCountDot tone="bad" count={r.hourlyAnomalyCount ?? 0} />
+                      </div>
+                    )}
+                  </td>
                   <td className="num text-right">{r.kWh.toFixed(2)}</td>
                   <td className="num text-right">
                     {r.intervalCount ?? "—"}
@@ -433,6 +492,15 @@ export function ReadingsExplorer({
                     </td>
                   </tr>
                 )}
+                {expanded === r.id && (
+                  <tr>
+                    <td colSpan={canEdit ? 6 : 5} className="bg-[var(--surface-2,var(--surface))]">
+                      {hourlyLoading && <p className="py-2 text-[12px] text-[var(--text-muted)]">Loading the 24 hourly readings…</p>}
+                      {hourlyError && <p className="py-2 text-[12px]" style={{ color: "var(--bad-fg)" }}>{hourlyError}</p>}
+                      {hourly && <HourlyBreakdown hours={hourly} />}
+                    </td>
+                  </tr>
+                )}
                 </React.Fragment>
               );
             })}
@@ -500,5 +568,63 @@ function Th({ k, label, sortKey, dir, onSort, align = "left" }: {
         <span aria-hidden style={{ opacity: active ? 1 : 0.25 }}>{active ? (dir === 1 ? "↑" : "↓") : "↕"}</span>
       </button>
     </th>
+  );
+}
+
+/** One of the three hourly counts under a day's date — hidden entirely at zero, so a quiet day shows no clutter. */
+function HourCountDot({ tone, count }: { tone: "ok" | "warn" | "bad"; count: number }) {
+  if (count === 0) return null;
+  return (
+    <span
+      className="num inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5"
+      style={{ background: `var(--${tone}-bg)`, color: `var(--${tone}-fg)` }}
+      title={tone === "ok" ? `${count} normal hours` : tone === "warn" ? `${count} suspect hours` : `${count} anomalous hours`}
+    >
+      <span aria-hidden style={{ width: 5, height: 5, borderRadius: "50%", background: "currentColor" }} />
+      {count}
+    </span>
+  );
+}
+
+const HOUR_CLASS_TONE: Record<HourReading["class"], "ok" | "warn" | "bad" | null> = {
+  normal: "ok",
+  suspect: "warn",
+  anomaly: "bad",
+  unclassified: null,
+};
+
+/**
+ * The real 24-hour breakdown behind one day (2026-10-06, user-asked) — a
+ * compact strip, hour by hour, each tinted by its own class against its own
+ * hour-of-day history (`src/lib/hourly-anomaly.ts`): an evening-peak hour and
+ * a 3am trough are judged against what THAT hour normally reads, never one
+ * blanket threshold across the whole day.
+ */
+function HourlyBreakdown({ hours }: { hours: HourReading[] }) {
+  return (
+    <div className="py-2">
+      <p className="mb-2 text-[11px] text-[var(--text-subtle)]">
+        Each hour judged against its own history — not present means the meter reported nothing that hour.
+      </p>
+      <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8 md:grid-cols-12">
+        {hours.map((h) => {
+          const tone = h.present ? HOUR_CLASS_TONE[h.class] : null;
+          return (
+            <div
+              key={h.hour}
+              className="rounded-[var(--r-sm)] border px-1.5 py-1 text-center"
+              style={{
+                borderColor: tone ? `var(--${tone}-fg)` : "var(--border)",
+                background: tone ? `var(--${tone}-bg)` : "var(--surface)",
+              }}
+              title={h.present ? `${String(h.hour).padStart(2, "0")}:00 — ${h.kWh.toFixed(3)} kWh — ${h.class}` : `${String(h.hour).padStart(2, "0")}:00 — no reading`}
+            >
+              <div className="text-[10px] text-[var(--text-subtle)]">{String(h.hour).padStart(2, "0")}:00</div>
+              <div className="num text-[11.5px] font-semibold">{h.present ? h.kWh.toFixed(2) : "—"}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }

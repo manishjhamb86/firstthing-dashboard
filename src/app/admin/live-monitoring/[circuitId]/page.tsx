@@ -158,6 +158,9 @@ export default async function LiveMonitoringCircuitPage({
               dayClassHoursPresent: r.dayClassHoursPresent,
               validOverride: r.validOverrideAt !== null,
               validOverrideReason: r.validOverrideReason,
+              hourlyNormalCount: r.hourlyNormalCount,
+              hourlySuspectCount: r.hourlySuspectCount,
+              hourlyAnomalyCount: r.hourlyAnomalyCount,
             };
           });
 

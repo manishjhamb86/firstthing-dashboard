@@ -2565,6 +2565,17 @@ model MeterReading {
   validityFlag Boolean @default(true) @map("validity_flag")
   anomalyFlag  Boolean @default(false) @map("anomaly_flag")
 
+  // Per-hour anomaly counts (src/lib/hourly-anomaly.ts, 2026-10-06,
+  // user-asked) — written only for a meter-origin day, which is the only
+  // source with a real hourly breakdown; null on a monthly-upload/legacy
+  // row, which has nothing to classify. The readings table reads these
+  // directly rather than reclassifying 24 hours on every page render; the
+  // expand-a-day view re-derives fresh, so it can never disagree with a
+  // stale stored count for longer than the next projection run.
+  hourlyNormalCount  Int? @map("hourly_normal_count")
+  hourlySuspectCount Int? @map("hourly_suspect_count")
+  hourlyAnomalyCount Int? @map("hourly_anomaly_count")
+
   // Excluded days are excluded, never interpolated (FLOW-09 step 7, CON-12).
   excludedAt     DateTime? @map("excluded_at")
   excludedById   String?   @map("excluded_by_id")

@@ -11,7 +11,8 @@ import { logger } from "@/lib/logger";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { exclusionRefusal } from "@/lib/reading-exclusion";
 import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
-import { PARTIAL_REASON_PREFIX } from "@/lib/monitoring-projection";
+import { circuitHourlySamples, PARTIAL_REASON_PREFIX } from "@/lib/monitoring-projection";
+import { buildHourlyProfiles, classifyDay as classifyHourlyDay, type HourReading } from "@/lib/hourly-anomaly";
 
 type Outcome = { error: string } | { ok: true };
 
@@ -136,4 +137,57 @@ export async function setDayValidOverride(readingId: string, valid: boolean, rea
   });
   revalidatePath(`/admin/live-monitoring/${reading.circuit.id}`);
   return { ok: true };
+}
+
+/**
+ * The real 24 hours behind one stored monitoring day, re-derived fresh on
+ * demand (2026-10-06, user-asked: "allow backend user to see all 24 hour
+ * readings of a day... once he clicks on a day"). Never read from the
+ * row's own stored counts — a stored `hourlyNormalCount` etc. can predate
+ * a profile-affecting re-projection (or, for an older row, not exist at
+ * all), so this recomputes from the meter's own hourly store every time
+ * it's asked, the same way the readings explorer's other figures are never
+ * trusted stale relative to what actually happened.
+ */
+export async function getHourlyReadings(
+  readingId: string,
+): Promise<{ error: string } | { ok: true; hours: HourReading[] }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid." };
+  const perms = admin.permissions as string[];
+  if (!perms.includes("manage_survey") && !perms.includes("manage_pipeline")) {
+    return { error: "Viewing hourly readings needs field-survey or operations access." };
+  }
+
+  const reading = await db.meterReading.findUnique({
+    where: { id: readingId },
+    select: {
+      id: true,
+      date: true,
+      meterId: true,
+      circuit: {
+        select: {
+          voidedAt: true,
+          meterInstallations: { orderBy: { installedAt: "asc" }, select: { meterId: true, installedAt: true, removedAt: true } },
+        },
+      },
+    },
+  });
+  if (!reading || reading.circuit.voidedAt) return { error: "That reading no longer exists." };
+  if (!reading.meterId) {
+    return { error: "This day has no hourly breakdown — it came from a monthly upload, not the meter's own hourly store." };
+  }
+
+  const hourly = await db.meterHourlyReading.findMany({
+    where: { meterId: reading.meterId, day: reading.date },
+    select: { hour: true, kWh: true },
+  });
+  const kwhByHour: (number | null)[] = new Array(24).fill(null);
+  for (const h of hourly) kwhByHour[h.hour] = h.kWh;
+
+  const now = new Date();
+  const hourlySamples = await circuitHourlySamples(reading.circuit.meterInstallations, now);
+  const profiles = buildHourlyProfiles(hourlySamples);
+  const summary = classifyHourlyDay(kwhByHour, profiles);
+  return { ok: true, hours: summary.hours };
 }

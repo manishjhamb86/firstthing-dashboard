@@ -18,6 +18,7 @@ import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, savingsPct, SAVINGS_SUSP
 import { mergeMonitoringDay, monitoringStart, type Origin } from "@/lib/monitoring";
 import { dayMs } from "@/lib/demo-periods";
 import { classifyDayHours, inferOperatingHours, OPERATING_HOURS_WINDOW_DAYS } from "@/lib/day-validity";
+import { buildHourlyProfiles, classifyDay as classifyHourlyDay } from "@/lib/hourly-anomaly";
 
 export const PARTIAL_REASON_PREFIX = "Partial day — ";
 
@@ -185,7 +186,15 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
   // not a blanket 24.
   const byDay = new Map<
     number,
-    { kWh: number; hours: number; dataHours: number; meterId: string; importId: string | null; present: boolean[] }
+    {
+      kWh: number;
+      hours: number;
+      dataHours: number;
+      meterId: string;
+      importId: string | null;
+      present: boolean[];
+      kwhByHour: (number | null)[];
+    }
   >();
   if (start) {
     for (const stay of circuit.meterInstallations) {
@@ -197,9 +206,12 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       });
       for (const h of hours) {
         const t = dayMs(h.day);
-        const d = byDay.get(t) ?? { kWh: 0, hours: 0, dataHours: 0, meterId: stay.meterId, importId: null, present: new Array(24).fill(false) as boolean[] };
+        const d =
+          byDay.get(t) ??
+          { kWh: 0, hours: 0, dataHours: 0, meterId: stay.meterId, importId: null, present: new Array(24).fill(false) as boolean[], kwhByHour: new Array(24).fill(null) as (number | null)[] };
         d.kWh += h.kWh;
         d.hours += 1;
+        d.kwhByHour[h.hour] = h.kWh;
         if (h.kWh !== 0) {
           d.dataHours += 1;
           d.present[h.hour] = true;
@@ -209,9 +221,12 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       }
     }
   }
-  const operating = start
-    ? inferOperatingHours(await circuitHourlySamples(circuit.meterInstallations, now), now)
-    : { hours: new Set<number>(), confident: false };
+  const hourlySamples = start ? await circuitHourlySamples(circuit.meterInstallations, now) : [];
+  const operating = start ? inferOperatingHours(hourlySamples, now) : { hours: new Set<number>(), confident: false };
+  // Per-hour-of-day median+MAD (hourly-anomaly.ts, 2026-10-06) — the SAME
+  // rolling samples the operating-hours learner already fetched, reused
+  // rather than queried twice.
+  const hourlyProfiles = buildHourlyProfiles(hourlySamples);
 
   const existing = await db.meterReading.findMany({
     where: { circuitId, source: "csv" },
@@ -229,6 +244,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       excludedAt: true,
       excludedReason: true,
       validOverrideAt: true,
+      hourlyNormalCount: true,
     },
   });
   const existingByDay = new Map(existing.map((r) => [dayMs(r.date), r]));
@@ -282,6 +298,12 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       dayClassHoursExpected: hourClass.hoursExpected,
       dayClassHoursPresent: hourClass.hoursPresent,
     };
+    const hourlySummary = classifyHourlyDay(d.kwhByHour, hourlyProfiles);
+    const hourlyData = {
+      hourlyNormalCount: hourlySummary.normalCount,
+      hourlySuspectCount: hourlySummary.suspectCount,
+      hourlyAnomalyCount: hourlySummary.anomalyCount,
+    };
     if (action.kind === "create") {
       await db.meterReading.create({
         data: {
@@ -298,6 +320,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
           rawFileId: await rawFile(d.importId),
           ...dayClassData,
           ...partialData,
+          ...hourlyData,
         },
       });
       summary.created++;
@@ -305,8 +328,11 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
     } else if (action.kind === "skip") {
       if (action.why === "released") summary.releasedSkipped++;
       else summary.unchanged++;
-      // A day unchanged in value can still have filled out its hours.
-      if (action.why === "unchanged" && prior && prior.intervalCount !== d.hours) {
+      // A day unchanged in value can still have filled out its hours, or —
+      // a row written before hourly-anomaly.ts existed — still be missing
+      // its per-hour counts entirely; either case is worth a write even
+      // though the figure itself didn't move.
+      if (action.why === "unchanged" && prior && (prior.intervalCount !== d.hours || prior.hourlyNormalCount === null)) {
         const wasAuto = prior.excludedReason?.startsWith(PARTIAL_REASON_PREFIX) ?? false;
         await db.meterReading.update({
           where: { id: prior.id },
@@ -314,6 +340,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
             intervalCount: d.hours,
             dataHours: d.dataHours,
             ...dayClassData,
+            ...hourlyData,
             ...(partial && !overridden ? (prior.excludedAt ? {} : partialData) : wasAuto ? { excludedAt: null, excludedById: null, excludedReason: null } : {}),
           },
         });
@@ -339,6 +366,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
           otherOrigin: action.other.origin,
           otherRawFileId: action.replaceValue && prior.origin !== "meter" ? prior.rawFileId : undefined,
           ...dayClassData,
+          ...hourlyData,
           ...(partial && !overridden
             ? wasAuto || !prior.excludedAt
               ? partialData

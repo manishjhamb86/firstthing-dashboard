@@ -7,6 +7,7 @@ import { Card, ErrorText, Field, StatusChip } from "@/components/ui";
 import { ExclusionNote } from "@/components/exclusion-note";
 import { hasExclusion, type Exclusion } from "@/lib/circuit-load";
 import { purgeRemovedDemo, removeDemo, setBenchmarkOverride, setDemoLightCount, setDemoRejected, startDemo } from "./demo-step-actions";
+import { deleteLightHistoryEntries, setLightHistoryExcluded } from "./inventory-actions";
 
 export type DemoDTO = {
   id: string;
@@ -30,8 +31,21 @@ export type DemoDTO = {
  * baseline adds to the first) or repeats the SAME lights (the baselines
  * average); the benchmark is the mean of the demos' percentages either way.
  */
+export type LightHistoryItemDTO = {
+  /** The underlying `ChangeLog` row id(s) this entry was built from — what Exclude/Delete act on. */
+  ids: string[];
+  at: string;
+  text: string;
+  /** Detected automatically (filterCustomerRelevant): an exact, immediate reversal — already hidden from the customer, no action needed. */
+  autoHidden: boolean;
+  /** An operator's own manual exclusion — the backend's fallback for whatever the automatic rule doesn't catch. */
+  excludedAt: string | null;
+  excludedReason: string | null;
+};
+
 export function DemosPanel({
   circuitId,
+  societyId,
   demos,
   circuitBaseline,
   circuitBenchmark,
@@ -45,9 +59,12 @@ export function DemosPanel({
   removed = [],
   canChangeLights = false,
   lightCountHistory = [],
+  canManageHistory = false,
+  demoMode = false,
   exclusion,
 }: {
   circuitId: string;
+  societyId: string;
   demos: DemoDTO[];
   circuitBaseline: number | null;
   circuitBenchmark: number | null;
@@ -68,7 +85,10 @@ export function DemosPanel({
    * split, newest first (2026-10-05, user-asked: "with proper history when
    * it was changed, so user have clear picture").
    */
-  lightCountHistory?: { at: string; text: string }[];
+  lightCountHistory?: LightHistoryItemDTO[];
+  /** Operations: may hide/un-hide an entry from the customer view, and (demo mode only) delete one outright (2026-10-06, user-asked). */
+  canManageHistory?: boolean;
+  demoMode?: boolean;
   /** What stayed on the circuit unreplaced — the savings here leave it out. */
   exclusion?: Exclusion;
 }) {
@@ -85,6 +105,13 @@ export function DemosPanel({
   const [overriding, setOverriding] = useState(false);
   const [pct, setPct] = useState(overridePct === null ? "" : String(overridePct));
   const [reason, setReason] = useState(overrideReason ?? "");
+  const [excludingKey, setExcludingKey] = useState<string | null>(null);
+  const [excludeReason, setExcludeReason] = useState("");
+  // inventory-actions.ts's Outcome is a strict `{error:string}|{ok:true}`
+  // union, which TS's weak-type check rejects against run()'s `{error?:
+  // string}` shape for the `{ok:true}` branch — normalized here rather than
+  // widening that file's own, more precise return type.
+  const toRunResult = (p: Promise<{ error: string } | { ok: true }>) => p.then((r) => ("error" in r ? r : {}));
   const run = (fn: () => Promise<{ error?: string }>, after?: () => void) =>
     start(async () => {
       setError(null);
@@ -263,12 +290,96 @@ export function DemosPanel({
           <summary className="cursor-pointer">
             {lightCountHistory.length === 1 ? "1 light-count correction on record" : `${lightCountHistory.length} light-count corrections on record`}
           </summary>
-          <ul className="mt-2 space-y-1">
-            {lightCountHistory.map((h, i) => (
-              <li key={i}>
-                <span className="num">{h.at}</span> — {h.text}
-              </li>
-            ))}
+          <ul className="mt-2 space-y-2">
+            {lightCountHistory.map((h) => {
+              const key = h.ids.join(",");
+              return (
+                <li key={key}>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="num">{h.at}</span> — {h.text}
+                  </div>
+                  {h.excludedAt !== null ? (
+                    <p className="mt-0.5" style={{ color: "var(--text-subtle)" }}>
+                      Hidden from the customer, {h.excludedAt} — {h.excludedReason}
+                      {canManageHistory && (
+                        <button
+                          type="button"
+                          className="ml-2 underline"
+                          disabled={pending}
+                          onClick={() => run(() => toRunResult(setLightHistoryExcluded({ ids: h.ids, exclude: false, reason: "", circuitId, societyId })))}
+                        >
+                          Un-hide
+                        </button>
+                      )}
+                    </p>
+                  ) : h.autoHidden ? (
+                    <p className="mt-0.5" style={{ color: "var(--text-subtle)" }}>
+                      Cancels out — automatically hidden from the customer
+                    </p>
+                  ) : (
+                    canManageHistory && (
+                      <div className="mt-0.5">
+                        {excludingKey === key ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              type="text"
+                              className="field field-auto"
+                              placeholder="Why hide this from the customer"
+                              value={excludeReason}
+                              onChange={(e) => setExcludeReason(e.target.value)}
+                              disabled={pending}
+                            />
+                            <button
+                              type="button"
+                              className="btn-ghost btn-sm"
+                              disabled={pending}
+                              onClick={() =>
+                                run(
+                                  () => toRunResult(setLightHistoryExcluded({ ids: h.ids, exclude: true, reason: excludeReason, circuitId, societyId })),
+                                  () => setExcludingKey(null),
+                                )
+                              }
+                            >
+                              Hide from customer
+                            </button>
+                            <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={() => setExcludingKey(null)}>
+                              Cancel
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="underline"
+                              onClick={() => {
+                                setExcludingKey(key);
+                                setExcludeReason("");
+                              }}
+                            >
+                              Hide from customer
+                            </button>
+                            {demoMode && (
+                              <button
+                                type="button"
+                                className="underline"
+                                style={{ color: "var(--bad-fg)" }}
+                                disabled={pending}
+                                onClick={() => {
+                                  if (!window.confirm("Delete this record outright? This cannot be undone.")) return;
+                                  run(() => toRunResult(deleteLightHistoryEntries({ ids: h.ids, circuitId, societyId })));
+                                }}
+                              >
+                                Delete
+                              </button>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </details>
       )}

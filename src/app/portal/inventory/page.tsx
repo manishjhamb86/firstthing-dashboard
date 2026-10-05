@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { demoLightsInstalled, totalLights } from "@/lib/light-population";
-import { circuitLightCountHistoryByCircuit, describeLightCountChange } from "@/lib/circuit-light-history";
+import { circuitLightCountHistoryByCircuit, describeLightCountChange, filterCustomerRelevant } from "@/lib/circuit-light-history";
 import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
@@ -80,7 +80,11 @@ export default async function PortalInventoryPage() {
         .map((d) => d.lightReplacementDate!)
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
     demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices: c.devices }),
-    lightHistory: lightHistoryByCircuit.get(c.id) ?? [],
+    // A real back-and-forth that exactly cancels (or an operator's own
+    // manual exclusion) is dropped here — a resident reading "it was X,
+    // then corrected to Y, then back to X" when nothing actually, lastingly
+    // moved is confusing, not transparent (2026-10-06, user-caught).
+    lightHistory: filterCustomerRelevant(lightHistoryByCircuit.get(c.id) ?? []),
   }));
 
   // What counts as a FirsThing-installed fitting: a line with a recorded

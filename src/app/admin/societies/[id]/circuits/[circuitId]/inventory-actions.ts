@@ -323,3 +323,83 @@ export async function correctLockedCount(input: { lineId: string; count: number;
   revalidatePath(circuitPath(circuit.societyId, circuit.id));
   return { ok: true };
 }
+
+// ---- The light-count audit trail's own backend escape hatch (2026-10-06,
+// user-asked, after a real back-and-forth correction — two real people,
+// five minutes apart, netting to no actual change — read as nonsensical
+// junk on the customer portal). `filterCustomerRelevant`
+// (circuit-light-history.ts) already detects and hides an EXACT, adjacent
+// reversal automatically; these two actions are the manual fallback for
+// whatever that rule doesn't catch, and the one place operations can act
+// on a specific entry. Same ops gate as `correctLockedCount` above.
+
+async function requireOps() {
+  const admin = await resolveAdmin();
+  if (!admin) return null;
+  const p = admin.permissions as string[];
+  if (!(p.includes("manage_survey") && p.includes("manage_pipeline"))) return null;
+  return admin;
+}
+
+/**
+ * Hides (or un-hides) one or more `ChangeLog` rows from the customer-facing
+ * read — never a delete. The row, its old/new values and who made it stay
+ * on record either way; only the portal stops showing it.
+ */
+export async function setLightHistoryExcluded(input: {
+  ids: string[];
+  exclude: boolean;
+  reason: string;
+  circuitId: string;
+  societyId: string;
+}): Promise<Outcome> {
+  const admin = await requireOps();
+  if (!admin) {
+    logger.warn("change_log.exclude_refused", { ids: input.ids, reason: "not_ops" });
+    return { error: "Hiding a record from the customer view is an operations lead action." };
+  }
+  if (input.ids.length === 0) return { error: "Nothing to update." };
+  if (input.exclude && !input.reason.trim()) {
+    return { error: "Say why this is being hidden from the customer — it stays visible here either way." };
+  }
+  await db.changeLog.updateMany({
+    where: { id: { in: input.ids } },
+    data: input.exclude
+      ? { excludedAt: new Date(), excludedById: admin.id, excludedReason: input.reason.trim() }
+      : { excludedAt: null, excludedById: null, excludedReason: null },
+  });
+  logger.info("change_log.exclude_set", { actorId: admin.id, ids: input.ids, exclude: input.exclude, reason: input.reason.trim() || null });
+  revalidatePath(circuitPath(input.societyId, input.circuitId));
+  return { ok: true };
+}
+
+/**
+ * A genuine hard delete — deliberately gated to demo mode, the same "we are
+ * not live yet" exception this codebase already makes for purging a whole
+ * demo outright (`purgeDemo`). Outside demo mode there is no delete at all,
+ * only the exclude above — a released audit trail is never erased, by
+ * design, once there is a real customer to answer to.
+ */
+export async function deleteLightHistoryEntries(input: { ids: string[]; circuitId: string; societyId: string }): Promise<Outcome> {
+  const admin = await requireOps();
+  if (!admin) {
+    logger.warn("change_log.delete_refused", { ids: input.ids, reason: "not_ops" });
+    return { error: "Deleting a record is an operations lead action." };
+  }
+  if (!(await isDemoMode())) {
+    logger.warn("change_log.delete_refused", { ids: input.ids, reason: "not_demo_mode" });
+    return { error: "Deleting a record outright is only available in demo mode, before go-live — hide it from the customer view instead." };
+  }
+  if (input.ids.length === 0) return { error: "Nothing to delete." };
+  // A snapshot goes into the structured log even though the row itself is
+  // gone — a deletion still leaves SOME trace, the same reasoning as every
+  // other access-control decision this codebase logs.
+  const rows = await db.changeLog.findMany({
+    where: { id: { in: input.ids } },
+    select: { id: true, entity: true, field: true, oldValue: true, newValue: true, at: true, reason: true },
+  });
+  await db.changeLog.deleteMany({ where: { id: { in: input.ids } } });
+  logger.info("change_log.entries_deleted", { actorId: admin.id, deleted: rows });
+  revalidatePath(circuitPath(input.societyId, input.circuitId));
+  return { ok: true };
+}

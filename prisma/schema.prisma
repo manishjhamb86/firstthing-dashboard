@@ -1465,6 +1465,17 @@ model ChangeLog {
   actorId   String?  @map("actor_id")
   at        DateTime @default(now())
 
+  /// Hidden from a CUSTOMER-facing read, kept for the backend's own audit
+  /// trail (2026-10-06, user-asked, after a real back-and-forth correction
+  /// read as nonsensical junk on the portal). An exact, adjacent reversal is
+  /// already detected and filtered automatically
+  /// (`filterCustomerRelevant`); this is the manual fallback for whatever
+  /// that rule doesn't catch — never a hard delete, which stays a demo-mode-
+  /// only, "we are not live yet" action instead.
+  excludedAt     DateTime? @map("excluded_at")
+  excludedById   String?   @map("excluded_by_id")
+  excludedReason String?   @map("excluded_reason")
+
   @@index([demoId, at])
   @@index([circuitId, at])
   @@index([meterId, at])

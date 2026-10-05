@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { demoLightsInstalled, describeLights, totalLights } from "@/lib/light-population";
-import { circuitLightCountHistory, describeLightCountChange } from "@/lib/circuit-light-history";
+import { circuitLightCountHistory, describeLightCountChange, filterCustomerRelevant } from "@/lib/circuit-light-history";
 import { isDemoMode } from "@/lib/demo-mode";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
@@ -149,6 +149,10 @@ export default async function CircuitDetailPage({
   if (!circuit || circuit.societyId !== id) notFound();
 
   const lightCountHistory = await circuitLightCountHistory(circuit.id);
+  // What the customer would actually see, so the admin screen can mark an
+  // entry "cancels out — hidden from the customer" rather than operations
+  // having to work that out by eye (2026-10-06, user-asked).
+  const customerVisibleIds = new Set(filterCustomerRelevant(lightCountHistory).flatMap((h) => h.ids));
 
   const eligible = circuit.state !== "surveyed" && circuit.state !== "ineligible";
   const pipelineId = circuit.siteSurvey?.pipelineId ?? null;
@@ -468,6 +472,7 @@ export default async function CircuitDetailPage({
 
       <DemosPanel
         circuitId={circuit.id}
+        societyId={id}
         demos={demoDTOs}
         circuitBaseline={circuit.preInstallBaseline}
         circuitBenchmark={circuit.benchmarkSavingsPct}
@@ -477,7 +482,16 @@ export default async function CircuitDetailPage({
         canStart={canEdit && !circuit.voidedAt && eligible}
         canDecide={canOverride && !circuit.voidedAt}
         canChangeLights={demoMode && canEdit && !circuit.voidedAt}
-        lightCountHistory={lightCountHistory.map((h) => ({ at: h.at, text: describeLightCountChange(h) }))}
+        lightCountHistory={lightCountHistory.map((h) => ({
+          ids: h.ids,
+          at: h.at,
+          text: describeLightCountChange(h),
+          autoHidden: h.excludedAt === null && !h.ids.some((id) => customerVisibleIds.has(id)),
+          excludedAt: h.excludedAt,
+          excludedReason: h.excludedReason,
+        }))}
+        canManageHistory={canOverride}
+        demoMode={demoMode}
         exclusion={exclusion}
         maxDemos={MAX_DEMOS_PER_CIRCUIT}
         agreedPending={agreedPending}

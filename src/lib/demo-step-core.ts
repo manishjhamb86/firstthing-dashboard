@@ -63,6 +63,7 @@ export const demoSelect = {
       voidedAt: true,
       wattage: true,
       meteredLightCount: true,
+      representedLightCount: true,
       devices: { select: { count: true, wattage: true } },
       society: { select: { name: true } },
       siteSurvey: {

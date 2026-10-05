@@ -44,6 +44,7 @@ export function DemosPanel({
   agreedPending,
   removed = [],
   canChangeLights = false,
+  lightCountHistory = [],
   exclusion,
 }: {
   circuitId: string;
@@ -62,6 +63,12 @@ export function DemosPanel({
   removed?: { id: string; sequence: number; reason: string; on: string; by: string | null }[];
   /** Demo mode: a demo's light count can be changed from the table. */
   canChangeLights?: boolean;
+  /**
+   * Every recorded correction to this circuit's demo-count/full-installation
+   * split, newest first (2026-10-05, user-asked: "with proper history when
+   * it was changed, so user have clear picture").
+   */
+  lightCountHistory?: { at: string; text: string }[];
   /** What stayed on the circuit unreplaced — the savings here leave it out. */
   exclusion?: Exclusion;
 }) {
@@ -145,7 +152,10 @@ export function DemosPanel({
                         onClick={() => {
                           const v = window.prompt(`Lights on demo ${d.sequence}'s meter (now ${d.meteredLightCount}):`, String(d.meteredLightCount));
                           if (v === null || v.trim() === "" || Number(v) === d.meteredLightCount) return;
-                          run(() => setDemoLightCount({ demoId: d.id, count: Number(v) }));
+                          // Optional — kept on the history disclosure above
+                          // when given, so a later reader knows why.
+                          const why = window.prompt("Why is this count being corrected? (optional)") ?? undefined;
+                          run(() => setDemoLightCount({ demoId: d.id, count: Number(v), reason: why?.trim() || undefined }));
                         }}
                       >
                         Change
@@ -239,6 +249,24 @@ export function DemosPanel({
                     Delete completely
                   </button>
                 )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
+      {lightCountHistory.length > 0 && (
+        // Closed by default, same as `removed` above — most circuits have
+        // never had a correction (2026-10-05, user-asked: a clear record of
+        // when and why the full-installation/demo split last moved).
+        <details className="text-[13px] text-[var(--text-muted)]">
+          <summary className="cursor-pointer">
+            {lightCountHistory.length === 1 ? "1 light-count correction on record" : `${lightCountHistory.length} light-count corrections on record`}
+          </summary>
+          <ul className="mt-2 space-y-1">
+            {lightCountHistory.map((h, i) => (
+              <li key={i}>
+                <span className="num">{h.at}</span> — {h.text}
               </li>
             ))}
           </ul>

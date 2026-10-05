@@ -14,6 +14,7 @@ import { logChange } from "@/lib/change-log";
 import { demoLockState } from "@/lib/demo-lock";
 import { planCountCorrection } from "@/lib/count-correction";
 import { resyncCircuitFigures } from "@/lib/circuit-figures";
+import { representedCountAfterDemoCorrection } from "@/lib/light-population";
 
 type Outcome = { error: string } | { ok: true };
 
@@ -222,9 +223,10 @@ export async function correctLockedCount(input: { lineId: string; count: number;
       societyId: true,
       voidedAt: true,
       meteredLightCount: true,
+      representedLightCount: true,
       siteSurvey: { select: { pipelineId: true } },
       devices: { select: { id: true, count: true, replacementCount: true } },
-      demos: { where: { voidedAt: null }, select: { id: true, sequence: true, meteredLightCount: true, unlockedUntil: true } },
+      demos: { where: { voidedAt: null }, orderBy: { sequence: "asc" }, select: { id: true, sequence: true, meteredLightCount: true, unlockedUntil: true } },
     },
   });
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
@@ -237,6 +239,24 @@ export async function correctLockedCount(input: { lineId: string; count: number;
     demos: circuit.demos,
   });
   if ("error" in plan) return { error: plan.error };
+
+  // Only the circuit's current INITIAL (first live, by sequence) demo feeds
+  // the full-installation/demo split (2026-10-05) — if the correction reaches
+  // it, the full installation absorbs the opposite change so the total
+  // actually installed stays what it always was.
+  const initialDemo = circuit.demos[0];
+  const representedAdjustment = initialDemo && plan.demoIds.includes(initialDemo.id)
+    ? representedCountAfterDemoCorrection({
+        isInitialDemo: true,
+        representedLightCount: circuit.representedLightCount,
+        oldDemoCount: plan.totalOld,
+        newDemoCount: plan.totalNew,
+      })
+    : ({ changed: false } as const);
+  if ("error" in representedAdjustment) {
+    logger.warn("inventory.count_correction_refused", { actorId: admin.id, lineId: input.lineId, reason: "represented_floor" });
+    return { error: representedAdjustment.error };
+  }
 
   // A demo the society has seen in a shared report is locked: correcting it
   // changes what they were shown, so it is unlocked first, as for any edit.
@@ -269,6 +289,24 @@ export async function correctLockedCount(input: { lineId: string; count: number;
       await tx.circuitDemo.update({ where: { id: demoId }, data: { meteredLightCount: plan.totalNew } });
       await logChange(tx, { entity: "circuit_demo", entityId: demoId, kind: "edit", field: "meteredLightCount", circuitId: circuit.id, demoId, oldValue: plan.totalOld, newValue: plan.totalNew, reason, actorId: admin.id });
     }
+    // The total actually installed (full installation + demo lights) must
+    // stay what it always was — the correction moves the split, not the
+    // total (2026-10-05, user-asked).
+    if (representedAdjustment.changed) {
+      await tx.circuit.update({ where: { id: circuit.id }, data: { representedLightCount: representedAdjustment.newRepresentedLightCount } });
+      await logChange(tx, {
+        entity: "circuit",
+        entityId: circuit.id,
+        kind: "edit",
+        field: "representedLightCount",
+        circuitId: circuit.id,
+        demoId: initialDemo?.id ?? null,
+        oldValue: circuit.representedLightCount,
+        newValue: representedAdjustment.newRepresentedLightCount,
+        reason: `The demo's own light count was corrected ${plan.totalOld} → ${plan.totalNew} — the full installation moved by the same amount the other way, so the total installed stays unchanged.`,
+        actorId: admin.id,
+      });
+    }
     await resyncCircuitFigures(tx, circuit.id, admin.id);
   });
   logger.info("inventory.count_corrected", {
@@ -279,6 +317,7 @@ export async function correctLockedCount(input: { lineId: string; count: number;
     to: plan.newCount,
     circuitMetered: plan.circuitMeteredCount,
     demos: plan.demoIds.length,
+    representedLightCountChanged: representedAdjustment.changed,
     reason,
   });
   revalidatePath(circuitPath(circuit.societyId, circuit.id));

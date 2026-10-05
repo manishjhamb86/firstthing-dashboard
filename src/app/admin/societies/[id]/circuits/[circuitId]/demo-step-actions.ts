@@ -24,6 +24,7 @@ import { logChange } from "@/lib/change-log";
 import { isDemoMode } from "@/lib/demo-mode";
 import { scheduleJob } from "@/lib/jobs";
 import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
+import { representedCountAfterDemoCorrection } from "@/lib/light-population";
 import { refuseUnlock, unlockUntil } from "@/lib/demo-lock";
 import { periodDates, periodOfDay, refuseDemoPeriods, type PeriodInput } from "@/lib/demo-periods";
 import { acceptanceOf, refuseAcceptance } from "@/lib/demo-acceptance";
@@ -608,12 +609,50 @@ export async function setDemoLightCount(input: { demoId: string; count: number; 
   if ("error" in g) return { error: g.error };
   const demo = g.demo;
   if (demo.meteredLightCount === input.count) return { error: "That is already the demo's light count." };
+
+  // Only the circuit's current INITIAL (first live, by sequence) demo feeds
+  // the full-installation/demo split at all (2026-10-05) — demoLightsInstalled()
+  // reads only that one, so correcting any other demo's count never moves it.
+  const initial = await db.circuitDemo.findFirst({
+    where: { circuitId: demo.circuitId, voidedAt: null },
+    orderBy: { sequence: "asc" },
+    select: { id: true },
+  });
+  const adjustment = representedCountAfterDemoCorrection({
+    isInitialDemo: initial?.id === demo.id,
+    representedLightCount: demo.circuit.representedLightCount,
+    oldDemoCount: demo.meteredLightCount,
+    newDemoCount: input.count,
+  });
+  if ("error" in adjustment) {
+    logger.warn("demo.light_count_refused", { actorId: a.admin.id, demoId: demo.id, reason: "represented_floor" });
+    return { error: adjustment.error };
+  }
+
   await db.$transaction(async (tx) => {
     await tx.circuitDemo.update({ where: { id: demo.id }, data: { meteredLightCount: input.count } });
     await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "meteredLightCount", circuitId: demo.circuitId, demoId: demo.id, oldValue: demo.meteredLightCount, newValue: input.count, reason: input.reason?.trim() || null, actorId: a.admin.id });
+    // The total actually installed (full installation + demo lights) must
+    // stay what it always was — the correction moves the SPLIT, not the
+    // total (2026-10-05, user-asked, from an ATS Greens Paradiso report).
+    if (adjustment.changed) {
+      await tx.circuit.update({ where: { id: demo.circuitId }, data: { representedLightCount: adjustment.newRepresentedLightCount } });
+      await logChange(tx, {
+        entity: "circuit",
+        entityId: demo.circuitId,
+        kind: "edit",
+        field: "representedLightCount",
+        circuitId: demo.circuitId,
+        demoId: demo.id,
+        oldValue: demo.circuit.representedLightCount,
+        newValue: adjustment.newRepresentedLightCount,
+        reason: `The demo's own light count was corrected ${demo.meteredLightCount} → ${input.count} — the full installation moved by the same amount the other way, so the total installed stays unchanged.`,
+        actorId: a.admin.id,
+      });
+    }
     await finish(tx, demo.circuitId, a.admin.id);
   });
-  logger.info("demo.light_count_changed", { actorId: a.admin.id, demoId: demo.id, from: demo.meteredLightCount, to: input.count });
+  logger.info("demo.light_count_changed", { actorId: a.admin.id, demoId: demo.id, from: demo.meteredLightCount, to: input.count, representedLightCountChanged: adjustment.changed });
   revalidatePath(pathOf(demo));
   return { ok: true };
 }

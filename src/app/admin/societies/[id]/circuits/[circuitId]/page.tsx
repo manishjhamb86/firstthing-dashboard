@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { demoLightsInstalled, describeLights, totalLights } from "@/lib/light-population";
+import { circuitLightCountHistory, describeLightCountChange } from "@/lib/circuit-light-history";
 import { isDemoMode } from "@/lib/demo-mode";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
@@ -146,6 +147,8 @@ export default async function CircuitDetailPage({
     },
   });
   if (!circuit || circuit.societyId !== id) notFound();
+
+  const lightCountHistory = await circuitLightCountHistory(circuit.id);
 
   const eligible = circuit.state !== "surveyed" && circuit.state !== "ineligible";
   const pipelineId = circuit.siteSurvey?.pipelineId ?? null;
@@ -474,6 +477,7 @@ export default async function CircuitDetailPage({
         canStart={canEdit && !circuit.voidedAt && eligible}
         canDecide={canOverride && !circuit.voidedAt}
         canChangeLights={demoMode && canEdit && !circuit.voidedAt}
+        lightCountHistory={lightCountHistory.map((h) => ({ at: h.at, text: describeLightCountChange(h) }))}
         exclusion={exclusion}
         maxDemos={MAX_DEMOS_PER_CIRCUIT}
         agreedPending={agreedPending}

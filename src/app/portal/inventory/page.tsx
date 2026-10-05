@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { demoLightsInstalled, totalLights } from "@/lib/light-population";
+import { circuitLightCountHistoryByCircuit, describeLightCountChange } from "@/lib/circuit-light-history";
 import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
@@ -70,6 +71,7 @@ export default async function PortalInventoryPage() {
       select: { id: true, name: true, productName: true, hasLevelSignal: true, setupType: true },
     }),
   ]);
+  const lightHistoryByCircuit = await circuitLightCountHistoryByCircuit(circuitRows.map((c) => c.id));
   const circuits = circuitRows.map(({ demos, ...c }) => ({
     ...c,
     lightReplacementDate:
@@ -78,6 +80,7 @@ export default async function PortalInventoryPage() {
         .map((d) => d.lightReplacementDate!)
         .sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
     demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices: c.devices }),
+    lightHistory: lightHistoryByCircuit.get(c.id) ?? [],
   }));
 
   // What counts as a FirsThing-installed fitting: a line with a recorded
@@ -204,6 +207,24 @@ export default async function PortalInventoryPage() {
                             )}
                           </p>
                         </div>
+                        {c.lightHistory.length > 0 && (
+                          // Closed by default — most circuits have never had
+                          // a correction, and the ones that have state it in
+                          // full rather than leave the split looking like a
+                          // mistake (2026-10-05, user-asked).
+                          <details className="mt-1">
+                            <summary className="cursor-pointer text-xs underline" style={{ color: "var(--text-muted)" }}>
+                              {c.lightHistory.length === 1 ? "1 correction on record" : `${c.lightHistory.length} corrections on record`}
+                            </summary>
+                            <ul className="mt-1 flex flex-col gap-1">
+                              {c.lightHistory.map((h, i) => (
+                                <li key={i} className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                                  <span className="font-medium">{h.at}</span> — {describeLightCountChange(h)}
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        )}
                         <div className="mt-1 flex flex-col">
                           {c.devices.map((d) => (
                             <div

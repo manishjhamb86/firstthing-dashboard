@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { demoLightsInstalled, describeLights, fullFromTotal, refuseFullInstallationCount, totalLights } from "@/lib/light-population";
+import {
+  demoLightsInstalled,
+  describeLights,
+  fullFromTotal,
+  refuseFullInstallationCount,
+  representedCountAfterDemoCorrection,
+  totalLights,
+} from "@/lib/light-population";
 
 const dev = (count: number, replacementCount: number | null = null, excludedFromCalculation = false) => ({ count, replacementCount, excludedFromCalculation });
 
@@ -34,5 +41,37 @@ describe("full installation and total", () => {
     expect(refuseFullInstallationCount(1545)).toBeNull();
     expect(refuseFullInstallationCount(0)).toMatch(/more than zero/);
     expect(refuseFullInstallationCount(1.5)).toMatch(/whole number/);
+  });
+});
+
+// ATS Greens Paradiso (2026-10-05, user-asked): a demo's own count corrected
+// from 40 to 44 must leave the total installed at 951, moving the split from
+// 911 full installation + 40 demo to 907 full installation + 44 demo.
+describe("representedCountAfterDemoCorrection", () => {
+  it("the installed total stays fixed: 911+40=951 -> 907+44=951", () => {
+    const r = representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 44 });
+    expect(r).toEqual({ changed: true, newRepresentedLightCount: 907 });
+    expect(totalLights(907, 44)).toBe(951);
+    expect(totalLights(911, 40)).toBe(951);
+  });
+  it("reverses the same way", () => {
+    expect(representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 907, oldDemoCount: 44, newDemoCount: 40 })).toEqual({
+      changed: true,
+      newRepresentedLightCount: 911,
+    });
+  });
+  it("a later demo (not the initial one) never touches the split", () => {
+    expect(representedCountAfterDemoCorrection({ isInitialDemo: false, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 44 })).toEqual({
+      changed: false,
+    });
+  });
+  it("no real change, nothing to do", () => {
+    expect(representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 40 })).toEqual({
+      changed: false,
+    });
+  });
+  it("refuses rather than driving the full installation to zero or below", () => {
+    const r = representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 10, oldDemoCount: 40, newDemoCount: 55 });
+    expect("error" in r && r.error).toMatch(/more than zero/);
   });
 });

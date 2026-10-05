@@ -86,3 +86,36 @@ export function describeLights(fullInstallation: number, demoLights: number): st
   const f = (n: number) => n.toLocaleString("en-IN");
   return `${f(totalLights(fullInstallation, demoLights))} (${f(fullInstallation)} full installation + ${f(demoLights)} demo)`;
 }
+
+/**
+ * When the circuit's INITIAL demo's own light count is corrected — through
+ * `setDemoLightCount` or the inventory's "Correct count" — the circuit's
+ * full-installation figure has to absorb the opposite change, so the total
+ * actually installed (full installation + demo lights) stays exactly what
+ * it always was. A correction says a number was typed wrong, not that new
+ * lights went in (2026-10-05, user-asked, from an ATS Greens Paradiso
+ * report: 951 installed must still read 951 lights whichever way the
+ * demo's own count later moves — 911 full installation + 40 demo becomes
+ * 907 full installation + 44 demo, not 951 full installation + 44 demo).
+ *
+ * Only the circuit's current initial (first live, by sequence) demo's count
+ * feeds the split at all — `demoLightsInstalled()` reads only that one, so
+ * correcting any OTHER demo's count never touches the full-installation
+ * figure, and this returns `{changed: false}` for it.
+ */
+export function representedCountAfterDemoCorrection(input: {
+  isInitialDemo: boolean;
+  representedLightCount: number;
+  oldDemoCount: number;
+  newDemoCount: number;
+}): { changed: false } | { changed: true; newRepresentedLightCount: number } | { error: string } {
+  if (!input.isInitialDemo || input.oldDemoCount === input.newDemoCount) return { changed: false };
+  const next = input.representedLightCount - (input.newDemoCount - input.oldDemoCount);
+  const err = refuseFullInstallationCount(next);
+  if (err) {
+    return {
+      error: `Changing the demo's count from ${input.oldDemoCount} to ${input.newDemoCount} would leave the full installation at ${next} lights — ${err}`,
+    };
+  }
+  return { changed: true, newRepresentedLightCount: next };
+}

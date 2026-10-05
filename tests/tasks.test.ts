@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dueInstant, mayActOnTask, refuseTask, taskState, taskSummary } from "@/lib/tasks";
+import { dueInstant, mayActOnTask, refuseTask, refuseTaskCompletion, taskState, taskSummary } from "@/lib/tasks";
 
 const d = (s: string) => new Date(s);
 const today = d("2026-09-25T10:00:00Z");
@@ -50,5 +50,20 @@ describe("refuseTask / dueInstant", () => {
   it("a date alone is all-day; a time is kept as entered", () => {
     expect(dueInstant("2026-09-30", "")).toEqual({ startAt: d("2026-09-30T00:00:00Z"), allDay: true });
     expect(dueInstant("2026-09-30", "10:30")).toEqual({ startAt: d("2026-09-30T10:30:00Z"), allDay: false });
+  });
+});
+
+describe("refuseTaskCompletion (2026-10-05, user-asked)", () => {
+  it("a task with no proof requirement completes freely", () => {
+    expect(refuseTaskCompletion({ requiresProof: false, proofKey: null }, false)).toBeNull();
+  });
+  it("a proof-required task with nothing stored and nothing just given is refused", () => {
+    expect(refuseTaskCompletion({ requiresProof: true, proofKey: null }, false)).toMatch(/photo or document/);
+  });
+  it("a proof-required task with a file just uploaded in this call is allowed", () => {
+    expect(refuseTaskCompletion({ requiresProof: true, proofKey: null }, true)).toBeNull();
+  });
+  it("a proof-required task that already has one stored is allowed, even without a new upload", () => {
+    expect(refuseTaskCompletion({ requiresProof: true, proofKey: "Documents/x/TaskProof/x.jpg" }, false)).toBeNull();
   });
 });

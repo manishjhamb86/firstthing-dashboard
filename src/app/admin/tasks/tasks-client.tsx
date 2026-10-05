@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field, StatusChip, type ChipTone } from "@/components/ui";
 import { Modal } from "@/components/modal";
-import { cancelTask, completeTask, createTask, reopenTask, updateTask } from "./actions";
+import { cancelTask, completeTask, createTask, getTaskProofUploadUrl, reopenTask, updateTask } from "./actions";
 
 export type TaskRow = {
   id: string;
@@ -32,13 +32,18 @@ export type TaskRow = {
   mayAct: boolean;
   meetLink: string | null;
   onGoogle: boolean;
+  /** Needs a photo or document uploaded as proof before it can be marked
+   *  done (2026-10-05, user-asked). */
+  requiresProof: boolean;
+  proofUrl: string | null;
+  proofFileName: string | null;
 };
 
 const STATE_TONE: Record<TaskRow["state"], ChipTone> = { overdue: "bad", due_today: "warn", upcoming: "info", done: "ok", cancelled: "neu" };
 type Show = "open" | "done" | "all";
 type Scope = "mine" | "set" | "all";
 
-type Form = { title: string; description: string; assigneeId: string; due: string; time: string; priority: "low" | "normal" | "high"; societyId: string };
+type Form = { title: string; description: string; assigneeId: string; due: string; time: string; priority: "low" | "normal" | "high"; societyId: string; requiresProof: boolean };
 
 export function TasksClient({
   rows,
@@ -63,8 +68,37 @@ export function TasksClient({
   const [q, setQ] = useState("");
   const [editing, setEditing] = useState<{ id: string | null; f: Form } | null>(null);
   const [closing, setClosing] = useState<{ row: TaskRow; mode: "done" | "cancel"; note: string } | null>(null);
+  const [proofFile, setProofFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  /**
+   * Marking done when proof is required (2026-10-05, user-asked): the file
+   * is presigned and PUT straight to S3, same shape as the inspection's own
+   * evidence upload, then the key is stored and the task completed in one
+   * step — the assignee picks a file and clicks Mark done once.
+   */
+  function markDone() {
+    if (!closing) return;
+    setError(null);
+    startTransition(async () => {
+      let proof: { key: string; fileName: string } | undefined;
+      if (proofFile) {
+        const presign = await getTaskProofUploadUrl({ taskId: closing.row.id, fileName: proofFile.name, contentType: proofFile.type || "application/octet-stream" });
+        if ("error" in presign) return setError(presign.error);
+        const put = await fetch(presign.uploadUrl, { method: "PUT", body: proofFile, headers: { "Content-Type": proofFile.type || "application/octet-stream" } });
+        if (!put.ok) return setError("The upload failed — try again.");
+        proof = { key: presign.key, fileName: proofFile.name };
+      }
+      const r = await completeTask(closing.row.id, closing.note, proof);
+      if (r.error) setError(r.error);
+      else {
+        setClosing(null);
+        setProofFile(null);
+        router.refresh();
+      }
+    });
+  }
 
   useEffect(() => {
     if (highlight) document.getElementById(`task-${highlight}`)?.scrollIntoView({ block: "center" });
@@ -84,7 +118,7 @@ export function TasksClient({
   const openCount = inScope.filter((r) => r.status === "scheduled").length;
   const doneCount = inScope.length - openCount;
 
-  const blank: Form = { title: "", description: "", assigneeId: me, due: today, time: "", priority: "normal", societyId: "" };
+  const blank: Form = { title: "", description: "", assigneeId: me, due: today, time: "", priority: "normal", societyId: "", requiresProof: false };
 
   function run(fn: () => Promise<{ error?: string }>, after: () => void) {
     setError(null);
@@ -157,6 +191,9 @@ export function TasksClient({
                     <StatusChip tone={STATE_TONE[r.state]}>{r.stateLabel}</StatusChip>
                     {r.priority === "high" && <StatusChip tone="bad">High priority</StatusChip>}
                     {r.kind !== "task" && <StatusChip tone="neu">{r.kindLabel}</StatusChip>}
+                    {r.requiresProof && r.status === "scheduled" && (
+                      <StatusChip tone={r.proofUrl ? "ok" : "warn"}>{r.proofUrl ? "Proof attached" : "Needs proof"}</StatusChip>
+                    )}
                     <span>Due {r.due}</span>
                     <span>· {r.assigneeId === me ? "You" : r.assignee}</span>
                     {r.createdById !== r.assigneeId && <span>· set by {r.createdById === me ? "you" : r.createdBy}</span>}
@@ -184,7 +221,7 @@ export function TasksClient({
                             onClick={() =>
                               setEditing({
                                 id: r.id,
-                                f: { title: r.title, description: r.description ?? "", assigneeId: r.assigneeId, due: r.dueIso, time: r.timeIso, priority: r.priority, societyId: r.societyId },
+                                f: { title: r.title, description: r.description ?? "", assigneeId: r.assigneeId, due: r.dueIso, time: r.timeIso, priority: r.priority, societyId: r.societyId, requiresProof: r.requiresProof },
                               })
                             }
                           >
@@ -280,6 +317,20 @@ export function TasksClient({
                 ))}
               </select>
             </Field>
+            <label className="flex items-start gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={editing.f.requiresProof}
+                onChange={(e) => setEditing((x) => x && { ...x, f: { ...x.f, requiresProof: e.target.checked } })}
+              />
+              <span>
+                Needs a photo or document as proof
+                <span className="block text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                  A gate pass, a photo, any document — required before it can be marked done.
+                </span>
+              </span>
+            </label>
             {error && <ErrorText>{error}</ErrorText>}
           </div>
         )}
@@ -287,19 +338,23 @@ export function TasksClient({
 
       <Modal
         open={closing !== null}
-        onClose={() => setClosing(null)}
+        onClose={() => { setClosing(null); setProofFile(null); }}
         title={closing?.mode === "cancel" ? "Cancel this task" : "Mark done"}
         description={closing?.row.title}
         footer={
           <>
-            <button type="button" className="btn-ghost" onClick={() => setClosing(null)}>
+            <button type="button" className="btn-ghost" onClick={() => { setClosing(null); setProofFile(null); }}>
               Back
             </button>
             <button
               type="button"
               className={closing?.mode === "cancel" ? "btn-danger" : "btn-primary"}
-              disabled={pending || (closing?.mode === "cancel" && !closing.note.trim())}
-              onClick={() => closing && run(() => (closing.mode === "done" ? completeTask(closing.row.id, closing.note) : cancelTask(closing.row.id, closing.note)), () => setClosing(null))}
+              disabled={
+                pending ||
+                (closing?.mode === "cancel" && !closing.note.trim()) ||
+                (closing?.mode === "done" && closing.row.requiresProof && !closing.row.proofUrl && !proofFile)
+              }
+              onClick={() => closing && (closing.mode === "done" ? markDone() : run(() => cancelTask(closing.row.id, closing.note), () => setClosing(null)))}
             >
               {closing?.mode === "cancel" ? "Cancel task" : "Mark done"}
             </button>
@@ -312,6 +367,29 @@ export function TasksClient({
               <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                 This comes from a deal step. Marking it done here only closes it on the list — record the work itself on the deal.
               </p>
+            )}
+            {closing.mode === "done" && closing.row.requiresProof && (
+              <div>
+                <p className="lbl mb-1">Proof</p>
+                {closing.row.proofUrl ? (
+                  <p className="text-[13px]">
+                    <a href={closing.row.proofUrl} target="_blank" rel="noreferrer" className="font-semibold underline">
+                      {closing.row.proofFileName ?? "Attached"} — view
+                    </a>
+                    {" · replace it below if it's wrong"}
+                  </p>
+                ) : (
+                  <p className="mb-1.5 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                    A gate pass, a photo, any document — required before this can be marked done.
+                  </p>
+                )}
+                <input
+                  type="file"
+                  aria-label="Proof file"
+                  onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+                  className="text-[13px]"
+                />
+              </div>
             )}
             <Field label={closing.mode === "cancel" ? "Why" : "Note (optional)"} htmlFor="tk-note">
               <input id="tk-note" className="field" value={closing.note} onChange={(e) => setClosing((x) => x && { ...x, note: e.target.value })} />

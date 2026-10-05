@@ -759,6 +759,17 @@ model ScheduledEvent {
   completedById  String?      @map("completed_by_id")
   completionNote String?      @map("completion_note")
 
+  /// Proof of completion (2026-10-05, user-asked): a gate pass, a photo, any
+  /// document — set at creation, required before the assignee can mark the
+  /// task done. `proofKey` is null until uploaded, whatever `requiresProof`
+  /// says, so "needed but missing" and "not needed" are both just a null key
+  /// — `requiresProof` is what tells them apart.
+  requiresProof     Boolean   @default(false) @map("requires_proof")
+  proofKey          String?   @map("proof_key")
+  proofFileName     String?   @map("proof_file_name")
+  proofUploadedAt   DateTime? @map("proof_uploaded_at")
+  proofUploadedById String?   @map("proof_uploaded_by_id")
+
   /// Who to ask for on arrival, and anything the visitor needs to know. This
   /// is the coordination that used to live in one person's phone.
   contactName  String? @map("contact_name")

@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
 import { SCHEDULE_KIND, scheduleEventHref, timeLabel } from "@/lib/schedule";
 import { TASK_STATE_LABEL, taskState } from "@/lib/tasks";
+import { publicS3Url } from "@/lib/s3";
 import { TasksClient, type TaskRow } from "./tasks-client";
 
 export const dynamic = "force-dynamic";
@@ -78,6 +79,9 @@ export default async function TasksPage({ searchParams }: { searchParams: Promis
       mayAct: ops || e.assigneeId === actor.id || e.createdById === actor.id,
       meetLink: e.meetLink,
       onGoogle: e.googleEventId !== null && !e.calendarSyncError,
+      requiresProof: e.requiresProof,
+      proofUrl: e.proofKey ? publicS3Url(e.proofKey) : null,
+      proofFileName: e.proofFileName,
     };
   });
 

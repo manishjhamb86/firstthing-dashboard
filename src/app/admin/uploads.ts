@@ -45,6 +45,10 @@ const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline" | "manage_survey"> 
   // Presigned by the field app's own upload route, keyed per survey subject —
   // listed here only so DocType stays exhaustive.
   surveyPhoto: "manage_survey",
+  // Presigned by src/app/admin/tasks/actions.ts's own action (gated to
+  // whoever may act on the task, not a fixed admin permission) — listed
+  // here only so DocType stays exhaustive.
+  taskProof: "manage_survey",
 };
 
 export async function getUploadUrl(input: {

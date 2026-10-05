@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-10-05 (day-level reading validity: one persisted flag, read everywhere, overridable — see below)
+2026-10-05 (a task can require proof before it's marked done — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -9025,3 +9025,41 @@ classified correctly (`partial`, 13 of 24) with no new `excludedAt`, confirmed b
 fixture removed afterward (dev's `meter_readings` table itself is currently empty — real reading
 history lives on stage, not dev, so this was the only way to exercise the write path pre-deploy).
 Not yet deployed or backfilled on stage — this branch is not merged.
+
+## A task can require proof before it's marked done (2026-10-05) — user-asked
+
+**The ask**: when creating a task, offer "this needs a document/photo as proof — a gate pass, or
+any image" — and once checked, the assigned person cannot mark it done until they've uploaded one.
+
+**Schema** (additive, migration `20261005100000_task_proof`): `ScheduledEvent` gains
+`requiresProof` (set at creation/edit, applies only to a genuine task — the deal's own
+assignments share this table but are never created through this form) and the provenance quartet
+`proofKey`/`proofFileName`/`proofUploadedAt`/`proofUploadedById`. `proofKey` stays null whatever
+`requiresProof` says until something is actually uploaded — "needed but missing" and "not needed"
+are both a null key; `requiresProof` is what tells them apart.
+
+**Upload follows the same shape as the inspection's own evidence photo**
+(`getInspectionEvidenceUploadUrl`, 2026-09-12) rather than the generic catalog-driven
+`admin/uploads.ts` path, since the permission here is "whoever may act on the task" (the assignee,
+whoever set it, or operations — `mayActOnTask`), not a fixed admin permission. A new `taskProof`
+`DocType` (`src/lib/document-keys.ts`) files it under the same public `Documents/` tree every
+other filed document uses — `Documents/Internal/{YYYY-MM}/TaskProof/...` when the task isn't about
+a society, under the society's own folder when it is.
+
+**One pure rule, not inlined in the action**: `refuseTaskCompletion()` (`src/lib/tasks.ts`) — a
+task needing proof refuses to close unless a key already exists on the row OR one was just
+uploaded in this same call, so the assignee can pick a file and click "Mark done" once rather than
+upload-then-complete as two separate steps. `completeTask` (`src/app/admin/tasks/actions.ts`)
+accepts an optional `{key, fileName}` and writes both the proof and the completion in one update.
+
+**UI** (`tasks-client.tsx`): the New/Edit Task form gains the checkbox, worded as the user asked
+("Needs a photo or document as proof... required before it can be marked done"). The task list
+shows a "Needs proof"/"Proof attached" chip on an open, proof-required task. The "Mark done" modal
+gains a file input when proof is required and missing — the button stays disabled until a file is
+chosen (or one is already attached), and clicking it presigns, PUTs to S3, then completes, exactly
+the inspection evidence upload's own sequence. An already-attached proof shows a "view" link with
+the option to replace it.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,287, +4 new in `tests/tasks.test.ts` —
+`refuseTaskCompletion`'s four branches: no requirement, required-and-missing, required-and-just-
+uploaded, required-and-already-stored) all clean. Not yet deployed — this branch is not merged.

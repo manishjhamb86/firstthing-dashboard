@@ -45,6 +45,7 @@ export function CustomerTasksCard({
         time: "",
         priority: "normal",
         societyId: "",
+        requiresProof: false,
         retailCustomerId: customerId,
       });
       if (r.error) return setError(r.error);

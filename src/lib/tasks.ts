@@ -61,6 +61,19 @@ export function refuseTask(input: { title: string; assigneeId: string; due: stri
   return null;
 }
 
+/**
+ * Why a task cannot be marked done, or null (2026-10-05, user-asked). A
+ * task flagged to need proof (a gate pass, a photo, any document) cannot be
+ * closed until one exists — either already stored on the row, or given in
+ * this same call (the assignee picks a file and marks done in one step).
+ */
+export function refuseTaskCompletion(t: { requiresProof: boolean; proofKey: string | null }, proofGiven: boolean): string | null {
+  if (t.requiresProof && !t.proofKey && !proofGiven) {
+    return "This task needs a photo or document uploaded as proof before it can be marked done.";
+  }
+  return null;
+}
+
 /** The stored due instant: the typed date (and time), wall-clock, like every other appointment. */
 export function dueInstant(due: string, time: string): { startAt: Date; allDay: boolean } {
   return time ? { startAt: new Date(`${due}T${time}:00Z`), allDay: false } : { startAt: new Date(`${due}T00:00:00Z`), allDay: true };

@@ -35,7 +35,10 @@ export type DocType =
   | "invoiceCopy"
   // Photos taken on the site survey (2026-09-29): the entrance, an area, a
   // circuit's panel, a pump-room unit, a logbook page.
-  | "surveyPhoto";
+  | "surveyPhoto"
+  // A task's required proof of completion (2026-10-05) — a gate pass, a
+  // photo, any document the assignee uploads before marking it done.
+  | "taskProof";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
@@ -52,6 +55,7 @@ const DOC_TYPE_FOLDER: Record<DocType, string> = {
   nonServiceInvoice: "Invoices",
   invoiceCopy: "Invoices",
   surveyPhoto: "Surveys",
+  taskProof: "TaskProof",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -69,6 +73,7 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
   nonServiceInvoice: "OtherInvoice",
   invoiceCopy: "Invoice",
   surveyPhoto: "SurveyPhoto",
+  taskProof: "TaskProof",
 };
 
 function slugifySociety(name: string): string {

@@ -142,7 +142,12 @@ export default async function IntakePage({
       hasSociety: !!review?.societyId,
       hasPeriod: !!review?.period && /^\d{4}-\d{2}$/.test(review.period),
       fromZoho: i.zohoInvoiceId !== null,
-      zohoChanged: i.zohoChangedAt !== null && i.status !== "submitted",
+      // Shown for a submitted row too now (2026-10-05, user-asked) — it was
+      // previously suppressed there, which meant a change Zoho recorded
+      // against an already-billed month produced no visible signal anywhere
+      // at all. A still-in-flight row never reaches here with the flag set:
+      // the sync itself refetches and re-reads it immediately.
+      zohoChanged: i.zohoChangedAt !== null,
     };
   });
 

@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-10-05 (a task can require proof before it's marked done — see below)
+2026-10-05 (a Zoho-changed invoice refetches and re-reads itself automatically — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -9063,3 +9063,39 @@ the option to replace it.
 **Verified**: `tsc`/`lint`/`pnpm test` (1,287, +4 new in `tests/tasks.test.ts` —
 `refuseTaskCompletion`'s four branches: no requirement, required-and-missing, required-and-just-
 uploaded, required-and-already-stored) all clean. Not yet deployed — this branch is not merged.
+
+## A Zoho-changed invoice refetches and re-reads itself (2026-10-05) — user-asked
+
+**The ask**: if an invoice is edited in Zoho after it was fetched, the system should fetch the
+updated PDF and ask to process it again — even for a small edit like the customer name — and the
+updated PDF should be what's used everywhere from then on, not the stale one.
+
+**What already existed**: `runZohoSync` already compares Zoho's own `last_modified_time` against
+what was last seen, which catches ANY edit (Zoho bumps it on every save, the customer name
+included — this needed no special-casing for "even a small field"). What it did with that
+detection was the gap: it only ever set a `zohoChangedAt` flag and left the actual refetch to a
+manual "Fetch again from Zoho" click — and that flag was explicitly hidden from the intake list
+for a row already `submitted` (`zohoChanged: i.zohoChangedAt !== null && i.status !== "submitted"`
+in `page.tsx`), so a change to an already-billed month produced **no visible signal anywhere**.
+
+**Fixed, split by whether anything has been committed yet (INV-03/GATE-02's own line, drawn the
+same way everywhere else in this codebase):**
+- **Still in flight** (`uploaded`/`reading`/`needs_review`/`could_not_read`/`ready` — nothing
+  committed to a calculation, a filed document or a retail sale yet): `runZohoSync` now calls
+  `fillFromZoho` again immediately, the exact function a manual refetch already used — the new PDF
+  is downloaded, read again by the AI, and the row lands back in Needs review exactly as a fresh
+  upload would. That "lands back in Needs review" IS this app's own existing way of asking someone
+  to process something, so no new notification channel was built for it. Counts against the same
+  per-pass fetch limit as a brand-new invoice.
+- **Already submitted** (a billed month, a filed document, a retail sale) or already
+  discarded/refused: never silently rewritten — the flag is kept exactly as before, but it is now
+  **shown on the list for a submitted row too** (the suppression was the actual bug), worded
+  differently so the next step is clear: "Changed in Zoho since this was processed — open it to
+  review," sitting right beside the row's own "Open month"/"View document"/"View customer" link.
+  Reprocessing a committed row stays a deliberate, operator-driven decision — this app's standing
+  rule for anything already billed — not something a sync pass does on its own.
+
+**Verified**: `tsc`/`lint`/`pnpm test` (1,287, unaffected — `runZohoSync` is DB-impure like its
+neighbouring sync/projection functions in this codebase and has no unit test file of its own; the
+change reuses `fillFromZoho`, which the existing manual-refetch path already exercises) all clean.
+Not yet deployed — this branch is not merged.

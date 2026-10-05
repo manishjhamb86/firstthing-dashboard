@@ -119,10 +119,15 @@ export async function runZohoSync(input: { actorId?: string | null; limit: numbe
       (
         await db.invoiceIntake.findMany({
           where: { zohoInvoiceId: { in: list.map((i) => i.invoice_id) } },
-          select: { id: true, zohoInvoiceId: true, zohoLastModifiedAt: true, zohoChangedAt: true },
+          select: { id: true, zohoInvoiceId: true, zohoLastModifiedAt: true, zohoChangedAt: true, status: true },
         })
       ).map((r) => [r.zohoInvoiceId!, r]),
     );
+    // Still in flight — nothing committed to anything else yet, so the new
+    // PDF can simply replace what's here. Zoho bumps last_modified_time on
+    // ANY edit, the customer name included, so this needs no special-casing
+    // for "only a small field changed" (user-asked, 2026-10-05).
+    const REFETCHABLE_STATUSES = new Set(["uploaded", "reading", "needs_review", "could_not_read", "ready"]);
 
     for (const item of list) {
       const modified = zohoTime(item.last_modified_time);
@@ -131,7 +136,25 @@ export async function runZohoSync(input: { actorId?: string | null; limit: numbe
         if (mine) {
           const seen = mine.zohoChangedAt ?? mine.zohoLastModifiedAt;
           if (modified && seen && modified.getTime() > seen.getTime()) {
-            await db.invoiceIntake.update({ where: { id: mine.id }, data: { zohoChangedAt: modified } });
+            if (REFETCHABLE_STATUSES.has(mine.status)) {
+              // Fetch the updated PDF and read it again right away — the row
+              // lands back in Needs review exactly as a fresh read would,
+              // which is this app's own existing way of asking someone to
+              // process it (user-asked: "fetch the updated invoice pdf and
+              // ask to again process... use the updated pdf everywhere").
+              if (summary.fetched >= input.limit) {
+                summary.waiting += 1;
+              } else {
+                await fillFromZoho(session, mine.id, item.invoice_id, actorId);
+                summary.fetched += 1;
+              }
+            } else {
+              // Already submitted (a billed month, a filed document, a
+              // retail sale) or already discarded/refused — never silently
+              // rewritten (INV-03/GATE-02). Flagged for an operator to act
+              // on deliberately, same as today.
+              await db.invoiceIntake.update({ where: { id: mine.id }, data: { zohoChangedAt: modified } });
+            }
             summary.changed += 1;
           }
           continue;

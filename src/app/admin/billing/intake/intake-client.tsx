@@ -700,7 +700,9 @@ export function IntakeClient({
                         </p>
                         {r.zohoChanged && (
                           <p className="text-[12px]" style={{ color: "var(--warn-fg)" }}>
-                            Changed in Zoho since it was fetched
+                            {r.status.startsWith("submitted")
+                              ? "Changed in Zoho since this was processed — open it to review"
+                              : "Changed in Zoho since it was fetched"}
                           </p>
                         )}
                         <p className="text-[12px] md:hidden" style={{ color: "var(--text-subtle)" }}>

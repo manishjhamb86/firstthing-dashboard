@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { formatDate, monthLabel } from "@/lib/format-date";
+import { formatDate, formatInstant, monthLabel } from "@/lib/format-date";
 import { settledTotal } from "@/lib/payment";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -10,6 +10,7 @@ import { refuseRelease } from "@/lib/invoice-reconciliation";
 import { arrearsStateOf } from "@/lib/arrears";
 import { monitoringStart } from "@/lib/monitoring";
 import { InvoicePanel } from "./invoice-panel";
+import { ZohoChangedReprocess } from "./zoho-changed-reprocess";
 
 // MS-08 / FEAT-048 — one month's run, line by line.
 //
@@ -57,6 +58,16 @@ export default async function CalculationPage({
     },
   });
   if (!calc) notFound();
+
+  // Whether the invoice behind this month came from Zoho and has since
+  // changed there (2026-10-06) — the intake review page redirects straight
+  // here for a submitted row, so this is the only screen that can ever
+  // offer the correction. invoice-rederive.ts re-points the intake row
+  // forward on every re-derivation, so it always names the live version.
+  const sourceIntake = await db.invoiceIntake.findFirst({
+    where: { monthlyCalculationId: calc.id },
+    select: { id: true, zohoChangedAt: true },
+  });
 
   // At most one is ever live (a partial unique index guarantees it) — the
   // rest are void, kept as history rather than hidden (2026-09-12).
@@ -271,6 +282,10 @@ export default async function CalculationPage({
           </p>
         )}
       </Card>
+
+      {sourceIntake?.zohoChangedAt && canRelease(gate.actor) && (
+        <ZohoChangedReprocess intakeId={sourceIntake.id} changedAt={formatInstant(sourceIntake.zohoChangedAt)} wasReleased={calc.status === "released"} />
+      )}
 
       {calc.status !== "held" && (
         <InvoicePanel

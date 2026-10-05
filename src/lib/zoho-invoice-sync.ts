@@ -245,6 +245,55 @@ export async function refetchZohoIntake(intakeId: string, actorId: string): Prom
   await fillFromZoho(session, intakeId, intake.zohoInvoiceId, actorId);
 }
 
+/**
+ * The deliberate exception to GATE-02 the accountant asked for (2026-10-06):
+ * when Zoho's own copy of an ALREADY-SUBMITTED (possibly already-released)
+ * invoice changes, void the live invoice and reopen the month for review —
+ * requiring a fresh submit and, for a released month, a fresh release.
+ * Never silent: the old invoice is voided with a stated reason naming this
+ * as the cause, the old calculation is superseded rather than restated in
+ * place, and both are logged. `submitIntake`'s own refusal ("already
+ * released — it cannot be replaced from intake") only reads `status`, so
+ * superseding the old row is what actually lets a resubmit through.
+ */
+export async function reprocessReleasedInvoice(intakeId: string, actorId: string): Promise<void> {
+  const session = await zohoSession();
+  if (!session) throw new Error("Zoho is not connected.");
+  const intake = await db.invoiceIntake.findUnique({
+    where: { id: intakeId },
+    select: { zohoInvoiceId: true, zohoChangedAt: true, status: true, monthlyCalculationId: true },
+  });
+  if (!intake?.zohoInvoiceId) throw new Error("This invoice did not come from Zoho.");
+  if (!intake.zohoChangedAt) throw new Error("Zoho's own copy has not changed since this was processed.");
+  if (intake.status !== "submitted" || !intake.monthlyCalculationId) {
+    throw new Error("This invoice is not yet submitted — fetch it again instead.");
+  }
+  const calc = await db.monthlyCalculation.findUnique({ where: { id: intake.monthlyCalculationId }, select: { id: true, status: true } });
+  if (!calc) throw new Error("The month this was submitted to no longer exists.");
+
+  const calcWasReleased = calc.status === "released";
+  const hadLiveInvoice = await db.$transaction(async (tx) => {
+    const liveInvoice = await tx.billingInvoice.findFirst({ where: { monthlyCalculationId: calc.id, voidedAt: null } });
+    if (liveInvoice) {
+      await tx.billingInvoice.update({
+        where: { id: liveInvoice.id },
+        data: {
+          voidedAt: new Date(),
+          voidedById: actorId,
+          voidReason: "Zoho's own copy of this invoice changed after it was processed — voided to bring in the updated figures.",
+        },
+      });
+    }
+    if (calc.status !== "superseded") {
+      await tx.monthlyCalculation.update({ where: { id: calc.id }, data: { status: "superseded" } });
+    }
+    return liveInvoice !== null;
+  });
+  logger.warn("billing.released_invoice_reprocessed", { actorId, intakeId, calculationId: calc.id, hadLiveInvoice, calcWasReleased });
+
+  await fillFromZoho(session, intakeId, intake.zohoInvoiceId, actorId);
+}
+
 export function describeSync(s: ZohoSyncSummary): string {
   const parts = [`${s.fetched} fetched`];
   if (s.linked) parts.push(`${s.linked} matched to uploaded PDFs`);

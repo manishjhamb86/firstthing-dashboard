@@ -513,6 +513,21 @@ export async function commitUpload(
       data: { anomalyFlag: true },
     });
 
+    // A blocking anomaly excludes its own day BY DEFAULT now (2026-10-06,
+    // user-caught: flagging a day and still counting it toward every
+    // average had the operator discover and exclude each one by hand, with
+    // no visible reason even once they noticed — the system has already
+    // decided this day is wrong; acting should be needed to COUNT it again,
+    // not to leave it out). `validOverrideAt` is the operator's own earlier
+    // "count it anyway," and a re-upload must not silently undo that.
+    for (const f of anomalyRows) {
+      if (!f.blocksBilling || !f.date) continue;
+      await tx.meterReading.updateMany({
+        where: { circuitId: file.circuitId, date: f.date, source: "csv", validOverrideAt: null },
+        data: { excludedAt: now, excludedById: ops.session.user.id, excludedReason: f.detail },
+      });
+    }
+
     await tx.rawReadingFile.update({
       where: { id: file.id },
       data: {

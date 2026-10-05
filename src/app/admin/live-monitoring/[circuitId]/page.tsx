@@ -117,6 +117,17 @@ export default async function LiveMonitoringCircuitPage({
   // days live on the demo itself, and a day between the demo's post period
   // and the billing start feeds nothing.
   const monitoringStart = await circuitMonitoringStart(circuitId);
+  // What the detector actually saw, per flagged day (2026-10-06, user-caught:
+  // "Flagged" rendered with no reason anywhere on this table) — the newest
+  // finding wins when more than one detector fired on the same date.
+  const anomalyDetailByDay = new Map<string, string>();
+  for (const a of await db.readingAnomaly.findMany({
+    where: { circuitId, date: { not: null } },
+    orderBy: { detectedAt: "asc" },
+    select: { date: true, detail: true },
+  })) {
+    anomalyDetailByDay.set(a.date!.toISOString().slice(0, 10), a.detail);
+  }
   const monitoringDays: StoredReadingDTO[] = circuit.meterReadings
           .filter((r) => monitoringStart === null || r.date.getTime() >= monitoringStart.getTime())
           .map((r) => {
@@ -131,6 +142,7 @@ export default async function LiveMonitoringCircuitPage({
               phase: "monitoring" as const,
               excluded: r.excludedAt !== null,
               flagged: r.anomalyFlag,
+              flaggedReason: r.anomalyFlag ? (anomalyDetailByDay.get(r.date.toISOString().slice(0, 10)) ?? null) : null,
               // Days the meter store never saw (upload-era rows) stay null —
               // absence of hour-level truth is not evidence of silence.
               dataHours: r.dataHours ?? dataHoursByDay.get(r.date.toISOString().slice(0, 10)) ?? null,

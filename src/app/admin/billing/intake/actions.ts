@@ -30,7 +30,7 @@ import { buildDocumentKey } from "@/lib/document-keys";
 import { fileStoredDocumentForSociety, voidDocumentVersion } from "@/app/admin/documents/actions";
 import { sniffKind } from "@/lib/file-signature";
 import { INTAKE_SERVICE_LINE, runIntakeExtraction } from "@/lib/invoice-intake-extract";
-import { describeSync, refetchZohoIntake, runZohoSync } from "@/lib/zoho-invoice-sync";
+import { describeSync, refetchZohoIntake, reprocessReleasedInvoice, runZohoSync } from "@/lib/zoho-invoice-sync";
 import {
   allocateLine,
   arithmeticReport,
@@ -980,6 +980,29 @@ export async function refetchFromZoho(intakeId: string): Promise<Result> {
     return {};
   } catch (err) {
     logger.warn("intake.zoho_refetch_failed", { actorId: ops.actor.id, intakeId, error: String(err) });
+    return { error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+/**
+ * The accountant's own exception to GATE-02 (2026-10-06, user-asked): a
+ * submitted — possibly already-released — month whose Zoho invoice has
+ * since changed gets voided and reopened for review, naming the reason.
+ * Gated to the accountant specifically, since this is the one place in the
+ * codebase ops cannot do alone: undoing a release needs the same authority
+ * that granted it.
+ */
+export async function reprocessReleasedZohoInvoice(intakeId: string): Promise<Result> {
+  const acc = await requireAccountant();
+  if (!acc.ok) return { error: acc.error };
+  try {
+    await reprocessReleasedInvoice(intakeId, acc.actor.id);
+    revalidatePath(INTAKE_PATH);
+    revalidatePath(`${INTAKE_PATH}/${intakeId}`);
+    revalidatePath("/admin/billing");
+    return {};
+  } catch (err) {
+    logger.warn("billing.released_invoice_reprocess_failed", { actorId: acc.actor.id, intakeId, error: String(err) });
     return { error: err instanceof Error ? err.message : String(err) };
   }
 }

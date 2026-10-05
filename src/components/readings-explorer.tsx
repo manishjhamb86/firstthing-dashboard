@@ -21,6 +21,8 @@ export type StoredReadingDTO = {
   superseded: boolean;
   /** A stored day whose figure looks impossible. */
   flagged?: boolean;
+  /** What the detector actually saw — shown as the Flagged chip's own title (2026-10-06, user-caught: "Flagged" with no reason anywhere). */
+  flaggedReason?: string | null;
   /**
    * Hours that carried a reading. The vendor writes 0 for an hour the meter
    * was offline, so a 24-row day can still be mostly silence. Null when no
@@ -325,7 +327,16 @@ export function ReadingsExplorer({
                   </td>
                   <td className="text-[12px]">
                     <span className="flex flex-wrap gap-x-2">
-                      {r.flagged && <span style={{ color: "var(--bad-fg)" }}>Flagged</span>}
+                      {r.flagged && (
+                        <span style={{ color: "var(--bad-fg)" }}>
+                          Flagged
+                          {r.flaggedReason && (
+                            <span className="block text-[11px] font-normal" style={{ color: "var(--text-muted)" }}>
+                              {r.flaggedReason}
+                            </span>
+                          )}
+                        </span>
+                      )}
                       {r.validOverride && (
                         <span title={r.validOverrideReason ?? undefined} style={{ color: "var(--ok-fg)" }}>
                           Marked valid

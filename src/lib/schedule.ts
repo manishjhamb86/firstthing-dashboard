@@ -144,10 +144,13 @@ export function scheduleEventHref(e: {
   societyId: string | null;
 }): string | null {
   if (e.kind === "meeting") return `/admin/schedule?open=${e.id}#ev-${e.id}`;
+  // A circuit-scoped task (e.g. the demo monitoring sweep's "upload yesterday's
+  // reading") deep-links to the circuit's own page, same as any other event
+  // tied to one — checked before the bare "task → nowhere" fallback below.
+  if (e.circuitId && e.societyId) return `/admin/societies/${e.societyId}/circuits/${e.circuitId}`;
   if (e.kind === "task") return null;
   if (e.pipelineId) {
     return e.kind === "survey_visit" ? `/admin/pipeline/${e.pipelineId}/survey` : `/admin/pipeline/${e.pipelineId}`;
   }
-  if (e.circuitId && e.societyId) return `/admin/societies/${e.societyId}/circuits/${e.circuitId}`;
   return null;
 }

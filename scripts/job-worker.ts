@@ -10,6 +10,7 @@ import { runCalendarSweep } from "../src/lib/calendar-sync";
 import { runZohoSync } from "../src/lib/zoho-invoice-sync";
 import { runHelpTriageSweep } from "../src/lib/help-triage";
 import { settledTotal } from "../src/lib/payment";
+import { syncDemoMonitoringAlerts } from "../src/lib/demo-monitoring-alerts";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -77,6 +78,13 @@ const ZOHO_SYNC_LIMIT = 100;
  * hammered.
  */
 const HELP_TRIAGE_INTERVAL_MS = 10 * 60 * 1000;
+
+/**
+ * The demo monitoring watch (2026-10-06, user-asked): checked once a day,
+ * since the readings it judges arrive by upload a day behind "now" anyway —
+ * there is nothing fresher to check more often than this against.
+ */
+const DEMO_MONITORING_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Nothing this writes persists an actor as a foreign key (confirmed by
@@ -172,6 +180,9 @@ async function processJob(job: { id: string; type: string }) {
       break;
     case "demo_relock_sweep":
       await runDemoRelockSweep();
+      break;
+    case "demo_monitoring_sweep":
+      await runDemoMonitoringSweep();
       break;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
@@ -470,6 +481,56 @@ async function ensureHelpTriageScheduled() {
   }
 }
 
+/**
+ * Every circuit with at least one live, meter-installed demo — the raw
+ * condition `demoMonitoringPeriod` itself judges, read generously here so a
+ * demo whose period just ENDED still gets one more pass to close out any
+ * alert or task it left open (demo-monitoring-alerts.ts's own `period ===
+ * "none"` branch does that closing).
+ */
+async function runDemoMonitoringSweep() {
+  try {
+    const candidates = await db.circuitDemo.findMany({
+      where: { voidedAt: null, rejected: false, meterInstalledAt: { not: null } },
+      select: { circuitId: true },
+      distinct: ["circuitId"],
+    });
+    let checked = 0;
+    for (const c of candidates) {
+      try {
+        await syncDemoMonitoringAlerts(c.circuitId);
+        checked++;
+      } catch (err) {
+        logger.warn("job.demo_monitoring_sweep_circuit_failed", { circuitId: c.circuitId, error: String(err) });
+      }
+    }
+    logger.info("job.demo_monitoring_sweep_done", { checked, candidates: candidates.length });
+  } finally {
+    // Reschedule even after a failure — one bad circuit must not stop the
+    // watch for every other one (the per-circuit try/catch above already
+    // isolates that; this finally is the belt for a failure in the query
+    // itself).
+    await scheduleDemoMonitoringSweep(new Date(Date.now() + DEMO_MONITORING_SWEEP_INTERVAL_MS));
+  }
+}
+
+async function scheduleDemoMonitoringSweep(runAt: Date) {
+  const existing = await db.job.findFirst({ where: { type: "demo_monitoring_sweep", status: "pending" } });
+  if (existing) {
+    logger.warn("job.demo_monitoring_sweep_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "demo_monitoring_sweep", runAt } });
+}
+
+async function ensureDemoMonitoringSweepScheduled() {
+  const existing = await db.job.findFirst({ where: { type: "demo_monitoring_sweep", status: { in: ["pending", "running"] } } });
+  if (!existing) {
+    await db.job.create({ data: { type: "demo_monitoring_sweep", runAt: new Date() } });
+    logger.info("job.demo_monitoring_sweep_seeded", {});
+  }
+}
+
 async function scheduleZohoInvoiceSync(runAt: Date) {
   const existing = await db.job.findFirst({ where: { type: "zoho_invoice_sync", status: "pending" } });
   if (existing) {
@@ -682,6 +743,7 @@ async function main() {
   await ensureCalendarSyncScheduled();
   await ensureZohoInvoiceSyncScheduled();
   await ensureHelpTriageScheduled();
+  await ensureDemoMonitoringSweepScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

@@ -2,7 +2,13 @@ import { db } from "@/lib/db";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 import { logger } from "@/lib/logger";
 import { sendPush } from "@/lib/push";
-import { assignmentMessage, meterAlertMessage, shouldNotifyAssignee } from "@/lib/push-messages";
+import {
+  assignmentMessage,
+  demoAlertMessage,
+  meterAlertMessage,
+  shouldNotifyAssignee,
+  type DemoAlertKind,
+} from "@/lib/push-messages";
 
 /**
  * The four assignment moments and the meter alert, each turned into one push
@@ -107,6 +113,27 @@ export async function notifyTaskAssigned(input: { taskId: string; toId: string; 
       }),
     );
   });
+}
+
+/**
+ * The demo monitoring sweep's own alert (demo-monitoring-alerts.ts) — raised
+ * by the system, not by a person, so there is no actor to skip for
+ * self-assignment: every distinct, non-null id in `toIds` is sent to.
+ */
+export async function notifyDemoAlert(input: {
+  kind: DemoAlertKind;
+  circuitId: string;
+  what: string;
+  detail?: string | null;
+  url: string;
+  ref: string;
+  toIds: (string | null)[];
+}): Promise<void> {
+  const ids = [...new Set(input.toIds.filter((id): id is string => shouldNotifyAssignee(id, null)))];
+  if (ids.length === 0) return;
+  await safely("demo_alert", () =>
+    sendPush(ids, demoAlertMessage({ kind: input.kind, what: input.what, detail: input.detail, url: input.url, ref: input.ref })),
+  );
 }
 
 export async function notifyMeterAlert(input: { meterId: string; kind: string }): Promise<void> {

@@ -215,6 +215,10 @@ enum JobType {
   zoho_invoice_sync
   // 2026-09-30: read field help reports the AI has not read yet.
   help_triage_sweep
+  // 2026-10-06: a demo's pre/post monitoring window, checked daily — a day's
+  // reading against the circuit's expected load/savings, and whether
+  // yesterday's reading landed at all.
+  demo_monitoring_sweep
 
   @@map("job_type")
 }
@@ -3809,6 +3813,18 @@ enum MeterAlertKind {
   /// more than the contract's own tolerance. A COMMERCIAL condition, unlike
   /// the two above: nothing is broken, the circuit is under-delivering.
   savings_out_of_band
+  /// A demo's PRE-install reading is outside ±10% of the circuit's expected
+  /// load (CON-17's own tolerance, reused here as a daily watch rather than
+  /// a one-time check) — src/lib/demo-monitoring.ts.
+  demo_pre_variance
+  /// A demo's POST-install day measured savings outside the 60-70% band this
+  /// daily watch uses — deliberately narrower than, and never confused with,
+  /// the 60-80% band that decides whether the demo's ACCEPTED average
+  /// counts as a valid benchmark (src/lib/circuit-demos.ts's BAND_MIN/MAX_PCT).
+  demo_post_variance
+  /// No reading was recorded for yesterday while a demo's pre or post window
+  /// is open — chases the reading itself, not a figure computed from it.
+  demo_readings_missing
 }
 
 /// A meter needing somebody's attention, kept open until it is resolved.

@@ -54,3 +54,19 @@ export function meterAlertMessage(input: { kind: MeterAlertPushKind; meterName: 
 export function shouldNotifyAssignee(assigneeId: string | null | undefined, actorId: string | null | undefined): assigneeId is string {
   return typeof assigneeId === "string" && assigneeId.length > 0 && assigneeId !== actorId;
 }
+
+/** The three kinds the demo monitoring sweep raises (demo-monitoring.ts). */
+export type DemoAlertKind = "demo_pre_variance" | "demo_post_variance" | "demo_readings_missing";
+
+const DEMO_ALERT_TITLE: Record<DemoAlertKind, string> = {
+  demo_pre_variance: "Demo reading outside the expected range",
+  demo_post_variance: "Demo savings outside the expected range",
+  demo_readings_missing: "Upload yesterday's demo reading",
+};
+
+/** System-raised, not an assignment — there is no "by" and no self-skip actor. */
+export function demoAlertMessage(input: { kind: DemoAlertKind; what: string; detail?: string | null; url: string; ref: string }): PushMessage {
+  const parts = [input.what];
+  if (input.detail) parts.push(input.detail);
+  return { title: DEMO_ALERT_TITLE[input.kind], body: parts.join(" · "), url: input.url, tag: `demo:${input.kind}:${input.ref}` };
+}

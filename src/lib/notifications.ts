@@ -354,9 +354,12 @@ function toNotification(a: Row): Notification {
     circuitLabel: circuit ? circuitLabelOf(circuit.location, circuit.lightType) : null,
     ownerLabel: owner ? (owner.name ?? owner.email) : null,
     // A commercial shortfall belongs on the monitoring screen where the
-    // figures are; a hardware fault belongs on the meter.
-    href:
-      a.kind === "savings_out_of_band" && circuit
+    // figures are; a hardware fault belongs on the meter. A demo still mid-
+    // window belongs on the circuit's own page, where the demo steps and
+    // readings live — live-monitoring is for AFTER commissioning.
+    href: DEMO_ALERT_KINDS.has(a.kind) && circuit
+      ? `/admin/societies/${circuit.societyId}/circuits/${circuit.id}`
+      : a.kind === "savings_out_of_band" && circuit
         ? `/admin/live-monitoring/${circuit.id}`
         : a.meter
           ? `/admin/meters/${a.meter.id}`
@@ -365,6 +368,8 @@ function toNotification(a: Row): Notification {
             : "/admin/notifications",
   };
 }
+
+const DEMO_ALERT_KINDS = new Set(["demo_pre_variance", "demo_post_variance", "demo_readings_missing"]);
 
 /**
  * How many need attention right now — the number on the bell.

@@ -201,7 +201,7 @@ export default async function LiveMonitoringCircuitPage({
     <>
       <PageHeader
         backHref="/admin/live-monitoring"
-        title={circuit.location || circuit.lightType}
+        title={circuit.society.name}
         chip={
           blocker ? (
             <StatusChip tone="warn">Not live yet</StatusChip>
@@ -209,7 +209,7 @@ export default async function LiveMonitoringCircuitPage({
             <StatusChip tone="ok">Live monitoring</StatusChip>
           )
         }
-        subtitle={`${circuit.society.name} · ${circuit.lightType} · ${circuit.meteredLightCount} metered · ${describeLights(
+        subtitle={`${circuit.location || circuit.lightType} · ${circuit.lightType} · ${circuit.meteredLightCount} metered · ${describeLights(
           circuit.representedLightCount,
           demoLightsInstalled({ meteredLightCount: circuit.meteredLightCount, demos: circuit.demos.filter((d) => !d.voidedAt), devices: circuit.devices }),
         )}`}

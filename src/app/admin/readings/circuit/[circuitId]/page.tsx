@@ -72,11 +72,11 @@ export default async function CircuitReadingHistory({
     <>
       <PageHeader
         backHref={`/admin/societies/${circuit.society.id}/circuits/${circuit.id}`}
-        title={`${circuit.lightType} readings`}
+        title={circuit.society.name}
         subtitle={
           circuit.location
-            ? `${circuit.location} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
-            : `${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
+            ? `${circuit.lightType} readings · ${circuit.location} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
+            : `${circuit.lightType} readings · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
         }
         action={
           <Link href="/admin/readings" className="btn-secondary">

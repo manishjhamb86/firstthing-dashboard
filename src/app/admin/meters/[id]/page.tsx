@@ -145,15 +145,17 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         chip={<MeterStateChip state={meter.state} />}
         subtitle={
           <>
-            {meter.productModel} · device type {meter.uiid}
-            {meter.societyName && (
+            {meter.societyName ? (
               <>
-                {" · "}
                 <Link href={`/admin/societies/${meter.societyId}`} className="underline">
                   {meter.societyName}
                 </Link>
+                {" · "}
               </>
+            ) : (
+              "Not assigned to a society · "
             )}
+            {meter.productModel} · device type {meter.uiid}
             {meter.circuitLabel && ` · ${meter.circuitLabel}`}
           </>
         }

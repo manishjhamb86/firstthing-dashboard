@@ -121,8 +121,8 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
     <>
       <PageHeader
         backHref={`/admin/societies/${societyId}`}
-        title="Inventory"
-        subtitle={`Every FirsThing device and fitting at ${society.name}.`}
+        title={society.name}
+        subtitle="Inventory — every FirsThing device and fitting at this society."
       />
 
       {empty ? (

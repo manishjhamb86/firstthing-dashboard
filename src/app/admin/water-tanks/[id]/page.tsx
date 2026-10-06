@@ -98,7 +98,7 @@ export default async function TankStatusPage({
             <StatusChip tone="ok">Online</StatusChip>
           )
         }
-        subtitle={`${tank.productName || "Tank sensor"} · ${tank.tuyaDeviceId}`}
+        subtitle={`${tank.society ? tank.society.name : "Not assigned to a society"} · ${tank.productName || "Tank sensor"} · ${tank.tuyaDeviceId}`}
         action={
           tank.society && tank.hasLevelSignal ? (
             <ReassignButton

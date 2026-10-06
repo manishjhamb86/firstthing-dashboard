@@ -60,6 +60,10 @@ export default async function IntakeReviewPage({ params }: { params: Promise<{ i
       nonServiceInvoice: false,
     };
   const preview = await previewIntake(intake.id, review);
+  // The review itself can still be figuring out which society this invoice
+  // belongs to — that is sometimes the whole point of the screen — so this
+  // is shown only once a society is actually confirmed, never a guess.
+  const reviewSociety = review.societyId ? societies.find((s) => s.id === review.societyId) : null;
   // The PDF is read through a signed GET, never a public URL — the Invoices/
   // prefix carries bank details and GST numbers. An hour is long enough for
   // a review; the page reloads a fresh one.
@@ -93,9 +97,10 @@ export default async function IntakeReviewPage({ params }: { params: Promise<{ i
           )
         }
         subtitle={
-          intake.zohoInvoiceId
+          (reviewSociety ? `${reviewSociety.name} · ` : "") +
+          (intake.zohoInvoiceId
             ? `Fetched from Zoho Invoice by ${intake.uploadedBy.name ?? intake.uploadedBy.email}, ${formatInstant(intake.uploadedAt)} — figures are Zoho's own; the PDF is Zoho's copy.`
-            : `${intake.fileName} · ${(intake.fileSize / 1024).toFixed(0)} KB · uploaded by ${intake.uploadedBy.name ?? intake.uploadedBy.email}, ${formatInstant(intake.uploadedAt)}`
+            : `${intake.fileName} · ${(intake.fileSize / 1024).toFixed(0)} KB · uploaded by ${intake.uploadedBy.name ?? intake.uploadedBy.email}, ${formatInstant(intake.uploadedAt)}`)
         }
       />
       {intake.zohoInvoiceId && (

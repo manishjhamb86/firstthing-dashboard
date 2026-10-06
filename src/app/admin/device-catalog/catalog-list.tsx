@@ -289,115 +289,126 @@ export function CatalogList({ rows, canEdit }: { rows: CatalogRow[]; canEdit: bo
         )}
       </ListToolbar>
 
-      <div className="card overflow-x-auto">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Device</th>
-              <th>Kind</th>
-              <th className="text-right">Default W</th>
-              <th>Status</th>
-              {canEdit && <th />}
-            </tr>
-          </thead>
-          <tbody>
-            {live.length === 0 ? (
-              <tr>
-                <td colSpan={canEdit ? 5 : 4} className="text-[var(--text-muted)]">
-                  {onlyAttention
-                    ? "Every device has a replacement mapped."
-                    : q
-                      ? `Nothing matches "${q}".`
-                      : "The catalog is empty."}
-                </td>
-              </tr>
-            ) : (
-              live.map((r) => {
-                // The header states the count and the toolbar filters on it;
-                // the row still carries the mark so a scan finds it without
-                // filtering first (user-reported 2026-08-20).
-                const unmapped = needsAttention(r);
-                return (
-                <tr key={r.id} style={unmapped ? { background: "var(--warn-bg)" } : undefined}>
-                  <td>
-                    <span className="font-medium">{r.name}</span>
-                    {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
-                  </td>
-                  <td>
-                    {/* The one distinction the catalog turns on. */}
+      {live.length === 0 ? (
+        <div className="card p-4 text-[var(--text-muted)]">
+          {onlyAttention ? "Every device has a replacement mapped." : q ? `Nothing matches "${q}".` : "The catalog is empty."}
+        </div>
+      ) : (
+        <>
+          {/* Desktop/tablet table (2026-10-07, user-caught — Default W and
+              Status were running off the right edge of a phone). Below sm, a
+              stacked card per device: the name and kind lead, wattage and the
+              status chips sit together on one line, actions on their own row. */}
+          <div className="hidden card overflow-x-auto sm:block">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Kind</th>
+                  <th className="text-right">Default W</th>
+                  <th>Status</th>
+                  {canEdit && <th />}
+                </tr>
+              </thead>
+              <tbody>
+                {live.map((r) => {
+                  const unmapped = needsAttention(r);
+                  return (
+                    <tr key={r.id} style={unmapped ? { background: "var(--warn-bg)" } : undefined}>
+                      <td>
+                        <span className="font-medium">{r.name}</span>
+                        {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
+                      </td>
+                      <td>
+                        <StatusChip tone={r.role === "replacement" ? "ok" : "neu"}>
+                          {r.role === "replacement" ? "Replacement" : "To be replaced"}
+                        </StatusChip>
+                      </td>
+                      <td className="num text-right">{r.defaultWattage ?? "—"}</td>
+                      <td>
+                        <span className="flex flex-wrap items-center gap-2">
+                          {r.active ? <StatusChip tone="ok">Active</StatusChip> : <StatusChip tone="warn">Retired</StatusChip>}
+                          {unmapped && <StatusChip tone="warn">No replacement mapped</StatusChip>}
+                        </span>
+                      </td>
+                      {canEdit && (
+                        <td className="text-right whitespace-nowrap">
+                          <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(r)} disabled={pending}>
+                            Edit
+                          </button>
+                          <button type="button" className="btn-ghost btn-sm" style={{ color: "var(--bad-fg)" }} disabled={pending} onClick={() => remove(r)}>
+                            Remove
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-2.5 sm:hidden">
+            {live.map((r) => {
+              const unmapped = needsAttention(r);
+              return (
+                <div key={r.id} className="card p-3.5" style={unmapped ? { background: "var(--warn-bg)" } : undefined}>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 font-medium">{r.name}</span>
+                    <span className="num shrink-0">{r.defaultWattage != null ? `${r.defaultWattage} W` : "—"}</span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <StatusChip tone={r.role === "replacement" ? "ok" : "neu"}>
                       {r.role === "replacement" ? "Replacement" : "To be replaced"}
                     </StatusChip>
-                  </td>
-                  <td className="num text-right">{r.defaultWattage ?? "—"}</td>
-                  <td>
-                    <span className="flex flex-wrap items-center gap-2">
-                      {r.active ? (
-                        <StatusChip tone="ok">Active</StatusChip>
-                      ) : (
-                        <StatusChip tone="warn">Retired</StatusChip>
-                      )}
-                      {unmapped && <StatusChip tone="warn">No replacement mapped</StatusChip>}
-                    </span>
-                  </td>
+                    {r.active ? <StatusChip tone="ok">Active</StatusChip> : <StatusChip tone="warn">Retired</StatusChip>}
+                    {unmapped && <StatusChip tone="warn">No replacement mapped</StatusChip>}
+                  </div>
+                  {rowError?.id === r.id && (
+                    <div className="mt-1.5">
+                      <ErrorText>{rowError.message}</ErrorText>
+                    </div>
+                  )}
                   {canEdit && (
-                    <td className="text-right whitespace-nowrap">
+                    <div className="mt-2.5 flex gap-4 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
                       <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(r)} disabled={pending}>
                         Edit
                       </button>
-                      <button
-                        type="button"
-                        className="btn-ghost btn-sm"
-                        style={{ color: "var(--bad-fg)" }}
-                        disabled={pending}
-                        onClick={() => remove(r)}
-                      >
+                      <button type="button" className="btn-ghost btn-sm" style={{ color: "var(--bad-fg)" }} disabled={pending} onClick={() => remove(r)}>
                         Remove
                       </button>
-                    </td>
+                    </div>
                   )}
-                </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
 
       {removed.length > 0 && (
         <details className="mt-4">
           <summary className="cursor-pointer text-sm text-[var(--text-muted)]">
             {removed.length} removed device{removed.length === 1 ? "" : "s"}
           </summary>
-          <div className="card overflow-x-auto mt-3">
-            <table className="tbl">
-              <tbody>
-                {removed.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <span className="font-medium line-through">{r.name}</span>
-                      <p className="text-[13px] text-[var(--text-muted)]">
-                        {r.role === "replacement" ? "Replacement" : "To be replaced"}
-                        {r.usageCount > 0 ? ` · still on ${r.usageCount} recorded line${r.usageCount === 1 ? "" : "s"}` : ""}
-                      </p>
-                      {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
-                    </td>
-                    {canEdit && (
-                      <td className="text-right">
-                        <button
-                          type="button"
-                          className="btn-ghost btn-sm"
-                          disabled={pending}
-                          onClick={() => act(r.id, () => restoreDeviceType(r.id))}
-                        >
-                          Restore
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="card mt-3 divide-y" style={{ borderColor: "var(--border-subtle)" }}>
+            {removed.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <span className="font-medium line-through">{r.name}</span>
+                  <p className="text-[13px] text-[var(--text-muted)]">
+                    {r.role === "replacement" ? "Replacement" : "To be replaced"}
+                    {r.usageCount > 0 ? ` · still on ${r.usageCount} recorded line${r.usageCount === 1 ? "" : "s"}` : ""}
+                  </p>
+                  {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
+                </div>
+                {canEdit && (
+                  <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={() => act(r.id, () => restoreDeviceType(r.id))}>
+                    Restore
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </details>
       )}

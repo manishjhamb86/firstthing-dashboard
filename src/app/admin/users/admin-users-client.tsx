@@ -293,55 +293,120 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
         />
       </ListToolbar>
 
-      <div className="card overflow-x-auto">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Account</th>
-              <th>Permissions</th>
-              <th>Status</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {live.length === 0 && (
-              <tr>
-                <td colSpan={4} className="text-[var(--text-muted)]">
-                  Nothing matches &ldquo;{q}&rdquo;.
-                </td>
-              </tr>
-            )}
+      {live.length === 0 ? (
+        <div className="card p-4 text-[var(--text-muted)]">Nothing matches &ldquo;{q}&rdquo;.</div>
+      ) : (
+        <>
+          {/* Desktop/tablet table (2026-10-07, user-caught: Permissions/
+              Status/the three actions ran off the right edge of a phone
+              screen entirely). Below sm, a stacked card per account instead —
+              the same data, re-ordered so the account identity leads, the
+              permission chips wrap freely under it, and the three actions sit
+              on their own row at the bottom where a thumb can reach them. */}
+          <div className="hidden card overflow-x-auto sm:block">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Permissions</th>
+                  <th>Status</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {live.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <span className="font-medium">{r.name ?? "—"}</span>
+                      {r.id === selfId && <span className="text-[var(--text-muted)]"> (you)</span>}
+                      <p className="text-[13px] text-[var(--text-muted)]">
+                        {r.email} · {teamMeta(r.team).label}
+                      </p>
+                      {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
+                    </td>
+                    <td>
+                      {r.permissions.length === 0 ? (
+                        <span className="text-[var(--text-muted)]">None</span>
+                      ) : (
+                        <span className="flex flex-wrap gap-1">
+                          {r.permissions.map((p) => (
+                            <StatusChip key={p} tone="neu">
+                              {LABEL.get(p) ?? p}
+                            </StatusChip>
+                          ))}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      {r.isActive ? (
+                        <StatusChip tone="ok">Active</StatusChip>
+                      ) : (
+                        <StatusChip tone="warn">Disabled</StatusChip>
+                      )}
+                    </td>
+                    <td className="text-right whitespace-nowrap">
+                      <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(r)} disabled={pending}>
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={pending}
+                        onClick={() =>
+                          act(r.id, () =>
+                            updateAdminUser({ id: r.id, name: r.name ?? "", permissions: r.permissions, isActive: !r.isActive, team: r.team, receivesBugReports: r.receivesBugReports }),
+                          )
+                        }
+                      >
+                        {r.isActive ? "Disable" : "Enable"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        style={{ color: "var(--bad-fg)" }}
+                        disabled={pending || r.id === selfId}
+                        title={r.id === selfId ? "You cannot remove your own account" : undefined}
+                        onClick={() => remove(r)}
+                      >
+                        Remove
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-2.5 sm:hidden">
             {live.map((r) => (
-              <tr key={r.id}>
-                <td>
-                  <span className="font-medium">{r.name ?? "—"}</span>
-                  {r.id === selfId && <span className="text-[var(--text-muted)]"> (you)</span>}
-                  <p className="text-[13px] text-[var(--text-muted)]">
-                    {r.email} · {teamMeta(r.team).label}
-                  </p>
-                  {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
-                </td>
-                <td>
-                  {r.permissions.length === 0 ? (
-                    <span className="text-[var(--text-muted)]">None</span>
-                  ) : (
-                    <span className="flex flex-wrap gap-1">
-                      {r.permissions.map((p) => (
-                        <StatusChip key={p} tone="neu">
-                          {LABEL.get(p) ?? p}
-                        </StatusChip>
-                      ))}
-                    </span>
-                  )}
-                </td>
-                <td>
-                  {r.isActive ? (
-                    <StatusChip tone="ok">Active</StatusChip>
-                  ) : (
-                    <StatusChip tone="warn">Disabled</StatusChip>
-                  )}
-                </td>
-                <td className="text-right whitespace-nowrap">
+              <div key={r.id} className="card p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="font-medium">{r.name ?? "—"}</span>
+                    {r.id === selfId && <span className="text-[var(--text-muted)]"> (you)</span>}
+                    <p className="text-[12.5px] text-[var(--text-muted)]">
+                      {r.email} · {teamMeta(r.team).label}
+                    </p>
+                  </div>
+                  <div className="shrink-0">
+                    {r.isActive ? <StatusChip tone="ok">Active</StatusChip> : <StatusChip tone="warn">Disabled</StatusChip>}
+                  </div>
+                </div>
+                {r.permissions.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {r.permissions.map((p) => (
+                      <StatusChip key={p} tone="neu">
+                        {LABEL.get(p) ?? p}
+                      </StatusChip>
+                    ))}
+                  </div>
+                )}
+                {rowError?.id === r.id && (
+                  <div className="mt-1.5">
+                    <ErrorText>{rowError.message}</ErrorText>
+                  </div>
+                )}
+                <div className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
                   <button type="button" className="btn-ghost btn-sm" onClick={() => setEditing(r)} disabled={pending}>
                     Edit
                   </button>
@@ -367,12 +432,12 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
                   >
                     Remove
                   </button>
-                </td>
-              </tr>
+                </div>
+              </div>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        </>
+      )}
 
       {/* A removal that hides the row completely is indistinguishable from a
           real delete — the same reason removed circuits stay visible in a
@@ -382,30 +447,19 @@ export function AdminUsersClient({ rows, selfId }: { rows: AdminListRow[]; selfI
           <summary className="cursor-pointer text-sm text-[var(--text-muted)]">
             {removed.length} removed account{removed.length === 1 ? "" : "s"}
           </summary>
-          <div className="card overflow-x-auto mt-3">
-            <table className="tbl">
-              <tbody>
-                {removed.map((r) => (
-                  <tr key={r.id}>
-                    <td>
-                      <span className="font-medium line-through">{r.name ?? r.email}</span>
-                      <p className="text-[13px] text-[var(--text-muted)]">{r.email}</p>
-                      {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
-                    </td>
-                    <td className="text-right">
-                      <button
-                        type="button"
-                        className="btn-ghost btn-sm"
-                        disabled={pending}
-                        onClick={() => act(r.id, () => restoreAdminUser(r.id))}
-                      >
-                        Restore
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="card mt-3 divide-y" style={{ borderColor: "var(--border-subtle)" }}>
+            {removed.map((r) => (
+              <div key={r.id} className="flex flex-wrap items-center justify-between gap-3 p-3">
+                <div className="min-w-0">
+                  <span className="font-medium line-through">{r.name ?? r.email}</span>
+                  <p className="text-[13px] text-[var(--text-muted)]">{r.email}</p>
+                  {rowError?.id === r.id && <ErrorText>{rowError.message}</ErrorText>}
+                </div>
+                <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={() => act(r.id, () => restoreAdminUser(r.id))}>
+                  Restore
+                </button>
+              </div>
+            ))}
           </div>
         </details>
       )}

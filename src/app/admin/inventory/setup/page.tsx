@@ -71,7 +71,12 @@ export default async function InventorySetupPage() {
             <CardTitle className="mb-0">Item types</CardTitle>
             <AddItemType categories={categories.map((c) => c.name)} catalogNames={catalog.map((c) => c.name).filter((n) => !stocked.has(n.toLowerCase()))} />
           </div>
-          <div className="mb-4 overflow-x-auto">
+          {/* Desktop/tablet table. Below sm, a stacked card per item type
+              (2026-10-07, user-caught — Category/Tracked/Make-model/Warranty
+              ran off a phone's right edge): the name leads, the tracking
+              method stays a chip (it's the one fact that changes how this
+              item behaves elsewhere), everything else is one muted line. */}
+          <div className="mb-4 hidden overflow-x-auto sm:block">
             <table className="tbl tbl-compact">
               <thead>
                 <tr>
@@ -96,6 +101,21 @@ export default async function InventorySetupPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mb-4 flex flex-col gap-2 sm:hidden">
+            {items.map((i) => (
+              <div key={i.id} className="rounded-[var(--r-md)] border p-3" style={{ borderColor: "var(--border-subtle)" }}>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 font-medium">{i.name}</span>
+                  <StatusChip tone={i.tracking === "serial" ? "info" : "neu"}>{TRACKING[i.tracking]}</StatusChip>
+                </div>
+                <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                  {i.category}
+                  {[i.make, i.model].filter(Boolean).length > 0 ? ` · ${[i.make, i.model].filter(Boolean).join(" ")}` : ""}
+                  {i.defaultWarrantyMonths ? ` · ${i.defaultWarrantyMonths} mo warranty` : ""}
+                </p>
+              </div>
+            ))}
           </div>
         </Card>
       </div>

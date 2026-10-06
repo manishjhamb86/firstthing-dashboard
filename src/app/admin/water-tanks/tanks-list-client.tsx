@@ -204,7 +204,12 @@ export function TanksListClient({
         </p>
       )}
 
-      <Card className="overflow-x-auto">
+      {/* Desktop/tablet table. Below sm, a stacked card per tank instead
+          (2026-10-07, user-caught — Level/Status/Society were running off a
+          phone's right edge): the level bar moves directly under the tank's
+          own name (it's the figure a reader actually came for), status and
+          society sit on one line beneath it. */}
+      <Card className="hidden overflow-x-auto sm:block">
         <table className="tbl">
           <thead>
             <tr>
@@ -290,6 +295,61 @@ export function TanksListClient({
           </tbody>
         </table>
       </Card>
+
+      <div className="flex flex-col gap-2.5 sm:hidden">
+        {rows.map((t) => {
+          const selectable = canAssign && t.hasLevelSignal && t.society === null;
+          return (
+            <div
+              key={t.id}
+              className="card p-3.5"
+              style={{ opacity: t.hasLevelSignal ? 1 : 0.55, cursor: "pointer" }}
+              onClick={(e) => {
+                if ((e.target as HTMLElement).closest("input")) return;
+                router.push(`/admin/water-tanks/${t.id}`);
+              }}
+            >
+              <div className="flex items-start gap-3">
+                {selectable && (
+                  <input
+                    type="checkbox"
+                    className="mt-1 shrink-0"
+                    aria-label={`Select ${t.name}`}
+                    checked={selected.has(t.id)}
+                    onChange={() => toggle(t.id)}
+                  />
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">{t.name}</p>
+                  <p className="num text-xs" style={{ color: "var(--text-muted)" }}>
+                    {t.deviceId.slice(0, 6)}…{t.deviceId.slice(-4)} · {t.productName || "unknown product"}
+                  </p>
+                  <div className="mt-2">
+                    <TankLevelBar pct={t.hasLevelSignal ? (t.level ?? 0) : null} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {t.online ? (
+                      <StatusChip tone="ok">Online</StatusChip>
+                    ) : t.hasLevelSignal ? (
+                      <StatusChip tone="warn">Offline</StatusChip>
+                    ) : (
+                      <StatusChip tone="neu">Offline</StatusChip>
+                    )}
+                    {t.society ? (
+                      <span className="text-[12.5px] font-medium">
+                        {t.society.name} · {t.society.location}
+                      </span>
+                    ) : t.hasLevelSignal ? (
+                      <StatusChip tone="warn">Unassigned</StatusChip>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       <p className="mt-3.5 text-[13px]" style={{ color: "var(--text-muted)" }}>
         Selection is offered on unassigned tank sensors only. Devices without a water-level signal stay
         listed so nothing in the account is invisible.

@@ -313,7 +313,176 @@ export function MetersListClient({
               : "No device matches this filter or search."}
         </EmptyState>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* A phone-only sort control (2026-10-07) — the card list below has no
+            column headers to click, so sorting moves here instead of being
+            quietly dropped. Same SORTS map, same compareBy, just a different
+            control surface. */}
+        <div className="mb-3 flex items-center gap-2 sm:hidden">
+          <label className="lbl shrink-0" htmlFor="mobile-sort">Sort by</label>
+          <select
+            id="mobile-sort"
+            className="field field-auto flex-1"
+            value={sortKey}
+            onChange={(e) => sortBy(e.target.value as SortKey)}
+          >
+            {(Object.keys(SORTS) as SortKey[]).map((k) => (
+              <option key={k} value={k}>
+                {SORTS[k].label}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn-ghost btn-sm shrink-0"
+            onClick={() => setSortDir((d) => (d === 1 ? -1 : 1))}
+            aria-label={sortDir === 1 ? "Ascending" : "Descending"}
+          >
+            {sortDir === 1 ? "↑" : "↓"}
+          </button>
+        </div>
+
+        {/* Phone: one card per device. Seven dense columns (society, state,
+            power + sparkline, today vs ceiling, history, owner, actions) have
+            no honest way to fit a phone width side by side — this reads them
+            down the card instead, in the same order of importance the desktop
+            table already sorts toward: state first (is anything wrong), then
+            what it's measuring, then the two live figures, then who's chased
+            and what can be done (2026-10-07, user-caught). */}
+        <div className="flex flex-col gap-2.5 sm:hidden">
+          {shown.map((m) => (
+            <div key={m.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Link href={`/admin/meters/${m.id}`} className="font-semibold underline">
+                    {m.name}
+                  </Link>
+                  <div className="text-xs text-[var(--text-subtle)]">{m.productModel}</div>
+                </div>
+                <MeterStateChip state={m.state} />
+              </div>
+
+              <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                {m.societyName ? (
+                  <>
+                    {m.societyName} · {m.circuitLabel ?? "no circuit yet"}
+                  </>
+                ) : m.hasEnergySignal ? (
+                  "Not assigned"
+                ) : (
+                  "Not a meter"
+                )}
+              </p>
+
+              {m.state !== null && m.state !== "reporting" && m.offlineSince && (
+                <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                  since {formatInstant(m.offlineSince)}
+                </p>
+              )}
+
+              {m.removedFromAccountAt && (
+                <div className="mt-1.5">
+                  <StatusChip tone="warn">Deleted from the account {formatDate(m.removedFromAccountAt)}</StatusChip>
+                  {m.circuitId ? (
+                    <p className="mt-1 text-xs" style={{ color: "var(--warn-fg)" }}>
+                      Still measuring {m.circuitLabel ?? "a circuit"} — billed on these readings.
+                    </p>
+                  ) : m.societyName ? (
+                    <p className="mt-1 text-xs text-[var(--text-muted)]">
+                      Still listed against {m.societyName}, on no circuit — nothing billed through it.
+                    </p>
+                  ) : null}
+                </div>
+              )}
+
+              {m.openAlerts.length > 0 && (
+                <div className="mt-1.5">
+                  <StatusChip tone="bad">
+                    {m.openAlerts.length} open alert{m.openAlerts.length === 1 ? "" : "s"}
+                  </StatusChip>
+                </div>
+              )}
+
+              {(m.powerW !== null || m.dayKwh !== null) && (
+                <div className="mt-2.5 grid grid-cols-2 gap-3 border-t pt-2.5" style={{ borderColor: "var(--border-subtle)" }}>
+                  <div>
+                    <p className="lbl">Power now</p>
+                    {m.powerW === null ? (
+                      <span className="text-[var(--text-subtle)]">—</span>
+                    ) : (
+                      <>
+                        <span className="num" style={{ color: m.stale ? "var(--text-muted)" : "var(--text)" }}>
+                          {m.powerW.toFixed(0)} W
+                        </span>
+                        <div className="text-xs text-[var(--text-subtle)]">{m.readAge}</div>
+                      </>
+                    )}
+                  </div>
+                  <div>
+                    <p className="lbl">Today</p>
+                    {m.dayKwh === null ? (
+                      <span className="num text-[var(--text-subtle)]">—</span>
+                    ) : m.capacityKwh === null ? (
+                      <>
+                        <span className="num">{m.dayKwh.toFixed(2)} kWh</span>
+                        <div className="text-xs text-[var(--text-subtle)]">no ceiling</div>
+                      </>
+                    ) : (
+                      <>
+                        <CeilingBar value={m.dayKwh} ceiling={m.capacityKwh} />
+                        <span className="num text-xs text-[var(--text-subtle)]">
+                          {m.dayKwh.toFixed(2)} of {m.capacityKwh.toFixed(1)} kWh
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <p className="mt-2 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                {m.hourlyCount === 0 ? "No history" : `${m.hourlyCount.toLocaleString()} h of history, to ${formatDate(m.hourlyTo)}`}
+                {" · Chased by "}
+                {m.ownerLabel ?? (!m.assigned ? "—" : "Nobody")}
+              </p>
+
+              {canAssign && (
+                <div className="mt-2.5 flex flex-wrap gap-4 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
+                  {m.hasEnergySignal ? (
+                    <>
+                      <button type="button" className="btn-ghost btn-sm" onClick={() => openAssign(m)}>
+                        {m.circuitId ? "Reassign" : "Assign"}
+                      </button>
+                      {m.assigned && (
+                        <button type="button" className="btn-ghost btn-sm" disabled={pending} onClick={() => unassign(m)}>
+                          Unassign
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="btn-ghost btn-sm"
+                        disabled={pending}
+                        onClick={() =>
+                          start(async () => {
+                            setError(null);
+                            const r = await syncMeterNow(m.id);
+                            if (r.error) setError(r.error);
+                            else router.refresh();
+                          })
+                        }
+                      >
+                        Read
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-[var(--text-subtle)]">not a meter</span>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden overflow-x-auto sm:block">
           <table className="tbl">
             <thead>
               <tr>
@@ -496,6 +665,7 @@ export function MetersListClient({
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {/* In a modal, not appended to the card: the panel used to render

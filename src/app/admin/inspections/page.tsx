@@ -257,38 +257,76 @@ export default async function InspectionsPage({
             : "The first monthly visit appears here once an inspector records one."}
         </EmptyState>
       ) : (
-        <Card className="overflow-x-auto p-0">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Society</th>
-                <th>Area</th>
-                <th>Month</th>
-                <th>Inspected</th>
-                <th>Inspector</th>
-                <th className="text-right">Checked</th>
-                <th className="text-right">Faulty</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {inspections.map((i) => (
-                <tr key={i.id} className={i.voidedAt ? "opacity-50" : ""}>
-                  <td>
-                    <Link href={`/admin/inspections/${i.id}`} className="font-medium hover:underline">
-                      {i.society.name}
-                    </Link>
-                    <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-                      {i.society.location}
-                    </p>
-                  </td>
-                  <td>{i.area || "Whole society"}</td>
-                  <td>{monthLabel(`${i.period}-01`)}</td>
-                  <td>{formatDate(i.inspectedAt)}</td>
-                  <td>{i.inspectorName}</td>
-                  <td className="num text-right">{i.totalLightsChecked ?? "—"}</td>
-                  <td className="num text-right">{i.totalLightsChecked === null ? "—" : i._count.findings}</td>
-                  <td>
+        <>
+          {/* Desktop/tablet: the full table. Below sm, a table this wide only
+              ever overflows or clips its right-hand columns — the status chip
+              and the checked/faulty counts were running off the edge of the
+              phone entirely (2026-10-07, user-caught, across many list pages
+              at once). The exact pattern this codebase already proved on the
+              inspection findings table itself (2026-09-12): one stacked card
+              per row at phone width, the same data re-prioritized rather than
+              squeezed. */}
+          <Card className="hidden overflow-x-auto p-0 sm:block">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Area</th>
+                  <th>Month</th>
+                  <th>Inspected</th>
+                  <th>Inspector</th>
+                  <th className="text-right">Checked</th>
+                  <th className="text-right">Faulty</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {inspections.map((i) => (
+                  <tr key={i.id} className={i.voidedAt ? "opacity-50" : ""}>
+                    <td>
+                      <Link href={`/admin/inspections/${i.id}`} className="font-medium hover:underline">
+                        {i.society.name}
+                      </Link>
+                      <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        {i.society.location}
+                      </p>
+                    </td>
+                    <td>{i.area || "Whole society"}</td>
+                    <td>{monthLabel(`${i.period}-01`)}</td>
+                    <td>{formatDate(i.inspectedAt)}</td>
+                    <td>{i.inspectorName}</td>
+                    <td className="num text-right">{i.totalLightsChecked ?? "—"}</td>
+                    <td className="num text-right">{i.totalLightsChecked === null ? "—" : i._count.findings}</td>
+                    <td>
+                      {i.voidedAt ? (
+                        <StatusChip tone="neu">Voided</StatusChip>
+                      ) : i.totalLightsChecked === null ? (
+                        <StatusChip tone="info">In progress</StatusChip>
+                      ) : i._count.findings === 0 ? (
+                        <StatusChip tone="ok">Clean</StatusChip>
+                      ) : (
+                        <StatusChip tone="warn">{i._count.findings} faulty</StatusChip>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          {/* Phone: the society (what you're scanning for) and its status
+              chip lead; area/month/inspector — secondary, identifying detail
+              — sit on one muted line; the two counts close the card, since
+              they're only meaningful once the chip has already said
+              in-progress/clean/faulty. */}
+          <div className="flex flex-col gap-2.5 sm:hidden">
+            {inspections.map((i) => (
+              <Card key={i.id} className={`p-3.5 ${i.voidedAt ? "opacity-50" : ""}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <Link href={`/admin/inspections/${i.id}`} className="min-w-0 font-medium hover:underline">
+                    {i.society.name}
+                  </Link>
+                  <div className="shrink-0">
                     {i.voidedAt ? (
                       <StatusChip tone="neu">Voided</StatusChip>
                     ) : i.totalLightsChecked === null ? (
@@ -298,12 +336,24 @@ export default async function InspectionsPage({
                     ) : (
                       <StatusChip tone="warn">{i._count.findings} faulty</StatusChip>
                     )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+                  </div>
+                </div>
+                <p className="mt-0.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                  {i.area || "Whole society"} · {monthLabel(`${i.period}-01`)} · {formatDate(i.inspectedAt)}
+                </p>
+                <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                  {i.inspectorName}
+                </p>
+                {i.totalLightsChecked !== null && (
+                  <p className="mt-1.5 text-[12.5px]">
+                    <span className="num font-medium">{i.totalLightsChecked}</span> checked ·{" "}
+                    <span className="num font-medium">{i._count.findings}</span> faulty
+                  </p>
+                )}
+              </Card>
+            ))}
+          </div>
+        </>
       )}
     </>
   );

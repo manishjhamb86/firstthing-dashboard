@@ -48,45 +48,76 @@ export function TimelineTable({ rows, initialQuery }: { rows: TimelineRow[]; ini
           {rows.length === 0 ? "A society’s timeline appears here once it is added." : "Try a different name or location."}
         </EmptyState>
       ) : (
-        <div className="card overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Society</th>
-                <th>Dates</th>
-                <th>Billed from</th>
-                <th className="text-right">Requests</th>
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((r) => {
-                const bad = r.summary.order + r.summary.future;
-                return (
-                  <tr key={r.id}>
-                    <td>
-                      <Link href={`/admin/societies/${r.id}/timeline`} className="font-semibold hover:underline">
-                        {r.name}
-                      </Link>
-                      <div className="text-[12px] text-[var(--text-subtle)]">{r.location}</div>
-                    </td>
-                    <td>
-                      <div className="flex flex-wrap gap-1.5">
-                        {bad > 0 && <span className="chip chip-bad">✕ {bad} out of order</span>}
-                        {r.summary.check > 0 && <span className="chip chip-warn">! {r.summary.check} to check</span>}
-                        {r.summary.missing > 0 && <span className="chip chip-warn">– {r.summary.missing} not recorded</span>}
-                        {r.line.tone === "ok" && <span className="chip chip-ok">✓ {r.summary.inOrder} in order</span>}
-                      </div>
-                    </td>
-                    <td className="num whitespace-nowrap">
-                      {r.billedFrom ? formatDate(r.billedFrom) : <span className="text-[var(--text-subtle)]">Not billed</span>}
-                    </td>
-                    <td className="num text-right">{r.pending > 0 ? <span className="chip chip-warn">{r.pending} waiting</span> : "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          {/* Desktop/tablet table. Below sm, a stacked card per society
+              (2026-10-07, user-caught — the chips were wrapping over
+              "Billed from"/"Requests" and both read as a jumble): the name
+              leads, the chronology chips wrap freely on their own line, and
+              billed-from + requests close the card on one row. */}
+          <div className="hidden card overflow-x-auto sm:block">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Dates</th>
+                  <th>Billed from</th>
+                  <th className="text-right">Requests</th>
+                </tr>
+              </thead>
+              <tbody>
+                {shown.map((r) => {
+                  const bad = r.summary.order + r.summary.future;
+                  return (
+                    <tr key={r.id}>
+                      <td>
+                        <Link href={`/admin/societies/${r.id}/timeline`} className="font-semibold hover:underline">
+                          {r.name}
+                        </Link>
+                        <div className="text-[12px] text-[var(--text-subtle)]">{r.location}</div>
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap gap-1.5">
+                          {bad > 0 && <span className="chip chip-bad">✕ {bad} out of order</span>}
+                          {r.summary.check > 0 && <span className="chip chip-warn">! {r.summary.check} to check</span>}
+                          {r.summary.missing > 0 && <span className="chip chip-warn">– {r.summary.missing} not recorded</span>}
+                          {r.line.tone === "ok" && <span className="chip chip-ok">✓ {r.summary.inOrder} in order</span>}
+                        </div>
+                      </td>
+                      <td className="num whitespace-nowrap">
+                        {r.billedFrom ? formatDate(r.billedFrom) : <span className="text-[var(--text-subtle)]">Not billed</span>}
+                      </td>
+                      <td className="num text-right">{r.pending > 0 ? <span className="chip chip-warn">{r.pending} waiting</span> : "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-col gap-2.5 sm:hidden">
+            {shown.map((r) => {
+              const bad = r.summary.order + r.summary.future;
+              return (
+                <div key={r.id} className="card p-3.5">
+                  <Link href={`/admin/societies/${r.id}/timeline`} className="font-semibold hover:underline">
+                    {r.name}
+                  </Link>
+                  <div className="text-[12px] text-[var(--text-subtle)]">{r.location}</div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {bad > 0 && <span className="chip chip-bad">✕ {bad} out of order</span>}
+                    {r.summary.check > 0 && <span className="chip chip-warn">! {r.summary.check} to check</span>}
+                    {r.summary.missing > 0 && <span className="chip chip-warn">– {r.summary.missing} not recorded</span>}
+                    {r.line.tone === "ok" && <span className="chip chip-ok">✓ {r.summary.inOrder} in order</span>}
+                  </div>
+                  <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                    {r.billedFrom ? <span className="num">Billed from {formatDate(r.billedFrom)}</span> : "Not billed"}
+                    {r.pending > 0 && <span className="chip chip-warn num ml-2">{r.pending} waiting</span>}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
     </>
   );

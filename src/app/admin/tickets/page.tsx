@@ -91,50 +91,83 @@ export default async function AdminTicketsPage({
             {filter ? "No requests with this status." : "No society has raised a request yet."}
           </EmptyState>
         ) : (
-          <div className="print-table-scroll">
-            <table className="tbl w-full">
-              <thead>
-                <tr>
-                  <th>Society</th>
-                  <th>Type</th>
-                  <th>Subject</th>
-                  <th>Raised by</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  {canAct && <th className="text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {tickets.map((t) => (
-                  <tr key={t.id}>
-                    <td>
-                      <Link href={`/admin/societies/${t.society.id}`} className="font-semibold">
-                        {t.society.name}
-                      </Link>
-                    </td>
-                    <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                      {TYPE_LABEL[t.type]}
-                    </td>
-                    <td>
-                      <strong>{t.subject}</strong>
-                      <span className="block max-w-[420px] text-[12px]" style={{ color: "var(--text-muted)" }}>
-                        {t.detail}
-                      </span>
-                      {t.status === "resolved" && t.resolutionNote && (
-                        <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                          Resolved: {t.resolutionNote}
-                          {t.lastStatusByAdmin &&
-                            ` — ${t.lastStatusByAdmin.name ?? t.lastStatusByAdmin.email}`}
+          <>
+            {/* Desktop/tablet table. Below sm, a stacked card per request
+                (2026-10-07, user-caught — Type/Raised by/Date/Status/Actions
+                ran off a phone's right edge): the society and status lead,
+                the subject and its detail get the full card width they
+                actually need, and everything else sits on one muted line. */}
+            <div className="hidden print-table-scroll sm:block">
+              <table className="tbl w-full">
+                <thead>
+                  <tr>
+                    <th>Society</th>
+                    <th>Type</th>
+                    <th>Subject</th>
+                    <th>Raised by</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    {canAct && <th className="text-right">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {tickets.map((t) => (
+                    <tr key={t.id}>
+                      <td>
+                        <Link href={`/admin/societies/${t.society.id}`} className="font-semibold">
+                          {t.society.name}
+                        </Link>
+                      </td>
+                      <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {TYPE_LABEL[t.type]}
+                      </td>
+                      <td>
+                        <strong>{t.subject}</strong>
+                        <span className="block max-w-[420px] text-[12px]" style={{ color: "var(--text-muted)" }}>
+                          {t.detail}
                         </span>
+                        {t.status === "resolved" && t.resolutionNote && (
+                          <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+                            Resolved: {t.resolutionNote}
+                            {t.lastStatusByAdmin &&
+                              ` — ${t.lastStatusByAdmin.name ?? t.lastStatusByAdmin.email}`}
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {t.raisedBy.name ?? t.raisedBy.email}
+                      </td>
+                      <td className="num text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {formatDate(t.createdAt)}
+                      </td>
+                      <td>
+                        {t.status === "open" ? (
+                          <StatusChip tone="bad">Open</StatusChip>
+                        ) : t.status === "in_progress" ? (
+                          <StatusChip tone="warn">In progress</StatusChip>
+                        ) : (
+                          <StatusChip tone="ok">Resolved</StatusChip>
+                        )}
+                      </td>
+                      {canAct && (
+                        <td>
+                          <AdminTicketControls ticketId={t.id} status={t.status} />
+                        </td>
                       )}
-                    </td>
-                    <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                      {t.raisedBy.name ?? t.raisedBy.email}
-                    </td>
-                    <td className="num text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                      {formatDate(t.createdAt)}
-                    </td>
-                    <td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-col gap-2.5 sm:hidden">
+              {tickets.map((t) => (
+                <div key={t.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                  <div className="flex items-start justify-between gap-3">
+                    <Link href={`/admin/societies/${t.society.id}`} className="min-w-0 font-semibold">
+                      {t.society.name}
+                    </Link>
+                    <div className="shrink-0">
                       {t.status === "open" ? (
                         <StatusChip tone="bad">Open</StatusChip>
                       ) : t.status === "in_progress" ? (
@@ -142,17 +175,33 @@ export default async function AdminTicketsPage({
                       ) : (
                         <StatusChip tone="ok">Resolved</StatusChip>
                       )}
-                    </td>
-                    {canAct && (
-                      <td>
-                        <AdminTicketControls ticketId={t.id} status={t.status} />
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                  </div>
+                  <p className="mt-1.5">
+                    <strong>{t.subject}</strong>
+                    <span className="block text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                      {t.detail}
+                    </span>
+                  </p>
+                  {t.status === "resolved" && t.resolutionNote && (
+                    <p className="mt-1 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+                      Resolved: {t.resolutionNote}
+                      {t.lastStatusByAdmin && ` — ${t.lastStatusByAdmin.name ?? t.lastStatusByAdmin.email}`}
+                    </p>
+                  )}
+                  <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                    {TYPE_LABEL[t.type]} · {t.raisedBy.name ?? t.raisedBy.email} ·{" "}
+                    <span className="num">{formatDate(t.createdAt)}</span>
+                  </p>
+                  {canAct && (
+                    <div className="mt-2.5 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
+                      <AdminTicketControls ticketId={t.id} status={t.status} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </Card>
     </>

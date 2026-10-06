@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangle, Check, ChevronRight, type LucideIcon } from "lucide-react";
+import { AlertTriangle, Check, type LucideIcon } from "lucide-react";
 
 // Shared icon-bubble tile components for the portal (design canvas fidelity,
 // 2026-09-21) — extracted out of the dashboard so the Electricity page (and
@@ -125,6 +125,12 @@ export type HealthIssue = { text: string; href: string };
  * problem with a link to where it can be seen — "Needs attention" beside a
  * tick and no detail read as a success (user-caught 2026-09-25, with 2 of 3
  * tanks offline).
+ *
+ * Collapsed to one line in the OK case (2026-10-07, user-reviewed design —
+ * see the dashboard mockup): a clean bill of health is the expected,
+ * non-actionable case and earns a quiet line, not a full KPI-sized card.
+ * The fuller icon-bubble treatment is kept for when something genuinely
+ * needs attention, where the extra visual weight is earned.
  */
 export function HealthBubble({
   issues,
@@ -132,17 +138,40 @@ export function HealthBubble({
   okLabel = "All reporting",
   attentionLabel = "Needs attention",
   title = "System health",
+  compact = false,
 }: {
   issues: HealthIssue[];
   summary: string;
   okLabel?: string;
   attentionLabel?: string;
   title?: string;
+  /** One-line pill instead of a full card when there's nothing wrong. */
+  compact?: boolean;
 }) {
+  const ok = issues.length === 0;
+
+  if (compact && ok) {
+    return (
+      <div
+        className="flex items-center gap-2.5 rounded-[var(--r-md)] px-3.5 py-2.5"
+        style={{ background: HEALTH_PURPLE.bg }}
+      >
+        <span
+          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+          style={{ background: HEALTH_PURPLE.iconBg, color: "#fff" }}
+        >
+          <Check size={13} strokeWidth={3} aria-hidden />
+        </span>
+        <p className="text-[13px] font-bold" style={{ color: HEALTH_PURPLE.title }}>
+          {okLabel} — {summary}
+        </p>
+      </div>
+    );
+  }
+
   // Same anatomy as KpiBubble — icon bubble on top, the headline where the
   // figure goes, a bold line, a muted line — so the four tiles line up
   // (user-caught 2026-09-25: the side-icon layout sat out of line).
-  const ok = issues.length === 0;
   const colors = ok
     ? { bg: HEALTH_PURPLE.bg, fg: HEALTH_PURPLE.title, muted: HEALTH_PURPLE.subtitle, iconBg: HEALTH_PURPLE.iconBg, iconFg: "#fff" }
     : { bg: toneColors("warn").bg, fg: toneColors("warn").fg, muted: "var(--text-subtle)", iconBg: "var(--surface)", iconFg: toneColors("warn").fg };
@@ -179,8 +208,13 @@ export function HealthBubble({
   );
 }
 
-/** A highlighted shortcut row — real navigation, not decoration. */
-export function QuickLinkRow({
+/**
+ * A compact shortcut pill — real navigation, not decoration. Replaced the
+ * full-width `QuickLinkRow` (2026-10-07, user-reviewed design): two of
+ * these side by side cost a fraction of two stacked 56px rows, which is all
+ * a navigation shortcut needs — the information is elsewhere on the page.
+ */
+export function QuickLinkPill({
   icon: Icon,
   tone,
   label,
@@ -191,18 +225,15 @@ export function QuickLinkRow({
   label: string;
   href: string;
 }) {
-  const { bg, fg } = toneColors(tone);
+  const { fg } = toneColors(tone);
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-[var(--r-md)] border px-3.5 py-3"
+      className="flex flex-1 items-center gap-2 rounded-[var(--r-md)] border px-3 py-2.5"
       style={{ borderColor: "var(--border-subtle)", background: "var(--surface)" }}
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full" style={{ background: bg, color: fg }}>
-        <Icon size={16} strokeWidth={2.2} aria-hidden />
-      </span>
-      <span className="flex-1 text-[14px] font-semibold">{label}</span>
-      <ChevronRight size={17} style={{ color: "var(--text-subtle)" }} aria-hidden />
+      <Icon size={15} strokeWidth={2.2} aria-hidden style={{ color: fg }} />
+      <span className="min-w-0 truncate text-[12.5px] font-semibold">{label}</span>
     </Link>
   );
 }

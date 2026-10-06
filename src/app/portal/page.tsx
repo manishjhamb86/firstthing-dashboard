@@ -27,7 +27,7 @@ import { ConsumptionChart } from "./consumption-chart";
 import { LightCountHistory } from "./light-count-history";
 import { MonitoringReadings } from "@/components/monitoring-readings";
 import { ChevronRight, FileText as FileTextIcon, Receipt, ShieldCheck, Zap } from "lucide-react";
-import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkRow, type HealthIssue } from "./kpi-tiles";
+import { CompactTile, HealthBubble, HeroSavedTile, KpiBubble, QuickLinkPill, type HealthIssue } from "./kpi-tiles";
 
 export const dynamic = "force-dynamic";
 
@@ -166,17 +166,41 @@ export default async function PortalHomePage() {
 
   return (
     <>
-      <PageHeader
-        title={`Good day, ${first}`}
-        subtitle={`You are logged in as ${signedInAs} · ${PORTAL_AUTHORITY_LABEL[viewer.role].toLowerCase()}`}
-        chip={
-          pendingActions.length > 0 ? (
+      {/* A compact mobile-only header (user-reviewed design, 2026-10-07):
+          the full "logged in as X (email) · role" line cost two lines above
+          the fold on a phone for information the avatar menu already
+          carries. Collapsed to a single truncated caption; the chip moves
+          onto the same line as the name when it fits. Desktop keeps the
+          original PageHeader exactly as it was — this was never a complaint
+          at that width. */}
+      <div className="mb-5 sm:hidden">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1.5">
+          <h1 className="min-w-0 text-[19px] font-extrabold leading-tight tracking-[-0.01em]">
+            Good day, {first}
+          </h1>
+          {pendingActions.length > 0 ? (
             <StatusChip tone="warn">{pendingActions.length} awaiting you</StatusChip>
           ) : (
-            <StatusChip tone="ok">Nothing needs you</StatusChip>
-          )
-        }
-      />
+            <StatusChip tone="ok">All clear</StatusChip>
+          )}
+        </div>
+        <p className="mt-0.5 truncate text-[11.5px]" style={{ color: "var(--text-subtle)" }} title={signedInAs}>
+          {signedInAs} · {PORTAL_AUTHORITY_LABEL[viewer.role].toLowerCase()}
+        </p>
+      </div>
+      <div className="hidden sm:block">
+        <PageHeader
+          title={`Good day, ${first}`}
+          subtitle={`You are logged in as ${signedInAs} · ${PORTAL_AUTHORITY_LABEL[viewer.role].toLowerCase()}`}
+          chip={
+            pendingActions.length > 0 ? (
+              <StatusChip tone="warn">{pendingActions.length} awaiting you</StatusChip>
+            ) : (
+              <StatusChip tone="ok">Nothing needs you</StatusChip>
+            )
+          }
+        />
+      </div>
 
       {/* The mobile pill row this replaced duplicated the header's own
           hamburger drawer one-for-one (same six links, same one tap away)
@@ -355,18 +379,20 @@ export default async function PortalHomePage() {
                   <CompactTile tone="info" value={kwhText} label="Energy saved" />
                   <CompactTile tone="ok" value={pctText} label="Savings achieved" />
                 </div>
-                <HealthBubble issues={healthIssues} summary={healthSummary} />
-                <div className="flex flex-col gap-2">
-                  <QuickLinkRow icon={Zap} tone="info" label="Electricity" href="/portal/electricity" />
+                {/* Collapsed to one line when nothing needs attention (user-
+                    reviewed design) — see HealthBubble's own comment. */}
+                <HealthBubble issues={healthIssues} summary={healthSummary} compact />
+                {/* Electricity + Billing combined into one compact row
+                    (user-reviewed design) rather than two full 56px rows —
+                    navigation, not information, so it doesn't need that
+                    much weight. */}
+                <div className="flex gap-2">
+                  <QuickLinkPill icon={Zap} tone="info" label="Electricity" href="/portal/electricity" />
                   {grants.has("billing") && (
-                    <QuickLinkRow
+                    <QuickLinkPill
                       icon={Receipt}
                       tone="warn"
-                      label={
-                        billedInvoice
-                          ? `Invoice ${billedInvoice.number} · ${billedInvoice.status === "paid" ? "paid" : "pending"}`
-                          : "Billing"
-                      }
+                      label={billedInvoice ? (billedInvoice.status === "paid" ? "Billing · paid" : "Billing · pending") : "Billing"}
                       href="/portal/billing"
                     />
                   )}

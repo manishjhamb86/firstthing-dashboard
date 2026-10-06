@@ -363,8 +363,8 @@ export default async function CircuitDetailPage({
 
       <PageHeader
         backHref={`/admin/societies/${id}/circuits`}
-        title={circuit.location || circuit.lightType}
-        subtitle={`${circuit.lightType} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLights)}`}
+        title={circuit.society.name}
+        subtitle={`${circuit.location || circuit.lightType} · ${circuit.lightType} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLights)}`}
         chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
       />
 

@@ -212,8 +212,8 @@ export default async function SiteSurveyPage({
     <>
       <PageHeader
         backHref={`/admin/pipeline/${pipeline.id}`}
-        title="Site survey"
-        subtitle={pipeline.society.location}
+        title={pipeline.society.name}
+        subtitle={`Site survey · ${pipeline.society.location}`}
       />
 
       {pipeline.siteSurvey && <FieldSurveyReview pipelineId={pipeline.id} surveyId={pipeline.siteSurvey.id} canQuery={canApproveException} />}

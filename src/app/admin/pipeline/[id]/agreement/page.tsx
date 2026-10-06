@@ -80,9 +80,9 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
     <>
       <PageHeader
         backHref={`/admin/pipeline/${pipeline.id}`}
-        title="Agreement & contract"
+        title={pipeline.society.name}
         chip={contractStatus ? <StatusChip tone={contractStatus.tone}>{contractStatus.label}</StatusChip> : undefined}
-        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · prepared from the accepted offer`}
+        subtitle={`Agreement & contract · ${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · prepared from the accepted offer`}
         // Top right, and only once there is an agreement to print — it was
         // buried under the execution table, where a document you may need at
         // any point in the flow is the hardest thing to find.

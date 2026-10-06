@@ -69,9 +69,9 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
     <>
       <PageHeader
         backHref={`/admin/pipeline/${pipeline.id}`}
-        title="Demo savings report"
+        title={pipeline.society.name}
         chip={status ? <StatusChip tone={status.tone}>{status.label}</StatusChip> : undefined}
-        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · measured on the demo circuits, extrapolated society-wide`}
+        subtitle={`Demo savings report · ${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · measured on the demo circuits, extrapolated society-wide`}
       />
 
       {!latest ? (

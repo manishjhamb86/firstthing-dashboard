@@ -124,9 +124,9 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
     <>
       <PageHeader
         backHref={`/admin/pipeline/${pipeline.id}`}
-        title="Offer"
+        title={pipeline.society.name}
         chip={status ? <StatusChip tone={status.tone}>{status.label}</StatusChip> : undefined}
-        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · priced from the demo numbers`}
+        subtitle={`Offer · ${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · priced from the demo numbers`}
       />
 
       {!current ? (

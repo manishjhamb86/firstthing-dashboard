@@ -66,8 +66,8 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
     <>
       <PageHeader
         backHref={`/admin/societies/${society.id}`}
-        title="Circuit registry"
-        subtitle="Every metered circuit this society has, through its full commissioning lifecycle."
+        title={society.name}
+        subtitle="Circuit registry — every metered circuit this society has, through its full commissioning lifecycle."
       />
 
       {circuits.length === 0 ? (

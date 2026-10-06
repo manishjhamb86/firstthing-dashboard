@@ -75,13 +75,13 @@ export default async function KycPage({ params }: { params: Promise<{ id: string
     <>
       <PageHeader
         backHref={`/admin/pipeline/${pipeline.id}`}
-        title="KYC documents"
+        title={pipeline.society.name}
         chip={
           <StatusChip tone={settled === items.length ? "ok" : "warn"}>
             {settled} of {items.length} settled
           </StatusChip>
         }
-        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · collected before the agreement can be executed`}
+        subtitle={`KYC documents · ${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · collected before the agreement can be executed`}
       />
 
       {!canEdit && (

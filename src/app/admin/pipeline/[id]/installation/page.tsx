@@ -130,7 +130,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   const header = (
     <PageHeader
       backHref={`/admin/pipeline/${pipeline.id}`}
-      title="Installation"
+      title={pipeline.society.name}
       chip={
         project ? (
           <StatusChip tone={statusMeta(INSTALLATION_PROJECT_STATE, project.state).tone}>
@@ -146,8 +146,8 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
       // against, so it is the one the header quotes.
       subtitle={
         project
-          ? `${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${project.contractedLightCount.toLocaleString("en-IN")} lights contracted`
-          : `${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${surveyed.toLocaleString("en-IN")} lights surveyed`
+          ? `Installation · ${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${project.contractedLightCount.toLocaleString("en-IN")} lights contracted`
+          : `Installation · ${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${surveyed.toLocaleString("en-IN")} lights surveyed`
       }
       // Top right, in line with the title — raising a blocker is a thing you
       // do from anywhere on this screen, not a control belonging to the

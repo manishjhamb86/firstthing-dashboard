@@ -28,6 +28,10 @@ import {
 import { circuitLabelOf } from "@/lib/meter-view";
 import type { InspectionSensorStatus } from "@prisma/client";
 
+function isUniqueConstraintViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && (err as { code?: string }).code === "P2002";
+}
+
 export type StartInspectionInput = {
   societyId: string;
   circuitId: string | null;
@@ -69,6 +73,11 @@ export async function startInspection(
   // input's "T00:00:00Z".
   const inspectedAt = new Date(`${input.inspectedAt}:00Z`);
 
+  // A voided inspection still holds the slot's unique key (society, area,
+  // month) — inspection-file.ts's own fileInspection already says so and
+  // refuses in these same words; this path hadn't implemented that half of
+  // the rule, and the real unique index answered with a raw 500 instead
+  // (user-caught 2026-10-06, found on RG Residency's own voided October slot).
   const existing = await db.inspection.findUnique({
     where: { societyId_area_period: { societyId: input.societyId, area, period: input.period } },
     select: { voidedAt: true },
@@ -90,19 +99,38 @@ export async function startInspection(
     logger.warn("inspection.start_refused", { actorId: admin.id, societyId: input.societyId, reason: refusal });
     return { error: refusal };
   }
+  if (existing) {
+    logger.warn("inspection.start_refused", { actorId: admin.id, societyId: input.societyId, reason: "slot_voided" });
+    return { error: "An inspection for this society, area and month was filed and then voided. That month's slot cannot be filed again." };
+  }
 
-  const created = await db.inspection.create({
-    data: {
-      societyId: input.societyId,
-      circuitId: input.circuitId,
-      area,
-      period: input.period,
-      inspectedAt,
-      inspectorName,
-      inspectorContact,
-      createdById: admin.id,
-    },
-  });
+  let created;
+  try {
+    created = await db.inspection.create({
+      data: {
+        societyId: input.societyId,
+        circuitId: input.circuitId,
+        area,
+        period: input.period,
+        inspectedAt,
+        inspectorName,
+        inspectorContact,
+        createdById: admin.id,
+      },
+    });
+  } catch (err) {
+    // Belt-and-braces for a genuine race (two submissions landing together)
+    // — the checks above should already have caught every other case.
+    // same visit together, can both pass that check and then race each other
+    // here. The unique index is what actually decides it; this just turns the
+    // loser's raw constraint violation into the same words the pre-check
+    // already uses, rather than an opaque production digest.
+    if (isUniqueConstraintViolation(err)) {
+      logger.warn("inspection.start_refused", { actorId: admin.id, societyId: input.societyId, reason: "race" });
+      return { error: "An inspection already exists for this society, area and month — void it first, or continue the one already in progress." };
+    }
+    throw err;
+  }
 
   logger.info("inspection.started", { actorId: admin.id, societyId: input.societyId, inspectionId: created.id });
   revalidatePath("/admin/inspections");

@@ -70,29 +70,47 @@ export function NewLeadForm({
     salesOwners.some((o) => o.id === currentUserId) ? currentUserId : (salesOwners[0]?.id ?? ""),
   );
 
+  // Arriving from a society's own page (initialSocietyId), the society is
+  // already decided — locked, not just prefilled, so neither a stray click
+  // nor a failed-submit re-render can quietly move the lead onto a different
+  // society (user-asked 2026-10-06). The lock is keyed on the PROP, not on
+  // whatever societyId state happens to hold, so it survives exactly as long
+  // as the page was reached with ?societyId= — a fresh visit to "Log a lead"
+  // with no society in the URL is the only way back to an editable field.
+  const lockedSociety = initialSocietyId ? societies.find((s) => s.id === initialSocietyId) : undefined;
+
   return (
     <Card className="max-w-xl p-6">
       <form action={formAction} className="space-y-5">
-        <Field label="Society" htmlFor="societyId">
-          <select
-            id="societyId"
-            name="societyId"
-            value={societyId}
-            onChange={(e) => setSocietyId(e.target.value)}
-            required
-            className="field"
-          >
-            <option value="" disabled>
-              Choose a society…
-            </option>
-            {societies.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} — {s.location}
+        {lockedSociety ? (
+          <Field label="Society" htmlFor="societyId">
+            <input type="hidden" name="societyId" value={lockedSociety.id} />
+            <div id="societyId" className="field bg-[var(--surface-sunken)] text-[var(--text-muted)]">
+              {lockedSociety.name} — {lockedSociety.location}
+            </div>
+          </Field>
+        ) : (
+          <Field label="Society" htmlFor="societyId">
+            <select
+              id="societyId"
+              name="societyId"
+              value={societyId}
+              onChange={(e) => setSocietyId(e.target.value)}
+              required
+              className="field"
+            >
+              <option value="" disabled>
+                Choose a society…
               </option>
-            ))}
-            <option value="__new__">+ New society (not yet in the system)</option>
-          </select>
-        </Field>
+              {societies.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name} — {s.location}
+                </option>
+              ))}
+              <option value="__new__">+ New society (not yet in the system)</option>
+            </select>
+          </Field>
+        )}
 
         {societyId === "__new__" && (
           <div className="space-y-4 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-sunken)] p-4">

@@ -16,7 +16,7 @@ import { ReplacementFollowUpCard } from "./followup-card";
 import { openReplacementFollowUps } from "@/lib/portal-followups";
 import { ExclusionNote } from "@/components/exclusion-note";
 import { ConsumptionChart } from "../consumption-chart";
-import { KpiBubble } from "../kpi-tiles";
+import { CompactTile, HeroSavedTile, KpiBubble } from "../kpi-tiles";
 import { Gauge, IndianRupee, Leaf, Zap } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -119,8 +119,40 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
               four real figures the StatRow they replace carried, none
               dropped: this page has more to say than LiveMetering.dc.html's
               own simpler 2-row card, so it keeps saying all of it, just in
-              the mockup's visual language. */}
-          <div className="mb-6 grid gap-4 grid-cols-2 xl:grid-cols-4">
+              the mockup's visual language.
+
+              Below sm: the dashboard's own hero+compact split (user-caught,
+              2026-10-07 — "those four cards have taken all the space and
+              listing is not even visible without scrolling"), never adopted
+              here when it was built for the dashboard. The ₹ figure is the
+              headline (it's what a billed month actually states); kWh
+              consumed/avoided are a compact 2-up row; meters-online becomes
+              one muted line rather than a fourth full KPI tile. */}
+          <div className="mb-6 flex flex-col gap-3 sm:hidden">
+            <HeroSavedTile
+              value={billed ? inr(billed.savedValue) : "—"}
+              label="Saved in rupees"
+              detail={billed ? `${monthName(billed.period)} · you kept ${inr(billed.societyKeeps)}` : "Appears once FirsThing publishes a billed month"}
+            />
+            <div className="grid grid-cols-2 gap-3">
+              <CompactTile
+                tone="info"
+                value={energy.totals.consumedKwh !== null ? `${Math.round(energy.totals.consumedKwh).toLocaleString("en-IN")} kWh` : "—"}
+                label={`Consumed · ${energy.month ? monthName(energy.month).split(" ")[0] : "month"}`}
+              />
+              <CompactTile
+                tone="ok"
+                value={energy.totals.avoidedKwh !== null ? `${Math.round(energy.totals.avoidedKwh).toLocaleString("en-IN")} kWh` : "—"}
+                label="Avoided vs before"
+              />
+            </div>
+            <p className="flex items-center gap-2 text-[12.5px]" style={{ color: meters.length > 0 && metersOnline < meters.length ? "var(--warn-fg)" : "var(--text-muted)" }}>
+              <Gauge size={14} aria-hidden />
+              <span className="num font-semibold">{metersOnline} of {meters.length}</span> meters online, watching your circuits
+            </p>
+          </div>
+
+          <div className="mb-6 hidden gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
             <KpiBubble
               icon={Zap}
               tone="info"

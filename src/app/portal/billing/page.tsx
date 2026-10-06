@@ -76,29 +76,43 @@ export default async function PortalBillingPage() {
             const meta = STATUS_META[latest.status] ?? { label: latest.status, tone: "warn" as const };
             return (
               <Card className="p-6">
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-[15px] font-extrabold">Latest invoice</p>
+                {/* Restructured (2026-10-07, user-caught — "upper space
+                    un-utilised... right side showing blank"): every field
+                    was a separate left-aligned line in a narrow column, with
+                    the Download button floating alone on the right below
+                    them. The amount and the due-date/status detail now sit
+                    side by side (using the card's full width instead of
+                    just its left edge), and Download is a full-width
+                    primary action rather than an isolated right-aligned
+                    button with empty space around it. */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[15px] font-extrabold">Latest invoice</p>
+                    <p className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                      <span className="num">{latest.number}</span> ·{" "}
+                      {periodLine(latest.calculation.period, latest.calculation.proratedDays, latest.calculation.daysInMonth)}
+                    </p>
+                  </div>
                   <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
                 </div>
-                <p className="text-[13.5px]" style={{ color: "var(--text-subtle)" }}>
-                  <span className="num">{latest.number}</span> ·{" "}
-                  {periodLine(latest.calculation.period, latest.calculation.proratedDays, latest.calculation.daysInMonth)}
-                </p>
-                <p className="num mt-1 text-[34px] font-extrabold leading-none tracking-[-0.02em]">
-                  {rupees(latest.amount)}
-                </p>
-                <p className="mt-2 text-[13px]" style={{ color: "var(--text-subtle)" }}>
-                  {latest.subtotal !== null && latest.taxAmount !== null
-                    ? `${rupeesWhole(latest.subtotal)} + tax · due by ${formatDate(latest.dueDate)}`
-                    : `Issued ${formatDate(latest.issueDate)} · due by ${formatDate(latest.dueDate)}`}
-                </p>
+                <div className="mt-4 flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+                  <p className="num text-[34px] font-extrabold leading-none tracking-[-0.02em]">
+                    {rupees(latest.amount)}
+                  </p>
+                  <div className="text-right text-[13px]" style={{ color: "var(--text-subtle)" }}>
+                    {latest.subtotal !== null && latest.taxAmount !== null && (
+                      <p>{rupeesWhole(latest.subtotal)} + tax</p>
+                    )}
+                    <p>due by {formatDate(latest.dueDate)}</p>
+                  </div>
+                </div>
                 {paidTotal > 0 && latest.status !== "paid" && (
-                  <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                  <p className="mt-2 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
                     {rupees(paidTotal)} recorded against this invoice so far.
                   </p>
                 )}
                 <div className="mt-4">
-                  <DownloadInvoiceButton invoiceId={latest.id} />
+                  <DownloadInvoiceButton invoiceId={latest.id} fullWidth />
                 </div>
                 <p className="mt-3 text-center text-[11.5px] leading-snug" style={{ color: "var(--text-subtle)" }}>
                   Pay by bank transfer using the details printed on the invoice — FirsThing confirms

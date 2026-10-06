@@ -9,7 +9,7 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
 import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
 import { circuitLabelOf } from "@/lib/meter-view";
-import { KpiBubble } from "../kpi-tiles";
+import { CompactTile, KpiBubble } from "../kpi-tiles";
 import { Droplets, Lightbulb, Zap } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -126,7 +126,17 @@ export default async function PortalInventoryPage() {
         </EmptyState>
       ) : (
         <>
-          <div className="mb-6 grid gap-4 grid-cols-1 sm:grid-cols-3">
+          {/* Below sm: three full KPI tiles stacked a full column tall each
+              (user-caught, 2026-10-07 — "same issue [as Electricity]") — a
+              compact 3-up row carries the same three figures in a fraction
+              of the height; the full detail lines move to sm+. */}
+          <div className="mb-6 grid grid-cols-3 gap-2.5 sm:hidden">
+            <CompactTile tone="ok" value={societyLights.toLocaleString("en-IN")} label="LED lights" />
+            <CompactTile tone="info" value={String(meters.length)} label="Smart meters" />
+            <CompactTile tone="info" value={String(sensors.length)} label="Tank sensors" />
+          </div>
+
+          <div className="mb-6 hidden gap-4 sm:grid sm:grid-cols-3">
             <KpiBubble
               icon={Lightbulb}
               tone="ok"

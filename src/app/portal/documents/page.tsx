@@ -240,8 +240,14 @@ export default async function PortalDocumentsPage({
 
           {agreement && (activeType === null || activeType === "agreement") && (
             <Card className="mb-5 p-5">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3">
+              {/* flex-col below sm, same row above it (2026-10-07, user-
+                  caught — "all text, no proper utilisation of space"): a
+                  fixed-width button squeezed to the row's right edge left
+                  the rest of a narrow row doing nothing; full width below sm
+                  makes it a real second line rather than dead space beside
+                  truncated text. */}
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <div className="flex min-w-0 flex-1 items-center gap-3">
                   <DocIcon tone="info" />
                   <div className="min-w-0">
                     <p className="text-sm font-bold">Signed agreement — the copy on record</p>
@@ -254,7 +260,7 @@ export default async function PortalDocumentsPage({
                   href={agreement.portalHref}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-secondary"
+                  className="btn-secondary w-full text-center sm:w-auto"
                 >
                   Download
                 </a>
@@ -269,10 +275,10 @@ export default async function PortalDocumentsPage({
                 {items.map((d, i) => (
                   <div
                     key={d.id}
-                    className="flex flex-wrap items-center justify-between gap-3 py-3"
+                    className="flex flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                     style={i < items.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
                   >
-                    <div className="flex min-w-0 items-center gap-3">
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
                       <DocIcon tone={VISIBLE[d.docType].tone} />
                       <div className="min-w-0">
                         <p className="truncate text-[13.5px] font-semibold" title={d.title}>
@@ -284,11 +290,11 @@ export default async function PortalDocumentsPage({
                       </div>
                     </div>
                     {d.external ? (
-                      <a href={d.portalHref} target="_blank" rel="noreferrer" className="btn-secondary">
+                      <a href={d.portalHref} target="_blank" rel="noreferrer" className="btn-secondary w-full text-center sm:w-auto">
                         Download
                       </a>
                     ) : (
-                      <Link href={d.portalHref} className="btn-secondary">
+                      <Link href={d.portalHref} className="btn-secondary w-full text-center sm:w-auto">
                         Open &amp; download
                       </Link>
                     )}

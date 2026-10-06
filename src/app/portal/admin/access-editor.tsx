@@ -76,7 +76,13 @@ export function AccessEditor({
             return (
               <div
                 key={m.id}
-                className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 py-3"
+                // flex-col below sm (2026-10-07, user-caught: "same issue"
+                // as the other portal pages) — the name, the grant chips and
+                // the Edit button used to share one flex-wrap row, so the
+                // chips (justify-end) and the button landed wherever the
+                // wrap happened to break on a narrow screen. Each piece gets
+                // its own line below sm instead.
+                className="flex flex-col gap-2 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2"
                 style={{
                   ...(i < members.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : {}),
                   ...(selectedId === m.id ? { background: "var(--accent-subtle)", borderRadius: "var(--r-sm)", padding: "12px" } : {}),
@@ -98,7 +104,7 @@ export function AccessEditor({
                     </div>
                   </div>
                 </div>
-                <div className="flex min-w-0 flex-1 flex-wrap justify-end gap-1.5">
+                <div className="flex min-w-0 flex-wrap gap-1.5 sm:flex-1 sm:justify-end">
                   {isOb ? (
                     <StatusChip tone="info">Everything</StatusChip>
                   ) : m.grants.length === 0 ? (
@@ -122,7 +128,7 @@ export function AccessEditor({
                   )}
                 </div>
                 {canEdit && !isOb && (
-                  <button type="button" className="btn-sm btn-ghost" onClick={() => openFor(m)}>
+                  <button type="button" className="btn-sm btn-ghost self-start sm:self-auto" onClick={() => openFor(m)}>
                     Edit access
                   </button>
                 )}

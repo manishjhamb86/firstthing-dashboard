@@ -153,7 +153,11 @@ export function CommitteeClient({
               className="border-t pt-3 first:border-t-0 first:pt-0"
               style={{ borderColor: "var(--border-subtle)" }}
             >
-              <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              {/* flex-col below sm (2026-10-07, user-caught: "same issue")
+                  — name/email/role on one line, Transfer/Remove on their own
+                  line beneath, rather than both halves of one wrapping row
+                  landing wherever the wrap happened to break on a phone. */}
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-4 sm:gap-y-2">
                 <div className="flex min-w-0 items-center gap-3">
                   <MemberAvatar name={a.name} email={a.email} />
                   <div className="min-w-0">
@@ -173,21 +177,19 @@ export function CommitteeClient({
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {viewerIsOfficeBearer && a.authority !== "office_bearer" && (
-                    <>
-                      <TransferButton profileId={a.id} />
-                      <button
-                        type="button"
-                        className="btn-ghost btn-sm"
-                        disabled={pending}
-                        onClick={() => remove(a)}
-                      >
-                        Remove
-                      </button>
-                    </>
-                  )}
-                </div>
+                {viewerIsOfficeBearer && a.authority !== "office_bearer" && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <TransferButton profileId={a.id} />
+                    <button
+                      type="button"
+                      className="btn-ghost btn-sm"
+                      disabled={pending}
+                      onClick={() => remove(a)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
               </div>
               {rowError?.id === a.id && (
                 <div className="mt-2">

@@ -6,7 +6,7 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { RaiseTicketCards, TicketStatusControl } from "./support-client";
-import { KpiBubble } from "../kpi-tiles";
+import { CompactTile, KpiBubble } from "../kpi-tiles";
 import { CheckCircle2, CircleDot, Clock, Timer } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -59,7 +59,17 @@ export default async function PortalSupportPage() {
         }
       />
 
-      <div className="mb-6 grid gap-4 grid-cols-2 xl:grid-cols-4">
+      {/* Below sm: four full KPI tiles stacked into 2 rows pushed the actual
+          ticket list below the fold (user-caught, 2026-10-07) — a compact
+          2x2 grid carries the same four figures at a fraction of the height. */}
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:hidden">
+        <CompactTile tone={open > 0 ? "bad" : "ok"} value={String(open)} label="Open" />
+        <CompactTile tone="warn" value={String(inProgress)} label="In progress" />
+        <CompactTile tone="ok" value={String(resolved)} label="Resolved" />
+        <CompactTile tone="info" value={medianDays !== null ? `${medianDays.toFixed(1)}d` : "—"} label="Median to resolve" />
+      </div>
+
+      <div className="mb-6 hidden gap-4 sm:grid sm:grid-cols-2 xl:grid-cols-4">
         <KpiBubble icon={CircleDot} tone={open > 0 ? "bad" : "ok"} value={String(open)} label="Open" detail="awaiting a first look" />
         <KpiBubble icon={Clock} tone="warn" value={String(inProgress)} label="In progress" detail="being worked on" />
         <KpiBubble icon={CheckCircle2} tone="ok" value={String(resolved)} label="Resolved" detail="closed out" />
@@ -82,57 +92,94 @@ export default async function PortalSupportPage() {
             its status.
           </EmptyState>
         ) : (
-          <div className="print-table-scroll">
-            <table className="tbl w-full">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Subject</th>
-                  <th>Raised by</th>
-                  <th>Date</th>
-                  <th>Status</th>
-                  {canManage && <th className="text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {tickets.map((t) => (
-                  <tr key={t.id}>
-                    <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                      {TYPE_LABEL[t.type]}
-                    </td>
-                    <td>
-                      <strong>{t.subject}</strong>
-                      {t.status === "resolved" && t.resolutionNote && (
-                        <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                          {t.resolutionNote}
-                        </span>
-                      )}
-                    </td>
-                    <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                      {t.raisedBy.name ?? t.raisedBy.email}
-                    </td>
-                    <td className="num text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-                      {formatDate(t.createdAt)}
-                    </td>
-                    <td>
-                      {t.status === "open" ? (
-                        <StatusChip tone="bad">Open</StatusChip>
-                      ) : t.status === "in_progress" ? (
-                        <StatusChip tone="warn">In progress</StatusChip>
-                      ) : (
-                        <StatusChip tone="ok">Resolved</StatusChip>
-                      )}
-                    </td>
-                    {canManage && (
-                      <td>
-                        <TicketStatusControl ticketId={t.id} status={t.status} />
-                      </td>
-                    )}
+          <>
+            {/* Desktop/tablet table. Below sm, a stacked card per ticket
+                (2026-10-07, user-caught) — matching the admin side's own
+                table/card pairing (e.g. src/app/admin/tickets/page.tsx),
+                which this page had never adopted. */}
+            <div className="hidden print-table-scroll sm:block">
+              <table className="tbl w-full">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Subject</th>
+                    <th>Raised by</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    {canManage && <th className="text-right">Actions</th>}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {tickets.map((t) => (
+                    <tr key={t.id}>
+                      <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {TYPE_LABEL[t.type]}
+                      </td>
+                      <td>
+                        <strong>{t.subject}</strong>
+                        {t.status === "resolved" && t.resolutionNote && (
+                          <span className="block text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+                            {t.resolutionNote}
+                          </span>
+                        )}
+                      </td>
+                      <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {t.raisedBy.name ?? t.raisedBy.email}
+                      </td>
+                      <td className="num text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {formatDate(t.createdAt)}
+                      </td>
+                      <td>
+                        {t.status === "open" ? (
+                          <StatusChip tone="bad">Open</StatusChip>
+                        ) : t.status === "in_progress" ? (
+                          <StatusChip tone="warn">In progress</StatusChip>
+                        ) : (
+                          <StatusChip tone="ok">Resolved</StatusChip>
+                        )}
+                      </td>
+                      {canManage && (
+                        <td>
+                          <TicketStatusControl ticketId={t.id} status={t.status} />
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-col gap-2.5 sm:hidden">
+              {tickets.map((t) => (
+                <div key={t.id} className="card p-3.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <strong className="min-w-0">{t.subject}</strong>
+                    {t.status === "open" ? (
+                      <StatusChip tone="bad">Open</StatusChip>
+                    ) : t.status === "in_progress" ? (
+                      <StatusChip tone="warn">In progress</StatusChip>
+                    ) : (
+                      <StatusChip tone="ok">Resolved</StatusChip>
+                    )}
+                  </div>
+                  {t.status === "resolved" && t.resolutionNote && (
+                    <p className="mt-1 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                      {t.resolutionNote}
+                    </p>
+                  )}
+                  <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                    {TYPE_LABEL[t.type]} · {t.raisedBy.name ?? t.raisedBy.email} ·{" "}
+                    <span className="num">{formatDate(t.createdAt)}</span>
+                  </p>
+                  {canManage && (
+                    <div className="mt-2.5 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
+                      <TicketStatusControl ticketId={t.id} status={t.status} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
         )}
       </Card>
     </>

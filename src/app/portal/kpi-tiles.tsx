@@ -94,8 +94,11 @@ export function HeroSavedTile({ value, label = "Saved this month", detail }: { v
   );
 }
 
-/** The 2-up kWh/% row beside the hero — deliberately icon-less and smaller than `KpiBubble`. */
-export function CompactTile({ tone, value, label }: { tone: "ok" | "info"; value: string; label: string }) {
+/** The 2-up kWh/% row beside the hero — deliberately icon-less and smaller than `KpiBubble`.
+ *  Tone widened past ok/info (2026-10-07) for pages whose compact figures can
+ *  genuinely be bad/warn (e.g. Support's "Open" count), not just this product's
+ *  habitual savings green/blue. */
+export function CompactTile({ tone, value, label }: { tone: Tone; value: string; label: string }) {
   const { bg, fg, line } = toneColors(tone);
   return (
     <div className="flex flex-col gap-1.5 rounded-[var(--r-md)] p-4" style={{ background: bg, border: `1px solid ${line}` }}>

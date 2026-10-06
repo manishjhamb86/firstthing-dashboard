@@ -37,7 +37,23 @@ export function WaterPitch({
         <h2 className="max-w-[30ch] text-[26px] font-extrabold leading-tight tracking-[-0.02em] sm:text-[32px]">
           Stop paying to pump water that overflows
         </h2>
-        <p className="mt-3 max-w-[62ch] text-[15px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
+        {/* The CTAs moved up, right under the heading (2026-10-07, user-
+            caught: "buttons not visible without scroll") — the paragraph
+            and the savings banner below them are real copy worth reading,
+            but on a phone they used to sit between the heading and the
+            buttons, pushing the one thing this section exists to offer
+            below the fold. Order now matches what the section is FOR: say
+            what it's about, offer the action, then make the case. */}
+        <div className="mt-4 flex flex-wrap gap-3">
+          <a href="#enquiry" className="btn-primary h-11 px-6 text-[15px]">
+            Contact us
+          </a>
+          <a href={`tel:+91${SALES_CONTACTS.calls[0].phone}`} className="btn-secondary h-11 px-6 text-[15px]">
+            <Phone size={16} aria-hidden className="mr-2" />
+            Call {SALES_CONTACTS.calls[0].name.split(" ")[0]}
+          </a>
+        </div>
+        <p className="mt-4 max-w-[62ch] text-[15px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
           An overflowing tank wastes the water and the electricity it took to pump it — and it is usually
           noticed only when someone happens to see it. FirsThing can watch every tank for you and stop the
           overflow before it starts.
@@ -52,15 +68,6 @@ export function WaterPitch({
             lighting. Bring the same care to your water.
           </p>
         )}
-        <div className="mt-6 flex flex-wrap gap-3">
-          <a href="#enquiry" className="btn-primary h-11 px-6 text-[15px]">
-            Contact us
-          </a>
-          <a href={`tel:+91${SALES_CONTACTS.calls[0].phone}`} className="btn-secondary h-11 px-6 text-[15px]">
-            <Phone size={16} aria-hidden className="mr-2" />
-            Call {SALES_CONTACTS.calls[0].name.split(" ")[0]}
-          </a>
-        </div>
       </section>
 
       {/* The problem, in their words */}

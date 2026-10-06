@@ -10,6 +10,7 @@ import {
   currentMonthSummary,
   type SocietyFaultHistory,
 } from "@/lib/inspection-intelligence";
+import { InspectionSocietyFilter } from "./society-filter";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inspections" };
@@ -21,7 +22,7 @@ export const metadata = { title: "Inspections" };
 export default async function InspectionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ missing?: string }>;
+  searchParams: Promise<{ missing?: string; societyId?: string }>;
 }) {
   await requireAdminPage();
   const actor = await resolveAdmin();
@@ -31,7 +32,7 @@ export default async function InspectionsPage({
   // lands. The notification carries the count; this is the who. Both read
   // `societiesMissingInspection`, so the number on the bell and the rows
   // here are the same query rather than two that can disagree.
-  const { missing: missingParam } = await searchParams;
+  const { missing: missingParam, societyId: societyFilter } = await searchParams;
   const missingPeriod =
     missingParam && /^\d{4}-\d{2}$/.test(missingParam) ? missingParam : null;
   const missing = missingPeriod ? await societiesMissingInspection(missingPeriod) : [];
@@ -98,14 +99,18 @@ export default async function InspectionsPage({
   }
   const faultSummary = classifyPortfolioFaultRates([...faultHistoryBySociety.values()]);
 
-  const inspections = await db.inspection.findMany({
-    orderBy: [{ inspectedAt: "desc" }],
-    take: 100,
-    include: {
-      society: { select: { name: true, location: true } },
-      _count: { select: { findings: true } },
-    },
-  });
+  const [inspections, allSocieties] = await Promise.all([
+    db.inspection.findMany({
+      where: societyFilter ? { societyId: societyFilter } : undefined,
+      orderBy: [{ inspectedAt: "desc" }],
+      take: 100,
+      include: {
+        society: { select: { name: true, location: true } },
+        _count: { select: { findings: true } },
+      },
+    }),
+    db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+  ]);
 
   return (
     <>
@@ -236,9 +241,13 @@ export default async function InspectionsPage({
         </Card>
       )}
 
+      <InspectionSocietyFilter options={allSocieties.map((s) => ({ id: s.id, label: s.name }))} />
+
       {inspections.length === 0 ? (
-        <EmptyState title="No inspections filed yet">
-          The first monthly visit appears here once an inspector records one.
+        <EmptyState title={societyFilter ? "No inspections for this society yet" : "No inspections filed yet"}>
+          {societyFilter
+            ? "Nothing on record for this society — try a different one, or clear the filter."
+            : "The first monthly visit appears here once an inspector records one."}
         </EmptyState>
       ) : (
         <Card className="overflow-x-auto p-0">

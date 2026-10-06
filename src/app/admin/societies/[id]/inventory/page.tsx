@@ -1,29 +1,42 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-permissions";
+import { isDemoMode } from "@/lib/demo-mode";
 import { demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { circuitLightCountHistoryByCircuit, describeLightCountChange, filterCustomerRelevant } from "@/lib/circuit-light-history";
 import { deviceLabel, fittingLabel, installedCount, meteredOf } from "@/lib/inventory-display";
 import { formatDate } from "@/lib/format-date";
-import { db } from "@/lib/db";
-import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
-import { resolvePortalViewer } from "@/lib/portal-viewer";
-import { hasGrant } from "@/lib/portal-access";
-import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
 import { circuitLabelOf } from "@/lib/meter-view";
-import { KpiBubble } from "../kpi-tiles";
-import { Droplets, Lightbulb, Zap } from "lucide-react";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow } from "@/components/ui";
+import { LightHistoryList } from "@/components/light-history-list";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventory" };
 
-// What FirsThing has deployed at the society — the fittings on each circuit
-// (from the load inventory the commissioning work already keeps), the smart
-// meters, and the tank sensors. Read straight from the rows of record; no
-// counts are typed in anywhere.
-export default async function PortalInventoryPage() {
-  const viewer = await resolvePortalViewer();
-  if (!viewer?.societyId) redirect(STALE_SESSION_EXIT);
-  if (!hasGrant(viewer, "inventory")) redirect("/portal");
-  const societyId = viewer.societyId;
+/**
+ * The backend's own mirror of the customer portal's Inventory page
+ * (2026-10-06, user-asked: "In backend under Society there should be a
+ * dedicated inventory section same as in customer portal") — every FirsThing
+ * device and fitting at the society, read through the SAME shared helpers
+ * (`inventory-display.ts`) the portal page uses, so the two can never
+ * disagree about what "installed" means. Unlike the portal, this one shows
+ * the RAW, unfiltered light-count history (an auto-cancelled pair still
+ * listed, marked as such) with the manage controls operations needs.
+ */
+export default async function SocietyInventoryPage({ params }: { params: Promise<{ id: string }> }) {
+  const session = await requireAdminPage();
+  const canView =
+    session.user.adminPermissions?.includes("manage_survey") ||
+    session.user.adminPermissions?.includes("manage_pipeline");
+  if (!canView) redirect("/admin/societies");
+  const canManage =
+    (session.user.adminPermissions?.includes("manage_survey") ?? false) &&
+    (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
+  const demoMode = await isDemoMode();
+
+  const { id: societyId } = await params;
+  const society = await db.society.findUnique({ where: { id: societyId }, select: { id: true, name: true } });
+  if (!society) notFound();
 
   const [circuitRows, meters, tanks] = await Promise.all([
     db.circuit.findMany({
@@ -33,11 +46,6 @@ export default async function PortalInventoryPage() {
         id: true,
         location: true,
         lightType: true,
-        // When the lights went in: the latest counted demo's replacement day
-        // (2026-09-26 — the replacement belongs to the demo now).
-        // Every live demo, first by sequence: the first is the initial demo
-        // (its lights are the demo lights), and the latest counted one's
-        // replacement day is when the lights went in.
         demos: {
           where: { voidedAt: null },
           orderBy: { sequence: "asc" },
@@ -73,39 +81,33 @@ export default async function PortalInventoryPage() {
     }),
   ]);
   const lightHistoryByCircuit = await circuitLightCountHistoryByCircuit(circuitRows.map((c) => c.id));
-  const circuits = circuitRows.map(({ demos, ...c }) => ({
-    ...c,
-    lightReplacementDate:
-      demos
-        .filter((d) => !d.rejected && d.lightReplacementDate)
-        .map((d) => d.lightReplacementDate!)
-        .sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
-    demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices: c.devices }),
-    // A real back-and-forth that exactly cancels (or an operator's own
-    // manual exclusion) is dropped here — a resident reading "it was X,
-    // then corrected to Y, then back to X" when nothing actually, lastingly
-    // moved is confusing, not transparent (2026-10-06, user-caught).
-    lightHistory: filterCustomerRelevant(lightHistoryByCircuit.get(c.id) ?? []),
-  }));
+  const circuits = circuitRows.map(({ demos, ...c }) => {
+    const history = lightHistoryByCircuit.get(c.id) ?? [];
+    // The RAW history, not the customer-filtered one — operations manages
+    // from here, so an auto-cancelled pair still needs to be visible,
+    // marked as such (the same "autoHidden" flag the single-circuit page
+    // computes), rather than silently vanishing.
+    const customerVisibleIds = new Set(filterCustomerRelevant(history).flatMap((h) => h.ids));
+    return {
+      ...c,
+      lightReplacementDate:
+        demos
+          .filter((d) => !d.rejected && d.lightReplacementDate)
+          .map((d) => d.lightReplacementDate!)
+          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null,
+      demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices: c.devices }),
+      lightHistory: history.map((h) => ({
+        ids: h.ids,
+        at: h.at,
+        text: describeLightCountChange(h),
+        kind: h.kind,
+        autoHidden: h.excludedAt === null && !h.ids.some((id) => customerVisibleIds.has(id)),
+        excludedAt: h.excludedAt,
+        excludedReason: h.excludedReason,
+      })),
+    };
+  });
 
-  /**
-   * What FirsThing has actually installed at the society, which is NOT the
-   * metered circuit's own fitting count (user-reported 2026-08-31: "showing
-   * only the demo install lights, not the complete installation as per the
-   * billing").
-   *
-   * CON-11 is the reason the two differ: a metered circuit stands in for
-   * every light of its type, and the fee is computed on that whole
-   * population — so a page listing 96 while the bill is raised on 2,508 is
-   * describing a different society from the invoice. The population figure
-   * is `representedLightCount`, the same field the demo report and the
-   * billing run read, and it counts only circuits whose replacement has
-   * actually been recorded.
-   */
-  // Installed = the full installation PLUS the demo lights (2026-09-27,
-  // user-specified): the demo lights went in before the full installation and
-  // are not part of it, but they are FirsThing's lights at the society all
-  // the same.
   const installedRows = circuits.filter((c) => c.lightReplacementDate && meteredOf(c) > 0);
   const societyLights = installedRows.reduce((s, c) => s + totalLights(c.representedLightCount, c.demoLights), 0);
   const demoLights = installedRows.reduce((s, c) => s + c.demoLights, 0);
@@ -113,61 +115,55 @@ export default async function PortalInventoryPage() {
   const sensors = tanks.filter((t) => t.hasLevelSignal);
 
   const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0;
-
   const SETUP_LABEL: Record<string, string> = { domestic: "Domestic", flush: "Flush", stp: "STP" };
 
   return (
     <>
-      <PageHeader title="Inventory" subtitle="Every FirsThing device and fitting at your society." />
+      <PageHeader
+        backHref={`/admin/societies/${societyId}`}
+        title="Inventory"
+        subtitle={`Every FirsThing device and fitting at ${society.name}.`}
+      />
 
       {empty ? (
         <EmptyState title="Nothing deployed yet">
-          Once FirsThing installs fittings, meters or sensors at your society, they are listed here.
+          Once FirsThing installs fittings, meters or sensors at this society, they are listed here.
         </EmptyState>
       ) : (
         <>
-          <div className="mb-6 grid gap-4 grid-cols-1 sm:grid-cols-3">
-            <KpiBubble
-              icon={Lightbulb}
-              tone="ok"
-              value={societyLights.toLocaleString("en-IN")}
+          <StatRow>
+            <Stat
               label="LED lights installed"
+              value={societyLights.toLocaleString("en-IN")}
               detail={
                 fullLights > 0
-                  ? `${fullLights.toLocaleString("en-IN")} in the full installation + ${demoLights.toLocaleString("en-IN")} from the demo`
+                  ? `${fullLights.toLocaleString("en-IN")} full installation + ${demoLights.toLocaleString("en-IN")} demo`
                   : `${demoLights.toLocaleString("en-IN")} from the demo`
               }
             />
-            <KpiBubble icon={Zap} tone="info" value={String(meters.length)} label="Smart meters" detail="watching your circuits" />
-            <KpiBubble icon={Droplets} tone="info" value={String(sensors.length)} label="Tank level sensors" detail="on your water tanks" />
-          </div>
+            <Stat label="Smart meters" value={String(meters.length)} detail="watching circuits" />
+            <Stat label="Tank level sensors" value={String(sensors.length)} detail="on water tanks" />
+          </StatRow>
 
           {circuits.some((c) => c.devices.length > 0) && (
-            <Card className="mb-5 p-6">
+            <Card className="mb-5 mt-5 p-6">
               <CardTitle>Lighting</CardTitle>
-              {/* Grouped by circuit, because a circuit is where the two
-                  figures meet: the population FirsThing replaced across the
-                  society, and the fittings on the circuit that measures it.
-                  Listed flat, the per-line counts read as the whole
-                  installation, which is the report this fixes. */}
               <div className="flex flex-col gap-5">
                 {circuits
                   .filter((c) => c.devices.length > 0)
                   .map((c) => {
                     const metered = meteredOf(c);
-                    const society = totalLights(c.representedLightCount, c.demoLights);
+                    const society2 = totalLights(c.representedLightCount, c.demoLights);
                     const standsIn = c.lightReplacementDate && metered > 0 && c.representedLightCount > 0;
                     return (
                       <div key={c.id}>
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                          <p className="text-[13.5px] font-semibold">
-                            {circuitLabelOf(c.location, c.lightType)}
-                          </p>
+                          <p className="text-[13.5px] font-semibold">{circuitLabelOf(c.location, c.lightType)}</p>
                           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                             {standsIn ? (
                               <>
                                 <span className="num font-bold" style={{ color: "var(--text)" }}>
-                                  {society.toLocaleString("en-IN")}
+                                  {society2.toLocaleString("en-IN")}
                                 </span>{" "}
                                 installed ·{" "}
                                 <span className="num">{c.representedLightCount.toLocaleString("en-IN")}</span> full
@@ -186,24 +182,13 @@ export default async function PortalInventoryPage() {
                             )}
                           </p>
                         </div>
-                        {c.lightHistory.length > 0 && (
-                          // Closed by default — most circuits have never had
-                          // a correction, and the ones that have state it in
-                          // full rather than leave the split looking like a
-                          // mistake (2026-10-05, user-asked).
-                          <details className="mt-1">
-                            <summary className="cursor-pointer text-xs underline" style={{ color: "var(--text-muted)" }}>
-                              {c.lightHistory.length === 1 ? "1 correction on record" : `${c.lightHistory.length} corrections on record`}
-                            </summary>
-                            <ul className="mt-1 flex flex-col gap-1">
-                              {c.lightHistory.map((h, i) => (
-                                <li key={i} className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                                  <span className="font-medium">{h.at}</span> — {describeLightCountChange(h)}
-                                </li>
-                              ))}
-                            </ul>
-                          </details>
-                        )}
+                        <LightHistoryList
+                          items={c.lightHistory}
+                          circuitId={c.id}
+                          societyId={societyId}
+                          canManage={canManage}
+                          demoMode={demoMode}
+                        />
                         <div className="mt-1 flex flex-col">
                           {c.devices.map((d) => (
                             <div
@@ -214,10 +199,7 @@ export default async function PortalInventoryPage() {
                               <div>
                                 <p className="text-[13px] font-medium">
                                   {d.replacementType
-                                    ? fittingLabel(
-                                        d.replacementWattage ?? d.wattage,
-                                        d.replacementType.name,
-                                      )
+                                    ? fittingLabel(d.replacementWattage ?? d.wattage, d.replacementType.name)
                                     : fittingLabel(d.wattage, d.deviceType.name)}
                                 </p>
                                 <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
@@ -225,18 +207,13 @@ export default async function PortalInventoryPage() {
                                     ? "on the circuit, not replaced by FirsThing"
                                     : installedCount(c, d) > 0
                                       ? `on the metered circuit${
-                                          c.lightReplacementDate
-                                            ? ` · installed ${formatDate(c.lightReplacementDate)}`
-                                            : ""
+                                          c.lightReplacementDate ? ` · installed ${formatDate(c.lightReplacementDate)}` : ""
                                         }`
                                       : "original fitting, awaiting replacement"}
                                 </p>
                               </div>
                               <span className="num text-[15px] font-bold">
-                                {(d.replacementType
-                                  ? (d.replacementCount ?? d.count)
-                                  : d.count
-                                ).toLocaleString("en-IN")}
+                                {(d.replacementType ? (d.replacementCount ?? d.count) : d.count).toLocaleString("en-IN")}
                               </span>
                             </div>
                           ))}
@@ -246,12 +223,9 @@ export default async function PortalInventoryPage() {
                   })}
               </div>
               {fullLights > 0 && (
-                // Said plainly, because the two numbers on this card have
-                // different evidence behind them and presenting them
-                // identically is what INV-02 exists to stop.
                 <p className="mt-4 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
                   Installed is the full installation plus the demo lights — the demo lights went in first
-                  and are not part of the full installation, and together they are what your bill is
+                  and are not part of the full installation, and together they are what the bill is
                   computed on. The lines beneath are the fittings on the metered circuit itself, which is
                   what the readings are taken from.
                 </p>
@@ -270,9 +244,7 @@ export default async function PortalInventoryPage() {
                     style={{ borderBottom: "1px solid var(--border-subtle)" }}
                   >
                     <div>
-                      <p className="text-[13.5px] font-semibold">
-                        {deviceLabel(`${m.productModel} energy meter`, m.name)}
-                      </p>
+                      <p className="text-[13.5px] font-semibold">{deviceLabel(`${m.productModel} energy meter`, m.name)}</p>
                       <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
                         {m.circuit
                           ? `${circuitLabelOf(m.circuit.location, m.circuit.lightType)} · reads power, voltage and daily kWh`
@@ -297,9 +269,7 @@ export default async function PortalInventoryPage() {
                     style={{ borderBottom: "1px solid var(--border-subtle)" }}
                   >
                     <div>
-                      <p className="text-[13.5px] font-semibold">
-                        {deviceLabel(t.productName, t.name)}
-                      </p>
+                      <p className="text-[13.5px] font-semibold">{deviceLabel(t.productName, t.name)}</p>
                       <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
                         {t.setupType ? `${SETUP_LABEL[t.setupType]} setup` : "setup not classified yet"}
                         {t.hasLevelSignal ? " · level sensor" : ""}

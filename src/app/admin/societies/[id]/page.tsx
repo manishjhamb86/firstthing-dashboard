@@ -200,6 +200,9 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             <Link href={`/admin/societies/${society.id}/circuits`} className="btn-outline btn-sm">
               Circuit registry
             </Link>
+            <Link href={`/admin/societies/${society.id}/inventory`} className="btn-outline btn-sm">
+              Inventory
+            </Link>
             {/* Terminated is set only by the recorded Reject action (with a
                 reason and a date), never by picking it in a list. */}
             {!society.closedAt && <StatusControl societyId={society.id} status={society.status} />}

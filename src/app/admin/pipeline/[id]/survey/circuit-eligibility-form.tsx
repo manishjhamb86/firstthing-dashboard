@@ -172,6 +172,7 @@ export function CircuitEligibilityForm({
         wifiReachable: checks.wifiReachable ?? false,
         fixturesUnder15ft: checks.fixturesUnder15ft ?? false,
         notOnDrivewayOrRamp: checks.notOnDrivewayOrRamp ?? false,
+        notInStiltParking: checks.notInStiltParking ?? false,
         lightCountExceptionReason:
           exceptionable && canApproveException && waiveLightCount ? waiveReason : undefined,
       });

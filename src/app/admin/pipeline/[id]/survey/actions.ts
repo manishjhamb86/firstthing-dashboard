@@ -207,6 +207,7 @@ export async function submitCircuitCandidate(input: {
   wifiReachable: boolean;
   fixturesUnder15ft: boolean;
   notOnDrivewayOrRamp: boolean;
+  notInStiltParking: boolean;
   /**
    * Operations waiving CON-16's ≥50 minimum at the moment of recording,
    * rather than the circuit landing `surveyed` and waiting for a second act
@@ -306,7 +307,7 @@ export async function approveEligibilityException(circuitId: string, reason: str
  */
 export async function correctCircuitEligibility(
   circuitId: string,
-  checks: { wifiReachable: boolean; fixturesUnder15ft: boolean; notOnDrivewayOrRamp: boolean },
+  checks: { wifiReachable: boolean; fixturesUnder15ft: boolean; notOnDrivewayOrRamp: boolean; notInStiltParking: boolean },
   note: string,
 ) {
   await requireAdminPermission("manage_survey");
@@ -326,6 +327,7 @@ export async function correctCircuitEligibility(
     wifiReachable: checks.wifiReachable,
     fixturesUnder15ft: checks.fixturesUnder15ft,
     notOnDrivewayOrRamp: checks.notOnDrivewayOrRamp,
+    notInStiltParking: checks.notInStiltParking,
     lightCountMinMet: circuit.meteredLightCount >= 50,
     correctedAt: new Date().toISOString(),
     correctedById: session.user.id,
@@ -351,6 +353,7 @@ export async function correctCircuitEligibility(
       wifiReachable: previous.wifiReachable,
       fixturesUnder15ft: previous.fixturesUnder15ft,
       notOnDrivewayOrRamp: previous.notOnDrivewayOrRamp,
+      notInStiltParking: previous.notInStiltParking,
     },
     to: checks,
     note,

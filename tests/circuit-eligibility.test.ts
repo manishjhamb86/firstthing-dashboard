@@ -17,6 +17,7 @@ describe("CON-16's verdict names what ruled a candidate out", () => {
         wifiReachable: true,
         fixturesUnder15ft: true,
         notOnDrivewayOrRamp: false,
+        notInStiltParking: true,
         lightCountMinMet: false,
       },
       meteredLightCount: 49,
@@ -34,6 +35,7 @@ describe("CON-16's verdict names what ruled a candidate out", () => {
         wifiReachable: true,
         fixturesUnder15ft: true,
         notOnDrivewayOrRamp: true,
+        notInStiltParking: true,
       },
       meteredLightCount: MIN_METERED_LIGHTS - 1,
     });
@@ -43,7 +45,7 @@ describe("CON-16's verdict names what ruled a candidate out", () => {
 
   it("a criterion nobody answered reads as failed, never as passed", () => {
     const v = eligibilityVerdict({ eligibilityChecklist: null, meteredLightCount: 200 });
-    expect(v.failedHard).toHaveLength(3);
+    expect(v.failedHard).toHaveLength(4);
     expect(v.lightCountShort).toBe(false);
     expect(v.exceptionable).toBe(false);
   });
@@ -56,6 +58,7 @@ describe("CON-16's verdict names what ruled a candidate out", () => {
         wifiReachable: true,
         fixturesUnder15ft: true,
         notOnDrivewayOrRamp: true,
+        notInStiltParking: true,
         noSharedAppliances: false,
       },
       meteredLightCount: 96,
@@ -70,6 +73,7 @@ describe("operations' two ways past a failed checklist", () => {
       wifiReachable: true,
       fixturesUnder15ft: true,
       notOnDrivewayOrRamp: false,
+      notInStiltParking: true,
     },
     meteredLightCount: 50,
   };
@@ -90,7 +94,7 @@ describe("operations' two ways past a failed checklist", () => {
 
   it("waiving one criterion does not let a second one through", () => {
     const two = {
-      eligibilityChecklist: { wifiReachable: false, fixturesUnder15ft: true, notOnDrivewayOrRamp: false },
+      eligibilityChecklist: { wifiReachable: false, fixturesUnder15ft: true, notOnDrivewayOrRamp: false, notInStiltParking: true },
       meteredLightCount: 50,
     };
     expect(outstandingCriteria(two)).toEqual(["wifiReachable", "notOnDrivewayOrRamp"]);
@@ -130,5 +134,16 @@ describe("operations' two ways past a failed checklist", () => {
     // strand a commissioning: a router goes out with the crew.
     expect(CRITERION_WAIVER_NOTE.wifiReachable).toMatch(/4G router/i);
     expect(CRITERION_WAIVER_NOTE.notOnDrivewayOrRamp).toBeUndefined();
+  });
+
+  it("stilt parking is its own hard criterion, no different from the others (2026-10-06, user-asked)", () => {
+    const stiltFail = {
+      eligibilityChecklist: { wifiReachable: true, fixturesUnder15ft: true, notOnDrivewayOrRamp: true, notInStiltParking: false },
+      meteredLightCount: 50,
+    };
+    expect(eligibilityState(stiltFail)).toBe("ineligible");
+    expect(outstandingCriteria(stiltFail)).toEqual(["notInStiltParking"]);
+    expect(eligibilityState({ ...stiltFail, waived: ["notInStiltParking"] })).toBe("eligible");
+    expect(CRITERION_WAIVER_NOTE.notInStiltParking).toBeUndefined();
   });
 });

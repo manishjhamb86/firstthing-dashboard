@@ -62,6 +62,7 @@ export function CircuitsForm({
   const [wifi, setWifi] = useState<"" | "yes" | "no">("");
   const [height, setHeight] = useState<"" | "yes" | "no">("");
   const [ramp, setRamp] = useState<"" | "yes" | "no">("");
+  const [stilt, setStilt] = useState<"" | "yes" | "no">("");
   const [typical, setTypical] = useState("");
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [unres, setUnres] = useState("");
@@ -73,6 +74,7 @@ export function CircuitsForm({
     setWifi("");
     setHeight("");
     setRamp("");
+    setStilt("");
     setTypical("");
     photos.forEach((p) => URL.revokeObjectURL(p.url));
     setPhotos([]);
@@ -97,7 +99,7 @@ export function CircuitsForm({
     if (!location.trim()) return say("bad", "Name the panel and where it is, so the installer finds it.");
     const bad = lines.find((l) => !l.deviceTypeId || !(Number(l.count) >= 1) || !(Number(l.wattage) > 0) || !(Number(l.hours) > 0 && Number(l.hours) <= 24));
     if (lines.length === 0 || bad) return say("bad", "Every fixture line needs its device, count, wattage and hours.");
-    if (!wifi || !height || !ramp) return say("bad", "Answer all three checks — an incomplete checklist can't be confirmed.");
+    if (!wifi || !height || !ramp || !stilt) return say("bad", "Answer all four checks — an incomplete checklist can't be confirmed.");
     if (typical.trim().length < 20) return say("bad", `Say why this circuit represents the other ${t.surveyed.toLocaleString("en-IN")} ${t.label} lights — same fixtures, hours, switching.`);
     if (photos.length === 0) return say("bad", "Photograph the panel — the installer finds the circuit by it.");
     const circuitId = crypto.randomUUID();
@@ -117,6 +119,7 @@ export function CircuitsForm({
             wifiReachable: wifi === "yes",
             fixturesUnder15ft: height === "yes",
             notOnDrivewayOrRamp: ramp === "yes",
+            notInStiltParking: stilt === "yes",
             typicalityNote: typical.trim(),
           },
           `${t.label} circuit: ${location.trim()} · ${label}`,
@@ -126,7 +129,7 @@ export function CircuitsForm({
       stored,
     );
     if (!ok) return say("bad", "Could not save on this phone. Try again.");
-    const hardFail = wifi === "no" || height === "no" || ramp === "no";
+    const hardFail = wifi === "no" || height === "no" || ramp === "no" || stilt === "no";
     setOpen(null);
     say(
       hardFail ? "bad" : "ok",
@@ -242,6 +245,7 @@ export function CircuitsForm({
                   ["WiFi or LAN reachable within 20–40 m", wifi, setWifi, "cc-wifi"],
                   ["Fixtures at 15 ft or lower", height, setHeight, "cc-height"],
                   ["Not on a driveway or ramp", ramp, setRamp, "cc-ramp"],
+                  ["Not in stilt parking", stilt, setStilt, "cc-stilt"],
                 ] as const
               ).map(([q, v, setV, id]) => (
                 <fieldset key={id} className="space-y-1">

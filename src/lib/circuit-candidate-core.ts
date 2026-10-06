@@ -37,6 +37,7 @@ export async function recordCandidateAs(actor: { id: string; permissions: string
   wifiReachable: boolean;
   fixturesUnder15ft: boolean;
   notOnDrivewayOrRamp: boolean;
+  notInStiltParking: boolean;
   /**
    * Operations waiving CON-16's ≥50 minimum at the moment of recording,
    * rather than the circuit landing `surveyed` and waiting for a second act
@@ -100,6 +101,7 @@ export async function recordCandidateAs(actor: { id: string; permissions: string
     wifiReachable: input.wifiReachable,
     fixturesUnder15ft: input.fixturesUnder15ft,
     notOnDrivewayOrRamp: input.notOnDrivewayOrRamp,
+    notInStiltParking: input.notInStiltParking,
     lightCountMinMet: meteredLightCount >= 50,
   };
 

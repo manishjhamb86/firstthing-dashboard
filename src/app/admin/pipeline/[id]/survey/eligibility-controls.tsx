@@ -109,6 +109,7 @@ export function EligibilityControls({
                     wifiReachable: draft.wifiReachable ?? false,
                     fixturesUnder15ft: draft.fixturesUnder15ft ?? false,
                     notOnDrivewayOrRamp: draft.notOnDrivewayOrRamp ?? false,
+                    notInStiltParking: draft.notInStiltParking ?? false,
                   },
                   note,
                 ),

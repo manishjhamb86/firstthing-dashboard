@@ -19,6 +19,7 @@ export const CON16_HARD_CRITERIA = [
   { name: "wifiReachable", label: "WiFi/LAN reachable within 20–40m" },
   { name: "fixturesUnder15ft", label: "Fixtures ≤15 feet high" },
   { name: "notOnDrivewayOrRamp", label: "Not on a driveway/ramp" },
+  { name: "notInStiltParking", label: "Not in stilt parking" },
 ] as const;
 
 /** CON-16's metered-light minimum — the one criterion an exception can clear. */

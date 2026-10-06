@@ -593,6 +593,7 @@ export type FieldCandidateInput = {
   wifiReachable: boolean;
   fixturesUnder15ft: boolean;
   notOnDrivewayOrRamp: boolean;
+  notInStiltParking: boolean;
   typicalityNote: string;
   photoKeys: string[];
 };
@@ -641,6 +642,7 @@ export async function recordFieldCandidateAs(actor: SurveyActor, input: FieldCan
     wifiReachable: input.wifiReachable,
     fixturesUnder15ft: input.fixturesUnder15ft,
     notOnDrivewayOrRamp: input.notOnDrivewayOrRamp,
+    notInStiltParking: input.notInStiltParking,
     circuitId: input.circuitId,
     typicalityNote: input.typicalityNote,
   });

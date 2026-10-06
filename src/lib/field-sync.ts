@@ -429,6 +429,7 @@ export type FieldCircuitPayload = {
   wifiReachable: boolean;
   fixturesUnder15ft: boolean;
   notOnDrivewayOrRamp: boolean;
+  notInStiltParking: boolean;
   typicalityNote: string;
   photoKeys: string[];
 };
@@ -459,6 +460,7 @@ export function parseCircuitPayload(p: unknown): FieldCircuitPayload | { error: 
     wifiReachable: o.wifiReachable === true,
     fixturesUnder15ft: o.fixturesUnder15ft === true,
     notOnDrivewayOrRamp: o.notOnDrivewayOrRamp === true,
+    notInStiltParking: o.notInStiltParking === true,
     typicalityNote: str(o.typicalityNote),
     photoKeys: Array.isArray(o.photoKeys) ? o.photoKeys.filter((k): k is string => typeof k === "string") : [],
   };

@@ -32,10 +32,12 @@ export type DemoDTO = {
  * average); the benchmark is the mean of the demos' percentages either way.
  */
 export type LightHistoryItemDTO = {
-  /** The underlying `ChangeLog` row id(s) this entry was built from — what Exclude/Delete act on. */
+  /** The underlying `ChangeLog` row id(s) this entry was built from — what Exclude/Delete act on. Only meaningful for `kind: "correction"`. */
   ids: string[];
   at: string;
   text: string;
+  /** "correction" (a ChangeLog edit) or "rescale" (a verified BenchmarkRescaleEvent, INV-07) — a rescale's own lifecycle (void/correct) lives on the circuit's rescale panel, not here, so Exclude/Delete are offered for corrections only. */
+  kind: "correction" | "rescale";
   /** Detected automatically (filterCustomerRelevant): an exact, immediate reversal — already hidden from the customer, no action needed. */
   autoHidden: boolean;
   /** An operator's own manual exclusion — the backend's fallback for whatever the automatic rule doesn't catch. */
@@ -317,7 +319,7 @@ export function DemosPanel({
                       Cancels out — automatically hidden from the customer
                     </p>
                   ) : (
-                    canManageHistory && (
+                    canManageHistory && h.kind === "correction" && (
                       <div className="mt-0.5">
                         {excludingKey === key ? (
                           <div className="flex flex-wrap items-center gap-2">

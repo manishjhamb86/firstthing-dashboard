@@ -17,15 +17,28 @@ import { formatDate } from "@/lib/format-date";
  * walking each demoId's own rows in chronological order instead: a
  * `circuit` row always immediately follows the `circuit_demo` row it
  * belongs to, before the next `circuit_demo` row for that same demo.
+ *
+ * A SECOND, separate source feeds the same history (2026-10-06, user-asked:
+ * "have you made the changes to show the history of light count changed
+ * here? in a way customer understands"): `BenchmarkRescaleEvent` (INV-07) —
+ * a genuine, verified change in how many lights are on the metered circuit
+ * itself, not a correction of a typing mistake. It has its own phrasing
+ * ("changed", not "corrected" — nothing was wrong before) and is dated by
+ * its EFFECTIVE date, not when it was typed in, since that's the date a
+ * resident would actually recognise ("changed 34 → 76 on 01-Sep-2026").
+ * Only live (non-voided) events are read — a voided entry already carries
+ * no weight in the replay, and showing it as "history" would misstate what
+ * actually happened.
  */
 export type LightCountHistoryEntry = {
   at: string;
+  kind: "correction" | "rescale";
   reason: string | null;
   demoFrom: number | null;
   demoTo: number | null;
   fullFrom: number | null;
   fullTo: number | null;
-  /** The underlying `ChangeLog` row id(s) this entry was built from — one, or two for a paired correction. What `setLightHistoryExcluded`/`deleteLightHistoryEntries` act on. */
+  /** The underlying row id(s) this entry was built from. What `setLightHistoryExcluded`/`deleteLightHistoryEntries` act on — only meaningful for `kind: "correction"`; a rescale entry's own lifecycle (void/correct) lives on the circuit's rescale panel instead. */
   ids: string[];
   /** Set when an operator has hidden this entry from the customer-facing read — see `filterCustomerRelevant`. */
   excludedAt: string | null;
@@ -52,6 +65,7 @@ function toEntry(demoRow: Row | null, circuitRow: Row | null): LightCountHistory
   const excludedAt = demoRow?.excludedAt ?? circuitRow?.excludedAt ?? null;
   return {
     at: at ? formatDate(at) : "",
+    kind: "correction",
     reason: circuitRow?.reason ?? demoRow?.reason ?? null,
     demoFrom: demoRow ? num(demoRow.oldValue) : null,
     demoTo: demoRow ? num(demoRow.newValue) : null,
@@ -84,47 +98,89 @@ function pair(rows: Row[]): { at: Date; entry: LightCountHistoryEntry }[] {
     }
     if (current) out.push({ at: current.at, entry: toEntry(current, null) });
   }
-  return out.sort((a, b) => b.at.getTime() - a.at.getTime());
+  return out;
+}
+
+type RescaleRow = {
+  id: string;
+  circuitId: string;
+  previousLightCount: number;
+  newLightCount: number;
+  verificationNote: string;
+  effectiveDate: Date;
+};
+
+function rescaleToEntry(r: RescaleRow): { at: Date; entry: LightCountHistoryEntry } {
+  return {
+    at: r.effectiveDate,
+    entry: {
+      at: formatDate(r.effectiveDate),
+      kind: "rescale",
+      reason: r.verificationNote,
+      demoFrom: r.previousLightCount,
+      demoTo: r.newLightCount,
+      fullFrom: null,
+      fullTo: null,
+      ids: [r.id],
+      excludedAt: null,
+      excludedReason: null,
+    },
+  };
 }
 
 const SELECT = { id: true, at: true, entity: true, oldValue: true, newValue: true, reason: true, demoId: true, excludedAt: true, excludedReason: true } as const;
+const RESCALE_SELECT = { id: true, circuitId: true, previousLightCount: true, newLightCount: true, verificationNote: true, effectiveDate: true } as const;
 
 export async function circuitLightCountHistory(circuitId: string): Promise<LightCountHistoryEntry[]> {
-  const rows = await db.changeLog.findMany({
-    where: {
-      circuitId,
-      OR: [
-        { entity: "circuit_demo", field: "meteredLightCount" },
-        { entity: "circuit", field: "representedLightCount" },
-      ],
-    },
-    orderBy: { at: "desc" },
-    select: SELECT,
-  });
-  return pair(rows).map((p) => p.entry);
+  const [rows, rescales] = await Promise.all([
+    db.changeLog.findMany({
+      where: {
+        circuitId,
+        OR: [
+          { entity: "circuit_demo", field: "meteredLightCount" },
+          { entity: "circuit", field: "representedLightCount" },
+        ],
+      },
+      select: SELECT,
+    }),
+    db.benchmarkRescaleEvent.findMany({ where: { circuitId, voidedAt: null }, select: RESCALE_SELECT }),
+  ]);
+  const combined = [...pair(rows), ...rescales.map(rescaleToEntry)];
+  return combined.sort((a, b) => b.at.getTime() - a.at.getTime()).map((p) => p.entry);
 }
 
-/** The same, for several circuits at once — one query, not one per circuit. */
+/** The same, for several circuits at once — one query per source, not one per circuit. */
 export async function circuitLightCountHistoryByCircuit(circuitIds: string[]): Promise<Map<string, LightCountHistoryEntry[]>> {
   if (circuitIds.length === 0) return new Map();
-  const rows = await db.changeLog.findMany({
-    where: {
-      circuitId: { in: circuitIds },
-      OR: [
-        { entity: "circuit_demo", field: "meteredLightCount" },
-        { entity: "circuit", field: "representedLightCount" },
-      ],
-    },
-    orderBy: { at: "desc" },
-    select: { ...SELECT, circuitId: true },
-  });
-  const byCircuit = new Map<string, typeof rows>();
+  const [rows, rescales] = await Promise.all([
+    db.changeLog.findMany({
+      where: {
+        circuitId: { in: circuitIds },
+        OR: [
+          { entity: "circuit_demo", field: "meteredLightCount" },
+          { entity: "circuit", field: "representedLightCount" },
+        ],
+      },
+      select: { ...SELECT, circuitId: true },
+    }),
+    db.benchmarkRescaleEvent.findMany({ where: { circuitId: { in: circuitIds }, voidedAt: null }, select: RESCALE_SELECT }),
+  ]);
+  const byCircuit = new Map<string, { at: Date; entry: LightCountHistoryEntry }[]>();
+  const push = (circuitId: string | null, item: { at: Date; entry: LightCountHistoryEntry }) => {
+    if (!circuitId) return;
+    byCircuit.set(circuitId, [...(byCircuit.get(circuitId) ?? []), item]);
+  };
+
+  const byDemoRows = new Map<string, typeof rows>();
   for (const r of rows) {
-    if (!r.circuitId) continue;
-    byCircuit.set(r.circuitId, [...(byCircuit.get(r.circuitId) ?? []), r]);
+    const key = r.circuitId ?? "";
+    byDemoRows.set(key, [...(byDemoRows.get(key) ?? []), r]);
   }
+  for (const [circuitId, circuitRows] of byDemoRows) for (const item of pair(circuitRows)) push(circuitId, item);
+  for (const r of rescales) push(r.circuitId, rescaleToEntry(r));
+
   const out = new Map<string, LightCountHistoryEntry[]>();
-  for (const [circuitId, circuitRows] of byCircuit) out.set(circuitId, pair(circuitRows).map((p) => p.entry));
+  for (const [circuitId, items] of byCircuit) out.set(circuitId, items.sort((a, b) => b.at.getTime() - a.at.getTime()).map((p) => p.entry));
   return out;
 }
 
@@ -132,9 +188,14 @@ export async function circuitLightCountHistoryByCircuit(circuitIds: string[]): P
  * "The demo's count was corrected 40 → 44 — the full installation moved
  * 911 → 907 the other way, so the total installed stayed at 951." The one
  * sentence every screen uses, so the admin side and the portal never say
- * this two different ways.
+ * this two different ways. A verified rescale reads differently — "changed",
+ * never "corrected": nothing about the earlier count was wrong, the circuit
+ * genuinely carries a different count now.
  */
 export function describeLightCountChange(e: LightCountHistoryEntry): string {
+  if (e.kind === "rescale" && e.demoFrom !== null && e.demoTo !== null) {
+    return `The light count on this circuit changed ${e.demoFrom} → ${e.demoTo}${e.reason ? ` — ${e.reason}` : ""}.`;
+  }
   if (e.demoFrom !== null && e.demoTo !== null && e.fullFrom !== null && e.fullTo !== null) {
     const total = e.demoTo + e.fullTo;
     return `The demo's count was corrected ${e.demoFrom} → ${e.demoTo} — the full installation moved ${e.fullFrom} → ${e.fullTo} the other way, so the total installed stayed at ${total.toLocaleString("en-IN")}.`;
@@ -172,8 +233,10 @@ function isExactReversal(earlier: LightCountHistoryEntry, later: LightCountHisto
  *
  * General on purpose: a chain of several cancelling corrections collapses
  * in one pass via a stack, the same way matched parentheses do, rather than
- * only handling exactly two. `entries` is newest-first, matching every
- * caller's existing convention; returned in the same order.
+ * only handling exactly two — and it is kind-agnostic, so a correction and a
+ * rescale that happen to exactly reverse each other cancel too. `entries` is
+ * newest-first, matching every caller's existing convention; returned in the
+ * same order.
  */
 export function filterCustomerRelevant(entries: LightCountHistoryEntry[]): LightCountHistoryEntry[] {
   const notExcluded = entries.filter((e) => e.excludedAt === null);

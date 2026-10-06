@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { filterCustomerRelevant, type LightCountHistoryEntry } from "@/lib/circuit-light-history";
+import { describeLightCountChange, filterCustomerRelevant, type LightCountHistoryEntry } from "@/lib/circuit-light-history";
 
 function entry(p: Partial<LightCountHistoryEntry>): LightCountHistoryEntry {
   return {
     at: "01-01-2026",
+    kind: "correction",
     reason: null,
     demoFrom: null,
     demoTo: null,
@@ -68,5 +69,33 @@ describe("filterCustomerRelevant", () => {
     const later = entry({ demoFrom: 76, demoTo: 34, ids: ["later"] }); // no paired full-installation move
     const earlier = entry({ demoFrom: 34, demoTo: 76, fullFrom: 942, fullTo: 900, ids: ["earlier"] });
     expect(filterCustomerRelevant([later, earlier])).toEqual([later, earlier]);
+  });
+
+  it("a verified rescale and a correction that exactly reverse each other still cancel — kind-agnostic", () => {
+    const rescale = entry({ kind: "rescale", demoFrom: 34, demoTo: 76, ids: ["r1"] });
+    const correction = entry({ kind: "correction", demoFrom: 76, demoTo: 34, ids: ["c1"] });
+    expect(filterCustomerRelevant([correction, rescale])).toEqual([]);
+  });
+
+  it("a single verified rescale, with nothing to cancel against, stays visible", () => {
+    const rescale = entry({ kind: "rescale", demoFrom: 34, demoTo: 76, reason: "Walked", ids: ["r1"] });
+    expect(filterCustomerRelevant([rescale])).toEqual([rescale]);
+  });
+});
+
+describe("describeLightCountChange", () => {
+  it("a verified rescale reads 'changed', never 'corrected' — nothing was wrong before", () => {
+    const e = entry({ kind: "rescale", demoFrom: 34, demoTo: 76, reason: "Walked" });
+    expect(describeLightCountChange(e)).toBe("The light count on this circuit changed 34 → 76 — Walked.");
+  });
+
+  it("a verified rescale with no note omits the dash", () => {
+    const e = entry({ kind: "rescale", demoFrom: 34, demoTo: 76, reason: null });
+    expect(describeLightCountChange(e)).toBe("The light count on this circuit changed 34 → 76.");
+  });
+
+  it("an ordinary correction still reads 'corrected', unchanged", () => {
+    const e = entry({ kind: "correction", demoFrom: 34, demoTo: 40 });
+    expect(describeLightCountChange(e)).toBe("The demo's count was corrected 34 → 40.");
   });
 });

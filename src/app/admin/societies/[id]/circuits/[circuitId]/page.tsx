@@ -486,6 +486,7 @@ export default async function CircuitDetailPage({
           ids: h.ids,
           at: h.at,
           text: describeLightCountChange(h),
+          kind: h.kind,
           autoHidden: h.excludedAt === null && !h.ids.some((id) => customerVisibleIds.has(id)),
           excludedAt: h.excludedAt,
           excludedReason: h.excludedReason,

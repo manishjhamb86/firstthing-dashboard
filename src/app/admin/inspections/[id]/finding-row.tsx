@@ -92,12 +92,12 @@ export function FindingRow({
 
   if (!open) {
     return (
-      <div className="rounded-[var(--r-md)] border p-3" style={{ borderColor: "var(--border-subtle)" }}>
+      <div className="rounded-[var(--r-sm)] border px-3 py-2" style={{ borderColor: "var(--border-subtle)" }}>
         <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-          <span className="min-w-0 truncate font-medium">
+          <span className="min-w-0 truncate text-[13.5px] font-medium">
             {finding.srNo}. {finding.location}
           </span>
-          <span className="inline-flex items-center gap-2">
+          <span className="inline-flex shrink-0 items-center gap-2">
             <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
             {canEdit && (
               <>
@@ -124,7 +124,7 @@ export function FindingRow({
           </span>
         </div>
         {(finding.physicalDamage || finding.actionReplace || finding.remarks) && (
-          <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+          <p className="mt-0.5 text-[12px]" style={{ color: "var(--text-muted)" }}>
             {[finding.physicalDamage ? "Physical damage" : null, finding.actionReplace ? "To be replaced" : null, finding.remarks].filter(Boolean).join(" · ")}
           </p>
         )}
@@ -138,37 +138,52 @@ export function FindingRow({
     );
   }
 
+  // Every field of the fixture being worked on, visible together, with
+  // nothing else competing for the screen (user-asked, 2026-10-07: "all
+  // fields of each line item visible at all times when editing"). Sensor and
+  // the two checkboxes each get their own full-width row rather than sharing
+  // one wrapped `items-end` line — that alignment trick cost vertical space
+  // on a narrow screen for no benefit, since nothing there needs to sit
+  // beside anything else.
   return (
-    <div className="rounded-[var(--r-md)] border p-3 space-y-2.5" style={{ borderColor: "var(--accent-line)" }}>
-      <p className="lbl">{finding.id ? `Fixture ${finding.srNo}` : "New fixture"}</p>
+    <div className="rounded-[var(--r-md)] border p-3 space-y-2" style={{ borderColor: "var(--accent-line)" }}>
+      <p className="lbl">{finding.id ? `Fixture ${finding.srNo}` : `New fixture — #${finding.srNo}`}</p>
       <Field label="Location" htmlFor={`fr-loc-${finding.id ?? "new"}`}>
-        <input id={`fr-loc-${finding.id ?? "new"}`} className="field" value={v.location} onChange={(e) => setV({ ...v, location: e.target.value })} disabled={pending} placeholder="e.g. Lift lobby 3rd floor" />
+        <input
+          id={`fr-loc-${finding.id ?? "new"}`}
+          className="field"
+          value={v.location}
+          onChange={(e) => setV({ ...v, location: e.target.value })}
+          disabled={pending}
+          placeholder="e.g. Lift lobby 3rd floor"
+          autoFocus={finding.id === null}
+        />
       </Field>
-      <div className="flex flex-wrap items-end gap-3">
-        <Field label="Sensor" htmlFor={`fr-sensor-${finding.id ?? "new"}`}>
-          <select id={`fr-sensor-${finding.id ?? "new"}`} className="field field-auto" value={v.sensorStatus} onChange={(e) => setV({ ...v, sensorStatus: e.target.value as InspectionSensorStatus })} disabled={pending}>
-            {SENSOR_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <label className="mb-2 flex items-center gap-2 text-sm">
+      <Field label="Sensor" htmlFor={`fr-sensor-${finding.id ?? "new"}`}>
+        <select id={`fr-sensor-${finding.id ?? "new"}`} className="field" value={v.sensorStatus} onChange={(e) => setV({ ...v, sensorStatus: e.target.value as InspectionSensorStatus })} disabled={pending}>
+          {SENSOR_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={v.physicalDamage} onChange={(e) => setV({ ...v, physicalDamage: e.target.checked })} disabled={pending} /> Physical damage
         </label>
-        <label className="mb-2 flex items-center gap-2 text-sm">
+        <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={v.actionReplace} onChange={(e) => setV({ ...v, actionReplace: e.target.checked })} disabled={pending} /> To be replaced
         </label>
       </div>
-      <Field label="Remarks" htmlFor={`fr-rem-${finding.id ?? "new"}`}>
+      <Field label="Remarks (optional)" htmlFor={`fr-rem-${finding.id ?? "new"}`}>
         <input id={`fr-rem-${finding.id ?? "new"}`} className="field" value={v.remarks} onChange={(e) => setV({ ...v, remarks: e.target.value })} disabled={pending} />
       </Field>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2 pt-1">
         <button
           type="button"
           className="btn-secondary btn-sm"
-          disabled={pending}
+          disabled={pending || !v.location.trim()}
           onClick={() =>
             start(async () => {
               setError(undefined);
@@ -188,7 +203,7 @@ export function FindingRow({
             })
           }
         >
-          {pending ? "Saving…" : finding.id ? "Save" : "Add fixture"}
+          {pending ? "Saving…" : finding.id ? "Save" : "Save & next fixture"}
         </button>
         <button
           type="button"
@@ -208,9 +223,22 @@ export function FindingRow({
   );
 }
 
-/** The "add a fixture" control beneath the list: a button that opens a new row. */
+/**
+ * The live add-fixture form.
+ *
+ * In `draft` mode it stays open and keeps rolling: saving one fixture
+ * immediately remounts a fresh blank form for the next one (a new `key`
+ * forces a clean `FindingRow` instance rather than fighting its own local
+ * state back to empty) instead of collapsing to a button the person has to
+ * find and tap again — "should move out of screen/focus only once that
+ * fixture is done and user moves to next line item" (user-asked, 2026-10-07).
+ * "Done adding for now" drops back to the plain button for whoever genuinely
+ * wants to stop. The non-draft (editing an already-finalized inspection)
+ * case is rarer and keeps the original tap-to-open shape.
+ */
 export function AddFindingRow({ inspectionId, nextSrNo, draft = false }: { inspectionId: string; nextSrNo: number; draft?: boolean }) {
-  const [adding, setAdding] = useState(false);
+  const [adding, setAdding] = useState(draft);
+  const [srNo, setSrNo] = useState(nextSrNo);
   if (!adding) {
     return (
       <button type="button" className="btn-outline btn-sm" onClick={() => setAdding(true)}>
@@ -219,12 +247,20 @@ export function AddFindingRow({ inspectionId, nextSrNo, draft = false }: { inspe
     );
   }
   return (
-    <FindingRow
-      inspectionId={inspectionId}
-      canEdit
-      draft={draft}
-      onDone={() => setAdding(false)}
-      finding={{ id: null, srNo: nextSrNo, location: "", sensorStatus: "off", physicalDamage: false, actionReplace: false, remarks: "" }}
-    />
+    <div className="space-y-2">
+      <FindingRow
+        key={srNo}
+        inspectionId={inspectionId}
+        canEdit
+        draft={draft}
+        onDone={() => (draft ? setSrNo((n) => n + 1) : setAdding(false))}
+        finding={{ id: null, srNo, location: "", sensorStatus: "off", physicalDamage: false, actionReplace: false, remarks: "" }}
+      />
+      {draft && (
+        <button type="button" className="text-[12.5px] font-semibold" style={{ color: "var(--text-subtle)" }} onClick={() => setAdding(false)}>
+          Done adding for now
+        </button>
+      )}
+    </div>
   );
 }

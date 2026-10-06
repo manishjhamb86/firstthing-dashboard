@@ -96,61 +96,115 @@ export default async function FieldWorkPage() {
             : "A deal reaches the field once its demo proposal is agreed and the survey is assigned."}
         </EmptyState>
       ) : (
-        <Card className="overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Society</th>
-                <th className="hidden md:table-cell">Service line</th>
-                <th>What is needed</th>
-                {!mineOnly && <th className="hidden lg:table-cell">Assigned to</th>}
-                <th className="hidden sm:table-cell" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <ClickableRow key={r.key} href={r.href}>
-                  <td>
-                    <span className="font-medium">{r.societyName}</span>
-                    <p className="text-[13px] text-[var(--text-muted)]">{r.societyLocation}</p>
-                  </td>
-                  <td className="hidden md:table-cell">{r.serviceLine}</td>
-                  <td>
-                    <StatusChip tone={r.need.tone}>{r.need.label}</StatusChip>
-                    {/* When they are due on site, and who to ask for — the
-                        point of a list of your own visits (user-asked
-                        2026-08-25). */}
-                    {r.kind !== "installation" && (
-                      <p className="text-[13px] mt-1">
-                        {r.visitAt ? (
-                          <span className="num">{formatDateTime(r.visitAt)}</span>
-                        ) : (
-                          <span style={{ color: "var(--warn-fg)" }}>No visit scheduled</span>
-                        )}
-                        {r.contactName && (
-                          <span className="text-[var(--text-muted)]">
-                            {" · ask for "}
-                            {r.contactName}
-                          </span>
-                        )}
-                      </p>
-                    )}
-                  </td>
-                  {!mineOnly && (
-                    <td className="hidden lg:table-cell">
-                      {r.assigneeName ?? (
-                        <span className="text-[13px] text-[var(--warn-fg)]">Nobody yet</span>
+        <>
+          {/* Desktop/tablet table. Below sm, a stacked card per job
+              (2026-10-07, user-caught — "What is needed"'s visit date/
+              contact line ran off a phone's right edge with no way to
+              scroll to it): the society leads, the status chip sits beside
+              it, and the visit/contact/service-line/assignee detail is one
+              set of muted lines beneath — nothing fixed-width to overflow. */}
+          <Card className="hidden overflow-x-auto sm:block">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th className="hidden md:table-cell">Service line</th>
+                  <th>What is needed</th>
+                  {!mineOnly && <th className="hidden lg:table-cell">Assigned to</th>}
+                  <th className="hidden sm:table-cell" />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <ClickableRow key={r.key} href={r.href}>
+                    <td>
+                      <span className="font-medium">{r.societyName}</span>
+                      <p className="text-[13px] text-[var(--text-muted)]">{r.societyLocation}</p>
+                    </td>
+                    <td className="hidden md:table-cell">{r.serviceLine}</td>
+                    <td>
+                      <StatusChip tone={r.need.tone}>{r.need.label}</StatusChip>
+                      {/* When they are due on site, and who to ask for — the
+                          point of a list of your own visits (user-asked
+                          2026-08-25). */}
+                      {r.kind !== "installation" && (
+                        <p className="text-[13px] mt-1">
+                          {r.visitAt ? (
+                            <span className="num">{formatDateTime(r.visitAt)}</span>
+                          ) : (
+                            <span style={{ color: "var(--warn-fg)" }}>No visit scheduled</span>
+                          )}
+                          {r.contactName && (
+                            <span className="text-[var(--text-muted)]">
+                              {" · ask for "}
+                              {r.contactName}
+                            </span>
+                          )}
+                        </p>
                       )}
                     </td>
+                    {!mineOnly && (
+                      <td className="hidden lg:table-cell">
+                        {r.assigneeName ?? (
+                          <span className="text-[13px] text-[var(--warn-fg)]">Nobody yet</span>
+                        )}
+                      </td>
+                    )}
+                    <td className="hidden sm:table-cell text-right whitespace-nowrap" aria-hidden>
+                      <span className="row-link-cue text-sm font-semibold">Open →</span>
+                    </td>
+                  </ClickableRow>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+
+          <div className="flex flex-col gap-2 sm:hidden">
+            {rows.map((r) => (
+              <Link
+                key={r.key}
+                href={r.href}
+                className="block rounded-[var(--r-md)] border p-3.5"
+                style={{ borderColor: "var(--border-subtle)" }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium">{r.societyName}</p>
+                    <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                      {r.societyLocation}
+                    </p>
+                  </div>
+                  <div className="shrink-0">
+                    <StatusChip tone={r.need.tone}>{r.need.label}</StatusChip>
+                  </div>
+                </div>
+                {r.kind !== "installation" && (
+                  <p className="mt-1.5 text-[12.5px]">
+                    {r.visitAt ? (
+                      <span className="num">{formatDateTime(r.visitAt)}</span>
+                    ) : (
+                      <span style={{ color: "var(--warn-fg)" }}>No visit scheduled</span>
+                    )}
+                    {r.contactName && (
+                      <span className="text-[var(--text-muted)]">
+                        {" · ask for "}
+                        {r.contactName}
+                      </span>
+                    )}
+                  </p>
+                )}
+                <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                  {r.serviceLine}
+                  {!mineOnly &&
+                    (r.assigneeName ? ` · ${r.assigneeName}` : "")}
+                  {!mineOnly && !r.assigneeName && (
+                    <span style={{ color: "var(--warn-fg)" }}> · Nobody yet</span>
                   )}
-                  <td className="hidden sm:table-cell text-right whitespace-nowrap" aria-hidden>
-                    <span className="row-link-cue text-sm font-semibold">Open →</span>
-                  </td>
-                </ClickableRow>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+                </p>
+              </Link>
+            ))}
+          </div>
+        </>
       )}
 
       <p className="mt-4 text-[13px] text-[var(--text-muted)]">

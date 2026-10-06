@@ -299,6 +299,18 @@ body {
   line-height: 1.4;
   transition: border-color 120ms cubic-bezier(0.2, 0, 0, 1), box-shadow 120ms cubic-bezier(0.2, 0, 0, 1);
 }
+/* iOS Safari zooms the whole page in on focus when a focused field computes
+   under 16px (user-reported, 2026-10-07 — "the screen zooms in and the page
+   gets out of focus" on every text field, across every form in the app,
+   since every one of them shares this one class at 14px). The fix is the
+   field's own font-size, not the viewport meta: capping zoom there would
+   also take away pinch-zoom for everyone else. Scoped to the width iOS
+   actually does this at, so desktop keeps the denser 14px it was tuned for. */
+@media (max-width: 640px) {
+  .field {
+    font-size: 16px;
+  }
+}
 .field::placeholder {
   color: var(--text-subtle);
 }
@@ -686,6 +698,22 @@ textarea.field {
 .tbl tbody tr:hover .row-link-cue {
   color: var(--accent);
   transform: translateX(3px);
+}
+
+/* A plain "X →" link — the one shape used across the app for "go read more
+   over there" (Open the deal →, Log a lead →, New society →…) — had no
+   consistent affordance: some were underlined only on :hover (invisible on a
+   touch device, so indistinguishable from the same arrow used as plain
+   decoration in non-clickable text), some were bare accent-coloured text with
+   no underline at all. One class now marks every genuine instance the same
+   way, always, not just on hover (user-caught, 2026-10-07: "needs to be
+   changed in a way it is easily recognisable that its a clickable link"). */
+.link-arrow {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
 }
 }
 

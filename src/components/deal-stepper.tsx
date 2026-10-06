@@ -130,7 +130,7 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
         const reachable = s.href && s.status !== "locked";
         const chip = STATUS_CHIP[s.status];
         const title = reachable ? (
-          <Link href={s.href as string} className="font-semibold hover:underline">
+          <Link href={s.href as string} className="link-arrow">
             {s.title} →
           </Link>
         ) : (
@@ -180,7 +180,7 @@ export function DealStepper({ steps }: { steps: DealStep[] }) {
                 <p className="text-xs mt-1.5 flex flex-wrap items-center gap-1">
                   <span style={{ color: "var(--warn-fg)" }}>Waiting on</span>
                   {s.blockedBy.href ? (
-                    <Link href={s.blockedBy.href} className="font-medium hover:underline">
+                    <Link href={s.blockedBy.href} className="link-arrow">
                       step {s.blockedBy.index} · {s.blockedBy.title} →
                     </Link>
                   ) : (

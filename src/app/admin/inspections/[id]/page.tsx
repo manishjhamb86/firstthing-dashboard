@@ -123,16 +123,23 @@ export default async function InspectionDetailPage({
           )}
           <Card className="p-4 sm:p-6">
             <CardTitle>Faulty or notable fixtures</CardTitle>
-            <p className="mb-3 text-[13px]" style={{ color: "var(--text-muted)" }}>
-              Only fixtures with a problem — a healthy light is never listed. Each one saves the moment
-              you add it, so nothing is lost if you have to step away mid-visit.
+            <p className="mb-3 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+              Only a problem light is listed — each saves the moment you add it.
             </p>
-            {inspection.findings.length === 0 ? (
-              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-                No faulty fixtures added yet.
-              </p>
-            ) : (
-              <div className="space-y-2.5">
+            {/* The add/edit form leads (2026-10-07, user-caught: "the actual
+                form starts where the page ends... requires scrolling for
+                each line item addition") — on a phone, reaching it used to
+                mean scrolling past every fixture already recorded. It stays
+                open and resets itself for the next fixture after a save, so
+                walking a visit is tap-location-tap-save, never
+                tap-scroll-tap. Already-recorded fixtures are the compact,
+                closed reference list below it. */}
+            <AddFindingRow inspectionId={inspection.id} nextSrNo={inspection.findings.length + 1} draft />
+            {inspection.findings.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <p className="lbl" style={{ color: "var(--text-subtle)" }}>
+                  Already recorded ({inspection.findings.length})
+                </p>
                 {inspection.findings.map((f) => (
                   <FindingRow
                     key={f.id}
@@ -152,9 +159,6 @@ export default async function InspectionDetailPage({
                 ))}
               </div>
             )}
-            <div className="mt-3">
-              <AddFindingRow inspectionId={inspection.id} nextSrNo={inspection.findings.length + 1} draft />
-            </div>
           </Card>
           <FinishDraftForm inspectionId={inspection.id} defaultTotal={lightsToCheck} findingsSoFar={inspection.findings.length} />
           <DiscardDraftButton id={inspection.id} canDiscard={canDiscardDraft} />

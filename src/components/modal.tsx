@@ -56,9 +56,9 @@ export function Modal({
         // clicks on the content hit a child and stop here.
         if (e.target === ref.current) onClose();
       }}
-      className={`m-auto ${
+      className={`m-auto flex flex-col ${
         size === "wide" ? "w-[min(56rem,calc(100vw-2rem))]" : "w-[min(34rem,calc(100vw-2rem))]"
-      } max-h-[calc(100vh-4rem)] overflow-y-auto rounded-[var(--r-md)] border p-0 backdrop:bg-black/40`}
+      } max-h-[calc(100vh-4rem)] overflow-hidden rounded-[var(--r-md)] border p-0 backdrop:bg-black/40`}
       style={{
         borderColor: "var(--border)",
         background: "var(--surface)",
@@ -66,7 +66,7 @@ export function Modal({
         boxShadow: "var(--e2)",
       }}
     >
-      <div className="flex items-start justify-between gap-4 border-b p-5" style={{ borderColor: "var(--border)" }}>
+      <div className="flex shrink-0 items-start justify-between gap-4 border-b p-5" style={{ borderColor: "var(--border)" }}>
         <div className="min-w-0">
           <h2 className="text-[15px] font-semibold">{title}</h2>
           {description && <p className="mt-1 text-sm text-[var(--text-muted)]">{description}</p>}
@@ -86,10 +86,16 @@ export function Modal({
           </svg>
         </button>
       </div>
-      <div className="p-5 space-y-4">{children}</div>
+      {/* The scroll container is THIS div now, not the dialog itself
+          (2026-10-07, user-caught — a form with several stacked fields on a
+          short mobile viewport scrolled the header and footer away with the
+          content, so the Save button could be out of view while a field
+          further down was still being filled). Header and footer stay put;
+          only the body between them scrolls. */}
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">{children}</div>
       {footer && (
         <div
-          className="flex flex-wrap items-center gap-3 border-t p-5"
+          className="flex shrink-0 flex-wrap items-center gap-3 border-t p-5"
           style={{ borderColor: "var(--border)", background: "var(--surface-sunken)" }}
         >
           {footer}

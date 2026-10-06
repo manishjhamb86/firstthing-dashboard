@@ -137,31 +137,39 @@ export function TasksClient({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className="chip" style={chip(show === "open")} onClick={() => setShow("open")}>
-          Open {openCount}
-        </button>
-        <button type="button" className="chip" style={chip(show === "done")} onClick={() => setShow("done")}>
-          Completed {doneCount}
-        </button>
-        <button type="button" className="chip" style={chip(show === "all")} onClick={() => setShow("all")}>
-          All {inScope.length}
-        </button>
-        <span className="mx-1 h-5 w-px" style={{ background: "var(--border)" }} />
-        <button type="button" className="chip" style={chip(scope === "mine")} onClick={() => setScope("mine")}>
-          Assigned to me
-        </button>
-        <button type="button" className="chip" style={chip(scope === "set")} onClick={() => setScope("set")}>
-          Set by me
-        </button>
-        {isOps && (
-          <button type="button" className="chip" style={chip(scope === "all")} onClick={() => setScope("all")}>
-            Everyone&apos;s
+      {/* Three clearly separated rows rather than one wrapped soup of chips +
+          search + button (user-caught, 2026-10-07 — "all the buttons field
+          looking scattered"): which tasks (status), whose (scope), then the
+          search/new-task row on its own line so neither squeezes against a
+          chip depending on how much text wrapped above it. */}
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="chip" style={chip(show === "open")} onClick={() => setShow("open")}>
+            Open {openCount}
           </button>
-        )}
-        <div className="ml-auto flex gap-2">
-          <input className="field field-auto" placeholder="Search tasks" aria-label="Search tasks" value={q} onChange={(e) => setQ(e.target.value)} />
-          <button type="button" className="btn-primary btn-sm" onClick={() => setEditing({ id: null, f: blank })}>
+          <button type="button" className="chip" style={chip(show === "done")} onClick={() => setShow("done")}>
+            Completed {doneCount}
+          </button>
+          <button type="button" className="chip" style={chip(show === "all")} onClick={() => setShow("all")}>
+            All {inScope.length}
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" className="chip" style={chip(scope === "mine")} onClick={() => setScope("mine")}>
+            Assigned to me
+          </button>
+          <button type="button" className="chip" style={chip(scope === "set")} onClick={() => setScope("set")}>
+            Set by me
+          </button>
+          {isOps && (
+            <button type="button" className="chip" style={chip(scope === "all")} onClick={() => setScope("all")}>
+              Everyone&apos;s
+            </button>
+          )}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input className="field sm:w-64" placeholder="Search tasks" aria-label="Search tasks" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button type="button" className="btn-primary btn-sm sm:ml-auto" onClick={() => setEditing({ id: null, f: blank })}>
             New task
           </button>
         </div>
@@ -179,7 +187,13 @@ export function TasksClient({
               <li
                 key={r.id}
                 id={`task-${r.id}`}
-                className="flex flex-wrap items-start gap-3 px-4 py-3"
+                // A two-member flex-wrap row let the action buttons land in a
+                // different place row to row — flush beside a short title,
+                // pushed below a long one (user-caught, 2026-10-07: "doesn't
+                // hold its position"). Content, then actions on their own
+                // line, always — every row now has the same shape regardless
+                // of how long its title/description/meta line ran.
+                className="flex flex-col gap-2.5 px-4 py-3"
                 style={r.id === highlight ? { background: "var(--accent-subtle)" } : undefined}
               >
                 <div className="min-w-0 flex-1">
@@ -208,7 +222,7 @@ export function TasksClient({
                   {r.closedNote && <p className="mt-1 text-[12px]" style={{ color: "var(--text-subtle)" }}>{r.closedNote}</p>}
                 </div>
                 {r.mayAct && (
-                  <div className="flex shrink-0 gap-2">
+                  <div className="flex gap-2">
                     {r.status === "scheduled" ? (
                       <>
                         <button type="button" className="btn-secondary btn-sm" disabled={pending} onClick={() => setClosing({ row: r, mode: "done", note: "" })}>

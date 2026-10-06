@@ -267,7 +267,7 @@ export default async function AdminHomePage() {
             <Card className="p-6">
               <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 mb-5">
                 <CardTitle>Deal pipeline</CardTitle>
-                <Link href="/admin/pipeline" className="text-sm font-medium" style={{ color: "var(--accent)" }}>
+                <Link href="/admin/pipeline" className="link-arrow text-sm">
                   Open the board →
                 </Link>
               </div>
@@ -500,7 +500,7 @@ export default async function AdminHomePage() {
                   ))}
                   {meterAlerts.length > 3 && (
                     <li className="text-[13px]">
-                      <Link href="/admin/notifications" className="underline">
+                      <Link href="/admin/notifications" className="link-arrow">
                         and {meterAlerts.length - 3} more →
                       </Link>
                     </li>
@@ -509,7 +509,7 @@ export default async function AdminHomePage() {
               )}
 
               <p className="mt-3 text-[13px]">
-                <Link href="/admin/meters" className="underline">
+                <Link href="/admin/meters" className="link-arrow">
                   All meters →
                 </Link>
               </p>
@@ -548,7 +548,7 @@ export default async function AdminHomePage() {
                 ))}
                 {waiting.length > 8 && (
                   <li className="border-t border-[var(--border-subtle)] pt-3 text-[13px]">
-                    <Link href="/admin/notifications" className="underline">
+                    <Link href="/admin/notifications" className="link-arrow">
                       and {waiting.length - 8} more →
                     </Link>
                   </li>

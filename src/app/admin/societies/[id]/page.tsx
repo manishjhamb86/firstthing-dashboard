@@ -347,7 +347,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                           )
                         ) : lineDeals.length === 1 ? (
                           <>
-                            <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="underline">
+                            <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="link-arrow">
                               Open the deal →
                             </Link>
                             {billingByPipeline.get(lineDeals[0].id)?.billingStart && (
@@ -364,7 +364,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                               const billing = billingByPipeline.get(d.id);
                               return (
                                 <span key={d.id}>
-                                  <Link href={`/admin/pipeline/${d.id}`} className="underline">
+                                  <Link href={`/admin/pipeline/${d.id}`} className="link-arrow">
                                     {d.dealScope ?? "Unnamed part"} →
                                   </Link>
                                   {billing?.billingStart && ` · billing since ${formatDate(billing.billingStart)}`}

@@ -2,58 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
-import { openNotifications, pastNotifications } from "@/lib/notifications";
-import { AcknowledgeButton } from "./acknowledge-button";
-
-const KIND_LABEL: Record<string, string> = {
-  offline: "Not reachable",
-  out_of_range: "Out of range",
-  savings_out_of_band: "Below the agreed band",
-  billing_overdue: "Invoice overdue",
-  billing_warning: "Overdue — warning stage",
-  billing_suspended: "Suspended",
-  inspection_overdue: "Inspection not filed",
-  ticket_open: "Society request",
-  help_open: "Field help request",
-};
-
-// "offline"/"billing_suspended"/an unrecognised future kind default to the
-// more alarming tone; every other named kind here is deliberately opted
-// into the calmer one — a wrongly-alarming default is the safer failure
-// mode for a kind this map hasn't seen yet.
-const CALM_KINDS = new Set([
-  "out_of_range",
-  "savings_out_of_band",
-  "billing_overdue",
-  "inspection_overdue",
-  "ticket_open",
-  "help_open",
-]);
-function notificationTone(kind: string): "bad" | "warn" {
-  return CALM_KINDS.has(kind) ? "warn" : "bad";
-}
-
-// What the link actually opens — "Open meter →" was correct for every kind
-// this centre carried until billing/inspection notifications joined it; a
-// meter-flavoured label pointing at an invoice or a blank inspection form
-// reads as a broken link even though the href itself is right.
-function notificationActionLabel(kind: string): string {
-  if (kind.startsWith("billing_")) return "Open bill →";
-  if (kind === "inspection_overdue") return "File it →";
-  if (kind === "savings_out_of_band") return "Open circuit →";
-  if (kind === "help_open") return "Open request →";
-  return "Open meter →";
-}
-
-// Only a real MeterAlert row can be acknowledged — `n.id` for a billing or
-// inspection notification is an invoice id or a synthetic key, and
-// `acknowledgeAlert` would correctly (but confusingly) refuse it as "no
-// longer exists." Following up on those is the act itself (pay the invoice,
-// file the inspection), not a separate acknowledgement.
-const METER_ALERT_KINDS = new Set(["offline", "out_of_range", "savings_out_of_band"]);
-function isAcknowledgeable(kind: string): boolean {
-  return METER_ALERT_KINDS.has(kind);
-}
+import {
+  NOTIFICATION_KIND_LABEL,
+  isAcknowledgeableKind,
+  notificationActionLabel,
+  notificationCategory,
+  notificationTone,
+  openNotifications,
+  pastNotifications,
+} from "@/lib/notifications";
+import { NotificationsClient } from "./notifications-client";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Notifications" };
@@ -65,27 +23,35 @@ export const metadata = { title: "Notifications" };
  * The history half is the point: an alert that resolved itself overnight
  * used to leave no trace anybody would find, so "it has been offline several
  * times" was a thing the operator knew and the product did not.
+ *
+ * 2026-10-07, user-caught: a flat 25-item list is exhausting to read and
+ * gives no way to jump to what matters. The server side now does nothing
+ * but attach display fields (tone/label/category/action) to each row; every
+ * bit of grouping, filtering and search lives in `NotificationsClient`,
+ * which also folds the ticket feed in as one more category instead of a
+ * separately hardcoded card — one list, navigable, rather than two.
  */
 export default async function NotificationsPage() {
   const actor = await requireAdminPage();
   if (!actor) redirect("/api/session-ended");
-  // Open society requests are IN the feed now (notifications.ts) rather than
-  // fetched again here to "show what the badge counted" — one list, so the
-  // count and the page are the same arithmetic by construction.
   const [open, past] = await Promise.all([openNotifications(), pastNotifications()]);
   const canAck = actor.user.adminPermissions.includes("manage_users");
-  const openTickets = open.filter((n) => n.kind === "ticket_open");
-  // Requests keep their own card above, so they are excluded from the feed
-  // list below — in the feed for counting and for the Portfolio, rendered
-  // once here.
-  const openFeed = open.filter((n) => n.kind !== "ticket_open");
   const unattended = open.filter((n) => n.acknowledgedAt === null).length;
+
+  const items = open.map((n) => ({
+    ...n,
+    label: NOTIFICATION_KIND_LABEL[n.kind] ?? n.kind,
+    tone: notificationTone(n.kind),
+    category: notificationCategory(n.kind),
+    actionLabel: notificationActionLabel(n.kind),
+    acknowledgeable: canAck && isAcknowledgeableKind(n.kind),
+  }));
 
   return (
     <>
       <PageHeader
         title="Notifications"
-        subtitle="Meters that have asked for attention — open now, and everything that has resolved."
+        subtitle="Everything that has asked for attention — open now, and everything that has resolved."
         chip={
           unattended > 0 ? (
             <StatusChip tone="bad">{unattended} unattended</StatusChip>
@@ -95,114 +61,26 @@ export default async function NotificationsPage() {
         }
       />
 
-      {openTickets.length > 0 && (
-        <Card className="mb-6 p-6">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <CardTitle className="mb-0">Open society requests</CardTitle>
-            <Link href="/admin/tickets" className="text-[13px] font-semibold">
-              Open the desk →
-            </Link>
-          </div>
-          <div className="flex flex-col">
-            {openTickets.map((t, i) => (
-              <div
-                key={t.id}
-                className="flex flex-wrap items-center justify-between gap-3 py-2.5"
-                style={i < openTickets.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
-              >
-                <p className="text-[13.5px]">
-                  <strong>{t.societyName}</strong> — {t.subject}
-                </p>
-                <StatusChip tone="bad">Open</StatusChip>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <NotificationsClient items={items} />
 
-      <div className="space-y-6">
-        <Card className="p-6">
-          <CardTitle>Open</CardTitle>
-          <p className="mt-1 text-[13px] text-[var(--text-muted)]">
-            These conditions are still true. Acknowledging takes one off the badge without closing
-            it — only the meter reporting again, or reading back inside its ceiling, does that.
-          </p>
-          {openFeed.length === 0 ? (
-            <div className="mt-4">
-              <EmptyState title="Nothing open">
-                Every meter is reporting, and every day is inside what its circuit can draw.
-              </EmptyState>
-            </div>
-          ) : (
-            <ul className="mt-4 space-y-2">
-              {openFeed.map((n) => (
-                <li
-                  key={n.id}
-                  className="rounded-[var(--r-sm)] p-3"
-                  style={{
-                    background: notificationTone(n.kind) === "bad" ? "var(--bad-bg)" : "var(--warn-bg)",
-                    border: `1px solid ${notificationTone(n.kind) === "bad" ? "var(--bad-line)" : "var(--warn-line)"}`,
-                  }}
-                >
-                  {/* A phone-width card stacks the info and the actions as
-                      two full-width blocks rather than sharing one wrapped
-                      row with them — the row-based layout let "Acknowledge"
-                      render on top of the status chip on a narrow viewport
-                      (user-caught on stage, 2026-09-30). */}
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                    <div className="min-w-0 sm:flex-1">
-                      <div className="mb-1 flex flex-wrap items-center gap-2">
-                        <StatusChip tone={notificationTone(n.kind)}>
-                          {KIND_LABEL[n.kind] ?? n.kind}
-                        </StatusChip>
-                        <span className="num text-xs text-[var(--text-subtle)]">
-                          since {n.openedAt.slice(0, 16).replace("T", " ")}
-                        </span>
-                        {n.raiseCount > 1 && (
-                          <span className="text-xs font-semibold" style={{ color: "var(--bad-fg)" }}>
-                            raised {n.raiseCount}× — acknowledged before and still not resolved
-                          </span>
-                        )}
-                        {n.acknowledgedAt && (
-                          <span className="text-xs text-[var(--text-subtle)]">
-                            · acknowledged {n.acknowledgedAt.slice(0, 16).replace("T", " ")}
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[13px]">{n.message}</p>
-                      <p className="mt-1 text-xs text-[var(--text-subtle)]">
-                        {[n.societyName, n.circuitLabel].filter(Boolean).join(" · ") || "not assigned"}
-                        {n.ownerLabel ? ` · ${n.ownerLabel} to chase` : " · nobody named to chase it"}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-3 sm:shrink-0">
-                      {canAck && !n.acknowledgedAt && isAcknowledgeable(n.kind) && (
-                        <AcknowledgeButton alertId={n.id} />
-                      )}
-                      <Link href={n.href} className="text-[13px] font-semibold underline">
-                        {notificationActionLabel(n.kind)}
-                      </Link>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card className="p-6">
-          <CardTitle>Resolved</CardTitle>
-          <p className="mt-1 text-[13px] text-[var(--text-muted)]">
-            Kept so a meter that dropped out overnight and came back is still on record afterwards.
-          </p>
-          {past.length === 0 ? (
-            <div className="mt-4">
-              <EmptyState title="Nothing has resolved yet">
-                When an alert closes, it stays here with the reason it closed.
-              </EmptyState>
-            </div>
-          ) : (
-            <div className="mt-3 overflow-x-auto">
+      <Card className="mt-6 p-6">
+        <CardTitle>Resolved</CardTitle>
+        <p className="mt-1 text-[13px] text-[var(--text-muted)]">
+          Kept so a meter that dropped out overnight and came back is still on record afterwards.
+        </p>
+        {past.length === 0 ? (
+          <div className="mt-4">
+            <EmptyState title="Nothing has resolved yet">
+              When an alert closes, it stays here with the reason it closed.
+            </EmptyState>
+          </div>
+        ) : (
+          <>
+            {/* Desktop/tablet table. Below sm, a stacked card per row —
+                What/Meter/Opened/Closed/How ran off a phone's right edge on
+                a plain `.tbl`, same shape as every other listing swept in
+                the 2026-10-07 mobile pass. */}
+            <div className="mt-3 hidden overflow-x-auto sm:block">
               <table className="tbl">
                 <thead>
                   <tr>
@@ -218,7 +96,7 @@ export default async function NotificationsPage() {
                     <tr key={n.id}>
                       <td>
                         <StatusChip tone={notificationTone(n.kind)}>
-                          {KIND_LABEL[n.kind] ?? n.kind}
+                          {NOTIFICATION_KIND_LABEL[n.kind] ?? n.kind}
                         </StatusChip>
                       </td>
                       <td className="text-[13px]">
@@ -241,9 +119,33 @@ export default async function NotificationsPage() {
                 </tbody>
               </table>
             </div>
-          )}
-        </Card>
-      </div>
+            <div className="mt-3 flex flex-col gap-2.5 sm:hidden">
+              {past.map((n) => (
+                <div key={n.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                  <div className="mb-1 flex items-start justify-between gap-3">
+                    <StatusChip tone={notificationTone(n.kind)}>
+                      {NOTIFICATION_KIND_LABEL[n.kind] ?? n.kind}
+                    </StatusChip>
+                  </div>
+                  <Link href={n.href} className="font-medium underline">
+                    {n.subject}
+                  </Link>
+                  <p className="text-xs text-[var(--text-subtle)]">
+                    {[n.societyName, n.circuitLabel].filter(Boolean).join(" · ") || "not assigned"}
+                  </p>
+                  <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                    <span className="num">{n.openedAt.slice(0, 16).replace("T", " ")}</span>
+                    {" → "}
+                    <span className="num">{n.closedAt?.slice(0, 16).replace("T", " ")}</span>
+                    {" · "}
+                    {n.closedReason ?? "—"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </Card>
     </>
   );
 }

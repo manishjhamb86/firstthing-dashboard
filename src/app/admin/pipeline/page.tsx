@@ -97,80 +97,141 @@ export default async function PipelinePage() {
           Log the first one after a first meeting with a prospective society.
         </EmptyState>
       ) : (
-        <Card className="overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Society</th>
-                <th>Service line</th>
-                <th>Contact</th>
-                <th>Owner</th>
-                <th>Age</th>
-              </tr>
-            </thead>
+        <>
+          {/* Desktop/tablet table. Below sm, a stage-grouped stack of cards
+              (2026-10-07, user-caught — Service line/Contact/Owner/Age ran
+              off a phone's right edge with no way to scroll to them): each
+              card leads with the society, carries the deal scope and
+              contact/owner/age as one muted line, same grouping-by-stage the
+              table already does. */}
+          <Card className="hidden overflow-x-auto sm:block">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th>Service line</th>
+                  <th>Contact</th>
+                  <th>Owner</th>
+                  <th>Age</th>
+                </tr>
+              </thead>
+              {grouped.map(({ stage, deals }) => {
+                const meta = statusMeta(PIPELINE_STAGE, stage);
+                return (
+                  <tbody key={stage}>
+                    {/* A stage band, so the table reads as a pipeline rather
+                        than as one undifferentiated list. */}
+                    <tr>
+                      <th
+                        colSpan={5}
+                        className="text-left"
+                        style={{ background: "var(--surface-sunken)", borderBottom: "1px solid var(--border)" }}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                          <span className="num text-[var(--text-muted)]">{deals.length}</span>
+                        </span>
+                      </th>
+                    </tr>
+                    {deals.map((p) => {
+                      const age = ageInDays(p.createdAt);
+                      return (
+                        <tr key={p.id}>
+                          <td>
+                            <div className="flex items-center gap-3">
+                              <span
+                                aria-hidden
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-[13px] font-bold"
+                                style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
+                              >
+                                {p.society.name.slice(0, 2).toUpperCase()}
+                              </span>
+                              <div className="min-w-0">
+                                <Link
+                                  href={`/admin/pipeline/${p.id}`}
+                                  className="font-medium hover:underline"
+                                >
+                                  {p.society.name}
+                                </Link>
+                                <p className="text-[13px] text-[var(--text-muted)]">{p.society.location}</p>
+                              </div>
+                              {!p.authoritative && (
+                                <StatusChip tone="warn">Pending approval</StatusChip>
+                              )}
+                            </div>
+                          </td>
+                          <td className="text-[var(--text-muted)]">{dealLabel(p.serviceLine, p.dealScope)}</td>
+                          <td className="text-[var(--text-muted)]">{p.contactName}</td>
+                          <td className="text-[var(--text-muted)]">
+                            {p.salesOwner.name ?? p.salesOwner.email}
+                          </td>
+                          {/* How long this deal has been on the books — the
+                              column a pipeline is actually judged by. */}
+                          <td className="num whitespace-nowrap text-[var(--text-muted)]">
+                            {age === 0 ? "today" : `${age}d`}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                );
+              })}
+            </table>
+          </Card>
+
+          <div className="flex flex-col gap-4 sm:hidden">
             {grouped.map(({ stage, deals }) => {
               const meta = statusMeta(PIPELINE_STAGE, stage);
               return (
-                <tbody key={stage}>
-                  {/* A stage band, so the table reads as a pipeline rather
-                      than as one undifferentiated list. */}
-                  <tr>
-                    <th
-                      colSpan={5}
-                      className="text-left"
-                      style={{ background: "var(--surface-sunken)", borderBottom: "1px solid var(--border)" }}
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
-                        <span className="num text-[var(--text-muted)]">{deals.length}</span>
-                      </span>
-                    </th>
-                  </tr>
-                  {deals.map((p) => {
-                    const age = ageInDays(p.createdAt);
-                    return (
-                      <tr key={p.id}>
-                        <td>
-                          <div className="flex items-center gap-3">
-                            <span
-                              aria-hidden
-                              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-[13px] font-bold"
-                              style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-                            >
-                              {p.society.name.slice(0, 2).toUpperCase()}
-                            </span>
-                            <div className="min-w-0">
-                              <Link
-                                href={`/admin/pipeline/${p.id}`}
-                                className="font-medium hover:underline"
+                <div key={stage}>
+                  <div className="mb-2 flex items-center gap-2">
+                    <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                    <span className="num text-[13px] text-[var(--text-muted)]">{deals.length}</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {deals.map((p) => {
+                      const age = ageInDays(p.createdAt);
+                      return (
+                        <Link
+                          key={p.id}
+                          href={`/admin/pipeline/${p.id}`}
+                          className="block rounded-[var(--r-md)] border p-3.5"
+                          style={{ borderColor: "var(--border-subtle)" }}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex min-w-0 items-center gap-2.5">
+                              <span
+                                aria-hidden
+                                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-sm)] text-[12.5px] font-bold"
+                                style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
                               >
-                                {p.society.name}
-                              </Link>
-                              <p className="text-[13px] text-[var(--text-muted)]">{p.society.location}</p>
+                                {p.society.name.slice(0, 2).toUpperCase()}
+                              </span>
+                              <div className="min-w-0">
+                                <p className="font-medium">{p.society.name}</p>
+                                <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                                  {p.society.location}
+                                </p>
+                              </div>
                             </div>
-                            {!p.authoritative && (
-                              <StatusChip tone="warn">Pending approval</StatusChip>
-                            )}
+                            {!p.authoritative && <StatusChip tone="warn">Pending</StatusChip>}
                           </div>
-                        </td>
-                        <td className="text-[var(--text-muted)]">{dealLabel(p.serviceLine, p.dealScope)}</td>
-                        <td className="text-[var(--text-muted)]">{p.contactName}</td>
-                        <td className="text-[var(--text-muted)]">
-                          {p.salesOwner.name ?? p.salesOwner.email}
-                        </td>
-                        {/* How long this deal has been on the books — the
-                            column a pipeline is actually judged by. */}
-                        <td className="num whitespace-nowrap text-[var(--text-muted)]">
-                          {age === 0 ? "today" : `${age}d`}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
+                          <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                            {dealLabel(p.serviceLine, p.dealScope)}
+                          </p>
+                          <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                            {p.contactName} · {p.salesOwner.name ?? p.salesOwner.email} ·{" "}
+                            <span className="num">{age === 0 ? "today" : `${age}d`}</span>
+                          </p>
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
               );
             })}
-          </table>
-        </Card>
+          </div>
+        </>
       )}
     </>
   );

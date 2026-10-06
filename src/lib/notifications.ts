@@ -1,6 +1,12 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { circuitLabelOf } from "@/lib/meter-view";
+import {
+  notificationCategory,
+  NOTIFICATION_CATEGORY_LABEL,
+  type Notification,
+  type NotificationCategory,
+} from "@/lib/notification-types";
 
 /**
  * The notification centre's read model.
@@ -12,24 +18,79 @@ import { circuitLabelOf } from "@/lib/meter-view";
  * What was missing was never storage; it was a place to READ them, so a
  * notification that opened and closed while nobody was looking can still be
  * found afterwards.
+ *
+ * The shape itself and its display category live in `notification-types.ts`
+ * (an import-free module) and are re-exported here, so every existing
+ * `@/lib/notifications` import keeps working unchanged.
  */
-export type Notification = {
-  id: string;
-  kind: string;
-  message: string;
-  openedAt: string;
-  closedAt: string | null;
-  closedReason: string | null;
-  acknowledgedAt: string | null;
-  /** How many times this same condition has come back after acknowledgement. */
-  raiseCount: number;
-  /** What the alert is about — a meter's name, or a circuit's label. */
-  subject: string;
-  societyName: string | null;
-  circuitLabel: string | null;
-  ownerLabel: string | null;
-  href: string;
+export type { Notification, NotificationCategory };
+export { notificationCategory, NOTIFICATION_CATEGORY_LABEL };
+
+/**
+ * Display metadata for a notification's `kind`, centralised here (moved out
+ * of the page component, 2026-10-07) so every surface that needs to label,
+ * tone, link or group a notification reads the one map — a page-local copy
+ * is how `replacement_followup_open` and the three `demo_*` kinds ended up
+ * with no label at all (falling back to the raw kind string) and the wrong
+ * tone, caught while building the category filter below.
+ */
+export const NOTIFICATION_KIND_LABEL: Record<string, string> = {
+  offline: "Not reachable",
+  out_of_range: "Out of range",
+  savings_out_of_band: "Below the agreed band",
+  billing_overdue: "Invoice overdue",
+  billing_warning: "Overdue — warning stage",
+  billing_suspended: "Suspended",
+  inspection_overdue: "Inspection not filed",
+  ticket_open: "Society request",
+  help_open: "Field help request",
+  replacement_followup_open: "Left to the society",
+  demo_pre_variance: "Demo reading — before range",
+  demo_post_variance: "Demo reading — after range",
+  demo_readings_missing: "Demo readings missing",
 };
+
+// "offline"/"billing_suspended"/an unrecognised future kind default to the
+// more alarming tone; every other named kind here is deliberately opted
+// into the calmer one — a wrongly-alarming default is the safer failure
+// mode for a kind this map hasn't seen yet.
+const CALM_KINDS = new Set([
+  "out_of_range",
+  "savings_out_of_band",
+  "billing_overdue",
+  "inspection_overdue",
+  "ticket_open",
+  "help_open",
+  "replacement_followup_open",
+]);
+export function notificationTone(kind: string): "bad" | "warn" {
+  return CALM_KINDS.has(kind) ? "warn" : "bad";
+}
+
+// What the link actually opens — "Open meter →" was correct for every kind
+// this centre carried until billing/inspection/ticket/follow-up notifications
+// joined it; a meter-flavoured label pointing at an invoice, a blank
+// inspection form, or the ticket desk reads as a broken link even though the
+// href itself is right.
+export function notificationActionLabel(kind: string): string {
+  if (kind.startsWith("billing_")) return "Open bill →";
+  if (kind === "inspection_overdue") return "File it →";
+  if (kind === "savings_out_of_band") return "Open circuit →";
+  if (kind === "help_open") return "Open request →";
+  if (kind === "ticket_open") return "Open the desk →";
+  if (kind === "replacement_followup_open") return "Open circuit →";
+  return "Open meter →";
+}
+
+// Only a real MeterAlert row can be acknowledged — `n.id` for a billing or
+// inspection notification is an invoice id or a synthetic key, and
+// `acknowledgeAlert` would correctly (but confusingly) refuse it as "no
+// longer exists." Following up on those is the act itself (pay the invoice,
+// file the inspection), not a separate acknowledgement.
+const METER_ALERT_KINDS = new Set(["offline", "out_of_range", "savings_out_of_band"]);
+export function isAcknowledgeableKind(kind: string): boolean {
+  return METER_ALERT_KINDS.has(kind);
+}
 
 const include = {
   meter: {

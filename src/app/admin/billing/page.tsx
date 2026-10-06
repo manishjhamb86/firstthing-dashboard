@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { ListToolbar } from "@/components/list-toolbar";
 import { ClickableRow } from "@/components/clickable-row";
+import { ClickableCard } from "@/components/clickable-card";
 import { Card, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 import { requireBillingReader, canRelease, isOps } from "./access";
@@ -167,99 +168,174 @@ export default async function BillingPage({
           agreement is executed.
         </EmptyState>
       ) : (
-        <Card className="overflow-x-auto">
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Society</th>
-                <th className="hidden md:table-cell">Service line</th>
-                <th>Status</th>
-                <th className="text-right">Total</th>
-                <th className="hidden lg:table-cell">Out of band</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ contract, parts, calc, outOfBand }) => {
-                const meta = calc ? CALC_STATUS[calc.status] : null;
-                const href = calc ? `/admin/billing/${calc.id}` : null;
-                const body = (
-                  <>
-                    <td>
-                      <span className="font-medium">{contract.society.name}</span>
-                      <p className="text-[13px] text-[var(--text-muted)]">{contract.society.location}</p>
-                    </td>
-                    <td className="hidden md:table-cell">
-                      {SERVICE_LINE_LABEL[contract.serviceLine] ?? contract.serviceLine}
-                      {parts.length > 1 && (
-                        <p className="text-xs text-[var(--text-subtle)]">
-                          {parts.length} parts combine into one bill
-                        </p>
-                      )}
-                    </td>
-                    <td>
-                      {meta ? (
-                        <span className="inline-flex flex-wrap items-center gap-1.5">
-                          <StatusChip tone={meta.tone}>
-                            {meta.label}
-                            {calc && calc.version > 1 ? ` · v${calc.version}` : ""}
-                          </StatusChip>
-                          {(() => {
-                            // At most one live invoice per calculation (a
-                            // partial unique index guarantees it).
-                            const followUp = calc?.invoices[0] ? PAYMENT_FOLLOWUP[calc.invoices[0].status] : undefined;
-                            return followUp ? (
-                              <StatusChip tone={followUp.tone}>{followUp.label}</StatusChip>
-                            ) : null;
-                          })()}
-                        </span>
-                      ) : (
-                        <span className="text-[13px] text-[var(--text-subtle)]">Not run</span>
-                      )}
-                    </td>
-                    <td className="num text-right">
+        <>
+          {/* Desktop/tablet table. Below sm, a stacked card per (society,
+              service line) — this was one of the untouched old tables
+              (user-caught, 2026-10-07): Status/Total/Out of band ran off the
+              right edge with the Run/Open control cut off entirely. */}
+          <Card className="hidden overflow-x-auto sm:block">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Society</th>
+                  <th className="hidden md:table-cell">Service line</th>
+                  <th>Status</th>
+                  <th className="text-right">Total</th>
+                  <th className="hidden lg:table-cell">Out of band</th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(({ contract, parts, calc, outOfBand }) => {
+                  const meta = calc ? CALC_STATUS[calc.status] : null;
+                  const href = calc ? `/admin/billing/${calc.id}` : null;
+                  const body = (
+                    <>
+                      <td>
+                        <span className="font-medium">{contract.society.name}</span>
+                        <p className="text-[13px] text-[var(--text-muted)]">{contract.society.location}</p>
+                      </td>
+                      <td className="hidden md:table-cell">
+                        {SERVICE_LINE_LABEL[contract.serviceLine] ?? contract.serviceLine}
+                        {parts.length > 1 && (
+                          <p className="text-xs text-[var(--text-subtle)]">
+                            {parts.length} parts combine into one bill
+                          </p>
+                        )}
+                      </td>
+                      <td>
+                        {meta ? (
+                          <span className="inline-flex flex-wrap items-center gap-1.5">
+                            <StatusChip tone={meta.tone}>
+                              {meta.label}
+                              {calc && calc.version > 1 ? ` · v${calc.version}` : ""}
+                            </StatusChip>
+                            {(() => {
+                              // At most one live invoice per calculation (a
+                              // partial unique index guarantees it).
+                              const followUp = calc?.invoices[0] ? PAYMENT_FOLLOWUP[calc.invoices[0].status] : undefined;
+                              return followUp ? (
+                                <StatusChip tone={followUp.tone}>{followUp.label}</StatusChip>
+                              ) : null;
+                            })()}
+                          </span>
+                        ) : (
+                          <span className="text-[13px] text-[var(--text-subtle)]">Not run</span>
+                        )}
+                      </td>
+                      <td className="num text-right">
+                        {calc && calc.status !== "held"
+                          ? `₹${calc.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : "—"}
+                      </td>
+                      <td className="hidden lg:table-cell">
+                        {calc === null || calc.status === "held" ? (
+                          <span className="text-[var(--text-subtle)]">—</span>
+                        ) : outOfBand > 0 ? (
+                          <StatusChip tone="warn">{outOfBand} circuit{outOfBand === 1 ? "" : "s"}</StatusChip>
+                        ) : (
+                          <StatusChip tone="ok">All in band</StatusChip>
+                        )}
+                      </td>
+                      <td className="text-right whitespace-nowrap">
+                        {/* An invoice-first month (CON-47) is not re-run from readings —
+                            its stats re-derive themselves when readings arrive. */}
+                        {isOps(gate.actor) && calc?.status !== "released" && calc?.source !== "invoice" ? (
+                          <RunMonthButton
+                            societyId={contract.societyId}
+                            serviceLine={contract.serviceLine}
+                            period={period}
+                            rerun={calc !== null}
+                          />
+                        ) : href ? (
+                          <span className="row-link-cue text-sm font-semibold" aria-hidden>
+                            Open →
+                          </span>
+                        ) : null}
+                      </td>
+                    </>
+                  );
+                  return href ? (
+                    <ClickableRow key={contract.id} href={href}>
+                      {body}
+                    </ClickableRow>
+                  ) : (
+                    <tr key={contract.id}>{body}</tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </Card>
+
+          <div className="flex flex-col gap-2 sm:hidden">
+            {rows.map(({ contract, parts, calc, outOfBand }) => {
+              const meta = calc ? CALC_STATUS[calc.status] : null;
+              const href = calc ? `/admin/billing/${calc.id}` : null;
+              const followUp = calc?.invoices[0] ? PAYMENT_FOLLOWUP[calc.invoices[0].status] : undefined;
+              const content = (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium">{contract.society.name}</p>
+                      <p className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {contract.society.location}
+                      </p>
+                    </div>
+                    {meta ? (
+                      <StatusChip tone={meta.tone}>
+                        {meta.label}
+                        {calc && calc.version > 1 ? ` · v${calc.version}` : ""}
+                      </StatusChip>
+                    ) : (
+                      <span className="shrink-0 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                        Not run
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                    {SERVICE_LINE_LABEL[contract.serviceLine] ?? contract.serviceLine}
+                    {parts.length > 1 && ` · ${parts.length} parts combine into one bill`}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <span className="num text-[13px] font-semibold">
                       {calc && calc.status !== "held"
                         ? `₹${calc.total.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : "—"}
-                    </td>
-                    <td className="hidden lg:table-cell">
-                      {calc === null || calc.status === "held" ? (
-                        <span className="text-[var(--text-subtle)]">—</span>
-                      ) : outOfBand > 0 ? (
-                        <StatusChip tone="warn">{outOfBand} circuit{outOfBand === 1 ? "" : "s"}</StatusChip>
-                      ) : (
-                        <StatusChip tone="ok">All in band</StatusChip>
-                      )}
-                    </td>
-                    <td className="text-right whitespace-nowrap">
-                      {/* An invoice-first month (CON-47) is not re-run from readings —
-                          its stats re-derive themselves when readings arrive. */}
-                      {isOps(gate.actor) && calc?.status !== "released" && calc?.source !== "invoice" ? (
-                        <RunMonthButton
-                          societyId={contract.societyId}
-                          serviceLine={contract.serviceLine}
-                          period={period}
-                          rerun={calc !== null}
-                        />
-                      ) : href ? (
-                        <span className="row-link-cue text-sm font-semibold" aria-hidden>
-                          Open →
-                        </span>
-                      ) : null}
-                    </td>
-                  </>
-                );
-                return href ? (
-                  <ClickableRow key={contract.id} href={href}>
-                    {body}
-                  </ClickableRow>
-                ) : (
-                  <tr key={contract.id}>{body}</tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </Card>
+                    </span>
+                    {followUp && <StatusChip tone={followUp.tone}>{followUp.label}</StatusChip>}
+                    {calc && calc.status !== "held" && outOfBand > 0 && (
+                      <StatusChip tone="warn">{outOfBand} out of band</StatusChip>
+                    )}
+                  </div>
+                  {isOps(gate.actor) && calc?.status !== "released" && calc?.source !== "invoice" && (
+                    <div className="mt-2.5">
+                      <RunMonthButton
+                        societyId={contract.societyId}
+                        serviceLine={contract.serviceLine}
+                        period={period}
+                        rerun={calc !== null}
+                      />
+                    </div>
+                  )}
+                </>
+              );
+              return href ? (
+                <ClickableCard
+                  key={contract.id}
+                  href={href}
+                  className="rounded-[var(--r-md)] border p-3.5"
+                  style={{ borderColor: "var(--border-subtle)" }}
+                >
+                  {content}
+                </ClickableCard>
+              ) : (
+                <div key={contract.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                  {content}
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {!canRelease(gate.actor) && !isOps(gate.actor) && (

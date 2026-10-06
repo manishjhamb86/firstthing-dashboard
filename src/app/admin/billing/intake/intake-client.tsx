@@ -477,7 +477,7 @@ export function IntakeClient({
             void handleFiles(e.dataTransfer.files);
           }}
           onClick={() => inputRef.current?.click()}
-          className="flex cursor-pointer flex-col items-center gap-2 rounded-[var(--r-sm)] border-[1.5px] border-dashed px-4 py-7 text-center"
+          className="flex cursor-pointer flex-col items-center gap-2 rounded-[var(--r-sm)] border-[1.5px] border-dashed px-4 py-4 text-center sm:py-7"
           style={{
             borderColor: dragging ? "var(--accent)" : "var(--field-border)",
             background: dragging ? "var(--accent-subtle)" : "var(--surface-sunken)",
@@ -520,45 +520,73 @@ export function IntakeClient({
         </div>
       </Card>
 
-      <div className="mb-3.5 flex flex-wrap items-center gap-2">
+      {/* Ten status pills plus "All" took a whole screenful of vertical
+          space before any invoice was visible, on a phone (user-caught,
+          2026-10-07: "the listing is not visible without scroll... give a
+          small drop down to filter"). Below sm, one compact <select>
+          replaces the wrapped pill row; the pills stay on sm+, where the
+          room to show all ten at a glance is actually there. */}
+      <div className="mb-3.5 sm:hidden">
+        <select
+          value={view}
+          onChange={(e) => setView(e.target.value as View)}
+          aria-label="Filter by status"
+          className="field w-full text-sm"
+        >
+          <option value="all">All · {counts.all}</option>
+          {INTAKE_VIEWS.map((v) => (
+            <option key={v.key} value={v.key}>
+              {v.label} · {counts[v.key]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="mb-3.5 hidden flex-wrap items-center gap-2 sm:flex">
         {chip("all", "All", counts.all)}
         {INTAKE_VIEWS.map((v) => chip(v.key, v.label, counts[v.key]))}
       </div>
 
-      <div className="mb-3.5 flex flex-wrap items-center gap-2">
+      <div className="mb-3.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search invoice number, file, society or month"
           aria-label="Search invoices"
-          className="field field-auto min-w-[16rem] flex-1 text-sm"
+          className="field w-full text-sm sm:w-auto sm:min-w-[16rem] sm:flex-1"
         />
-        <select
-          value={societyFilter}
-          onChange={(e) => setSocietyFilter(e.target.value)}
-          aria-label="Filter by society"
-          className="field field-auto text-sm"
-        >
-          <option value="">Every society</option>
-          {societies.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} aria-label="Filter by month" className="field field-auto text-sm">
-          <option value="">Every month</option>
-          {months.map(([key, label]) => (
-            <option key={key} value={key}>
-              {label}
-            </option>
-          ))}
-        </select>
+        <div className="flex gap-2">
+          <select
+            value={societyFilter}
+            onChange={(e) => setSocietyFilter(e.target.value)}
+            aria-label="Filter by society"
+            className="field flex-1 text-sm sm:w-auto sm:flex-none"
+          >
+            <option value="">Every society</option>
+            {societies.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            value={monthFilter}
+            onChange={(e) => setMonthFilter(e.target.value)}
+            aria-label="Filter by month"
+            className="field flex-1 text-sm sm:w-auto sm:flex-none"
+          >
+            <option value="">Every month</option>
+            {months.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
         {filtering && (
           <button
             type="button"
-            className="btn-ghost btn-sm"
+            className="btn-ghost btn-sm self-start sm:self-auto"
             onClick={() => {
               setQuery("");
               setSocietyFilter("");

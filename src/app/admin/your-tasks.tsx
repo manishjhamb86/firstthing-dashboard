@@ -34,7 +34,7 @@ export async function YourTasks({ userId }: { userId: string }) {
     <Card className="mb-6 p-5">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
         <p className="text-[15px] font-bold">Your tasks</p>
-        <Link href="/admin/tasks" className="text-[13px] font-semibold">
+        <Link href="/admin/tasks" className="link-arrow text-[13px]">
           All tasks →
         </Link>
       </div>

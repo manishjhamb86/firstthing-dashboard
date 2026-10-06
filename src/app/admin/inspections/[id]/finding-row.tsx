@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { InspectionSensorStatus } from "@prisma/client";
 import { ErrorText, Field, StatusChip } from "@/components/ui";
 import { SENSOR_STATUS_META } from "@/lib/inspection";
-import { removeInspectionFinding, saveInspectionFinding } from "../actions";
+import { removeInspectionFinding, saveInspectionFinding, addDraftFinding, removeDraftFinding } from "../actions";
 
 const SENSOR_OPTIONS: { value: InspectionSensorStatus; label: string }[] = [
   { value: "ok", label: "OK" },
@@ -25,19 +25,70 @@ export type FindingRowData = {
   remarks: string;
 };
 
+type FindingValues = {
+  location: string;
+  sensorStatus: InspectionSensorStatus;
+  physicalDamage: boolean;
+  actionReplace: boolean;
+  remarks: string;
+};
+
 /**
- * One fixture on a finalised inspection, editable in place (user's call
- * 2026-09-16: "editing should be both line-item wise and the whole form").
- * Closed by default — the read-only line — with Edit / Remove; `id` null is
- * the "add a fixture" row, which opens straight onto the fields.
+ * One fixture, editable in place (user's call 2026-09-16: "editing should be
+ * both line-item wise and the whole form"). Closed by default — the
+ * read-only line — with Edit / Remove; `id` null is the "add a fixture" row,
+ * which opens straight onto the fields.
+ *
+ * `draft` (2026-10-06, user-asked) points the same component at the
+ * draft-scoped actions instead of the finalized-editing ones, so adding a
+ * fixture while the visit is still in progress saves the instant it's
+ * added — and surfaces the duplicate-location nudge `addDraftFinding`
+ * returns, which the finalized path has no equivalent of (a finalized
+ * inspection's findings were all entered together, so there was nothing to
+ * compare a new one against mid-walk).
  */
-export function FindingRow({ inspectionId, finding, canEdit, onDone }: { inspectionId: string; finding: FindingRowData; canEdit: boolean; onDone?: () => void }) {
+export function FindingRow({
+  inspectionId,
+  finding,
+  canEdit,
+  draft = false,
+  onDone,
+}: {
+  inspectionId: string;
+  finding: FindingRowData;
+  canEdit: boolean;
+  draft?: boolean;
+  onDone?: () => void;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(finding.id === null);
   const [v, setV] = useState(finding);
   const [error, setError] = useState<string | undefined>();
+  const [warning, setWarning] = useState<string | undefined>();
   const [pending, start] = useTransition();
   const meta = SENSOR_STATUS_META[finding.sensorStatus];
+
+  async function save(values: FindingValues): Promise<{ error?: string }> {
+    if (draft) {
+      if (finding.id) {
+        // No per-row edit action exists for a draft yet — only add/remove —
+        // so correcting a just-added row during the draft removes and
+        // re-adds it, which is functionally identical and keeps one action
+        // per concept rather than a third variant.
+        const r1 = await removeDraftFinding(inspectionId, finding.id);
+        if (r1.error) return r1;
+        const r2 = await addDraftFinding(inspectionId, values);
+        if ("error" in r2) return r2;
+        setWarning(r2.warning);
+        return {};
+      }
+      const r = await addDraftFinding(inspectionId, values);
+      if ("error" in r) return r;
+      setWarning(r.warning);
+      return {};
+    }
+    return saveInspectionFinding(inspectionId, finding.id, values);
+  }
 
   if (!open) {
     return (
@@ -60,7 +111,7 @@ export function FindingRow({ inspectionId, finding, canEdit, onDone }: { inspect
                   disabled={pending}
                   onClick={() =>
                     start(async () => {
-                      const r = await removeInspectionFinding(inspectionId, finding.id!);
+                      const r = await (draft ? removeDraftFinding(inspectionId, finding.id!) : removeInspectionFinding(inspectionId, finding.id!));
                       setError(r.error);
                       if (!r.error) router.refresh();
                     })
@@ -78,6 +129,11 @@ export function FindingRow({ inspectionId, finding, canEdit, onDone }: { inspect
           </p>
         )}
         {error && <ErrorText>{error}</ErrorText>}
+        {warning && (
+          <p className="mt-1 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
+            {warning}
+          </p>
+        )}
       </div>
     );
   }
@@ -116,7 +172,7 @@ export function FindingRow({ inspectionId, finding, canEdit, onDone }: { inspect
           onClick={() =>
             start(async () => {
               setError(undefined);
-              const r = await saveInspectionFinding(inspectionId, finding.id, {
+              const r = await save({
                 location: v.location,
                 sensorStatus: v.sensorStatus,
                 physicalDamage: v.physicalDamage,
@@ -153,7 +209,7 @@ export function FindingRow({ inspectionId, finding, canEdit, onDone }: { inspect
 }
 
 /** The "add a fixture" control beneath the list: a button that opens a new row. */
-export function AddFindingRow({ inspectionId, nextSrNo }: { inspectionId: string; nextSrNo: number }) {
+export function AddFindingRow({ inspectionId, nextSrNo, draft = false }: { inspectionId: string; nextSrNo: number; draft?: boolean }) {
   const [adding, setAdding] = useState(false);
   if (!adding) {
     return (
@@ -166,6 +222,7 @@ export function AddFindingRow({ inspectionId, nextSrNo }: { inspectionId: string
     <FindingRow
       inspectionId={inspectionId}
       canEdit
+      draft={draft}
       onDone={() => setAdding(false)}
       finding={{ id: null, srNo: nextSrNo, location: "", sensorStatus: "off", physicalDamage: false, actionReplace: false, remarks: "" }}
     />

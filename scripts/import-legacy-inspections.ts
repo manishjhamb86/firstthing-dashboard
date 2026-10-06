@@ -173,6 +173,7 @@ async function main() {
             sensorStatus: STATUS[it.issue_type] ?? "off",
             actionReplace: it.issue_type === "Replace Required",
             remarks: it.remarks?.trim() || null,
+            addedById: ACTOR,
           })),
         },
       },

@@ -114,3 +114,48 @@ export function refuseVoidInspection(input: { alreadyVoided: boolean; reason: st
   if (input.reason.trim() === "") return "Say why this inspection is being voided — a blank reason is not a reason.";
   return null;
 }
+
+/**
+ * Collaborative drafts (2026-10-06, user-asked): two field accounts can be
+ * on site together, each adding findings to the SAME in-progress inspection
+ * from their own account, saved the instant each is added rather than typed
+ * into one person's browser and lost if it closes. Pure helpers only — the
+ * DB reads/writes live in the Server Action.
+ */
+
+/** A bare location check — the one thing a finding genuinely cannot be without. */
+export function refuseFindingLocation(location: string): string | null {
+  if (location.trim() === "") return "A location is required — what a reader needs to go and find the fixture.";
+  return null;
+}
+
+/**
+ * Whether a draft may still be discarded rather than finished — "no two
+ * users cancelling each other's work" (the user's own words): once more than
+ * one distinct person has added a finding, discarding is refused outright,
+ * because it would destroy a collaborator's own contribution without their
+ * say. A draft with findings from at most one person — including nobody yet
+ * — may still be discarded by whoever is looking at it.
+ */
+export function refuseDiscardDraft(input: { alreadyFinalized: boolean; alreadyVoided: boolean; distinctContributors: number }): string | null {
+  if (input.alreadyVoided) return "This inspection no longer exists.";
+  if (input.alreadyFinalized) return "This inspection is already finished — ask operations to void it instead.";
+  if (input.distinctContributors > 1) {
+    return "More than one person has added findings here — discarding it would lose their work too. Ask operations to void it instead.";
+  }
+  return null;
+}
+
+/**
+ * An exact, case-insensitive match against a location already on this draft
+ * — never a block, only a nudge: "there is no sure way of telling if its the
+ * same light" (the user's own words), so the add always proceeds regardless.
+ */
+export function findMatchingLocation<T extends { location: string; addedById: string }>(
+  newLocation: string,
+  existing: readonly T[],
+): T | null {
+  const needle = newLocation.trim().toLowerCase();
+  if (!needle) return null;
+  return existing.find((f) => f.location.trim().toLowerCase() === needle) ?? null;
+}

@@ -598,10 +598,11 @@ model AdminUser {
   deviceTypesApproved DeviceType[]         @relation("DeviceTypeApprovedBy")
 
   // Monthly inspection checklist (2026-09-12)
-  inspectionsFiled  Inspection[]       @relation("InspectionFiledBy")
-  fieldSyncReceipts FieldSyncReceipt[]
-  pushSubscriptions PushSubscription[]
-  inspectionsVoided Inspection[]       @relation("InspectionVoidedBy")
+  inspectionsFiled   Inspection[]        @relation("InspectionFiledBy")
+  fieldSyncReceipts  FieldSyncReceipt[]
+  pushSubscriptions  PushSubscription[]
+  inspectionsVoided  Inspection[]        @relation("InspectionVoidedBy")
+  findingsAdded      InspectionFinding[] @relation("InspectionFindingAddedBy")
 
   dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
   dateChangesDecided   DateChangeRequest[] @relation("DateChangeDecidedBy")
@@ -4325,7 +4326,19 @@ model InspectionFinding {
   actionReplace  Boolean                @default(false) @map("action_replace")
   remarks        String?
 
+  /// Who added this ONE row, and when (2026-10-06, user-asked) — distinct
+  /// from the inspection's own createdById, since two field accounts can now
+  /// add findings to the same in-progress draft together, each saved the
+  /// instant they add it rather than batched at the end. This is also the
+  /// roster a draft's "who else is working on this" banner is built from —
+  /// no separate collaborator table, just the distinct addedById values
+  /// already on the rows. Backfilled to the inspection's own creator/
+  /// createdAt for every row that predates this column.
+  addedById String   @map("added_by_id")
+  addedAt   DateTime @default(now()) @map("added_at")
+
   inspection Inspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  addedBy    AdminUser  @relation("InspectionFindingAddedBy", fields: [addedById], references: [id])
 
   @@index([inspectionId])
   @@map("inspection_findings")

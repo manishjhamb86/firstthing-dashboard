@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   faultyLightsCount,
+  findMatchingLocation,
   inspectionSummary,
+  refuseDiscardDraft,
+  refuseFindingLocation,
   refuseInspectionFinalize,
   refuseInspectionStart,
   refuseVoidInspection,
@@ -147,5 +150,46 @@ describe("SENSOR_STATUS_META", () => {
       expect(SENSOR_STATUS_META[key].label).toBeTruthy();
       expect(["ok", "warn", "bad"]).toContain(SENSOR_STATUS_META[key].tone);
     }
+  });
+});
+
+describe("refuseFindingLocation", () => {
+  it("a blank location is refused", () => {
+    expect(refuseFindingLocation("")).toMatch(/location is required/i);
+    expect(refuseFindingLocation("   ")).toMatch(/location is required/i);
+  });
+  it("a real location is accepted", () => {
+    expect(refuseFindingLocation("Lift lobby 3rd floor")).toBeNull();
+  });
+});
+
+describe("refuseDiscardDraft — \"no two users cancelling each other's work\" (2026-10-06, user-asked)", () => {
+  it("an untouched draft, or one touched by one person, may be discarded", () => {
+    expect(refuseDiscardDraft({ alreadyFinalized: false, alreadyVoided: false, distinctContributors: 0 })).toBeNull();
+    expect(refuseDiscardDraft({ alreadyFinalized: false, alreadyVoided: false, distinctContributors: 1 })).toBeNull();
+  });
+  it("more than one contributor refuses, pointing at operations instead", () => {
+    expect(refuseDiscardDraft({ alreadyFinalized: false, alreadyVoided: false, distinctContributors: 2 })).toMatch(/operations/i);
+  });
+  it("an already-finished or already-voided inspection cannot be discarded this way", () => {
+    expect(refuseDiscardDraft({ alreadyFinalized: true, alreadyVoided: false, distinctContributors: 0 })).toMatch(/already finished/i);
+    expect(refuseDiscardDraft({ alreadyFinalized: false, alreadyVoided: true, distinctContributors: 0 })).toMatch(/no longer exists/i);
+  });
+});
+
+describe("findMatchingLocation — the duplicate nudge, never a block", () => {
+  const existing = [
+    { location: "Lift lobby 3rd floor", addedById: "a1" },
+    { location: "Basement B2 ramp", addedById: "a2" },
+  ];
+  it("an exact, case-insensitive match is found", () => {
+    expect(findMatchingLocation("lift lobby 3rd floor", existing)?.addedById).toBe("a1");
+    expect(findMatchingLocation("  LIFT LOBBY 3RD FLOOR  ", existing)?.addedById).toBe("a1");
+  });
+  it("a genuinely different location finds nothing", () => {
+    expect(findMatchingLocation("Terrace water tank", existing)).toBeNull();
+  });
+  it("a blank needle never matches", () => {
+    expect(findMatchingLocation("   ", existing)).toBeNull();
   });
 });

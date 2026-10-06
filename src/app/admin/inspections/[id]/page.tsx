@@ -9,8 +9,12 @@ import { formatDateTime, monthLabel } from "@/lib/format-date";
 import { inspectionSummary } from "@/lib/inspection";
 import { publicS3Url } from "@/lib/s3";
 import { VoidInspectionButton } from "./void-button";
+import { DiscardDraftButton } from "./discard-draft-button";
 import { FinalizeInspectionForm } from "./finalize-inspection-form";
+import { FinishDraftForm } from "./finish-draft-form";
 import { AddFindingRow, FindingRow } from "./finding-row";
+import { refuseDiscardDraft } from "@/lib/inspection";
+import { timeAgo } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inspection" };
@@ -34,12 +38,30 @@ export default async function InspectionDetailPage({
       society: { select: { name: true, location: true } },
       circuit: { select: { representedLightCount: true, ...DEMO_LIGHTS_SELECT } },
       voidedBy: { select: { name: true, email: true } },
-      findings: { orderBy: { srNo: "asc" } },
+      findings: { orderBy: { srNo: "asc" }, include: { addedBy: { select: { name: true, email: true } } } },
     },
   });
   if (!inspection) notFound();
 
   const isDraft = inspection.totalLightsChecked === null && !inspection.voidedAt;
+
+  // Collaborative drafts (2026-10-06, user-asked): who else has added a
+  // finding here, and when they last did — derived straight from the rows,
+  // no separate presence/collaborator table. Not live/real-time (this app
+  // has no websocket layer) — it is as fresh as the last page load, which
+  // for two people both saving as they go is close enough to be useful.
+  const contributors = new Map<string, { name: string; lastAddedAt: Date }>();
+  for (const f of inspection.findings) {
+    const label = f.addedBy.name ?? f.addedBy.email;
+    const existingContributor = contributors.get(f.addedById);
+    if (!existingContributor || f.addedAt > existingContributor.lastAddedAt) {
+      contributors.set(f.addedById, { name: label, lastAddedAt: f.addedAt });
+    }
+  }
+  const otherContributors = [...contributors.entries()].filter(([aid]) => aid !== actor.id).map(([, c]) => c);
+  const canDiscardDraft =
+    isDraft &&
+    refuseDiscardDraft({ alreadyFinalized: false, alreadyVoided: false, distinctContributors: contributors.size }) === null;
   // A finalised inspection stays editable (user's call 2026-09-16): `?edit=1`
   // reopens the same form prefilled — a step you open, with a Cancel that
   // drops the parameter, the same shape as every other correction here.
@@ -92,10 +114,51 @@ export default async function InspectionDetailPage({
       />
 
       {isDraft ? (
-        <FinalizeInspectionForm
-          inspectionId={inspection.id}
-          defaultTotal={lightsToCheck}
-        />
+        <div className="flex flex-col gap-4">
+          {otherContributors.length > 0 && (
+            <PageRibbon tone="info">
+              Also working on this inspection:{" "}
+              {otherContributors.map((c) => `${c.name} (last added ${timeAgo(c.lastAddedAt)})`).join(" · ")}
+            </PageRibbon>
+          )}
+          <Card className="p-4 sm:p-6">
+            <CardTitle>Faulty or notable fixtures</CardTitle>
+            <p className="mb-3 text-[13px]" style={{ color: "var(--text-muted)" }}>
+              Only fixtures with a problem — a healthy light is never listed. Each one saves the moment
+              you add it, so nothing is lost if you have to step away mid-visit.
+            </p>
+            {inspection.findings.length === 0 ? (
+              <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+                No faulty fixtures added yet.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {inspection.findings.map((f) => (
+                  <FindingRow
+                    key={f.id}
+                    inspectionId={inspection.id}
+                    canEdit
+                    draft
+                    finding={{
+                      id: f.id,
+                      srNo: f.srNo,
+                      location: f.location,
+                      sensorStatus: f.sensorStatus,
+                      physicalDamage: f.physicalDamage,
+                      actionReplace: f.actionReplace,
+                      remarks: f.remarks ?? "",
+                    }}
+                  />
+                ))}
+              </div>
+            )}
+            <div className="mt-3">
+              <AddFindingRow inspectionId={inspection.id} nextSrNo={inspection.findings.length + 1} draft />
+            </div>
+          </Card>
+          <FinishDraftForm inspectionId={inspection.id} defaultTotal={lightsToCheck} findingsSoFar={inspection.findings.length} />
+          <DiscardDraftButton id={inspection.id} canDiscard={canDiscardDraft} />
+        </div>
       ) : isEditing ? (
         <FinalizeInspectionForm
           inspectionId={inspection.id}

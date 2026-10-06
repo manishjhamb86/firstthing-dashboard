@@ -102,6 +102,7 @@ export async function fileInspection(
           physicalDamage: f.physicalDamage,
           actionReplace: f.actionReplace,
           remarks: f.remarks.trim() || null,
+          addedById: actor.id,
         })),
       },
     },

@@ -51,7 +51,7 @@ export default async function ZohoSettingsPage() {
               <p>
                 {fetched} invoices fetched so far
                 {config.lastSyncAt && <> · last fetch {formatInstant(config.lastSyncAt)}</>}.{" "}
-                <Link href="/admin/billing/intake" className="font-medium hover:underline" style={{ color: "var(--accent)" }}>
+                <Link href="/admin/billing/intake" className="link-arrow">
                   Open Invoice intake →
                 </Link>
               </p>

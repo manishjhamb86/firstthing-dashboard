@@ -99,7 +99,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
                 <p className="text-sm text-[var(--text-muted)]">
                   The demo starts on the site survey — record the lighting inventory and pick the
                   circuit to meter.{" "}
-                  <Link href={`/admin/pipeline/${pipeline.id}/survey`} className="underline">
+                  <Link href={`/admin/pipeline/${pipeline.id}/survey`} className="link-arrow">
                     Open the site survey →
                   </Link>
                 </p>
@@ -109,7 +109,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
                     <li key={c.id}>
                       <Link
                         href={`/admin/societies/${pipeline.societyId}/circuits/${c.id}`}
-                        className="font-medium underline"
+                        className="link-arrow"
                       >
                         {c.label} →
                       </Link>{" "}

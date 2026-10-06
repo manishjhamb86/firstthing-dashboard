@@ -112,7 +112,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
                 {!offerAccepted && (
                   <>
                     {" — "}
-                    <Link href={`/admin/pipeline/${pipeline.id}/offer`} className="underline font-medium">
+                    <Link href={`/admin/pipeline/${pipeline.id}/offer`} className="link-arrow">
                       Open the offer →
                     </Link>
                   </>
@@ -123,7 +123,7 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
                 {!kycDone && (
                   <>
                     {kycTotal > 0 ? ` — ${kycSettled} of ${kycTotal} settled. ` : " — nothing collected yet. "}
-                    <Link href={`/admin/pipeline/${pipeline.id}/kyc`} className="underline font-medium">
+                    <Link href={`/admin/pipeline/${pipeline.id}/kyc`} className="link-arrow">
                       Open KYC →
                     </Link>
                   </>

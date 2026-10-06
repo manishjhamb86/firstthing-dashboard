@@ -121,7 +121,7 @@ export default async function NotificationsPage() {
             </div>
             <div className="mt-3 flex flex-col gap-2.5 sm:hidden">
               {past.map((n) => (
-                <div key={n.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                <div key={n.id} className="card p-3.5">
                   <div className="mb-1 flex items-start justify-between gap-3">
                     <StatusChip tone={notificationTone(n.kind)}>
                       {NOTIFICATION_KIND_LABEL[n.kind] ?? n.kind}

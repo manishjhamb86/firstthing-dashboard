@@ -246,7 +246,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
           <p className="mt-4 text-[13px] text-[var(--text-muted)]">
             <Link
               href={`/admin/readings/circuit/${line.circuitId}?period=${calc.period}`}
-              className="underline"
+              className="link-arrow"
             >
               Open this circuit&apos;s readings →
             </Link>

@@ -92,7 +92,7 @@ export default async function MonthlyReportPage({
               certificate, so there is nothing to report against until then.
             </p>
             <p className="mt-4 text-sm no-print">
-              <Link href={circuitHref} className="underline">
+              <Link href={circuitHref} className="link-arrow">
                 Open the circuit&apos;s setup &amp; history →
               </Link>
             </p>

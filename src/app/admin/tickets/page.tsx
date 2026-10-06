@@ -162,7 +162,7 @@ export default async function AdminTicketsPage({
 
             <div className="flex flex-col gap-2.5 sm:hidden">
               {tickets.map((t) => (
-                <div key={t.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                <div key={t.id} className="card p-3.5">
                   <div className="flex items-start justify-between gap-3">
                     <Link href={`/admin/societies/${t.society.id}`} className="min-w-0 font-semibold">
                       {t.society.name}

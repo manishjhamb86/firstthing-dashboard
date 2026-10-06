@@ -104,7 +104,7 @@ export default async function InventorySetupPage() {
           </div>
           <div className="mb-4 flex flex-col gap-2 sm:hidden">
             {items.map((i) => (
-              <div key={i.id} className="rounded-[var(--r-md)] border p-3" style={{ borderColor: "var(--border-subtle)" }}>
+              <div key={i.id} className="card p-3">
                 <div className="flex items-start justify-between gap-3">
                   <span className="min-w-0 font-medium">{i.name}</span>
                   <StatusChip tone={i.tracking === "serial" ? "info" : "neu"}>{TRACKING[i.tracking]}</StatusChip>

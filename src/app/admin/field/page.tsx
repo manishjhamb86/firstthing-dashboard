@@ -164,8 +164,7 @@ export default async function FieldWorkPage() {
               <Link
                 key={r.key}
                 href={r.href}
-                className="block rounded-[var(--r-md)] border p-3.5"
-                style={{ borderColor: "var(--border-subtle)" }}
+                className="card block p-3.5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">

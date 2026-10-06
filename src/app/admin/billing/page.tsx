@@ -320,16 +320,11 @@ export default async function BillingPage({
                 </>
               );
               return href ? (
-                <ClickableCard
-                  key={contract.id}
-                  href={href}
-                  className="rounded-[var(--r-md)] border p-3.5"
-                  style={{ borderColor: "var(--border-subtle)" }}
-                >
+                <ClickableCard key={contract.id} href={href} className="card p-3.5">
                   {content}
                 </ClickableCard>
               ) : (
-                <div key={contract.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                <div key={contract.id} className="card p-3.5">
                   {content}
                 </div>
               );

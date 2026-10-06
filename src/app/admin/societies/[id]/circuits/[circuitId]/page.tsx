@@ -786,7 +786,7 @@ export default async function CircuitDetailPage({
         <p className="text-sm mb-8">
           {liveMonitoringBlocker({ benchmarkSavingsPct: circuit.benchmarkSavingsPct, installationCertificateSigned: installationSignedOff }) === null ? (
             <>
-              <Link href={`/admin/live-monitoring/${circuit.id}`} className="underline font-medium">
+              <Link href={`/admin/live-monitoring/${circuit.id}`} className="link-arrow">
                 Live monitoring →
               </Link>{" "}
               <span className="text-[var(--text-muted)]">— this circuit is live; its monthly readings count from the billing start.</span>

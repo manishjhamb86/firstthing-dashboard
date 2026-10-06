@@ -78,8 +78,7 @@ export default async function FacilityManagementPage() {
                 <Link
                   key={c.id}
                   href={`/admin/facility-management/${c.id}`}
-                  className="block rounded-[var(--r-md)] border p-3.5"
-                  style={{ borderColor: "var(--border-subtle)" }}
+                  className="card block p-3.5"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <span className="min-w-0 font-semibold">{c.name}</span>

@@ -91,8 +91,21 @@ export function Modal({
           short mobile viewport scrolled the header and footer away with the
           content, so the Save button could be out of view while a field
           further down was still being filled). Header and footer stay put;
-          only the body between them scrolls. */}
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-5">{children}</div>
+          only the body between them scrolls.
+
+          Deliberately NOT flex-1/flex-grow (reverted same day, user-caught —
+          a short form, e.g. a one-field "Mark done" note, rendered with a
+          large blank gap, and the whole dialog ballooned to near the page's
+          other content on "New meeting"): a flex column with an indefinite
+          (auto) height but a max-height cap hands a flex-grow child ALL the
+          leftover room up to that cap, even when the child's own content is
+          one short field — the dialog stops sizing to its content at all.
+          Plain flex-shrink (the default) is all the long-content case
+          actually needs: when total content exceeds max-height, header and
+          footer are shrink-0 and refuse to shrink, so this div is the only
+          one that can, and min-h-0 lets it shrink below its content's
+          natural height and scroll — no grow involved either way. */}
+      <div className="min-h-0 space-y-4 overflow-y-auto p-5">{children}</div>
       {footer && (
         <div
           className="flex shrink-0 flex-wrap items-center gap-3 border-t p-5"

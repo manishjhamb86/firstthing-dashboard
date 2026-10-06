@@ -229,7 +229,7 @@ export default async function LiveMonitoringCircuitPage({
         <Card className="p-5 max-w-2xl">
           <p className="text-sm">{blocker}</p>
           <p className="mt-3 text-sm">
-            <Link href={circuitHref} className="underline">
+            <Link href={circuitHref} className="link-arrow">
               Open the circuit&apos;s commissioning page →
             </Link>
           </p>

@@ -351,7 +351,7 @@ export function MetersListClient({
             and what can be done (2026-10-07, user-caught). */}
         <div className="flex flex-col gap-2.5 sm:hidden">
           {shown.map((m) => (
-            <div key={m.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+            <div key={m.id} className="card p-3.5">
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <Link href={`/admin/meters/${m.id}`} className="font-semibold underline">

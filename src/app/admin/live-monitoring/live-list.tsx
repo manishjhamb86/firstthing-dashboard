@@ -184,7 +184,13 @@ export function LiveList({
                   </span>
                 </div>
 
-                <div className="overflow-x-auto">
+                {/* Desktop/tablet table. Below sm, each circuit becomes its
+                    own compact row inside the society's card (2026-10-07,
+                    user-caught — Benchmark/Measured ran off the right edge
+                    with only a horizontal scroll to reach them): the
+                    circuit's own link leads, benchmark/measured/days/last-
+                    reading become one wrapping line beneath it. */}
+                <div className="hidden overflow-x-auto sm:block">
                   <table className="tbl">
                     <thead>
                       <tr>
@@ -200,10 +206,7 @@ export function LiveList({
                       {s.circuits.map((c) => (
                         <tr key={c.id}>
                           <td>
-                            <Link
-                              href={`/admin/live-monitoring/${c.id}`}
-                              className="font-medium hover:underline"
-                            >
+                            <Link href={`/admin/live-monitoring/${c.id}`} className="link-arrow">
                               {c.label} →
                             </Link>
                           </td>
@@ -228,6 +231,37 @@ export function LiveList({
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                <div className="sm:hidden">
+                  {s.circuits.map((c, i) => (
+                    <div
+                      key={c.id}
+                      className="px-4 py-3"
+                      style={i > 0 ? { borderTop: "1px solid var(--border-subtle)" } : undefined}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                        <Link href={`/admin/live-monitoring/${c.id}`} className="link-arrow">
+                          {c.label} →
+                        </Link>
+                        <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                          {SERVICE_LINE_LABEL[c.serviceLine] ?? c.serviceLine}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        <span>
+                          Benchmark <span className="num font-medium" style={{ color: "var(--text)" }}>{c.benchmarkPct != null ? `${c.benchmarkPct.toFixed(1)}%` : "—"}</span>
+                        </span>
+                        {c.measuredPct == null ? (
+                          <span>awaiting readings</span>
+                        ) : (
+                          <StatusChip tone={c.warn ? "warn" : "ok"}>{c.measuredPct.toFixed(1)}% measured</StatusChip>
+                        )}
+                        <span className="num">{c.days} day{c.days === 1 ? "" : "s"}</span>
+                        <span className="num">{c.lastReading ? formatDate(c.lastReading) : "none yet"}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </Card>
             );

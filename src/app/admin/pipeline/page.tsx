@@ -195,8 +195,7 @@ export default async function PipelinePage() {
                         <Link
                           key={p.id}
                           href={`/admin/pipeline/${p.id}`}
-                          className="block rounded-[var(--r-md)] border p-3.5"
-                          style={{ borderColor: "var(--border-subtle)" }}
+                          className="card block p-3.5"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex min-w-0 items-center gap-2.5">

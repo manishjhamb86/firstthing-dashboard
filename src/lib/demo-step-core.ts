@@ -29,6 +29,8 @@ import { LOAD_TOLERANCE_PCT, resyncCircuitFigures } from "./circuit-figures";
 import { planSpanAssignment } from "./meter-installation";
 import { expectedDisplayedLoadW } from "./circuit-load";
 import { afterHistoryChange, applySpanPlan, lockedDemosTouched } from "./meter-history";
+import { refuseMissingFollowUp, remainingLinesOf, type PartialLine, type RemainingLine } from "./demo-replacement-followup";
+import type { Prisma } from "@prisma/client";
 
 export type CoreOutcome = { ok?: true; error?: string; warning?: string };
 
@@ -275,7 +277,16 @@ export type DemoReplacementLine = { lineId: string; replacementTypeId: string; c
  * handed to a crew and booked first; the day must fall after the pre period
  * and before the post period.
  */
-export async function recordDemoReplacementAs(admin: { id: string }, input: { demoId: string; replacedOn: string; lines?: DemoReplacementLine[] }): Promise<CoreOutcome> {
+export async function recordDemoReplacementAs(
+  admin: { id: string },
+  input: {
+    demoId: string;
+    replacedOn: string;
+    lines?: DemoReplacementLine[];
+    /** Required whenever a submitted line replaces fewer lights than it holds — see demo-replacement-followup.ts. */
+    followUp?: { plan: "field_revisit" | "society_completes"; reason: string };
+  },
+): Promise<CoreOutcome> {
   const g = await editableDemo(input.demoId, admin.id, "replacement");
   if ("error" in g) return { error: g.error };
   const demo = g.demo;
@@ -315,6 +326,18 @@ export async function recordDemoReplacementAs(admin: { id: string }, input: { de
       if (!Number.isFinite(r.wattage) || r.wattage <= 0 || r.wattage > 2000) return { error: `Installed wattage for ${line.deviceType.name} must be between 1 and 2000 W.` };
     }
   }
+
+  // Some lights left on the circuit, unreplaced — somebody has to finish
+  // them, and it has to be said who (2026-10-06, user-asked).
+  const partialLines: PartialLine[] = withLines
+    ? devices
+        .filter((line) => !byLine.get(line.id)?.exclude)
+        .map((line) => ({ lineId: line.id, deviceTypeName: line.deviceType.name, lineCount: line.count, replacedCount: byLine.get(line.id)!.count }))
+    : [];
+  const remaining: RemainingLine[] = remainingLinesOf(partialLines);
+  const followUpError = refuseMissingFollowUp(remaining, input.followUp ?? null);
+  if (followUpError) return { error: followUpError };
+
   await db.$transaction(async (tx) => {
     if (withLines) {
       for (const line of devices) {
@@ -343,6 +366,35 @@ export async function recordDemoReplacementAs(admin: { id: string }, input: { de
     }
     await tx.circuitDemo.update({ where: { id: demo.id }, data: { lightReplacementDate: date } });
     await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "lightReplacementDate", circuitId: demo.circuitId, demoId: demo.id, oldValue: iso(demo.lightReplacementDate), newValue: input.replacedOn, actorId: admin.id });
+
+    if (remaining.length > 0 && input.followUp?.plan === "society_completes") {
+      // The field-revisit path raises no row of its own — correcting the
+      // line's count up to the full total (below) is what closes that story.
+      await tx.demoReplacementFollowUp.create({
+        data: {
+          demoId: demo.id,
+          circuitId: demo.circuitId,
+          societyId: demo.circuit.societyId,
+          remaining: remaining as unknown as Prisma.InputJsonValue,
+          plan: "society_completes",
+          reason: input.followUp.reason.trim(),
+          raisedById: admin.id,
+        },
+      });
+      logger.info("demo.replacement_followup_raised", { demoId: demo.id, actorId: admin.id, remaining });
+    } else if (correcting && remaining.length === 0) {
+      // Every line is now fully replaced — a field crew's return visit closes
+      // whatever was left open, with no separate "mark done" button needed.
+      const open = await tx.demoReplacementFollowUp.findFirst({ where: { demoId: demo.id, completedAt: null, voidedAt: null } });
+      if (open) {
+        await tx.demoReplacementFollowUp.update({
+          where: { id: open.id },
+          data: { completedAt: new Date(), completedByAdminId: admin.id, completionNote: "All lines corrected to the full count." },
+        });
+        logger.info("demo.replacement_followup_closed_by_correction", { demoId: demo.id, followUpId: open.id, actorId: admin.id });
+      }
+    }
+
     await finish(tx, demo.circuitId, admin.id);
   });
   logger.info(correcting ? "demo.replacement_corrected" : "demo.replacement_recorded", {

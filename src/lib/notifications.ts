@@ -337,6 +337,40 @@ const openHelpNotifications = cache(async (): Promise<Notification[]> => {
   }));
 });
 
+/**
+ * Open "the society agreed to finish these lights itself" handoffs
+ * (2026-10-06) — visible to ops so a society that never gets around to it
+ * isn't forgotten. No acknowledge act: the society marking it done IS the
+ * resolution, same shape as the ticket feed.
+ */
+const openReplacementFollowUpNotifications = cache(async (): Promise<Notification[]> => {
+  const rows = await db.demoReplacementFollowUp.findMany({
+    where: { plan: "society_completes", completedAt: null, voidedAt: null },
+    orderBy: { raisedAt: "asc" },
+    include: { circuit: { select: { id: true, societyId: true, location: true, lightType: true, society: { select: { name: true } } } } },
+  });
+  return rows.map((f) => {
+    const remaining = Array.isArray(f.remaining) ? (f.remaining as { remainingCount?: number }[]) : [];
+    const total = remaining.reduce((n, l) => n + (Number(l.remainingCount) || 0), 0);
+    const label = circuitLabelOf(f.circuit.location, f.circuit.lightType);
+    return {
+      id: f.id,
+      kind: "replacement_followup_open",
+      message: `${f.circuit.society.name} · ${label}: ${total} light${total === 1 ? "" : "s"} still waiting on the society.`,
+      openedAt: f.raisedAt.toISOString(),
+      closedAt: null,
+      closedReason: null,
+      acknowledgedAt: null,
+      raiseCount: 1,
+      subject: label,
+      societyName: f.circuit.society.name,
+      circuitLabel: label,
+      ownerLabel: null,
+      href: `/admin/societies/${f.circuit.societyId}/circuits/${f.circuit.id}`,
+    };
+  });
+});
+
 function toNotification(a: Row): Notification {
   const circuit = a.circuit ?? a.meter?.circuit ?? null;
   const owner = a.meter?.owner ?? a.circuit?.meterDevice?.owner ?? null;
@@ -390,13 +424,14 @@ export const unreadNotificationCount = cache(async (): Promise<number> => {
 
 /** Everything still open, worst-first by age. */
 export const openNotifications = cache(async (): Promise<Notification[]> => {
-  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications, helpNotifications] =
+  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications, helpNotifications, followUpNotifications] =
     await Promise.all([
       db.meterAlert.findMany({ where: { closedAt: null }, orderBy: { openedAt: "asc" }, include }),
       openInvoiceNotifications(),
       openInspectionOverdueNotifications(),
       openTicketNotifications(),
       openHelpNotifications(),
+      openReplacementFollowUpNotifications(),
     ]);
   return [
     ...alertRows.map(toNotification),
@@ -404,6 +439,7 @@ export const openNotifications = cache(async (): Promise<Notification[]> => {
     ...inspectionNotifications,
     ...ticketNotifications,
     ...helpNotifications,
+    ...followUpNotifications,
   ].sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
 });
 

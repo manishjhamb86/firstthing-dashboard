@@ -196,7 +196,13 @@ export function parseDemoMeterPayload(p: unknown): FieldDemoMeterPayload | { err
 export type FieldReplacementLine = { lineId: string; replacementTypeId: string; count: number; wattage: number; exclude: boolean };
 
 /** The light replacement for one demo (demo-step-core.ts recordDemoReplacementAs). */
-export type FieldDemoReplacementPayload = { demoId: string; replacedOn: string; lines: FieldReplacementLine[] };
+export type FieldDemoReplacementPayload = {
+  demoId: string;
+  replacedOn: string;
+  lines: FieldReplacementLine[];
+  /** Required when a submitted line leaves lights unreplaced — demo-replacement-followup.ts. */
+  followUp?: { plan: "field_revisit" | "society_completes"; reason: string };
+};
 
 export function parseDemoReplacementPayload(p: unknown): FieldDemoReplacementPayload | { error: string } {
   const o = (p ?? {}) as Record<string, unknown>;
@@ -215,7 +221,13 @@ export function parseDemoReplacementPayload(p: unknown): FieldDemoReplacementPay
       exclude: l.exclude === true,
     });
   }
-  return { demoId: str(o.demoId), replacedOn: str(o.replacedOn), lines };
+  let followUp: FieldDemoReplacementPayload["followUp"];
+  if (o.followUp && typeof o.followUp === "object") {
+    const f = o.followUp as Record<string, unknown>;
+    const plan = f.plan === "society_completes" ? "society_completes" : f.plan === "field_revisit" ? "field_revisit" : null;
+    if (plan) followUp = { plan, reason: str(f.reason) };
+  }
+  return { demoId: str(o.demoId), replacedOn: str(o.replacedOn), lines, followUp };
 }
 
 /**

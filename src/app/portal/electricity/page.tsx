@@ -12,6 +12,8 @@ import { formatDate } from "@/lib/format-date";
 import { Card, CardTitle, ChartPending, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { BAND_TONE, monthName } from "../portal-widgets";
 import { LightCountHistory } from "../light-count-history";
+import { ReplacementFollowUpCard } from "./followup-card";
+import { openReplacementFollowUps } from "@/lib/portal-followups";
 import { ExclusionNote } from "@/components/exclusion-note";
 import { ConsumptionChart } from "../consumption-chart";
 import { KpiBubble } from "../kpi-tiles";
@@ -34,7 +36,7 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
   if (!hasGrant(viewer, "electricity")) redirect("/portal");
   const societyId = viewer.societyId;
 
-  const [energy, meters, published, contracts] = await Promise.all([
+  const [energy, meters, published, contracts, followUps] = await Promise.all([
     societyEnergy(societyId),
     societyMeterRows(societyId),
     // FEAT-111 — released months only (CON-33), the ₹ side of this page.
@@ -53,6 +55,7 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
         },
       },
     }),
+    openReplacementFollowUps(societyId),
   ]);
 
   const metersOnline = meters.filter((m) => m.state === "reporting").length;
@@ -98,6 +101,12 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
           ) : undefined
         }
       />
+
+      {followUps.length > 0 && (
+        <div className="mb-6">
+          <ReplacementFollowUpCard rows={followUps} />
+        </div>
+      )}
 
       {noData ? (
         <EmptyState title="No electricity work on record yet">

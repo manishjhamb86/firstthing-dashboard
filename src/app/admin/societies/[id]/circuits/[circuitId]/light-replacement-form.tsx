@@ -58,6 +58,8 @@ export function LightReplacementForm({
   onDone?: () => void;
 }) {
   const [date, setDate] = useState(initialDate ?? todayISO());
+  const [plan, setPlan] = useState<"field_revisit" | "society_completes">("field_revisit");
+  const [followUpReason, setFollowUpReason] = useState("");
   const [lineState, setLineState] = useState<Record<string, LineState>>(() =>
     Object.fromEntries(
       lines.map((l) => [
@@ -110,6 +112,19 @@ export function LightReplacementForm({
   const likeTotal = lines.filter(sameItem).reduce((n, l) => n + l.count, 0);
   const otherKwh = keptOther.reduce((n, l) => n + kwhPerDay(l), 0);
 
+  // A PARTIAL line — not excluded outright, but fewer lights replaced than it
+  // holds (2026-10-06, user-asked: "47 of 50 replaced... 3 lights left with
+  // society"). Distinct from the kept-fixture lines above, which are whole
+  // lines left out of the retrofit entirely — this is a line that is being
+  // retrofitted, just not finished on the day.
+  const partialLines = lines.filter((l) => {
+    if (isExcluded(l)) return false;
+    const c = Number(lineState[l.lineId]?.count);
+    return Number.isFinite(c) && c > 0 && c < l.count;
+  });
+  const remainingTotal = partialLines.reduce((n, l) => n + (l.count - Number(lineState[l.lineId]?.count)), 0);
+  const needsFollowUp = remainingTotal > 0;
+
   function submit() {
     // A count that differs from the original is real (a broken fitting left
     // unreplaced) but must be deliberate.
@@ -118,7 +133,13 @@ export function LightReplacementForm({
       setError(`${tooMany.deviceName}: the line holds ${tooMany.count} lights — no more than that can have been replaced.`);
       return;
     }
-    const differing = correcting ? [] : lines.filter((l) => !isExcluded(l) && Number(lineState[l.lineId]?.count) !== l.count);
+    if (needsFollowUp && !followUpReason.trim()) {
+      setError(`Say why ${remainingTotal} light${remainingTotal === 1 ? " was" : "s were"} left unreplaced, and who is finishing them.`);
+      return;
+    }
+    const differing = correcting
+      ? []
+      : lines.filter((l) => !isExcluded(l) && Number(lineState[l.lineId]?.count) !== l.count && !partialLines.includes(l));
     if (differing.length > 0) {
       const detail = differing
         .map((l) => `${l.deviceName}: ${l.count} → ${lineState[l.lineId]?.count}`)
@@ -138,7 +159,12 @@ export function LightReplacementForm({
               wattage: Number(lineState[l.lineId].wattage),
             },
       );
-      const result = await recordDemoReplacement({ demoId, replacedOn: date, lines: replacements });
+      const result = await recordDemoReplacement({
+        demoId,
+        replacedOn: date,
+        lines: replacements,
+        followUp: needsFollowUp ? { plan, reason: followUpReason.trim() } : undefined,
+      });
       setError(result?.error);
       if (!result?.error) {
         onDone?.();
@@ -272,6 +298,44 @@ export function LightReplacementForm({
         </div>
       )}
 
+      {needsFollowUp && (
+        <div className="space-y-3 rounded-md border border-[var(--field-border)] p-3">
+          <p className="text-sm">
+            <strong>
+              {remainingTotal} light{remainingTotal === 1 ? "" : "s"} left unreplaced
+            </strong>{" "}
+            ({partialLines.map((l) => `${l.count - Number(lineState[l.lineId]?.count)} × ${l.deviceName}`).join(", ")}) —
+            who is finishing them, and why weren&apos;t they done today?
+          </p>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="followup-plan" checked={plan === "field_revisit"} onChange={() => setPlan("field_revisit")} disabled={pending} />
+              The crew will visit again another day
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="followup-plan" checked={plan === "society_completes"} onChange={() => setPlan("society_completes")} disabled={pending} />
+              The society agreed to finish it themselves and will let us know
+            </label>
+          </div>
+          <Field label="Why they were left" htmlFor="lr-followup-reason">
+            <input
+              id="lr-followup-reason"
+              className="field"
+              value={followUpReason}
+              onChange={(e) => setFollowUpReason(e.target.value)}
+              placeholder="A car was parked under the fixture — the area wasn't accessible."
+              disabled={pending}
+            />
+          </Field>
+          {plan === "society_completes" && (
+            <p className="text-xs text-[var(--text-muted)]">
+              This appears on the society&apos;s own portal, with a button they use once it&apos;s done — the internal team
+              is notified the moment they mark it.
+            </p>
+          )}
+        </div>
+      )}
+
       <Field
         label="Date the last light was replaced"
         htmlFor="lr-date"
@@ -310,6 +374,55 @@ export function LightReplacementForm({
         </p>
       )}
     </Card>
+  );
+}
+
+type FollowUpRow = {
+  id: string;
+  plan: "field_revisit" | "society_completes";
+  reason: string;
+  remaining: unknown;
+  raisedAt: Date | string;
+  completedAt: Date | string | null;
+  completionNote: string | null;
+  voidedAt: Date | string | null;
+  completedByProfile: { name: string | null; email: string } | null;
+  completedByAdmin: { name: string | null; email: string } | null;
+};
+
+/**
+ * The remaining-lights handoff raised at the replacement step (2026-10-06,
+ * user-asked) — shown on the done step so a lingering open one is visible,
+ * not just discoverable by noticing the kept column still reads nonzero.
+ */
+export function ReplacementFollowUpStatus({ followUps }: { followUps: FollowUpRow[] }) {
+  if (followUps.length === 0) return null;
+  const remainingCount = (r: unknown) => (Array.isArray(r) ? r.reduce((n, l) => n + (Number(l?.remainingCount) || 0), 0) : 0);
+  return (
+    <div className="space-y-2">
+      {followUps.map((f) => {
+        const total = remainingCount(f.remaining);
+        if (f.voidedAt) return null;
+        if (f.completedAt) {
+          const by = f.completedByProfile ? `${f.completedByProfile.name ?? f.completedByProfile.email} (the society)` : f.completedByAdmin ? (f.completedByAdmin.name ?? f.completedByAdmin.email) : "—";
+          return (
+            <p key={f.id} className="text-[13px] text-[var(--text-muted)]">
+              {total} remaining light{total === 1 ? "" : "s"} — completed by {by}
+              {f.completionNote ? ` (${f.completionNote})` : ""}.
+            </p>
+          );
+        }
+        return (
+          <div key={f.id} className="rounded-md border border-[var(--warn-line)] bg-[var(--warn-bg)] p-3 text-[13px]">
+            <strong>
+              {total} light{total === 1 ? "" : "s"} still left unreplaced
+            </strong>{" "}
+            — {f.plan === "society_completes" ? "the society agreed to finish these themselves" : "the crew is returning to finish these"}.{" "}
+            {f.reason}
+          </div>
+        );
+      })}
+    </div>
   );
 }
 

@@ -545,7 +545,12 @@ export async function updateDemoReplacementVisit(
 export type { DemoReplacementLine } from "@/lib/demo-step-core";
 
 /** Record the replacement (the pivot day) — or correct it. The step itself is in src/lib/demo-step-core.ts. */
-export async function recordDemoReplacement(input: { demoId: string; replacedOn: string; lines?: DemoReplacementLine[] }): Promise<Outcome> {
+export async function recordDemoReplacement(input: {
+  demoId: string;
+  replacedOn: string;
+  lines?: DemoReplacementLine[];
+  followUp?: { plan: "field_revisit" | "society_completes"; reason: string };
+}): Promise<Outcome> {
   const a = await actor("field");
   if ("error" in a) return { error: a.error };
   const r = await recordDemoReplacementAs(a.admin, input);

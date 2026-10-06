@@ -9,7 +9,7 @@ import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } f
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { GatePassForm } from "./gate-pass-form";
 import { GatePassApproval } from "./gate-pass-approval";
-import { LightReplacementForm, ReplacementRecord } from "./light-replacement-form";
+import { LightReplacementForm, ReplacementFollowUpStatus, ReplacementRecord } from "./light-replacement-form";
 import { ReplacementDateForm } from "./replacement-date-form";
 import { RescaleRowActions } from "./rescale-row-actions";
 import { RescaleForm } from "./rescale-form";
@@ -142,6 +142,21 @@ export default async function CircuitDetailPage({
           scheduledEvents: { where: { kind: "installation_day" }, orderBy: { startAt: "asc" } },
           readings: { orderBy: { date: "asc" } },
           acceptances: { orderBy: { version: "desc" } },
+          replacementFollowUps: {
+            orderBy: { raisedAt: "desc" },
+            select: {
+              id: true,
+              plan: true,
+              reason: true,
+              remaining: true,
+              raisedAt: true,
+              completedAt: true,
+              completionNote: true,
+              voidedAt: true,
+              completedByProfile: { select: { name: true, email: true } },
+              completedByAdmin: { select: { name: true, email: true } },
+            },
+          },
         },
       },
     },
@@ -744,6 +759,7 @@ export default async function CircuitDetailPage({
                 } else if (step.status === "done" && demo.lightReplacementDate) {
                   body = (
                     <div className="space-y-4">
+                      <ReplacementFollowUpStatus followUps={demo.replacementFollowUps} />
                       <ReplacementRecord
                         demoId={demo.id}
                         lines={replacementFormLines}

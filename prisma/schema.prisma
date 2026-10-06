@@ -376,6 +376,7 @@ model Society {
   inspections             Inspection[]
   fmEngagements           SocietyFmEngagement[]
   dateChangeRequests      DateChangeRequest[]
+  replacementFollowUps    DemoReplacementFollowUp[]
 
   @@map("societies")
 }
@@ -450,6 +451,8 @@ model Profile {
   ticketsRaised  Ticket[] @relation("TicketRaisedBy")
   ticketsTouched Ticket[] @relation("TicketStatusBy")
 
+  replacementFollowUpsCompleted DemoReplacementFollowUp[] @relation("FollowUpCompletedByProfile")
+
   @@index([societyId])
   @@map("profiles")
 }
@@ -500,6 +503,8 @@ model AdminUser {
   demoReplacementsAssigned    CircuitDemo[]               @relation("DemoReplacementAssignedBy")
   demosUnlocked               CircuitDemo[]               @relation("DemoUnlockedBy")
   demoAcceptances             CircuitDemoAcceptance[]
+  replacementFollowUpsRaised    DemoReplacementFollowUp[] @relation("FollowUpRaisedBy")
+  replacementFollowUpsCompleted DemoReplacementFollowUp[] @relation("FollowUpCompletedByAdmin")
   waterTanksAssigned          WaterTank[]                 @relation("WaterTankAssignedBy")
   meterDevicesAssigned        MeterDevice[]               @relation("MeterDeviceAssignedBy")
   meterInstallationsOpened    MeterInstallation[]         @relation("MeterInstalledBy")
@@ -1247,6 +1252,7 @@ model Circuit {
   meterInstallations      MeterInstallation[]
   alerts                  MeterAlert[]
   inspections             Inspection[]
+  replacementFollowUps    DemoReplacementFollowUp[]
 
   @@index([societyId])
   @@index([siteSurveyId])
@@ -1363,6 +1369,7 @@ model CircuitDemo {
   gatePasses            GatePass[]
   scheduledEvents       ScheduledEvent[]
   reviews               DemoResultReview[]
+  replacementFollowUps  DemoReplacementFollowUp[]
 
   @@unique([circuitId, sequence])
   @@map("circuit_demos")
@@ -1380,6 +1387,69 @@ enum DemoOrigin {
   migrated
 
   @@map("demo_origin")
+}
+
+/// A partial light replacement (2026-10-06, user-asked): some of a demo's
+/// lights could not be replaced on the day — an inaccessible area, something
+/// parked under the fixture — and somebody has to finish the rest. Which of
+/// the two, not a free-text status, because the completion path differs:
+/// a field revisit is closed by the field crew simply correcting the line's
+/// own replaced count up to the full total (demo-step-core.ts's existing
+/// path); a society that agreed to finish the lights itself needs a surface
+/// it can act from, which it does not otherwise have (its own portal).
+enum FollowUpPlan {
+  field_revisit
+  society_completes
+
+  @@map("follow_up_plan")
+}
+
+/// The remaining-lights record a partial replacement raises. Created only
+/// when `plan` is `society_completes` — a field revisit needs no row of its
+/// own, since correcting the line's count closes the story by itself.
+///
+/// `remaining` is a snapshot, not a live query: "47 of 50, 3 left with the
+/// society" has to stay a legible fact on this row even after the line's own
+/// replacementCount has since moved (corrected, or completed from here).
+model DemoReplacementFollowUp {
+  id        String @id @default(cuid())
+  demoId    String @map("demo_id")
+  circuitId String @map("circuit_id")
+  societyId String @map("society_id")
+
+  /// `{lineId, deviceTypeName, remainingCount}[]` as recorded at the moment
+  /// this was raised.
+  remaining Json
+
+  plan   FollowUpPlan
+  reason String
+
+  raisedAt   DateTime @default(now()) @map("raised_at")
+  raisedById String   @map("raised_by_id")
+
+  completedAt          DateTime? @map("completed_at")
+  /// Set when the SOCIETY marks it done from its own portal.
+  completedByProfileId String?   @map("completed_by_profile_id")
+  /// Set when FirsThing staff closes it instead — a field-revisit demo whose
+  /// lines were all corrected up to full, closed the same moment that
+  /// happens (demo-step-core.ts), never requiring its own button.
+  completedByAdminId   String?   @map("completed_by_admin_id")
+  completionNote       String?   @map("completion_note")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
+  demo               CircuitDemo @relation(fields: [demoId], references: [id], onDelete: Cascade)
+  circuit            Circuit     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  society            Society     @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  raisedBy           AdminUser   @relation("FollowUpRaisedBy", fields: [raisedById], references: [id])
+  completedByProfile Profile?    @relation("FollowUpCompletedByProfile", fields: [completedByProfileId], references: [id])
+  completedByAdmin   AdminUser?  @relation("FollowUpCompletedByAdmin", fields: [completedByAdminId], references: [id])
+
+  @@index([circuitId])
+  @@index([societyId, completedAt])
+  @@map("demo_replacement_follow_ups")
 }
 
 enum DemoReadingSource {

@@ -70,3 +70,13 @@ export function demoAlertMessage(input: { kind: DemoAlertKind; what: string; det
   if (input.detail) parts.push(input.detail);
   return { title: DEMO_ALERT_TITLE[input.kind], body: parts.join(" · "), url: input.url, tag: `demo:${input.kind}:${input.ref}` };
 }
+
+/** The society finished the lights it agreed to complete itself (2026-10-06). */
+export function replacementFollowUpCompletedMessage(input: { what: string; url: string; ref: string }): PushMessage {
+  return {
+    title: "Society finished the remaining lights",
+    body: input.what,
+    url: input.url,
+    tag: `followup:completed:${input.ref}`,
+  };
+}

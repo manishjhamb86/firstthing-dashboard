@@ -6,6 +6,7 @@ import {
   assignmentMessage,
   demoAlertMessage,
   meterAlertMessage,
+  replacementFollowUpCompletedMessage,
   shouldNotifyAssignee,
   type DemoAlertKind,
 } from "@/lib/push-messages";
@@ -134,6 +135,25 @@ export async function notifyDemoAlert(input: {
   await safely("demo_alert", () =>
     sendPush(ids, demoAlertMessage({ kind: input.kind, what: input.what, detail: input.detail, url: input.url, ref: input.ref })),
   );
+}
+
+/** The society marked its own remaining-lights follow-up complete (2026-10-06). */
+export async function notifyReplacementFollowUpCompleted(input: { followUpId: string; circuitId: string; raisedById: string }): Promise<void> {
+  await safely("replacement_followup_completed", async () => {
+    const circuit = await db.circuit.findUnique({
+      where: { id: input.circuitId },
+      select: { societyId: true, location: true, lightType: true, society: { select: { name: true } } },
+    });
+    if (!circuit) return;
+    await sendPush(
+      [input.raisedById],
+      replacementFollowUpCompletedMessage({
+        what: `${circuit.society.name} · ${circuit.location || circuit.lightType}`,
+        url: `/admin/societies/${circuit.societyId}/circuits/${input.circuitId}`,
+        ref: input.followUpId,
+      }),
+    );
+  });
 }
 
 export async function notifyMeterAlert(input: { meterId: string; kind: string }): Promise<void> {

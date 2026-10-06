@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { formatDate, monthLabel } from "@/lib/format-date";
 import { currentInspectionPeriod, inspectionReminderPeriod, societiesMissingInspection } from "@/lib/notifications";
 import {
@@ -131,39 +131,51 @@ export default async function InspectionsPage({
         }
       />
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <Card className="p-5">
-          <CardTitle>{monthLabel(`${currentPeriod}-01`)} so far</CardTitle>
-          <StatRow>
-            <Stat label="Done" value={monthSummary.doneCount} tone="ok" detail={`of ${monthSummary.totalActive} active societies`} />
-            <Stat label="Pending" value={monthSummary.pendingCount} tone="accent" detail="not yet visited this month" />
-            <Stat
-              label="Delayed"
-              value={monthSummary.delayedCount}
-              tone={monthSummary.delayedCount > 0 ? "bad" : "accent"}
-              detail="missed last month too"
-            />
-          </StatRow>
-        </Card>
-
-        <Card className="p-5">
-          <CardTitle>Fault pattern, overall</CardTitle>
-          {faultSummary.normalCount + faultSummary.chronicCount === 0 ? (
-            <p className="text-[13px] text-[var(--text-muted)]">
-              No society has enough finalised inspections yet to judge a pattern ({faultSummary.notEnoughHistoryCount} still building history).
-            </p>
-          ) : faultSummary.chronicCount === 0 ? (
-            <p className="text-[13px]">
-              <span className="num font-semibold" style={{ color: "var(--ok-fg)" }}>
-                {faultSummary.normalCount}
-              </span>{" "}
-              societ{faultSummary.normalCount === 1 ? "y has" : "ies have"} a normal inspection pattern overall — nothing alarming.
-              {faultSummary.notEnoughHistoryCount > 0 &&
-                ` ${faultSummary.notEnoughHistoryCount} ${faultSummary.notEnoughHistoryCount === 1 ? "is" : "are"} still building history.`}
-            </p>
-          ) : (
-            <>
-              <p className="mb-2 text-[13px]">
+      {/* Compacted into one short strip (2026-10-06, user-caught: two full-height
+          cards pushed the actual listing below the fold) — the numbers read
+          inline rather than as big tiles, since they are a glance-and-move-on
+          summary, not the page's own content. */}
+      <Card className="mb-4 p-3">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 text-[13px]">
+          <p>
+            <span className="lbl mr-2">{monthLabel(`${currentPeriod}-01`)}</span>
+            <span className="num font-semibold" style={{ color: "var(--ok-fg)" }}>
+              {monthSummary.doneCount}
+            </span>{" "}
+            done ·{" "}
+            <span className="num font-semibold" style={{ color: "var(--accent)" }}>
+              {monthSummary.pendingCount}
+            </span>{" "}
+            pending ·{" "}
+            <span className="num font-semibold" style={{ color: monthSummary.delayedCount > 0 ? "var(--bad-fg)" : "var(--accent)" }}>
+              {monthSummary.delayedCount}
+            </span>{" "}
+            delayed
+            <span className="text-[var(--text-muted)]"> (of {monthSummary.totalActive} active societies)</span>
+          </p>
+          <p className="max-w-lg text-[var(--text-muted)]">
+            {faultSummary.normalCount + faultSummary.chronicCount === 0 ? (
+              <>
+                <span className="lbl mr-2" style={{ color: "var(--text)" }}>
+                  Fault pattern
+                </span>
+                No society has enough history to judge a pattern yet ({faultSummary.notEnoughHistoryCount} building history).
+              </>
+            ) : faultSummary.chronicCount === 0 ? (
+              <>
+                <span className="lbl mr-2" style={{ color: "var(--text)" }}>
+                  Fault pattern
+                </span>
+                <span className="num font-semibold" style={{ color: "var(--ok-fg)" }}>
+                  {faultSummary.normalCount}
+                </span>{" "}
+                normal — nothing alarming.
+              </>
+            ) : (
+              <>
+                <span className="lbl mr-2" style={{ color: "var(--text)" }}>
+                  Fault pattern
+                </span>
                 <span className="num font-semibold" style={{ color: "var(--ok-fg)" }}>
                   {faultSummary.normalCount}
                 </span>{" "}
@@ -171,32 +183,27 @@ export default async function InspectionsPage({
                 <span className="num font-semibold" style={{ color: "var(--bad-fg)" }}>
                   {faultSummary.chronicCount}
                 </span>{" "}
-                society{faultSummary.chronicCount === 1 ? "" : "ies"} with repeated faults every visit, well above the portfolio&rsquo;s own typical rate
-                {faultSummary.notEnoughHistoryCount > 0 &&
-                  ` (${faultSummary.notEnoughHistoryCount} still building history)`}
-                .
-              </p>
-              <ul className="flex flex-col">
-                {faultSummary.chronic.map((c, i) => (
-                  <li
-                    key={c.societyId}
-                    className="flex flex-wrap items-center justify-between gap-2 py-1.5 text-[13px]"
-                    style={i < faultSummary.chronic.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
-                  >
-                    <span className="font-medium">{c.name}</span>
-                    <span className="text-[var(--text-muted)]">
-                      <span className="num" style={{ color: "var(--bad-fg)" }}>
-                        {c.recentFaultRatePct.toFixed(1)}%
-                      </span>{" "}
-                      faulty, last {c.inspectionsConsidered} visits — a real pattern, likely a poor resident experience worth a closer look.
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </Card>
-      </div>
+                repeated faults every visit, above the portfolio&rsquo;s typical rate.
+              </>
+            )}
+          </p>
+        </div>
+        {faultSummary.chronic.length > 0 && (
+          <ul className="mt-2 flex flex-col border-t pt-1" style={{ borderColor: "var(--border-subtle)" }}>
+            {faultSummary.chronic.map((c) => (
+              <li key={c.societyId} className="flex flex-wrap items-center justify-between gap-2 py-1 text-[12.5px]">
+                <span className="font-medium">{c.name}</span>
+                <span className="text-[var(--text-muted)]">
+                  <span className="num" style={{ color: "var(--bad-fg)" }}>
+                    {c.recentFaultRatePct.toFixed(1)}%
+                  </span>{" "}
+                  faulty, last {c.inspectionsConsidered} visits
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {missingPeriod !== null && (
         <Card className="mb-6 p-6">

@@ -9,7 +9,7 @@ import { publishedMonthsFor } from "@/lib/published-months-loader";
 import { societyMeterRows } from "@/lib/meter-view";
 import { SAVINGS_BAND_META } from "@/lib/circuit-load";
 import { formatDate } from "@/lib/format-date";
-import { Card, CardTitle, ChartPending, EmptyState, PageHeader, StatusChip } from "@/components/ui";
+import { Card, CardTitle, ChartPending, EmptyState, InfoNote, PageHeader, StatusChip } from "@/components/ui";
 import { BAND_TONE, monthName } from "../portal-widgets";
 import { LightCountHistory } from "../light-count-history";
 import { ReplacementFollowUpCard } from "./followup-card";
@@ -202,12 +202,17 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
               a society whose circuits represent only themselves has nothing
               to disclose here. */}
           {energy.circuits.some((c) => c.representedLightCount > c.lightCount) && (
-            <p className="-mt-1 mb-5 text-[12.5px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-              The kWh figures above are what your metered circuits actually recorded. The ₹ figure is
-              for your whole society — each metered circuit stands in for every light of its type, so
-              its saving is scaled up to that full count before it is billed (see the circuit table
-              below for each circuit&apos;s count).
-            </p>
+            <div className="-mt-1 mb-5 flex items-start gap-1.5">
+              <InfoNote label="Why the kWh and ₹ figures use different counts">
+                The kWh figures above are what your metered circuits actually recorded. The ₹ figure is
+                for your whole society — each metered circuit stands in for every light of its type, so
+                its saving is scaled up to that full count before it is billed (see the circuit table
+                below for each circuit&apos;s count).
+              </InfoNote>
+              <p className="pt-0.5 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                Why the ₹ figure covers more lights than the kWh figures
+              </p>
+            </div>
           )}
 
           {published.months.length > 0 && (
@@ -236,10 +241,20 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
                   ))}
                 </div>
               )}
-              <p className="mb-3 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                Each month as FirsThing billed it. The saving is what the old lights would have cost; FirsThing&apos;s share is your invoice, and the rest stays with you.
-              </p>
-              <div className="overflow-x-auto">
+              <div className="mb-3 flex items-start gap-1.5">
+                <InfoNote label="How this figure is worked out">
+                  Each month as FirsThing billed it. The saving is what the old lights would have cost;
+                  FirsThing&apos;s share is your invoice, and the rest stays with you.
+                </InfoNote>
+                <p className="pt-0.5 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                  How this is worked out
+                </p>
+              </div>
+              {/* Desktop/tablet table. Below sm, a stacked card per month
+                  (2026-10-07, user-caught — Paid/Kept ran off the right
+                  edge with no way to scroll to them): month + basis lead,
+                  the four figures become a compact 2x2 grid beneath. */}
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="tbl tbl-compact">
                   <thead>
                     <tr>
@@ -269,6 +284,33 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
                   </tbody>
                 </table>
               </div>
+
+              <div className="flex flex-col gap-2.5 sm:hidden">
+                {shownMonths.map((m) => (
+                  <div key={m.period} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                    <p className="font-semibold">{monthName(m.period)}</p>
+                    <p className="mt-0.5 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+                      {m.basisWords}
+                      {m.savingsPct !== null ? ` ${m.savingsPct.toFixed(1)}%.` : ""}
+                      {m.updatedAt ? ` Updated ${formatDate(m.updatedAt)}.` : ""}
+                    </p>
+                    <div className="mt-2.5 grid grid-cols-2 gap-x-4 gap-y-2 text-[12.5px]">
+                      <span>
+                        Saved <span className="num font-semibold">{Math.round(m.savedKwh).toLocaleString("en-IN")} kWh</span>
+                      </span>
+                      <span>
+                        Saved <span className="num font-semibold">{inr(m.savedValue)}</span>
+                      </span>
+                      <span>
+                        Paid <span className="num font-semibold">{inr(m.paidToFirsthing)}</span>
+                      </span>
+                      <span>
+                        Kept <span className="num font-semibold">{inr(m.societyKeeps)}</span>
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </Card>
           )}
 
@@ -287,7 +329,14 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
           {energy.circuits.length > 0 && (
             <Card className="mb-5 p-6">
               <CardTitle>Circuit-wise{energy.month ? ` · ${monthName(energy.month)}` : ""}</CardTitle>
-              <div className="print-table-scroll">
+              {/* Desktop/tablet table. Below sm, one card per circuit
+                  (2026-10-07, user-caught — the first cell alone carries
+                  the label, a light-count history, a kept-fixtures note
+                  and an exclusion note, which cannot sensibly sit in a
+                  table cell at phone width): the same pieces, unchanged,
+                  stacked in reading order, with the four right-hand
+                  columns collapsed into one small stat row at the end. */}
+              <div className="hidden print-table-scroll sm:block">
                 <table className="tbl w-full">
                   <thead>
                     <tr>
@@ -370,6 +419,76 @@ export default async function PortalElectricityPage({ searchParams }: { searchPa
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              <div className="flex flex-col gap-4 sm:hidden">
+                {energy.circuits.map((c) => (
+                  <div key={c.id} className="rounded-[var(--r-md)] border p-3.5" style={{ borderColor: "var(--border-subtle)" }}>
+                    <p>
+                      <strong>{c.label}</strong>{" "}
+                      <span className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                        · {c.lightCount.toLocaleString("en-IN")} metered
+                        {c.representedLightCount > c.lightCount && (
+                          <>
+                            {" "}
+                            · {c.representedLightCount.toLocaleString("en-IN")} across your society (
+                            {c.fullInstallation.toLocaleString("en-IN")} full installation +{" "}
+                            {c.demoLights.toLocaleString("en-IN")} demo)
+                          </>
+                        )}
+                      </span>
+                    </p>
+                    <LightCountHistory stages={c.lightHistory} />
+                    {c.keptStory && (
+                      <div
+                        className="mt-2 rounded-[var(--r-md)] border px-3 py-2 text-[12.5px] leading-relaxed"
+                        style={{ borderColor: "var(--border-subtle)" }}
+                      >
+                        <p style={{ color: "var(--text-muted)" }}>{c.keptStory.atDemo}</p>
+                        <p className="mt-1" style={{ color: "var(--text)" }}>
+                          {c.monitoringFrom ? `From ${formatDate(new Date(`${c.monitoringFrom}T00:00:00Z`))} — ` : ""}
+                          {c.keptStory.afterFull}
+                        </p>
+                      </div>
+                    )}
+                    <ExclusionNote
+                      exclusion={c.exclusion}
+                      before={c.baselineNow}
+                      after={c.monthDailyAvg}
+                      title="Why this month's saving leaves some fixtures out"
+                      className="mt-2"
+                    />
+                    <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[12.5px]">
+                      <span>
+                        <span className="num font-semibold">{c.monthDailyAvg !== null ? c.monthDailyAvg.toFixed(1) : "—"}</span> kWh/day
+                      </span>
+                      <span>
+                        {c.monthKwh !== null ? (
+                          <span className="num font-semibold">{Math.round(c.monthKwh).toLocaleString("en-IN")} kWh</span>
+                        ) : (
+                          "—"
+                        )}{" "}
+                        this month
+                      </span>
+                      <span>
+                        {c.savingsPct !== null ? (
+                          <span
+                            className="num inline-block rounded-[var(--r-sm)] px-2 py-0.5 font-bold"
+                            style={{ background: c.band ? SAVINGS_BAND_META[c.band].bg : undefined }}
+                          >
+                            {c.savingsPct.toFixed(1)}%
+                          </span>
+                        ) : (
+                          <span className="num">—</span>
+                        )}{" "}
+                        saved
+                      </span>
+                      <span style={{ color: "var(--text-muted)" }}>
+                        {c.benchmarkPct !== null ? `benchmark ${c.benchmarkPct.toFixed(1)}%` : "benchmark not agreed yet"}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
               {shareNote && (
                 <p className="mt-3 text-xs" style={{ color: "var(--text-subtle)" }}>

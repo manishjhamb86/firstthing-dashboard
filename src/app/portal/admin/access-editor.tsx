@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import type { PortalGrant } from "@prisma/client";
-import { Card, CardTitle, ErrorText, StatusChip } from "@/components/ui";
+import { Card, CardTitle, ErrorText, InfoNote, StatusChip } from "@/components/ui";
 import { GRANT_META } from "@/lib/portal-access";
 import { setMemberGrants } from "./grant-actions";
 import { MemberAvatar, RoleBadge } from "../member-badges";
@@ -184,10 +184,12 @@ export function AccessEditor({
                 {pending ? "Saving…" : "Save access"}
               </button>
             </div>
-            <p className="mt-3 text-[11.5px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-              A tab only appears for a member when its access is on. The office-bearer designation
-              itself still moves by transfer — exactly one member holds it.
-            </p>
+            <div className="mt-3">
+              <InfoNote label="How this works">
+                A tab only appears for a member when its access is on. The office-bearer designation
+                itself still moves by transfer — exactly one member holds it.
+              </InfoNote>
+            </div>
           </>
         ) : (
           <>

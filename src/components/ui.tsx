@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Info } from "lucide-react";
 import { BackButton } from "./back-button";
 
 // Shared presentational primitives for the DIR-02 Console system
@@ -18,6 +19,28 @@ export function StatusChip({ tone, children }: { tone: ChipTone; children: React
 
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={`card ${className ?? ""}`}>{children}</div>;
+}
+
+/**
+ * A permanent paragraph of "how this figure is computed" copy was reading
+ * as a wall of text ahead of the actual content it explained (user-caught,
+ * 2026-10-07, across four pages) — this folds it behind a small tap-to-open
+ * info icon instead, inline next to whatever it explains.
+ *
+ * Plain `<details>`/`<summary>`, not client state: it needs no JS and works
+ * identically in a Server Component, and native disclosure semantics (a
+ * real toggle button, no hover-only affordance) are exactly what a
+ * touch-first product needs here — hover isn't a reliable input on a phone.
+ */
+export function InfoNote({ label = "More info", children }: { label?: string; children: ReactNode }) {
+  return (
+    <details className="info-note">
+      <summary aria-label={label} title={label}>
+        <Info size={13} strokeWidth={2} aria-hidden />
+      </summary>
+      <div className="info-note-body">{children}</div>
+    </details>
+  );
 }
 
 // Section heading inside a card — Modernize-style sentence-case semibold,

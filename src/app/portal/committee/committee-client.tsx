@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
+import { Card, CardTitle, ErrorText, Field, InfoNote } from "@/components/ui";
 import { createSocietyAccount, deactivateSocietyAccount } from "../actions";
 import { TransferButton } from "../transfer-button";
 import { MemberAvatar, RoleBadge } from "../member-badges";
@@ -71,20 +71,25 @@ export function CommitteeClient({
   }
 
   return (
-    <div className="grid items-start gap-5 lg:grid-cols-12">
-      <Card className="p-6 lg:col-span-7">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="mb-0">Committee accounts</CardTitle>
+      <Card className="p-6">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5">
+            <CardTitle className="mb-0">Committee accounts</CardTitle>
+            <InfoNote label="About these accounts">
+              These are the people at your society who can sign in. Exactly one holds the office-bearer
+              designation — the only authority that can accept an offer or sign an agreement. These
+              accounts see only your society&apos;s own data, and nothing else in FirsThing. The
+              office-bearer designation moves by handing it to someone — there is always exactly one, so
+              it is transferred rather than added, and the account holding it cannot be removed until it
+              has been passed on.
+            </InfoNote>
+          </div>
           {viewerIsOfficeBearer && !open && (
             <button type="button" className="btn-primary btn-sm" onClick={() => setOpen(true)}>
               Add an account
             </button>
           )}
         </div>
-        <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-          These are the people at your society who can sign in. Exactly one holds the office-bearer
-          designation — the only authority that can accept an offer or sign an agreement.
-        </p>
 
         {handover && (
           <div
@@ -200,16 +205,5 @@ export function CommitteeClient({
           ))}
         </ul>
       </Card>
-
-      <Card className="p-6 lg:col-span-5">
-        <CardTitle>What you can and cannot do here</CardTitle>
-        <p className="text-[13px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-          These accounts see only your society&apos;s data, and nothing else in FirsThing. The
-          office-bearer designation moves by handing it to someone — there is always exactly one, so
-          it is transferred rather than added, and the account holding it cannot be removed until it
-          has been passed on.
-        </p>
-      </Card>
-    </div>
   );
 }

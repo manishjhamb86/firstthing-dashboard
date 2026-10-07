@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
-import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui";
+import { Card, CardTitle, EmptyState, InfoNote, PageHeader } from "@/components/ui";
 import { circuitLabelOf } from "@/lib/meter-view";
 import { CompactTile, KpiBubble } from "../kpi-tiles";
 import { Droplets, Lightbulb, Zap } from "lucide-react";
@@ -259,12 +259,17 @@ export default async function PortalInventoryPage() {
                 // Said plainly, because the two numbers on this card have
                 // different evidence behind them and presenting them
                 // identically is what INV-02 exists to stop.
-                <p className="mt-4 text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                  Installed is the full installation plus the demo lights — the demo lights went in first
-                  and are not part of the full installation, and together they are what your bill is
-                  computed on. The lines beneath are the fittings on the metered circuit itself, which is
-                  what the readings are taken from.
-                </p>
+                <div className="mt-4 flex items-start gap-1.5">
+                  <InfoNote label="How the two light counts differ">
+                    Installed is the full installation plus the demo lights — the demo lights went in
+                    first and are not part of the full installation, and together they are what your bill
+                    is computed on. The lines beneath are the fittings on the metered circuit itself,
+                    which is what the readings are taken from.
+                  </InfoNote>
+                  <p className="pt-0.5 text-xs" style={{ color: "var(--text-subtle)" }}>
+                    How the installed and metered counts differ
+                  </p>
+                </div>
               )}
             </Card>
           )}

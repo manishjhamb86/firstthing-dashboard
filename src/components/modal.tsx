@@ -56,9 +56,18 @@ export function Modal({
         // clicks on the content hit a child and stop here.
         if (e.target === ref.current) onClose();
       }}
-      className={`m-auto flex flex-col ${
+      // The backdrop dimming is a plain CSS rule in globals.css
+      // (`dialog.ft-modal::backdrop`), not Tailwind's `backdrop:` variant
+      // (2026-10-07, user-caught across three unrelated modals: "doesn't
+      // even close down" / page content visibly showing through). Checked
+      // directly against the compiled stylesheet: this project's Tailwind
+      // v4 setup was generating NO rule at all for `backdrop:bg-black/40` —
+      // every dialog in the app has been falling back to the browser's own
+      // ~10% default backdrop tint instead of an actual dimming overlay,
+      // which is indistinguishable from "the modal isn't really modal."
+      className={`ft-modal m-auto flex flex-col ${
         size === "wide" ? "w-[min(56rem,calc(100vw-2rem))]" : "w-[min(34rem,calc(100vw-2rem))]"
-      } max-h-[calc(100vh-4rem)] overflow-hidden rounded-[var(--r-md)] border p-0 backdrop:bg-black/40`}
+      } max-h-[calc(100vh-4rem)] overflow-hidden rounded-[var(--r-md)] border p-0`}
       style={{
         borderColor: "var(--border)",
         background: "var(--surface)",

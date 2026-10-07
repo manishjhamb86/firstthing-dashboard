@@ -250,6 +250,57 @@ body {
   box-shadow: var(--e1);
 }
 
+/* Every <dialog>'s backdrop dimming (src/components/modal.tsx), as a plain
+   rule rather than Tailwind's `backdrop:` variant — checked directly against
+   the compiled stylesheet (2026-10-07, user-caught on three unrelated
+   modals): this project's Tailwind v4 setup generates no CSS at all for
+   `backdrop:bg-black/40`, so every dialog in the app has been falling back
+   to the browser's own near-invisible ~10% default tint. The result reads
+   exactly like "the modal isn't a real overlay" — page content behind it
+   stays fully legible instead of dimmed, which is what every report of a
+   modal "not closing" / "content showing through" actually was. */
+dialog.ft-modal::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+/* InfoNote (src/components/ui.tsx) — a tap-to-open explainer, replacing a
+   permanent paragraph of "how this figure is computed" copy. */
+.info-note {
+  display: inline-block;
+}
+.info-note > summary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-subtle);
+  cursor: pointer;
+  list-style: none;
+}
+.info-note > summary::-webkit-details-marker {
+  display: none;
+}
+.info-note > summary:hover,
+.info-note[open] > summary {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-subtle);
+}
+.info-note-body {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  max-width: 48ch;
+}
+
 /* label — softened from the Console treatment: still uppercase for form
    labels, but lighter tracking and weight to sit with Jakarta */
 .lbl {

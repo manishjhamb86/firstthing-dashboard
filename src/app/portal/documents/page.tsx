@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
-import { Card, EmptyState, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
+import { Card, EmptyState, InfoNote, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { publicS3Url } from "@/lib/s3";
 import { SOCIETY_DOC_TYPES, societyDocuments } from "@/lib/society-documents";
 import { monthName } from "../portal-widgets";
@@ -111,11 +111,13 @@ export default async function PortalDocumentsPage({
 
       {latestShared.length > 0 && (
         <Card className="mb-6 p-5">
-          <p className="text-sm font-bold">Demo reports</p>
-          <p className="mb-3 text-xs" style={{ color: "var(--text-subtle)" }}>
-            The demo savings report, and for each demo the readings before and after the lights were replaced. They are built
-            from the accepted readings each time you open them.
-          </p>
+          <div className="mb-3 flex items-center gap-1.5">
+            <p className="text-sm font-bold">Demo reports</p>
+            <InfoNote label="What these reports are">
+              The demo savings report, and for each demo the readings before and after the lights were
+              replaced. They are built from the accepted readings each time you open them.
+            </InfoNote>
+          </div>
           <ul className="flex flex-col gap-2">
             {latestShared.map((r) => (
               <li key={r.id} className="flex flex-wrap gap-2">

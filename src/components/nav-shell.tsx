@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Menu, MoreHorizontal, X, type LucideIcon } from "lucide-react";
@@ -113,6 +113,31 @@ export function NavShell({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [identityOpen, setIdentityOpen] = useState(false);
+  // Opened, it only closed on its own toggle — tapping the toggle again, or
+  // a link inside it — never on tapping anywhere else on the page, which
+  // reads as broken (user-caught, 2026-10-07, the "More" sheet left open
+  // over the page behind it). A pointerdown outside either the toggle or
+  // the open panel closes it; the toggle itself is inside `navRef`, so its
+  // own onClick still runs untouched rather than being raced by this.
+  const navToggleRef = useRef<HTMLButtonElement>(null);
+  const navPanelRef = useRef<HTMLDivElement>(null);
+  const identityRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open && !identityOpen) return;
+    function onPointerDown(e: PointerEvent) {
+      const target = e.target as Node;
+      if (
+        open &&
+        !(navToggleRef.current && navToggleRef.current.contains(target)) &&
+        !(navPanelRef.current && navPanelRef.current.contains(target))
+      ) {
+        setOpen(false);
+      }
+      if (identityOpen && identityRef.current && !identityRef.current.contains(target)) setIdentityOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open, identityOpen]);
   // A navigation should always close whatever popover is open — otherwise
   // the identity dropdown from one page is still open, invisibly, on the
   // next, and the next tap on the avatar looks like it does nothing.
@@ -238,7 +263,7 @@ export function NavShell({
         <ThemeSwitcher current={theme} surface="content" />
       </div>
       <div aria-hidden className="h-6 w-px hidden sm:block" style={{ background: "var(--border)" }} />
-      <div className="relative flex items-center gap-2.5">
+      <div ref={identityRef} className="relative flex items-center gap-2.5">
         {/*
           Below `sm` the email + Sign out block used to be `hidden sm:block`
           — genuinely unreachable, not just visually tight: the avatar next
@@ -332,6 +357,7 @@ export function NavShell({
             <div className="flex min-w-0 items-center gap-3">
               {!mobileTabBar && (
                 <button
+                  ref={navToggleRef}
                   type="button"
                   onClick={() => setOpen((v) => !v)}
                   aria-expanded={open}
@@ -352,6 +378,7 @@ export function NavShell({
 
           {open && !mobileTabBar && (
             <div
+              ref={navPanelRef}
               className="lg:hidden px-4 pb-4 pt-2 space-y-1 max-h-[calc(100vh-64px)] overflow-y-auto"
               style={{ background: "var(--chrome)", borderTop: "1px solid var(--chrome-border)" }}
             >
@@ -380,6 +407,7 @@ export function NavShell({
         <>
           {open && (
             <div
+              ref={navPanelRef}
               className="lg:hidden fixed inset-x-0 bottom-16 z-20 max-h-[60vh] space-y-1 overflow-y-auto px-4 py-3"
               style={{
                 background: "var(--chrome)",
@@ -417,6 +445,7 @@ export function NavShell({
               );
             })}
             <button
+              ref={navToggleRef}
               type="button"
               onClick={() => setOpen((v) => !v)}
               aria-expanded={open}

@@ -131,7 +131,19 @@ export default async function PortalBillingPage() {
                   return (
                     <div
                       key={inv.id}
-                      className="flex flex-wrap items-center justify-between gap-3 py-3"
+                      // flex-wrap left the chip+button pair stranded on its
+                      // own line at the card's LEFT edge whenever the row
+                      // didn't fit both halves side by side — justify-between
+                      // only spaces items sharing one line, and a lone group
+                      // wrapped onto its own line has nothing to space
+                      // against (user-caught, 2026-10-07, with a screenshot:
+                      // "still not fixed" — this list sat beside the Latest-
+                      // invoice card I'd already fixed, untouched). That
+                      // group is now its own full-width row below sm, with
+                      // justify-between spanning the row's real width so the
+                      // button reaches the same right edge the text above it
+                      // does.
+                      className="flex flex-col gap-3 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between"
                       style={i < past.length - 1 ? { borderBottom: "1px solid var(--border-subtle)" } : undefined}
                     >
                       <div>
@@ -142,7 +154,7 @@ export default async function PortalBillingPage() {
                           {rupees(inv.amount)}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center justify-between gap-3 sm:w-auto sm:justify-start">
                         <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
                         <DownloadInvoiceButton invoiceId={inv.id} />
                       </div>

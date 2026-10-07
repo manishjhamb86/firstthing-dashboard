@@ -264,8 +264,16 @@ dialog.ft-modal::backdrop {
 }
 
 /* InfoNote (src/components/ui.tsx) — a tap-to-open explainer, replacing a
-   permanent paragraph of "how this figure is computed" copy. */
+   permanent paragraph of "how this figure is computed" copy.
+
+   A real floating tooltip, not an inline expansion (user-caught, 2026-10-07,
+   with a screenshot: the first version let the opened <details> push every-
+   thing below it down the page — "this disturbs the page"). .info-note is
+   the positioning anchor and .info-note-body is pulled out of flow onto its
+   own layer, so opening it draws OVER whatever is below rather than shoving
+   it down; nothing else on the page moves either way. */
 .info-note {
+  position: relative;
   display: inline-block;
 }
 .info-note > summary {
@@ -290,15 +298,20 @@ dialog.ft-modal::backdrop {
   background: var(--accent-subtle);
 }
 .info-note-body {
-  margin-top: 8px;
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 6px);
+  left: 0;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 32px));
   padding: 10px 12px;
   border-radius: var(--r-sm);
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: var(--e2);
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--text-muted);
-  max-width: 48ch;
 }
 
 /* label — softened from the Console treatment: still uppercase for form

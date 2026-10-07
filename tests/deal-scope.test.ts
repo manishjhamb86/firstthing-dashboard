@@ -98,4 +98,12 @@ describe("dealLabel", () => {
     expect(dealLabel("lighting", null)).toBe("Lighting");
     expect(dealLabel("pumps", "  ")).toBe("Water pumps");
   });
+  it("strips a line name already typed into the scope, rather than doubling it", () => {
+    expect(dealLabel("lighting", "Lighting — Lift Lobby And Staircase Area Tower J and K")).toBe(
+      "Lighting — Lift Lobby And Staircase Area Tower J and K",
+    );
+  });
+  it("is case-insensitive about the redundant prefix", () => {
+    expect(dealLabel("lighting", "lighting — Basement B1")).toBe("Lighting — Basement B1");
+  });
 });

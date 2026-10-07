@@ -89,7 +89,18 @@ export function checkNewDeal(input: {
  */
 export function dealLabel(serviceLine: string, dealScope: string | null | undefined): string {
   const line = SERVICE_LINE_LABEL[serviceLine] ?? serviceLine;
-  const scope = dealScope?.trim();
+  let scope = dealScope?.trim();
+  // A stored scope is supposed to be just the part name — "Basement B1",
+  // never "Lighting — Basement B1" — but one real deal's own scope had the
+  // line name typed straight into it (user-caught, 2026-10-08: "Lighting —
+  // Lighting — Lift Lobby…" on RG Residency), so this function was
+  // faithfully prepending the line a second time. Stripping a redundant
+  // leading "{line} — " here means a future mis-typed scope reads correctly
+  // everywhere this is called, rather than relying on every future entry
+  // point to get the typing right.
+  if (scope && scope.toLowerCase().startsWith(`${line.toLowerCase()} — `)) {
+    scope = scope.slice(line.length + 3).trim();
+  }
   return scope ? `${line} — ${scope}` : line;
 }
 

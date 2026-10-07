@@ -169,6 +169,41 @@ export function HealthBubble({
     );
   }
 
+  // The attention case still carried the full KPI-tile anatomy (a 36px icon
+  // bubble, a 24px headline, its own "System health · …" line) even in the
+  // compact slot — which is sized to match the quiet OK pill above, not a
+  // full tile. One tank offline was taking as much vertical room as the
+  // whole rest of the mobile hero combined (user-caught, 2026-10-08, with
+  // a screenshot). Same slim pill shape as the OK case, just warn-toned and
+  // carrying the issue link(s) instead of the summary line.
+  if (compact) {
+    const warn = toneColors("warn");
+    return (
+      <div className="flex flex-col gap-1 rounded-[var(--r-md)] px-3.5 py-2.5" style={{ background: warn.bg }}>
+        <div className="flex items-center gap-2.5">
+          <span
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+            style={{ background: "var(--surface)", color: warn.fg }}
+          >
+            <AlertTriangle size={12.5} strokeWidth={2.5} aria-hidden />
+          </span>
+          <p className="text-[13px] font-bold" style={{ color: warn.fg }}>
+            {attentionLabel}
+          </p>
+        </div>
+        <ul className="flex flex-col gap-0.5 pl-[34px]">
+          {issues.map((i) => (
+            <li key={i.text}>
+              <Link href={i.href} className="text-[12.5px] font-semibold underline" style={{ color: warn.fg }}>
+                {i.text} →
+              </Link>
+            </li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+
   // Same anatomy as KpiBubble — icon bubble on top, the headline where the
   // figure goes, a bold line, a muted line — so the four tiles line up
   // (user-caught 2026-09-25: the side-icon layout sat out of line).

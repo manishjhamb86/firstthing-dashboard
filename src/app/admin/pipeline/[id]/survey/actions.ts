@@ -73,7 +73,22 @@ export async function addLightingInventoryArea(input: {
 export async function updateLightingInventoryArea(
   id: string,
   siteSurveyId: string,
-  input: { count: number; method: "walked" | "records" | "estimated"; note?: string },
+  input: {
+    count: number;
+    method: "walked" | "records" | "estimated";
+    note?: string;
+    /**
+     * The row's own area/light-type names, typed as recorded with no
+     * standard casing or spelling check (2026-10-08, user-asked, from the
+     * same "allow editing names" report as the candidate circuit's own
+     * rename). Optional so every existing caller omitting them is
+     * unaffected. Safe to rename for the same reason the circuit's own
+     * lightType is: both are read as plain labels, matched to each other
+     * only through lightTypeKey()'s normalisation at read time, below.
+     */
+    area?: string;
+    lightType?: string;
+  },
 ): Promise<{ error?: string; circuit?: { from: number; to: number } | null; circuitNote?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -91,6 +106,15 @@ export async function updateLightingInventoryArea(
   if (input.method === "estimated" && !input.note?.trim()) {
     return { error: "A note is required when the count is estimated, not walked." };
   }
+  if (input.area !== undefined && !input.area.trim()) return { error: "Area can't be blank." };
+  if (input.lightType !== undefined && !input.lightType.trim()) return { error: "Light type can't be blank." };
+  // The effective values after this edit — every downstream match/aggregate
+  // below uses these, never the stale row.area/row.lightType, so a rename
+  // takes effect immediately rather than leaving this save matched against
+  // the name it just corrected away from.
+  const area = input.area?.trim() || row.area;
+  const lightType = input.lightType?.trim() || row.lightType;
+
   // The inventory IS the population (user-caught 2026-09-16: "demo savings
   // report still shows 1773 even after regenerating"). The candidate circuit
   // for this light type follows the corrected total — forward only, as a
@@ -102,10 +126,10 @@ export async function updateLightingInventoryArea(
   await db.$transaction(async (tx) => {
     await tx.lightingInventoryArea.update({
       where: { id },
-      data: { count: input.count, method: input.method, note: input.note?.trim() || null },
+      data: { count: input.count, method: input.method, note: input.note?.trim() || null, area, lightType },
     });
     const total = (
-      await tx.lightingInventoryArea.aggregate({ where: { siteSurveyId, lightType: row.lightType, voidedAt: null }, _sum: { count: true } })
+      await tx.lightingInventoryArea.aggregate({ where: { siteSurveyId, lightType, voidedAt: null }, _sum: { count: true } })
     )._sum.count ?? 0;
     // The inventory's light type and the candidate's are two free-text
     // fields ("Surface Light 12W" on one, "Lift Lobby and Staircase" on the
@@ -117,7 +141,7 @@ export async function updateLightingInventoryArea(
       where: { siteSurveyId, voidedAt: null },
       select: { id: true, lightType: true, location: true, representedLightCount: true, ...DEMO_LIGHTS_SELECT },
     });
-    const byType = live.filter((c) => lightTypeKey(c.lightType) === lightTypeKey(row.lightType));
+    const byType = live.filter((c) => lightTypeKey(c.lightType) === lightTypeKey(lightType));
     const circuits = byType.length > 0 ? byType : live.length === 1 ? live : [];
     if (circuits.length !== 1) {
       circuitNote =
@@ -125,7 +149,7 @@ export async function updateLightingInventoryArea(
           ? "More than one circuit carries this light type — correct each one's represented count on its own page."
           : live.length === 0
             ? undefined
-            : `No candidate circuit matches the light type "${row.lightType}" (${live.map((c) => c.lightType).join(", ")}) — correct the represented count on the circuit's own page.`;
+            : `No candidate circuit matches the light type "${lightType}" (${live.map((c) => c.lightType).join(", ")}) — correct the represented count on the circuit's own page.`;
       return;
     }
     const c = circuits[0];
@@ -143,7 +167,7 @@ export async function updateLightingInventoryArea(
         previousCount: c.representedLightCount,
         nextCount: full,
         effectiveFrom,
-        reason: `Lighting inventory corrected on the site survey (${row.area}: ${row.count} → ${input.count}); full installation = ${total} counted − ${total - full} demo lights.`,
+        reason: `Lighting inventory corrected on the site survey (${area}: ${row.count} → ${input.count}); full installation = ${total} counted − ${total - full} demo lights.`,
         recordedById: actor.id,
       },
     });
@@ -161,8 +185,8 @@ export async function updateLightingInventoryArea(
     actorId: actor.id,
     siteSurveyId,
     rowId: id,
-    from: { count: row.count, method: row.method },
-    to: { count: input.count, method: input.method },
+    from: { area: row.area, lightType: row.lightType, count: row.count, method: row.method },
+    to: { area, lightType, count: input.count, method: input.method },
     circuitApplied: applied,
   });
   revalidatePath(`/admin/pipeline`);

@@ -402,6 +402,8 @@ export default async function SiteSurveyPage({
                           <EditAreaForm
                             id={a.id}
                             siteSurveyId={siteSurvey.id}
+                            area={a.area}
+                            lightType={a.lightType}
                             count={a.count}
                             method={a.method}
                             note={a.note}

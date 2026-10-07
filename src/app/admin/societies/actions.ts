@@ -8,6 +8,7 @@ import { requireAdmin, resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
 import { societyDedupeKey } from "@/lib/society-key";
+import { findSimilarSociety, toTitleCase } from "@/lib/text-similarity";
 import { resolveBackdate } from "@/lib/backdate";
 
 // FEAT-085: society record & lifecycle. A society starts as a `prospect`
@@ -35,10 +36,17 @@ export async function createSociety(input: {
   /** The facility management company running it, and since when (2026-09-25). */
   fmCompanyId?: string;
   fmSince?: string;
+  /**
+   * Set only when the operator has already been shown a near-match (below)
+   * and confirmed it is a genuinely different society — skips the soft
+   * check on the retry, so confirming doesn't loop back into the same
+   * warning.
+   */
+  confirmedNotDuplicate?: boolean;
 }) {
   const creator = await requireAdmin();
 
-  const name = input.name.trim();
+  const name = toTitleCase(input.name);
   const location = input.location.trim();
 
   if (!name || !location) return { error: "Society name and location are required." };
@@ -61,6 +69,25 @@ export async function createSociety(input: {
       error: `${existing.name} in ${existing.location} is already on the system. Open that record rather than creating a second one.`,
       duplicateOf: existing.id,
     };
+  }
+
+  // A SOFT check on top of the hard one above (2026-10-08, user-asked,
+  // after "OXY HOMEZ" and "Oxy Homes" — one misspelling apart, with
+  // unrelated location text — reached real data as two rows the exact-match
+  // key above could never have caught). Name-only, society-wide: refusing
+  // outright on a ~90%-similar name would also block two genuinely
+  // different societies that happen to share most of their name, so this
+  // asks rather than blocks, and only once — confirmedNotDuplicate skips it
+  // on the resubmit.
+  if (!input.confirmedNotDuplicate) {
+    const allSocieties = await db.society.findMany({ select: { id: true, name: true, location: true } });
+    const near = findSimilarSociety(name, allSocieties);
+    if (near) {
+      logger.warn("society.near_duplicate_flagged", { name, location, nearId: near.id, nearName: near.name });
+      return {
+        nearDuplicate: { id: near.id, name: near.name, location: near.location },
+      };
+    }
   }
 
   // The first date in a backdated deal. Everything after it is ordered

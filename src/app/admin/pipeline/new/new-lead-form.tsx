@@ -8,7 +8,9 @@ import { SERVICE_LINE_LABEL } from "@/lib/status-maps";
 
 type Society = { id: string; name: string; location: string };
 type SalesOwner = { id: string; name: string | null; email: string };
-type FormState = { error?: string; duplicateOf?: string } | undefined;
+type FormState =
+  | { error?: string; duplicateOf?: string; nearDuplicate?: { id: string; name: string; location: string } }
+  | undefined;
 
 async function action(_prev: FormState, formData: FormData): Promise<FormState> {
   const societyId = formData.get("societyId") as string;
@@ -30,6 +32,7 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     salesOwnerId: formData.get("salesOwnerId") as string,
     dealScope: (formData.get("dealScope") as string) || undefined,
     loggedOn: (formData.get("loggedOn") as string) || undefined,
+    confirmedNotDuplicate: formData.get("confirmedNotDuplicate") === "true",
   });
   return result;
 }
@@ -291,6 +294,26 @@ export function NewLeadForm({
         ) : state?.error ? (
           <ErrorText>{state.error}</ErrorText>
         ) : null}
+
+        {/* A near-match, not a duplicate — asked, not refused (2026-10-08,
+            user-asked). See new-society-form.tsx's own comment for why. */}
+        {state?.nearDuplicate && (
+          <div
+            className="rounded-[var(--r-md)] border p-4 text-sm"
+            style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
+          >
+            <p style={{ color: "var(--warn-fg)" }}>
+              This name is close to an existing society:{" "}
+              <span className="font-semibold">{state.nearDuplicate.name}</span> in {state.nearDuplicate.location}.
+              Is this the same society?
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="submit" name="confirmedNotDuplicate" value="true" disabled={pending} className="btn-ghost btn-sm">
+                {pending ? "Logging…" : "No — this is a different society, log it"}
+              </button>
+            </div>
+          </div>
+        )}
 
         <button type="submit" disabled={pending} className="btn-primary">
           {pending ? "Logging…" : "Log lead"}

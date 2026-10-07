@@ -6,7 +6,9 @@ import { Card, Field } from "@/components/ui";
 import { BackdateField } from "@/components/backdate-field";
 import { FmCompanyPicker } from "@/components/fm-company-picker";
 
-type FormState = { error?: string; duplicateOf?: string } | undefined;
+type FormState =
+  | { error?: string; duplicateOf?: string; nearDuplicate?: { id: string; name: string; location: string } }
+  | undefined;
 
 async function action(_prev: FormState, formData: FormData): Promise<FormState> {
   const result = await createSociety({
@@ -16,8 +18,14 @@ async function action(_prev: FormState, formData: FormData): Promise<FormState> 
     createdOn: (formData.get("createdOn") as string) || undefined,
     fmCompanyId: (formData.get("fmCompanyId") as string) || undefined,
     fmSince: (formData.get("fmSince") as string) || undefined,
+    // The submit button that confirms past a near-duplicate carries its own
+    // name/value pair (see the button below) rather than a separately
+    // tracked piece of state — one fewer thing that can drift from what was
+    // actually submitted.
+    confirmedNotDuplicate: formData.get("confirmedNotDuplicate") === "true",
   });
-  // createSociety redirects on success, so reaching here means an error.
+  // createSociety redirects on success, so reaching here means an error or
+  // a near-duplicate to confirm past.
   return result;
 }
 
@@ -100,6 +108,33 @@ export function NewSocietyForm({ demoMode = false, fmCompanies = [] }: { demoMod
             <p className="mb-2" style={{ color: "var(--warn-fg)" }}>
               {state.error}
             </p>
+          </div>
+        )}
+
+        {/* A name close enough to an existing society that it's worth
+            asking, but not an exact duplicate (2026-10-08, user-asked) —
+            refused-not-flagged is the wrong call here, since a ~90%-similar
+            name can genuinely be a different, unrelated society. Asked
+            once; the "it's different" button carries its own confirmation
+            so resubmitting doesn't loop back into the same warning. */}
+        {state?.nearDuplicate && (
+          <div
+            className="rounded-[var(--r-md)] border p-4 text-sm"
+            style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)" }}
+          >
+            <p style={{ color: "var(--warn-fg)" }}>
+              This name is close to an existing society:{" "}
+              <span className="font-semibold">{state.nearDuplicate.name}</span> in{" "}
+              {state.nearDuplicate.location}. Is this the same society?
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <a href={`/admin/societies/${state.nearDuplicate.id}`} className="btn-secondary btn-sm">
+                Open {state.nearDuplicate.name} instead
+              </a>
+              <button type="submit" name="confirmedNotDuplicate" value="true" disabled={pending} className="btn-ghost btn-sm">
+                {pending ? "Creating…" : "No — this is a different society, create it"}
+              </button>
+            </div>
           </div>
         )}
 

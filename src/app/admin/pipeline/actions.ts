@@ -8,6 +8,7 @@ import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import { checkNewDeal } from "@/lib/deal-scope";
 import { societyDedupeKey } from "@/lib/society-key";
+import { findSimilarSociety, toTitleCase } from "@/lib/text-similarity";
 import { canOwn, isOperations, mayAct, teamMeta } from "@/lib/admin-teams";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { refuseOrderedDate } from "@/lib/step-dates";
@@ -41,7 +42,12 @@ export async function createLead(input: {
   dealScope?: string;
   /** DEMO_MODE only — the day this lead was actually logged. */
   loggedOn?: string;
-}): Promise<{ error?: string; duplicateOf?: string } | undefined> {
+  /** Set only after the operator has confirmed a near-match isn't the same society. */
+  confirmedNotDuplicate?: boolean;
+}): Promise<
+  | { error?: string; duplicateOf?: string; nearDuplicate?: { id: string; name: string; location: string } }
+  | undefined
+> {
   const session = await requireAdminPermission("manage_pipeline");
 
   const contactName = input.contactName.trim();
@@ -70,7 +76,7 @@ export async function createLead(input: {
   let societyId = input.societyId;
   if (!societyId) {
     const ns = input.newSociety;
-    const name = ns?.name.trim();
+    const name = ns?.name.trim() ? toTitleCase(ns.name) : "";
     const location = ns?.location.trim();
     if (!name || !location) return { error: "Society name and location are required." };
     if (!ns || !Number.isFinite(ns.flatCount) || ns.flatCount <= 0) {
@@ -89,6 +95,19 @@ export async function createLead(input: {
         error: `${existing.name} in ${existing.location} is already on the system — pick it from the list above instead of entering it again.`,
         duplicateOf: existing.id,
       };
+    }
+
+    // The soft, name-only check on top of the hard one above (2026-10-08,
+    // user-asked) — see societies/actions.ts's createSociety for the full
+    // reasoning. Same rule, same threshold, here too since this is the
+    // OTHER real path that creates a society.
+    if (!input.confirmedNotDuplicate) {
+      const allSocieties = await db.society.findMany({ select: { id: true, name: true, location: true } });
+      const near = findSimilarSociety(name, allSocieties);
+      if (near) {
+        logger.warn("society.near_duplicate_flagged", { name, location, nearId: near.id, nearName: near.name, via: "lead" });
+        return { nearDuplicate: { id: near.id, name: near.name, location: near.location } };
+      }
     }
 
     // A society created BY this lead cannot postdate it: backdate the

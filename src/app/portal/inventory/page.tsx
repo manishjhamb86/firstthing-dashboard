@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { circuitLightCountHistoryByCircuit, describeLightCountChange, filterCustomerRelevant } from "@/lib/circuit-light-history";
 import { deviceLabel, fittingLabel, installedCount, meteredOf } from "@/lib/inventory-display";
+import { groupCircuitsByDeal } from "@/lib/circuit-deal-group";
 import { formatDate } from "@/lib/format-date";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
@@ -31,6 +32,7 @@ export default async function PortalInventoryPage() {
       orderBy: { createdAt: "asc" },
       select: {
         id: true,
+        siteSurveyId: true,
         location: true,
         lightType: true,
         // When the lights went in: the latest counted demo's replacement day
@@ -107,9 +109,35 @@ export default async function PortalInventoryPage() {
   // are not part of it, but they are FirsThing's lights at the society all
   // the same.
   const installedRows = circuits.filter((c) => c.lightReplacementDate && meteredOf(c) > 0);
-  const societyLights = installedRows.reduce((s, c) => s + totalLights(c.representedLightCount, c.demoLights), 0);
+  // Several circuits can stand for ONE deal/location — the society asked
+  // for a second demo, or the first wasn't trusted, and the redo was walked
+  // through as a fresh circuit rather than a second demo on the existing
+  // one (2026-10-08, user-specified). Each such circuit carries its OWN
+  // full-installation figure, independently entered — summing them as if
+  // they were separate installations would double what a resident is told
+  // was actually fitted. The full installation is counted once per deal
+  // group; a disagreement between members takes the larger figure rather
+  // than silently averaging it, so the total never reads lower than what
+  // was genuinely installed.
+  const { groups: installedGroups, solo: installedSolo } = groupCircuitsByDeal(
+    installedRows.map((c) => ({
+      id: c.id,
+      siteSurveyId: c.siteSurveyId,
+      location: c.location,
+      lightType: c.lightType,
+      demoLights: c.demoLights,
+      fullInstallation: c.representedLightCount,
+      isLive: false,
+      state: "",
+    })),
+  );
+  const groupFullInstallation = (g: (typeof installedGroups)[number]) =>
+    g.fullInstallationDisagreement ? Math.max(...g.fullInstallationDisagreement) : g.members[0]!.fullInstallation;
   const demoLights = installedRows.reduce((s, c) => s + c.demoLights, 0);
-  const fullLights = installedRows.reduce((s, c) => s + c.representedLightCount, 0);
+  const fullLights =
+    installedGroups.reduce((s, g) => s + groupFullInstallation(g), 0) +
+    installedSolo.reduce((s, c) => s + c.fullInstallation, 0);
+  const societyLights = fullLights + demoLights;
   const sensors = tanks.filter((t) => t.hasLevelSignal);
 
   const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0;
@@ -159,20 +187,47 @@ export default async function PortalInventoryPage() {
                   figures meet: the population FirsThing replaced across the
                   society, and the fittings on the circuit that measures it.
                   Listed flat, the per-line counts read as the whole
-                  installation, which is the report this fixes. */}
-              <div className="flex flex-col gap-5">
-                {circuits
-                  .filter((c) => c.devices.length > 0)
-                  .map((c) => {
-                    const metered = meteredOf(c);
-                    const society = totalLights(c.representedLightCount, c.demoLights);
-                    const standsIn = c.lightReplacementDate && metered > 0 && c.representedLightCount > 0;
-                    return (
-                      <div key={c.id}>
+                  installation, which is the report this fixes.
+
+                  Where more than one circuit stands for the same deal/
+                  location — a second demo the society asked for, walked
+                  through as its own circuit rather than a second demo on
+                  the first one (2026-10-08, user-specified) — those circuits
+                  are shown together under one shared heading, each demo's
+                  own line still listed, so the combined total reads once
+                  rather than as two unrelated installations. */}
+              {(() => {
+                const lit = circuits.filter((c) => c.devices.length > 0);
+                const { groups, solo } = groupCircuitsByDeal(
+                  lit.map((c) => ({
+                    id: c.id,
+                    siteSurveyId: c.siteSurveyId,
+                    location: c.location,
+                    lightType: c.lightType,
+                    demoLights: c.demoLights,
+                    fullInstallation: c.representedLightCount,
+                    isLive: false,
+                    state: "",
+                  })),
+                );
+                const byId = new Map(lit.map((c) => [c.id, c]));
+                /** `null` for a solo circuit — shows its own name and full
+                 * caption. A number for a circuit inside a deal group — the
+                 * combined caption already lives on the group's own
+                 * heading, so each member just names which demo it is. */
+                const renderCircuit = (c: (typeof lit)[number], demoOrdinal: number | null) => {
+                  const metered = meteredOf(c);
+                  const society = totalLights(c.representedLightCount, c.demoLights);
+                  const standsIn = c.lightReplacementDate && metered > 0 && c.representedLightCount > 0;
+                  return (
+                    <div key={c.id}>
+                      {demoOrdinal !== null ? (
+                        <p className="text-[12.5px] font-semibold" style={{ color: "var(--text-subtle)" }}>
+                          Demo {demoOrdinal} — <span className="num">{c.demoLights.toLocaleString("en-IN")}</span> lights
+                        </p>
+                      ) : (
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                          <p className="text-[13.5px] font-semibold">
-                            {circuitLabelOf(c.location, c.lightType)}
-                          </p>
+                          <p className="text-[13.5px] font-semibold">{circuitLabelOf(c.location, c.lightType)}</p>
                           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                             {standsIn ? (
                               <>
@@ -196,65 +251,90 @@ export default async function PortalInventoryPage() {
                             )}
                           </p>
                         </div>
-                        {c.lightHistory.length > 0 && (
-                          // Closed by default — most circuits have never had
-                          // a correction, and the ones that have state it in
-                          // full rather than leave the split looking like a
-                          // mistake (2026-10-05, user-asked).
-                          <details className="mt-1">
-                            <summary className="cursor-pointer text-xs underline" style={{ color: "var(--text-muted)" }}>
-                              {c.lightHistory.length === 1 ? "1 correction on record" : `${c.lightHistory.length} corrections on record`}
-                            </summary>
-                            <ul className="mt-1 flex flex-col gap-1">
-                              {c.lightHistory.map((h, i) => (
-                                <li key={i} className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-                                  <span className="font-medium">{h.at}</span> — {describeLightCountChange(h)}
-                                </li>
-                              ))}
-                            </ul>
-                          </details>
-                        )}
-                        <div className="mt-1 flex flex-col">
-                          {c.devices.map((d) => (
-                            <div
-                              key={d.id}
-                              className="flex flex-wrap items-center justify-between gap-3 py-2.5"
-                              style={{ borderBottom: "1px solid var(--border-subtle)" }}
-                            >
-                              <div>
-                                <p className="text-[13px] font-medium">
-                                  {d.replacementType
-                                    ? fittingLabel(
-                                        d.replacementWattage ?? d.wattage,
-                                        d.replacementType.name,
-                                      )
-                                    : fittingLabel(d.wattage, d.deviceType.name)}
-                                </p>
-                                <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
-                                  {d.excludedFromCalculation
-                                    ? "on the circuit, not replaced by FirsThing"
-                                    : installedCount(c, d) > 0
-                                      ? `on the metered circuit${
-                                          c.lightReplacementDate
-                                            ? ` · installed ${formatDate(c.lightReplacementDate)}`
-                                            : ""
-                                        }`
-                                      : "original fitting, awaiting replacement"}
-                                </p>
-                              </div>
-                              <span className="num text-[15px] font-bold">
-                                {(d.replacementType
-                                  ? (d.replacementCount ?? d.count)
-                                  : d.count
-                                ).toLocaleString("en-IN")}
-                              </span>
+                      )}
+                      {c.lightHistory.length > 0 && (
+                        // Closed by default — most circuits have never had
+                        // a correction, and the ones that have state it in
+                        // full rather than leave the split looking like a
+                        // mistake (2026-10-05, user-asked).
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs underline" style={{ color: "var(--text-muted)" }}>
+                            {c.lightHistory.length === 1 ? "1 correction on record" : `${c.lightHistory.length} corrections on record`}
+                          </summary>
+                          <ul className="mt-1 flex flex-col gap-1">
+                            {c.lightHistory.map((h, i) => (
+                              <li key={i} className="text-xs leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                                <span className="font-medium">{h.at}</span> — {describeLightCountChange(h)}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      )}
+                      <div className="mt-1 flex flex-col">
+                        {c.devices.map((d) => (
+                          <div
+                            key={d.id}
+                            className="flex flex-wrap items-center justify-between gap-3 py-2.5"
+                            style={{ borderBottom: "1px solid var(--border-subtle)" }}
+                          >
+                            <div>
+                              <p className="text-[13px] font-medium">
+                                {d.replacementType
+                                  ? fittingLabel(d.replacementWattage ?? d.wattage, d.replacementType.name)
+                                  : fittingLabel(d.wattage, d.deviceType.name)}
+                              </p>
+                              <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
+                                {d.excludedFromCalculation
+                                  ? "on the circuit, not replaced by FirsThing"
+                                  : installedCount(c, d) > 0
+                                    ? `on the metered circuit${
+                                        c.lightReplacementDate ? ` · installed ${formatDate(c.lightReplacementDate)}` : ""
+                                      }`
+                                    : "original fitting, awaiting replacement"}
+                              </p>
                             </div>
-                          ))}
+                            <span className="num text-[15px] font-bold">
+                              {(d.replacementType ? (d.replacementCount ?? d.count) : d.count).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                };
+                return (
+                  <div className="flex flex-col gap-6">
+                    {groups.map((g) => (
+                      <div key={g.label + g.members.map((m) => m.id).join(",")}>
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                          <p className="text-[13.5px] font-semibold">{g.label}</p>
+                          <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                            {g.combinedTotal !== null ? (
+                              <>
+                                <span className="num font-bold" style={{ color: "var(--text)" }}>
+                                  {g.combinedTotal.toLocaleString("en-IN")}
+                                </span>{" "}
+                                installed ·{" "}
+                                <span className="num">
+                                  {g.members[0]!.fullInstallation.toLocaleString("en-IN")}
+                                </span>{" "}
+                                full installation +{" "}
+                                <span className="num">{g.combinedDemoLights.toLocaleString("en-IN")}</span> demo
+                              </>
+                            ) : (
+                              `${g.combinedDemoLights.toLocaleString("en-IN")} demo lights across ${g.members.length} demos`
+                            )}
+                          </p>
+                        </div>
+                        <div className="mt-3 flex flex-col gap-4 border-l-2 pl-3" style={{ borderColor: "var(--border-subtle)" }}>
+                          {g.members.map((m, i) => renderCircuit(byId.get(m.id)!, i + 1))}
                         </div>
                       </div>
-                    );
-                  })}
-              </div>
+                    ))}
+                    {solo.map((s) => renderCircuit(byId.get(s.id)!, null))}
+                  </div>
+                );
+              })()}
               {fullLights > 0 && (
                 // Said plainly, because the two numbers on this card have
                 // different evidence behind them and presenting them

@@ -28,7 +28,15 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
   const circuits = await db.circuit.findMany({
     where: { societyId: id, voidedAt: null },
     orderBy: { createdAt: "asc" },
-    include: { devices: { select: DEMO_LIGHTS_SELECT.devices.select }, demos: DEMO_LIGHTS_SELECT.demos },
+    include: {
+      devices: { select: DEMO_LIGHTS_SELECT.devices.select },
+      demos: DEMO_LIGHTS_SELECT.demos,
+      // "Live" — a real meter is currently attached and reporting through
+      // this circuit (a cache of the open MeterInstallation, not a second
+      // query against it). A circuit built from a backfilled demo, or one
+      // whose meter moved elsewhere, has none.
+      meterDevice: { select: { id: true } },
+    },
   });
 
   // FEAT-040-AC-2 is "no ad-hoc creation here", not "give no direction".
@@ -105,9 +113,10 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
       ) : (
         <div className="max-w-none">
           <CircuitList
-            circuits={circuits.map(({ devices, demos, ...c }) => ({
+            circuits={circuits.map(({ devices, demos, meterDevice, ...c }) => ({
               ...c,
               demoLights: demoLightsInstalled({ meteredLightCount: c.meteredLightCount, demos, devices }),
+              isLive: meterDevice !== null,
               canRemove: removal.get(c.id)?.canRemove ?? false,
               blockLabel: removal.get(c.id)?.blockLabel ?? null,
             }))}

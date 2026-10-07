@@ -65,7 +65,28 @@ export function Modal({
       // every dialog in the app has been falling back to the browser's own
       // ~10% default backdrop tint instead of an actual dimming overlay,
       // which is indistinguishable from "the modal isn't really modal."
-      className={`ft-modal m-auto flex flex-col ${
+      //
+      // The REAL cause of "open by default / doesn't close on click"
+      // (2026-10-08, user-caught — a dialog sitting visible on the page
+      // whatever its open state, on every surface): `flex flex-col` is NOT
+      // here any more. A plain author-origin CSS declaration — even one
+      // class selector's worth — always wins over a user-agent stylesheet
+      // rule, REGARDLESS of specificity. The browser's own built-in
+      // `dialog:not([open]) { display: none }` is a user-agent rule, and an
+      // unconditional `.flex { display: flex }` class sitting on the
+      // element at all times outranks it no matter what. So the dialog was
+      // being forced to render (display: flex, un-hidden) whether or not
+      // `showModal()`/`close()` had ever run — every Modal on every page
+      // was permanently visible, absolutely positioned wherever it sits in
+      // the DOM, never truly `:modal`, with no backdrop and nothing to
+      // close. Checked directly against a live stage dialog: `isModal:
+      // false`, `position: "absolute"`, `display: "flex"` on a dialog whose
+      // own `open` attribute was false. The fix is `dialog.ft-modal[open]`
+      // in globals.css — display:flex now applies ONLY while the `open`
+      // attribute (which showModal()/close() genuinely control) is present,
+      // so a closed dialog has no competing author rule and the browser's
+      // own display:none wins exactly when it should.
+      className={`ft-modal m-auto ${
         size === "wide" ? "w-[min(56rem,calc(100vw-2rem))]" : "w-[min(34rem,calc(100vw-2rem))]"
       } max-h-[calc(100vh-4rem)] overflow-hidden rounded-[var(--r-md)] border p-0`}
       style={{

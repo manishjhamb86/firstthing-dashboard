@@ -263,6 +263,23 @@ dialog.ft-modal::backdrop {
   background: rgba(0, 0, 0, 0.45);
 }
 
+/* The real cause of "the modal is open by default and doesn't close"
+   (2026-10-08, user-caught everywhere — portal and admin alike): the
+   dialog's own className used to carry plain `flex flex-col` Tailwind
+   classes. Those are author-origin CSS present on the element AT ALL
+   TIMES, and an author declaration always beats a user-agent one
+   regardless of specificity — so it permanently overrode the browser's
+   own built-in `dialog:not([open]) { display: none }`, keeping every
+   dialog rendered and visible whether or not showModal()/close() had
+   ever run. Scoping `display: flex` to `[open]` means it only competes
+   with the UA rule while the dialog is genuinely open (the one state
+   where they'd both want display:flex anyway); closed, there is no
+   author rule left to win and the browser's own display:none applies. */
+dialog.ft-modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+
 /* InfoNote (src/components/ui.tsx) — a tap-to-open explainer, replacing a
    permanent paragraph of "how this figure is computed" copy.
 

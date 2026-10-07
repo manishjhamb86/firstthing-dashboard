@@ -347,10 +347,20 @@ export function NavShell({
       <div className="app-shell-content lg:pl-[264px]">
         <header
           className="app-header sticky top-0 z-20"
+          // transform: translateZ(0) — a no-op visually, but it promotes
+          // this element to its own compositing layer. Without it, mobile
+          // Safari sometimes leaves a sticky/fixed element painted at its
+          // stale position after a client-side route change swaps the page
+          // content beneath it, and it only catches up on the next scroll
+          // (user-caught, 2026-10-08: "the menu disappears and doesn't
+          // appear until scrolled"). Promoting it means it's composited
+          // independently, so a content swap below it can never leave it
+          // unpainted.
           style={{
             background: "var(--surface)",
             borderBottom: "1px solid var(--border)",
             boxShadow: "0 1px 3px rgba(42, 53, 71, 0.04)",
+            transform: "translateZ(0)",
           }}
         >
           <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3">
@@ -380,7 +390,7 @@ export function NavShell({
             <div
               ref={navPanelRef}
               className="lg:hidden px-4 pb-4 pt-2 space-y-1 max-h-[calc(100vh-64px)] overflow-y-auto"
-              style={{ background: "var(--chrome)", borderTop: "1px solid var(--chrome-border)" }}
+              style={{ background: "var(--chrome)", borderTop: "1px solid var(--chrome-border)", transform: "translateZ(0)" }}
             >
               {navLinks(() => setOpen(false))}
             </div>
@@ -413,6 +423,7 @@ export function NavShell({
                 background: "var(--chrome)",
                 borderTop: "1px solid var(--chrome-border)",
                 boxShadow: "0 -6px 18px rgba(20, 30, 52, 0.16)",
+                transform: "translateZ(0)",
               }}
             >
               {navLinks(() => setOpen(false))}
@@ -421,10 +432,13 @@ export function NavShell({
           <nav
             aria-label="Portal sections"
             className="lg:hidden fixed inset-x-0 bottom-0 z-20 grid h-16"
+            // Same compositing-layer fix as the header above — this is the
+            // bar the user was actually reporting as vanishing after a tap.
             style={{
               gridTemplateColumns: `repeat(${mobileTabBar.length + 1}, minmax(0, 1fr))`,
               background: "var(--surface)",
               borderTop: "1px solid var(--border)",
+              transform: "translateZ(0)",
             }}
           >
             {mobileTabBar.map((item) => {

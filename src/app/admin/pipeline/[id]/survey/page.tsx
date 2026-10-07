@@ -15,6 +15,7 @@ import { resolveCircuitRemoval } from "@/lib/circuit-removal";
 import { criterionLabel, MIN_METERED_LIGHTS, outstandingCriteria } from "@/lib/circuit-eligibility";
 import { lightTypeKey } from "@/lib/light-type";
 import { RemoveCircuitButton } from "@/components/remove-circuit-button";
+import { EditCircuitNameForm } from "./edit-circuit-name-form";
 import { candidateLabel, circuitNextLabel, mostAdvancedCandidate } from "@/lib/deal-progress";
 import { NextStepCallout, StepHeading } from "@/components/deal-stepper";
 import { VisitDetails } from "@/components/visit-details";
@@ -537,6 +538,17 @@ export default async function SiteSurveyPage({
                   <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                     <span>
                       <span className="font-medium">{c.lightType}</span>{" "}
+                      {canApproveException && (
+                        <EditCircuitNameForm
+                          circuitId={c.id}
+                          lightType={c.lightType}
+                          location={c.location}
+                          meteredLightCount={c.meteredLightCount}
+                          representedLightCount={c.representedLightCount}
+                          wattage={c.wattage}
+                          workingHours={c.workingHours}
+                        />
+                      )}{" "}
                       <span className="text-[var(--text-muted)]">
                         {/* Once the demo locks in (benchmark confirmed), this
                             is a frozen record of what the survey/demo

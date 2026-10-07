@@ -19,10 +19,24 @@ export async function updateCircuitConfiguration(
     representedLightCount: number;
     wattage: number;
     workingHours?: number;
+    /**
+     * The circuit's own display name — "basement", "TubeLight" — typed
+     * as-recorded at survey time with no standard casing or spelling check
+     * (2026-10-08, user-asked: "give option to edit names"). Optional so
+     * every existing caller that doesn't pass it is unaffected; lightType
+     * is only ever read as a label and through lightTypeKey()'s own
+     * normalisation at read time, never stored as a separate matching key
+     * elsewhere, so renaming it carries no staleness risk.
+     */
+    lightType?: string;
   }
 ) {
   await requireAdminPermission("manage_survey");
   const session = await requireAdminPermission("manage_pipeline");
+
+  if (input.lightType !== undefined && !input.lightType.trim()) {
+    return { error: "Light type can't be blank." };
+  }
 
   // FEAT-040-AC-3 — zero/negative light count or wattage refused outright
   // (feeds CON-17 load validation and CON-11 extrapolation directly); a
@@ -72,6 +86,7 @@ export async function updateCircuitConfiguration(
       wattage: input.wattage,
       workingHours: input.workingHours ?? null,
       ...(workingHoursChanged ? { workingHoursEffectiveAt: new Date() } : {}),
+      ...(input.lightType !== undefined ? { lightType: input.lightType.trim() } : {}),
     },
   });
 
@@ -79,7 +94,12 @@ export async function updateCircuitConfiguration(
     actorId: session.user.id,
     circuitId,
     workingHoursChanged,
+    lightTypeChanged: input.lightType !== undefined,
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits`);
+  if (input.lightType !== undefined && circuit.siteSurveyId) {
+    const survey = await db.siteSurvey.findUnique({ where: { id: circuit.siteSurveyId }, select: { pipelineId: true } });
+    if (survey) revalidatePath(`/admin/pipeline/${survey.pipelineId}/survey`);
+  }
   return {};
 }

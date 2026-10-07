@@ -7,6 +7,7 @@ import { ErrorText, Field } from "@/components/ui";
 type Circuit = {
   id: string;
   location: string | null;
+  lightType: string;
   meteredLightCount: number;
   representedLightCount: number;
   wattage: number;
@@ -14,6 +15,7 @@ type Circuit = {
 };
 
 export function CircuitEditForm({ circuit, onDone }: { circuit: Circuit; onDone: () => void }) {
+  const [lightType, setLightType] = useState(circuit.lightType);
   const [location, setLocation] = useState(circuit.location ?? "");
   const [meteredLightCount, setMeteredLightCount] = useState(String(circuit.meteredLightCount));
   const [representedLightCount, setRepresentedLightCount] = useState(String(circuit.representedLightCount));
@@ -25,6 +27,7 @@ export function CircuitEditForm({ circuit, onDone }: { circuit: Circuit; onDone:
   function submit() {
     startTransition(async () => {
       const result = await updateCircuitConfiguration(circuit.id, {
+        lightType,
         location,
         meteredLightCount: Number(meteredLightCount),
         representedLightCount: Number(representedLightCount),
@@ -41,6 +44,15 @@ export function CircuitEditForm({ circuit, onDone }: { circuit: Circuit; onDone:
 
   return (
     <div className="mt-2 p-4 rounded-[var(--r-md)] border border-[var(--border)] bg-[var(--surface-sunken)] space-y-4">
+      <Field label="Light type" htmlFor={`ce-lighttype-${circuit.id}`} hint="As shown wherever this circuit is named — correct a misspelling or casing without changing anything else.">
+        <input
+          id={`ce-lighttype-${circuit.id}`}
+          value={lightType}
+          onChange={(e) => setLightType(e.target.value)}
+          disabled={pending}
+          className="field"
+        />
+      </Field>
       <Field label="Location / area" htmlFor={`ce-location-${circuit.id}`}>
         <input
           id={`ce-location-${circuit.id}`}

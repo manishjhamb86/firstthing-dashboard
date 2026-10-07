@@ -221,8 +221,44 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
   await reconcileOfferWithDemos(tx, circuitId, actorId);
 
   // An out-of-band demo raises its review; a demo back in band resolves it.
+  //
+  // Only while this circuit has exactly ONE live demo (2026-10-08,
+  // user-caught) — once a second one exists, this circuit is using the
+  // multi-demo averaging design (2026-08-27: "the benchmark is the mean of
+  // the demos' percentages"), and an individual demo's own result can sit
+  // outside the band while being a correct, deliberate half of the average
+  // — the precedent (Urban Casa, 48.28% + 85.19% -> 66.72%) has both
+  // component demos individually outside 60-80%. Checking each demo in
+  // isolation fired a review the moment ONE demo's own figure looked
+  // implausible, even while a SECOND demo meant to average with it was
+  // still being entered — reading as a defect needing a restart when it was
+  // a planned, in-progress multi-demo demo. The circuit's own lifecycle
+  // state above already judges the COMBINED figure (figures.benchmark.
+  // inBand) correctly for this case, so a genuinely out-of-band combined
+  // result still lands the circuit in benchmark_review and stays visible
+  // there — only the per-demo investigation queue (FEAT-015) doesn't yet
+  // follow a multi-demo circuit the same way a single-demo one does.
+  const liveDemoCount = circuit.demos.filter((d) => !d.voidedAt && !d.rejected).length;
   for (const d of circuit.demos) {
     if (d.voidedAt || d.rejected) continue;
+    if (liveDemoCount > 1) {
+      // Auto-resolve a review raised before a sibling demo existed, so a
+      // first demo's own out-of-band result doesn't keep prompting a
+      // restart once it's correctly part of an average.
+      const open = await tx.demoResultReview.findFirst({ where: { demoId: d.id, state: "open" } });
+      if (open) {
+        await tx.demoResultReview.update({
+          where: { id: open.id },
+          data: {
+            state: "resolved",
+            resolvedAt: new Date(),
+            resolvedById: actorId,
+            resolutionNote: "A second demo now exists on this circuit — the combined, averaged figure is what the band judges, not this demo's own result alone.",
+          },
+        });
+      }
+      continue;
+    }
     const f = factsById.get(d.id)!;
     if (!f.postAccepted || f.savingsPct === null || f.preAverage === null || f.postAverage === null) continue;
     const open = await tx.demoResultReview.findFirst({ where: { demoId: d.id, state: "open" } });

@@ -670,6 +670,32 @@ export async function setDemoLightCount(input: { demoId: string; count: number; 
         actorId: a.admin.id,
       });
     }
+    // The survey page's own frozen "as recorded" snapshot (lightCountAtDemoLock)
+    // is deliberately never touched by a later rescale or by the circuit's own
+    // count moving on — but a CORRECTION is a different claim: it says the
+    // figure locked in was never right, not that something changed since. If
+    // the snapshot currently holds exactly the wrong value this demo is being
+    // corrected FROM, it follows; a snapshot that reflects something else
+    // (another demo, or a value nobody has seen since) is left alone — the
+    // same "only values that coincide follow" rule as planCountCorrection
+    // (2026-10-12, user-caught: "it should show 42 everywhere unless a
+    // corrected count is added" — the survey page kept showing the pre-
+    // correction figure).
+    if (demo.circuit.lightCountAtDemoLock === demo.meteredLightCount) {
+      await tx.circuit.update({ where: { id: demo.circuitId }, data: { lightCountAtDemoLock: input.count } });
+      await logChange(tx, {
+        entity: "circuit",
+        entityId: demo.circuitId,
+        kind: "edit",
+        field: "lightCountAtDemoLock",
+        circuitId: demo.circuitId,
+        demoId: demo.id,
+        oldValue: demo.circuit.lightCountAtDemoLock,
+        newValue: input.count,
+        reason: "The demo's own light count was corrected — the survey page's frozen record of what was recorded at demo-lock follows the correction, since it was the wrong figure that got frozen.",
+        actorId: a.admin.id,
+      });
+    }
     await finish(tx, demo.circuitId, a.admin.id);
   });
   logger.info("demo.light_count_changed", { actorId: a.admin.id, demoId: demo.id, from: demo.meteredLightCount, to: input.count, representedLightCountChanged: adjustment.changed });

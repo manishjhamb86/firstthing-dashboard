@@ -162,9 +162,10 @@ export function DemosPanel({
                         onClick={() => {
                           const v = window.prompt(`Lights on demo ${d.sequence}'s meter (now ${d.meteredLightCount}):`, String(d.meteredLightCount));
                           if (v === null || v.trim() === "" || Number(v) === d.meteredLightCount) return;
-                          // Optional — kept on the history disclosure above
-                          // when given, so a later reader knows why.
-                          const why = window.prompt("Why is this count being corrected? (optional)") ?? undefined;
+                          // Kept on the history disclosure above either way, so
+                          // a later reader knows why — required once live (the
+                          // server refuses a blank one), optional in demo mode.
+                          const why = window.prompt(demoMode ? "Why is this count being corrected? (optional)" : "What was wrong with the recorded count? (required)") ?? undefined;
                           run(() => setDemoLightCount({ demoId: d.id, count: Number(v), reason: why?.trim() || undefined }));
                         }}
                       >

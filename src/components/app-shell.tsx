@@ -23,6 +23,7 @@ import {
   ListChecks,
   History,
   Mail,
+  Wrench,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -164,6 +165,9 @@ export function AppShell({
       // AWS account as S3), this just states whether it's configured and
       // offers a test send.
       showUsers && { href: "/admin/settings/email", label: "Email", icon: Mail },
+      // Operations-only page (2026-10-12) — temporary, admin-toggleable
+      // capabilities for one-time cleanup work.
+      showUsers && { href: "/admin/settings/corrections", label: "Data corrections", icon: Wrench },
     ]),
   ];
 

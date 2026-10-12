@@ -522,6 +522,7 @@ model AdminUser {
   tankApiConfigUpdated        TankApiConfig[]             @relation("TankApiConfigUpdatedBy")
   googleCalendarConfigUpdated GoogleCalendarConfig[]      @relation("GoogleCalendarConfigUpdatedBy")
   zohoInvoiceConfigUpdated    ZohoInvoiceConfig[]         @relation("ZohoInvoiceConfigUpdatedBy")
+  operationsFlagUpdated       OperationsFlag[]            @relation("OperationsFlagUpdatedBy")
   helpReportsRaised           HelpReport[]                @relation("HelpReportReporter")
   helpReportsResolved         HelpReport[]                @relation("HelpReportResolvedBy")
   helpMessages                HelpMessage[]               @relation("HelpMessageAuthor")
@@ -890,6 +891,25 @@ model GoogleCalendarConfig {
   updatedBy AdminUser? @relation("GoogleCalendarConfigUpdatedBy", fields: [updatedById], references: [id])
 
   @@map("google_calendar_config")
+}
+
+/// Operations-controlled switches for a temporary, one-time capability
+/// (2026-10-12, user-asked): the live-mode demo-count correction below
+/// exists to fix a specific batch of wrong historical records and is meant
+/// to be switched off again once that cleanup is done, and switched back on
+/// only if it is genuinely needed again — without a redeploy either way.
+model OperationsFlag {
+  id                           String   @id @default("singleton")
+  /// `setDemoLightCount` outside demo mode (an operations lead correcting a
+  /// demo's own historical light count on a live circuit). Defaults ON —
+  /// this flag ships already enabled for the cleanup it was built for.
+  allowLiveDemoCountCorrection Boolean  @default(true) @map("allow_live_demo_count_correction")
+  updatedById                  String?  @map("updated_by_id")
+  updatedAt                    DateTime @updatedAt @map("updated_at")
+
+  updatedBy AdminUser? @relation("OperationsFlagUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("operations_flags")
 }
 
 enum ScheduleKind {

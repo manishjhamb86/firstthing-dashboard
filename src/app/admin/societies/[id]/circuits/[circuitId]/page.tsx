@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { demoLightsInstalled, describeLights, totalLights } from "@/lib/light-population";
 import { circuitLightCountHistory, describeLightCountChange, filterCustomerRelevant } from "@/lib/circuit-light-history";
 import { isDemoMode } from "@/lib/demo-mode";
+import { liveDemoCountCorrectionAllowed } from "@/lib/operations-flags";
 import { Card, EmptyState, PageHeader, PageRibbon, Stat, StatRow, StatusChip } from "@/components/ui";
 import { CIRCUIT_STATE, GATE_PASS_STATUS, statusMeta } from "@/lib/status-maps";
 import { GatePassForm } from "./gate-pass-form";
@@ -94,6 +95,10 @@ export default async function CircuitDetailPage({
   const canOverride =
     (session.user.adminPermissions?.includes("manage_survey") ?? false) &&
     (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
+  // Live-mode demo-count correction (2026-10-12, user-asked) — a temporary,
+  // admin-toggleable capability (see Settings → Data corrections), off the
+  // moment the flag is switched off, with no redeploy either way.
+  const liveCorrectionAllowed = demoMode ? false : await liveDemoCountCorrectionAllowed();
 
   const { id, circuitId } = await params;
   const sp = await searchParams;
@@ -496,7 +501,7 @@ export default async function CircuitDetailPage({
         overrideReason={circuit.benchmarkOverrideReason}
         canStart={canEdit && !circuit.voidedAt && eligible}
         canDecide={canOverride && !circuit.voidedAt}
-        canChangeLights={demoMode && canEdit && !circuit.voidedAt}
+        canChangeLights={!circuit.voidedAt && ((demoMode && canEdit) || (canOverride && liveCorrectionAllowed))}
         lightCountHistory={lightCountHistory.map((h) => ({
           ids: h.ids,
           at: h.at,

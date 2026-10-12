@@ -22,6 +22,7 @@ import { logger } from "@/lib/logger";
 import { formatDate } from "@/lib/format-date";
 import { logChange } from "@/lib/change-log";
 import { isDemoMode } from "@/lib/demo-mode";
+import { liveDemoCountCorrectionAllowed } from "@/lib/operations-flags";
 import { scheduleJob } from "@/lib/jobs";
 import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
 import { representedCountAfterDemoCorrection } from "@/lib/light-population";
@@ -603,11 +604,25 @@ export async function relockDemo(demoId: string): Promise<Outcome> {
  * is kept in the change log.
  */
 export async function setDemoLightCount(input: { demoId: string; count: number; reason?: string }): Promise<Outcome> {
-  const a = await actor("field");
+  const demoMode = await isDemoMode();
+  // Demo mode: free, for field staff, as before. Live (2026-10-12,
+  // user-asked — a demo's OWN historical count was mistakenly typed over
+  // with the circuit's later, larger live count, and the only visible fix
+  // was demo-mode-only): an operations lead may correct it too, same gate
+  // and reason requirement as `correctLockedCount`'s inventory-line
+  // correction — a demo's count is a historical fact, not something a
+  // later recount of the circuit should silently override, and fixing a
+  // past mistake has to stay possible once the system is live.
+  const a = await actor(demoMode ? "field" : "ops");
   if ("error" in a) return { error: a.error };
-  if (!(await isDemoMode())) {
-    logger.warn("demo.light_count_refused", { actorId: a.admin.id, demoId: input.demoId, reason: "not_demo_mode" });
-    return { error: "Changing a demo's light count is only available in demo mode. A count typed wrong can be corrected on the load inventory." };
+  if (!demoMode) {
+    if (!input.reason?.trim()) {
+      return { error: "Say what was wrong — a correction with no stated reason cannot be reviewed later." };
+    }
+    if (!(await liveDemoCountCorrectionAllowed())) {
+      logger.warn("demo.light_count_refused", { actorId: a.admin.id, demoId: input.demoId, reason: "live_correction_disabled" });
+      return { error: "Live correction of a demo's light count is switched off for now — ask an operations lead to turn it back on in Settings if this is genuinely needed." };
+    }
   }
   if (!Number.isInteger(input.count) || input.count < 1 || input.count > 5000) return { error: "The light count must be a whole number between 1 and 5000." };
   const g = await editableDemo(input.demoId, a.admin.id, "light_count");

@@ -4,9 +4,10 @@
 // property the agreement print route (FEAT-029) was built on.
 
 import { db } from "@/lib/db";
-import { demoLightsInstalled } from "@/lib/light-population";
+import { demoLightsInstalled, fullInstallSavingsEstimate, totalLights } from "@/lib/light-population";
 import { currentDemoOf } from "@/lib/circuit-figures";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
+import { daysInPeriod } from "@/lib/reading-normalize";
 import {
   periodSavingsSummary,
   savingsBand,
@@ -41,15 +42,19 @@ export type CircuitFeeLineForMonth = {
 };
 
 /**
- * The rupee figure for one circuit's one month — read ONLY from a RELEASED
- * calculation's own fee line, never computed here (user-asked 2026-09-24:
- * "in savings report we need to show amount... how amount is saved" — this
- * report is kWh-only by design, per the standing INV-02 rule already stated
- * at its own foot: two independently-computed money figures for one month
- * is how they end up disagreeing). A `superseded` version's status is no
- * longer `released`, so this can never read a stale re-derivation. Null for
- * a month that has not been released yet — the report says so rather than
- * inventing a rate.
+ * The ACTUAL invoiced fee for one circuit's one month — read ONLY from a
+ * RELEASED calculation's own fee line (user-asked 2026-09-24). Still the
+ * only source for `amount` (what the society is really charged); a
+ * `superseded` version's status is no longer `released`, so this can never
+ * read a stale re-derivation. Null for a month that has not been released
+ * yet.
+ *
+ * `savedValue`/`societyNet` here are the MEASURED figures the real invoice
+ * was reconciled against — `buildMonthlySnapshot` below replaces them with
+ * its own benchmark-driven estimate when one can be computed (2026-10-12,
+ * user-specified), deliberately now a second, independently-computed
+ * figure for what was SAVED — but never for `amount`, which always stays
+ * the one real, invoiced number.
  */
 export async function circuitFeeLineFor(circuitId: string, period: string): Promise<CircuitFeeLineForMonth | null> {
   const line = await db.circuitFeeLine.findFirst({
@@ -88,6 +93,17 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
         where: { voidedAt: null },
         orderBy: { sequence: "asc" },
         include: { readings: { orderBy: { date: "asc" } } },
+      },
+      siteSurvey: {
+        select: {
+          pipeline: {
+            select: {
+              contract: {
+                select: { versions: { orderBy: { version: "desc" }, take: 1, select: { unitElectricityRate: true } } },
+              },
+            },
+          },
+        },
       },
     },
   });
@@ -279,6 +295,37 @@ export async function buildMonthlySnapshot(
   const baselineAt = (d: Date) =>
     effectiveBaselineAt(report.circuit.preInstallBaseline, report.circuit.rescaleEvents, d);
   const lastDay = days.length > 0 ? new Date(days[days.length - 1].date) : null;
+
+  // The report's OWN figure (2026-10-12, user-specified) — the demo's own
+  // frozen baseline and light count, extrapolated to the whole-society total
+  // at the LATEST benchmark, independent of any month's actual readings.
+  // Deliberately separate from what is actually billed: `amount` below still
+  // comes only from a released fee line (never computed here), so this
+  // changes what the report SAYS was saved without touching what the
+  // society is invoiced.
+  const unitRate = report.circuit.siteSurvey?.pipeline.contract?.versions[0]?.unitElectricityRate ?? null;
+  const demoLightCount = report.demo?.meteredLightCount ?? null;
+  const estimate =
+    report.circuit.preInstallBaseline !== null &&
+    demoLightCount !== null &&
+    demoLightCount > 0 &&
+    report.circuit.benchmarkSavingsPct !== null &&
+    unitRate !== null
+      ? fullInstallSavingsEstimate({
+          demoBaselineKwhPerDay: report.circuit.preInstallBaseline,
+          demoLightCount,
+          totalLightCount: totalLights(report.circuit.representedLightCount, report.demoLights),
+          benchmarkSavingsPct: report.circuit.benchmarkSavingsPct,
+          daysInMonth: daysInPeriod(month),
+          unitElectricityRate: unitRate,
+        })
+      : null;
+  const realFee = await circuitFeeLineFor(report.circuit.id, month);
+  const fee: CircuitFeeLineForMonth | null =
+    estimate && realFee
+      ? { savedValue: estimate.savedValue, amount: realFee.amount, societyNet: estimate.savedValue - realFee.amount }
+      : realFee;
+
   return {
     societyName: report.society.name,
     societyLocation: report.society.location,
@@ -291,7 +338,7 @@ export async function buildMonthlySnapshot(
     baselineKwhPerDay: lastDay ? baselineAt(lastDay) : report.effBaselineNow,
     days,
     summary: summarize(baselineAt, days, report.monitoringExclusion),
-    fee: await circuitFeeLineFor(report.circuit.id, month),
+    fee,
     generatedAt: new Date().toISOString(),
   };
 }

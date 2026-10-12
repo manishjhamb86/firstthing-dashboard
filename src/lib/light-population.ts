@@ -119,3 +119,35 @@ export function representedCountAfterDemoCorrection(input: {
   }
   return { changed: true, newRepresentedLightCount: next };
 }
+
+/**
+ * The monthly savings report's own figure (2026-10-12, user-specified) —
+ * deliberately NOT the invoice-first measured figure the actual bill is
+ * reconciled against (that stays untouched, read from the real released
+ * fee line). Two facts are frozen forever at the demo (its own baseline and
+ * the lights it was measured on — "the demo savings reports will use these
+ * two and should never change whether in future the light count on the demo
+ * circuit changes"); one is live (the latest benchmark — "changes only if
+ * the benchmark savings is changed... it should take the latest"); one is
+ * the whole-society total, which a light-count move between circuits never
+ * changes (517+42 or 504+55, always 559) — so only the SPLIT needs to move
+ * with a rescale, never this formula's own total input.
+ *
+ * baseline kWh/day for one demo light × total lights × days in the month =
+ * what the whole installation would have drawn without FirsThing; × the
+ * benchmark = the saving; × the unit rate = the rupee figure.
+ */
+export function fullInstallSavingsEstimate(input: {
+  demoBaselineKwhPerDay: number;
+  demoLightCount: number;
+  totalLightCount: number;
+  benchmarkSavingsPct: number;
+  daysInMonth: number;
+  unitElectricityRate: number;
+}): { baselineKwh: number; savedKwh: number; savedValue: number } {
+  const perLightBaseline = input.demoLightCount > 0 ? input.demoBaselineKwhPerDay / input.demoLightCount : 0;
+  const baselineKwh = perLightBaseline * input.totalLightCount * input.daysInMonth;
+  const savedKwh = baselineKwh * (input.benchmarkSavingsPct / 100);
+  const savedValue = savedKwh * input.unitElectricityRate;
+  return { baselineKwh, savedKwh, savedValue };
+}

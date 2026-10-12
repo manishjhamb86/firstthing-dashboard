@@ -68,10 +68,14 @@ export function MonthlySavingsSheet({ s }: { s: SavingsReportSnapshot }) {
           )}
         </p>
       </div>
-      {/* Read ONLY from a released calculation's own fee line (INV-02) —
-          this report never computes a rupee figure of its own (user-
-          asked 2026-09-24, "how amount is saved"). Absent one, states
-          what will produce it rather than a blank or an invented rate. */}
+      {/* Saved value: the demo's own frozen baseline and light count,
+          extrapolated to the whole-society total at the latest benchmark
+          (2026-10-12, user-specified) — independent of this month's actual
+          readings, so it stays the same every month unless the benchmark
+          itself is revised. `amount` (FirsThing's fee) still comes ONLY
+          from a released calculation's own fee line (INV-02, 2026-09-24) —
+          the real invoiced figure, never computed here. Absent a release,
+          states what will produce it rather than a blank or an invented rate. */}
       <div className="shrink-0">
         <p className="lbl" style={{ color: "var(--info-fg)" }}>
           Saved this month
@@ -109,9 +113,9 @@ export function MonthlySavingsSheet({ s }: { s: SavingsReportSnapshot }) {
         .{" "}
         {s.fee && (
           <>
-            Of that, <strong className="num text-[var(--text)]">{inr(s.fee.amount)}</strong> is
-            FirsThing&rsquo;s fee and <strong className="num text-[var(--text)]">{inr(s.fee.societyNet)}</strong>{" "}
-            is kept by the society.
+            At the agreed {s.benchmarkSavingsPct !== null ? pct(s.benchmarkSavingsPct) : "—"} benchmark,{" "}
+            <strong className="num text-[var(--text)]">{inr(s.fee.amount)}</strong> is FirsThing&rsquo;s fee and{" "}
+            <strong className="num text-[var(--text)]">{inr(s.fee.societyNet)}</strong> is kept by the society.
           </>
         )}
         {s.summary.warn &&

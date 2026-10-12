@@ -3,6 +3,7 @@ import {
   demoLightsInstalled,
   describeLights,
   fullFromTotal,
+  fullInstallSavingsEstimate,
   refuseFullInstallationCount,
   representedCountAfterDemoCorrection,
   totalLights,
@@ -73,5 +74,60 @@ describe("representedCountAfterDemoCorrection", () => {
   it("refuses rather than driving the full installation to zero or below", () => {
     const r = representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 10, oldDemoCount: 40, newDemoCount: 55 });
     expect("error" in r && r.error).toMatch(/more than zero/);
+  });
+});
+
+// Gateway Towers' real figures (2026-10-12, user-specified worked example):
+// 19.61616 kWh/day measured on the demo's 42 lights, extrapolated to the
+// whole 559-light installation at the 60.9293...% benchmark.
+describe("fullInstallSavingsEstimate", () => {
+  it("matches the user's own worked example to the demo's true precision", () => {
+    const r = fullInstallSavingsEstimate({
+      demoBaselineKwhPerDay: 19.61616,
+      demoLightCount: 42,
+      totalLightCount: 559,
+      benchmarkSavingsPct: 60.9293562042724,
+      daysInMonth: 30,
+      unitElectricityRate: 7,
+    });
+    // Independently: 19.61616 / 42 = 0.467051... kWh/light/day; × 559 lights
+    // × 30 days = 7832.45 kWh; × 60.9293...% = 4772.26 kWh; × ₹7 = ₹33,405.84.
+    expect(r.baselineKwh).toBeCloseTo(7832.45, 1);
+    expect(r.savedKwh).toBeCloseTo(4772.26, 1);
+    expect(r.savedValue).toBeCloseTo(33405.84, 1);
+  });
+
+  it("the total installed is what matters, not how it is split between full installation and the demo circuit", () => {
+    const before = fullInstallSavingsEstimate({
+      demoBaselineKwhPerDay: 19.62,
+      demoLightCount: 42,
+      totalLightCount: 559, // 517 full + 42 demo
+      benchmarkSavingsPct: 61,
+      daysInMonth: 30,
+      unitElectricityRate: 7,
+    });
+    const after = fullInstallSavingsEstimate({
+      demoBaselineKwhPerDay: 19.62,
+      demoLightCount: 42,
+      totalLightCount: 559, // 504 full + 55 demo — lights moved, total unchanged
+      benchmarkSavingsPct: 61,
+      daysInMonth: 30,
+      unitElectricityRate: 7,
+    });
+    expect(after).toEqual(before);
+  });
+
+  it("a later rescale of the demo circuit's own count never changes the demo's frozen 42", () => {
+    // Same total (559), demo count unchanged at 42 — the figure must not move
+    // just because the circuit's OWN live meteredLightCount has grown.
+    const r1 = fullInstallSavingsEstimate({ demoBaselineKwhPerDay: 19.62, demoLightCount: 42, totalLightCount: 559, benchmarkSavingsPct: 61, daysInMonth: 30, unitElectricityRate: 7 });
+    const r2 = fullInstallSavingsEstimate({ demoBaselineKwhPerDay: 19.62, demoLightCount: 42, totalLightCount: 559, benchmarkSavingsPct: 61, daysInMonth: 30, unitElectricityRate: 7 });
+    expect(r1).toEqual(r2);
+  });
+
+  it("the latest benchmark is always what is used — a revised benchmark changes the figure", () => {
+    const at61 = fullInstallSavingsEstimate({ demoBaselineKwhPerDay: 19.62, demoLightCount: 42, totalLightCount: 559, benchmarkSavingsPct: 61, daysInMonth: 30, unitElectricityRate: 7 });
+    const at65 = fullInstallSavingsEstimate({ demoBaselineKwhPerDay: 19.62, demoLightCount: 42, totalLightCount: 559, benchmarkSavingsPct: 65, daysInMonth: 30, unitElectricityRate: 7 });
+    expect(at65.savedValue).toBeGreaterThan(at61.savedValue);
   });
 });

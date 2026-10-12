@@ -4610,6 +4610,10 @@ model InventoryBatch {
   itemTypeId           String        @map("item_type_id")
   /// Null for a historical entry (2026-10-12) — stock that was already in
   /// place before this system existed has no supplier invoice to trace to.
+  /// A CHECK constraint (`inventory_batches_purchase_requires_non_historical`,
+  /// not expressible here) enforces that null is legal ONLY when
+  /// `historical` is true — not just a convention `receiveHistoricalStock`
+  /// happens to follow.
   purchaseId           String?       @map("purchase_id")
   /// True for exactly that case — surfaced wherever a batch is shown, so a
   /// pre-system count is never mistaken for a real, invoiced delivery.

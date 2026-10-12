@@ -7,7 +7,7 @@ import { MoveUnitsForm, type MoveContext } from "../../move-forms";
 
 export type UnitRow = { code: string; serialNumber: string | null; status: string; statusLabel: string; where: string; warranty: string; warrantyTone: ChipTone };
 
-const STATUS_TONE: Record<string, ChipTone> = { in_stock: "info", deployed: "ok", faulty: "warn", returned_to_supplier: "neu", scrapped: "neu", lost: "bad" };
+const STATUS_TONE: Record<string, ChipTone> = { in_stock: "info", deployed: "ok", faulty: "warn", sent_for_repair: "info", returned_to_supplier: "neu", scrapped: "neu", lost: "bad" };
 
 /** A batch's units — select some (or a numbered range) and record what happened to them. */
 export function UnitsTable({ units, ctx }: { units: UnitRow[]; ctx: MoveContext }) {

@@ -16,7 +16,9 @@ import {
   AgreementDatesControl,
   ExecutedUploadForm,
   PrepareAgreementButton,
+  RegenerateReportsButton,
   StepButton,
+  UnitRateCorrectionControl,
 } from "./agreement-controls";
 
 function stepChip(done: Date | null) {
@@ -303,6 +305,10 @@ export default async function AgreementPage({ params }: { params: Promise<{ id: 
                 Terms are versioned and effective-dated: an amendment applies forward only, and a prior month
                 stays computed against the version in force at the time.
               </p>
+              {canCorrectDates && currentTerms && (
+                <UnitRateCorrectionControl pipelineId={pipeline.id} rate={currentTerms.unitElectricityRate} live={!demoMode} />
+              )}
+              {canEdit && <RegenerateReportsButton pipelineId={pipeline.id} />}
             </Card>
           ) : null}
           </div>

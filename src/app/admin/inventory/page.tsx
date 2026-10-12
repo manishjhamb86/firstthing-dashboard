@@ -78,12 +78,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
   const now = new Date();
   const soon = new Date(now.getTime() + 60 * 86_400_000);
   const warrantyBatches = await db.inventoryBatch.findMany({
-    where: { warrantyMonths: { not: null }, units: { some: { status: { in: ["in_stock", "deployed", "faulty"] } } } },
-    include: { itemType: { select: { name: true } }, purchase: { select: { invoiceDate: true } }, _count: { select: { units: { where: { status: { in: ["in_stock", "deployed", "faulty"] } } } } } },
+    where: { warrantyMonths: { not: null }, units: { some: { status: { in: ["in_stock", "deployed", "faulty", "sent_for_repair"] } } } },
+    include: { itemType: { select: { name: true } }, purchase: { select: { invoiceDate: true } }, _count: { select: { units: { where: { status: { in: ["in_stock", "deployed", "faulty", "sent_for_repair"] } } } } } },
   });
   const expiring = warrantyBatches
     .filter((b) => b.warrantyBasis === "purchase")
-    .map((b) => ({ b, w: warrantyView({ warrantyMonths: b.warrantyMonths, basis: "purchase", purchaseDate: b.purchase.invoiceDate, deployedOn: null, now }) }))
+    .map((b) => ({ b, w: warrantyView({ warrantyMonths: b.warrantyMonths, basis: "purchase", purchaseDate: b.purchase?.invoiceDate ?? b.receivedOn, deployedOn: null, now }) }))
     .filter(({ w }) => w.until && w.until <= soon)
     .sort((a, z) => a.w.until!.getTime() - z.w.until!.getTime());
 
@@ -93,9 +93,14 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         title="Stock"
         subtitle="Every device from purchase to where it is now. Scan or type a printed code to open it."
         action={
-          <Link href="/admin/inventory/receive" className="btn-primary btn-sm">
-            Receive stock
-          </Link>
+          <span className="inline-flex flex-wrap gap-2">
+            <Link href="/admin/inventory/existing" className="btn-secondary btn-sm">
+              Add existing inventory
+            </Link>
+            <Link href="/admin/inventory/receive" className="btn-primary btn-sm">
+              Receive stock
+            </Link>
+          </span>
         }
       />
       <form className="mb-5 flex gap-2" action="/admin/inventory">
@@ -107,9 +112,10 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       {code?.trim() && <p className="-mt-3 mb-4 text-[13px]" style={{ color: "var(--warn-fg)" }}>Nothing has the code “{code.trim()}”.</p>}
 
       <StatRow>
-        <Stat label="In stock" value={count("in_stock").toLocaleString("en-IN")} detail="units at offices" />
-        <Stat label="Deployed" value={count("deployed").toLocaleString("en-IN")} detail="units at societies" />
-        <Stat label="Faulty" value={count("faulty").toLocaleString("en-IN")} detail="awaiting repair or return" />
+        <Stat label="In stock" value={count("in_stock").toLocaleString("en-IN")} detail="working, at offices" />
+        <Stat label="Deployed" value={count("deployed").toLocaleString("en-IN")} detail="working, at societies" />
+        <Stat label="Faulty" value={count("faulty").toLocaleString("en-IN")} detail="not working — ready to send for fixing" />
+        <Stat label="Sent for repair" value={count("sent_for_repair").toLocaleString("en-IN")} detail="away on a warranty claim" />
         <Stat label="Stock value" value={rupees(officeValue)} detail={uncosted > 0 ? `at cost, held at offices · ${uncosted.toLocaleString("en-IN")} without a cost` : "at cost, held at offices"} />
         <Stat label="Warranty ending ≤ 60 days" value={expiring.reduce((n, e) => n + e.b._count.units, 0).toLocaleString("en-IN")} detail="units still in use" />
       </StatRow>
@@ -206,9 +212,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                       {b.code}
                     </Link>{" "}
                     · {b.itemType.name} · {b.quantity} {b.itemType.unit}
+                    {b.historical && (
+                      <>
+                        {" "}
+                        <StatusChip tone="neu">Pre-existing</StatusChip>
+                      </>
+                    )}
                     <span style={{ color: "var(--text-subtle)" }}>
                       {" "}
-                      · {b.purchase.supplier.name}, {formatDate(b.receivedOn)}
+                      · {b.purchase ? b.purchase.supplier.name : "existing stock"}, {formatDate(b.receivedOn)}
                     </span>
                   </li>
                 ))}

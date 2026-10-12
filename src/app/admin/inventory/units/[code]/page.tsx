@@ -36,7 +36,7 @@ export default async function UnitPage({ params }: { params: Promise<{ code: str
   const w = warrantyView({
     warrantyMonths: unit.batch.warrantyMonths,
     basis: unit.batch.warrantyBasis,
-    purchaseDate: unit.batch.purchase.invoiceDate,
+    purchaseDate: unit.batch.purchase?.invoiceDate ?? unit.batch.receivedOn,
     deployedOn: unit.deployedOn,
     now: new Date(),
   });
@@ -47,7 +47,12 @@ export default async function UnitPage({ params }: { params: Promise<{ code: str
       <PageHeader
         backHref={`/admin/inventory/batches/${unit.batchId}`}
         title={<span className="font-mono">{unit.code}</span>}
-        chip={<StatusChip tone={status === "deployed" ? "ok" : status === "in_stock" ? "info" : status === "faulty" ? "warn" : "neu"}>{STATUS_LABEL[status]}</StatusChip>}
+        chip={
+          <span className="inline-flex items-center gap-1.5">
+            <StatusChip tone={status === "deployed" ? "ok" : status === "in_stock" ? "info" : status === "sent_for_repair" ? "info" : status === "faulty" ? "warn" : "neu"}>{STATUS_LABEL[status]}</StatusChip>
+            {unit.batch.historical && <StatusChip tone="neu">Pre-existing</StatusChip>}
+          </span>
+        }
         subtitle={`${unit.itemType.name}${unit.location ? ` · at ${unit.location.name}` : ""}${circuit ? ` · ${circuitLabelOf(circuit.location, circuit.lightType)}` : ""}`}
       />
       <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
@@ -88,8 +93,11 @@ export default async function UnitPage({ params }: { params: Promise<{ code: str
             {[
               ["Batch", <Link key="b" href={`/admin/inventory/batches/${unit.batchId}`} className="font-mono">{unit.batch.code}</Link>],
               ["Maker's serial", unit.serialNumber ?? "—"],
-              ["Supplier", unit.batch.purchase.supplier.name],
-              ["Supplier invoice", `${unit.batch.purchase.invoiceNumber} · ${formatDate(unit.batch.purchase.invoiceDate)}`],
+              ["Supplier", unit.batch.purchase ? unit.batch.purchase.supplier.name : "— pre-existing, no supplier on record"],
+              [
+                "Supplier invoice",
+                unit.batch.purchase ? `${unit.batch.purchase.invoiceNumber} · ${formatDate(unit.batch.purchase.invoiceDate)}` : "—",
+              ],
               ["Supplier's lot", unit.batch.supplierLot ?? "—"],
               ["Received", `${formatDate(unit.batch.receivedOn)} at ${unit.batch.receivedAt.name}`],
               ["Deployed", unit.deployedOn ? formatDate(unit.deployedOn) : "—"],

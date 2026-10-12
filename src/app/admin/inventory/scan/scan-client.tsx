@@ -16,6 +16,7 @@ const STATUS_LABEL: Record<string, string> = {
   in_stock: "In stock",
   deployed: "Deployed",
   faulty: "Faulty",
+  sent_for_repair: "Sent for repair",
   returned_to_supplier: "Returned to supplier",
   scrapped: "Scrapped",
   lost: "Lost",

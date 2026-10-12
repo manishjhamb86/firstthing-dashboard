@@ -1,13 +1,14 @@
 // Inventory & device lifecycle rules (2026-09-25) — pure, one place.
 // docs/engineering/17-inventory-lifecycle.md holds the decisions.
 
-export type UnitStatus = "in_stock" | "deployed" | "faulty" | "returned_to_supplier" | "scrapped" | "lost";
+export type UnitStatus = "in_stock" | "deployed" | "faulty" | "sent_for_repair" | "returned_to_supplier" | "scrapped" | "lost";
 export type MoveKind =
   | "receive"
   | "transfer"
   | "deploy"
   | "return_to_office"
   | "mark_faulty"
+  | "send_for_repair"
   | "repair"
   | "return_to_supplier"
   | "scrap"
@@ -20,6 +21,7 @@ export const MOVE_LABEL: Record<MoveKind, string> = {
   deploy: "Deployed",
   return_to_office: "Brought back to office",
   mark_faulty: "Marked faulty",
+  send_for_repair: "Sent for repair (warranty claim)",
   repair: "Repaired",
   return_to_supplier: "Returned to supplier",
   scrap: "Scrapped",
@@ -31,6 +33,7 @@ export const STATUS_LABEL: Record<UnitStatus, string> = {
   in_stock: "In stock",
   deployed: "Deployed",
   faulty: "Faulty",
+  sent_for_repair: "Sent for repair",
   returned_to_supplier: "Returned to supplier",
   scrapped: "Scrapped",
   lost: "Lost",
@@ -73,8 +76,15 @@ export function nextState(status: UnitStatus, kind: MoveKind): Transition | { er
       return status === "deployed" || status === "faulty" ? { status: status === "faulty" ? "faulty" : "in_stock", to: "office" } : { error: "It is already at an office." };
     case "mark_faulty":
       return status === "in_stock" || status === "deployed" ? { status: "faulty", to: "keep" } : { error: "It is already marked faulty." };
+    // `to: "keep"` on both — the unit stays recorded at the office that
+    // sent it (which office physically holds a unit mid-transit to the
+    // manufacturer is not tracked, same simplification already made for a
+    // faulty unit sitting on a shelf; it still counts there in "what is
+    // where" and stock value, which is right — the company still owns it).
+    case "send_for_repair":
+      return status === "faulty" ? { status: "sent_for_repair", to: "keep" } : { error: status === "sent_for_repair" ? "It has already been sent for repair." : "Only a faulty unit can be sent for repair — mark it faulty first." };
     case "repair":
-      return status === "faulty" ? { status: "in_stock", to: "keep" } : { error: "Only a faulty unit can be repaired." };
+      return status === "faulty" || status === "sent_for_repair" ? { status: "in_stock", to: "keep" } : { error: "Only a faulty unit, or one already sent for repair, can be recorded as repaired." };
     case "return_to_supplier":
     case "scrap":
       return status === "deployed" ? { error: "Bring it back to an office first." } : { status: kind === "scrap" ? "scrapped" : "returned_to_supplier", to: "none" };

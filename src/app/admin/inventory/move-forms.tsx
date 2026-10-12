@@ -23,9 +23,9 @@ export type MoveContext = {
   today: string;
 };
 
-const UNIT_KINDS: MoveKind[] = ["deploy", "return_to_office", "transfer", "mark_faulty", "repair", "return_to_supplier", "scrap", "lost"];
+const UNIT_KINDS: MoveKind[] = ["deploy", "return_to_office", "transfer", "mark_faulty", "send_for_repair", "repair", "return_to_supplier", "scrap", "lost"];
 const QTY_KINDS: MoveKind[] = ["deploy", "transfer", "return_to_office", "return_to_supplier", "scrap", "lost", "adjust"];
-const NEEDS_REASON: MoveKind[] = ["mark_faulty", "scrap", "lost", "return_to_supplier", "adjust"];
+const NEEDS_REASON: MoveKind[] = ["mark_faulty", "send_for_repair", "scrap", "lost", "return_to_supplier", "adjust"];
 
 function Destination({
   kind,

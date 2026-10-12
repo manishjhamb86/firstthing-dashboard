@@ -32,6 +32,14 @@ describe("nextState — the unit lifecycle", () => {
   it("scrapped, lost and returned units are final", () => {
     for (const s of ["scrapped", "lost", "returned_to_supplier"] as const) expect(nextState(s, "deploy")).toHaveProperty("error");
   });
+  it("a faulty unit can be sent for repair, and repair brings it back to stock from either state", () => {
+    expect(nextState("faulty", "send_for_repair")).toEqual({ status: "sent_for_repair", to: "keep" });
+    expect(nextState("in_stock", "send_for_repair")).toHaveProperty("error");
+    expect(nextState("sent_for_repair", "send_for_repair")).toHaveProperty("error");
+    expect(nextState("sent_for_repair", "repair")).toEqual({ status: "in_stock", to: "keep" });
+    expect(nextState("faulty", "repair")).toEqual({ status: "in_stock", to: "keep" });
+    expect(nextState("sent_for_repair", "deploy")).toHaveProperty("error");
+  });
 });
 
 describe("warranty", () => {

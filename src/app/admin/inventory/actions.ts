@@ -13,7 +13,7 @@ import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { retailNameKey } from "@/lib/retail-customer";
-import { applyUnitMove, moveDestination, type MoveResult as UnitMoveResult } from "@/lib/inventory-move";
+import { applyUnitMove, moveDestination, siteFor, type MoveResult as UnitMoveResult } from "@/lib/inventory-move";
 import {
   MOVE_LABEL,
   batchCode,
@@ -400,4 +400,121 @@ export async function setBatchCost(batchId: string, unitCost: number | null): Pr
   revalidatePath("/admin/inventory");
   revalidatePath(`/admin/inventory/batches/${batchId}`);
   return {};
+}
+
+// ---------------------------------------------------------------------------
+// Existing inventory (2026-10-12, user-asked) — stock that was already in
+// place before this system existed, with no supplier invoice or batch
+// number to trace it to. A real batch and (for a serial-tracked item) real,
+// printable unit codes are still generated, exactly as a normal receipt
+// gets — only the supplier invoice is skipped, since there genuinely isn't
+// one. `InventoryBatch.historical` is the one fact that distinguishes it
+// from a real delivery everywhere a batch is shown.
+// ---------------------------------------------------------------------------
+
+export async function receiveHistoricalStock(input: {
+  itemTypeId: string;
+  count: number;
+  since: string;
+  locationKind: "office" | "society";
+  officeId: string;
+  societyId: string;
+  notes: string;
+}): Promise<Result<{ batchId: string }>> {
+  const admin = await requireStockStaff();
+  if (!admin) return { error: REFUSED };
+  const since = day(input.since);
+  if (!since) return { error: "Enter when this stock was already in place." };
+  if (!notFuture(since)) return { error: "That date cannot be in the future." };
+
+  const type = await db.inventoryItemType.findUnique({ where: { id: input.itemTypeId } });
+  if (!type) return { error: "Choose the item." };
+  if (!(input.count > 0)) return { error: `Enter how many ${type.unit} there already are.` };
+  if (type.tracking !== "length" && !Number.isInteger(input.count)) return { error: `${type.name} is counted in whole pieces.` };
+  if (type.tracking === "serial" && input.count > 5000) return { error: "Split a count of more than 5,000 units into separate entries." };
+
+  let locationId: string;
+  let deploy = false;
+  if (input.locationKind === "society") {
+    if (!input.societyId) return { error: "Choose the society it is already at." };
+    const site = await siteFor(db, input.societyId);
+    if (!site) return { error: "That society no longer exists." };
+    locationId = site;
+    deploy = true;
+  } else {
+    const office = input.officeId ? await db.stockLocation.findUnique({ where: { id: input.officeId } }) : null;
+    if (!office || office.kind !== "office") return { error: "Choose the office it is already at." };
+    locationId = office.id;
+  }
+
+  const prefix = batchCode(since, 0).slice(0, 5);
+  const monthCodes = (await db.inventoryBatch.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } })).map((b) => b.code);
+  const seq = nextBatchSeq(monthCodes);
+  const code = batchCode(since, seq);
+  const reason = input.notes.trim() || "Existing inventory — already in place before FirsThing, no supplier invoice on record.";
+
+  const batchId = await db.$transaction(
+    async (tx) => {
+      const batch = await tx.inventoryBatch.create({
+        data: {
+          code,
+          itemTypeId: type.id,
+          purchaseId: null,
+          historical: true,
+          receivedAtLocationId: locationId,
+          receivedOn: since,
+          quantity: input.count,
+          unitCost: null,
+          warrantyMonths: null,
+          warrantyBasis: "install",
+          notes: reason,
+          createdById: admin.id,
+        },
+      });
+      if (type.tracking === "serial") {
+        const status: "deployed" | "in_stock" = deploy ? "deployed" : "in_stock";
+        const units = Array.from({ length: input.count }, (_, i) => ({
+          id: `${batch.id}-${i + 1}`,
+          code: unitCode(code, i + 1),
+          batchId: batch.id,
+          itemTypeId: type.id,
+          status,
+          locationId,
+          deployedOn: deploy ? since : null,
+        }));
+        await tx.inventoryUnit.createMany({ data: units });
+        await tx.stockMovement.createMany({
+          data: units.map((u) => ({
+            kind: "receive" as const,
+            on: since,
+            itemTypeId: type.id,
+            batchId: batch.id,
+            unitId: u.id,
+            quantity: 1,
+            toLocationId: locationId,
+            reason,
+            recordedById: admin.id,
+          })),
+        });
+      } else {
+        await tx.stockMovement.create({
+          data: {
+            kind: "receive",
+            on: since,
+            itemTypeId: type.id,
+            batchId: batch.id,
+            quantity: input.count,
+            toLocationId: locationId,
+            reason,
+            recordedById: admin.id,
+          },
+        });
+      }
+      return batch.id;
+    },
+    { timeout: 60_000 },
+  );
+  logger.info("inventory.historical_received", { actorId: admin.id, batchId, itemTypeId: type.id, count: input.count, locationId, deployed: deploy });
+  revalidatePath("/admin/inventory");
+  return { batchId };
 }

@@ -23,7 +23,7 @@ export type UnitMoveInput = {
 
 export type MoveResult = { done: number; failed: { code: string; error: string }[] };
 
-const REASON_NEEDED: MoveKind[] = ["mark_faulty", "scrap", "lost", "return_to_supplier"];
+const REASON_NEEDED: MoveKind[] = ["mark_faulty", "send_for_repair", "scrap", "lost", "return_to_supplier"];
 
 /** A society's stock site, created the first time anything is deployed there. */
 export async function siteFor(client: Client, societyId: string): Promise<string | null> {

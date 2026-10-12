@@ -54,7 +54,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
   const serial = batch.itemType.tracking === "serial";
 
   let invoiceUrl: string | null = null;
-  if (batch.purchase.invoiceS3Key) {
+  if (batch.purchase?.invoiceS3Key) {
     try {
       invoiceUrl = await getSignedUrl(s3, new GetObjectCommand({ Bucket: S3_BUCKET, Key: batch.purchase.invoiceS3Key }), { expiresIn: 600 });
     } catch {
@@ -71,15 +71,20 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
     .filter((h) => h.balance > 0);
 
   const warranty = (deployedOn: Date | null) =>
-    warrantyView({ warrantyMonths: batch.warrantyMonths, basis: batch.warrantyBasis, purchaseDate: batch.purchase.invoiceDate, deployedOn, now });
+    warrantyView({ warrantyMonths: batch.warrantyMonths, basis: batch.warrantyBasis, purchaseDate: batch.purchase?.invoiceDate ?? batch.receivedOn, deployedOn, now });
 
   return (
     <>
       <PageHeader
         backHref="/admin/inventory"
         title={`Batch ${batch.code}`}
-        chip={<StatusChip tone="info">{batch.itemType.name}</StatusChip>}
-        subtitle={`${batch.quantity} ${batch.itemType.unit} from ${batch.purchase.supplier.name} · received ${formatDate(batch.receivedOn)} at ${batch.receivedAt.name}`}
+        chip={
+          <span className="inline-flex items-center gap-1.5">
+            <StatusChip tone="info">{batch.itemType.name}</StatusChip>
+            {batch.historical && <StatusChip tone="neu">Pre-existing — before FirsThing</StatusChip>}
+          </span>
+        }
+        subtitle={`${batch.quantity} ${batch.itemType.unit}${batch.purchase ? ` from ${batch.purchase.supplier.name}` : " — no supplier, recorded as existing stock"} · received ${formatDate(batch.receivedOn)} at ${batch.receivedAt.name}`}
         action={
           serial ? (
             <Link href={`/admin/inventory/batches/${batch.id}/labels`} className="btn-secondary btn-sm">
@@ -140,8 +145,11 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
             <CardTitle>Batch details</CardTitle>
             <dl className="space-y-2">
               {([
-                ["Supplier", batch.purchase.supplier.name],
-                ["Supplier invoice", `${batch.purchase.invoiceNumber} · ${formatDate(batch.purchase.invoiceDate)}`],
+                ["Supplier", batch.purchase ? batch.purchase.supplier.name : "— pre-existing, no supplier on record"],
+                [
+                  "Supplier invoice",
+                  batch.purchase ? `${batch.purchase.invoiceNumber} · ${formatDate(batch.purchase.invoiceDate)}` : "—",
+                ],
                 ["Supplier's lot", batch.supplierLot ?? "—"],
                 ["Manufactured", batch.manufacturedOn ? formatDate(batch.manufacturedOn) : "—"],
                 ["Cost", <BatchCost key="cost" batchId={batch.id} unitCost={batch.unitCost} unit={batch.itemType.unit} />],

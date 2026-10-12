@@ -4495,6 +4495,12 @@ enum InventoryUnitStatus {
   in_stock
   deployed
   faulty
+  /// Out for a warranty claim/repair (2026-10-12) — distinct from `faulty`
+  /// (broken, still on our shelf, ready to send) so the two can be counted
+  /// separately: how much is simply waiting to be sent, versus how much is
+  /// already away at the manufacturer. Not terminal — `repair` brings it
+  /// back to `in_stock` the same way it already does from `faulty`.
+  sent_for_repair
   returned_to_supplier
   scrapped
   lost
@@ -4508,6 +4514,7 @@ enum StockMovementKind {
   deploy
   return_to_office   @map("return")
   mark_faulty        @map("fault")
+  send_for_repair
   repair
   return_to_supplier
   scrap
@@ -4601,8 +4608,14 @@ model InventoryBatch {
   /// Printed on every unit: B{YYMM}-{nnn}.
   code                 String        @unique
   itemTypeId           String        @map("item_type_id")
-  purchaseId           String        @map("purchase_id")
-  /// The office it arrived at.
+  /// Null for a historical entry (2026-10-12) — stock that was already in
+  /// place before this system existed has no supplier invoice to trace to.
+  purchaseId           String?       @map("purchase_id")
+  /// True for exactly that case — surfaced wherever a batch is shown, so a
+  /// pre-system count is never mistaken for a real, invoiced delivery.
+  historical            Boolean       @default(false)
+  /// The office it arrived at, or — for a historical, already-deployed entry
+  /// — the society's own site.
   receivedAtLocationId String        @map("received_at_location_id")
   receivedOn           DateTime      @map("received_on")
   /// Units, metres or pieces received.
@@ -4617,9 +4630,9 @@ model InventoryBatch {
   createdAt            DateTime      @default(now()) @map("created_at")
   createdById          String        @map("created_by_id")
 
-  itemType   InventoryItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
-  purchase   InventoryPurchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
-  receivedAt StockLocation     @relation(fields: [receivedAtLocationId], references: [id], onDelete: Restrict)
+  itemType   InventoryItemType  @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+  purchase   InventoryPurchase? @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  receivedAt StockLocation      @relation(fields: [receivedAtLocationId], references: [id], onDelete: Restrict)
   units      InventoryUnit[]
   movements  StockMovement[]
 

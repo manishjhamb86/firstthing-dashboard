@@ -4,7 +4,15 @@ import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { ErrorText, Field } from "@/components/ui";
 import { uploadFileToS3 } from "@/lib/upload-to-s3";
-import { activateContract, correctAgreementDates, markAgreementStep, prepareAgreement, uploadExecutedAgreement } from "./actions";
+import {
+  activateContract,
+  correctAgreementDates,
+  correctUnitElectricityRate,
+  markAgreementStep,
+  prepareAgreement,
+  regenerateSavingsReports,
+  uploadExecutedAgreement,
+} from "./actions";
 
 export function PrepareAgreementButton({ pipelineId }: { pipelineId: string }) {
   const [error, setError] = useState<string | undefined>();
@@ -310,5 +318,112 @@ export function AgreementDatesControl({
       </div>
       {error && <ErrorText>{error}</ErrorText>}
     </form>
+  );
+}
+
+/**
+ * Correct the contract's unit rate — not a renegotiation (that is a new,
+ * forward-only term version), this is fixing a wrong figure, and the rate
+ * change is applied to every released report that already used it.
+ */
+export function UnitRateCorrectionControl({ pipelineId, rate, live }: { pipelineId: string; rate: number; live: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState(String(rate));
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [result, setResult] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
+        Correct the unit rate
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="mt-3 space-y-3 rounded-[var(--r-md)] border border-[var(--border)] p-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(undefined);
+        setResult(undefined);
+        startTransition(async () => {
+          const r = await correctUnitElectricityRate(pipelineId, Number(value), reason);
+          if ("error" in r) setError(r.error);
+          else {
+            setOpen(false);
+            setResult(r.rederived > 0 ? `Corrected — ${r.rederived} past month${r.rederived === 1 ? "" : "s"} re-derived.` : "Corrected.");
+          }
+        });
+      }}
+    >
+      <Field label="Unit rate (₹/kWh)" htmlFor="rate-correction">
+        <input
+          id="rate-correction"
+          className="field field-auto"
+          type="number"
+          step="0.01"
+          min="0.01"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          required
+        />
+      </Field>
+      <p className="text-xs text-[var(--text-muted)]">
+        Every released month billed against this rate is re-derived from when it took effect — the invoice amount
+        a society was sent never changes, only the saving figure it is explained by.
+      </p>
+      <Field label={live ? "Why it is being corrected" : "Why (optional in demo mode)"} htmlFor="rate-reason" hint="Kept with the old rate.">
+        <input id="rate-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Recorded wrong at signing — the agreement reads ₹6.80." />
+      </Field>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+          {pending ? "Saving…" : "Save the correction"}
+        </button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => { setOpen(false); setError(undefined); setValue(String(rate)); }}>
+          Cancel
+        </button>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+      {result && <p className="text-xs text-[var(--text-muted)]">{result}</p>}
+    </form>
+  );
+}
+
+/**
+ * Re-publishes every already-published savings report across every circuit
+ * of this contract — the explicit "regenerate" the unit-rate correction
+ * above, or any other correction, should be followed by (2026-10-12,
+ * user-asked). `publishSavingsReport` itself decides whether a given
+ * month's figures actually moved; a month that did not change is counted
+ * as unchanged, not an error.
+ */
+export function RegenerateReportsButton({ pipelineId }: { pipelineId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | undefined>();
+  const [result, setResult] = useState<string | undefined>();
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        className="btn-secondary btn-sm"
+        disabled={pending}
+        onClick={() =>
+          startTransition(async () => {
+            setError(undefined);
+            setResult(undefined);
+            const r = await regenerateSavingsReports(pipelineId);
+            if ("error" in r) setError(r.error);
+            else setResult(`Checked ${r.checked} published report${r.checked === 1 ? "" : "s"} — ${r.updated} updated, ${r.unchanged} already current.`);
+          })
+        }
+      >
+        {pending ? "Regenerating…" : "Regenerate published savings reports"}
+      </button>
+      {error && <ErrorText>{error}</ErrorText>}
+      {result && <p className="mt-1 text-xs text-[var(--text-muted)]">{result}</p>}
+    </div>
   );
 }

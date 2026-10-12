@@ -16,6 +16,7 @@ import { KYC_TYPE_LABEL } from "@/lib/kyc";
 import { bestKycAcross, kycMissing } from "@/lib/kyc-society";
 import type { OfferCircuitTerm } from "@/lib/offer";
 import { fileStoredDocumentForSociety } from "@/app/admin/documents/actions";
+import { publishSavingsReport } from "@/app/admin/societies/[id]/circuits/[circuitId]/reports/monthly/actions";
 
 // FEAT-029-AC-4 / FEAT-062-AC-4 — agreement preparation and contract term
 // confirmation are PER-01's, not any pipeline actor's.
@@ -467,4 +468,115 @@ export async function correctAgreementDates(pipelineId: string, input: Agreement
   revalidatePath(`/admin/pipeline/${pipelineId}`);
   revalidatePath("/portal");
   return { ok: true as const };
+}
+
+/**
+ * Correct the contract's unit electricity rate (2026-10-12, user-asked). This
+ * is deliberately NOT "amend" — ContractTermVersion is versioned so a
+ * genuine renegotiation applies forward only (FEAT-062-AC-5); this is for
+ * when the recorded rate was simply wrong, and the user explicitly asked
+ * that fixing it "affect the past reports also". It is updated IN PLACE on
+ * the current term version (no new version — nothing was renegotiated), and
+ * every released invoice-sourced month this version has ever covered is
+ * re-derived from its own effective month on, the same hook a light-count
+ * correction already uses (`rederiveInvoiceMonthsAfterRescale`) — the
+ * invoice itself never changes (ADR-011); only the stats version does.
+ */
+export async function correctUnitElectricityRate(pipelineId: string, rate: number, reason: string) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." };
+  const refusal0 = refuseDateCorrector({
+    demo: await isDemoMode(),
+    isField: admin.permissions.includes("manage_pipeline"),
+    isOps: admin.permissions.includes("manage_pipeline") && admin.permissions.includes("manage_survey"),
+    reason,
+  });
+  if (refusal0) {
+    logger.warn("agreement.unit_rate_correction_refused", { actorId: admin.id, pipelineId, refusal: refusal0 });
+    return { error: refusal0.replace("installation dates are", "the unit rate is") };
+  }
+  if (!Number.isFinite(rate) || rate <= 0) return { error: "Enter a positive rate in ₹/kWh." };
+  if (rate > 1000) return { error: "That rate looks wrong — it is ₹ per kWh, not for the whole month." };
+
+  const contract = await db.contract.findUnique({
+    where: { pipelineId },
+    include: { versions: { orderBy: { version: "desc" }, take: 1 } },
+  });
+  if (!contract) return { error: "There is no contract yet." };
+  const current = contract.versions[0];
+  if (!current) return { error: "The contract has no terms recorded yet." };
+  if (current.unitElectricityRate === rate) return { error: "That is already the recorded rate." };
+
+  const oldRate = current.unitElectricityRate;
+  const reasonTrim = reason.trim() || null;
+  await db.$transaction(async (tx) => {
+    await tx.contractTermVersion.update({ where: { id: current.id }, data: { unitElectricityRate: rate } });
+    await logChange(tx, {
+      entity: "contract_term_version",
+      entityId: current.id,
+      kind: "edit",
+      field: "unitElectricityRate",
+      oldValue: oldRate,
+      newValue: rate,
+      reason: reasonTrim,
+      actorId: admin.id,
+    });
+  });
+
+  const circuits = await db.circuit.findMany({ where: { siteSurvey: { pipelineId }, voidedAt: null }, select: { id: true } });
+  const fromPeriod = current.effectiveFrom.toISOString().slice(0, 7);
+  const rederivedCalculationIds: string[] = [];
+  for (const c of circuits) {
+    try {
+      const { rederivedCalculationIds: ids } = await rederiveInvoiceMonthsAfterRescale(c.id, fromPeriod, admin.id);
+      rederivedCalculationIds.push(...ids);
+    } catch (err) {
+      logger.error("agreement.unit_rate_followup_failed", { pipelineId, circuitId: c.id, error: String(err) });
+    }
+  }
+
+  logger.info("agreement.unit_rate_corrected", { actorId: admin.id, pipelineId, from: oldRate, to: rate, reason: reasonTrim, rederived: rederivedCalculationIds.length });
+  revalidatePath(`/admin/pipeline/${pipelineId}/agreement`);
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  revalidatePath("/portal");
+  return { ok: true as const, rederived: rederivedCalculationIds.length };
+}
+
+/**
+ * Regenerate every already-published savings report of every circuit under
+ * this contract (2026-10-12, user-asked — the explicit button alongside the
+ * rate correction above, also useful after any other correction a society's
+ * published reports should pick up). Reuses `publishSavingsReport` itself —
+ * same figures, same "refused, nothing changed" outcome for a month whose
+ * published copy already matches — rather than a second copy of the
+ * publish arithmetic that could drift from it.
+ */
+export async function regenerateSavingsReports(pipelineId: string) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." };
+  if (!admin.permissions.includes("manage_pipeline")) {
+    logger.warn("agreement.regenerate_reports_refused", { actorId: admin.id, pipelineId, reason: "permission" });
+    return { error: "Publishing to a society is a pipeline action (Manage pipeline)." };
+  }
+  const circuits = await db.circuit.findMany({ where: { siteSurvey: { pipelineId }, voidedAt: null }, select: { id: true } });
+  if (circuits.length === 0) return { error: "This deal has no circuit to report on." };
+
+  const periods = await db.publishedSavingsReport.findMany({
+    where: { circuitId: { in: circuits.map((c) => c.id) }, voidedAt: null },
+    select: { circuitId: true, period: true },
+    distinct: ["circuitId", "period"],
+  });
+  if (periods.length === 0) return { error: "No report has been published to this society yet — there is nothing to regenerate." };
+
+  let updated = 0;
+  let unchanged = 0;
+  for (const p of periods) {
+    const r = await publishSavingsReport(p.circuitId, p.period);
+    if ("version" in r) updated++;
+    else unchanged++;
+  }
+  logger.info("agreement.reports_regenerated", { actorId: admin.id, pipelineId, checked: periods.length, updated, unchanged });
+  revalidatePath(`/admin/pipeline/${pipelineId}/agreement`);
+  revalidatePath("/portal/documents");
+  return { ok: true as const, checked: periods.length, updated, unchanged };
 }

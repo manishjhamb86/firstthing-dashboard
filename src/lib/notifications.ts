@@ -505,9 +505,16 @@ export const openNotifications = cache(async (): Promise<Notification[]> => {
 });
 
 /** The history — resolved alerts, most recently closed first. */
-export async function pastNotifications(limit = 50): Promise<Notification[]> {
+/**
+ * `since` keeps the Resolved list from growing forever on screen (2026-10-13,
+ * user-caught) without ever deleting anything — every closed alert stays a
+ * real row, this just narrows which ones render by default. Omitted (or
+ * `null`) shows the full history, capped only by `limit` as before.
+ */
+export async function pastNotifications(opts: { limit?: number; since?: Date | null } = {}): Promise<Notification[]> {
+  const { limit = 50, since } = opts;
   const rows = await db.meterAlert.findMany({
-    where: { closedAt: { not: null } },
+    where: { closedAt: since ? { not: null, gte: since } : { not: null } },
     orderBy: { closedAt: "desc" },
     take: limit,
     include,

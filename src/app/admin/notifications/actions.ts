@@ -8,12 +8,19 @@ import { logger } from "@/lib/logger";
 /**
  * Acknowledge an alert: someone has seen it and owns it now.
  *
- * Deliberately NOT the same as closing it. The meter is still down — only
- * the poll's own recovery closes an offline alert, and only a reading back
- * inside the ceiling closes an out-of-range one. Acknowledging takes it off
- * the badge without pretending the condition ended, which is the difference
- * between a notification list people trust and one they clear to make the
- * number go away.
+ * On an OPEN alert this is deliberately NOT the same as closing it. The
+ * meter is still down — only the poll's own recovery closes an offline
+ * alert, and only a reading back inside the ceiling closes an out-of-range
+ * one. Acknowledging takes it off the badge without pretending the
+ * condition ended, which is the difference between a notification list
+ * people trust and one they clear to make the number go away.
+ *
+ * On a RESOLVED alert (2026-10-13, user-asked), the same field now carries a
+ * second, simpler meaning: has anyone actually looked at this row. The
+ * Resolved table shows every closed alert in green (the problem IS over),
+ * but green alone can't tell a reader "new since you last checked" apart
+ * from "you've already seen this" — `acknowledgedAt` is that flag, for
+ * either state, one field rather than a second one with the same shape.
  */
 export async function acknowledgeAlert(alertId: string): Promise<{ error?: string; ok?: true }> {
   const actor = await resolveAdmin();
@@ -27,7 +34,6 @@ export async function acknowledgeAlert(alertId: string): Promise<{ error?: strin
     select: { id: true, closedAt: true, acknowledgedAt: true },
   });
   if (!alert) return { error: "That alert no longer exists." };
-  if (alert.closedAt) return { error: "That alert has already resolved itself." };
   if (alert.acknowledgedAt) return { ok: true };
 
   await db.meterAlert.update({

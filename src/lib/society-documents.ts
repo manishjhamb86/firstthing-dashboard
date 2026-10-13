@@ -26,6 +26,7 @@ export const SOCIETY_DOC_TYPES: Record<string, { label: string; tone: ChipTone }
   preDemoReport: { label: "Demo report (before)", tone: "neu" },
   postDemoReport: { label: "Demo report (after)", tone: "neu" },
   inspectionReport: { label: "Inspection report", tone: "ok" },
+  gatePass: { label: "Gate pass", tone: "neu" },
   invoiceCopy: { label: "Invoice", tone: "warn" },
   nonServiceInvoice: { label: "Invoice (other charges)", tone: "warn" },
 };

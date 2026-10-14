@@ -2,11 +2,14 @@ import { redirect } from "next/navigation";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { societyEvents } from "@/lib/portal-notifications";
+import { effectiveGrants } from "@/lib/portal-access";
+import { vapidPublicKey } from "@/lib/push";
 import { Card, EmptyState, PageHeader } from "@/components/ui";
 import { formatInstant } from "@/lib/format-date";
 import { timeAgoShort } from "../portal-widgets";
 import Link from "next/link";
 import { MarkReadButton } from "./mark-read-button";
+import { PushNotificationsCard } from "./push-notifications-card";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Notifications" };
@@ -23,6 +26,7 @@ export default async function PortalNotificationsPage() {
   const seenAt = viewer.notificationsSeenAt;
   const isUnseen = (at: Date) => seenAt === null || at > seenAt;
   const unseenCount = events.filter((e) => isUnseen(e.at)).length;
+  const canWatchTanks = viewer.role ? effectiveGrants(viewer.role, viewer.grants).has("water_tanks") : false;
 
   return (
     <>
@@ -31,6 +35,8 @@ export default async function PortalNotificationsPage() {
         subtitle="Reports filed, sensor trouble, ticket updates — newest first."
         action={unseenCount > 0 ? <MarkReadButton /> : undefined}
       />
+
+      {canWatchTanks && <PushNotificationsCard vapidKey={vapidPublicKey()} />}
 
       {events.length === 0 ? (
         <EmptyState title="Nothing yet">

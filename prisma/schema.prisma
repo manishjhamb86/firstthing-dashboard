@@ -453,6 +453,8 @@ model Profile {
 
   replacementFollowUpsCompleted DemoReplacementFollowUp[] @relation("FollowUpCompletedByProfile")
 
+  pushSubscriptions PushSubscription[]
+
   @@index([societyId])
   @@map("profiles")
 }
@@ -3610,6 +3612,12 @@ model TankApiConfig {
   lastError       String?   @map("last_error")
   lastDeviceCount Int?      @map("last_device_count")
   lastSyncAt      DateTime? @map("last_sync_at")
+  /// Alert thresholds, operator-tunable without a redeploy (2026-10-14).
+  /// A tank at or below this is "critically low"; at or above this,
+  /// "critically high / overflow risk". Defaults are a starting point, not
+  /// a researched figure — this is deliberately the one place to revisit.
+  lowLevelPct     Int       @default(20) @map("low_level_pct")
+  highLevelPct    Int       @default(90) @map("high_level_pct")
 
   updatedBy AdminUser? @relation("TankApiConfigUpdatedBy", fields: [updatedById], references: [id])
 
@@ -3660,6 +3668,7 @@ model WaterTank {
   society    Society?           @relation(fields: [societyId], references: [id], onDelete: SetNull)
   assignedBy AdminUser?         @relation("WaterTankAssignedBy", fields: [assignedById], references: [id])
   readings   TankLevelReading[]
+  alerts     TankAlert[]
 
   @@index([societyId])
   @@map("water_tanks")
@@ -3682,6 +3691,46 @@ model TankLevelReading {
 
   @@index([tankId, recordedAt])
   @@map("tank_level_readings")
+}
+
+enum TankAlertKind {
+  /// The sensor stopped reporting (mirrors MeterAlertKind.offline).
+  offline
+  /// At or below TankApiConfig.lowLevelPct.
+  level_low
+  /// At or above TankApiConfig.highLevelPct — overflow risk.
+  level_high
+}
+
+/// A tank's open/close alert history, same shape and same reason as
+/// MeterAlert (2026-10-14, user-asked — real push to every portal account
+/// at the society holding the water_tanks grant): one OPEN alert per
+/// (tankId, kind), enforced by a partial unique index because the half-
+/// hourly sampler racing itself must never file the same outage twice, and
+/// nothing is ever deleted — a tank that went dry overnight stays on record
+/// after it recovers.
+model TankAlert {
+  id String @id @default(cuid())
+
+  tankId   String        @map("tank_id")
+  kind     TankAlertKind
+  openedAt DateTime      @default(now()) @map("opened_at")
+  message  String
+  detail   Json?
+
+  closedAt     DateTime? @map("closed_at")
+  closedReason String?   @map("closed_reason")
+
+  /// Re-raised after a cool-off rather than duplicated — one row per
+  /// ongoing condition (same reasoning as MeterAlert.reraisedAt).
+  raiseCount Int       @default(1) @map("raise_count")
+  reraisedAt DateTime? @map("reraised_at")
+
+  tank WaterTank @relation(fields: [tankId], references: [id], onDelete: Cascade)
+
+  @@index([tankId, openedAt])
+  @@index([closedAt])
+  @@map("tank_alerts")
 }
 
 // ---- eWeLink (SONOFF) meter mirror -------------------------------------
@@ -4894,8 +4943,12 @@ model FieldSyncReceipt {
 /// push service says the subscription is gone (404/410) or the person turns
 /// notifications off.
 model PushSubscription {
-  id         String    @id @default(cuid())
-  adminId    String    @map("admin_id")
+  id        String  @id @default(cuid())
+  /// Exactly one of adminId/profileId is set (checked, `push_subscriptions_one_subject`) —
+  /// a field-app phone subscribes an AdminUser, a portal phone subscribes a
+  /// Profile (2026-10-14, water-tank alerts), never both.
+  adminId   String? @map("admin_id")
+  profileId String? @map("profile_id")
   endpoint   String    @unique
   p256dh     String
   auth       String
@@ -4903,9 +4956,11 @@ model PushSubscription {
   createdAt  DateTime  @default(now()) @map("created_at")
   lastSentAt DateTime? @map("last_sent_at")
 
-  admin AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  admin   AdminUser? @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  profile Profile?   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([adminId])
+  @@index([profileId])
   @@map("push_subscriptions")
 }
 

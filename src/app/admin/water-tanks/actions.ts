@@ -117,6 +117,34 @@ export async function saveTankApiConfig(input: {
   return synced;
 }
 
+/**
+ * The alert thresholds (2026-10-14, user-asked): a tank at or below "low" is
+ * critically low, at or above "high" is critically high / overflow risk —
+ * tunable without a redeploy, same reason TankApiConfig already lives here.
+ * Separate save from the credentials above: this never tests a connection,
+ * it just stores two numbers, and conflating the two save semantics would
+ * make a bad threshold look like a connection failure.
+ */
+export async function saveTankAlertThresholds(input: { lowPct: number; highPct: number }): Promise<{ error?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team)) {
+    logger.warn("tank.thresholds_refused", { actorId: actor.id, actorTeam: actor.team });
+    return { error: "Alert thresholds are an operations action." };
+  }
+  const low = Math.round(input.lowPct);
+  const high = Math.round(input.highPct);
+  if (!Number.isFinite(low) || !Number.isFinite(high) || low < 0 || high > 100 || low >= high) {
+    return { error: "The low threshold must be below the high threshold, and both between 0 and 100." };
+  }
+  const existing = await db.tankApiConfig.findUnique({ where: { id: "singleton" } });
+  if (!existing) return { error: "Set up the API connection first — there is nothing to tune thresholds on yet." };
+  await db.tankApiConfig.update({ where: { id: "singleton" }, data: { lowLevelPct: low, highLevelPct: high, updatedById: actor.id } });
+  logger.info("tank.thresholds_saved", { actorId: actor.id, low, high });
+  revalidatePath("/admin/water-tanks/settings");
+  return {};
+}
+
 /** Re-mirror the account on demand, from the settings or list page. */
 export async function syncTanksNow(): Promise<{ error?: string; devices?: number; tanks?: number }> {
   const actor = await resolveAdmin();

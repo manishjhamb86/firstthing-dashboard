@@ -1,12 +1,14 @@
 import { db } from "@/lib/db";
 import { formatDate, formatDateTime } from "@/lib/format-date";
 import { logger } from "@/lib/logger";
-import { sendPush } from "@/lib/push";
+import { sendPortalPush, sendPush } from "@/lib/push";
+import { effectiveGrants } from "@/lib/portal-access";
 import {
   assignmentMessage,
   demoAlertMessage,
   meterAlertMessage,
   replacementFollowUpCompletedMessage,
+  tankAlertMessage,
   shouldNotifyAssignee,
   type DemoAlertKind,
 } from "@/lib/push-messages";
@@ -164,5 +166,31 @@ export async function notifyMeterAlert(input: { meterId: string; kind: string })
     });
     if (!m?.ownerId) return;
     await sendPush([m.ownerId], meterAlertMessage({ kind: input.kind, meterName: m.name, place: m.society?.name ?? null, meterId: input.meterId }));
+  });
+}
+
+/**
+ * The tank sampler's own alert (tank-alerts.ts), to every portal account at
+ * the tank's society holding the water_tanks grant — a society whose tank
+ * is going dry or overflowing is the one that needs to know, not FirsThing
+ * staff (2026-10-14, user-asked). A tank with no society assigned yet has
+ * nobody to tell.
+ */
+export async function notifyTankAlert(input: { tankId: string; kind: string }): Promise<void> {
+  await safely("tank", async () => {
+    const tank = await db.waterTank.findUnique({
+      where: { id: input.tankId },
+      select: { name: true, societyId: true, society: { select: { name: true } } },
+    });
+    if (!tank?.societyId) return;
+    const members = await db.profile.findMany({
+      where: { societyId: tank.societyId, isActive: true },
+      select: { id: true, portalAuthority: true, grants: true },
+    });
+    const toIds = members
+      .filter((m) => m.portalAuthority && effectiveGrants(m.portalAuthority, m.grants).has("water_tanks"))
+      .map((m) => m.id);
+    if (toIds.length === 0) return;
+    await sendPortalPush(toIds, tankAlertMessage({ kind: input.kind, tankName: tank.name, place: tank.society?.name ?? null, tankId: input.tankId }));
   });
 }

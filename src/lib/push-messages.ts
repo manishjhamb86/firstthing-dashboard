@@ -50,6 +50,21 @@ export function meterAlertMessage(input: { kind: MeterAlertPushKind; meterName: 
   return { title, body, url: `/admin/meters/${input.meterId}`, tag: `meter:${input.kind}:${input.meterId}` };
 }
 
+export type TankAlertPushKind = "offline" | "level_low" | "level_high" | string;
+
+const TANK_ALERT_TITLE: Record<string, string> = {
+  offline: "Water tank sensor stopped reporting",
+  level_low: "Water tank critically low",
+  level_high: "Water tank critically high — overflow risk",
+};
+
+/** System-raised, same shape as meterAlertMessage — no "by", no self-skip actor. */
+export function tankAlertMessage(input: { kind: TankAlertPushKind; tankName: string; place?: string | null; tankId: string }): PushMessage {
+  const title = TANK_ALERT_TITLE[input.kind] ?? "Water tank alert";
+  const body = [input.tankName, input.place].filter(Boolean).join(" · ");
+  return { title, body, url: `/portal/tanks`, tag: `tank:${input.kind}:${input.tankId}` };
+}
+
 /** Whether a sender should notify: never for a person assigning work to themselves. */
 export function shouldNotifyAssignee(assigneeId: string | null | undefined, actorId: string | null | undefined): assigneeId is string {
   return typeof assigneeId === "string" && assigneeId.length > 0 && assigneeId !== actorId;

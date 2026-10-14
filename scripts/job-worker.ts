@@ -11,6 +11,7 @@ import { runZohoSync } from "../src/lib/zoho-invoice-sync";
 import { runHelpTriageSweep } from "../src/lib/help-triage";
 import { settledTotal } from "../src/lib/payment";
 import { syncDemoMonitoringAlerts } from "../src/lib/demo-monitoring-alerts";
+import { closeTankAlert, evaluateTankConditions, openTankAlert } from "../src/lib/tank-alerts";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -227,11 +228,18 @@ async function runTankLevelSample() {
       return;
     }
     const synced = await syncTankDevices(cfg);
-    const tanks = await db.waterTank.findMany({
-      where: { hasLevelSignal: true },
-      select: { id: true, lastLevelPercent: true, lastOnline: true, lastReportedAt: true },
-    });
+    const [tanks, thresholds] = await Promise.all([
+      db.waterTank.findMany({
+        where: { hasLevelSignal: true },
+        select: { id: true, name: true, lastLevelPercent: true, lastOnline: true, lastReportedAt: true },
+      }),
+      db.tankApiConfig.findUnique({ where: { id: "singleton" }, select: { lowLevelPct: true, highLevelPct: true } }),
+    ]);
+    const lowPct = thresholds?.lowLevelPct ?? 20;
+    const highPct = thresholds?.highLevelPct ?? 90;
     const now = new Date();
+    let alertsOpened = 0;
+    let alertsClosed = 0;
     for (const t of tanks) {
       if (t.lastLevelPercent === null) continue;
       await db.tankLevelReading.create({
@@ -243,8 +251,41 @@ async function runTankLevelSample() {
           reportedAt: t.lastReportedAt,
         },
       });
+
+      // Push notifications for the society (2026-10-14, user-asked): sensor
+      // stopped reporting, critically low, critically high / overflow risk.
+      // Same open/close-on-transition shape as the meter poll's own alerts.
+      const active = new Set(evaluateTankConditions({ online: t.lastOnline, levelPercent: t.lastLevelPercent, lowPct, highPct }));
+      for (const kind of ["offline", "level_low", "level_high"] as const) {
+        if (active.has(kind)) {
+          const { opened } = await openTankAlert({
+            tankId: t.id,
+            kind,
+            message:
+              kind === "offline"
+                ? `${t.name} has stopped reporting.`
+                : kind === "level_low"
+                  ? `${t.name} is critically low — ${t.lastLevelPercent}%.`
+                  : `${t.name} is critically high — ${t.lastLevelPercent}%, overflow risk.`,
+            detail: { levelPercent: t.lastLevelPercent, lowPct, highPct },
+          });
+          if (opened) alertsOpened += 1;
+        } else {
+          const { closed } = await closeTankAlert({
+            tankId: t.id,
+            kind,
+            reason:
+              kind === "offline"
+                ? "The sensor is reporting again."
+                : kind === "level_low"
+                  ? `Back above the low threshold — ${t.lastLevelPercent}%.`
+                  : `Back below the high threshold — ${t.lastLevelPercent}%.`,
+          });
+          alertsClosed += closed;
+        }
+      }
     }
-    logger.info("job.tank_sample_done", { devices: synced.devices, tanks: tanks.length });
+    logger.info("job.tank_sample_done", { devices: synced.devices, tanks: tanks.length, alertsOpened, alertsClosed });
   } finally {
     // Reschedule even after a failed pass — a Tuya outage must not kill the
     // chain, only skip the sample.

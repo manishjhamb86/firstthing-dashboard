@@ -1,0 +1,17 @@
+{
+  "id": "/portal",
+  "name": "FirsThing Portal",
+  "short_name": "FirsThing",
+  "description": "Your society's electricity savings, water tanks, documents and requests.",
+  "start_url": "/portal",
+  "scope": "/portal",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1C2434",
+  "theme_color": "#1C2434",
+  "icons": [
+    { "src": "/field-icon/192", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/field-icon/512", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/field-icon/512?maskable=1", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

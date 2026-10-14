@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { Metadata, Viewport } from "next";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
@@ -8,8 +9,23 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { resolveTheme } from "@/lib/resolve-theme";
 import { PortalShell, type PortalNavEntry } from "./portal-shell";
 import { portalNavEntries } from "./portal-nav-entries";
+import { PushRegistration } from "./push-registration";
 
 export const dynamic = "force-dynamic";
+
+// Installable, for the push notifications below (2026-10-14) — the manifest
+// is linked from THIS layout only, so installing from any other page does
+// not make the back office an app called "FirsThing".
+export const metadata: Metadata = {
+  manifest: "/portal.webmanifest",
+  appleWebApp: { capable: true, title: "FirsThing", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#1C2434",
+  width: "device-width",
+  initialScale: 1,
+};
 
 /**
  * One shell for every portal page (the customer-portal revamp, 2026-08-29) —
@@ -46,14 +62,17 @@ export default async function PortalLayout({ children }: { children: ReactNode }
   ];
 
   return (
-    <PortalShell
-      theme={theme}
-      email={viewer.email}
-      societyName={society.name}
-      entries={entries}
-      bellCount={unseen}
-    >
-      {children}
-    </PortalShell>
+    <>
+      <PushRegistration />
+      <PortalShell
+        theme={theme}
+        email={viewer.email}
+        societyName={society.name}
+        entries={entries}
+        bellCount={unseen}
+      >
+        {children}
+      </PortalShell>
+    </>
   );
 }

@@ -82,3 +82,44 @@ export async function sendPush(adminIds: string[], message: PushMessage): Promis
   }
   return { sent, removed };
 }
+
+/**
+ * The same thing, for portal (Profile) subscribers rather than AdminUsers
+ * (2026-10-14, water-tank alerts — real push to every portal account at the
+ * society holding the water_tanks grant). Kept as its own function rather
+ * than a branch inside `sendPush`: the two audiences never mix, and this
+ * keeps the field app's own log lines ("people"/adminId) from quietly
+ * growing a second meaning.
+ */
+export async function sendPortalPush(profileIds: string[], message: PushMessage): Promise<{ sent: number; removed: number }> {
+  const ids = [...new Set(profileIds.filter(Boolean))];
+  if (ids.length === 0 || !configure()) return { sent: 0, removed: 0 };
+  let sent = 0;
+  let removed = 0;
+  try {
+    const subs = await db.pushSubscription.findMany({ where: { profileId: { in: ids } } });
+    const payload = JSON.stringify(message);
+    await Promise.all(
+      subs.map(async (s) => {
+        try {
+          await webpush.sendNotification({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } }, payload, { TTL: 24 * 60 * 60, urgency: "normal", timeout: SEND_TIMEOUT_MS });
+          sent += 1;
+          await db.pushSubscription.update({ where: { id: s.id }, data: { lastSentAt: new Date() } }).catch(() => {});
+        } catch (err) {
+          const status = (err as { statusCode?: number }).statusCode;
+          if (status === 404 || status === 410) {
+            await db.pushSubscription.delete({ where: { id: s.id } }).catch(() => {});
+            removed += 1;
+            logger.info("push.subscription_gone", { profileId: s.profileId, status });
+          } else {
+            logger.warn("push.send_failed", { profileId: s.profileId, status: status ?? null, error: String((err as Error).message ?? err) });
+          }
+        }
+      }),
+    );
+    if (subs.length > 0) logger.info("push.sent", { tag: message.tag, people: ids.length, phones: subs.length, sent, removed, audience: "portal" });
+  } catch (err) {
+    logger.error("push.failed", { tag: message.tag, error: String(err) });
+  }
+  return { sent, removed };
+}

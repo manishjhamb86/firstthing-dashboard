@@ -6,6 +6,7 @@ import { BackButton } from "@/components/back-button";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { formatInstant } from "@/lib/format-date";
 import { SettingsForm } from "./settings-form";
+import { ThresholdsForm } from "./thresholds-form";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Water tank API" };
@@ -92,6 +93,15 @@ export default async function TankApiSettingsPage() {
             The background job samples every tank&apos;s level every 30 minutes using these
             credentials — history charts read that store.
           </p>
+        </Card>
+
+        <Card className="p-6 lg:col-span-2">
+          <CardTitle>Alert thresholds</CardTitle>
+          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            Every portal account with Water access gets a push notification the moment a tank
+            crosses one of these, and when it stops reporting at all.
+          </p>
+          <ThresholdsForm current={{ lowPct: config?.lowLevelPct ?? 20, highPct: config?.highLevelPct ?? 90 }} />
         </Card>
       </div>
     </>

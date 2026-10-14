@@ -31,7 +31,7 @@ const VISIBLE_DOC_LABEL: Record<string, string> = {
 };
 
 export const societyEvents = cache(async (societyId: string): Promise<PortalEvent[]> => {
-  const [alerts, docs, tickets] = await Promise.all([
+  const [alerts, tankAlerts, docs, tickets] = await Promise.all([
     db.meterAlert.findMany({
       where: {
         OR: [{ meter: { societyId } }, { circuit: { societyId } }],
@@ -46,6 +46,14 @@ export const societyEvents = cache(async (societyId: string): Promise<PortalEven
         closedAt: true,
         closedReason: true,
       },
+    }),
+    // Water-tank alerts (2026-10-14) — same rows the push notification
+    // reads, so a resident who dismissed the push can still find it here.
+    db.tankAlert.findMany({
+      where: { tank: { societyId } },
+      orderBy: { openedAt: "desc" },
+      take: 10,
+      select: { id: true, message: true, openedAt: true, closedAt: true, closedReason: true },
     }),
     db.storedDocument.findMany({
       where: { societyId, voidedAt: null, docType: { in: Object.keys(VISIBLE_DOC_LABEL) } },
@@ -89,6 +97,28 @@ export const societyEvents = cache(async (societyId: string): Promise<PortalEven
         title: a.message,
         detail: "FirsThing has this on record and is on it.",
         href: null,
+      });
+    }
+  }
+
+  for (const a of tankAlerts) {
+    if (a.closedAt) {
+      events.push({
+        id: `tank-alert-closed-${a.id}`,
+        at: a.closedAt,
+        tone: "ok",
+        title: "Resolved — " + a.message.split(" — ")[0],
+        detail: a.closedReason ?? "Back to normal.",
+        href: "/portal/tanks",
+      });
+    } else {
+      events.push({
+        id: `tank-alert-${a.id}`,
+        at: a.openedAt,
+        tone: "warn",
+        title: a.message,
+        detail: "FirsThing has this on record.",
+        href: "/portal/tanks",
       });
     }
   }

@@ -12,6 +12,8 @@ import { buildDocumentKey, type DocType } from "@/lib/document-keys";
 import { buildRawReadingKey } from "@/lib/ingest-keys";
 import { documentType, validateDocumentUpload } from "@/lib/document-catalog";
 import { extractDocument, EXTRACTABLE_TYPES } from "@/lib/document-extract";
+import { gatePassMismatch, readGatePassWithRetry } from "@/lib/gate-pass-extract";
+import { proposeSociety } from "@/lib/invoice-intake";
 import { extensionOf } from "@/lib/file-signature";
 import { logger } from "@/lib/logger";
 import { findDuplicateCircuit } from "@/lib/circuit-duplicate";
@@ -247,6 +249,85 @@ export async function fileStoredDocumentForSociety(input: {
       version === 1
         ? "filed against the society."
         : `filed as version ${version}. Version ${version - 1} is kept as it was.`,
+  };
+}
+
+const GATE_PASS_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+};
+
+export type GatePassCheck = {
+  /** Null when nothing on the form could be matched to a real society. */
+  societyId: string | null;
+  /** The society's own name as written on the form — shown even when unmatched. */
+  societyNameOnDocument: string;
+  /** YYYY-MM-DD, or "" when the date could not be read. */
+  date: string;
+  /** True when EITHER the society or the date disagrees with what was chosen. */
+  mismatch: boolean;
+};
+
+/**
+ * Read the society name and date off an already-uploaded gate pass, and say
+ * whether either disagrees with what the operator already chose (2026-10-14,
+ * user-asked). Never writes anything — the form shows both readings and lets
+ * the operator pick or simply retype the society/period fields it already
+ * has, then file as normal. A zip (several scans in one file) or a Word
+ * original has no single page to read, so this is skipped for those — the
+ * upload proceeds exactly as it did before this existed.
+ */
+export async function extractGatePassFields(input: {
+  s3Key: string;
+  fileName: string;
+  chosenSocietyId: string;
+  chosenPeriod: string;
+}): Promise<{ error?: string; check?: GatePassCheck }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_pipeline")) {
+    return { error: "Filing a gate pass needs the manage pipeline permission." };
+  }
+  const ext = extensionOf(input.fileName);
+  const mimeType = ext ? GATE_PASS_MIME[ext] : undefined;
+  if (!mimeType) return { error: "skip" }; // a .zip or .docx — nothing single-page to read.
+
+  let bytes: Uint8Array;
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: input.s3Key }));
+    bytes = await obj.Body!.transformToByteArray();
+  } catch {
+    return { error: "The uploaded file could not be read back from storage." };
+  }
+
+  let extraction;
+  try {
+    extraction = await readGatePassWithRetry(bytes, mimeType);
+  } catch (err) {
+    logger.warn("gatepass.extraction_failed", { actorId: actor.id, s3Key: input.s3Key, message: String(err).slice(0, 300) });
+    return { error: "Could not read the gate pass automatically — check the society and date by hand." };
+  }
+
+  const societies = await db.society.findMany({ select: { id: true, name: true } });
+  const matched = proposeSociety(extraction.societyNameOnDocument.value, societies);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(extraction.date.value) ? extraction.date.value : "";
+  const mismatch = gatePassMismatch({
+    matchedSocietyId: matched?.id ?? null,
+    readDate: date,
+    chosenSocietyId: input.chosenSocietyId,
+    chosenPeriod: input.chosenPeriod,
+  });
+
+  logger.info("gatepass.read", { actorId: actor.id, s3Key: input.s3Key, mismatch });
+  return {
+    check: {
+      societyId: matched?.id ?? null,
+      societyNameOnDocument: extraction.societyNameOnDocument.value,
+      date,
+      mismatch,
+    },
   };
 }
 

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ErrorText, Field } from "@/components/ui";
 import { validateDocumentUpload } from "@/lib/document-catalog";
-import { finalizeDocument, presignDocument } from "./actions";
+import { extractGatePassFields, finalizeDocument, presignDocument, type GatePassCheck } from "./actions";
 
 type TypeOption = {
   id: string;
@@ -74,6 +74,13 @@ export function DocumentUploadClient({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ message: string; href?: string } | null>(null);
   const [pending, start] = useTransition();
+  // Set once a gate pass's bytes are already in S3 but the read society/date
+  // disagreed with what was chosen — the file is not re-uploaded on the next
+  // click, only the already-uploaded key is finalized once the operator has
+  // either corrected the fields or confirmed their own choice (2026-10-14).
+  const [gatePassPendingKey, setGatePassPendingKey] = useState<string | null>(null);
+  const [gatePassWarning, setGatePassWarning] = useState<GatePassCheck | null>(null);
+  const societiesById = useMemo(() => new Map(societies.map((s) => [s.id, s.label])), [societies]);
 
   const spec = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
   const scoped: Scoped[] =
@@ -145,6 +152,7 @@ export function DocumentUploadClient({
                 setSocietyId(e.target.value);
                 setContextId("");
                 setError(null);
+                setGatePassWarning(null);
               }}
             >
               <option value="">Choose the society…</option>
@@ -218,7 +226,10 @@ export function DocumentUploadClient({
                 type="month"
                 className="field field-auto"
                 value={period}
-                onChange={(e) => setPeriod(e.target.value)}
+                onChange={(e) => {
+                  setPeriod(e.target.value);
+                  setGatePassWarning(null);
+                }}
               />
             </Field>
           )}
@@ -230,6 +241,8 @@ export function DocumentUploadClient({
               files={file ? [file] : []}
               onFiles={async (picked) => {
                 setDone(null);
+                setGatePassPendingKey(null);
+                setGatePassWarning(null);
                 const f = picked[0] ?? null;
                 setFile(f);
                 if (!f) return setError(null);
@@ -258,6 +271,57 @@ export function DocumentUploadClient({
             </p>
           )}
 
+          {gatePassWarning && (
+            <div
+              className="rounded-[var(--r-md)] border p-3.5 text-[13px]"
+              style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+            >
+              <p className="font-semibold">The gate pass itself reads differently — check which is correct.</p>
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div>
+                  <p className="text-[11.5px] uppercase tracking-wide opacity-80">You selected</p>
+                  <p>{societyName || "No society chosen"}</p>
+                  <p>{period || "No month chosen"}</p>
+                </div>
+                <div>
+                  <p className="text-[11.5px] uppercase tracking-wide opacity-80">The document reads</p>
+                  <p>
+                    {gatePassWarning.societyId
+                      ? (societiesById.get(gatePassWarning.societyId) ?? gatePassWarning.societyNameOnDocument)
+                      : gatePassWarning.societyNameOnDocument
+                        ? `"${gatePassWarning.societyNameOnDocument}" — not one of FirsThing's societies`
+                        : "No society legible"}
+                  </p>
+                  <p>{gatePassWarning.date || "No date legible"}</p>
+                </div>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="btn-secondary btn-sm"
+                  onClick={() => setGatePassWarning(null)}
+                >
+                  Keep what I selected
+                </button>
+                <button
+                  type="button"
+                  className="btn-outline btn-sm"
+                  disabled={!gatePassWarning.societyId && !gatePassWarning.date}
+                  onClick={() => {
+                    if (gatePassWarning.societyId) setSocietyId(gatePassWarning.societyId);
+                    if (gatePassWarning.date) setPeriod(gatePassWarning.date.slice(0, 7));
+                    setGatePassWarning(null);
+                  }}
+                >
+                  Use what the document says
+                </button>
+              </div>
+              <p className="mt-2 text-[12px] opacity-80">
+                Either way, the society and month above can still be changed by hand before filing.
+              </p>
+            </div>
+          )}
+
           <button
             type="button"
             className="btn-primary"
@@ -267,30 +331,54 @@ export function DocumentUploadClient({
                 if (!file) return;
                 setError(null);
                 setDone(null);
-                const head = await headOf(file);
-                const presigned = await presignDocument({
-                  docTypeId: spec.id,
-                  contextId: effectiveContextId,
-                  period,
-                  fileName: file.name,
-                  contentType: file.type || "application/octet-stream",
-                  byteSize: file.size,
-                  headBase64: toBase64(head),
-                  clientSha256: await sha256Of(file),
-                });
-                if ("error" in presigned) return setError(presigned.error);
 
-                const put = await fetch(presigned.uploadUrl, {
-                  method: "PUT",
-                  body: file,
-                  headers: { "Content-Type": file.type || "application/octet-stream" },
-                });
-                if (!put.ok) return setError(`The upload failed (${put.status}). Nothing was filed.`);
+                let s3Key = gatePassPendingKey;
+                if (!s3Key) {
+                  const head = await headOf(file);
+                  const presigned = await presignDocument({
+                    docTypeId: spec.id,
+                    contextId: effectiveContextId,
+                    period,
+                    fileName: file.name,
+                    contentType: file.type || "application/octet-stream",
+                    byteSize: file.size,
+                    headBase64: toBase64(head),
+                    clientSha256: await sha256Of(file),
+                  });
+                  if ("error" in presigned) return setError(presigned.error);
+
+                  const put = await fetch(presigned.uploadUrl, {
+                    method: "PUT",
+                    body: file,
+                    headers: { "Content-Type": file.type || "application/octet-stream" },
+                  });
+                  if (!put.ok) return setError(`The upload failed (${put.status}). Nothing was filed.`);
+                  s3Key = presigned.key;
+
+                  // A gate pass gets one extra, optional check before it is
+                  // filed: read the society and date off the form itself and
+                  // warn if either disagrees with what was chosen (2026-10-14,
+                  // user-asked). Any other type, or a file this can't read
+                  // (a zip, a Word original), proceeds exactly as before.
+                  if (spec.id === "gatePass") {
+                    const check = await extractGatePassFields({
+                      s3Key,
+                      fileName: file.name,
+                      chosenSocietyId: effectiveContextId,
+                      chosenPeriod: period,
+                    });
+                    if (check.check?.mismatch) {
+                      setGatePassPendingKey(s3Key);
+                      setGatePassWarning(check.check);
+                      return;
+                    }
+                  }
+                }
 
                 const filed = await finalizeDocument({
                   docTypeId: spec.id,
                   contextId: effectiveContextId,
-                  s3Key: presigned.key,
+                  s3Key,
                   fileName: file.name,
                   contentType: file.type || "application/octet-stream",
                   byteSize: file.size,
@@ -299,11 +387,13 @@ export function DocumentUploadClient({
                 if (filed.error) return setError(filed.error);
                 setDone({ message: filed.message ?? "Filed.", href: filed.href });
                 setFile(null);
+                setGatePassPendingKey(null);
+                setGatePassWarning(null);
                 router.refresh();
               })
             }
           >
-            {pending ? "Filing…" : "Upload & file"}
+            {pending ? "Filing…" : gatePassPendingKey ? "File it" : "Upload & file"}
           </button>
         </>
       ) : null}

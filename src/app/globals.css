@@ -233,6 +233,53 @@ body {
   line-height: 1.55;
 }
 
+/* The stage-only environment banner (2026-10-14, user-asked) — fixed,
+   maximal z-index so it sits above every modal/dropdown/sticky header this
+   app has, and deliberately hardcoded colors rather than theme tokens: it
+   has to look identical whichever of light/dark/slate is active, since the
+   point is "this is not the live site," not themed UI. body.has-stage-banner
+   reserves the same height as padding so nothing renders underneath it. */
+body.has-stage-banner {
+  padding-top: 34px;
+}
+@media (max-width: 480px) {
+  body.has-stage-banner {
+    padding-top: 40px;
+  }
+}
+.stage-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2147483647;
+}
+.stage-banner__bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 5px 12px;
+  background: #D4380D;
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  text-align: center;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+}
+.stage-banner__stripe {
+  height: 4px;
+  background-image: repeating-linear-gradient(45deg, #111 0 10px, #FFD500 10px 20px);
+}
+@media (max-width: 480px) {
+  .stage-banner__bar {
+    min-height: 36px;
+    font-size: 12px;
+  }
+}
+
 /* one global focus treatment — every interactive element, §3.9 */
 :focus-visible {
   outline: 2px solid var(--accent);

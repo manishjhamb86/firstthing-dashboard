@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Plus_Jakarta_Sans } from "next/font/google";
 import { resolveTheme } from "@/lib/resolve-theme";
+import { isStageEnvironment } from "@/lib/stage-banner";
+import { StageBanner } from "@/components/stage-banner";
 import "./globals.css";
 
 // Modernize's face — self-hosted by next/font at build time, exposed as the
@@ -12,7 +14,7 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "FirsThing",
+  title: isStageEnvironment() ? "[STAGE] FirsThing" : "FirsThing",
   description: "Verified utility savings for Indian residential societies.",
 };
 
@@ -22,10 +24,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // and Dark need an explicit attribute. Stamped server-side before first
   // paint, so there is no flash and no client bootstrap script needed here.
   const dataTheme = theme === "slate" ? undefined : theme;
+  const stage = isStageEnvironment();
 
   return (
     <html lang="en" data-theme={dataTheme} className={jakarta.variable} suppressHydrationWarning>
-      <body>{children}</body>
+      <body className={stage ? "has-stage-banner" : undefined}>
+        {stage && <StageBanner />}
+        {children}
+      </body>
     </html>
   );
 }

@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { ROLE_HOME, isRole } from "@/lib/roles";
+import { isStageEnvironment } from "@/lib/stage-banner";
+import { STAGE_ACCESS_COOKIE, stageAccessGranted, stageAccessRequired } from "@/lib/stage-access";
 
 // Route-prefix -> roles allowed. `null` would mean any authenticated role.
 const ROUTE_ROLES: Record<string, string[] | null> = {
@@ -60,6 +62,19 @@ export default auth((req) => {
   const { pathname } = req.nextUrl;
   const role = req.auth?.user?.role;
 
+  // Staging access gate (2026-10-14, user-asked): on stage, with the secret
+  // configured, NOTHING below this runs for a visitor who lacks the cookie —
+  // not the marketing page, not /login, not an API route. The cookie is set
+  // by hand (a browser extension), never through a sign-in flow this app
+  // provides, so there is nothing to redirect to; a stranger gets a bare
+  // refusal and nothing else about the app is ever reached.
+  if (isStageEnvironment() && stageAccessRequired()) {
+    const presented = req.cookies.get(STAGE_ACCESS_COOKIE)?.value;
+    if (!stageAccessGranted(presented)) {
+      return new NextResponse("Access restricted.", { status: 403 });
+    }
+  }
+
   if (pathname === "/" && MARKETING_HOSTS.has(hostOf(req))) {
     return NextResponse.rewrite(new URL("/marketing", req.url));
   }
@@ -88,7 +103,11 @@ export default auth((req) => {
 });
 
 export const config = {
+  // `/api/**` is included now too (2026-10-14) — only so the staging access
+  // gate above also covers it there; nothing else in this file acts on an
+  // API path (matchRoute only lists /admin, /field, /portal), so this is a
+  // no-op everywhere the gate itself is off, i.e. production and local dev.
   matcher: [
-    "/((?!api|_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|svg|webp|gif|css|js|map|txt|xml)$).*)",
+    "/((?!_next/static|_next/image|.*\\.(?:ico|png|jpg|jpeg|svg|webp|gif|css|js|map|txt|xml)$).*)",
   ],
 };

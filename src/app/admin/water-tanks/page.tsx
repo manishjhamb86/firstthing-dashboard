@@ -100,6 +100,12 @@ export default async function WaterTanksPage() {
             level: t.lastLevelPercent,
             online: t.lastOnline,
             reportedAt: t.lastReportedAt?.toISOString() ?? null,
+            // When OUR OWN sampling job last actually fetched this device's
+            // status — a different fact from reportedAt, which is the
+            // device's own self-reported instant and can lag well behind a
+            // poll that found nothing new (2026-10-15, user-asked: "show 2
+            // timestamps, first Last Report and 2nd last updated/fetched").
+            syncedAt: t.syncedAt.toISOString(),
             stale: isStale(t.lastReportedAt),
             society: t.society ? { id: t.society.id, name: t.society.name, location: t.society.location } : null,
           }))}

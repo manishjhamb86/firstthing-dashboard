@@ -124,10 +124,19 @@ export default async function PortalTanksPage() {
     // look untrustworthy (the user's call, 2026-08-26).
     const quiet = !t.lastOnline;
     const unchangedFor = isStale(reportedAt);
+    // What the resident sees as "Last updated" (2026-10-15, user-asked): the
+    // latest moment we actually fetched this tank via the API and wrote it
+    // into our own system — NOT reportedAt, which is the device's own
+    // self-reported instant and can be well behind the last time we checked.
+    // When this render's own live shadow read succeeded, that moment is
+    // right now; otherwise it's the half-hourly sampling job's own last
+    // successful fetch (syncedAt).
+    const updatedAt = l ? new Date(now) : t.syncedAt;
     return {
       tank: t,
       level: l?.level ?? t.lastLevelPercent ?? null,
       reportedAt,
+      updatedAt,
       quiet,
       unchangedFor,
       offline: !t.lastOnline,
@@ -269,7 +278,7 @@ export default async function PortalTanksPage() {
             className="mb-5 grid gap-5 last:mb-0"
             style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 440px), 1fr))" }}
           >
-            {sub.rows.map(({ tank: t, level, reportedAt, quiet, unchangedFor, offline, history }) => {
+            {sub.rows.map(({ tank: t, level, updatedAt, quiet, unchangedFor, offline, history }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-5 gap-y-3 p-4 sm:p-5">
@@ -293,10 +302,9 @@ export default async function PortalTanksPage() {
                         <StatusChip tone="ok">Live</StatusChip>
                       )}
                       <span>
-                        {quiet ? "Last reported" : "Updated"}{" "}
-                        <span className="num">{reportedAt ? formatInstant(reportedAt) : "—"}</span>
+                        Last updated <span className="num">{formatInstant(updatedAt)}</span>
                         {" · "}
-                        {timeAgo(reportedAt)}
+                        {timeAgo(updatedAt)}
                       </span>
                     </div>
                     {quiet ? (

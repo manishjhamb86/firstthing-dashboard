@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   completionBlockers,
+  partialCompletionBlockers,
   evaluateDayGate,
   refuseGateSkip,
   reviewDeadlineFor,
@@ -171,5 +172,42 @@ describe("TC-037-3 — the completion gate lists everything outstanding (FEAT-03
   it("refuses completion before any work is logged at all", () => {
     const r = completionBlockers({ batches: [], openBlockerCount: 0, plannedDayCount: 3, daysWithBatches: 0 });
     expect(r.map((x) => x.kind)).toContain("no-batches");
+  });
+});
+
+describe("partialCompletionBlockers — the exceptional-billing exemption (2026-10-14, user-asked)", () => {
+  it("clears unplanned-days alone — more planned days still to come is exactly the exception being made", () => {
+    const r = partialCompletionBlockers({ batches: [batch()], openBlockerCount: 0, plannedDayCount: 4, daysWithBatches: 1 });
+    expect(r).toEqual([]);
+  });
+
+  it("still refuses on a disputed batch — the exception is for incompleteness, not a data-integrity problem", () => {
+    const r = partialCompletionBlockers({
+      batches: [batch({ state: "disputed" })],
+      openBlockerCount: 0,
+      plannedDayCount: 4,
+      daysWithBatches: 1,
+    });
+    expect(r.map((x) => x.kind)).toEqual(["disputed-batches"]);
+  });
+
+  it("still refuses on an open blocker", () => {
+    const r = partialCompletionBlockers({ batches: [batch()], openBlockerCount: 1, plannedDayCount: 4, daysWithBatches: 1 });
+    expect(r).toEqual([{ kind: "open-blockers", count: 1 }]);
+  });
+
+  it("still refuses on an unapproved batch", () => {
+    const r = partialCompletionBlockers({
+      batches: [batch({ state: "awaiting_review" })],
+      openBlockerCount: 0,
+      plannedDayCount: 4,
+      daysWithBatches: 1,
+    });
+    expect(r.map((x) => x.kind)).toEqual(["unapproved-batches"]);
+  });
+
+  it("still refuses with nothing logged at all", () => {
+    const r = partialCompletionBlockers({ batches: [], openBlockerCount: 0, plannedDayCount: 4, daysWithBatches: 0 });
+    expect(r.map((x) => x.kind)).toEqual(["no-batches"]);
   });
 });

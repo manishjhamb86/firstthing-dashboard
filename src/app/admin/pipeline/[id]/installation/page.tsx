@@ -21,6 +21,7 @@ import {
 } from "@/lib/status-maps";
 import {
   completionBlockers,
+  partialCompletionBlockers,
   describeCompletionBlocker,
   evaluateDayGate,
   type BatchGateInput,
@@ -30,6 +31,8 @@ import {
   AddPlannedDayForm,
   BatchCaptureForm,
   CompletionForm,
+  PartialCompletionForm,
+  CompleteRemainingButton,
   PlannedDayActions,
   ProjectSetupForm,
   RaiseBlockerForm,
@@ -106,7 +109,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
           onlooker: true,
           createdBy: true,
           skipApprover: true,
-          certificate: { include: { recordedBy: true } },
+          certificate: { include: { recordedBy: true, completedBy: true } },
           plannedDays: { orderBy: { day: "asc" }, include: { assignedTo: true } },
           batches: {
             orderBy: { day: "asc" },
@@ -312,12 +315,20 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   const installationDone = !!project.certificate;
   const afterInstall = installationDone ? (await loadDealProgress(pipeline.id))?.next ?? null : null;
 
-  const blocks = completionBlockers({
+  const gateInput = {
     batches: gateInputs(project.batches),
     openBlockerCount: openBlockers.length,
     plannedDayCount: new Set(project.plannedDays.map((d) => d.day)).size,
     daysWithBatches: new Set(project.batches.map((b) => b.day)).size,
-  });
+  };
+  const blocks = completionBlockers(gateInput);
+  // The exceptional path (2026-10-14, user-asked) is only offered when
+  // "more planned days remain" is the SOLE thing outstanding — every other
+  // reason (a dispute, an open blocker, nothing logged) blocks it too.
+  const onlyUnplannedDaysLeft = blocks.length > 0 && partialCompletionBlockers(gateInput).length === 0;
+  // Confirming the rest is installed needs the SAME full gate clear,
+  // including unplanned-days this time — it is the genuine completion.
+  const readyToCompleteTheRest = project.certificate?.isPartial && !project.certificate.completedAt && blocks.length === 0;
 
   return (
     <>
@@ -699,6 +710,37 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   <dd className="num">{project.certificate.totalInstalledCount}</dd>
                 </div>
               </dl>
+              {project.certificate.isPartial && (
+                <div
+                  className="mt-4 rounded-[var(--r-md)] border p-4 text-sm"
+                  style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+                >
+                  {project.certificate.completedAt ? (
+                    <p>
+                      Billing started on {project.certificate.totalInstalledCount} of{" "}
+                      {project.certificate.fullLightCount} agreed lights ({project.certificate.partialReason}); the
+                      rest was confirmed installed on {day(project.certificate.completedAt)} by{" "}
+                      {project.certificate.completedBy?.name ?? project.certificate.completedBy?.email}, now billing
+                      the full {project.certificate.fullLightCount}.
+                    </p>
+                  ) : (
+                    <>
+                      <p className="mb-2">
+                        <strong>Exceptional — billing only {project.certificate.totalInstalledCount} of{" "}
+                        {project.certificate.fullLightCount} agreed lights so far.</strong> {project.certificate.partialReason}
+                      </p>
+                      {readyToCompleteTheRest ? (
+                        <CompleteRemainingButton pipelineId={pipeline.id} />
+                      ) : (
+                        <p>
+                          The rest of the installation is not yet ready to confirm:{" "}
+                          {blocks.map(describeCompletionBlocker).join(" ")}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
               {canCorrectDates && (
                 <CorrectDatesControl
                   kind="certificate"
@@ -733,6 +775,18 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   <li key={b.kind}>• {describeCompletionBlocker(b)}</li>
                 ))}
               </ul>
+              {/* Exceptional billing (2026-10-14, user-asked): when more
+                  planned days are the ONLY thing outstanding, offer to bill
+                  what's actually installed now and the rest once it's done. */}
+              {onlyUnplannedDaysLeft && isOps && (
+                <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
+                  <p className="text-sm text-[var(--text-muted)] mb-3">
+                    If the rest is genuinely delayed, billing can start now on what is already installed and
+                    approved — the rest bills from whenever it is actually finished.
+                  </p>
+                  <PartialCompletionForm pipelineId={pipeline.id} />
+                </div>
+              )}
             </div>
           ) : isOps ? (
             <CompletionForm pipelineId={pipeline.id} />

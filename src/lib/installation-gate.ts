@@ -232,6 +232,21 @@ export function completionBlockers(input: {
   return reasons;
 }
 
+/**
+ * The gate for signing a PARTIAL completion certificate (2026-10-14,
+ * user-asked): "start billing of installed lights even if the full
+ * installation is not done... in exceptional cases when full installation
+ * is delayed." Every reason `completionBlockers` checks still applies
+ * EXCEPT `unplanned-days` — that one IS the exception being asked for
+ * (more planned days exist and have not happened yet). Every other reason
+ * is a data-integrity problem (a dispute, an unapproved batch, an open
+ * blocker, or nothing logged at all), and none of those become acceptable
+ * just because billing is starting early.
+ */
+export function partialCompletionBlockers(input: Parameters<typeof completionBlockers>[0]): CompletionBlockReason[] {
+  return completionBlockers(input).filter((r) => r.kind !== "unplanned-days");
+}
+
 export function describeCompletionBlocker(r: CompletionBlockReason): string {
   switch (r.kind) {
     case "no-batches":

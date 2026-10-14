@@ -591,6 +591,7 @@ model AdminUser {
   blockersRaised        InstallationBlocker[]    @relation("BlockerRaisedBy")
   blockersResolved      InstallationBlocker[]    @relation("BlockerResolvedBy")
   certificatesRecorded  CompletionCertificate[]  @relation("CertificateRecordedBy")
+  certificatesCompleted CompletionCertificate[]  @relation("CertificateCompletedBy")
 
   // MS-07
   rawReadingsUploaded RawReadingFile[]     @relation("RawReadingUploadedBy")
@@ -2502,11 +2503,25 @@ model CompletionCertificate {
   waivedBlockerIds Json?   @map("waived_blocker_ids")
   waiverReason     String? @map("waiver_reason")
 
+  /// Exceptional partial completion (2026-10-14, user-asked): billing may
+  /// start on what is actually installed while the rest is still delayed.
+  /// `fullLightCount` is the circuit's originally-agreed count, captured
+  /// here so `completeRemainingInstallation` restores the exact right
+  /// number later rather than re-deriving it. `completedAt`/`completedById`
+  /// are set once the rest is confirmed installed — the certificate itself
+  /// is never re-signed or mutated beyond these two fields.
+  isPartial      Boolean   @default(false) @map("is_partial")
+  partialReason  String?   @map("partial_reason")
+  fullLightCount Int?      @map("full_light_count")
+  completedAt    DateTime? @map("completed_at")
+  completedById  String?   @map("completed_by_id")
+
   recordedById String   @map("recorded_by_id")
   recordedAt   DateTime @default(now()) @map("recorded_at")
 
-  project    InstallationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  recordedBy AdminUser           @relation("CertificateRecordedBy", fields: [recordedById], references: [id])
+  project     InstallationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  recordedBy  AdminUser           @relation("CertificateRecordedBy", fields: [recordedById], references: [id])
+  completedBy AdminUser?          @relation("CertificateCompletedBy", fields: [completedById], references: [id])
 
   @@map("completion_certificates")
 }

@@ -11,6 +11,7 @@ import { prorateFirstMonth } from "@/lib/billing-start";
 import { BLOCKER_TYPE_LABEL } from "@/lib/status-maps";
 import {
   addPlannedDay,
+  completeRemainingInstallation,
   correctBatchDates,
   correctCertificateDate,
   correctPlannedDayDate,
@@ -905,6 +906,112 @@ export function CompletionForm({ pipelineId }: { pipelineId: string }) {
       </button>
       {error && <ErrorText>{error}</ErrorText>}
     </form>
+  );
+}
+
+/**
+ * The exceptional path (2026-10-14, user-asked): "start billing of installed
+ * lights even if the full installation is not done... in exceptional cases
+ * when full installation is delayed." Only ever offered when more planned
+ * days are the SOLE thing outstanding (page.tsx's own gate) — every other
+ * data-integrity reason still blocks it. A typed reason is required, same
+ * as every other exception this codebase records rather than silently
+ * allows.
+ */
+export function PartialCompletionForm({ pipelineId }: { pipelineId: string }) {
+  const [signedAt, setSignedAt] = useState(new Date().toISOString().slice(0, 10));
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  const proration = prorateFirstMonth(new Date(`${signedAt}T00:00:00.000Z`));
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-secondary btn-sm" onClick={() => setOpen(true)}>
+        Bill what&apos;s installed so far (exceptional)
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(undefined);
+        startTransition(async () => {
+          const r = await signCompletionCertificate(pipelineId, {
+            signedAt,
+            signatoryName: name,
+            signatoryRole: role,
+            signatureKey: null,
+            partialReason: reason,
+          });
+          setError(r?.error);
+        });
+      }}
+    >
+      <Field label="Why the rest is being delayed" htmlFor="partial-reason">
+        <input id="partial-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} required />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Field label="Signature date" htmlFor="partial-signed-at">
+          <input id="partial-signed-at" className="field" type="date" value={signedAt} onChange={(e) => setSignedAt(e.target.value)} required />
+        </Field>
+        <Field label="Who signed" htmlFor="partial-signatory-name">
+          <input id="partial-signatory-name" className="field" value={name} onChange={(e) => setName(e.target.value)} required />
+        </Field>
+        <Field label="In what capacity" htmlFor="partial-signatory-role">
+          <input id="partial-signatory-role" className="field" value={role} onChange={(e) => setRole(e.target.value)} required />
+        </Field>
+      </div>
+      <div
+        className="rounded-[var(--r-md)] border p-4 text-sm"
+        style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
+      >
+        <strong>Billing starts {formatDate(proration.billingStart)}</strong> on only the lights already installed
+        and approved — not the full agreed count. The first invoice covers {proration.proratedDays} of{" "}
+        {proration.daysInMonth} days that month, prorated. The rest bills once it is confirmed installed, from
+        whenever that actually happens.
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button type="submit" className="btn-primary" disabled={pending}>
+          {pending ? "Recording…" : "Start billing the partial installation"}
+        </button>
+        <button type="button" className="btn-ghost" disabled={pending} onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+      {error && <ErrorText>{error}</ErrorText>}
+    </form>
+  );
+}
+
+/** The rest has been confirmed installed — bill the full agreed count from here (2026-10-14). */
+export function CompleteRemainingButton({ pipelineId }: { pipelineId: string }) {
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        className="btn-primary btn-sm"
+        disabled={pending}
+        onClick={() => startTransition(async () => setError((await completeRemainingInstallation(pipelineId))?.error))}
+      >
+        {pending ? "Confirming…" : "Confirm the rest is now installed"}
+      </button>
+      {error && (
+        <p className="mt-2 text-sm" style={{ color: "var(--bad-fg)" }}>
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 

@@ -20,6 +20,7 @@ import {
 } from "@/lib/installation-gate";
 import { prorateFirstMonth } from "@/lib/billing-start";
 import {
+  completeRemainingInstallationAs,
   raiseBlockerAs,
   signCertificateAs,
   startBatchAs,
@@ -433,6 +434,17 @@ export async function signCompletionCertificate(pipelineId: string, input: Certi
   const ops = await requireOps();
   if ("error" in ops) return { error: ops.error };
   const r = await signCertificateAs({ id: ops.session.user.id }, pipelineId, input);
+  if ("error" in r) return { error: r.error };
+  revalidatePath(pathFor(pipelineId));
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  return { ok: true as const };
+}
+
+/** The exceptional-billing follow-up (2026-10-14): the rest is now confirmed installed. */
+export async function completeRemainingInstallation(pipelineId: string) {
+  const ops = await requireOps();
+  if ("error" in ops) return { error: ops.error };
+  const r = await completeRemainingInstallationAs({ id: ops.session.user.id }, pipelineId);
   if ("error" in r) return { error: r.error };
   revalidatePath(pathFor(pipelineId));
   revalidatePath(`/admin/pipeline/${pipelineId}`);

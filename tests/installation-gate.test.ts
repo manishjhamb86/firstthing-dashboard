@@ -196,12 +196,35 @@ describe("partialCompletionBlockers — the exceptional-billing exemption (2026-
     expect(r).toEqual([{ kind: "open-blockers", count: 1 }]);
   });
 
-  it("still refuses on an unapproved batch", () => {
+  it("still refuses on a batch genuinely submitted and awaiting the society's sign-off", () => {
     const r = partialCompletionBlockers({
       batches: [batch({ state: "awaiting_review" })],
       openBlockerCount: 0,
       plannedDayCount: 4,
       daysWithBatches: 1,
+    });
+    expect(r.map((x) => x.kind)).toEqual(["unapproved-batches"]);
+  });
+
+  it("clears an untouched draft batch too — a crew that started a day's row but never submitted it is the same fact as no batch at all (2026-10-14, user-caught on Prateek Laurel: a 5th, draft, un-submitted batch for a day with no planned-day row hid the option entirely)", () => {
+    const r = partialCompletionBlockers({
+      batches: [batch(), batch({ id: "b2", state: "draft", submittedAt: null, reviewedAt: null })],
+      openBlockerCount: 0,
+      plannedDayCount: 1,
+      daysWithBatches: 2,
+    });
+    expect(r).toEqual([]);
+  });
+
+  it("still refuses when even one unapproved batch has actually been submitted, alongside an untouched one", () => {
+    const r = partialCompletionBlockers({
+      batches: [
+        batch({ state: "draft", submittedAt: null, reviewedAt: null }),
+        batch({ id: "b2", state: "awaiting_review" }),
+      ],
+      openBlockerCount: 0,
+      plannedDayCount: 1,
+      daysWithBatches: 2,
     });
     expect(r.map((x) => x.kind)).toEqual(["unapproved-batches"]);
   });

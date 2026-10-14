@@ -237,14 +237,30 @@ export function completionBlockers(input: {
  * user-asked): "start billing of installed lights even if the full
  * installation is not done... in exceptional cases when full installation
  * is delayed." Every reason `completionBlockers` checks still applies
- * EXCEPT `unplanned-days` — that one IS the exception being asked for
- * (more planned days exist and have not happened yet). Every other reason
- * is a data-integrity problem (a dispute, an unapproved batch, an open
- * blocker, or nothing logged at all), and none of those become acceptable
- * just because billing is starting early.
+ * EXCEPT the ones that just mean "the rest genuinely hasn't happened yet" —
+ * that IS the exception being asked for. Every data-integrity reason (a
+ * dispute, a batch that was actually submitted and is still awaiting the
+ * society's sign-off, an open blocker, or nothing logged at all) still
+ * blocks it; none of those become acceptable just because billing is
+ * starting early.
+ *
+ * `unplanned-days` is always the "hasn't happened yet" case by definition.
+ * `unapproved-batches` is split further (2026-10-14, user-caught on Prateek
+ * Laurel): a batch a crew merely started but never submitted — `draft`,
+ * `submittedAt` still null — is the SAME fact as a day with no batch row at
+ * all; a batch the crew DID submit (`awaiting_review`) is real, unconfirmed
+ * work, which is a different and more serious thing to bill on without the
+ * society's approval, so that one still blocks.
  */
 export function partialCompletionBlockers(input: Parameters<typeof completionBlockers>[0]): CompletionBlockReason[] {
-  return completionBlockers(input).filter((r) => r.kind !== "unplanned-days");
+  const untouchedOnly = input.batches
+    .filter((b) => b.state !== "approved" && b.state !== "disputed")
+    .every((b) => b.submittedAt === null);
+  return completionBlockers(input).filter((r) => {
+    if (r.kind === "unplanned-days") return false;
+    if (r.kind === "unapproved-batches" && untouchedOnly) return false;
+    return true;
+  });
 }
 
 export function describeCompletionBlocker(r: CompletionBlockReason): string {

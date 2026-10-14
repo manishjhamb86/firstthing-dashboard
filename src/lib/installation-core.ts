@@ -334,10 +334,10 @@ export async function signCertificateAs(actor: Actor, pipelineId: string, input:
     });
     return { error: `Not ready to complete. ${blocks.map(describeCompletionBlocker).join(" ")}` };
   }
-  if (partialReason && gateInput.plannedDayCount <= daysWithBatches) {
-    // Everything planned IS already logged — there is nothing left to bill
-    // later, so this is not actually the exceptional case being asked for.
-    return { error: "Every planned day already has a batch logged — sign the ordinary completion certificate instead." };
+  if (partialReason && completionBlockers(gateInput).length === 0) {
+    // The ORDINARY gate was already clear — nothing was actually exempted,
+    // so this is not the exceptional case being asked for.
+    return { error: "Nothing is actually outstanding — sign the ordinary completion certificate instead." };
   }
 
   // The one circuit this partial count applies to. A deal spanning more

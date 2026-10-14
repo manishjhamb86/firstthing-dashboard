@@ -6,7 +6,7 @@
 // { error } and logged, the ledger is only ever appended to.
 
 import { revalidatePath } from "next/cache";
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
@@ -24,6 +24,8 @@ import {
   type MoveKind,
   refuseUnitCost,
 } from "@/lib/inventory";
+import { friendlySupplierExtractionError, readSupplierInvoiceWithRetry } from "@/lib/supplier-invoice-extract";
+import { proposeItemType, proposeSupplier } from "@/lib/supplier-invoice-match";
 
 type Result<T = object> = ({ error: string } & Partial<T>) | ({ error?: undefined } & T);
 
@@ -131,6 +133,86 @@ export async function getSupplierInvoiceUploadUrl(fileName: string): Promise<Res
   const key = `Inventory/Purchases/${new Date().toISOString().slice(0, 10)}/${Date.now()}_${safe}`;
   const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: "application/pdf" }), { expiresIn: 300 });
   return { uploadUrl, key };
+}
+
+export type SupplierInvoiceProposedLine = {
+  itemTypeId: string | null;
+  itemLabel: string | null;
+  description: string;
+  quantity: number | null;
+  unitCost: number | null;
+  supplierLot: string;
+};
+
+export type SupplierInvoiceProposal = {
+  supplierId: string | null;
+  sellerName: string;
+  invoiceNumber: string;
+  invoiceDate: string;
+  total: number | null;
+  lines: SupplierInvoiceProposedLine[];
+  notes: string;
+};
+
+/**
+ * Read the already-uploaded supplier invoice PDF back and propose the
+ * Receive stock form's fields (2026-10-14, user-asked: "Stock lines should
+ * auto populate on invoice upload"). Never writes anything — the operator
+ * still reviews and submits through `receiveDelivery` exactly as before;
+ * this only saves them re-typing what the PDF already says.
+ */
+export async function extractSupplierInvoiceForm(key: string): Promise<Result<{ proposal: SupplierInvoiceProposal }>> {
+  const admin = await requireStockStaff();
+  if (!admin) return { error: REFUSED };
+
+  let bytes: Uint8Array;
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
+    bytes = await obj.Body!.transformToByteArray();
+  } catch {
+    return { error: "The uploaded file could not be read back from storage. Choose it again." };
+  }
+
+  let extraction;
+  try {
+    extraction = await readSupplierInvoiceWithRetry(bytes);
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    logger.warn("inventory.invoice_extraction_failed", { actorId: admin.id, key, message: raw.slice(0, 300) });
+    return { error: friendlySupplierExtractionError(raw) };
+  }
+
+  const [suppliers, items] = await Promise.all([
+    db.supplier.findMany({ select: { id: true, name: true } }),
+    db.inventoryItemType.findMany({ where: { active: true }, select: { id: true, name: true, make: true, model: true } }),
+  ]);
+  const supplier = proposeSupplier(extraction.sellerName.value, suppliers);
+  const invoiceDate = /^\d{4}-\d{2}-\d{2}$/.test(extraction.invoiceDate.value) ? extraction.invoiceDate.value : "";
+
+  const lines: SupplierInvoiceProposedLine[] = extraction.lines.map((l) => {
+    const match = proposeItemType(l.description.value, items);
+    return {
+      itemTypeId: match?.itemTypeId ?? null,
+      itemLabel: match ? (items.find((i) => i.id === match.itemTypeId)?.name ?? null) : null,
+      description: l.description.value,
+      quantity: l.qty.value,
+      unitCost: l.rate.value,
+      supplierLot: l.supplierLot.value,
+    };
+  });
+
+  logger.info("inventory.invoice_extracted", { actorId: admin.id, key, lines: lines.length, matchedSupplier: !!supplier });
+  return {
+    proposal: {
+      supplierId: supplier?.id ?? null,
+      sellerName: extraction.sellerName.value,
+      invoiceNumber: extraction.invoiceNumber.value,
+      invoiceDate,
+      total: extraction.total.value,
+      lines,
+      notes: extraction.notes,
+    },
+  };
 }
 
 export type ReceiveLine = {

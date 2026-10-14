@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { extractInvoice, type ExtractedInvoice } from "@/lib/invoice-extract";
-import { quotaKind } from "@/lib/gemini-models";
+import { quotaKind, readWithOneRetry as readWithOneModelRetry } from "@/lib/gemini-models";
 import {
   classifyLine,
   parseInvoiceMonth,
@@ -112,25 +112,18 @@ export function friendlyExtractionError(raw: string): string {
 }
 
 /**
- * One automatic retry on a rate limit, after the delay the service asks for.
- * The free tier's window is a minute, and the reader says exactly how long to
- * wait ("retry in 49s"); the first cut capped the wait at 20 s, so a Retry
- * clicked straight after the refusal waited too little and failed the same
- * way (user-caught 2026-09-16). Honoured up to a minute now — the operator
- * sees "Reading…" for that long, which beats a second identical refusal.
+ * One automatic retry on a rate limit, after the delay the service asks for
+ * (`gemini-models.ts`'s `readWithOneRetry`, generalized 2026-10-14 so the
+ * supplier-invoice reader gets the same behaviour). The free tier's window
+ * is a minute, and the reader says exactly how long to wait ("retry in
+ * 49s"); the first cut here capped the wait at 20 s, so a Retry clicked
+ * straight after the refusal waited too little and failed the same way
+ * (user-caught 2026-09-16). Honoured up to a minute — the operator sees
+ * "Reading…" for that long, which beats a second identical refusal.
  */
 async function readWithOneRetry(bytes: Uint8Array): Promise<ExtractedInvoice> {
   const base64 = Buffer.from(bytes).toString("base64");
-  try {
-    return await extractInvoice({ base64, mimeType: "application/pdf" });
-  } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
-    if (quotaKind(raw) !== "quota" || !m) throw err;
-    const waitMs = Math.min(m[2].toLowerCase() === "ms" ? Number(m[1]) : Number(m[1]) * 1000, 65_000);
-    await new Promise((r) => setTimeout(r, waitMs + 1_000));
-    return await extractInvoice({ base64, mimeType: "application/pdf" });
-  }
+  return readWithOneModelRetry(() => extractInvoice({ base64, mimeType: "application/pdf" }));
 }
 
 /**

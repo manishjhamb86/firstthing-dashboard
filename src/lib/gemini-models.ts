@@ -58,3 +58,24 @@ export async function withModelFallback<T>(
   }
   throw lastErr;
 }
+
+/**
+ * One automatic retry on a rate limit, after the delay the service asks for
+ * (2026-09-16, generalized from invoice-intake-extract.ts's own version so
+ * every document reader — Zoho invoices, supplier invoices — gets the same
+ * behaviour rather than each re-implementing it). The free tier's window is
+ * a minute, and the reader says exactly how long to wait ("retry in 49s");
+ * capping the wait short of that makes a Retry fail the same way again.
+ */
+export async function readWithOneRetry<T>(read: () => Promise<T>): Promise<T> {
+  try {
+    return await read();
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
+    if (quotaKind(raw) !== "quota" || !m) throw err;
+    const waitMs = Math.min(m[2].toLowerCase() === "ms" ? Number(m[1]) : Number(m[1]) * 1000, 65_000);
+    await new Promise((r) => setTimeout(r, waitMs + 1_000));
+    return await read();
+  }
+}

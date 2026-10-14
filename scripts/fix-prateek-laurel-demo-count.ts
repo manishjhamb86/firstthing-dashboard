@@ -20,6 +20,17 @@
  *
  * pnpm tsx scripts/fix-prateek-laurel-demo-count.ts --dry-run
  * pnpm tsx scripts/fix-prateek-laurel-demo-count.ts
+ *
+ * Run for real against production on 2026-10-14 (copied to the box directly
+ * rather than deployed via git, so as not to also carry the day's other,
+ * not-yet-stage-tested feature work — see the commit message). Verified:
+ * demo meteredLightCount 45→39, circuit representedLightCount 2461→2467,
+ * lightCountAtDemoLock 39, baseline/benchmark unchanged (they are frozen
+ * demo facts, correctly untouched by a count correction); report version 3
+ * generated (meteredLightCount 39, extrapolationFactor 64.10 vs v1's 55.56,
+ * projectedSavingsKwhPerDay 810.06 vs v1's 700.37) and shared with the
+ * society. See the revalidatePath note below for the one wrinkle hit along
+ * the way — the underlying correction itself was unaffected by it.
  */
 import "./load-env";
 import { db } from "../src/lib/db";
@@ -141,9 +152,26 @@ async function main() {
   console.log("After correction:", { demo: demoAfter, circuit: circuitAfter });
 
   // 4. Regenerate the demo report (a new version, per FEAT-020-AC-5) and share it.
-  const gen = await generateDemoReportInternal(PIPELINE_ID, ACTOR_ID);
-  if ("error" in gen) throw new Error(`Report generation failed: ${gen.error}`);
-  const latest = await db.demoReport.findFirst({ where: { pipelineId: PIPELINE_ID }, orderBy: { version: "desc" } });
+  //
+  // Run for real (2026-10-14): generateDemoReportInternal's own DB write
+  // (the new DemoReport row) committed correctly, but the function ALSO
+  // calls revalidatePath() at the end — a Next.js cache-invalidation call
+  // that assumes a live request context, which a bare script has none of.
+  // It threw "Invariant: static generation store missing" AFTER the write
+  // had already landed — confirmed by the row existing with the right
+  // figures. Not a product bug: every real caller of this function (the
+  // Server Action, or the BenchmarkConfirmed-triggered internal path) runs
+  // inside a request. Caught here so a future run of this script doesn't
+  // stop short of sharing the report it just generated.
+  let latest: { id: string; version: number; measuredSavingsPct: number } | null = null;
+  try {
+    const gen = await generateDemoReportInternal(PIPELINE_ID, ACTOR_ID);
+    if ("error" in gen) throw new Error(`Report generation failed: ${gen.error}`);
+  } catch (err) {
+    if (!/static generation store missing/.test(String(err))) throw err;
+    console.warn("revalidatePath failed outside a request context (expected when run as a script) — continuing, the report row itself was already written.");
+  }
+  latest = await db.demoReport.findFirst({ where: { pipelineId: PIPELINE_ID }, orderBy: { version: "desc" } });
   if (!latest) throw new Error("No report found after generation — aborting before sharing.");
   console.log("Generated report version", latest.version, "measuredSavingsPct", latest.measuredSavingsPct);
 

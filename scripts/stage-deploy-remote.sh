@@ -71,7 +71,14 @@ pm2 restart firsthing-dashboard --update-env
 pm2 restart firsthing-job-worker --update-env
 sleep 6
 pm2 describe firsthing-dashboard | grep -E 'status|unstable restarts' || true
-CODE=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3005/login || true)
+# The staging access gate (2026-10-14) answers 403 to a cookie-less
+# request on purpose now — pass the same cookie the internal team sets by
+# hand, read straight out of .env.local, so this check still measures the
+# thing it always has: does a legitimate visitor actually get in.
+STAGE_SECRET=$(grep '^STAGE_ACCESS_SECRET=' .env.local | sed 's/^STAGE_ACCESS_SECRET=//')
+COOKIE_ARG=()
+[ -n "$STAGE_SECRET" ] && COOKIE_ARG=(-b "ft_stage_access=$STAGE_SECRET")
+CODE=$(curl -s "${COOKIE_ARG[@]}" -o /dev/null -w '%{http_code}' http://localhost:3005/login || true)
 echo "  login answers $CODE"
 echo "  --- startup lines ---"
 tail -n 200 ~/.pm2/logs/firsthing-dashboard-out.log | grep -o '"event":"web.server_[a-z_]*"[^}]*' | tail -2 || true

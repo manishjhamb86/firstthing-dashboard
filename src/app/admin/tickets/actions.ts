@@ -65,3 +65,96 @@ export async function adminSetTicketStatus(
   revalidatePath("/portal/support");
   return { ok: true };
 }
+
+/**
+ * Who's handling the request (2026-10-15, user-asked) — separate from
+ * lastStatusByAdminId, which only records who last moved the status. assignee
+ * === null unassigns. The assignee must themselves hold manage_users — the
+ * same gate every other action here checks — since assigning it to someone
+ * who can't act on it would be pointless.
+ */
+export async function assignTicket(
+  ticketId: string,
+  assigneeId: string | null,
+): Promise<{ ok: true } | { error: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!admin.permissions.includes("manage_users")) {
+    logger.warn("admin.ticket_assign_refused", { actorId: admin.id, ticketId, reason: "permission" });
+    return { error: "Acting on society requests is a society-management action (Manage users)." };
+  }
+
+  const ticket = await db.ticket.findUnique({ where: { id: ticketId }, select: { id: true, societyId: true } });
+  if (!ticket) return { error: "That request no longer exists." };
+
+  if (assigneeId) {
+    const assignee = await db.adminUser.findUnique({
+      where: { id: assigneeId },
+      select: { isActive: true, deletedAt: true, permissions: true },
+    });
+    if (!assignee || assignee.deletedAt || !assignee.isActive) {
+      return { error: "That account no longer exists or is inactive." };
+    }
+    if (!assignee.permissions.includes("manage_users")) {
+      return { error: "That account does not hold Manage users, so it cannot act on society requests." };
+    }
+  }
+
+  await db.ticket.update({
+    where: { id: ticket.id },
+    data: { assignedToId: assigneeId, assignedAt: assigneeId ? new Date() : null },
+  });
+  logger.info("admin.ticket_assigned", {
+    ticketId: ticket.id,
+    societyId: ticket.societyId,
+    actorId: admin.id,
+    assigneeId,
+  });
+  revalidatePath("/admin/tickets");
+  return { ok: true };
+}
+
+/**
+ * Correcting the ticket's own wording — a typo, or clarifying what the
+ * society actually meant — never what the society itself typed in their own
+ * words silently (that stays on record); this is the back office's own
+ * correction, logged as one.
+ */
+export async function updateTicketDetails(
+  ticketId: string,
+  subject: string,
+  detail: string,
+): Promise<{ ok: true } | { error: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!admin.permissions.includes("manage_users")) {
+    logger.warn("admin.ticket_edit_refused", { actorId: admin.id, ticketId, reason: "permission" });
+    return { error: "Acting on society requests is a society-management action (Manage users)." };
+  }
+
+  const trimmedSubject = subject.trim();
+  const trimmedDetail = detail.trim();
+  if (!trimmedSubject) return { error: "Give the request a subject." };
+  if (!trimmedDetail) return { error: "Give the request some detail." };
+
+  const ticket = await db.ticket.findUnique({
+    where: { id: ticketId },
+    select: { id: true, societyId: true, subject: true, detail: true },
+  });
+  if (!ticket) return { error: "That request no longer exists." };
+
+  await db.ticket.update({
+    where: { id: ticket.id },
+    data: { subject: trimmedSubject, detail: trimmedDetail },
+  });
+  logger.info("admin.ticket_edited", {
+    ticketId: ticket.id,
+    societyId: ticket.societyId,
+    actorId: admin.id,
+    oldSubject: ticket.subject,
+    oldDetail: ticket.detail,
+  });
+  revalidatePath("/admin/tickets");
+  revalidatePath("/portal/support");
+  return { ok: true };
+}

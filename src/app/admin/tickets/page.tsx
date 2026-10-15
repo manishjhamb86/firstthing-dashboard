@@ -19,37 +19,65 @@ const TYPE_LABEL: Record<string, string> = {
 // every society's complaints, replacement and pickup requests in one queue.
 // Any admin can read it; acting on a request is manage_users, re-checked in
 // the action. Open requests first — the queue is the point.
+//
+// "Assigned to me" (2026-10-15, user-asked) narrows the SAME queue rather
+// than being a separate screen — it combines with the status chips so an
+// assignee can ask "my open ones" or "everything assigned to me" in one
+// click, and still sees the whole desk the moment they clear the filter.
 export default async function AdminTicketsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; mine?: string }>;
 }) {
   await requireAdminPage();
   const admin = await resolveAdmin();
   const canAct = admin?.permissions.includes("manage_users") ?? false;
-  const { status } = await searchParams;
+  const { status, mine } = await searchParams;
   const filter = ["open", "in_progress", "resolved"].includes(status ?? "") ? status : undefined;
+  const mineOn = mine === "1" && !!admin;
 
-  const tickets = await db.ticket.findMany({
-    where: filter ? { status: filter as never } : undefined,
-    orderBy: [{ status: "asc" }, { createdAt: "desc" }],
-    take: 200,
-    include: {
-      society: { select: { id: true, name: true } },
-      raisedBy: { select: { name: true, email: true } },
-      lastStatusByAdmin: { select: { name: true, email: true } },
-    },
-  });
+  const where = {
+    ...(filter ? { status: filter as never } : {}),
+    ...(mineOn ? { assignedToId: admin!.id } : {}),
+  };
+
+  const [tickets, assignees] = await Promise.all([
+    db.ticket.findMany({
+      where,
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      take: 200,
+      include: {
+        society: { select: { id: true, name: true } },
+        raisedBy: { select: { name: true, email: true } },
+        lastStatusByAdmin: { select: { name: true, email: true } },
+        assignedTo: { select: { name: true, email: true } },
+      },
+    }),
+    db.adminUser.findMany({
+      where: { isActive: true, deletedAt: null, permissions: { has: "manage_users" } },
+      select: { id: true, name: true, email: true },
+      orderBy: { name: "asc" },
+    }),
+  ]);
   const counts = {
     open: await db.ticket.count({ where: { status: "open" } }),
     in_progress: await db.ticket.count({ where: { status: "in_progress" } }),
     resolved: await db.ticket.count({ where: { status: "resolved" } }),
+    assignedToMe: admin ? await db.ticket.count({ where: { assignedToId: admin.id } }) : 0,
   };
+
+  function buildHref(params: { status?: string; mine?: boolean }) {
+    const sp = new URLSearchParams();
+    if (params.status) sp.set("status", params.status);
+    if (params.mine) sp.set("mine", "1");
+    const qs = sp.toString();
+    return qs ? `/admin/tickets?${qs}` : "/admin/tickets";
+  }
 
   const chip = (key: string | undefined, label: string, count: number) => (
     <Link
       key={label}
-      href={key ? `/admin/tickets?status=${key}` : "/admin/tickets"}
+      href={buildHref({ status: key, mine: mineOn })}
       className="chip"
       style={
         filter === key
@@ -75,6 +103,14 @@ export default async function AdminTicketsPage({
         <Stat label="Open" value={String(counts.open)} tone={counts.open > 0 ? "warn" : undefined} detail="nobody has taken these up" />
         <Stat label="In progress" value={String(counts.in_progress)} />
         <Stat label="Resolved" value={String(counts.resolved)} />
+        {admin && (
+          <Stat
+            label="Assigned to me"
+            value={String(counts.assignedToMe)}
+            tone={counts.assignedToMe > 0 ? "warn" : undefined}
+            detail="to track and update"
+          />
+        )}
       </StatRow>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -82,13 +118,30 @@ export default async function AdminTicketsPage({
         {chip("open", "Open", counts.open)}
         {chip("in_progress", "In progress", counts.in_progress)}
         {chip("resolved", "Resolved", counts.resolved)}
+        {admin && (
+          <Link
+            href={buildHref({ status: filter, mine: !mineOn })}
+            className="chip"
+            style={
+              mineOn
+                ? { background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)" }
+                : { background: "var(--surface)", color: "var(--text-muted)", borderColor: "var(--border)" }
+            }
+          >
+            Assigned to me · {counts.assignedToMe}
+          </Link>
+        )}
       </div>
 
       <Card className="p-6">
         <CardTitle>Requests</CardTitle>
         {tickets.length === 0 ? (
           <EmptyState title="Nothing here">
-            {filter ? "No requests with this status." : "No society has raised a request yet."}
+            {mineOn
+              ? "Nothing is assigned to you right now."
+              : filter
+                ? "No requests with this status."
+                : "No society has raised a request yet."}
           </EmptyState>
         ) : (
           <>
@@ -107,6 +160,7 @@ export default async function AdminTicketsPage({
                     <th>Raised by</th>
                     <th>Date</th>
                     <th>Status</th>
+                    <th>Assigned to</th>
                     {canAct && <th className="text-right">Actions</th>}
                   </tr>
                 </thead>
@@ -149,9 +203,19 @@ export default async function AdminTicketsPage({
                           <StatusChip tone="ok">Resolved</StatusChip>
                         )}
                       </td>
+                      <td className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                        {t.assignedTo ? t.assignedTo.name ?? t.assignedTo.email : "—"}
+                      </td>
                       {canAct && (
                         <td>
-                          <AdminTicketControls ticketId={t.id} status={t.status} />
+                          <AdminTicketControls
+                            ticketId={t.id}
+                            status={t.status}
+                            assignedToId={t.assignedToId}
+                            assignees={assignees}
+                            subject={t.subject}
+                            detail={t.detail}
+                          />
                         </td>
                       )}
                     </tr>
@@ -193,9 +257,19 @@ export default async function AdminTicketsPage({
                     {TYPE_LABEL[t.type]} · {t.raisedBy.name ?? t.raisedBy.email} ·{" "}
                     <span className="num">{formatDate(t.createdAt)}</span>
                   </p>
+                  <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                    Assigned to {t.assignedTo ? t.assignedTo.name ?? t.assignedTo.email : "nobody yet"}
+                  </p>
                   {canAct && (
                     <div className="mt-2.5 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
-                      <AdminTicketControls ticketId={t.id} status={t.status} />
+                      <AdminTicketControls
+                        ticketId={t.id}
+                        status={t.status}
+                        assignedToId={t.assignedToId}
+                        assignees={assignees}
+                        subject={t.subject}
+                        detail={t.detail}
+                      />
                     </div>
                   )}
                 </div>

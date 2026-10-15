@@ -18,6 +18,7 @@ import {
 } from "./invoice-actions";
 import { METHOD_LABEL, tdsFromRate, type PaymentMethod } from "@/lib/payment";
 import { FileDrop } from "@/components/file-drop";
+import { BILLING_INVOICE_STATUS } from "@/lib/status-maps";
 
 export type InvoiceState = {
   id: string;
@@ -71,15 +72,6 @@ const RECON_META: Record<string, { label: string; tone: "ok" | "warn" | "bad" }>
   acknowledged: { label: "Mismatch acknowledged", tone: "warn" },
   // CON-47 — an invoice-first month has no computed total to compare against.
   not_applicable: { label: "From the invoice itself — no computed total to compare", tone: "ok" },
-};
-
-const STATUS_META: Record<string, { label: string; tone: "ok" | "warn" | "bad" | "info" }> = {
-  attached: { label: "Attached — not yet released", tone: "info" },
-  released: { label: "Pending payment", tone: "warn" },
-  overdue: { label: "Overdue", tone: "bad" },
-  warning: { label: "Overdue — warning stage", tone: "bad" },
-  suspended: { label: "Suspended", tone: "bad" },
-  paid: { label: "Paid", tone: "ok" },
 };
 
 /**
@@ -421,7 +413,7 @@ export function InvoicePanel({
             <div>
               <p className="lbl">Status</p>
               <p>
-                <StatusChip tone={STATUS_META[invoice.status].tone}>{STATUS_META[invoice.status].label}</StatusChip>
+                <StatusChip tone={BILLING_INVOICE_STATUS[invoice.status].tone}>{BILLING_INVOICE_STATUS[invoice.status].label}</StatusChip>
               </p>
               {invoice.paidTotal > 0 && (
                 <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>

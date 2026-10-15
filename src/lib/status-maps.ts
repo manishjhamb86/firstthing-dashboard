@@ -203,3 +203,16 @@ export const CALCULATION_STATUS: Record<string, StatusMeta> = {
   released: { label: "Released", tone: "ok" },
   superseded: { label: "Superseded", tone: "neu" },
 };
+
+// A BillingInvoice's own payment lifecycle (CON-13's clock) — shared by the
+// invoice detail panel and the intake list (2026-10-15, user-asked: "show
+// payment status of each invoice on listing as well"), so the two can't
+// drift the way CALCULATION_STATUS's own per-page copies already had.
+export const BILLING_INVOICE_STATUS: Record<string, StatusMeta> = {
+  attached: { label: "Attached — not yet released", tone: "info" },
+  released: { label: "Pending payment", tone: "warn" },
+  overdue: { label: "Overdue", tone: "bad" },
+  warning: { label: "Overdue — warning stage", tone: "bad" },
+  suspended: { label: "Suspended", tone: "bad" },
+  paid: { label: "Paid", tone: "ok" },
+};

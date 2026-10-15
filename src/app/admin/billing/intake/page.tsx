@@ -6,7 +6,8 @@ import { formatInstant, monthLabel, timeAgo } from "@/lib/format-date";
 import { Card, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { requireBillingOps } from "../access";
 import { intakeViewOf, submittedDisplayStatus } from "@/lib/intake-list";
-import { CALCULATION_STATUS } from "@/lib/status-maps";
+import { CALCULATION_STATUS, BILLING_INVOICE_STATUS } from "@/lib/status-maps";
+import { retailInvoiceSettled } from "@/lib/retail-customer";
 import { IntakeClient, type IntakeRow } from "./intake-client";
 import { ZohoFetchButton } from "./zoho-fetch-button";
 
@@ -72,18 +73,39 @@ export default async function IntakePage({
     ? await db.monthlyCalculation.findMany({ where: { id: { in: calcIds } }, select: { id: true, status: true } })
     : [];
   const calcStatusById = new Map(calcs.map((c) => [c.id, c.status]));
+  // Payment status (2026-10-15, user-asked: "show payment status of each
+  // invoice on listing"): the LIVE BillingInvoice per calculation — the same
+  // CON-13-sweep-maintained status the invoice detail panel itself displays,
+  // never recomputed here with different logic. voidedAt: null — a voided
+  // attach (2026-09-12's void/reattach) is history, not the live bill.
+  const liveInvoices = calcIds.length
+    ? await db.billingInvoice.findMany({
+        where: { monthlyCalculationId: { in: calcIds }, voidedAt: null },
+        select: { monthlyCalculationId: true, status: true },
+      })
+    : [];
+  const paymentStatusByCalc = new Map(liveInvoices.map((inv) => [inv.monthlyCalculationId, inv.status]));
   const retailIds = intakes.filter((i) => i.retailInvoiceId).map((i) => i.retailInvoiceId!);
-  const retailCustomerByInvoice = new Map(
-    (retailIds.length ? await db.retailInvoice.findMany({ where: { id: { in: retailIds } }, select: { id: true, customerId: true, customer: { select: { name: true } } } }) : []).map((r) => [
-      r.id,
-      r.customerId,
-    ]),
-  );
+  const retailInvoices = retailIds.length
+    ? await db.retailInvoice.findMany({
+        where: { id: { in: retailIds } },
+        select: {
+          id: true,
+          customerId: true,
+          customer: { select: { name: true } },
+          total: true,
+          advanceAmount: true,
+          payments: { select: { amount: true } },
+        },
+      })
+    : [];
+  const retailCustomerByInvoice = new Map(retailInvoices.map((r) => [r.id, r.customerId]));
   // A retail row shows its customer's name where a society would sit.
-  const retailNameByInvoice = new Map(
-    retailIds.length
-      ? (await db.retailInvoice.findMany({ where: { id: { in: retailIds } }, select: { id: true, customer: { select: { name: true } } } })).map((r) => [r.id, r.customer.name])
-      : [],
+  const retailNameByInvoice = new Map(retailInvoices.map((r) => [r.id, r.customer.name]));
+  // Retail has no CON-13 arrears clock (retail-customer.ts's own comment) —
+  // just whether the money owed has actually arrived.
+  const retailSettledByInvoice = new Map(
+    retailInvoices.map((r) => [r.id, retailInvoiceSettled(r, r.payments)]),
   );
   const docIds = intakes.filter((i) => i.filedAsDocumentId).map((i) => i.filedAsDocumentId!);
   const releasedDocIds = new Set(
@@ -148,6 +170,17 @@ export default async function IntakePage({
       // at all. A still-in-flight row never reaches here with the flag set:
       // the sync itself refetches and re-reads it immediately.
       zohoChanged: i.zohoChangedAt !== null,
+      // Payment status (2026-10-15, user-asked) — null reads as "—", a
+      // filed document copy or a not-yet-submitted row has no payment
+      // lifecycle to show. Service-line bills read CON-13's own stored
+      // status (overdue/warning/suspended all ring red, via the same
+      // BILLING_INVOICE_STATUS map the invoice detail panel uses); a retail
+      // sale has no arrears clock, so it's simply Paid or Unpaid.
+      paymentStatus: i.retailInvoiceId
+        ? { label: retailSettledByInvoice.get(i.retailInvoiceId) ? "Paid" : "Unpaid", tone: retailSettledByInvoice.get(i.retailInvoiceId) ? "ok" : "warn" }
+        : i.monthlyCalculationId && paymentStatusByCalc.has(i.monthlyCalculationId)
+          ? BILLING_INVOICE_STATUS[paymentStatusByCalc.get(i.monthlyCalculationId)!]
+          : null,
     };
   });
 

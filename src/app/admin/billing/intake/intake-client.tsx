@@ -66,6 +66,10 @@ export type IntakeRow = {
   fromZoho: boolean;
   /** Changed in Zoho since it was fetched — fetch it again from its page. */
   zohoChanged: boolean;
+  /** Null when there's nothing to show yet (not submitted, or a filed
+   *  document copy with no payment lifecycle). Service-line overdue states
+   *  all ring "bad" — the user's "overdue invoices clearly visible in red". */
+  paymentStatus: { label: string; tone: ChipTone } | null;
 };
 
 type View = IntakeView | "all";
@@ -699,6 +703,7 @@ export function IntakeClient({
                       column beside it (user-reported 2026-09-24, screenshot:
                       "release8days ago"). */}
                   <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[245px]" />
+                  <th className="hidden w-[150px] xl:table-cell">Payment</th>
                   <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[90px] lg:table-cell" />
                   <th className="w-[190px]" />
                 </tr>
@@ -736,6 +741,11 @@ export function IntakeClient({
                         <p className="text-[12px] md:hidden" style={{ color: "var(--text-subtle)" }}>
                           {r.society ?? "Society not confirmed"} · {r.period ?? "month not confirmed"}
                         </p>
+                        {r.paymentStatus && (
+                          <p className="mt-1 xl:hidden">
+                            <StatusChip tone={r.paymentStatus.tone}>{r.paymentStatus.label}</StatusChip>
+                          </p>
+                        )}
                       </td>
                       <td className="hidden max-w-[9rem] truncate md:table-cell" title={r.society ?? undefined}>
                         {r.society ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
@@ -750,6 +760,13 @@ export function IntakeClient({
                           <p className="mt-1 line-clamp-2 text-[12px]" style={{ color: "var(--text-subtle)" }} title={r.note}>
                             {r.note}
                           </p>
+                        )}
+                      </td>
+                      <td className="hidden whitespace-nowrap xl:table-cell">
+                        {r.paymentStatus ? (
+                          <StatusChip tone={r.paymentStatus.tone}>{r.paymentStatus.label}</StatusChip>
+                        ) : (
+                          <span style={{ color: "var(--text-subtle)" }}>—</span>
                         )}
                       </td>
                       <td className="hidden whitespace-nowrap text-[12.5px] lg:table-cell" style={{ color: "var(--text-muted)" }} title={r.uploadedAt}>

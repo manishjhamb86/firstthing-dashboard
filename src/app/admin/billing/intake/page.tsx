@@ -6,7 +6,7 @@ import { formatInstant, monthLabel, timeAgo } from "@/lib/format-date";
 import { Card, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { requireBillingOps } from "../access";
 import { intakeViewOf, submittedDisplayStatus } from "@/lib/intake-list";
-import { CALCULATION_STATUS, BILLING_INVOICE_STATUS } from "@/lib/status-maps";
+import { CALCULATION_STATUS } from "@/lib/status-maps";
 import { retailInvoiceSettled } from "@/lib/retail-customer";
 import { IntakeClient, type IntakeRow } from "./intake-client";
 import { ZohoFetchButton } from "./zoho-fetch-button";
@@ -42,6 +42,22 @@ const STATUS_META: Record<string, { label: string; tone: ChipTone }> = {
   submitted_retail: { label: "Filed · retail sale", tone: "info" },
   refused_duplicate: { label: "Refused — duplicate", tone: "bad" },
   discarded: { label: "Discarded", tone: "neu" },
+};
+
+// A shorter word for this one narrow, table-layout:fixed column (2026-10-15)
+// — the shared BILLING_INVOICE_STATUS wording ("Attached — not yet
+// released", "Overdue — warning stage") is right on the invoice's own
+// detail page, which has the room; forcing those full sentences into this
+// column pushed Month/Total into visibly overlapping each other (user-
+// reported, screenshot). "warning" keeps the SAME red emphasis as plain
+// "overdue" here — the finer distinction is what the detail page is for.
+const PAYMENT_STATUS_COMPACT: Record<string, { label: string; tone: ChipTone }> = {
+  attached: { label: "Not released", tone: "info" },
+  released: { label: "Pending", tone: "warn" },
+  overdue: { label: "Overdue", tone: "bad" },
+  warning: { label: "Overdue", tone: "bad" },
+  suspended: { label: "Suspended", tone: "bad" },
+  paid: { label: "Paid", tone: "ok" },
 };
 
 /** A read that started before this and never finished has no process behind it. */
@@ -173,13 +189,13 @@ export default async function IntakePage({
       // Payment status (2026-10-15, user-asked) — null reads as "—", a
       // filed document copy or a not-yet-submitted row has no payment
       // lifecycle to show. Service-line bills read CON-13's own stored
-      // status (overdue/warning/suspended all ring red, via the same
-      // BILLING_INVOICE_STATUS map the invoice detail panel uses); a retail
-      // sale has no arrears clock, so it's simply Paid or Unpaid.
+      // status (overdue/warning/suspended all ring red, via
+      // PAYMENT_STATUS_COMPACT above); a retail sale has no arrears clock,
+      // so it's simply Paid or Unpaid.
       paymentStatus: i.retailInvoiceId
         ? { label: retailSettledByInvoice.get(i.retailInvoiceId) ? "Paid" : "Unpaid", tone: retailSettledByInvoice.get(i.retailInvoiceId) ? "ok" : "warn" }
         : i.monthlyCalculationId && paymentStatusByCalc.has(i.monthlyCalculationId)
-          ? BILLING_INVOICE_STATUS[paymentStatusByCalc.get(i.monthlyCalculationId)!]
+          ? PAYMENT_STATUS_COMPACT[paymentStatusByCalc.get(i.monthlyCalculationId)!]
           : null,
     };
   });

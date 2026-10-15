@@ -145,7 +145,7 @@ import { DEFAULT_INTAKE_FILTERS, intakeFiltersQuery, intakeListReturnHref, parse
 
 describe("intake list filters in the URL", () => {
   it("round-trips every filter through the query string", () => {
-    const f = { view: "review" as const, q: "80850044", society: "soc-ace-city", month: "2026-07", sort: "total" as const, dir: 1 as const };
+    const f = { view: "review" as const, q: "80850044", society: "soc-ace-city", month: "2026-07", sort: "total" as const, dir: 1 as const, overdue: true };
     const qs = intakeFiltersQuery(f);
     expect(parseIntakeFilters(Object.fromEntries(new URLSearchParams(qs.slice(1))))).toEqual(f);
   });

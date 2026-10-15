@@ -227,9 +227,13 @@ export type IntakeFilters = {
   month: string;
   sort: IntakeSortKey;
   dir: 1 | -1;
+  /** Independent of `view` (2026-10-15, user-asked) — an invoice's processing
+   *  state and its payment state are two different questions, so "Overdue"
+   *  combines with any status chip rather than being one more of them. */
+  overdue: boolean;
 };
 
-export const DEFAULT_INTAKE_FILTERS: IntakeFilters = { view: "all", q: "", society: "", month: "", sort: "uploaded", dir: -1 };
+export const DEFAULT_INTAKE_FILTERS: IntakeFilters = { view: "all", q: "", society: "", month: "", sort: "uploaded", dir: -1, overdue: false };
 
 /** Read filters from search params; anything unrecognised falls back to the default. */
 export function parseIntakeFilters(p: Record<string, string | string[] | undefined>): IntakeFilters {
@@ -248,6 +252,7 @@ export function parseIntakeFilters(p: Record<string, string | string[] | undefin
     month: one("month"),
     sort: validSort ? (sort as IntakeSortKey) : DEFAULT_INTAKE_FILTERS.sort,
     dir: one("dir") === "asc" ? 1 : one("dir") === "desc" ? -1 : validSort ? INTAKE_SORTS[sort as IntakeSortKey].firstDir : DEFAULT_INTAKE_FILTERS.dir,
+    overdue: one("overdue") === "1",
   };
 }
 
@@ -262,6 +267,7 @@ export function intakeFiltersQuery(f: IntakeFilters): string {
     qs.set("sort", f.sort);
     qs.set("dir", f.dir === 1 ? "asc" : "desc");
   }
+  if (f.overdue) qs.set("overdue", "1");
   const s = qs.toString();
   return s ? `?${s}` : "";
 }

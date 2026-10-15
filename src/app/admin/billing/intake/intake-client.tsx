@@ -110,19 +110,23 @@ export function IntakeClient({
   const [monthFilter, setMonthFilter] = useState(initialFilters.month);
   const [sortKey, setSortKey] = useState<IntakeSortKey>(initialFilters.sort);
   const [sortDir, setSortDir] = useState<1 | -1>(initialFilters.dir);
+  // Independent of the view chips (2026-10-15, user-asked): "which of these
+  // need chasing for money" is a different question from "where is this in
+  // processing", so it combines with any status chip rather than being one.
+  const [overdueOnly, setOverdueOnly] = useState(initialFilters.overdue);
 
   // Mirror the filters into the URL (replace, not push — a filter change is
   // not a page the Back button should step through) and remember that URL
   // for this tab, so the review page's own return goes back to it.
   useEffect(() => {
-    const href = `${INTAKE_LIST_PATH}${intakeFiltersQuery({ view, q: query, society: societyFilter, month: monthFilter, sort: sortKey, dir: sortDir })}`;
+    const href = `${INTAKE_LIST_PATH}${intakeFiltersQuery({ view, q: query, society: societyFilter, month: monthFilter, sort: sortKey, dir: sortDir, overdue: overdueOnly })}`;
     if (`${window.location.pathname}${window.location.search}` !== href) window.history.replaceState(window.history.state, "", href);
     try {
       window.sessionStorage.setItem(INTAKE_LIST_RETURN_KEY, href);
     } catch {
       // Storage can be unavailable (private mode); the URL alone still works.
     }
-  }, [view, query, societyFilter, monthFilter, sortKey, sortDir]);
+  }, [view, query, societyFilter, monthFilter, sortKey, sortDir, overdueOnly]);
   const [refusals, setRefusals] = useState<string[]>([]);
   // What a dropped archive yielded — information, not a refusal.
   const [archiveNotes, setArchiveNotes] = useState<string[]>([]);
@@ -416,9 +420,19 @@ export function IntakeClient({
     return c;
   }, [narrowed]);
 
+  // "Overdue" means the LIVE payment status is one of overdue/warning/
+  // suspended — the "bad" tone on BILLING_INVOICE_STATUS (page.tsx). A
+  // retail sale's "Unpaid" is tone "warn", not "bad" — it has no CON-13
+  // arrears clock, so it never counts as overdue here either.
+  const overdueCount = useMemo(() => narrowed.filter((r) => r.paymentStatus?.tone === "bad").length, [narrowed]);
+
   const visible = useMemo(
-    () => narrowed.filter((r) => view === "all" || intakeViewOf(r.status) === view).sort(compareIntakes(sortKey, sortDir)),
-    [narrowed, view, sortKey, sortDir],
+    () =>
+      narrowed
+        .filter((r) => view === "all" || intakeViewOf(r.status) === view)
+        .filter((r) => !overdueOnly || r.paymentStatus?.tone === "bad")
+        .sort(compareIntakes(sortKey, sortDir)),
+    [narrowed, view, overdueOnly, sortKey, sortDir],
   );
 
   const societies = useMemo(() => [...new Set(rows.map((r) => r.society).filter((s): s is string => !!s))].sort(), [rows]);
@@ -427,7 +441,7 @@ export function IntakeClient({
       [...new Map(rows.filter((r) => r.periodKey).map((r) => [r.periodKey!, r.period!])).entries()].sort((a, b) => (a[0] < b[0] ? 1 : -1)),
     [rows],
   );
-  const filtering = query.trim() !== "" || societyFilter !== "" || monthFilter !== "";
+  const filtering = query.trim() !== "" || societyFilter !== "" || monthFilter !== "" || overdueOnly;
 
   // A row is selectable when it can take at least one bulk action; "select
   // all" means the actionable rows currently on screen, not every row in
@@ -544,10 +558,29 @@ export function IntakeClient({
             </option>
           ))}
         </select>
+        <label className="mt-2 flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" checked={overdueOnly} onChange={(e) => setOverdueOnly(e.target.checked)} />
+          Overdue only · {overdueCount}
+        </label>
       </div>
       <div className="mb-3.5 hidden flex-wrap items-center gap-2 sm:flex">
         {chip("all", "All", counts.all)}
         {INTAKE_VIEWS.map((v) => chip(v.key, v.label, counts[v.key]))}
+        {/* A toggle, not one more of the view chips above — "needs chasing
+            for money" combines with any processing state rather than being
+            mutually exclusive with it (2026-10-15, user-asked). */}
+        <button
+          type="button"
+          onClick={() => setOverdueOnly((v) => !v)}
+          className="rounded-full border px-3.5 py-1.5 text-xs font-semibold"
+          style={
+            overdueOnly
+              ? { background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }
+              : { background: "var(--surface)", borderColor: "var(--border)", color: "var(--text-muted)" }
+          }
+        >
+          Overdue · {overdueCount}
+        </button>
       </div>
 
       <div className="mb-3.5 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -694,7 +727,7 @@ export function IntakeClient({
                   <th className="w-10" />
                   <SortHeader k="invoice" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[180px]" />
                   <SortHeader k="society" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[110px] md:table-cell" />
-                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[90px] md:table-cell" />
+                  <SortHeader k="period" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[105px] md:table-cell" />
                   <SortHeader k="total" sortKey={sortKey} dir={sortDir} onSort={sortBy} align="right" className="w-[105px]" />
                   {/* 245px, sized for the single longest real status label
                       ("Submitted — awaiting release", 29 chars) — narrower
@@ -703,7 +736,15 @@ export function IntakeClient({
                       column beside it (user-reported 2026-09-24, screenshot:
                       "release8days ago"). */}
                   <SortHeader k="status" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="w-[245px]" />
-                  <th className="hidden w-[150px] xl:table-cell">Payment</th>
+                  {/* 115px — shortened wording for this column specifically
+                      (PAYMENT_STATUS_COMPACT in page.tsx: "Not released",
+                      "Pending", "Overdue", "Suspended", "Paid") after the
+                      shared BILLING_INVOICE_STATUS sentences ("Attached —
+                      not yet released") pushed Month/Total into visibly
+                      overlapping each other at this column's expense, under
+                      table-layout:fixed's proportional scaling (user-
+                      reported, screenshot). */}
+                  <th className="hidden w-[115px] xl:table-cell">Payment</th>
                   <SortHeader k="uploaded" sortKey={sortKey} dir={sortDir} onSort={sortBy} className="hidden w-[90px] lg:table-cell" />
                   <th className="w-[190px]" />
                 </tr>
@@ -750,7 +791,7 @@ export function IntakeClient({
                       <td className="hidden max-w-[9rem] truncate md:table-cell" title={r.society ?? undefined}>
                         {r.society ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
                       </td>
-                      <td className="hidden whitespace-nowrap md:table-cell">
+                      <td className="hidden truncate md:table-cell" title={r.period ?? undefined}>
                         {r.period ?? <span style={{ color: "var(--text-subtle)" }}>Not confirmed</span>}
                       </td>
                       <td className="num whitespace-nowrap text-right">{r.total !== null ? inr(r.total) : "—"}</td>

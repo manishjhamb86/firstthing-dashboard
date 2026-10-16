@@ -163,7 +163,16 @@
   font-size: 0.9rem;
   font-weight: 600;
 }
-.navlinks a:hover {
+/* Scoped to the plain text nav links only, never the .btn CTA that sits in
+ * the same <nav> (user-reported, twice: first the button's own text at
+ * rest, now the same button going invisible on hover — same root cause, the
+ * SAME class of specificity bug as :where(.page) above). `.navlinks a:hover`
+ * is (0,2,1) specificity — enough to beat `.btn`'s own (0,1,0) `color:#fff`
+ * the instant the pointer is over it, since `.btn` has no :hover rule of
+ * its own to defend that state. :where() zeroes .navlinks' and the :not()
+ * exclusion's own contribution, leaving a bare, low-priority `a:hover`
+ * that only ever loses to a real component class like .btn. */
+:where(.navlinks) a:not(:where(.btn)):hover {
   color: var(--green);
 }
 .mobileMenu {

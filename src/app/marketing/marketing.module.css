@@ -12,11 +12,22 @@
  * element selector (h1, a, input, section, footer, ...): left alone, a rule
  * like `footer{...}` would apply to every <footer> on any page that happens
  * to load this stylesheet. Every such rule below is written as a descendant
- * of `.page` (this page's one root class) instead, so it only ever matches
- * inside this component's own tree. A rule that already starts from a named
- * class (`.logo span`, `.step p`, `.bar span`, ...) needs no such prefix —
- * the leading class is already scoped, and the descendant combinator does
- * the rest.
+ * of `:where(.page)` (this page's one root class) instead, so it only ever
+ * matches inside this component's own tree. A rule that already starts from
+ * a named class (`.logo span`, `.step p`, `.bar span`, ...) needs no such
+ * prefix — the leading class is already scoped, and the descendant
+ * combinator does the rest.
+ *
+ * `:where(.page)`, not a bare `.page` — found the hard way (user-reported,
+ * screenshot: every solid .btn rendered with near-black text instead of
+ * white). `.page a{color:inherit}` is meant as a page-wide DEFAULT, but a
+ * plain `.page` combined with the `a` type selector gives it specificity
+ * (0,1,1) — HIGHER than a single named class like `.btn` (0,1,0) — so it
+ * was silently outranking every plain `.btn` link's own `color:#fff`
+ * everywhere the two disagreed. `:where()` always contributes zero
+ * specificity, dropping these scoping wrappers to the bare tag's own weight
+ * (0,0,1) — below any real component class, which is what "default, easily
+ * overridden" was always supposed to mean.
  */
 
 .page {
@@ -31,45 +42,45 @@
   font: 16px/1.6 "DM Sans", sans-serif;
   background: #fff;
 }
-.page * {
+:where(.page) * {
   box-sizing: border-box;
 }
-.page h1,
-.page h2,
-.page h3 {
+:where(.page) h1,
+:where(.page) h2,
+:where(.page) h3 {
   font-family: Manrope, sans-serif;
   line-height: 1.15;
   letter-spacing: -0.04em;
   margin: 0 0 20px;
 }
-.page h1 {
+:where(.page) h1 {
   font-size: clamp(2.8rem, 6vw, 5.3rem);
   max-width: 900px;
 }
-.page h2 {
+:where(.page) h2 {
   font-size: clamp(2rem, 4vw, 3.5rem);
 }
-.page h3 {
+:where(.page) h3 {
   font-size: 1.35rem;
 }
-.page p {
+:where(.page) p {
   margin: 0 0 20px;
 }
-.page a {
+:where(.page) a {
   color: inherit;
   text-decoration: none;
 }
-.page section {
+:where(.page) section {
   padding: 95px 0;
 }
-.page label {
+:where(.page) label {
   display: block;
   font-size: 0.86rem;
   font-weight: 700;
   margin-bottom: 7px;
 }
-.page input,
-.page select {
+:where(.page) input,
+:where(.page) select {
   width: 100%;
   padding: 12px 14px;
   border: 1px solid #bdd0c3;
@@ -78,7 +89,7 @@
   color: var(--dark);
   font: inherit;
 }
-.page footer {
+:where(.page) footer {
   background: #122a22;
   color: #e7f1e9;
   padding: 60px 0 25px;
@@ -410,7 +421,7 @@
   grid-template-columns: 2fr 1fr 1fr;
   gap: 35px;
 }
-.page footer a {
+:where(.page) footer a {
   display: block;
   margin-bottom: 9px;
   color: #c2d8c9;
@@ -457,7 +468,7 @@
   }
 }
 @media (max-width: 560px) {
-  .page section {
+  :where(.page) section {
     padding: 65px 0;
   }
   .grid,

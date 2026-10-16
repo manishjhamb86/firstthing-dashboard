@@ -14,6 +14,8 @@ import {
   completeRemainingInstallation,
   correctBatchDates,
   correctCertificateDate,
+  correctContractedLightCount,
+  correctPlannedDayCount,
   correctPlannedDayDate,
   deletePlannedDay,
   raiseBlocker,
@@ -499,6 +501,7 @@ export function PlannedDayActions({
   plannedDayId,
   plannedDate,
   startTime,
+  plannedCount,
 }: {
   pipelineId: string;
   plannedDayId: string;
@@ -506,10 +509,12 @@ export function PlannedDayActions({
   plannedDate: string;
   /** HH:MM */
   startTime: string;
+  plannedCount: number;
 }) {
-  const [open, setOpen] = useState<"date" | "delete" | null>(null);
+  const [open, setOpen] = useState<"date" | "count" | "delete" | null>(null);
   const [date, setDate] = useState(plannedDate);
   const [time, setTime] = useState(startTime);
+  const [count, setCount] = useState(String(plannedCount));
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
@@ -525,9 +530,55 @@ export function PlannedDayActions({
       <button type="button" className="btn-ghost btn-sm" onClick={() => { setDate(plannedDate); setTime(startTime); setOpen("date"); }}>
         Correct the date
       </button>
+      <button type="button" className="btn-ghost btn-sm" onClick={() => { setCount(String(plannedCount)); setOpen("count"); }}>
+        Correct the count
+      </button>
       <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen("delete")}>
         Delete
       </button>
+
+      <Modal open={open === "count"} onClose={close} title="Correct the planned count">
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(undefined);
+            startTransition(async () => {
+              const n = Number(count);
+              if (!Number.isInteger(n) || n <= 0) {
+                setError("Enter a positive whole number.");
+                return;
+              }
+              const r = await correctPlannedDayCount(pipelineId, plannedDayId, { plannedCount: n, reason });
+              if (r && "error" in r) setError(r.error);
+              else close();
+            });
+          }}
+        >
+          <Field label="Planned count" htmlFor="pd-count">
+            <input id="pd-count" type="number" min={1} step={1} className="field num" value={count} onChange={(e) => setCount(e.target.value)} required />
+          </Field>
+          <Field label="Why this is being corrected" htmlFor="pd-count-reason">
+            <input
+              id="pd-count-reason"
+              className="field"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="The plan was set up before subtracting the lights already installed on the demo circuit."
+              required
+            />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+          <div className="flex gap-2">
+            <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+              {pending ? "Saving…" : "Save the correction"}
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       <Modal open={open === "date"} onClose={close} title="Correct the planned date">
         <form
@@ -597,6 +648,73 @@ export function PlannedDayActions({
         </form>
       </Modal>
     </span>
+  );
+}
+
+/**
+ * Correct the project's own contracted figure (2026-10-17, user-asked,
+ * alongside correcting a single day's count) — closed by default, showing
+ * the figure as a fact; "Correct it" opens the one field it is.
+ */
+export function CorrectContractedCountControl({ pipelineId, contractedLightCount }: { pipelineId: string; contractedLightCount: number }) {
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(String(contractedLightCount));
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-ghost btn-sm mt-1" onClick={() => { setCount(String(contractedLightCount)); setOpen(true); }}>
+        Correct it
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="mt-2 space-y-2 rounded-[var(--r-md)] border border-[var(--border)] p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(undefined);
+        startTransition(async () => {
+          const n = Number(count);
+          if (!Number.isInteger(n) || n <= 0) {
+            setError("Enter a positive whole number.");
+            return;
+          }
+          const r = await correctContractedLightCount(pipelineId, { contractedLightCount: n, reason });
+          if (r && "error" in r) setError(r.error);
+          else {
+            setOpen(false);
+            setReason("");
+          }
+        });
+      }}
+    >
+      <Field label="Contracted light count" htmlFor="contracted-correct">
+        <input id="contracted-correct" type="number" min={1} step={1} className="field num" value={count} onChange={(e) => setCount(e.target.value)} required />
+      </Field>
+      <Field label="Why this is being corrected" htmlFor="contracted-correct-reason">
+        <input
+          id="contracted-correct-reason"
+          className="field"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Set up before subtracting the lights already installed on the demo circuit."
+          required
+        />
+      </Field>
+      {error && <ErrorText>{error}</ErrorText>}
+      <div className="flex gap-2">
+        <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+          {pending ? "Saving…" : "Save the correction"}
+        </button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => { setOpen(false); setError(undefined); }}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 

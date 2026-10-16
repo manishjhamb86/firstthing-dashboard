@@ -37,6 +37,7 @@ import {
   PlannedDayActions,
   ProjectSetupForm,
   RaiseBlockerForm,
+  CorrectContractedCountControl,
   CorrectDatesControl,
   KeptOutcomeCard,
   type KeptLine,
@@ -364,6 +365,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
             <div>
               <dt className="lbl">Contracted</dt>
               <dd className="num">{project.contractedLightCount}</dd>
+              {canCorrectDates && <CorrectContractedCountControl pipelineId={pipeline.id} contractedLightCount={project.contractedLightCount} />}
             </div>
             <div>
               <dt className="lbl">Surveyed</dt>
@@ -405,6 +407,21 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
         {/* ── The plan, day by day, each with its CON-21 gate ── */}
         <Card className="p-5">
           <CardTitle>Days</CardTitle>
+          {(() => {
+            // Always visible, not just right after a correction (2026-10-17,
+            // user-asked: "validate the count... show count issue if there
+            // are any") — a published plan can drift from its own contracted
+            // scope one day-correction at a time, and this is the one place
+            // that states whether it still adds up, on every page load.
+            const totalPlanned = project.plannedDays.reduce((n, d) => n + d.plannedCount, 0);
+            const gap = totalPlanned - project.contractedLightCount;
+            return (
+              <p className="mt-1 mb-3 text-[13px]" style={{ color: gap === 0 ? "var(--text-muted)" : "var(--warn-fg)" }}>
+                {totalPlanned} planned against {project.contractedLightCount} contracted —{" "}
+                {gap === 0 ? "reconciled" : gap > 0 ? `${gap} over` : `${-gap} short`}
+              </p>
+            );
+          })()}
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead>
@@ -471,6 +488,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                             plannedDayId={d.id}
                             plannedDate={isoDate(d.plannedDate)}
                             startTime={d.startAt.toISOString().slice(11, 16)}
+                            plannedCount={d.plannedCount}
                           />
                         )}
                       </td>

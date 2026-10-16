@@ -612,6 +612,99 @@ export async function correctPlannedDayDate(
 }
 
 /**
+ * Correct a day's planned count after publishing (2026-10-17, user-asked,
+ * from a plan that had baked in 16 lights the demo circuit had already
+ * installed). Same guard as the date correction — once a batch is
+ * submitted the day IS the record of what happened, not a plan to revise.
+ *
+ * Deliberately does not refuse when the result no longer reconciles to the
+ * project's own contractedLightCount: fixing a multi-day plan is often a
+ * multi-step edit (this day, then another, then the contracted figure
+ * itself), and blocking each intermediate step would make the correction
+ * impossible to do one day at a time. The caller gets the live totals back
+ * so the page can state the gap honestly rather than silently.
+ */
+export async function correctPlannedDayCount(
+  pipelineId: string,
+  plannedDayId: string,
+  input: { plannedCount: number; reason: string },
+) {
+  const who = await dateCorrector(input.reason, pipelineId, "planned_day_count");
+  if ("error" in who) return who;
+
+  const day = await db.installationPlannedDay.findUnique({
+    where: { id: plannedDayId },
+    include: {
+      project: { select: { pipelineId: true, contractedLightCount: true } },
+      batches: { select: { id: true, submittedAt: true } },
+    },
+  });
+  if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is no longer on record." };
+  if (day.batches.some((b) => b.submittedAt)) {
+    return { error: "This day has already been submitted — it is the record of what happened, not a plan to revise." };
+  }
+  if (!Number.isInteger(input.plannedCount) || input.plannedCount <= 0) {
+    return { error: "Planned count must be a positive whole number." };
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.installationPlannedDay.update({ where: { id: plannedDayId }, data: { plannedCount: input.plannedCount } });
+    await logChange(tx, {
+      entity: "installation_planned_day", entityId: plannedDayId, kind: "edit", field: "plannedCount",
+      oldValue: day.plannedCount, newValue: input.plannedCount, reason: input.reason.trim() || null, actorId: who.actorId,
+    });
+  });
+
+  const siblingTotal = await db.installationPlannedDay.aggregate({
+    where: { projectId: day.projectId },
+    _sum: { plannedCount: true },
+  });
+  const totalPlanned = siblingTotal._sum.plannedCount ?? 0;
+
+  logger.info("installation.planned_count_corrected", {
+    actorId: who.actorId, pipelineId, plannedDayId, plannedCount: input.plannedCount, totalPlanned, contractedLightCount: day.project.contractedLightCount,
+  });
+  revalidatePath(pathFor(pipelineId));
+  return { ok: true as const, totalPlanned, contractedLightCount: day.project.contractedLightCount };
+}
+
+/**
+ * Correct the project's own contracted light count after publishing
+ * (2026-10-17, user-asked) — correcting one day's planned count can only
+ * bring the day-by-day total in line with whatever the project itself
+ * still says is contracted; if THAT figure was the actual mistake (set up
+ * before subtracting lights already installed on the demo circuit, as here),
+ * nothing else reaches it. Same authority and reason requirement as every
+ * other installation-project correction; the before/after goes to the
+ * change log, same as a scope variance note would have.
+ */
+export async function correctContractedLightCount(pipelineId: string, input: { contractedLightCount: number; reason: string }) {
+  const who = await dateCorrector(input.reason, pipelineId, "contracted_light_count");
+  if ("error" in who) return who;
+
+  if (!Number.isInteger(input.contractedLightCount) || input.contractedLightCount <= 0) {
+    return { error: "The contracted scope must be a positive whole number." };
+  }
+
+  const project = await db.installationProject.findUnique({ where: { pipelineId } });
+  if (!project) return { error: "No installation project is set up for this deal yet." };
+
+  await db.$transaction(async (tx) => {
+    await tx.installationProject.update({ where: { id: project.id }, data: { contractedLightCount: input.contractedLightCount } });
+    await logChange(tx, {
+      entity: "installation_project", entityId: project.id, kind: "edit", field: "contractedLightCount",
+      oldValue: project.contractedLightCount, newValue: input.contractedLightCount, reason: input.reason.trim() || null, actorId: who.actorId,
+    });
+  });
+
+  logger.info("installation.contracted_count_corrected", {
+    actorId: who.actorId, pipelineId, from: project.contractedLightCount, to: input.contractedLightCount,
+  });
+  revalidatePath(pathFor(pipelineId));
+  return { ok: true as const };
+}
+
+/**
  * Remove a planned day that was set up wrong (2026-10-02, user-asked:
  * "also allow to delete a row and reenter again"). Only ever a row nobody has
  * submitted work against yet — once a batch is submitted, the day IS the

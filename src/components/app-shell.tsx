@@ -128,6 +128,10 @@ export function AppShell({
       // Named for what it is, not for what it holds: next to "Meters" the
       // old label "Readings" read as a synonym for it (2026-09-20).
       showReadings && { href: "/admin/readings", label: "Monthly uploads", icon: Gauge },
+      // Moved here from Settings (2026-10-17, user-caught: filed it looking
+      // for "where we map which light replaces with what" and couldn't find
+      // it under a generic label with no connection to lighting at all).
+      showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb },
     ]),
     // Water tank monitoring (2026-08-25) — mirrors the Smart Life account,
     // society-management's to run. Its own service line, its own group.
@@ -158,7 +162,6 @@ export function AppShell({
       showBilling && { href: "/admin/retail-customers", label: "Retail customers", icon: Receipt },
     ]),
     ...group("settings", "Settings", Settings, [
-      showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb },
       showUsers && { href: "/admin/users", label: "Admin users", icon: Users },
       (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
       // Operations-only page; shown under the same broad flag, the page redirects anyone else.

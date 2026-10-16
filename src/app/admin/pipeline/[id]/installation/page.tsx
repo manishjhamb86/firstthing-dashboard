@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { keptAtDemoOf } from "@/lib/circuit-load";
+import { alreadyInstalledCount, remainingInstallationScope } from "@/lib/installation-scope";
 import { circuitLabelOf } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -124,6 +125,11 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
 
   const project = pipeline.installationProject;
   const surveyed = (pipeline.siteSurvey?.areas ?? []).reduce((n, a) => n + a.count, 0);
+  // A demo circuit's own lights are replaced before the full crew ever
+  // arrives (2026-10-17, user-asked) — the day-by-day plan only has to cover
+  // what's left, not the demo's own lights a second time.
+  const alreadyInstalled = alreadyInstalledCount(keptCircuits);
+  const remainingScope = remainingInstallationScope(surveyed, alreadyInstalled);
   const accounts = await db.profile.findMany({
     where: { societyId: pipeline.societyId, isActive: true },
     select: { id: true, name: true, email: true, portalAuthority: true },
@@ -281,6 +287,8 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 pipelineId={pipeline.id}
                 societyName={pipeline.society.name}
                 surveyedLightCount={surveyed}
+                alreadyInstalledCount={alreadyInstalled}
+                remainingScope={remainingScope}
                 accounts={accounts}
               />
             </Card>

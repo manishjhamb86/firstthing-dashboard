@@ -41,16 +41,23 @@ export function ProjectSetupForm({
   pipelineId,
   societyName,
   surveyedLightCount,
+  alreadyInstalledCount,
+  remainingScope,
   accounts,
   initial,
 }: {
   pipelineId: string;
   societyName: string;
   surveyedLightCount: number;
+  /** Lights already replaced on this deal's own demo circuit(s) — the full
+   *  crew does not plan these again (2026-10-17, user-asked). */
+  alreadyInstalledCount: number;
+  /** surveyedLightCount minus alreadyInstalledCount, never negative. */
+  remainingScope: number;
   accounts: Account[];
   initial?: { contractedLightCount: number; scopeVarianceNote: string; onlookerId: string; days: PlannedDayInput[] };
 }) {
-  const [contracted, setContracted] = useState(String(initial?.contractedLightCount ?? surveyedLightCount));
+  const [contracted, setContracted] = useState(String(initial?.contractedLightCount ?? remainingScope));
   const [variance, setVariance] = useState(initial?.scopeVarianceNote ?? "");
   const [onlookerId, setOnlookerId] = useState(initial?.onlookerId ?? "");
   const [days, setDays] = useState<PlannedDayInput[]>(
@@ -87,7 +94,15 @@ export function ProjectSetupForm({
       }}
     >
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Contracted light count" htmlFor="contracted-count" hint={`The survey found ${surveyedLightCount}.`}>
+        <Field
+          label="Contracted light count"
+          htmlFor="contracted-count"
+          hint={
+            alreadyInstalledCount > 0
+              ? `The survey found ${surveyedLightCount}; ${alreadyInstalledCount} were already installed on the demo circuit — ${remainingScope} remain.`
+              : `The survey found ${surveyedLightCount}.`
+          }
+        >
           <input
             id="contracted-count"
             className="field"
@@ -114,7 +129,7 @@ export function ProjectSetupForm({
         </Field>
       </div>
 
-      {contractedNum !== surveyedLightCount && (
+      {contractedNum !== remainingScope && (
         <Field
           label="Why the contracted scope differs from the survey"
           htmlFor="scope-variance"

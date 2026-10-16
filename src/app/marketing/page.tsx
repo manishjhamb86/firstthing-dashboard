@@ -1,241 +1,432 @@
-import { Activity, Gauge, LineChart, ShieldCheck, Wrench, ClipboardCheck, Zap } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { ROLE_HOME, isRole } from "@/lib/roles";
 import { BrandMark } from "@/components/brand-mark";
-import { resolveTheme } from "@/lib/resolve-theme";
-import { COMPANY, SALES_CONTACTS } from "@/lib/company";
+import { Calculator } from "./calculator";
+import { MobileNav } from "./mobile-nav";
+import { ContactForm } from "./contact-form";
+import styles from "./marketing.module.css";
 
 export const dynamic = "force-dynamic";
 
-// The public marketing homepage (2026-10-02, user-specified): www.firsthing.earth
-// was a separate static site; this is the same content and claims, brought
-// into this app and rebuilt on its own design-token system (the user's own
-// choice — "rebuild with the app's own design system") so the public site and
-// the product read as one brand rather than two unrelated-looking surfaces.
-// Reachable directly at /marketing on any host, and rewritten here by
-// src/proxy.ts whenever the request's own Host header is the public domain —
-// see that file's comment for what this app-level change does and does not
-// cover (DNS/reverse-proxy for the real app./www. split is a separate step).
+// The public homepage (2026-10-16, user-supplied HTML — "keep the layout and
+// design as it is"; wire the contact form and the login/dashboard button to
+// the real backend). Content, copy, stats, disclaimers, images and the CSS
+// are ported as given — only three things changed from the raw HTML:
+//  - the text logo became the real dashboard app's own BrandMark asset
+//    (user-asked, same day), in both the nav and the footer;
+//  - the mailto: lead form now calls a real Server Action (./actions.ts,
+//    ./contact-form.tsx) instead of opening the visitor's email client;
+//  - every "Customer Login" link reads the session (auth(), the same
+//    role→home map src/app/page.tsx already uses) and becomes "Dashboard",
+//    pointed at /admin or /portal, when the visitor is already signed in.
 //
-// Content basis: the live site as fetched 2026-10-02 (nav: About us, Contact;
-// hero; Who We Are; Solutions/EnergiTrack; How It Works; Products;
-// Testimonials; footer contact details). Two nav items on the live site are
-// deliberately NOT reproduced here, stated rather than silently dropped:
-// "Analytics" points at a separate subdomain (Analytics.FirsThing.earth) this
-// app does not own, and "Basement Parking" names a page whose content this
-// pass had nothing to recreate from.
-
-const SOLUTIONS = [
-  { icon: Activity, title: "Appliance-level monitoring", body: "See what every circuit draws, not just the building's total — the same per-light-type metering the product itself runs on." },
-  { icon: Gauge, title: "Real-time consumption data", body: "Hourly readings, not an estimate reconciled once a quarter." },
-  { icon: LineChart, title: "Savings you can trace", body: "Every percentage traces back to the readings and the benchmark that produced it." },
-  { icon: ShieldCheck, title: "No control over your equipment", body: "The platform reads sensor and meter data — it never issues a command to switch anything off." },
-  { icon: Zap, title: "Up to 50% lower energy spend", body: "Measured against a commissioned baseline, not a rule of thumb." },
-];
-
-const STEPS = [
-  { icon: ClipboardCheck, step: "1", title: "Site audit", body: "We walk the site, count the fixtures, and commission a measured baseline for each circuit." },
-  { icon: Wrench, step: "2", title: "Automation", body: "Energy-efficient devices go in; a meter watches the result against that baseline." },
-  { icon: LineChart, step: "3", title: "Saving money", body: "You pay a share of the saving the readings actually show, every month, on an invoice you can audit." },
-];
-
-const PRODUCTS = [
-  { name: "Energy Track Device", body: "The meter behind every figure on your monthly bill — installed per circuit, read hourly." },
-  { name: "Energy Saving Device", body: "Automated lighting control sized to cut a circuit's draw by up to 35%, verified against its own commissioned baseline." },
-];
-
-const TESTIMONIALS = [
-  { quote: "Our common-area electricity bill dropped noticeably within the first billing cycle, and we can see exactly where the saving comes from.", name: "RWA office-bearer", place: "Gurugram" },
-  { quote: "No upfront cost, no hardware to manage ourselves — FirsThing installed it and we just watch the bill.", name: "Facility manager", place: "Noida" },
-  { quote: "What won us over was that the savings are measured, not promised — we could see the readings behind the number.", name: "Committee member", place: "Bengaluru" },
-];
-
+// Reached at /marketing directly, and rewritten here from `/` on the public
+// hosts by src/proxy.ts — nothing there redirects a signed-in session away
+// from this page, so "already logged in" is a real, reachable state here,
+// not a hypothetical one.
 export default async function MarketingHomePage() {
-  const theme = await resolveTheme();
-  const wordmarkVariant = theme === "dark" ? "dark" : "light";
+  const session = await auth();
+  const role = session?.user?.role;
+  const loggedIn = !!session?.user && isRole(role);
+  const dashboardHref = loggedIn ? ROLE_HOME[role!] : "/login";
+  const loginLabel = loggedIn ? "Dashboard" : "Customer Login";
 
   return (
-    <div style={{ background: "var(--surface)", color: "var(--text)" }}>
-      {/* Nav */}
-      <header
-        className="sticky top-0 z-10 flex items-center justify-between gap-4 border-b px-6 py-4 backdrop-blur"
-        style={{ borderColor: "var(--border-subtle)", background: "color-mix(in srgb, var(--surface) 88%, transparent)" }}
-      >
-        <BrandMark variant={wordmarkVariant} className="h-7" />
-        <nav className="hidden items-center gap-6 text-[14px] font-medium sm:flex" style={{ color: "var(--text-muted)" }}>
-          <a href="#who-we-are" className="hover:text-[var(--text)]">Who we are</a>
-          <a href="#solutions" className="hover:text-[var(--text)]">Solutions</a>
-          <a href="#how-it-works" className="hover:text-[var(--text)]">How it works</a>
-          <a href="#contact" className="hover:text-[var(--text)]">Contact</a>
-        </nav>
-        <a href="/login" className="btn-primary btn-sm">
-          Login
-        </a>
+    <div className={styles.page}>
+      <header className={styles.nav}>
+        <div className={`${styles.container} ${styles.navInner}`}>
+          <a className={styles.logo} href="#home" aria-label="FirsThing.earth">
+            <BrandMark variant="light" className="h-7" />
+          </a>
+          <MobileNav loggedIn={loggedIn} dashboardHref={dashboardHref} />
+        </div>
       </header>
 
-      {/* Hero */}
-      <section
-        className="relative overflow-hidden px-6 py-20 sm:py-28"
-        style={{
-          background: `linear-gradient(160deg, var(--auth-panel) 0%, var(--auth-panel-lift) 100%)`,
-          color: "var(--auth-panel-text)",
-        }}
-      >
-        <div
-          aria-hidden
-          className="pointer-events-none absolute -right-32 -top-32 h-[28rem] w-[28rem] rounded-full"
-          style={{ background: `radial-gradient(circle, var(--auth-glow) 0%, transparent 70%)` }}
-        />
-        <div className="relative mx-auto max-w-3xl text-center">
-          <h1 className="text-[36px] font-bold leading-[1.15] tracking-[-0.02em] text-balance sm:text-[48px]">
-            IoT-based energy management for residential and commercial infrastructure
-          </h1>
-          <p className="mt-5 text-[17px] leading-relaxed" style={{ color: "var(--auth-panel-muted)" }}>
-            FirsThing instruments your building&rsquo;s lighting and power circuits, measures what they
-            actually draw, and cuts your energy spend — with no upfront cost and no control over your
-            equipment.
-          </p>
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-            <a href="/login" className="btn-primary">Login</a>
-            <a href="#contact" className="btn-outline" style={{ borderColor: "var(--auth-panel-line)", color: "var(--auth-panel-text)" }}>
-              Get in touch
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Who we are */}
-      <section id="who-we-are" className="mx-auto max-w-4xl px-6 py-20 text-center">
-        <h2 className="text-[26px] font-bold tracking-[-0.01em]">Who we are</h2>
-        <p className="mt-4 text-[16px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-          FirsThing builds IoT-based energy management for the buildings people actually live and
-          work in — residential societies, co-living spaces, and commercial infrastructure. We
-          instrument a site, measure it, and keep measuring it for as long as we bill against it.
-        </p>
-      </section>
-
-      {/* Solutions */}
-      <section id="solutions" className="px-6 py-20" style={{ background: "var(--surface-sunken)" }}>
-        <div className="mx-auto max-w-5xl">
-          <div className="text-center">
-            <p className="lbl" style={{ color: "var(--accent)" }}>EnergiTrack</p>
-            <h2 className="mt-2 text-[26px] font-bold tracking-[-0.01em]">Our flagship solution</h2>
-            <p className="mx-auto mt-3 max-w-xl text-[15px]" style={{ color: "var(--text-muted)" }}>
-              Appliance-level visibility, measured savings, and no control over your equipment.
+      <main>
+        <div id="home" className={styles.hero}>
+          <div className={styles.container}>
+            <p className={styles.eyebrow}>The future of smarter infrastructure</p>
+            <h1>
+              Smarter Buildings.
+              <br />
+              Lower Costs.
+              <br />
+              <span style={{ color: "var(--green)" }}>Greener Tomorrow.</span>
+            </h1>
+            <p className={styles.lead}>
+              We help residential communities and commercial properties reduce energy waste, automate
+              essential infrastructure and achieve measurable operational savings.
             </p>
-          </div>
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {SOLUTIONS.map(({ icon: Icon, title, body }) => (
-              <div key={title} className="card p-6">
-                <span
-                  aria-hidden
-                  className="flex h-10 w-10 items-center justify-center rounded-[var(--r-sm)]"
-                  style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
-                >
-                  <Icon size={19} strokeWidth={1.75} />
-                </span>
-                <h3 className="mt-4 text-[15px] font-semibold">{title}</h3>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: "var(--text-muted)" }}>{body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how-it-works" className="mx-auto max-w-5xl px-6 py-20">
-        <div className="text-center">
-          <h2 className="text-[26px] font-bold tracking-[-0.01em]">How it works</h2>
-        </div>
-        <div className="mt-12 grid gap-8 sm:grid-cols-3">
-          {STEPS.map(({ icon: Icon, step, title, body }, i) => (
-            <div key={step} className="relative text-center">
-              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full" style={{ background: "var(--accent)", color: "var(--text-on-accent)" }}>
-                <Icon size={22} strokeWidth={1.75} />
-              </div>
-              <p className="mt-4 num text-[13px] font-semibold" style={{ color: "var(--accent)" }}>Step {step}</p>
-              <h3 className="mt-1 text-[16px] font-semibold">{title}</h3>
-              <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: "var(--text-muted)" }}>{body}</p>
-              {i < STEPS.length - 1 && (
-                <div
-                  aria-hidden
-                  className="absolute left-[calc(50%+40px)] top-7 hidden h-px w-[calc(100%-80px)] sm:block"
-                  style={{ background: "var(--border)" }}
-                />
-              )}
+            <div className={styles.buttons}>
+              <a href="#contact" className={styles.btn}>
+                Get a Free Energy Assessment ↗
+              </a>
+              <a href="#solutions" className={`${styles.btn} ${styles.secondary}`}>
+                Explore Solutions
+              </a>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Products */}
-      <section className="px-6 py-20" style={{ background: "var(--surface-sunken)" }}>
-        <div className="mx-auto max-w-4xl">
-          <div className="text-center">
-            <h2 className="text-[26px] font-bold tracking-[-0.01em]">Products</h2>
-          </div>
-          <div className="mt-10 grid gap-5 sm:grid-cols-2">
-            {PRODUCTS.map((p) => (
-              <div key={p.name} className="card p-6">
-                <h3 className="text-[16px] font-semibold">{p.name}</h3>
-                <p className="mt-1.5 text-[13.5px] leading-relaxed" style={{ color: "var(--text-muted)" }}>{p.body}</p>
+            <div className={styles.heroPhoto}>
+              <div className={styles.photoCaption}>Energy efficiency • Water automation • Intelligence</div>
+            </div>
+            <div className={styles.stats}>
+              <div className={styles.stat}>
+                <strong>19+</strong>
+                <small>Societies served*</small>
               </div>
-            ))}
+              <div className={styles.stat}>
+                <strong>30K+</strong>
+                <small>Devices deployed*</small>
+              </div>
+              <div className={styles.stat}>
+                <strong>Up to 70%</strong>
+                <small>Potential lighting savings</small>
+              </div>
+            </div>
+            <p className={styles.disclaimer}>*Previously reported business figures. Confirm current totals before publication.</p>
           </div>
         </div>
-      </section>
 
-      {/* Testimonials */}
-      <section className="mx-auto max-w-5xl px-6 py-20">
-        <div className="text-center">
-          <h2 className="text-[26px] font-bold tracking-[-0.01em]">What societies say</h2>
-        </div>
-        <div className="mt-10 grid gap-5 sm:grid-cols-3">
-          {TESTIMONIALS.map((t) => (
-            <figure key={t.name} className="card p-6">
-              <blockquote className="text-[13.5px] leading-relaxed" style={{ color: "var(--text)" }}>
-                &ldquo;{t.quote}&rdquo;
-              </blockquote>
-              <figcaption className="mt-4 text-[13px] font-medium" style={{ color: "var(--text-muted)" }}>
-                {t.name} · {t.place}
-              </figcaption>
-            </figure>
-          ))}
-        </div>
-      </section>
+        <section className={styles.soft}>
+          <div className={styles.container}>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>The hidden cost of inefficiency</p>
+              <h2>Your Building Is Spending More Than It Should.</h2>
+              <p>
+                Every day, properties lose money through inefficient lighting, manually operated pumps,
+                water overflow and limited visibility into consumption. FirsThing identifies these
+                inefficiencies and deploys measurable, automated solutions.
+              </p>
+            </div>
+            <div className={`${styles.grid} ${styles.four}`}>
+              <div className={styles.tile}>
+                <span className={styles.symbol}>💡</span>Lighting waste
+              </div>
+              <div className={styles.tile}>
+                <span className={styles.symbol}>💧</span>Water overflow
+              </div>
+              <div className={styles.tile}>
+                <span className={styles.symbol}>⚙️</span>Manual operations
+              </div>
+              <div className={styles.tile}>
+                <span className={styles.symbol}>📊</span>Untracked consumption
+              </div>
+            </div>
+          </div>
+        </section>
 
-      {/* Contact / footer */}
-      <footer id="contact" className="border-t px-6 py-16" style={{ borderColor: "var(--border-subtle)" }}>
-        <div className="mx-auto grid max-w-5xl gap-10 sm:grid-cols-2">
-          <div>
-            <BrandMark variant={wordmarkVariant} className="h-7" />
-            <p className="mt-4 max-w-xs text-[13.5px] leading-relaxed" style={{ color: "var(--text-muted)" }}>
-              {COMPANY.legalName}
-            </p>
-            <p className="mt-2 max-w-xs text-[13px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
-              {COMPANY.address}
+        <section id="solutions">
+          <div className={styles.container}>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>Our solutions</p>
+              <h2>One Partner. Complete Infrastructure Efficiency.</h2>
+              <p>Integrated solutions designed to reduce operating costs and simplify infrastructure management.</p>
+            </div>
+            <div className={styles.grid}>
+              <article className={styles.solution}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- external, unoptimizable marketing stock photo, ported as given */}
+                <img
+                  src="https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1000&q=80"
+                  alt="Modern building lighting"
+                />
+                <div className={styles.solutionBody}>
+                  <h3>01. Smart Lighting</h3>
+                  <p>Motion-based lighting automation for basements, staircases, lift lobbies and common areas.</p>
+                  <small>Up to 70% potential lighting energy savings</small>
+                </div>
+              </article>
+              <article className={styles.solution}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1000&q=80"
+                  alt="Industrial automation equipment"
+                />
+                <div className={styles.solutionBody}>
+                  <h3>02. Pump Automation</h3>
+                  <p>Intelligent controls, scheduling, monitoring and optimization for building water pumps.</p>
+                  <small>Lower energy use and manual intervention</small>
+                </div>
+              </article>
+              <article className={styles.solution}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1437482078695-73f5ca6c96e2?auto=format&fit=crop&w=1000&q=80"
+                  alt="Water infrastructure"
+                />
+                <div className={styles.solutionBody}>
+                  <h3>03. Water Automation</h3>
+                  <p>Live tank levels, automated filling, motorised valves, alerts and smarter water management.</p>
+                  <small>Better visibility. Less avoidable overflow.</small>
+                </div>
+              </article>
+              <article className={styles.solution}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=1000&q=80"
+                  alt="Data analytics screen"
+                />
+                <div className={styles.solutionBody}>
+                  <h3>04. Energy Intelligence</h3>
+                  <p>Live metering, baseline comparison, savings verification and downloadable performance reports.</p>
+                  <small>Measure what matters</small>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section id="process" className={styles.soft}>
+          <div className={styles.container}>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>Our process</p>
+              <h2>From Assessment to Continuous Savings.</h2>
+            </div>
+            <div className={styles.steps}>
+              <div className={styles.step}>
+                <div className={styles.number}>01</div>
+                <h3>Assess</h3>
+                <p>Inspect the property and identify improvement opportunities.</p>
+              </div>
+              <div className={styles.step}>
+                <div className={styles.number}>02</div>
+                <h3>Measure</h3>
+                <p>Establish a baseline using metering and operating data.</p>
+              </div>
+              <div className={styles.step}>
+                <div className={styles.number}>03</div>
+                <h3>Deploy</h3>
+                <p>Install the right efficiency and automation solutions.</p>
+              </div>
+              <div className={styles.step}>
+                <div className={styles.number}>04</div>
+                <h3>Verify</h3>
+                <p>Compare performance against the baseline.</p>
+              </div>
+              <div className={styles.step}>
+                <div className={styles.number}>05</div>
+                <h3>Maintain</h3>
+                <p>Continue monitoring, servicing and optimizing.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="impact">
+          <div className={styles.container}>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>Our impact</p>
+              <h2>Real Buildings. Measurable Results.</h2>
+              <p>
+                Examples of previously reported lighting performance. Final reports and customer
+                publication permissions should be confirmed.
+              </p>
+            </div>
+            <div className={styles.grid}>
+              <article className={styles.case}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1000&q=80"
+                  alt="Illustrative residential buildings"
+                />
+                <div className={styles.caseBody}>
+                  <h3>Princely Estate</h3>
+                  <strong>61.52%</strong>
+                  <p>Previously reported lighting energy savings</p>
+                </div>
+              </article>
+              <article className={styles.case}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80"
+                  alt="Illustrative apartment buildings"
+                />
+                <div className={styles.caseBody}>
+                  <h3>French Apartment</h3>
+                  <strong>62.19%</strong>
+                  <p>Previously reported lighting energy savings</p>
+                </div>
+              </article>
+            </div>
+            <p className={styles.disclaimer} style={{ marginTop: 14 }}>
+              Images are illustrative and do not depict the named societies.
             </p>
           </div>
-          <div>
-            <p className="lbl" style={{ color: "var(--text-subtle)" }}>Get in touch</p>
-            <p className="mt-3 text-[14px]">
-              <a href={`mailto:${COMPANY.email}`} className="font-medium hover:underline">{COMPANY.email}</a>
+        </section>
+
+        <section className={styles.soft}>
+          <div className={styles.container}>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>Flexible commercial models</p>
+              <h2>Flexible Models. Measurable Value.</h2>
+            </div>
+            <div className={styles.grid}>
+              <div className={styles.model}>
+                <div className={styles.symbol}>🔁</div>
+                <h3>Savings-Sharing Model</h3>
+                <p>
+                  Eligible projects can be deployed with little or no upfront equipment investment by the
+                  society. FirsThing earns an agreed share of verified savings.
+                </p>
+              </div>
+              <div className={styles.model}>
+                <div className={styles.symbol}>💳</div>
+                <h3>Direct Purchase Model</h3>
+                <p>Customers purchase the solution upfront, with installation, warranty and support terms agreed for each project.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section id="calculator">
+          <div className={styles.container}>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>Savings calculator</p>
+              <h2>How Much Could Your Society Save?</h2>
+              <p>Estimate potential monthly lighting savings using your own operating assumptions.</p>
+            </div>
+            <Calculator />
+            <p className={styles.disclaimer} style={{ marginTop: 15 }}>
+              Assumes 30 days and a constant full-rated baseline. Actual savings depend on site
+              conditions and verified usage; estimates exclude service fees and are not guarantees.
             </p>
-            <ul className="mt-2 space-y-1 text-[14px]">
-              {SALES_CONTACTS.calls.map((c) => (
-                <li key={c.phone}>
-                  <a href={`tel:+91${c.phone}`} className="font-medium hover:underline">
-                    {c.name} · +91 {c.phone}
-                  </a>
-                </li>
-              ))}
-            </ul>
-            <a href="/login" className="btn-primary btn-sm mt-6 inline-flex">
-              Login to your dashboard
-            </a>
+          </div>
+        </section>
+
+        <section className={styles.soft}>
+          <div className={`${styles.container} ${styles.dashboard}`}>
+            <div>
+              <p className={styles.eyebrow}>Built on data, backed by transparency</p>
+              <h2>Every Unit Saved. Every System Monitored.</h2>
+              <p className={styles.muted}>
+                Access energy consumption, savings reports, inspection records and water-system
+                visibility from one customer portal.
+              </p>
+              <p>
+                ✓ Live energy monitoring
+                <br />✓ Verified savings reports
+                <br />✓ Water tank visibility
+                <br />✓ Inspection and billing reports
+              </p>
+              <a className={`${styles.btn} ${styles.secondary}`} href={dashboardHref}>
+                {loginLabel} ↗
+              </a>
+            </div>
+            <div className={styles.dashVisual}>
+              <p className={styles.eyebrow}>Illustrative dashboard</p>
+              <h3>Infrastructure Overview</h3>
+              <div className={styles.dashRow}>
+                <span>Monthly energy reduction</span>
+                <b>64%</b>
+              </div>
+              <div className={styles.bar}>
+                <span />
+              </div>
+              <div className={styles.dashRow}>
+                <span>Energy monitoring</span>
+                <b style={{ color: "var(--green)" }}>Active</b>
+              </div>
+              <div className={styles.dashRow}>
+                <span>Water monitoring</span>
+                <b style={{ color: "var(--green)" }}>Connected</b>
+              </div>
+              <div className={styles.dashRow}>
+                <span>Reports</span>
+                <b>Available</b>
+              </div>
+              <p className={styles.disclaimer} style={{ marginTop: 18 }}>
+                Sample UI, not live customer data.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section id="industries">
+          <div className={styles.container}>
+            <div className={styles.sectionHead}>
+              <p className={styles.eyebrow}>Industries we serve</p>
+              <h2>Efficiency for Every Kind of Building.</h2>
+            </div>
+            <div className={styles.industries}>
+              <div className={styles.industry}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=800&q=80"
+                  alt="Residential buildings"
+                />
+                <h3>Residential Societies</h3>
+              </div>
+              <div className={styles.industry}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1497366811353-6870744d04b2?auto=format&fit=crop&w=800&q=80"
+                  alt="Commercial building interior"
+                />
+                <h3>Commercial Buildings</h3>
+              </div>
+              <div className={styles.industry}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="https://images.unsplash.com/photo-1581092334651-ddf26d9a09d0?auto=format&fit=crop&w=800&q=80"
+                  alt="Industrial facility"
+                />
+                <h3>Industrial Facilities</h3>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.cta} id="contact">
+          <div className={`${styles.container} ${styles.ctaWrap}`}>
+            <div>
+              <p className={styles.eyebrow}>Let&rsquo;s make your property more efficient</p>
+              <h2>Your Next Electricity Bill Could Be Smarter.</h2>
+              <p>
+                Discover how much energy and water your property could save with measurement,
+                automation and intelligent infrastructure.
+              </p>
+              <p>
+                ✉ info@firsthing.earth
+                <br />🌐 www.firsthing.earth
+              </p>
+            </div>
+            <ContactForm />
+          </div>
+        </section>
+      </main>
+
+      <footer>
+        <div className={styles.container}>
+          <div className={styles.footerGrid}>
+            <div>
+              <a className={styles.logo} href="#home" aria-label="FirsThing.earth">
+                <BrandMark variant="dark" className="h-7" />
+              </a>
+              <p>
+                Energy &amp; Water Infrastructure Automation.
+                <br />
+                Smarter buildings, lower costs, greener tomorrow.
+              </p>
+              <p>BlueStonez Trailblazzer Private Limited</p>
+            </div>
+            <div>
+              <h3>Solutions</h3>
+              <a href="#solutions">Smart Lighting</a>
+              <a href="#solutions">Pump Automation</a>
+              <a href="#solutions">Water Automation</a>
+              <a href="#solutions">Energy Intelligence</a>
+            </div>
+            <div>
+              <h3>Connect</h3>
+              <a href="#contact">Get an Assessment</a>
+              <a href={dashboardHref}>{loginLabel}</a>
+              <a href="mailto:info@firsthing.earth">info@firsthing.earth</a>
+              <a href="https://www.firsthing.earth">www.firsthing.earth</a>
+            </div>
+          </div>
+          <div className={styles.fine}>
+            © {new Date().getFullYear()} FirsThing.earth · Website concept preview · Confirm legal details, client approvals
+            and current metrics before launch.
           </div>
         </div>
-        <p className="mx-auto mt-12 max-w-5xl text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-          © {new Date().getFullYear()} {COMPANY.legalName}. All rights reserved.
-        </p>
       </footer>
     </div>
   );

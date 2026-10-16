@@ -517,6 +517,7 @@ model AdminUser {
   storedDocuments             StoredDocument[]            @relation("StoredDocumentUploadedBy")
   ticketsTouched              Ticket[]                    @relation("TicketStatusByAdmin")
   ticketsAssigned             Ticket[]                    @relation("TicketAssignedTo")
+  marketingEnquiriesFollowedUp MarketingEnquiry[]         @relation("MarketingEnquiryFollowedUpBy")
   storedDocumentsVoided       StoredDocument[]            @relation("StoredDocumentVoidedBy")
   savingsReportsPublished     PublishedSavingsReport[]    @relation("SavingsReportPublishedBy")
   savingsReportsVoided        PublishedSavingsReport[]    @relation("SavingsReportVoidedBy")
@@ -4200,6 +4201,35 @@ model Ticket {
 
   @@index([societyId, status])
   @@map("tickets")
+}
+
+/// The public marketing homepage's "Request an Assessment" form (2026-10-16,
+/// user-asked). Deliberately NOT a Ticket — a Ticket's raisedById points at
+/// a Profile, and an anonymous visitor filling in this form has no account
+/// at all (INV-01: nothing here can mint one). A plain inbox row for the
+/// sales team to follow up on and, if it goes anywhere, turn into a real
+/// FEAT-001 lead by hand.
+model MarketingEnquiry {
+  id           String   @id @default(cuid())
+  name         String
+  organisation String
+  mobile       String
+  /// One of the lead-form's own options — "Smart Lighting", "Pump
+  /// Automation", "Water Automation", "Energy Monitoring", "Multiple
+  /// Solutions" (src/lib/marketing-enquiry.ts).
+  interest     String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  /// A closed enquiry with no stated outcome is indistinguishable from one
+  /// closed to tidy a list — same rule as Ticket.resolutionNote.
+  followedUpAt   DateTime? @map("followed_up_at")
+  followedUpById String?   @map("followed_up_by_id")
+  followedUpNote String?   @map("followed_up_note")
+
+  followedUpBy AdminUser? @relation("MarketingEnquiryFollowedUpBy", fields: [followedUpById], references: [id])
+
+  @@index([createdAt])
+  @@map("marketing_enquiries")
 }
 
 model StoredDocument {

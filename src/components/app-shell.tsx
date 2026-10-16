@@ -24,6 +24,7 @@ import {
   History,
   Mail,
   Wrench,
+  Inbox,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -92,6 +93,9 @@ export function AppShell({
       showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
       // The field team's own list — they do not get the deal (2026-08-24).
       showField && { href: "/admin/field", label: "Field work", icon: HardHat },
+      // The public homepage's own "Request an Assessment" form (2026-10-16)
+      // — sales territory, same gate as the pipeline itself.
+      showPipeline && { href: "/admin/marketing-enquiries", label: "Marketing enquiries", icon: Inbox },
     ]),
     ...group("societies", "Societies", Building2, [
       { href: "/admin/societies", label: "Societies", icon: Building2 },

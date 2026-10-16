@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { formatDate, isoDate } from "@/lib/format-date";
 import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
@@ -473,52 +474,70 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   const gateMeta = statusMeta(DAY_GATE_STATUS, gate.status);
                   const batchMeta = batch ? statusMeta(BATCH_STATE, batch.state) : null;
                   return (
-                    <tr key={d.id}>
-                      <td className="num">{d.day}</td>
-                      <td>
-                        {day(d.plannedDate)}
-                        <span className="text-[var(--text-subtle)]"> {time(d.startAt)}</span>
-                      </td>
-                      <td>{d.areaKey}</td>
-                      <td className="num">{d.plannedCount}</td>
-                      <td className="num">{batch ? batch.installedCount : "—"}</td>
-                      <td>{batchMeta ? <StatusChip tone={batchMeta.tone}>{batchMeta.label}</StatusChip> : "—"}</td>
-                      <td>
-                        <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip>
-                        {/* The gate has always computed a clear reason —
-                            nothing ever rendered it (2026-10-17, user-caught:
-                            a blocked day gave no reason at all). */}
-                        {gate.reason && (
-                          <p className="mt-1 text-xs text-[var(--text-muted)]">{gate.reason}</p>
-                        )}
-                      </td>
-                      <td className="whitespace-nowrap">
-                        {!batch && isField && gate.canStart && (
-                          <StartBatchButton pipelineId={pipeline.id} plannedDayId={d.id} />
-                        )}
-                        {/* Only on the day that is itself the blocker — a day
-                            blocked purely by the chain cascading forward
-                            (gate.outstanding/disputed both empty) has nothing
-                            of its OWN to skip; skipReviewGate re-evaluates
-                            per-day and would correctly refuse it as
-                            "not-blocked," so offering the control here would
-                            just be a dead end. */}
-                        {!batch &&
-                          !gate.canStart &&
-                          (gate.outstanding.length > 0 || gate.disputed.length > 0) &&
-                          isOps &&
-                          !project.gateSkipUsedAt && <SkipGateForm pipelineId={pipeline.id} plannedDayId={d.id} />}
-                        {canCorrectDates && !batch?.submittedAt && (
-                          <PlannedDayActions
-                            pipelineId={pipeline.id}
-                            plannedDayId={d.id}
-                            plannedDate={isoDate(d.plannedDate)}
-                            startTime={d.startAt.toISOString().slice(11, 16)}
-                            plannedCount={d.plannedCount}
-                          />
-                        )}
-                      </td>
-                    </tr>
+                    // A long reason sentence used to live INSIDE the "Can
+                    // start" cell, which forced that whole row tall and
+                    // starved the actions cell's width — the four action
+                    // links then wrapped one per line instead of sitting in
+                    // their usual row (2026-10-17, user-caught: "the listing
+                    // is broken"). It gets its own full-width line below the
+                    // row instead, so every other cell keeps its normal,
+                    // compact height.
+                    <Fragment key={d.id}>
+                      <tr>
+                        <td className="num">{d.day}</td>
+                        <td>
+                          {day(d.plannedDate)}
+                          <span className="text-[var(--text-subtle)]"> {time(d.startAt)}</span>
+                        </td>
+                        <td>{d.areaKey}</td>
+                        <td className="num">{d.plannedCount}</td>
+                        <td className="num">{batch ? batch.installedCount : "—"}</td>
+                        <td>{batchMeta ? <StatusChip tone={batchMeta.tone}>{batchMeta.label}</StatusChip> : "—"}</td>
+                        <td>
+                          <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip>
+                        </td>
+                        <td className="whitespace-nowrap">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            {!batch && isField && gate.canStart && (
+                              <StartBatchButton pipelineId={pipeline.id} plannedDayId={d.id} />
+                            )}
+                            {/* Only on the day that is itself the blocker — a
+                                day blocked purely by the chain cascading
+                                forward (gate.outstanding/disputed both empty)
+                                has nothing of its OWN to skip; skipReviewGate
+                                re-evaluates per-day and would correctly
+                                refuse it as "not-blocked," so offering the
+                                control here would just be a dead end. */}
+                            {!batch &&
+                              !gate.canStart &&
+                              (gate.outstanding.length > 0 || gate.disputed.length > 0) &&
+                              isOps &&
+                              !project.gateSkipUsedAt && (
+                                <SkipGateForm pipelineId={pipeline.id} plannedDayId={d.id} />
+                              )}
+                            {canCorrectDates && !batch?.submittedAt && (
+                              <PlannedDayActions
+                                pipelineId={pipeline.id}
+                                plannedDayId={d.id}
+                                plannedDate={isoDate(d.plannedDate)}
+                                startTime={d.startAt.toISOString().slice(11, 16)}
+                                plannedCount={d.plannedCount}
+                              />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {/* The gate has always computed a clear reason —
+                          nothing ever rendered it until now (2026-10-17,
+                          user-caught: a blocked day gave no reason at all). */}
+                      {gate.reason && (
+                        <tr>
+                          <td colSpan={8} className="text-xs text-[var(--text-muted)]">
+                            {gate.reason}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>

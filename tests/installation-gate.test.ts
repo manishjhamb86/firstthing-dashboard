@@ -315,7 +315,26 @@ describe("evaluateDayGateChain — a block propagates forward (2026-10-17, user-
     }
   });
 
-  it("stops cascading the moment the root block actually clears", () => {
+  it("day 3 evaluates on its own merits once day 2 actually has a batch on record, not merely a clear gate", () => {
+    const day1Approved = batch({ id: "d1", state: "approved", reviewedAt: new Date("2026-09-11T04:00:00Z") });
+    const day2Approved = batch({ id: "d2", state: "approved", reviewedAt: new Date("2026-09-12T04:00:00Z") });
+    const now = new Date("2026-09-13T10:00:00Z");
+
+    const gates = evaluateDayGateChain({
+      now,
+      days: [
+        { day: 1, startAt: dayStart(1), previousBatches: [] },
+        { day: 2, startAt: dayStart(2), previousBatches: [day1Approved] },
+        { day: 3, startAt: dayStart(3), previousBatches: [day2Approved] }, // day 2's own real batch
+      ],
+    });
+
+    expect(gates.get(2)!.canStart).toBe(true);
+    expect(gates.get(3)!.canStart).toBe(true);
+    expect(gates.get(3)!.status).toBe("clear");
+  });
+
+  it("day 2's gate being clear is NOT the same as day 2 being done — day 3 still cannot jump ahead of it (2026-10-17, user-caught: 'you cant skip a day and jump to next days work')", () => {
     const day1Approved = batch({ id: "d1", state: "approved", reviewedAt: new Date("2026-09-11T04:00:00Z") });
     const now = new Date("2026-09-12T10:00:00Z");
 
@@ -324,16 +343,42 @@ describe("evaluateDayGateChain — a block propagates forward (2026-10-17, user-
       days: [
         { day: 1, startAt: dayStart(1), previousBatches: [] },
         { day: 2, startAt: dayStart(2), previousBatches: [day1Approved] },
-        { day: 3, startAt: dayStart(3), previousBatches: [] }, // day 2 approved, but hasn't started its own batch yet
+        { day: 3, startAt: dayStart(3), previousBatches: [] }, // day 2 is clear to start, but nobody has yet
+        { day: 4, startAt: dayStart(4), previousBatches: [] },
       ],
     });
 
-    expect(gates.get(2)!.canStart).toBe(true);
-    // Day 3 reads clear on its own genuine merits (day 2 approved in time),
-    // not because the chain never checked — it is the same "nothing to
-    // review yet" state day 1 itself is in, correctly.
+    expect(gates.get(2)!.canStart).toBe(true); // day 2 itself is genuinely fine to start
+    expect(gates.get(3)!.canStart).toBe(false); // day 3 cannot jump ahead of it regardless
+    expect(gates.get(3)!.status).toBe("blocked");
+    expect(gates.get(3)!.reason).toContain("Day 2 hasn't started yet");
+    expect(gates.get(4)!.canStart).toBe(false); // and day 4 cascades from day 3, same as before
+  });
+
+  it("the exact reported shape: days 1–2 approved (day 2 late), day 3 clears via the late approval and is the ONLY actionable day — 4, 5 and 6 are not", () => {
+    const day1 = batch({ id: "d1", state: "approved", reviewedAt: new Date("2026-07-22T15:00:00Z") });
+    const day2 = batch({ id: "d2", state: "approved", reviewedAt: new Date("2026-07-24T07:00:00Z") }); // after its own deadline (06:00)
+    const now = new Date("2026-07-24T10:00:00Z");
+    const start = (day: string) => new Date(`2026-07-${day}T09:00:00Z`);
+
+    const gates = evaluateDayGateChain({
+      now,
+      days: [
+        { day: 1, startAt: start("22"), previousBatches: [] },
+        { day: 2, startAt: start("23"), previousBatches: [day1] },
+        { day: 3, startAt: start("24"), previousBatches: [day2] }, // day 2's own real batch, approved late
+        { day: 4, startAt: start("25"), previousBatches: [] }, // day 3 never started
+        { day: 5, startAt: start("29"), previousBatches: [] },
+        { day: 6, startAt: start("30"), previousBatches: [] },
+      ],
+    });
+
     expect(gates.get(3)!.canStart).toBe(true);
-    expect(gates.get(3)!.status).toBe("clear");
+    expect(gates.get(3)!.status).toBe("late_approved");
+    for (const d of [4, 5, 6]) {
+      expect(gates.get(d)!.canStart).toBe(false);
+      expect(gates.get(d)!.reason).toContain("Day 3 hasn't started yet");
+    }
   });
 
   it("a dispute on day 1 blocks day 2 and cascades the same way a missed deadline does", () => {
@@ -351,18 +396,38 @@ describe("evaluateDayGateChain — a block propagates forward (2026-10-17, user-
     expect(gates.get(3)!.reason).toContain("Day 2 hasn't started yet");
   });
 
-  it("the once-per-project skip on the root day clears it, and the cascade clears with it", () => {
+  it("the once-per-project skip on the root day clears it, but day 3 still needs day 2 actually done — a skipped GATE is not completed WORK", () => {
     const unapproved = [batch({ id: "d1", state: "awaiting_review", reviewedAt: null })];
     const gates = evaluateDayGateChain({
       now: new Date("2026-09-12T10:00:00Z"),
       days: [
         { day: 1, startAt: dayStart(1), previousBatches: [] },
         { day: 2, startAt: dayStart(2), previousBatches: unapproved, skipUsedForDay: true },
-        { day: 3, startAt: dayStart(3), previousBatches: [] },
+        { day: 3, startAt: dayStart(3), previousBatches: [] }, // nobody has started day 2 yet
       ],
     });
     expect(gates.get(2)!.status).toBe("skipped");
     expect(gates.get(2)!.canStart).toBe(true);
-    expect(gates.get(3)!.canStart).toBe(true);
+    // Day 2 is ALLOWED to start — that's what the skip bought. It does not
+    // mean day 2 is DONE, so day 3 still cannot jump ahead of it.
+    expect(gates.get(3)!.canStart).toBe(false);
+    expect(gates.get(3)!.reason).toContain("Day 2 hasn't started yet");
+  });
+
+  it("day 2 itself cannot start before day 1 has — the same 'not started yet' rule applies at the very first step, not only once the chain is already underway", () => {
+    const gates = evaluateDayGateChain({
+      now: new Date("2026-09-11T10:00:00Z"),
+      days: [
+        { day: 1, startAt: dayStart(1), previousBatches: [] }, // day 1 itself: nothing precedes it, always fine
+        { day: 2, startAt: dayStart(2), previousBatches: [] }, // but day 1 has no batch yet either
+        { day: 3, startAt: dayStart(3), previousBatches: [] },
+      ],
+    });
+    expect(gates.get(1)!.canStart).toBe(true);
+    expect(gates.get(1)!.status).toBe("clear");
+    expect(gates.get(2)!.canStart).toBe(false);
+    expect(gates.get(2)!.reason).toContain("Day 1 hasn't started yet");
+    expect(gates.get(3)!.canStart).toBe(false);
+    expect(gates.get(3)!.reason).toContain("Day 1 hasn't started yet");
   });
 });

@@ -190,18 +190,41 @@ export function evaluateDayGate(input: {
   return { status: "clear", canStart: true, deadline, outstanding: [], disputed: [], reason: null };
 }
 
+const CASCADE_BLOCK: Omit<DayGate, "reason"> = {
+  status: "blocked",
+  canStart: false,
+  deadline: null,
+  outstanding: [],
+  disputed: [],
+};
+
 /**
  * `evaluateDayGate` is correct in isolation — for ONE day, given only its own
  * immediate predecessor's batches. Its own first rule, "no previous batches
  * means clear," is right for day 1 (nothing precedes it) but wrong applied
- * blindly day after day: if day 2 is itself blocked, it never gets a batch —
- * so day 3, looking only at day 2's (empty) batches, reads that absence the
- * same way day 1 would and comes back "clear" too (2026-10-17, user-caught:
- * "shouldnt they all be blocked?"). Days run in sequence, so a block has to
- * carry forward until whatever is blocking it actually clears — this is the
- * one place that walks the whole chain, rather than every caller re-deriving
- * it (and risking the same one-day-blind mistake) from `evaluateDayGate` on
- * its own.
+ * blindly day after day, in TWO distinct ways this function corrects:
+ *
+ *  1. If day 2 is itself blocked, it never gets a batch — so day 3, looking
+ *     only at day 2's (empty) batches, reads that absence the same way day 1
+ *     would and comes back "clear" too (2026-10-17, user-caught: "shouldnt
+ *     they all be blocked?").
+ *  2. Separately — and this is NOT the same bug — a day that is NOT blocked
+ *     but simply hasn't been started yet ALSO has no batch, and every day
+ *     after it has the identical problem: day 4 cannot tell "day 3 cleared
+ *     its own gate and is just waiting for the crew" apart from "nothing
+ *     precedes day 1," so days 4, 5 and 6 all read as independently
+ *     startable the moment day 3's own predecessor (day 2) is sorted —
+ *     letting a crew skip straight to day 6 while day 3 has not even begun
+ *     (2026-10-17, user-caught: "only one line item actionable... you cant
+ *     skip a day and jump to next day's work").
+ *
+ * So every day but the very first in the project needs its own immediate
+ * predecessor to have been GENUINELY ATTEMPTED (a real batch on record) —
+ * empty previousBatches past day one is never "nothing to review," it is
+ * "the day before this was never even opened," and that blocks exactly like
+ * an unapproved one does. Both are one carried-forward block, computed once
+ * here rather than by every caller re-deriving it (and risking either
+ * one-day-blind mistake) from `evaluateDayGate` on its own.
  */
 export function evaluateDayGateChain(input: {
   /** Ascending by day number. */
@@ -212,18 +235,29 @@ export function evaluateDayGateChain(input: {
   const result = new Map<number, DayGate>();
   let blockedFromDay: number | null = null;
 
-  for (const d of input.days) {
+  input.days.forEach((d, index) => {
     if (blockedFromDay !== null) {
       result.set(d.day, {
-        status: "blocked",
-        canStart: false,
-        deadline: null,
-        outstanding: [],
-        disputed: [],
+        ...CASCADE_BLOCK,
         reason: `Day ${blockedFromDay} hasn't started yet — days run in order, and this one cannot begin until that one has.`,
       });
-      continue;
+      return;
     }
+
+    // Not day 1, and its own immediate predecessor has no batch at all (not
+    // even an unsubmitted draft) — that predecessor hasn't been touched yet,
+    // which is a block in its own right, distinct from the predecessor's
+    // gate actually being clear. An explicit skip for THIS day overrides it,
+    // same as it overrides every other block.
+    if (index > 0 && d.previousBatches.length === 0 && !d.skipUsedForDay) {
+      blockedFromDay = d.day - 1;
+      result.set(d.day, {
+        ...CASCADE_BLOCK,
+        reason: `Day ${d.day - 1} hasn't started yet — days run in order, and this one cannot begin until that one has.`,
+      });
+      return;
+    }
+
     const gate = evaluateDayGate({
       previousBatches: d.previousBatches,
       startAt: d.startAt,
@@ -233,7 +267,7 @@ export function evaluateDayGateChain(input: {
     });
     result.set(d.day, gate);
     if (!gate.canStart) blockedFromDay = d.day;
-  }
+  });
 
   return result;
 }

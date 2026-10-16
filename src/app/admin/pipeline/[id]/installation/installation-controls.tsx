@@ -44,22 +44,23 @@ export function ProjectSetupForm({
   societyName,
   surveyedLightCount,
   alreadyInstalledCount,
-  remainingScope,
   accounts,
   initial,
 }: {
   pipelineId: string;
   societyName: string;
   surveyedLightCount: number;
-  /** Lights already replaced on this deal's own demo circuit(s) — the full
-   *  crew does not plan these again (2026-10-17, user-asked). */
+  /** Lights already replaced on this deal's own demo circuit(s) — real work,
+   *  already done, shown as its own line rather than silently subtracted
+   *  from the contracted scope (2026-10-17, user-asked, then corrected:
+   *  the contracted figure is the true agreed total and stays as the
+   *  survey found it; the demo's own lights are a VISIBLE part of that
+   *  total, not a reduction of it). */
   alreadyInstalledCount: number;
-  /** surveyedLightCount minus alreadyInstalledCount, never negative. */
-  remainingScope: number;
   accounts: Account[];
   initial?: { contractedLightCount: number; scopeVarianceNote: string; onlookerId: string; days: PlannedDayInput[] };
 }) {
-  const [contracted, setContracted] = useState(String(initial?.contractedLightCount ?? remainingScope));
+  const [contracted, setContracted] = useState(String(initial?.contractedLightCount ?? surveyedLightCount));
   const [variance, setVariance] = useState(initial?.scopeVarianceNote ?? "");
   const [onlookerId, setOnlookerId] = useState(initial?.onlookerId ?? "");
   const [days, setDays] = useState<PlannedDayInput[]>(
@@ -71,8 +72,15 @@ export function ProjectSetupForm({
   const [pending, startTransition] = useTransition();
 
   const plannedTotal = days.reduce((n, d) => n + (Number(d.plannedCount) || 0), 0);
+  const accountedTotal = plannedTotal + alreadyInstalledCount;
   const contractedNum = Number(contracted) || 0;
-  const reconciles = plannedTotal === contractedNum;
+  const reconciles = accountedTotal === contractedNum;
+  // What's left to plan day-by-day, for the hint only — Contracted itself
+  // stays the true agreed total (the survey's own count), never silently
+  // reduced by what the demo already did (2026-10-17, user-corrected: the
+  // first cut subtracted this from Contracted; the demo's lights are shown
+  // as their own visible line in the plan instead, see accountedTotal above).
+  const stillToPlan = Math.max(0, surveyedLightCount - alreadyInstalledCount);
 
   function setDay(i: number, patch: Partial<PlannedDayInput>) {
     setDays((prev) => prev.map((d, j) => (i === j ? { ...d, ...patch } : d)));
@@ -101,7 +109,7 @@ export function ProjectSetupForm({
           htmlFor="contracted-count"
           hint={
             alreadyInstalledCount > 0
-              ? `The survey found ${surveyedLightCount}; ${alreadyInstalledCount} were already installed on the demo circuit — ${remainingScope} remain.`
+              ? `The survey found ${surveyedLightCount}; ${alreadyInstalledCount} were already installed on the demo circuit, so the day-by-day plan below needs to cover ${stillToPlan}.`
               : `The survey found ${surveyedLightCount}.`
           }
         >
@@ -131,7 +139,7 @@ export function ProjectSetupForm({
         </Field>
       </div>
 
-      {contractedNum !== remainingScope && (
+      {contractedNum !== surveyedLightCount && (
         <Field
           label="Why the contracted scope differs from the survey"
           htmlFor="scope-variance"
@@ -236,7 +244,10 @@ export function ProjectSetupForm({
             Add a day
           </button>
           <span className={`text-sm ${reconciles ? "text-[var(--text-muted)]" : "text-[var(--bad-fg)]"}`}>
-            {plannedTotal} planned against {contractedNum} contracted
+            {alreadyInstalledCount > 0
+              ? `${plannedTotal} planned + ${alreadyInstalledCount} already installed on the demo circuit = ${accountedTotal}`
+              : `${plannedTotal} planned`}{" "}
+            against {contractedNum} contracted
             {reconciles ? " — reconciled" : " — these must match before publishing"}
           </span>
         </div>

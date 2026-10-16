@@ -7,7 +7,7 @@ import {
   completionBlockers,
   partialCompletionBlockers,
   describeCompletionBlocker,
-  evaluateDayGate,
+  evaluateDayGateChain,
   type BatchGateInput,
 } from "@/lib/installation-gate";
 import { prorateFirstMonth } from "@/lib/billing-start";
@@ -43,12 +43,46 @@ function toGateInput(b: {
   };
 }
 
+/**
+ * The server-side mirror of the admin/field pages' own chain fix
+ * (2026-10-17): whether `upToDay` may start depends on the WHOLE chain back
+ * to day 1, not just its immediate predecessor's batches — a day blocked by
+ * its own predecessor never gets a batch of its own either, so checking only
+ * one day back reads that absence the same way day 1's "nothing precedes
+ * this" reads, and would let a crew start day 3 while day 2 never happened.
+ */
+function dayGateFor(input: {
+  plannedDays: { day: number; startAt: Date }[];
+  batches: { id: string; areaKey: string; state: string; day: number; submittedAt: Date | null; review: { reviewedAt: Date } | null }[];
+  gateSkipBatchId: string | null;
+  ignoreDeadline: boolean;
+  now: Date;
+  upToDay: number;
+}) {
+  const chain = input.plannedDays
+    .filter((d) => d.day <= input.upToDay)
+    .sort((a, b) => a.day - b.day)
+    .map((d) => {
+      const previous = input.batches.filter((b) => b.day === d.day - 1);
+      const skipApplies = !!input.gateSkipBatchId && previous.some((b) => b.id === input.gateSkipBatchId);
+      return { day: d.day, startAt: d.startAt, previousBatches: previous.map(toGateInput), skipUsedForDay: skipApplies };
+    });
+  return evaluateDayGateChain({ days: chain, now: input.now, ignoreDeadline: input.ignoreDeadline }).get(input.upToDay)!;
+}
+
 // ── FEAT-034 — daily batch logging ───────────────────────────────────────
 
 export async function startBatchAs(actor: Actor, pipelineId: string, plannedDayId: string): Promise<CoreResult<{ batchId: string }>> {
   const day = await db.installationPlannedDay.findUnique({
     where: { id: plannedDayId },
-    include: { project: { include: { batches: { include: { review: true } } } } },
+    include: {
+      project: {
+        include: {
+          batches: { include: { review: true } },
+          plannedDays: { select: { day: true, startAt: true } },
+        },
+      },
+    },
   });
   if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is not part of this project." };
 
@@ -57,16 +91,16 @@ export async function startBatchAs(actor: Actor, pipelineId: string, plannedDayI
 
   // CON-21 reaches back into capture: a day that cannot start should not be
   // able to open a batch either, or the crew discovers the block on arrival —
-  // which is precisely what FEAT-035-AC-3 exists to prevent.
-  const previous = day.project.batches.filter((b) => b.day === day.day - 1).map(toGateInput);
-  const gate = evaluateDayGate({
+  // which is precisely what FEAT-035-AC-3 exists to prevent. Checked against
+  // the WHOLE chain back to day 1 (dayGateFor), not just this day's own
+  // predecessor — see that function's own comment.
+  const gate = dayGateFor({
+    plannedDays: day.project.plannedDays,
+    batches: day.project.batches,
+    gateSkipBatchId: day.project.gateSkipBatchId,
     ignoreDeadline: await demoBypass("installation_review_deadline", { plannedDayId: day.id }),
-    previousBatches: previous,
-    startAt: day.startAt,
     now: new Date(),
-    skipUsedForDay: day.project.gateSkipBatchId
-      ? day.project.batches.some((b) => b.id === day.project.gateSkipBatchId && b.day === day.day - 1)
-      : false,
+    upToDay: day.day,
   });
   if (!gate.canStart) {
     logger.warn("installation.day_blocked", { actorId: actor.id, pipelineId, day: day.day, status: gate.status });

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { keptAtDemoOf } from "@/lib/circuit-load";
-import { alreadyInstalledCount, remainingInstallationScope } from "@/lib/installation-scope";
+import { alreadyInstalledCount } from "@/lib/installation-scope";
 import { circuitLabelOf } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -24,7 +24,7 @@ import {
   completionBlockers,
   partialCompletionBlockers,
   describeCompletionBlocker,
-  evaluateDayGate,
+  evaluateDayGateChain,
   type BatchGateInput,
 } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
@@ -127,10 +127,10 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   const project = pipeline.installationProject;
   const surveyed = (pipeline.siteSurvey?.areas ?? []).reduce((n, a) => n + a.count, 0);
   // A demo circuit's own lights are replaced before the full crew ever
-  // arrives (2026-10-17, user-asked) — the day-by-day plan only has to cover
-  // what's left, not the demo's own lights a second time.
+  // arrives (2026-10-17, user-asked, then corrected): shown as its own
+  // visible line in the plan rather than netted out of the contracted total —
+  // see ProjectSetupForm's own comment.
   const alreadyInstalled = alreadyInstalledCount(keptCircuits);
-  const remainingScope = remainingInstallationScope(surveyed, alreadyInstalled);
   const accounts = await db.profile.findMany({
     where: { societyId: pipeline.societyId, isActive: true },
     select: { id: true, name: true, email: true, portalAuthority: true },
@@ -289,7 +289,6 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 societyName={pipeline.society.name}
                 surveyedLightCount={surveyed}
                 alreadyInstalledCount={alreadyInstalled}
-                remainingScope={remainingScope}
                 accounts={accounts}
               />
             </Card>
@@ -316,6 +315,21 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   const now = new Date();
   // One evaluation of the flag per render, shared by every day's gate.
   const demoDeadline = await demoBypass("installation_review_deadline", { pipelineId: id });
+  // Computed ONCE, as a chain, not per-row in isolation (2026-10-17,
+  // user-caught: "shouldnt they all be blocked?") — a day blocked by its own
+  // predecessor has no batch of its own either, so evaluating each day
+  // against only its immediate predecessor's (then-empty) batches read every
+  // day after the first block as "clear." See evaluateDayGateChain's own
+  // comment for why a per-day call can't see this on its own.
+  const dayGates = evaluateDayGateChain({
+    ignoreDeadline: demoDeadline,
+    now,
+    days: project.plannedDays.map((d) => {
+      const previous = project.batches.filter((b) => b.day === d.day - 1);
+      const skipApplies = !!project.gateSkipBatchId && previous.some((b) => b.id === project.gateSkipBatchId);
+      return { day: d.day, startAt: d.startAt, previousBatches: gateInputs(previous), skipUsedForDay: skipApplies };
+    }),
+  });
   const totalInstalled = project.batches.reduce((n, b) => n + b.installedCount, 0);
   const totalSkipped = project.batches.reduce((n, b) => n + b.skippedCount, 0);
   const openBlockers = project.blockers.filter((b) => b.status === "open");
@@ -412,12 +426,18 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
             // user-asked: "validate the count... show count issue if there
             // are any") — a published plan can drift from its own contracted
             // scope one day-correction at a time, and this is the one place
-            // that states whether it still adds up, on every page load.
+            // that states whether it still adds up, on every page load. The
+            // demo circuit's own lights are counted in, not netted out of
+            // Contracted — same accounting as ProjectSetupForm's own total.
             const totalPlanned = project.plannedDays.reduce((n, d) => n + d.plannedCount, 0);
-            const gap = totalPlanned - project.contractedLightCount;
+            const accountedTotal = totalPlanned + alreadyInstalled;
+            const gap = accountedTotal - project.contractedLightCount;
             return (
               <p className="mt-1 mb-3 text-[13px]" style={{ color: gap === 0 ? "var(--text-muted)" : "var(--warn-fg)" }}>
-                {totalPlanned} planned against {project.contractedLightCount} contracted —{" "}
+                {alreadyInstalled > 0
+                  ? `${totalPlanned} planned + ${alreadyInstalled} already installed on the demo circuit = ${accountedTotal}`
+                  : `${totalPlanned} planned`}{" "}
+                against {project.contractedLightCount} contracted —{" "}
                 {gap === 0 ? "reconciled" : gap > 0 ? `${gap} over` : `${-gap} short`}
               </p>
             );
@@ -449,16 +469,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 )}
                 {project.plannedDays.map((d) => {
                   const batch = project.batches.find((b) => b.plannedDayId === d.id);
-                  const previous = project.batches.filter((b) => b.day === d.day - 1);
-                  const skipApplies =
-                    !!project.gateSkipBatchId && previous.some((b) => b.id === project.gateSkipBatchId);
-                  const gate = evaluateDayGate({
-                    ignoreDeadline: demoDeadline,
-                    previousBatches: gateInputs(previous),
-                    startAt: d.startAt,
-                    now,
-                    skipUsedForDay: skipApplies,
-                  });
+                  const gate = dayGates.get(d.day)!;
                   const gateMeta = statusMeta(DAY_GATE_STATUS, gate.status);
                   const batchMeta = batch ? statusMeta(BATCH_STATE, batch.state) : null;
                   return (
@@ -474,14 +485,29 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       <td>{batchMeta ? <StatusChip tone={batchMeta.tone}>{batchMeta.label}</StatusChip> : "—"}</td>
                       <td>
                         <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip>
+                        {/* The gate has always computed a clear reason —
+                            nothing ever rendered it (2026-10-17, user-caught:
+                            a blocked day gave no reason at all). */}
+                        {gate.reason && (
+                          <p className="mt-1 text-xs text-[var(--text-muted)]">{gate.reason}</p>
+                        )}
                       </td>
                       <td className="whitespace-nowrap">
                         {!batch && isField && gate.canStart && (
                           <StartBatchButton pipelineId={pipeline.id} plannedDayId={d.id} />
                         )}
-                        {!batch && !gate.canStart && isOps && !project.gateSkipUsedAt && (
-                          <SkipGateForm pipelineId={pipeline.id} plannedDayId={d.id} />
-                        )}
+                        {/* Only on the day that is itself the blocker — a day
+                            blocked purely by the chain cascading forward
+                            (gate.outstanding/disputed both empty) has nothing
+                            of its OWN to skip; skipReviewGate re-evaluates
+                            per-day and would correctly refuse it as
+                            "not-blocked," so offering the control here would
+                            just be a dead end. */}
+                        {!batch &&
+                          !gate.canStart &&
+                          (gate.outstanding.length > 0 || gate.disputed.length > 0) &&
+                          isOps &&
+                          !project.gateSkipUsedAt && <SkipGateForm pipelineId={pipeline.id} plannedDayId={d.id} />}
                         {canCorrectDates && !batch?.submittedAt && (
                           <PlannedDayActions
                             pipelineId={pipeline.id}
@@ -501,10 +527,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
           {canCorrectDates && (
             <AddPlannedDayForm pipelineId={pipeline.id} areas={[...new Set(project.plannedDays.map((d) => d.areaKey))]} />
           )}
-          {project.plannedDays.some((d) => {
-            const previous = project.batches.filter((b) => b.day === d.day - 1);
-            return !evaluateDayGate({ previousBatches: gateInputs(previous), startAt: d.startAt, now, ignoreDeadline: demoDeadline }).canStart;
-          }) && (
+          {[...dayGates.values()].some((g) => !g.canStart) && (
             <div
               className="mt-4 rounded-[var(--r-md)] border p-4 text-sm"
               style={{ borderColor: "var(--bad-line)", background: "var(--bad-bg)", color: "var(--bad-fg)" }}

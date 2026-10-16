@@ -166,6 +166,54 @@ export function evaluateDayGate(input: {
   return { status: "clear", canStart: true, deadline, outstanding: [], disputed: [], reason: null };
 }
 
+/**
+ * `evaluateDayGate` is correct in isolation — for ONE day, given only its own
+ * immediate predecessor's batches. Its own first rule, "no previous batches
+ * means clear," is right for day 1 (nothing precedes it) but wrong applied
+ * blindly day after day: if day 2 is itself blocked, it never gets a batch —
+ * so day 3, looking only at day 2's (empty) batches, reads that absence the
+ * same way day 1 would and comes back "clear" too (2026-10-17, user-caught:
+ * "shouldnt they all be blocked?"). Days run in sequence, so a block has to
+ * carry forward until whatever is blocking it actually clears — this is the
+ * one place that walks the whole chain, rather than every caller re-deriving
+ * it (and risking the same one-day-blind mistake) from `evaluateDayGate` on
+ * its own.
+ */
+export function evaluateDayGateChain(input: {
+  /** Ascending by day number. */
+  days: Array<{ day: number; startAt: Date; previousBatches: BatchGateInput[]; skipUsedForDay?: boolean }>;
+  now: Date;
+  ignoreDeadline?: boolean;
+}): Map<number, DayGate> {
+  const result = new Map<number, DayGate>();
+  let blockedFromDay: number | null = null;
+
+  for (const d of input.days) {
+    if (blockedFromDay !== null) {
+      result.set(d.day, {
+        status: "blocked",
+        canStart: false,
+        deadline: null,
+        outstanding: [],
+        disputed: [],
+        reason: `Day ${blockedFromDay} hasn't started yet — days run in order, and this one cannot begin until that one has.`,
+      });
+      continue;
+    }
+    const gate = evaluateDayGate({
+      previousBatches: d.previousBatches,
+      startAt: d.startAt,
+      now: input.now,
+      skipUsedForDay: d.skipUsedForDay,
+      ignoreDeadline: input.ignoreDeadline,
+    });
+    result.set(d.day, gate);
+    if (!gate.canStart) blockedFromDay = d.day;
+  }
+
+  return result;
+}
+
 export type SkipRefusal = "already-used" | "no-reason" | "not-blocked";
 
 export const SKIP_REFUSAL_MESSAGE: Record<SkipRefusal, string> = {

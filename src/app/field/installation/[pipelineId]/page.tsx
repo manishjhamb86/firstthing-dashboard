@@ -8,7 +8,7 @@ import { istWallClock } from "@/lib/field-today";
 import {
   completionBlockers,
   describeCompletionBlocker,
-  evaluateDayGate,
+  evaluateDayGateChain,
   type BatchGateInput,
 } from "@/lib/installation-gate";
 import { BATCH_STATE, BLOCKER_TYPE_LABEL, DAY_GATE_STATUS, statusMeta } from "@/lib/status-maps";
@@ -110,11 +110,22 @@ export default async function FieldInstallationPage({ params }: { params: Promis
   const demoDeadline = await demoBypass("installation_review_deadline", { pipelineId });
   const today = istWallClock(now).toISOString().slice(0, 10);
 
+  // Same chain fix as the admin screen (2026-10-17): a day blocked by its own
+  // predecessor never gets a batch, so evaluating each day against only its
+  // immediate predecessor reads every later day as "clear" too.
+  const dayGates = evaluateDayGateChain({
+    ignoreDeadline: demoDeadline,
+    now,
+    days: project.plannedDays.map((d) => {
+      const previous = project.batches.filter((b) => b.day === d.day - 1);
+      const skipApplies = !!project.gateSkipBatchId && previous.some((b) => b.id === project.gateSkipBatchId);
+      return { day: d.day, startAt: d.startAt, previousBatches: gateInputs(previous), skipUsedForDay: skipApplies };
+    }),
+  });
+
   const days: FieldDay[] = project.plannedDays.map((d) => {
     const batch = project.batches.find((b) => b.plannedDayId === d.id) ?? null;
-    const previous = project.batches.filter((b) => b.day === d.day - 1);
-    const skipApplies = !!project.gateSkipBatchId && previous.some((b) => b.id === project.gateSkipBatchId);
-    const gate = evaluateDayGate({ ignoreDeadline: demoDeadline, previousBatches: gateInputs(previous), startAt: d.startAt, now, skipUsedForDay: skipApplies });
+    const gate = dayGates.get(d.day)!;
     const plannedDate = d.plannedDate.toISOString().slice(0, 10);
     return {
       id: d.id,

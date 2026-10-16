@@ -3,6 +3,7 @@ import {
   completionBlockers,
   partialCompletionBlockers,
   evaluateDayGate,
+  evaluateDayGateChain,
   refuseGateSkip,
   reviewDeadlineFor,
   type BatchGateInput,
@@ -232,5 +233,94 @@ describe("partialCompletionBlockers — the exceptional-billing exemption (2026-
   it("still refuses with nothing logged at all", () => {
     const r = partialCompletionBlockers({ batches: [], openBlockerCount: 0, plannedDayCount: 4, daysWithBatches: 0 });
     expect(r.map((x) => x.kind)).toEqual(["no-batches"]);
+  });
+});
+
+describe("evaluateDayGateChain — a block propagates forward (2026-10-17, user-caught)", () => {
+  // Day 1 at 09:00, each day after one calendar day apart, same 09:00 start.
+  const dayStart = (n: number) => new Date(`2026-09-${10 + n}T09:00:00Z`);
+
+  it("day 1 clears, day 2 blocks on it, and every day after inherits the block — not just the next one", () => {
+    const day1Batch = batch({ id: "d1", state: "awaiting_review", submittedAt: new Date("2026-09-10T18:00:00Z"), reviewedAt: null });
+    const now = new Date("2026-09-12T10:00:00Z"); // well past day 2's deadline (06:00 on the 12th)
+
+    const gates = evaluateDayGateChain({
+      now,
+      days: [
+        { day: 1, startAt: dayStart(1), previousBatches: [] },
+        { day: 2, startAt: dayStart(2), previousBatches: [day1Batch] }, // day 1's real batch
+        { day: 3, startAt: dayStart(3), previousBatches: [] }, // day 2 never started — no batch of its own
+        { day: 4, startAt: dayStart(4), previousBatches: [] },
+        { day: 5, startAt: dayStart(5), previousBatches: [] },
+      ],
+    });
+
+    expect(gates.get(1)!.canStart).toBe(true);
+    expect(gates.get(1)!.status).toBe("clear");
+
+    expect(gates.get(2)!.canStart).toBe(false);
+    expect(gates.get(2)!.status).toBe("blocked");
+    expect(gates.get(2)!.reason).toMatch(/deadline has passed/);
+
+    // This is the exact bug reported: days 3, 4 and 5 must ALSO read
+    // blocked, not "clear" just because day 2 (which has no batch, since it
+    // never started) looks the same as "nothing precedes this."
+    for (const d of [3, 4, 5]) {
+      const g = gates.get(d)!;
+      expect(g.canStart).toBe(false);
+      expect(g.status).toBe("blocked");
+      expect(g.reason).toContain("Day 2 hasn't started yet");
+    }
+  });
+
+  it("stops cascading the moment the root block actually clears", () => {
+    const day1Approved = batch({ id: "d1", state: "approved", reviewedAt: new Date("2026-09-11T04:00:00Z") });
+    const now = new Date("2026-09-12T10:00:00Z");
+
+    const gates = evaluateDayGateChain({
+      now,
+      days: [
+        { day: 1, startAt: dayStart(1), previousBatches: [] },
+        { day: 2, startAt: dayStart(2), previousBatches: [day1Approved] },
+        { day: 3, startAt: dayStart(3), previousBatches: [] }, // day 2 approved, but hasn't started its own batch yet
+      ],
+    });
+
+    expect(gates.get(2)!.canStart).toBe(true);
+    // Day 3 reads clear on its own genuine merits (day 2 approved in time),
+    // not because the chain never checked — it is the same "nothing to
+    // review yet" state day 1 itself is in, correctly.
+    expect(gates.get(3)!.canStart).toBe(true);
+    expect(gates.get(3)!.status).toBe("clear");
+  });
+
+  it("a dispute on day 1 blocks day 2 and cascades the same way a missed deadline does", () => {
+    const disputed = batch({ id: "d1", state: "disputed" });
+    const gates = evaluateDayGateChain({
+      now: new Date("2026-09-12T10:00:00Z"),
+      days: [
+        { day: 1, startAt: dayStart(1), previousBatches: [] },
+        { day: 2, startAt: dayStart(2), previousBatches: [disputed] },
+        { day: 3, startAt: dayStart(3), previousBatches: [] },
+      ],
+    });
+    expect(gates.get(2)!.status).toBe("blocked");
+    expect(gates.get(3)!.canStart).toBe(false);
+    expect(gates.get(3)!.reason).toContain("Day 2 hasn't started yet");
+  });
+
+  it("the once-per-project skip on the root day clears it, and the cascade clears with it", () => {
+    const unapproved = [batch({ id: "d1", state: "awaiting_review", reviewedAt: null })];
+    const gates = evaluateDayGateChain({
+      now: new Date("2026-09-12T10:00:00Z"),
+      days: [
+        { day: 1, startAt: dayStart(1), previousBatches: [] },
+        { day: 2, startAt: dayStart(2), previousBatches: unapproved, skipUsedForDay: true },
+        { day: 3, startAt: dayStart(3), previousBatches: [] },
+      ],
+    });
+    expect(gates.get(2)!.status).toBe("skipped");
+    expect(gates.get(2)!.canStart).toBe(true);
+    expect(gates.get(3)!.canStart).toBe(true);
   });
 });

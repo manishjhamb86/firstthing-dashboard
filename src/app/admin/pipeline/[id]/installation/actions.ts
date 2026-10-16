@@ -7,7 +7,7 @@ import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdmin, requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logChange } from "@/lib/change-log";
 import { keptAtDemoOf } from "@/lib/circuit-load";
-import { alreadyInstalledCount, remainingInstallationScope } from "@/lib/installation-scope";
+import { alreadyInstalledCount } from "@/lib/installation-scope";
 import { refuseDateCorrector, refuseInstallationDates } from "@/lib/installation-dates";
 import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
 import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
@@ -131,37 +131,39 @@ export async function setUpInstallationProject(
 
   const surveyed = (pipeline.siteSurvey?.areas ?? []).reduce((n, a) => n + a.count, 0);
   // A demo circuit's own lights are replaced before the full crew ever
-  // arrives (2026-10-17, user-asked) — the crew's own plan only has to cover
-  // what's left, not the demo's own lights a second time.
+  // arrives (2026-10-17, user-asked, then corrected): the contracted figure
+  // stays the TRUE agreed total — the survey's own count — and the demo's
+  // lights are a visible, already-done PART of that total, never silently
+  // subtracted from it. So the day-by-day plan only has to reconcile once the
+  // demo's own count is added back in.
   const circuits = await db.circuit.findMany({
     where: { siteSurvey: { pipelineId }, voidedAt: null },
     select: { devices: { select: { replacementCount: true } } },
   });
   const alreadyInstalled = alreadyInstalledCount(circuits);
-  const remainingScope = remainingInstallationScope(surveyed, alreadyInstalled);
 
   // SCR-060: the plan must reconcile to the contracted scope. A mismatch is
   // either a planning error or an undocumented scope change, and both are far
   // cheaper to resolve now than on site.
   const planned = input.days.reduce((n, d) => n + d.plannedCount, 0);
-  if (planned !== input.contractedLightCount) {
+  const accountedTotal = planned + alreadyInstalled;
+  if (accountedTotal !== input.contractedLightCount) {
     return {
-      error: `The plan covers ${planned} lights but the contracted scope is ${input.contractedLightCount}. Reconcile them before publishing — a gap here becomes a dispute on site.`,
+      error:
+        alreadyInstalled > 0
+          ? `The plan covers ${planned} lights plus ${alreadyInstalled} already installed on the demo circuit (${accountedTotal} total) but the contracted scope is ${input.contractedLightCount}. Reconcile them before publishing — a gap here becomes a dispute on site.`
+          : `The plan covers ${planned} lights but the contracted scope is ${input.contractedLightCount}. Reconcile them before publishing — a gap here becomes a dispute on site.`,
     };
   }
 
   // FEAT-033-AC-5 — where contracted differs from surveyed, the difference is
   // *recorded*. The survey is not edited to match: it stays a record of what
-  // exists, and the project records what is contracted. Compared against
-  // what's actually left to install, not the raw survey tally, so a deal
-  // whose demo circuit already accounts for the gap doesn't need a note
-  // explaining a difference that isn't really one.
-  if (remainingScope !== input.contractedLightCount && !input.scopeVarianceNote.trim()) {
+  // exists, and the project records what is contracted. Compared against the
+  // raw survey tally — Contracted is meant to equal it, with the demo's own
+  // lights shown separately rather than netted out of either figure.
+  if (surveyed !== input.contractedLightCount && !input.scopeVarianceNote.trim()) {
     return {
-      error:
-        alreadyInstalled > 0
-          ? `The survey found ${surveyed} lights, ${alreadyInstalled} already installed on the demo circuit (${remainingScope} remaining) — the contracted scope is ${input.contractedLightCount}. Record why they differ.`
-          : `The survey found ${surveyed} lights and the contracted scope is ${input.contractedLightCount}. Record why they differ — the survey stays as it is.`,
+      error: `The survey found ${surveyed} lights and the contracted scope is ${input.contractedLightCount}. Record why they differ — the survey stays as it is.`,
     };
   }
 

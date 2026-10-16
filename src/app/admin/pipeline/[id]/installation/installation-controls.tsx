@@ -555,12 +555,12 @@ export function PlannedDayActions({
             });
           }}
         >
-          <Field label="Planned count" htmlFor="pd-count">
-            <input id="pd-count" type="number" min={1} step={1} className="field num" value={count} onChange={(e) => setCount(e.target.value)} required />
+          <Field label="Planned count" htmlFor={`pd-count-${plannedDayId}`}>
+            <input id={`pd-count-${plannedDayId}`} type="number" min={1} step={1} className="field num" value={count} onChange={(e) => setCount(e.target.value)} required />
           </Field>
-          <Field label="Why this is being corrected" htmlFor="pd-count-reason">
+          <Field label="Why this is being corrected" htmlFor={`pd-count-reason-${plannedDayId}`}>
             <input
-              id="pd-count-reason"
+              id={`pd-count-reason-${plannedDayId}`}
               className="field"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
@@ -594,15 +594,15 @@ export function PlannedDayActions({
           }}
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Date" htmlFor="pd-date">
-              <input id="pd-date" type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} required />
+            <Field label="Date" htmlFor={`pd-date-${plannedDayId}`}>
+              <input id={`pd-date-${plannedDayId}`} type="date" className="field" value={date} onChange={(e) => setDate(e.target.value)} required />
             </Field>
-            <Field label="Start time" htmlFor="pd-time">
-              <input id="pd-time" type="time" className="field" value={time} onChange={(e) => setTime(e.target.value)} required />
+            <Field label="Start time" htmlFor={`pd-time-${plannedDayId}`}>
+              <input id={`pd-time-${plannedDayId}`} type="time" className="field" value={time} onChange={(e) => setTime(e.target.value)} required />
             </Field>
           </div>
-          <Field label="Why this is being corrected" htmlFor="pd-reason">
-            <input id="pd-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="The plan was set up with the wrong date." required />
+          <Field label="Why this is being corrected" htmlFor={`pd-reason-${plannedDayId}`}>
+            <input id={`pd-reason-${plannedDayId}`} className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="The plan was set up with the wrong date." required />
           </Field>
           {error && <ErrorText>{error}</ErrorText>}
           <div className="flex gap-2">
@@ -633,8 +633,8 @@ export function PlannedDayActions({
             Removes this row entirely. Re-enter it with &ldquo;Add a planned day&rdquo; below the
             table if it was set up wrong rather than genuinely not needed.
           </p>
-          <Field label="Why this day is being removed" htmlFor="pd-del-reason">
-            <input id="pd-del-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} required />
+          <Field label="Why this day is being removed" htmlFor={`pd-del-reason-${plannedDayId}`}>
+            <input id={`pd-del-reason-${plannedDayId}`} className="field" value={reason} onChange={(e) => setReason(e.target.value)} required />
           </Field>
           {error && <ErrorText>{error}</ErrorText>}
           <div className="flex gap-2">

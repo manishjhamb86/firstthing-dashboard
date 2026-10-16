@@ -184,15 +184,34 @@ export function levelFromProperties(
 }
 
 /**
- * The controller's own `motor_status` datapoint, verbatim (2026-10-16,
- * user-asked: "add Motor status as Valve Status with the water monitors
- * against each sensor"). Read live, confirmed against this account's real
- * devices: the IT56WLCW tank controllers report it alongside
- * `liquid_level_percent` on the same shadow, value "Normal" on every device
- * checked. Shown as-is rather than translated through an invented enum —
- * there is no documentation to say what other strings this model can
- * report, and guessing at a translation table for values never actually
- * seen would be exactly the class of mistake the levelMax bug already was.
+ * Whether the motor/valve is actually running, from the controller's own
+ * `switch_6` datapoint — confirmed against this account's real thing model
+ * (2026-10-16): the device names `switch_6` "Motor" in its own schema, a
+ * plain boolean, and it is the only datapoint on this controller that is.
+ * `switch_2`-`switch_5` are the four float-switch level thresholds
+ * (100/75/50/25%); `relay_status` is a power-on BEHAVIOUR setting, not a
+ * live reading. This is the one genuine on/off state — `motor_status`
+ * (below) was shipped as "valve status" first and was wrong: it is a
+ * fault flag, not an on/off reading, caught when the user asked directly
+ * "it must be on or off" and a live model dump showed `switch_6: false`
+ * alongside `motor_status: "Dryrun"` on the same device at the same
+ * instant — two different questions, never the same signal.
+ */
+export function motorOnFromProperties(props: TuyaProperty[]): boolean | null {
+  const p = props.find((x) => x.code === "switch_6");
+  return p && typeof p.value === "boolean" ? p.value : null;
+}
+
+/**
+ * The controller's own `motor_status` datapoint, verbatim — a FAULT/HEALTH
+ * flag (its model declares the enum `["Normal", "Dryrun"]`), not an on/off
+ * state. "Dryrun" can be true while the motor is currently off (confirmed
+ * live) — it means the controller has detected a dry-run condition, not
+ * that the motor is running. Shown as-is rather than translated through an
+ * invented table — there is no documentation of what other strings this
+ * model can report, and guessing at a translation table for values never
+ * actually seen would be exactly the class of mistake the levelMax bug
+ * already was.
  */
 export function motorStatusFromProperties(props: TuyaProperty[]): string | null {
   const p = props.find((x) => x.code === "motor_status");
@@ -259,6 +278,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
     let hasLevelSignal = false;
     let levelMax = 100;
     let motorStatus: string | null = null;
+    let motorOn: boolean | null = null;
     try {
       const props = await getTuyaShadow(cfg, d.tuyaDeviceId);
       // The model first: without its declared max the raw value cannot be
@@ -269,6 +289,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
       level = levelFromProperties(props, levelMax);
       hasLevelSignal = level !== null;
       motorStatus = motorStatusFromProperties(props);
+      motorOn = motorOnFromProperties(props);
     } catch (err) {
       // A device whose shadow read fails stays listed with its cached state
       // — one flaky sensor must not fail the whole sync.
@@ -286,6 +307,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
         levelMax,
         lastOnline: d.isOnline,
         lastMotorStatus: motorStatus,
+        lastMotorOn: motorOn,
         ...(level ? { lastLevelPercent: level.level, lastReportedAt: new Date(level.time) } : {}),
       },
       update: {
@@ -294,6 +316,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
         category: d.category,
         lastOnline: d.isOnline,
         lastMotorStatus: motorStatus,
+        lastMotorOn: motorOn,
         syncedAt: new Date(),
         ...(level
           ? {

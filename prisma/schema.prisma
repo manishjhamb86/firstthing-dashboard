@@ -3679,14 +3679,20 @@ model WaterTank {
   lastLevelPercent Int?       @map("last_level_percent")
   lastOnline       Boolean    @default(false) @map("last_online")
   lastReportedAt   DateTime?  @map("last_reported_at")
-  /// The controller's own `motor_status` datapoint (2026-10-16, user-asked:
-  /// "add Motor status as Valve Status with the water monitors against each
-  /// sensor"), shown verbatim rather than translated through an invented
-  /// enum — the only value ever observed on this account's own IT56WLCW
-  /// controllers is "Normal"; any other string Tuya reports is shown as-is
-  /// rather than guessed at. Null for a plain level sensor with no motor
-  /// output on its shadow at all — the same "don't fabricate a field that
-  /// doesn't exist for this device" rule hasLevelSignal already follows.
+  /// Whether the motor is actually ON, from the controller's own `switch_6`
+  /// datapoint (named "Motor" in the device's own thing model, confirmed
+  /// 2026-10-16) — a plain boolean, the real on/off signal. Null for a
+  /// device with no motor output on its shadow at all.
+  lastMotorOn      Boolean?   @map("last_motor_on")
+  /// The controller's own `motor_status` datapoint — a FAULT/HEALTH flag
+  /// ("Normal" | "Dryrun"), shown verbatim rather than translated through an
+  /// invented enum (no documentation of other values this model can report).
+  /// This is NOT on/off — on this account's own devices "Dryrun" has been
+  /// observed while `lastMotorOn` is false, i.e. the fault is latched
+  /// independently of whether the motor is currently running. Null for a
+  /// plain level sensor with no motor output on its shadow at all — the
+  /// same "don't fabricate a field that doesn't exist for this device" rule
+  /// hasLevelSignal already follows.
   lastMotorStatus  String?    @map("last_motor_status")
   syncedAt         DateTime   @default(now()) @map("synced_at")
   createdAt        DateTime   @default(now()) @map("created_at")
@@ -3712,9 +3718,12 @@ model TankLevelReading {
   /// When the sensor itself last reported at sample time — an offline
   /// sensor's level is its last report, and the row says so.
   reportedAt   DateTime? @map("reported_at")
-  /// The same `motor_status` the live tank row carries, kept on each sample
-  /// for a history worth reading back later (2026-10-16) — null wherever the
-  /// device has no motor output at all.
+  /// The real on/off reading (`switch_6`, "Motor") at sample time — null
+  /// wherever the device has no motor output at all.
+  motorOn      Boolean?  @map("motor_on")
+  /// The same fault/health `motor_status` the live tank row carries, kept on
+  /// each sample for a history worth reading back later (2026-10-16) — this
+  /// is NOT on/off, see WaterTank.lastMotorStatus's own comment.
   motorStatus  String?   @map("motor_status")
 
   tank WaterTank @relation(fields: [tankId], references: [id], onDelete: Cascade)

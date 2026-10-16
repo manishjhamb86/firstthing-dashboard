@@ -5,6 +5,7 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { BackButton } from "@/components/back-button";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { TankVisual } from "@/components/tank-visual";
+import { ValveStatus } from "@/components/valve-status";
 import { formatDate, formatInstant, timeAgo } from "@/lib/format-date";
 import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
 import { logger } from "@/lib/logger";
@@ -241,13 +242,7 @@ export default async function TankStatusPage({
               {[
                 [
                   "Valve status",
-                  tank.lastMotorStatus ? (
-                    <StatusChip key="v" tone={tank.lastMotorStatus === "Normal" ? "ok" : "warn"}>
-                      {tank.lastMotorStatus}
-                    </StatusChip>
-                  ) : (
-                    "—"
-                  ),
+                  <ValveStatus key="v" motorOn={tank.lastMotorOn} motorStatus={tank.lastMotorStatus} />,
                 ],
                 ["Device ID", <span key="v" className="num">{tank.tuyaDeviceId}</span>],
                 ["Product", tank.productName || "—"],
@@ -397,13 +392,7 @@ export default async function TankStatusPage({
               {[
                 [
                   "Valve status",
-                  tank.lastMotorStatus ? (
-                    <StatusChip key="v" tone={tank.lastMotorStatus === "Normal" ? "ok" : "warn"}>
-                      {tank.lastMotorStatus}
-                    </StatusChip>
-                  ) : (
-                    "—"
-                  ),
+                  <ValveStatus key="v" motorOn={tank.lastMotorOn} motorStatus={tank.lastMotorStatus} />,
                 ],
                 ["Device ID", <span key="v" className="num">{tank.tuyaDeviceId}</span>],
                 ["Product", tank.productName || "—"],

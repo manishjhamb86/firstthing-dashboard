@@ -231,7 +231,15 @@ async function runTankLevelSample() {
     const [tanks, thresholds] = await Promise.all([
       db.waterTank.findMany({
         where: { hasLevelSignal: true },
-        select: { id: true, name: true, lastLevelPercent: true, lastOnline: true, lastReportedAt: true, lastMotorStatus: true },
+        select: {
+          id: true,
+          name: true,
+          lastLevelPercent: true,
+          lastOnline: true,
+          lastReportedAt: true,
+          lastMotorStatus: true,
+          lastMotorOn: true,
+        },
       }),
       db.tankApiConfig.findUnique({ where: { id: "singleton" }, select: { lowLevelPct: true, highLevelPct: true } }),
     ]);
@@ -250,6 +258,7 @@ async function runTankLevelSample() {
           online: t.lastOnline,
           reportedAt: t.lastReportedAt,
           motorStatus: t.lastMotorStatus,
+          motorOn: t.lastMotorOn,
         },
       });
 

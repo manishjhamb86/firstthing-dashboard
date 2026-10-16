@@ -6,6 +6,7 @@ import { ClickableRow } from "@/components/clickable-row";
 import { Card, ErrorText, StatusChip } from "@/components/ui";
 import { SearchInput } from "@/components/search-input";
 import { TankLevelBar } from "@/components/tank-visual";
+import { ValveStatus } from "@/components/valve-status";
 import { formatInstant, timeAgo } from "@/lib/format-date";
 import { assignTanks, syncTanksNow } from "./actions";
 
@@ -23,6 +24,7 @@ type Row = {
   syncedAt: string;
   /** The controller's own motor_status datapoint, verbatim; null when the
    *  device has no motor output on its shadow at all. */
+  motorOn: boolean | null;
   motorStatus: string | null;
   /** Connected, but its level has not changed in a long while. */
   stale: boolean;
@@ -273,11 +275,7 @@ export function TanksListClient({
                     )}
                   </td>
                   <td className="hidden lg:table-cell">
-                    {t.motorStatus ? (
-                      <StatusChip tone={t.motorStatus === "Normal" ? "ok" : "warn"}>{t.motorStatus}</StatusChip>
-                    ) : (
-                      <span style={{ color: "var(--text-subtle)" }}>—</span>
-                    )}
+                    <ValveStatus motorOn={t.motorOn} motorStatus={t.motorStatus} />
                   </td>
                   <td>
                     {t.society ? (
@@ -356,9 +354,7 @@ export function TanksListClient({
                     ) : (
                       <StatusChip tone="neu">Offline</StatusChip>
                     )}
-                    {t.motorStatus && (
-                      <StatusChip tone={t.motorStatus === "Normal" ? "ok" : "warn"}>{t.motorStatus}</StatusChip>
-                    )}
+                    <ValveStatus motorOn={t.motorOn} motorStatus={t.motorStatus} />
                     {t.society ? (
                       <span className="text-[12.5px] font-medium">
                         {t.society.name} · {t.society.location}

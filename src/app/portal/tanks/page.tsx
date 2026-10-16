@@ -10,7 +10,14 @@ import { WaterPitch } from "./water-pitch";
 import { TankVisual } from "@/components/tank-visual";
 import { TankHistory, type LevelPoint } from "./tank-history";
 import { formatInstant, timeAgo } from "@/lib/format-date";
-import { getTuyaShadow, levelFromProperties, motorStatusFromProperties, resolveTuyaConfig } from "@/lib/tuya";
+import {
+  getTuyaShadow,
+  levelFromProperties,
+  motorOnFromProperties,
+  motorStatusFromProperties,
+  resolveTuyaConfig,
+} from "@/lib/tuya";
+import { ValveStatus } from "@/components/valve-status";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -81,14 +88,20 @@ export default async function PortalTanksPage() {
   // when Tuya is slow or down — residents get the last sample, honestly
   // timestamped, not an error page.
   const cfg = await resolveTuyaConfig();
-  const live = new Map<string, { level: number; reportedAt: Date; motorStatus: string | null }>();
+  const live = new Map<string, { level: number; reportedAt: Date; motorOn: boolean | null; motorStatus: string | null }>();
   if (cfg && tanks.length > 0) {
     await Promise.allSettled(
       tanks.map(async (t) => {
         try {
           const props = await getTuyaShadow(cfg, t.tuyaDeviceId);
           const level = levelFromProperties(props, t.levelMax);
-          if (level) live.set(t.id, { level: level.level, reportedAt: new Date(level.time), motorStatus: motorStatusFromProperties(props) });
+          if (level)
+            live.set(t.id, {
+              level: level.level,
+              reportedAt: new Date(level.time),
+              motorOn: motorOnFromProperties(props),
+              motorStatus: motorStatusFromProperties(props),
+            });
         } catch (err) {
           logger.warn("tank.portal_live_read_failed", { tankId: t.id, error: String(err) });
         }
@@ -137,12 +150,14 @@ export default async function PortalTanksPage() {
     // cached value from the last sampling pass (2026-10-16, user-asked:
     // "add Motor status as Valve Status with the water monitors against
     // each sensor").
+    const motorOn = l ? l.motorOn : t.lastMotorOn;
     const motorStatus = l ? l.motorStatus : t.lastMotorStatus;
     return {
       tank: t,
       level: l?.level ?? t.lastLevelPercent ?? null,
       reportedAt,
       updatedAt,
+      motorOn,
       motorStatus,
       quiet,
       unchangedFor,
@@ -286,7 +301,7 @@ export default async function PortalTanksPage() {
               row... dont touch mobile design") — a single column below `lg`
               is untouched from before this change. */}
           <div className="mb-5 grid grid-cols-1 gap-5 last:mb-0 lg:grid-cols-2">
-            {sub.rows.map(({ tank: t, level, updatedAt, motorStatus, quiet, unchangedFor, offline, history }) => {
+            {sub.rows.map(({ tank: t, level, updatedAt, motorOn, motorStatus, quiet, unchangedFor, offline, history }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-5 gap-y-3 p-4 sm:p-5">
@@ -309,9 +324,7 @@ export default async function PortalTanksPage() {
                       ) : (
                         <StatusChip tone="ok">Live</StatusChip>
                       )}
-                      {motorStatus && (
-                        <StatusChip tone={motorStatus === "Normal" ? "ok" : "warn"}>Valve: {motorStatus}</StatusChip>
-                      )}
+                      <ValveStatus motorOn={motorOn} motorStatus={motorStatus} label="Valve: " />
                       <span>
                         Last updated <span className="num">{formatInstant(updatedAt)}</span>
                         {" · "}

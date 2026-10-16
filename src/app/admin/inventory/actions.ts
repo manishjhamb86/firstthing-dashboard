@@ -24,7 +24,11 @@ import {
   type MoveKind,
   refuseUnitCost,
 } from "@/lib/inventory";
-import { friendlySupplierExtractionError, readSupplierInvoiceWithRetry } from "@/lib/supplier-invoice-extract";
+import {
+  friendlySupplierExtractionError,
+  readSupplierInvoiceWithRetry,
+  type ExtractedSupplierInvoice,
+} from "@/lib/supplier-invoice-extract";
 import { proposeItemType, proposeSupplier } from "@/lib/supplier-invoice-match";
 
 type Result<T = object> = ({ error: string } & Partial<T>) | ({ error?: undefined } & T);
@@ -125,14 +129,70 @@ export async function createItemType(input: {
 // Receiving — a supplier invoice, its lines become batches, serial lines units
 // ---------------------------------------------------------------------------
 
-/** Presign a PUT for the supplier invoice PDF under the private Inventory/ prefix. */
-export async function getSupplierInvoiceUploadUrl(fileName: string): Promise<Result<{ uploadUrl: string; key: string }>> {
+export type ExistingSupplierInvoiceUpload = {
+  id: string;
+  fileName: string;
+  uploadedAt: string;
+  status: "uploaded" | "read" | "could_not_read" | "processed";
+  /** Where to send the operator when it's already been received. */
+  firstBatchId: string | null;
+};
+
+export type BeginSupplierInvoiceUploadResult =
+  | { uploadUrl: string; uploadId: string; existing?: undefined; error?: undefined }
+  | { existing: ExistingSupplierInvoiceUpload; uploadUrl?: undefined; uploadId?: undefined; error?: undefined }
+  | { error: string; uploadUrl?: undefined; uploadId?: undefined; existing?: undefined };
+
+/**
+ * Upload is its own first step now, not folded into reading (2026-10-16,
+ * user-asked): the file and its details are recorded the moment it's
+ * chosen, before anything reads it. The SAME bytes — by content, not by
+ * filename — refuse a second upload outright: `existing` names what
+ * already happened to it, so the operator is pointed at resuming or
+ * viewing it rather than silently re-uploading and re-reading a file this
+ * system already has.
+ */
+export async function beginSupplierInvoiceUpload(input: {
+  fileName: string;
+  byteSize: number;
+  fileHash: string;
+}): Promise<BeginSupplierInvoiceUploadResult> {
   const admin = await requireStockStaff();
   if (!admin) return { error: REFUSED };
-  const safe = fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-120);
+
+  const existing = await db.supplierInvoiceUpload.findUnique({ where: { fileHash: input.fileHash } });
+  if (existing) {
+    let firstBatchId: string | null = null;
+    if (existing.purchaseId) {
+      const batch = await db.inventoryBatch.findFirst({ where: { purchaseId: existing.purchaseId }, select: { id: true } });
+      firstBatchId = batch?.id ?? null;
+    }
+    return {
+      existing: {
+        id: existing.id,
+        fileName: existing.fileName,
+        uploadedAt: existing.uploadedAt.toISOString(),
+        status: existing.status,
+        firstBatchId,
+      },
+    };
+  }
+
+  const safe = input.fileName.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-120);
   const key = `Inventory/Purchases/${new Date().toISOString().slice(0, 10)}/${Date.now()}_${safe}`;
   const uploadUrl = await getSignedUrl(s3, new PutObjectCommand({ Bucket: S3_BUCKET, Key: key, ContentType: "application/pdf" }), { expiresIn: 300 });
-  return { uploadUrl, key };
+  const row = await db.supplierInvoiceUpload.create({
+    data: {
+      fileHash: input.fileHash,
+      s3Key: key,
+      fileName: input.fileName,
+      byteSize: input.byteSize,
+      uploadedById: admin.id,
+    },
+  });
+  logger.info("inventory.invoice_upload_started", { actorId: admin.id, uploadId: row.id });
+  revalidatePath("/admin/inventory/receive");
+  return { uploadUrl, uploadId: row.id };
 }
 
 export type SupplierInvoiceProposedLine = {
@@ -154,34 +214,12 @@ export type SupplierInvoiceProposal = {
   notes: string;
 };
 
-/**
- * Read the already-uploaded supplier invoice PDF back and propose the
- * Receive stock form's fields (2026-10-14, user-asked: "Stock lines should
- * auto populate on invoice upload"). Never writes anything — the operator
- * still reviews and submits through `receiveDelivery` exactly as before;
- * this only saves them re-typing what the PDF already says.
- */
-export async function extractSupplierInvoiceForm(key: string): Promise<Result<{ proposal: SupplierInvoiceProposal }>> {
-  const admin = await requireStockStaff();
-  if (!admin) return { error: REFUSED };
-
-  let bytes: Uint8Array;
-  try {
-    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: key }));
-    bytes = await obj.Body!.transformToByteArray();
-  } catch {
-    return { error: "The uploaded file could not be read back from storage. Choose it again." };
-  }
-
-  let extraction;
-  try {
-    extraction = await readSupplierInvoiceWithRetry(bytes);
-  } catch (err) {
-    const raw = err instanceof Error ? err.message : String(err);
-    logger.warn("inventory.invoice_extraction_failed", { actorId: admin.id, key, message: raw.slice(0, 300) });
-    return { error: friendlySupplierExtractionError(raw) };
-  }
-
+/** Turns a raw Gemini extraction into the form's proposal, matched against
+ *  whichever suppliers/items exist RIGHT NOW — kept separate from the
+ *  extraction itself so a cached read from before an item type existed
+ *  still proposes it correctly today (see SupplierInvoiceRead's own doc
+ *  comment in schema.prisma). */
+async function matchSupplierInvoice(extraction: ExtractedSupplierInvoice): Promise<SupplierInvoiceProposal> {
   const [suppliers, items] = await Promise.all([
     db.supplier.findMany({ select: { id: true, name: true } }),
     db.inventoryItemType.findMany({ where: { active: true }, select: { id: true, name: true, make: true, model: true } }),
@@ -201,18 +239,85 @@ export async function extractSupplierInvoiceForm(key: string): Promise<Result<{ 
     };
   });
 
-  logger.info("inventory.invoice_extracted", { actorId: admin.id, key, lines: lines.length, matchedSupplier: !!supplier });
   return {
-    proposal: {
-      supplierId: supplier?.id ?? null,
-      sellerName: extraction.sellerName.value,
-      invoiceNumber: extraction.invoiceNumber.value,
-      invoiceDate,
-      total: extraction.total.value,
-      lines,
-      notes: extraction.notes,
-    },
+    supplierId: supplier?.id ?? null,
+    sellerName: extraction.sellerName.value,
+    invoiceNumber: extraction.invoiceNumber.value,
+    invoiceDate,
+    total: extraction.total.value,
+    lines,
+    notes: extraction.notes,
   };
+}
+
+/**
+ * Read an uploaded supplier invoice back and propose the Receive stock
+ * form's fields from it (2026-10-14, user-asked: "Stock lines should auto
+ * populate on invoice upload"). Never writes a purchase row — the operator
+ * still reviews and submits through `receiveDelivery`; this only saves them
+ * re-typing what the PDF already says.
+ *
+ * Reads against the UPLOAD ROW, not a bare key (2026-10-16, user-asked:
+ * upload first with its own record, save the reading against that same
+ * record). Already read once (`status: "read"`) and not explicitly asked
+ * to redo it → the stored reading is reused, no second Gemini call —
+ * `force` is the one way around that, for the operator's own "Re-read this
+ * invoice" button. A row that was never read successfully (`uploaded` or
+ * `could_not_read`) always reads for real — that is the first real attempt,
+ * never a wasted repeat.
+ */
+export async function extractSupplierInvoiceForm(
+  uploadId: string,
+  force = false,
+): Promise<Result<{ proposal: SupplierInvoiceProposal; fileName: string }>> {
+  const admin = await requireStockStaff();
+  if (!admin) return { error: REFUSED };
+
+  const row = await db.supplierInvoiceUpload.findUnique({ where: { id: uploadId } });
+  if (!row) return { error: "That upload is no longer on record. Choose the file again." };
+  if (row.status === "processed") return { error: "This invoice has already been received — it can't be read again." };
+
+  if (!force && row.status === "read" && row.extraction) {
+    const proposal = await matchSupplierInvoice(row.extraction as unknown as ExtractedSupplierInvoice);
+    logger.info("inventory.invoice_read_reused", { actorId: admin.id, uploadId });
+    return { proposal, fileName: row.fileName };
+  }
+
+  let bytes: Uint8Array;
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: row.s3Key }));
+    bytes = await obj.Body!.transformToByteArray();
+  } catch {
+    return { error: "The uploaded file could not be read back from storage. Choose it again." };
+  }
+
+  let extraction: ExtractedSupplierInvoice;
+  try {
+    extraction = await readSupplierInvoiceWithRetry(bytes);
+  } catch (err) {
+    const raw = err instanceof Error ? err.message : String(err);
+    await db.supplierInvoiceUpload.update({
+      where: { id: uploadId },
+      data: { status: "could_not_read", errorMessage: raw.slice(0, 500) },
+    });
+    logger.warn("inventory.invoice_extraction_failed", { actorId: admin.id, uploadId, message: raw.slice(0, 300) });
+    return { error: friendlySupplierExtractionError(raw) };
+  }
+
+  await db.supplierInvoiceUpload.update({
+    where: { id: uploadId },
+    data: { status: "read", extraction: extraction as object, errorMessage: null, readAt: new Date() },
+  });
+
+  const proposal = await matchSupplierInvoice(extraction);
+  logger.info("inventory.invoice_extracted", {
+    actorId: admin.id,
+    uploadId,
+    forced: force,
+    lines: proposal.lines.length,
+    matchedSupplier: !!proposal.supplierId,
+  });
+  return { proposal, fileName: row.fileName };
 }
 
 export type ReceiveLine = {
@@ -232,8 +337,11 @@ export async function receiveDelivery(input: {
   invoiceNumber: string;
   invoiceDate: string;
   total: number | null;
-  invoiceS3Key: string | null;
-  invoiceFileName: string | null;
+  /** The upload this delivery was read from, when a PDF was uploaded — its
+   *  own s3Key/fileName are used, and it's marked processed in the same
+   *  transaction, so a repeat of this exact file refuses permanently
+   *  (2026-10-16). Null for a manually-entered delivery with no PDF. */
+  uploadId: string | null;
   receivedAtLocationId: string;
   receivedOn: string;
   notes: string;
@@ -257,6 +365,14 @@ export async function receiveDelivery(input: {
     where: { supplierId_invoiceNumber: { supplierId: input.supplierId, invoiceNumber: input.invoiceNumber.trim() } },
   });
   if (dup) return { error: `Invoice ${input.invoiceNumber.trim()} from this supplier is already received.` };
+
+  let upload: { id: string; s3Key: string; fileName: string } | null = null;
+  if (input.uploadId) {
+    const row = await db.supplierInvoiceUpload.findUnique({ where: { id: input.uploadId } });
+    if (!row) return { error: "That upload is no longer on record. Choose the file again." };
+    if (row.status === "processed") return { error: "This invoice has already been received." };
+    upload = row;
+  }
 
   const types = await db.inventoryItemType.findMany({ where: { id: { in: input.lines.map((l) => l.itemTypeId) } } });
   for (const [i, l] of input.lines.entries()) {
@@ -285,8 +401,8 @@ export async function receiveDelivery(input: {
           invoiceNumber: input.invoiceNumber.trim(),
           invoiceDate,
           total: input.total,
-          invoiceS3Key: input.invoiceS3Key,
-          invoiceFileName: input.invoiceFileName,
+          invoiceS3Key: upload?.s3Key ?? null,
+          invoiceFileName: upload?.fileName ?? null,
           notes: input.notes.trim() || null,
           createdById: admin.id,
         },
@@ -352,6 +468,12 @@ export async function receiveDelivery(input: {
           });
         }
       }
+      if (upload) {
+        await tx.supplierInvoiceUpload.update({
+          where: { id: upload.id },
+          data: { status: "processed", purchaseId: purchase.id },
+        });
+      }
       return ids;
     },
     { timeout: 60_000 },
@@ -362,8 +484,10 @@ export async function receiveDelivery(input: {
     invoiceNumber: input.invoiceNumber.trim(),
     batches: batchIds.length,
     officeId: office.id,
+    uploadId: upload?.id ?? null,
   });
   revalidatePath("/admin/inventory");
+  revalidatePath("/admin/inventory/receive");
   return { batchIds };
 }
 

@@ -4747,6 +4747,48 @@ model InventoryPurchase {
   @@map("inventory_purchases")
 }
 
+enum SupplierInvoiceUploadStatus {
+  uploaded // filed, not yet read
+  read // AI has proposed fields from it — ready to process
+  could_not_read // AI read failed; errorMessage says why
+  processed // receiveDelivery completed from this upload (purchaseId set)
+}
+
+/// A supplier invoice PDF, uploaded once and tracked through to processing
+/// (2026-10-16, user-asked: upload first with its own record, save the AI's
+/// reading against THAT record, let the operator process from there — and
+/// if the exact same file is uploaded again, refuse it and point at the
+/// existing upload rather than reading or storing it a second time).
+///
+/// `fileHash` (the file's own content, not its name) is what a re-upload is
+/// checked against — `receiveDelivery` sets `purchaseId` and flips the
+/// status to `processed` in the same transaction as creating the purchase,
+/// so a processed upload's own hash permanently refuses a repeat.
+model SupplierInvoiceUpload {
+  id           String                      @id @default(cuid())
+  fileHash     String                      @unique @map("file_hash")
+  s3Key        String                      @map("s3_key")
+  fileName     String                      @map("file_name")
+  byteSize     Int                         @map("byte_size")
+  status       SupplierInvoiceUploadStatus @default(uploaded)
+  /// The raw Gemini reading (seller/number/date/total/lines, each with its
+  /// verbatim source text) — never the item/supplier MATCH, which is
+  /// re-derived against whichever items and suppliers exist when the
+  /// operator opens it to process, so an old reading still proposes an
+  /// item type created after it was read.
+  extraction   Json?
+  errorMessage String?                     @map("error_message")
+  uploadedAt   DateTime                    @default(now()) @map("uploaded_at")
+  uploadedById String                      @map("uploaded_by_id")
+  readAt       DateTime?                   @map("read_at")
+  /// Set once receiveDelivery completes from this upload — the row that
+  /// makes a repeat of this exact file refuse permanently, not just until
+  /// the first read.
+  purchaseId   String?                     @unique @map("purchase_id")
+
+  @@map("supplier_invoice_uploads")
+}
+
 /// One line of a delivery — a lot with its own printed code.
 model InventoryBatch {
   id                   String        @id @default(cuid())

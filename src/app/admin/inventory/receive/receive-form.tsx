@@ -1,11 +1,25 @@
 "use client";
 
 import { FileDrop } from "@/components/file-drop";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardTitle, ErrorText, Field } from "@/components/ui";
+import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
 import { SerialScanButton } from "@/components/serial-scan";
-import { extractSupplierInvoiceForm, getSupplierInvoiceUploadUrl, receiveDelivery } from "../actions";
+import { formatInstant } from "@/lib/format-date";
+import { beginSupplierInvoiceUpload, extractSupplierInvoiceForm, receiveDelivery } from "../actions";
+
+type PendingUpload = {
+  id: string;
+  fileName: string;
+  status: "uploaded" | "read" | "could_not_read" | "processed";
+  uploadedAt: string;
+  errorMessage: string | null;
+};
+
+async function sha256Hex(file: File): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 
 type Item = { id: string; name: string; tracking: "serial" | "length" | "quantity"; unit: string; defaultWarrantyMonths: number | null };
 type Line = {
@@ -33,82 +47,152 @@ const blankLine = (): Line => ({
   rawDescription: "",
 });
 
+const STATUS_LABEL: Record<PendingUpload["status"], string> = {
+  uploaded: "Uploaded — not yet read",
+  read: "Read — ready to process",
+  could_not_read: "Could not be read",
+  processed: "Received",
+};
+const STATUS_TONE: Record<PendingUpload["status"], "neu" | "ok" | "warn"> = {
+  uploaded: "neu",
+  read: "ok",
+  could_not_read: "warn",
+  processed: "ok",
+};
+
 export function ReceiveForm({
   suppliers,
   offices,
   items,
   today,
+  pendingUploads,
+  resumeUploadId,
 }: {
   suppliers: { id: string; name: string }[];
   offices: { id: string; name: string }[];
   items: Item[];
   today: string;
+  pendingUploads: PendingUpload[];
+  resumeUploadId: string | null;
 }) {
   const router = useRouter();
   const [head, setHead] = useState({ supplierId: "", invoiceNumber: "", invoiceDate: today, total: "", officeId: offices[0]?.id ?? "", receivedOn: today, notes: "" });
   const [file, setFile] = useState<File | null>(null);
-  // Set the moment the chosen file finishes uploading (onFiles, below) — so
-  // submit() never re-uploads the same bytes a second time.
-  const [uploadedKey, setUploadedKey] = useState<string | null>(null);
+  // The upload this form is tied to, once one exists — submit() marks THIS
+  // row processed (2026-10-16), and it's what a re-read button re-reads.
+  const [uploadId, setUploadId] = useState<string | null>(null);
+  const [uploadFileName, setUploadFileName] = useState<string | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extractNote, setExtractNote] = useState<string | null>(null);
+  // Set when the chosen file's content hash matches an upload already on
+  // record — a duplicate is never re-uploaded or re-read, only pointed at.
+  const [duplicate, setDuplicate] = useState<{ id: string; fileName: string; status: PendingUpload["status"]; uploadedAt: string; firstBatchId: string | null } | null>(null);
   const [lines, setLines] = useState<Line[]>([blankLine()]);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const setLine = (i: number, p: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...p } : l)));
 
-  // Upload immediately on choosing a file, then read it back and auto-fill
-  // the form (2026-10-14, user-asked) — the operator still reviews and
-  // corrects everything before Receive stock; nothing here saves a row.
-  async function onChooseFile(f: File | null) {
-    setFile(f);
-    setUploadedKey(null);
-    setExtractNote(null);
-    if (!f) return;
+  function applyProposal(p: Awaited<ReturnType<typeof extractSupplierInvoiceForm>>["proposal"]) {
+    if (!p) return;
+    setHead((h) => ({
+      ...h,
+      supplierId: p.supplierId ?? h.supplierId,
+      invoiceNumber: p.invoiceNumber || h.invoiceNumber,
+      invoiceDate: p.invoiceDate || h.invoiceDate,
+      total: p.total !== null ? String(p.total) : h.total,
+    }));
+    if (p.lines.length > 0) {
+      setLines(
+        p.lines.map((l) => ({
+          ...blankLine(),
+          itemTypeId: l.itemTypeId ?? "",
+          quantity: l.quantity !== null ? String(l.quantity) : "",
+          unitCost: l.unitCost !== null ? String(l.unitCost) : "",
+          supplierLot: l.supplierLot,
+          rawDescription: l.itemTypeId ? "" : l.description,
+        })),
+      );
+    }
+    const unmatched = p.lines.filter((l) => !l.itemTypeId).length;
+    setExtractNote(
+      unmatched === 0
+        ? `Read ${p.lines.length} line${p.lines.length === 1 ? "" : "s"} from the invoice — check them before receiving.`
+        : `Read ${p.lines.length} line${p.lines.length === 1 ? "" : "s"} — ${unmatched} need an item chosen by hand (shown below each).`,
+    );
+  }
+
+  // Resume into a specific upload — from the pending-uploads list, from the
+  // duplicate banner's "process it" link, or from ?upload= on arrival.
+  async function resumeUpload(id: string, force = false) {
+    setError(null);
+    setDuplicate(null);
     setExtracting(true);
+    setUploadId(id);
     try {
-      const u = await getSupplierInvoiceUploadUrl(f.name);
-      if (u.error !== undefined || !u.uploadUrl) {
-        setExtractNote(u.error ?? "Could not prepare the upload.");
-        return;
-      }
-      const put = await fetch(u.uploadUrl, { method: "PUT", body: f, headers: { "Content-Type": "application/pdf" } });
-      if (!put.ok) {
-        setExtractNote(`The invoice PDF did not upload (${put.status}) — try again.`);
-        return;
-      }
-      setUploadedKey(u.key!);
-      const r = await extractSupplierInvoiceForm(u.key!);
+      const r = await extractSupplierInvoiceForm(id, force);
+      setUploadFileName(r.fileName ?? null);
       if (r.error !== undefined || !r.proposal) {
         setExtractNote(r.error ?? "Could not read the invoice.");
         return;
       }
-      const p = r.proposal;
-      setHead((h) => ({
-        ...h,
-        supplierId: p.supplierId ?? h.supplierId,
-        invoiceNumber: p.invoiceNumber || h.invoiceNumber,
-        invoiceDate: p.invoiceDate || h.invoiceDate,
-        total: p.total !== null ? String(p.total) : h.total,
-      }));
-      if (p.lines.length > 0) {
-        setLines(
-          p.lines.map((l) => ({
-            ...blankLine(),
-            itemTypeId: l.itemTypeId ?? "",
-            quantity: l.quantity !== null ? String(l.quantity) : "",
-            unitCost: l.unitCost !== null ? String(l.unitCost) : "",
-            supplierLot: l.supplierLot,
-            rawDescription: l.itemTypeId ? "" : l.description,
-          })),
-        );
+      applyProposal(r.proposal);
+    } finally {
+      setExtracting(false);
+    }
+  }
+
+  // Resuming straight off the URL (?upload=, on a fresh page load). Deferred
+  // to a microtask so resumeUpload's own setState calls land after this
+  // effect has committed, not synchronously inside it.
+  useEffect(() => {
+    if (!resumeUploadId) return;
+    queueMicrotask(() => {
+      void resumeUpload(resumeUploadId);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeUploadId]);
+
+  // Upload is its own step, recorded before anything reads it (2026-10-16,
+  // user-asked). The same bytes chosen again — this session or any other —
+  // are refused as a duplicate rather than uploaded or read a second time.
+  async function onChooseFile(f: File | null) {
+    setFile(f);
+    setUploadId(null);
+    setUploadFileName(null);
+    setExtractNote(null);
+    setDuplicate(null);
+    if (!f) return;
+    setExtracting(true);
+    try {
+      const hash = await sha256Hex(f);
+      const begin = await beginSupplierInvoiceUpload({ fileName: f.name, byteSize: f.size, fileHash: hash });
+      if (begin.error !== undefined) {
+        setExtractNote(begin.error);
+        return;
       }
-      const unmatched = p.lines.filter((l) => !l.itemTypeId).length;
-      setExtractNote(
-        unmatched === 0
-          ? `Read ${p.lines.length} line${p.lines.length === 1 ? "" : "s"} from the invoice — check them before receiving.`
-          : `Read ${p.lines.length} line${p.lines.length === 1 ? "" : "s"} — ${unmatched} need an item chosen by hand (shown below each).`,
-      );
+      if (begin.existing) {
+        setDuplicate({
+          id: begin.existing.id,
+          fileName: begin.existing.fileName,
+          status: begin.existing.status,
+          uploadedAt: begin.existing.uploadedAt,
+          firstBatchId: begin.existing.firstBatchId,
+        });
+        return;
+      }
+      const put = await fetch(begin.uploadUrl, { method: "PUT", body: f, headers: { "Content-Type": "application/pdf" } });
+      if (!put.ok) {
+        setExtractNote(`The invoice PDF did not upload (${put.status}) — try again.`);
+        return;
+      }
+      setUploadId(begin.uploadId);
+      setUploadFileName(f.name);
+      const r = await extractSupplierInvoiceForm(begin.uploadId);
+      if (r.error !== undefined || !r.proposal) {
+        setExtractNote(r.error ?? "Could not read the invoice.");
+        return;
+      }
+      applyProposal(r.proposal);
     } catch {
       setExtractNote("Could not read the invoice automatically — fill in the fields by hand.");
     } finally {
@@ -120,24 +204,12 @@ export function ReceiveForm({
     setError(null);
     startTransition(async () => {
       try {
-        let key = uploadedKey;
-        // Only reached if the file hasn't already uploaded above (e.g. the
-        // presign step failed and the operator picked the same file again
-        // without re-triggering onFiles) — the normal path already has a key.
-        if (!key && file) {
-          const u = await getSupplierInvoiceUploadUrl(file.name);
-          if (u.error !== undefined || !u.uploadUrl) return setError(u.error ?? "Could not prepare the upload.");
-          const put = await fetch(u.uploadUrl, { method: "PUT", body: file, headers: { "Content-Type": "application/pdf" } });
-          if (!put.ok) return setError(`The invoice PDF did not upload (${put.status}) — try again.`);
-          key = u.key!;
-        }
         const r = await receiveDelivery({
           supplierId: head.supplierId,
           invoiceNumber: head.invoiceNumber,
           invoiceDate: head.invoiceDate,
           total: head.total ? Number(head.total) : null,
-          invoiceS3Key: key,
-          invoiceFileName: file?.name ?? null,
+          uploadId,
           receivedAtLocationId: head.officeId,
           receivedOn: head.receivedOn,
           notes: head.notes,
@@ -163,6 +235,35 @@ export function ReceiveForm({
 
   return (
     <div className="space-y-5">
+      {pendingUploads.length > 0 && (
+        <Card className="p-5">
+          <CardTitle>Uploaded, not yet received</CardTitle>
+          <p className="mt-1 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            An invoice uploaded earlier that hasn&apos;t become a delivery yet — pick it up here rather than finding
+            and dropping the file again.
+          </p>
+          <div className="mt-3 space-y-2">
+            {pendingUploads.map((u) => (
+              <div key={u.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--r-sm)] border p-2.5" style={{ borderColor: "var(--border)" }}>
+                <div className="min-w-0">
+                  <p className="truncate text-[13.5px] font-medium">{u.fileName}</p>
+                  <p className="text-[12px]" style={{ color: "var(--text-subtle)" }}>
+                    uploaded {formatInstant(new Date(u.uploadedAt))}
+                    {u.status === "could_not_read" && u.errorMessage ? ` · ${u.errorMessage}` : ""}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusChip tone={STATUS_TONE[u.status]}>{STATUS_LABEL[u.status]}</StatusChip>
+                  <button type="button" className="btn-secondary btn-sm" onClick={() => resumeUpload(u.id)}>
+                    Process this
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <Card className="p-5">
         <CardTitle>The invoice</CardTitle>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -189,13 +290,40 @@ export function ReceiveForm({
             <FileDrop id="rc-file" accept="application/pdf" files={file ? [file] : []} onFiles={(f) => onChooseFile(f[0] ?? null)} compact />
             {extracting && (
               <p className="mt-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
-                Reading the invoice…
+                {uploadId ? "Reading the invoice…" : "Uploading…"}
               </p>
             )}
-            {!extracting && extractNote && (
+            {!extracting && duplicate && (
+              <div className="mt-2 rounded-[var(--r-sm)] border p-2.5 text-[13px]" style={{ borderColor: "var(--warn-fg)", color: "var(--warn-fg)" }}>
+                {duplicate.status === "processed" ? (
+                  <>
+                    This invoice has already been received (uploaded {formatInstant(new Date(duplicate.uploadedAt))}).{" "}
+                    {duplicate.firstBatchId && (
+                      <a href={`/admin/inventory/batches/${duplicate.firstBatchId}`} className="underline" target="_blank" rel="noreferrer">
+                        View it
+                      </a>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Already uploaded ({formatInstant(new Date(duplicate.uploadedAt))}, not yet processed).{" "}
+                    <button type="button" className="underline" onClick={() => resumeUpload(duplicate.id)}>
+                      Click here to process
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {!extracting && !duplicate && extractNote && (
               <p className="mt-2 text-[13px]" style={{ color: "var(--text-muted)" }}>
+                {uploadFileName && <span className="font-medium">{uploadFileName}: </span>}
                 {extractNote}
               </p>
+            )}
+            {!extracting && !duplicate && uploadId && (
+              <button type="button" className="btn-ghost btn-sm mt-2" onClick={() => resumeUpload(uploadId, true)}>
+                Re-read this invoice
+              </button>
             )}
           </Field>
         </div>

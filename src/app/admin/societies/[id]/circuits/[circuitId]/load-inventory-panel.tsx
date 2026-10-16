@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Card, EmptyState, ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { StepMarker } from "@/components/deal-stepper";
-import { addCircuitDevice, correctLockedCount, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
+import { addCircuitDevice, correctLockedCount, correctLockedDeviceType, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
 
 export type InventoryLine = {
   id: string;
@@ -291,7 +291,17 @@ function AddLineForm({
   );
 }
 
-function LineRow({ line, editable, canCorrect = false }: { line: InventoryLine; editable: boolean; canCorrect?: boolean }) {
+function LineRow({
+  line,
+  editable,
+  canCorrect = false,
+  catalog,
+}: {
+  line: InventoryLine;
+  editable: boolean;
+  canCorrect?: boolean;
+  catalog: CatalogOption[];
+}) {
   const [editing, setEditing] = useState(false);
   const [count, setCount] = useState(String(line.count));
   const [wattage, setWattage] = useState(String(line.wattage));
@@ -368,7 +378,10 @@ function LineRow({ line, editable, canCorrect = false }: { line: InventoryLine; 
       </td>
       {canCorrect && (
         <td>
-          <CorrectCount line={line} />
+          <span className="inline-flex flex-wrap gap-2">
+            <CorrectCount line={line} />
+            <CorrectDeviceType line={line} catalog={catalog} />
+          </span>
         </td>
       )}
       {editable && (
@@ -545,7 +558,7 @@ export function LoadInventoryPanel({
             </thead>
             <tbody>
               {lines.map((l) => (
-                <LineRow key={l.id} line={l} editable={editable} canCorrect={canCorrectCount && !editable} />
+                <LineRow key={l.id} line={l} editable={editable} canCorrect={canCorrectCount && !editable} catalog={catalog} />
               ))}
             </tbody>
             <tfoot>
@@ -664,6 +677,84 @@ function CorrectCount({ line }: { line: InventoryLine }) {
           </Field>
           <Field label="What was wrong" htmlFor={`cr-${line.id}`}>
             <input id={`cr-${line.id}`} value={reason} onChange={(e) => setReason(e.target.value)} disabled={pending} className="field" placeholder="e.g. 63 typed instead of 55" />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * A device TYPE picked wrong on a locked inventory (2026-10-16) — the same
+ * class of mistake as a mistyped count, just on which catalog entry a line
+ * points at rather than its figure.
+ */
+function CorrectDeviceType({ line, catalog }: { line: InventoryLine; catalog: CatalogOption[] }) {
+  const [open, setOpen] = useState(false);
+  const [deviceTypeId, setDeviceTypeId] = useState(line.deviceTypeId);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, start] = useTransition();
+  function save() {
+    start(async () => {
+      const r = await correctLockedDeviceType({ lineId: line.id, deviceTypeId, reason });
+      if ("error" in r) setError(r.error);
+      else {
+        setError(undefined);
+        setOpen(false);
+      }
+    });
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-ghost text-xs"
+        onClick={() => {
+          setDeviceTypeId(line.deviceTypeId);
+          setReason("");
+          setError(undefined);
+          setOpen(true);
+        }}
+      >
+        Correct device
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={`Correct the device — ${line.deviceTypeName}`}
+        description="For a catalog entry picked wrong. The count, wattage and hours stay exactly as they are — only which fixture this line records changes."
+        footer={
+          <>
+            <button type="button" onClick={save} disabled={pending || reason.trim() === ""} className="btn-primary">
+              {pending ? "Saving…" : "Save the correction"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} disabled={pending} className="btn-ghost">
+              Cancel
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Correct device" htmlFor={`cdt-${line.id}`} hint={`On record: ${line.deviceTypeName}.`}>
+            <select id={`cdt-${line.id}`} value={deviceTypeId} onChange={(e) => setDeviceTypeId(e.target.value)} disabled={pending} className="field">
+              {catalog.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="What was wrong" htmlFor={`cdtr-${line.id}`}>
+            <input
+              id={`cdtr-${line.id}`}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={pending}
+              className="field"
+              placeholder="e.g. surface light picked instead of tube light"
+            />
           </Field>
           {error && <ErrorText>{error}</ErrorText>}
         </div>

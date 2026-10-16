@@ -324,6 +324,61 @@ export async function correctLockedCount(input: { lineId: string; count: number;
   return { ok: true };
 }
 
+/**
+ * Correct a line's DEVICE TYPE on a locked inventory (2026-10-16, user-asked:
+ * "somewhere by mistake i selected surface light instead of tubelight" — a
+ * mix-up between two same-wattage catalog entries, caught only once the
+ * circuit reached its Light replacement step, by which point the meter is
+ * installed and the inventory is locked). Same gate and shape as
+ * `correctLockedCount` above — this is the identical class of mistake, just
+ * on a different field: a typo in which catalog entry was picked, not a
+ * change in what is actually on the wall. Count, wattage and hours are left
+ * exactly as they are; only the catalog entry a line points at moves, so
+ * there is no count/represented-light-count ripple to propagate the way a
+ * COUNT correction has.
+ */
+export async function correctLockedDeviceType(input: { lineId: string; deviceTypeId: string; reason: string }): Promise<Outcome> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  const p = admin.permissions as string[];
+  if (!(p.includes("manage_survey") && p.includes("manage_pipeline"))) {
+    logger.warn("inventory.device_type_correction_refused", { actorId: admin.id, lineId: input.lineId, reason: "not_ops" });
+    return { error: "Correcting a locked device type is an operations lead action." };
+  }
+  const reason = input.reason?.trim() ?? "";
+  if (!reason) return { error: "Say what was wrong — a correction with no stated reason cannot be reviewed later." };
+
+  const line = await db.circuitDevice.findUnique({ where: { id: input.lineId }, select: { id: true, circuitId: true, deviceTypeId: true } });
+  if (!line) return { error: "That inventory line is no longer on record." };
+  const circuit = await db.circuit.findUnique({ where: { id: line.circuitId }, select: { id: true, societyId: true, voidedAt: true } });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+  if (line.deviceTypeId === input.deviceTypeId) return { error: "That is already this line's device type." };
+
+  const type = await db.deviceType.findUnique({ where: { id: input.deviceTypeId } });
+  if (!type || !type.active || type.role !== "original") {
+    return { error: "Pick a device from the catalog — if it's missing, ops can add it there." };
+  }
+
+  await db.$transaction(async (tx) => {
+    await tx.circuitDevice.update({ where: { id: input.lineId }, data: { deviceTypeId: input.deviceTypeId } });
+    await logChange(tx, {
+      entity: "circuit_device",
+      entityId: input.lineId,
+      kind: "edit",
+      field: "deviceTypeId",
+      circuitId: circuit.id,
+      oldValue: line.deviceTypeId,
+      newValue: input.deviceTypeId,
+      reason,
+      actorId: admin.id,
+    });
+    await resyncCircuitFigures(tx, circuit.id, admin.id);
+  });
+  logger.info("inventory.device_type_corrected", { actorId: admin.id, circuitId: circuit.id, lineId: input.lineId, from: line.deviceTypeId, to: input.deviceTypeId, reason });
+  revalidatePath(circuitPath(circuit.societyId, circuit.id));
+  return { ok: true };
+}
+
 // ---- The light-count audit trail's own backend escape hatch (2026-10-06,
 // user-asked, after a real back-and-forth correction — two real people,
 // five minutes apart, netting to no actual change — read as nonsensical

@@ -29,6 +29,7 @@ import { NextStepCallout } from "@/components/deal-stepper";
 import type { NextAction } from "@/lib/deal-progress";
 import { bestKycAcross, kycDocumentsWanted } from "@/lib/kyc-society";
 import { SOCIETY_DOC_TYPES, societyDocuments } from "@/lib/society-documents";
+import { WithdrawButton } from "@/app/admin/documents/withdraw-button";
 
 const ALL_SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"];
 
@@ -600,6 +601,18 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                         <Link href={d.adminHref} className="btn-secondary btn-sm">
                           Open
                         </Link>
+                      )}
+                      {/* Only a genuine filed document (gate pass, a scanned
+                          historical report, …) can be withdrawn here — a
+                          GENERATED record (a published report, a finalised
+                          inspection) is corrected on its own screen instead
+                          (2026-10-16, user-asked: delete a gate pass filed
+                          by mistake). Same action/permission as the
+                          Documents tab's own Withdraw control. */}
+                      {d.external && d.version !== undefined && viewer?.permissions.includes("manage_pipeline") && (
+                        <div className="mt-1">
+                          <WithdrawButton documentId={d.id} version={d.version} />
+                        </div>
                       )}
                     </td>
                   </tr>

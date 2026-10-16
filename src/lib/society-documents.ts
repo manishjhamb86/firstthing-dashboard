@@ -46,6 +46,12 @@ export type SocietyDocRow = {
   adminHref: string;
   /** A file download (opens in a new tab) rather than a page in the app. */
   external: boolean;
+  /** Set only for a genuine StoredDocument row (external === true, and `id`
+   *  is that document's own id) — the thing a mistaken upload can be
+   *  withdrawn by, via voidDocumentVersion. A generated record (a published
+   *  report, a finalised inspection) has no version here and is corrected
+   *  on its own screen instead. */
+  version?: number;
 };
 
 const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
@@ -110,6 +116,7 @@ export async function societyDocuments(societyId: string): Promise<{ agreement: 
       portalHref: publicS3Url(d.s3Key),
       adminHref: publicS3Url(d.s3Key),
       external: true,
+      version: d.version,
     }),
   );
   const agreement = stored.find((d) => d.docType === "agreement") ?? null;

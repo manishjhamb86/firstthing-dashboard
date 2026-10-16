@@ -183,6 +183,22 @@ export function levelFromProperties(
   return { level: normaliseLevel(p.value, max), raw: p.value, time: p.time };
 }
 
+/**
+ * The controller's own `motor_status` datapoint, verbatim (2026-10-16,
+ * user-asked: "add Motor status as Valve Status with the water monitors
+ * against each sensor"). Read live, confirmed against this account's real
+ * devices: the IT56WLCW tank controllers report it alongside
+ * `liquid_level_percent` on the same shadow, value "Normal" on every device
+ * checked. Shown as-is rather than translated through an invented enum —
+ * there is no documentation to say what other strings this model can
+ * report, and guessing at a translation table for values never actually
+ * seen would be exactly the class of mistake the levelMax bug already was.
+ */
+export function motorStatusFromProperties(props: TuyaProperty[]): string | null {
+  const p = props.find((x) => x.code === "motor_status");
+  return p && typeof p.value === "string" && p.value.trim() ? p.value : null;
+}
+
 export function normaliseLevel(raw: number, max: number): number {
   // A zero or nonsensical max would silently produce Infinity or NaN and land
   // in a figure a society reads as its water. Fall back to "raw is already a
@@ -242,6 +258,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
     let level: { level: number; raw: number; time: number } | null = null;
     let hasLevelSignal = false;
     let levelMax = 100;
+    let motorStatus: string | null = null;
     try {
       const props = await getTuyaShadow(cfg, d.tuyaDeviceId);
       // The model first: without its declared max the raw value cannot be
@@ -251,6 +268,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
       }
       level = levelFromProperties(props, levelMax);
       hasLevelSignal = level !== null;
+      motorStatus = motorStatusFromProperties(props);
     } catch (err) {
       // A device whose shadow read fails stays listed with its cached state
       // — one flaky sensor must not fail the whole sync.
@@ -267,6 +285,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
         hasLevelSignal,
         levelMax,
         lastOnline: d.isOnline,
+        lastMotorStatus: motorStatus,
         ...(level ? { lastLevelPercent: level.level, lastReportedAt: new Date(level.time) } : {}),
       },
       update: {
@@ -274,6 +293,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
         productName: d.productName,
         category: d.category,
         lastOnline: d.isOnline,
+        lastMotorStatus: motorStatus,
         syncedAt: new Date(),
         ...(level
           ? {

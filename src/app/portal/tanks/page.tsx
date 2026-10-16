@@ -10,7 +10,7 @@ import { WaterPitch } from "./water-pitch";
 import { TankVisual } from "@/components/tank-visual";
 import { TankHistory, type LevelPoint } from "./tank-history";
 import { formatInstant, timeAgo } from "@/lib/format-date";
-import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
+import { getTuyaShadow, levelFromProperties, motorStatusFromProperties, resolveTuyaConfig } from "@/lib/tuya";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -81,13 +81,14 @@ export default async function PortalTanksPage() {
   // when Tuya is slow or down — residents get the last sample, honestly
   // timestamped, not an error page.
   const cfg = await resolveTuyaConfig();
-  const live = new Map<string, { level: number; reportedAt: Date }>();
+  const live = new Map<string, { level: number; reportedAt: Date; motorStatus: string | null }>();
   if (cfg && tanks.length > 0) {
     await Promise.allSettled(
       tanks.map(async (t) => {
         try {
-          const level = levelFromProperties(await getTuyaShadow(cfg, t.tuyaDeviceId), t.levelMax);
-          if (level) live.set(t.id, { level: level.level, reportedAt: new Date(level.time) });
+          const props = await getTuyaShadow(cfg, t.tuyaDeviceId);
+          const level = levelFromProperties(props, t.levelMax);
+          if (level) live.set(t.id, { level: level.level, reportedAt: new Date(level.time), motorStatus: motorStatusFromProperties(props) });
         } catch (err) {
           logger.warn("tank.portal_live_read_failed", { tankId: t.id, error: String(err) });
         }
@@ -132,11 +133,17 @@ export default async function PortalTanksPage() {
     // right now; otherwise it's the half-hourly sampling job's own last
     // successful fetch (syncedAt).
     const updatedAt = l ? new Date(now) : t.syncedAt;
+    // The live read when it succeeded this render, else the mirror's own
+    // cached value from the last sampling pass (2026-10-16, user-asked:
+    // "add Motor status as Valve Status with the water monitors against
+    // each sensor").
+    const motorStatus = l ? l.motorStatus : t.lastMotorStatus;
     return {
       tank: t,
       level: l?.level ?? t.lastLevelPercent ?? null,
       reportedAt,
       updatedAt,
+      motorStatus,
       quiet,
       unchangedFor,
       offline: !t.lastOnline,
@@ -274,11 +281,12 @@ export default async function PortalTanksPage() {
               {sub.location}
             </h3>
           )}
-          <div
-            className="mb-5 grid gap-5 last:mb-0"
-            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 440px), 1fr))" }}
-          >
-            {sub.rows.map(({ tank: t, level, updatedAt, quiet, unchangedFor, offline, history }) => {
+          {/* Exactly two per row on desktop, never auto-fill-however-many-fit
+              (user-asked, 2026-10-16: "on desktop can show two tanks in one
+              row... dont touch mobile design") — a single column below `lg`
+              is untouched from before this change. */}
+          <div className="mb-5 grid grid-cols-1 gap-5 last:mb-0 lg:grid-cols-2">
+            {sub.rows.map(({ tank: t, level, updatedAt, motorStatus, quiet, unchangedFor, offline, history }) => {
               const isLow = !quiet && level !== null && level < LOW_PCT;
               return (
                 <Card key={t.id} className="flex flex-wrap items-stretch gap-x-5 gap-y-3 p-4 sm:p-5">
@@ -300,6 +308,9 @@ export default async function PortalTanksPage() {
                         <StatusChip tone="warn">Running low</StatusChip>
                       ) : (
                         <StatusChip tone="ok">Live</StatusChip>
+                      )}
+                      {motorStatus && (
+                        <StatusChip tone={motorStatus === "Normal" ? "ok" : "warn"}>Valve: {motorStatus}</StatusChip>
                       )}
                       <span>
                         Last updated <span className="num">{formatInstant(updatedAt)}</span>

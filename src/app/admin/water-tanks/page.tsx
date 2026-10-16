@@ -106,6 +106,7 @@ export default async function WaterTanksPage() {
             // poll that found nothing new (2026-10-15, user-asked: "show 2
             // timestamps, first Last Report and 2nd last updated/fetched").
             syncedAt: t.syncedAt.toISOString(),
+            motorStatus: t.lastMotorStatus,
             stale: isStale(t.lastReportedAt),
             society: t.society ? { id: t.society.id, name: t.society.name, location: t.society.location } : null,
           }))}

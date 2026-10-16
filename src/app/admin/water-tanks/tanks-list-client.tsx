@@ -21,6 +21,9 @@ type Row = {
   /** When our own sampling job last fetched this device — distinct from
    *  reportedAt, the device's own self-reported instant. */
   syncedAt: string;
+  /** The controller's own motor_status datapoint, verbatim; null when the
+   *  device has no motor output on its shadow at all. */
+  motorStatus: string | null;
   /** Connected, but its level has not changed in a long while. */
   stale: boolean;
   society: { id: string; name: string; location: string } | null;
@@ -220,6 +223,7 @@ export function TanksListClient({
               <th>Tank</th>
               <th>Level</th>
               <th>Status</th>
+              <th className="hidden lg:table-cell">Valve status</th>
               <th>Society</th>
               <th className="hidden lg:table-cell">Last report</th>
               <th className="hidden lg:table-cell">Last updated</th>
@@ -266,6 +270,13 @@ export function TanksListClient({
                       <StatusChip tone="warn">Offline</StatusChip>
                     ) : (
                       <StatusChip tone="neu">Offline</StatusChip>
+                    )}
+                  </td>
+                  <td className="hidden lg:table-cell">
+                    {t.motorStatus ? (
+                      <StatusChip tone={t.motorStatus === "Normal" ? "ok" : "warn"}>{t.motorStatus}</StatusChip>
+                    ) : (
+                      <span style={{ color: "var(--text-subtle)" }}>—</span>
                     )}
                   </td>
                   <td>
@@ -344,6 +355,9 @@ export function TanksListClient({
                       <StatusChip tone="warn">Offline</StatusChip>
                     ) : (
                       <StatusChip tone="neu">Offline</StatusChip>
+                    )}
+                    {t.motorStatus && (
+                      <StatusChip tone={t.motorStatus === "Normal" ? "ok" : "warn"}>{t.motorStatus}</StatusChip>
                     )}
                     {t.society ? (
                       <span className="text-[12.5px] font-medium">

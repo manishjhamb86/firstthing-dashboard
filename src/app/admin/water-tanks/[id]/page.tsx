@@ -239,6 +239,16 @@ export default async function TankStatusPage({
                 </dd>
               </div>
               {[
+                [
+                  "Valve status",
+                  tank.lastMotorStatus ? (
+                    <StatusChip key="v" tone={tank.lastMotorStatus === "Normal" ? "ok" : "warn"}>
+                      {tank.lastMotorStatus}
+                    </StatusChip>
+                  ) : (
+                    "—"
+                  ),
+                ],
                 ["Device ID", <span key="v" className="num">{tank.tuyaDeviceId}</span>],
                 ["Product", tank.productName || "—"],
                 ["Category", <span key="v" className="num">{tank.category}</span>],
@@ -385,6 +395,16 @@ export default async function TankStatusPage({
             <CardTitle>Device</CardTitle>
             <dl className="grid gap-x-8 gap-y-2.5 text-sm sm:grid-cols-2">
               {[
+                [
+                  "Valve status",
+                  tank.lastMotorStatus ? (
+                    <StatusChip key="v" tone={tank.lastMotorStatus === "Normal" ? "ok" : "warn"}>
+                      {tank.lastMotorStatus}
+                    </StatusChip>
+                  ) : (
+                    "—"
+                  ),
+                ],
                 ["Device ID", <span key="v" className="num">{tank.tuyaDeviceId}</span>],
                 ["Product", tank.productName || "—"],
                 ["Category", <span key="v" className="num">{tank.category}</span>],

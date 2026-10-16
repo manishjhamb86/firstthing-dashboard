@@ -3679,6 +3679,15 @@ model WaterTank {
   lastLevelPercent Int?       @map("last_level_percent")
   lastOnline       Boolean    @default(false) @map("last_online")
   lastReportedAt   DateTime?  @map("last_reported_at")
+  /// The controller's own `motor_status` datapoint (2026-10-16, user-asked:
+  /// "add Motor status as Valve Status with the water monitors against each
+  /// sensor"), shown verbatim rather than translated through an invented
+  /// enum — the only value ever observed on this account's own IT56WLCW
+  /// controllers is "Normal"; any other string Tuya reports is shown as-is
+  /// rather than guessed at. Null for a plain level sensor with no motor
+  /// output on its shadow at all — the same "don't fabricate a field that
+  /// doesn't exist for this device" rule hasLevelSignal already follows.
+  lastMotorStatus  String?    @map("last_motor_status")
   syncedAt         DateTime   @default(now()) @map("synced_at")
   createdAt        DateTime   @default(now()) @map("created_at")
 
@@ -3703,6 +3712,10 @@ model TankLevelReading {
   /// When the sensor itself last reported at sample time — an offline
   /// sensor's level is its last report, and the row says so.
   reportedAt   DateTime? @map("reported_at")
+  /// The same `motor_status` the live tank row carries, kept on each sample
+  /// for a history worth reading back later (2026-10-16) — null wherever the
+  /// device has no motor output at all.
+  motorStatus  String?   @map("motor_status")
 
   tank WaterTank @relation(fields: [tankId], references: [id], onDelete: Cascade)
 

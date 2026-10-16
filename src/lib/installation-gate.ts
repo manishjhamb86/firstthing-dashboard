@@ -101,6 +101,28 @@ export function evaluateDayGate(input: {
 
   const disputed = previousBatches.filter((b) => b.state === "disputed");
   const outstanding = previousBatches.filter((b) => b.state !== "approved" && b.state !== "disputed");
+  // The two outstanding shapes read very differently to the person asking
+  // "why is tomorrow blocked" (2026-10-17, user-caught: the admin screen
+  // said "unapproved" while the society's own portal showed nothing at all
+  // waiting on them to review — because nothing had actually been
+  // submitted yet). "Unapproved" is true either way, but it reads as "the
+  // society hasn't acted," when the real blocker can just as easily be
+  // "the crew never finished logging the day."
+  const neverSubmitted = outstanding.filter((b) => b.submittedAt === null);
+  const awaitingReview = outstanding.filter((b) => b.submittedAt !== null);
+  const outstandingDescription = (): string => {
+    if (neverSubmitted.length > 0 && awaitingReview.length === 0) {
+      return neverSubmitted.length === 1
+        ? "the previous day's batch was never submitted"
+        : `${neverSubmitted.length} of the previous day's batches were never submitted`;
+    }
+    if (awaitingReview.length > 0 && neverSubmitted.length === 0) {
+      return awaitingReview.length === 1
+        ? "the previous day's batch is still awaiting the society's approval"
+        : `${awaitingReview.length} of the previous day's batches are still awaiting the society's approval`;
+    }
+    return `${neverSubmitted.length} of the previous day's batches were never submitted and ${awaitingReview.length} are still awaiting the society's approval`;
+  };
 
   if (input.skipUsedForDay) {
     return {
@@ -132,7 +154,7 @@ export function evaluateDayGate(input: {
         deadline,
         outstanding,
         disputed,
-        reason: `The previous day is still unapproved and the ${REVIEW_LEAD_HOURS}-hour deadline has passed. Tomorrow's start is on hold.`,
+        reason: `The ${REVIEW_LEAD_HOURS}-hour deadline has passed and ${outstandingDescription()}. Tomorrow's start is on hold.`,
       };
     }
     const atRisk = now >= new Date(deadline.getTime() - REVIEW_LEAD_HOURS * HOUR_MS);
@@ -142,7 +164,9 @@ export function evaluateDayGate(input: {
       deadline,
       outstanding,
       disputed,
-      reason: atRisk ? "Approval is due shortly. Without it, tomorrow's crew cannot start." : null,
+      reason: atRisk
+        ? `Due shortly — ${outstandingDescription()}. Without it, tomorrow's crew cannot start.`
+        : null,
     };
   }
 

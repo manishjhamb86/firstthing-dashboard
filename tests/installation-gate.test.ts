@@ -236,6 +236,48 @@ describe("partialCompletionBlockers — the exceptional-billing exemption (2026-
   });
 });
 
+describe("evaluateDayGate — 'never submitted' reads differently from 'awaiting review' (2026-10-17, user-caught)", () => {
+  // Aditya Urban Casa, production: day 1's batch sat in draft (the crew
+  // opened it, never submitted) while the admin screen said "unapproved,"
+  // which reads as "the society hasn't acted" — but the portal correctly
+  // showed nothing to review, because nothing had actually been sent to
+  // them. The reason text has to say which one is true.
+  it("names a never-submitted batch, not 'unapproved'", () => {
+    const g = evaluateDayGate({
+      previousBatches: [batch({ state: "draft", submittedAt: null, reviewedAt: null })],
+      startAt: START,
+      now: DEADLINE,
+    });
+    expect(g.status).toBe("blocked");
+    expect(g.reason).toContain("never submitted");
+    expect(g.reason).not.toContain("awaiting the society's approval");
+  });
+
+  it("names a submitted-but-unreviewed batch distinctly", () => {
+    const g = evaluateDayGate({
+      previousBatches: [batch({ state: "awaiting_review", reviewedAt: null })],
+      startAt: START,
+      now: DEADLINE,
+    });
+    expect(g.status).toBe("blocked");
+    expect(g.reason).toContain("awaiting the society's approval");
+    expect(g.reason).not.toContain("never submitted");
+  });
+
+  it("names both counts when the areas are a mix of the two", () => {
+    const g = evaluateDayGate({
+      previousBatches: [
+        batch({ id: "b1", state: "draft", submittedAt: null, reviewedAt: null }),
+        batch({ id: "b2", areaKey: "Tower B", state: "awaiting_review", reviewedAt: null }),
+      ],
+      startAt: START,
+      now: DEADLINE,
+    });
+    expect(g.reason).toContain("1 of the previous day's batches were never submitted");
+    expect(g.reason).toContain("1 are still awaiting the society's approval");
+  });
+});
+
 describe("evaluateDayGateChain — a block propagates forward (2026-10-17, user-caught)", () => {
   // Day 1 at 09:00, each day after one calendar day apart, same 09:00 start.
   const dayStart = (n: number) => new Date(`2026-09-${10 + n}T09:00:00Z`);

@@ -236,6 +236,10 @@ export default async function CircuitDetailPage({
     where: { originalTypeId: { in: circuit.devices.map((d) => d.deviceTypeId) } },
     include: { replacement: { select: { id: true, name: true, defaultWattage: true, active: true } } },
   });
+  // Null unless the circuit's one inventory line has been SPLIT across two or
+  // more demos (2026-10-17) — see CircuitDevice.demoId's own comment. A line
+  // with no owning demo belongs to every demo, the ordinary case.
+  const demoLabelOf = (demoId: string | null) => (demoId ? `Demo ${circuit.demos.find((d) => d.id === demoId)?.sequence ?? "?"}` : null);
   const replacementFormLines = circuit.devices.map((l) => ({
     lineId: l.id,
     deviceName: l.deviceType.name,
@@ -251,6 +255,10 @@ export default async function CircuitDetailPage({
     options: replacementOptionRows
       .filter((o) => o.originalTypeId === l.deviceTypeId && o.replacement.active)
       .map((o) => ({ id: o.replacement.id, name: o.replacement.name, defaultWattage: o.replacement.defaultWattage })),
+    // Not part of ReplacementFormLine's own exported type — read only by the
+    // per-demo filter below, never passed through to the component as a prop
+    // it doesn't declare.
+    demoId: l.demoId,
   }));
   const inventoryLines: InventoryLine[] = circuit.devices.map((l) => ({
     id: l.id,
@@ -265,6 +273,7 @@ export default async function CircuitDetailPage({
     replacementName: l.replacementType?.name ?? null,
     replacementCount: l.replacementCount,
     replacementWattage: l.replacementWattage,
+    demoLabel: demoLabelOf(l.demoId),
   }));
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
   const anyMeterInstalled = circuit.demos.some((d) => d.meterInstalledAt !== null);
@@ -486,6 +495,7 @@ export default async function CircuitDetailPage({
           // through an administrator, which is what the frozen message says.
           canRecordHistorical={canEdit && !circuit.voidedAt && demoMode}
           canCorrectCount={canOverride && anyMeterInstalled && !circuit.voidedAt}
+          demos={circuit.demos.map((d) => ({ id: d.id, label: `Demo ${d.sequence}` }))}
         />
       </section>
 
@@ -756,7 +766,10 @@ export default async function CircuitDetailPage({
                           only if the work has actually been done.
                         </PageRibbon>
                       )}
-                      <LightReplacementForm demoId={demo.id} lines={replacementFormLines} />
+                      <LightReplacementForm
+                        demoId={demo.id}
+                        lines={replacementFormLines.filter((l) => l.demoId === null || l.demoId === demo.id)}
+                      />
                     </div>
                   ) : (
                     readOnly(lockedNote ?? (ownerName ? `Awaiting ${ownerName} to record the replacement.` : "Awaiting the field team."))
@@ -767,7 +780,7 @@ export default async function CircuitDetailPage({
                       <ReplacementFollowUpStatus followUps={demo.replacementFollowUps} />
                       <ReplacementRecord
                         demoId={demo.id}
-                        lines={replacementFormLines}
+                        lines={replacementFormLines.filter((l) => l.demoId === null || l.demoId === demo.id)}
                         date={isoDate(demo.lightReplacementDate)}
                         canCorrect={editable}
                       />

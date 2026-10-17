@@ -4,7 +4,14 @@ import { useState, useTransition } from "react";
 import { Card, EmptyState, ErrorText, Field, StatusChip } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { StepMarker } from "@/components/deal-stepper";
-import { addCircuitDevice, correctLockedCount, correctLockedDeviceType, removeCircuitDevice, updateCircuitDevice } from "./inventory-actions";
+import {
+  addCircuitDevice,
+  correctLockedCount,
+  correctLockedDeviceType,
+  removeCircuitDevice,
+  splitLockedDeviceLine,
+  updateCircuitDevice,
+} from "./inventory-actions";
 
 export type InventoryLine = {
   id: string;
@@ -20,9 +27,13 @@ export type InventoryLine = {
   historical: boolean;
   /** Stays on the circuit unreplaced; its draw comes off the benchmark. */
   excluded: boolean;
+  /** Set only when this line was split to belong to one specific demo
+   *  (2026-10-17) — e.g. "Demo 1". Null means it belongs to every demo. */
+  demoLabel: string | null;
 };
 
 export type CatalogOption = { id: string; name: string; defaultWattage: number | null };
+export type DemoOption = { id: string; label: string };
 
 function lineKwh(l: { count: number; wattage: number; hoursPerDay: number }) {
   return (l.count * l.wattage * l.hoursPerDay) / 1000;
@@ -296,11 +307,13 @@ function LineRow({
   editable,
   canCorrect = false,
   catalog,
+  demos,
 }: {
   line: InventoryLine;
   editable: boolean;
   canCorrect?: boolean;
   catalog: CatalogOption[];
+  demos: DemoOption[];
 }) {
   const [editing, setEditing] = useState(false);
   const [count, setCount] = useState(String(line.count));
@@ -362,6 +375,13 @@ function LineRow({
             <StatusChip tone="neu">Past record</StatusChip>
           </span>
         )}
+        {/* This line was split to belong to one specific demo (2026-10-17) —
+            named so it's never mistaken for the circuit's whole inventory. */}
+        {line.demoLabel && (
+          <span className="ml-2 align-middle">
+            <StatusChip tone="info">{line.demoLabel}</StatusChip>
+          </span>
+        )}
       </td>
       <td className="num">{line.count}</td>
       <td className="num">{line.wattage}</td>
@@ -381,6 +401,12 @@ function LineRow({
           <span className="inline-flex flex-wrap gap-2">
             <CorrectCount line={line} />
             <CorrectDeviceType line={line} catalog={catalog} />
+            {/* Only offered on a line not already split, and not yet
+                recorded against — the same two conditions splitLockedDeviceLine
+                itself enforces server-side. */}
+            {line.demoLabel === null && line.replacementCount === null && demos.length >= 2 && (
+              <SplitLine line={line} demos={demos} />
+            )}
           </span>
         </td>
       )}
@@ -470,6 +496,7 @@ export function LoadInventoryPanel({
   frozenReason,
   canRecordHistorical,
   canCorrectCount = false,
+  demos = [],
 }: {
   circuitId: string;
   lines: InventoryLine[];
@@ -479,6 +506,9 @@ export function LoadInventoryPanel({
   canRecordHistorical: boolean;
   /** Operations may correct a mistyped count on a locked inventory. */
   canCorrectCount?: boolean;
+  /** The circuit's own live demos — needed only to offer splitting a line
+   *  across more than one of them. */
+  demos?: DemoOption[];
 }) {
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
   const anyReplacement = lines.some((l) => l.replacementName || l.excluded);
@@ -558,7 +588,7 @@ export function LoadInventoryPanel({
             </thead>
             <tbody>
               {lines.map((l) => (
-                <LineRow key={l.id} line={l} editable={editable} canCorrect={canCorrectCount && !editable} catalog={catalog} />
+                <LineRow key={l.id} line={l} editable={editable} canCorrect={canCorrectCount && !editable} catalog={catalog} demos={demos} />
               ))}
             </tbody>
             <tfoot>
@@ -754,6 +784,104 @@ function CorrectDeviceType({ line, catalog }: { line: InventoryLine; catalog: Ca
               disabled={pending}
               className="field"
               placeholder="e.g. surface light picked instead of tube light"
+            />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * Split one line across two or more of the circuit's own demos (2026-10-17,
+ * user-caught) — for when a circuit's single inventory line is really the
+ * combined population of two separately-run demos, each of which has to
+ * record its OWN replacement without clobbering the other's. Each demo gets
+ * its own row after this; neither shows the other's line any more.
+ */
+function SplitLine({ line, demos }: { line: InventoryLine; demos: DemoOption[] }) {
+  const [open, setOpen] = useState(false);
+  const [counts, setCounts] = useState<Record<string, string>>({});
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, start] = useTransition();
+
+  const total = demos.reduce((n, d) => n + (Number(counts[d.id]) || 0), 0);
+  const reconciles = total === line.count;
+
+  function save() {
+    const allocations = demos
+      .map((d) => ({ demoId: d.id, count: Number(counts[d.id]) || 0 }))
+      .filter((a) => a.count > 0);
+    start(async () => {
+      const r = await splitLockedDeviceLine({ lineId: line.id, allocations, reason });
+      if ("error" in r) setError(r.error);
+      else {
+        setError(undefined);
+        setOpen(false);
+      }
+    });
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-ghost text-xs"
+        onClick={() => {
+          setCounts({});
+          setReason("");
+          setError(undefined);
+          setOpen(true);
+        }}
+      >
+        Split for demos
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={`Split — ${line.deviceTypeName}`}
+        description="For a line that is really the combined population of two or more separate demos, each run on its own share of it. Give each demo its own count — they have to add up to this line's own total."
+        footer={
+          <>
+            <button type="button" onClick={save} disabled={pending || reason.trim() === "" || !reconciles || total === 0} className="btn-primary">
+              {pending ? "Saving…" : "Save the split"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} disabled={pending} className="btn-ghost">
+              Cancel
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="space-y-2">
+            {demos.map((d) => (
+              <Field key={d.id} label={d.label} htmlFor={`sl-${line.id}-${d.id}`}>
+                <input
+                  id={`sl-${line.id}-${d.id}`}
+                  type="number"
+                  min={0}
+                  value={counts[d.id] ?? ""}
+                  onChange={(e) => setCounts((prev) => ({ ...prev, [d.id]: e.target.value }))}
+                  disabled={pending}
+                  className="field"
+                  placeholder="0 — leave blank if none of this line is theirs"
+                />
+              </Field>
+            ))}
+          </div>
+          <p className={`text-sm ${reconciles ? "text-[var(--text-muted)]" : "text-[var(--bad-fg)]"}`}>
+            {total} allocated against {line.count} on this line{reconciles ? " — reconciled" : " — these must match before saving"}
+          </p>
+          <Field label="Why this line is being split" htmlFor={`slr-${line.id}`}>
+            <input
+              id={`slr-${line.id}`}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={pending}
+              className="field"
+              placeholder="e.g. two separate demos share this one line — 100 and 22"
             />
           </Field>
           {error && <ErrorText>{error}</ErrorText>}

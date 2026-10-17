@@ -379,6 +379,116 @@ export async function correctLockedDeviceType(input: { lineId: string; deviceTyp
   return { ok: true };
 }
 
+/**
+ * Split one inventory line across two or more of the circuit's own demos
+ * (2026-10-17, user-caught): two demos on one circuit had been sharing a
+ * single 122-light line, each expected to record its OWN share as a
+ * "replacement" — but replacementCount/replacedAt etc. above are single
+ * fields on the LINE, not per-demo, so a second demo's recording would
+ * silently overwrite the first's. Splitting the line so each demo owns its
+ * own row (CircuitDevice.demoId) is the fix: each demo's Light replacement
+ * step then shows only its own line, with no shared-write risk at all.
+ *
+ * Refuses once the line already has a recorded replacement — splitting
+ * which demo a line belongs to AFTER it was judged against would detach the
+ * record from what it was actually recorded for.
+ */
+export async function splitLockedDeviceLine(input: {
+  lineId: string;
+  allocations: { demoId: string; count: number }[];
+  reason: string;
+}): Promise<Outcome> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  const p = admin.permissions as string[];
+  if (!(p.includes("manage_survey") && p.includes("manage_pipeline"))) {
+    logger.warn("inventory.split_refused", { actorId: admin.id, lineId: input.lineId, reason: "not_ops" });
+    return { error: "Splitting a locked inventory line is an operations lead action." };
+  }
+  const reason = input.reason?.trim() ?? "";
+  if (!reason) return { error: "Say why this line is being split — a correction with no stated reason cannot be reviewed later." };
+  if (input.allocations.length < 2) return { error: "Splitting needs at least two demos to allocate the line across." };
+  if (input.allocations.some((a) => !Number.isInteger(a.count) || a.count <= 0)) {
+    return { error: "Each demo's share must be a positive whole number." };
+  }
+  if (new Set(input.allocations.map((a) => a.demoId)).size !== input.allocations.length) {
+    return { error: "Each demo can only be allocated a share once." };
+  }
+
+  const line = await db.circuitDevice.findUnique({
+    where: { id: input.lineId },
+    include: { circuit: { select: { societyId: true, voidedAt: true } } },
+  });
+  if (!line || line.circuit.voidedAt) return { error: "That inventory line is no longer on record." };
+  if (line.replacedAt) {
+    return { error: "This line already has a recorded replacement — splitting it now would detach that record from what it was judged against." };
+  }
+  const total = input.allocations.reduce((n, a) => n + a.count, 0);
+  if (total !== line.count) {
+    return { error: `The shares (${total} total) have to add up to the line's own count of ${line.count}.` };
+  }
+  const demos = await db.circuitDemo.findMany({
+    where: { id: { in: input.allocations.map((a) => a.demoId) }, circuitId: line.circuitId, voidedAt: null },
+    select: { id: true },
+  });
+  if (demos.length !== input.allocations.length) {
+    return { error: "One of the chosen demos is no longer on record for this circuit." };
+  }
+
+  const [first, ...rest] = input.allocations;
+  await db.$transaction(async (tx) => {
+    await tx.circuitDevice.update({ where: { id: line.id }, data: { count: first.count, demoId: first.demoId } });
+    await logChange(tx, {
+      entity: "circuit_device",
+      entityId: line.id,
+      kind: "edit",
+      field: "split",
+      circuitId: line.circuitId,
+      demoId: first.demoId,
+      oldValue: { count: line.count, demoId: line.demoId },
+      newValue: { count: first.count, demoId: first.demoId },
+      reason,
+      actorId: admin.id,
+    });
+    for (const a of rest) {
+      const created = await tx.circuitDevice.create({
+        data: {
+          circuitId: line.circuitId,
+          deviceTypeId: line.deviceTypeId,
+          count: a.count,
+          wattage: line.wattage,
+          hoursPerDay: line.hoursPerDay,
+          demoId: a.demoId,
+          historical: line.historical,
+          recordedById: admin.id,
+        },
+      });
+      await logChange(tx, {
+        entity: "circuit_device",
+        entityId: created.id,
+        kind: "edit",
+        field: "created_from_split",
+        circuitId: line.circuitId,
+        demoId: a.demoId,
+        oldValue: null,
+        newValue: { count: a.count, demoId: a.demoId, splitFromLineId: line.id },
+        reason,
+        actorId: admin.id,
+      });
+    }
+    await resyncCircuitFigures(tx, line.circuitId, admin.id);
+  });
+  logger.info("inventory.line_split", {
+    actorId: admin.id,
+    circuitId: line.circuitId,
+    lineId: input.lineId,
+    allocations: input.allocations,
+    reason,
+  });
+  revalidatePath(circuitPath(line.circuit.societyId, line.circuitId));
+  return { ok: true };
+}
+
 // ---- The light-count audit trail's own backend escape hatch (2026-10-06,
 // user-asked, after a real back-and-forth correction — two real people,
 // five minutes apart, netting to no actual change — read as nonsensical

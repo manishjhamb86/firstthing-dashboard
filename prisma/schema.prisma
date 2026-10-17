@@ -1396,6 +1396,9 @@ model CircuitDemo {
   scheduledEvents       ScheduledEvent[]
   reviews               DemoResultReview[]
   replacementFollowUps  DemoReplacementFollowUp[]
+  /// Set only when this circuit's inventory has been split across demos —
+  /// see CircuitDevice.demoId.
+  ownDevices            CircuitDevice[]
 
   @@unique([circuitId, sequence])
   @@map("circuit_demos")
@@ -3544,6 +3547,16 @@ model CircuitDevice {
   circuitId    String @map("circuit_id")
   deviceTypeId String @map("device_type_id")
 
+  /// Null (the default) means this line belongs to every demo on the
+  /// circuit — the ordinary case, one demo per circuit. Set only when the
+  /// circuit's one inventory line genuinely has to be split across two or
+  /// more demos each claiming their own share of it (2026-10-17,
+  /// user-caught: two demos recording a replacement against the SAME shared
+  /// line would silently overwrite each other's figures, since
+  /// replacementCount/replacedAt etc. above are single fields on the line,
+  /// not per-demo). `splitLockedDeviceLine` is the only writer.
+  demoId String? @map("demo_id")
+
   count       Int
   wattage     Float // per-unit watts — editable per line; the catalog only supplies a default
   hoursPerDay Float   @map("hours_per_day") // 24 or 12 normally; custom allowed (user's call 2026-08-17)
@@ -3601,8 +3614,10 @@ model CircuitDevice {
   replacementType DeviceType? @relation("CircuitReplacementType", fields: [replacementTypeId], references: [id])
   replacedBy      AdminUser?  @relation("CircuitDeviceReplacedBy", fields: [replacedById], references: [id])
   recordedBy      AdminUser?  @relation("CircuitDeviceRecordedBy", fields: [recordedById], references: [id])
+  demo            CircuitDemo? @relation(fields: [demoId], references: [id])
 
   @@index([circuitId])
+  @@index([demoId])
   @@map("circuit_devices")
 }
 

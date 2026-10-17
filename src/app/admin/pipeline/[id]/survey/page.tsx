@@ -182,8 +182,15 @@ export default async function SiteSurveyPage({
   // fix is one controlled vocabulary across both (CON-11 names five
   // profiles), which is a schema change and belongs in the blueprint, not
   // in a design pass. Flagged rather than silently normalised away.
+  //
+  // The same key can still miss when a circuit's own label carries more than
+  // the type ("Basement" on the inventory, "Basement 1" on its one circuit,
+  // 2026-10-17, user-caught) — this is the identical ambiguity
+  // `updateLightingInventoryArea` already resolves the same way (survey/
+  // actions.ts): a survey with exactly one live circuit has only one
+  // population any of its inventory rows can be describing, key or no key.
   const candidateTypeKeys = new Set(circuits.map((c) => lightTypeKey(c.lightType)));
-  const hasCandidateFor = (t: string) => candidateTypeKeys.has(lightTypeKey(t));
+  const hasCandidateFor = (t: string) => candidateTypeKeys.has(lightTypeKey(t)) || circuits.length === 1;
   const typesWithoutCandidate = byLightType.filter(([t]) => !hasCandidateFor(t)).length;
 
   // Where does this survey hand off? Once a candidate clears eligibility,

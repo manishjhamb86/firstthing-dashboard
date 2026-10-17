@@ -846,6 +846,45 @@ export function averageKwh(rows: { kWh: number }[]): number | null {
 /** One warning when a period averages below the contractual floor. */
 export const SAVINGS_WARN_BELOW = 60;
 
+/** A monitoring day missing more than this many of its expected hours is excluded automatically (2026-10-17, user-asked). */
+export const MONITORING_MAX_MISSING_HOURS = 5;
+
+/**
+ * A monitoring day's own automatic exclusion (2026-10-17, user-asked, from a
+ * real printed report: a run of 0.00 kWh days read as "110%" savings each
+ * and fed a 94% headline flagged "implausibly high" — true, but every one
+ * of those zero days should never have entered the average at all). A 0 kWh
+ * day is the vendor's own convention for "the meter said nothing that day,"
+ * not a real reading of total savings — it is excluded as offline outright,
+ * whatever `validOverrideAt` says, since there is no reading behind it to
+ * confirm. A day missing more than `MONITORING_MAX_MISSING_HOURS` of the
+ * circuit's own expected hours is incomplete enough that its one number
+ * cannot be trusted either — unless an operator has explicitly confirmed it
+ * anyway (`validOverrideAt`, the one manual override `excludedAt` alone
+ * doesn't cover). An operator's own `excludedAt` always wins and is checked
+ * by the caller before this ever runs, matching the existing precedence.
+ */
+export function monitoringDayAutoExclusion(row: {
+  kWh: number;
+  dayClassHoursExpected?: number | null;
+  dayClassHoursPresent?: number | null;
+  intervalCount?: number | null;
+  expectedIntervals?: number | null;
+  validOverrideAt?: Date | null;
+}): string | null {
+  if (!(row.kWh > 0)) return "Offline — no reading that day";
+  if (row.validOverrideAt) return null;
+  const expected = row.dayClassHoursExpected ?? row.expectedIntervals ?? null;
+  const present = row.dayClassHoursPresent ?? row.intervalCount ?? null;
+  if (expected !== null && present !== null) {
+    const missing = expected - present;
+    if (missing > MONITORING_MAX_MISSING_HOURS) {
+      return `Missing ${missing} of ${expected} hours of readings — not counted`;
+    }
+  }
+  return null;
+}
+
 /**
  * A period's savings, against the baseline IN FORCE ON EACH DAY, not one
  * "now" figure applied across the whole period (2026-10-02, user-caught: a

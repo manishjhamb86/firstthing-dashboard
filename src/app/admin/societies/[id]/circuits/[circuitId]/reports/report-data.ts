@@ -17,6 +17,7 @@ import {
   expectedDailyKwh,
   theoreticalDailyKwh,
   varianceAgainstTheoretical,
+  monitoringDayAutoExclusion,
   type SavingsBand,
   type VarianceBand,
 } from "@/lib/circuit-load";
@@ -182,13 +183,19 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
     ? demo.readings.filter((r) => r.phase === "post").map((r) => toDay(r, "post", () => demoBaseline))
     : [];
 
-  // Monitoring days, from the billing start (when one is known).
+  // Monitoring days, from the billing start (when one is known). An
+  // operator's own excludedAt always wins; otherwise an offline (0 kWh) or
+  // more-than-5-hours-missing day is excluded automatically, so it can
+  // never read as a real saving and can never enter the month's average
+  // (2026-10-17, user-asked) — see monitoringDayAutoExclusion's own note.
   const monitoringStart = await circuitMonitoringStart(circuitId);
   const postDays = circuit.meterReadings
     .filter((r) => monitoringStart === null || r.date.getTime() >= monitoringStart.getTime())
-    .map((r) =>
-      toDay(r, "post", (d) => effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, d)),
-    );
+    .map((r) => {
+      const autoReason = r.excludedAt === null ? monitoringDayAutoExclusion(r) : null;
+      const row = autoReason ? { ...r, excludedAt: r.date, excludedReason: autoReason } : r;
+      return toDay(row, "post", (d) => effectiveBaselineAt(circuit.preInstallBaseline, circuit.rescaleEvents, d));
+    });
 
   const avgVariance =
     preAverage !== null && theoretical !== null ? varianceAgainstTheoretical(preAverage, theoretical) : null;

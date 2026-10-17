@@ -16,6 +16,7 @@ import {
   windowIsEmpty,
   firstQualifyingDay,
   narrowToChosenRange,
+  monitoringDayAutoExclusion,
 } from "@/lib/circuit-load";
 import { liveMonitoringBlocker } from "@/lib/live-monitoring";
 import { matchKnownFormat, stripBom } from "@/lib/reading-formats";
@@ -574,5 +575,48 @@ describe("live monitoring is gated on the installation, not the benchmark", () =
     expect(
       liveMonitoringBlocker({ benchmarkSavingsPct: 68, installationCertificateSigned: true }),
     ).toBeNull();
+  });
+})
+
+// 2026-10-17, user-caught from a real report: a run of 0.00 kWh days read as
+// "110%" savings and fed a 94% headline — true that days were being counted
+// that never should have been.
+describe("monitoringDayAutoExclusion", () => {
+  it("a 0 kWh day is offline, whatever its hours say", () => {
+    expect(monitoringDayAutoExclusion({ kWh: 0, dayClassHoursExpected: 24, dayClassHoursPresent: 24 })).toMatch(/Offline/);
+    expect(monitoringDayAutoExclusion({ kWh: -1, dayClassHoursExpected: 24, dayClassHoursPresent: 24 })).toMatch(/Offline/);
+  });
+
+  it("more than 5 hours missing is excluded", () => {
+    const r = monitoringDayAutoExclusion({ kWh: 10, dayClassHoursExpected: 24, dayClassHoursPresent: 18 });
+    expect(r).toMatch(/Missing 6 of 24 hours/);
+  });
+
+  it("exactly 5 hours missing still counts — the bound is strictly more than 5", () => {
+    expect(monitoringDayAutoExclusion({ kWh: 10, dayClassHoursExpected: 24, dayClassHoursPresent: 19 })).toBeNull();
+  });
+
+  it("falls back to intervalCount/expectedIntervals when dayClass hasn't been computed yet", () => {
+    const r = monitoringDayAutoExclusion({ kWh: 10, intervalCount: 10, expectedIntervals: 24 });
+    expect(r).toMatch(/Missing 14 of 24 hours/);
+  });
+
+  it("an operator's confirmation stops the missing-hours check, never the offline one", () => {
+    expect(monitoringDayAutoExclusion({ kWh: 10, dayClassHoursExpected: 24, dayClassHoursPresent: 10, validOverrideAt: new Date() })).toBeNull();
+    expect(monitoringDayAutoExclusion({ kWh: 0, dayClassHoursExpected: 24, dayClassHoursPresent: 24, validOverrideAt: new Date() })).toMatch(/Offline/);
+  });
+
+  it("nothing known about hours at all: no automatic exclusion", () => {
+    expect(monitoringDayAutoExclusion({ kWh: 10 })).toBeNull();
+  });
+
+  it("periodSavingsSummary computes from a single remaining day once the rest are excluded", () => {
+    const s = periodSavingsSummary(20, [
+      { date: "2026-03-01", kWh: 0, excluded: true },
+      { date: "2026-03-02", kWh: 0, excluded: true },
+      { date: "2026-03-03", kWh: 5, excluded: false },
+    ]);
+    expect(s.averageKwh).toBe(5);
+    expect(s.savingsPct).toBe(75);
   });
 })

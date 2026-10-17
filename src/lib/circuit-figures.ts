@@ -184,8 +184,26 @@ export async function resyncCircuitFigures(tx: Tx, circuitId: string, actorId: s
     // never touched again: meteredLightCount keeps moving afterward (a
     // rescale, a demo-count correction), correct for billing, wrong for a
     // screen that is specifically a historical record of the survey/demo.
-    if (circuit.lightCountAtDemoLock === null) {
-      data.lightCountAtDemoLock = data.meteredLightCount ?? circuit.meteredLightCount;
+    //
+    // "Never touched again" still has one gap a two-demo circuit falls
+    // into: a second demo (combine: "batch") locking in on the SAME
+    // circuit after the first already froze its own count here is not
+    // drift, it's the recorded population genuinely growing — Urban Casa's
+    // own Basement (100 then 22 lights, 2026-10-17, user-caught) kept
+    // reading only 22 on its survey page, because the snapshot had already
+    // locked at a smaller figure before the second demo existed and the
+    // guard below never revisits a non-null value. So the snapshot is also
+    // allowed to GROW to match the combined total — never shrink, which
+    // stays the one narrow job of the exact-match correction below — and
+    // only while no rescale has moved the circuit's own count for a real
+    // reason (INV-07), same guard as the live figure just above.
+    if (circuit.rescaleEvents.length === 0) {
+      const recorded: number | null = figures.meteredLightCount ?? circuit.meteredLightCount;
+      if (circuit.lightCountAtDemoLock === null) {
+        data.lightCountAtDemoLock = recorded;
+      } else if (recorded !== null && recorded > circuit.lightCountAtDemoLock) {
+        data.lightCountAtDemoLock = recorded;
+      }
     }
   } else if (override && circuit.benchmarkSavingsPct !== override.pct) {
     data.benchmarkSavingsPct = override.pct;

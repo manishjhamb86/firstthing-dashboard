@@ -305,7 +305,15 @@ export async function recordDemoReplacementAs(
   if (demo.preTo && dayMs(date) <= dayMs(demo.preTo)) return { error: "The replacement has to come after the pre-installation period ends — move the period first." };
   if (demo.postFrom && dayMs(date) >= dayMs(demo.postFrom)) return { error: "The replacement has to come before the post-installation period starts — move the period first." };
 
-  const devices = await db.circuitDevice.findMany({ where: { circuitId: demo.circuitId }, include: { deviceType: { include: { replacementOptions: true } } } });
+  // A line split across demos (CircuitDevice.demoId, 2026-10-17) belongs to
+  // ONE demo only from here on — a line with no demoId still belongs to
+  // every demo, the ordinary one-demo-per-circuit case. Without this filter,
+  // a demo that owns only part of a split circuit would be asked to record
+  // a replacement against every sibling demo's own line too.
+  const devices = await db.circuitDevice.findMany({
+    where: { circuitId: demo.circuitId, OR: [{ demoId: null }, { demoId: demo.id }] },
+    include: { deviceType: { include: { replacementOptions: true } } },
+  });
   const byLine = new Map((input.lines ?? []).map((r) => [r.lineId, r]));
   // A correction may bring the lines too — "change the kept count from 8 to
   // 9" is a change to how many lights on a line were replaced (2026-09-27).
@@ -363,7 +371,10 @@ export async function recordDemoReplacementAs(
         }
       }
     } else {
-      await tx.circuitDevice.updateMany({ where: { circuitId: demo.circuitId, replacedAt: demo.lightReplacementDate }, data: { replacedAt: date } });
+      await tx.circuitDevice.updateMany({
+        where: { circuitId: demo.circuitId, replacedAt: demo.lightReplacementDate, OR: [{ demoId: null }, { demoId: demo.id }] },
+        data: { replacedAt: date },
+      });
     }
     await tx.circuitDemo.update({ where: { id: demo.id }, data: { lightReplacementDate: date } });
     await logChange(tx, { entity: "circuit_demo", entityId: demo.id, kind: "edit", field: "lightReplacementDate", circuitId: demo.circuitId, demoId: demo.id, oldValue: iso(demo.lightReplacementDate), newValue: input.replacedOn, actorId: admin.id });

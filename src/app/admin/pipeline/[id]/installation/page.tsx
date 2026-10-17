@@ -40,6 +40,7 @@ import {
   RaiseBlockerForm,
   CorrectContractedCountControl,
   CorrectDatesControl,
+  CorrectInstalledCountControl,
   KeptOutcomeCard,
   type KeptLine,
   ReopenBatchControl,
@@ -652,6 +653,9 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                           today={todayIso}
                           live={!demoMode}
                         />
+                      )}
+                      {canCorrectDates && b.submittedAt && (
+                        <CorrectInstalledCountControl pipelineId={pipeline.id} batchId={b.id} installedCount={b.installedCount} />
                       )}
                     </div>
                   );

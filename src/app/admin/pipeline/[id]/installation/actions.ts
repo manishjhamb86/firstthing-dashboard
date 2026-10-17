@@ -671,6 +671,83 @@ export async function correctPlannedDayCount(
 }
 
 /**
+ * Correct an ALREADY-SUBMITTED day's logged count (2026-10-17, user-asked) —
+ * correctPlannedDayCount refuses past submission on purpose ("the day is the
+ * record of what happened, not a plan to revise"), but the figure logged for
+ * that work can itself have been wrong from the outset, not a genuine fact
+ * being revised. Aditya Mega City's own Day 1: both the plan and the logged
+ * count baked in the demo circuit's already-installed 93 lights, which
+ * nobody had yet subtracted when the day was set up and reported.
+ *
+ * Moves the batch's own installedCount, the planned day it was built
+ * against (so the two can never disagree about what that day's work
+ * represented, the same invariant correctPlannedDayCount keeps
+ * pre-submission), and — when a completion certificate has already summed
+ * this batch into its own frozen totalInstalledCount — carries the same
+ * delta through it too, so correcting one figure here can never leave the
+ * certificate silently overstating what was certified.
+ */
+export async function correctBatchInstalledCount(
+  pipelineId: string,
+  batchId: string,
+  input: { installedCount: number; reason: string },
+) {
+  const who = await dateCorrector(input.reason, pipelineId, "batch_installed_count");
+  if ("error" in who) return who;
+
+  if (!Number.isInteger(input.installedCount) || input.installedCount <= 0) {
+    return { error: "Installed count must be a positive whole number." };
+  }
+
+  const project = await db.installationProject.findUnique({
+    where: { pipelineId },
+    include: { batches: { include: { plannedDay: true } }, certificate: true },
+  });
+  const batch = project?.batches.find((b) => b.id === batchId);
+  if (!project || !batch) return { error: "Batch not found." };
+  if (!batch.submittedAt) return { error: "This day has not been submitted yet — correct its planned count instead." };
+  if (input.installedCount === batch.installedCount) return { error: "That is already this day's installed count." };
+
+  const delta = input.installedCount - batch.installedCount;
+
+  await db.$transaction(async (tx) => {
+    await tx.installationBatch.update({ where: { id: batchId }, data: { installedCount: input.installedCount } });
+    await logChange(tx, {
+      entity: "installation_batch", entityId: batchId, kind: "edit", field: "installedCount",
+      oldValue: batch.installedCount, newValue: input.installedCount, reason: input.reason.trim() || null, actorId: who.actorId,
+    });
+
+    if (batch.plannedDay && batch.plannedDay.plannedCount !== input.installedCount) {
+      await tx.installationPlannedDay.update({ where: { id: batch.plannedDay.id }, data: { plannedCount: input.installedCount } });
+      await logChange(tx, {
+        entity: "installation_planned_day", entityId: batch.plannedDay.id, kind: "edit", field: "plannedCount",
+        oldValue: batch.plannedDay.plannedCount, newValue: input.installedCount,
+        reason: "The day's own logged count was corrected — the plan it was built against follows, since the two must agree once the work is done.",
+        actorId: who.actorId,
+      });
+    }
+
+    if (project.certificate) {
+      const newTotal = project.certificate.totalInstalledCount + delta;
+      await tx.completionCertificate.update({ where: { id: project.certificate.id }, data: { totalInstalledCount: newTotal } });
+      await logChange(tx, {
+        entity: "completion_certificate", entityId: project.certificate.id, kind: "edit", field: "totalInstalledCount",
+        oldValue: project.certificate.totalInstalledCount, newValue: newTotal,
+        reason: `Day ${batch.day}'s own logged count was corrected — the certificate's total follows by the same amount.`,
+        actorId: who.actorId,
+      });
+    }
+  });
+
+  logger.info("installation.batch_installed_count_corrected", {
+    actorId: who.actorId, pipelineId, batchId, from: batch.installedCount, to: input.installedCount, certificateUpdated: !!project.certificate,
+  });
+  revalidatePath(pathFor(pipelineId));
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
+  return { ok: true as const };
+}
+
+/**
  * Correct the project's own contracted light count after publishing
  * (2026-10-17, user-asked) — correcting one day's planned count can only
  * bring the day-by-day total in line with whatever the project itself

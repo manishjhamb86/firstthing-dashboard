@@ -13,6 +13,7 @@ import {
   addPlannedDay,
   completeRemainingInstallation,
   correctBatchDates,
+  correctBatchInstalledCount,
   correctCertificateDate,
   correctContractedLightCount,
   correctPlannedDayCount,
@@ -713,6 +714,77 @@ export function CorrectContractedCountControl({ pipelineId, contractedLightCount
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           placeholder="Set up before subtracting the lights already installed on the demo circuit."
+          required
+        />
+      </Field>
+      {error && <ErrorText>{error}</ErrorText>}
+      <div className="flex gap-2">
+        <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+          {pending ? "Saving…" : "Save the correction"}
+        </button>
+        <button type="button" className="btn-ghost btn-sm" onClick={() => { setOpen(false); setError(undefined); }}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Correct an already-submitted day's logged count (2026-10-17, user-asked) —
+ * PlannedDayActions's own "Correct the count" is hidden the moment a batch
+ * is submitted, on purpose: the plan is no longer the thing to revise. This
+ * is the sibling for what IS still correctable once the work is done —
+ * what actually got logged — for exactly the shape that prompted it:
+ * a day's reported count baked in lights the demo circuit had already
+ * installed, before anyone subtracted them.
+ */
+export function CorrectInstalledCountControl({ pipelineId, batchId, installedCount }: { pipelineId: string; batchId: string; installedCount: number }) {
+  const [open, setOpen] = useState(false);
+  const [count, setCount] = useState(String(installedCount));
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button type="button" className="btn-ghost btn-sm mt-1" onClick={() => { setCount(String(installedCount)); setOpen(true); }}>
+        Correct the installed count
+      </button>
+    );
+  }
+
+  return (
+    <form
+      className="mt-2 space-y-2 rounded-[var(--r-md)] border border-[var(--border)] p-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        setError(undefined);
+        startTransition(async () => {
+          const n = Number(count);
+          if (!Number.isInteger(n) || n <= 0) {
+            setError("Enter a positive whole number.");
+            return;
+          }
+          const r = await correctBatchInstalledCount(pipelineId, batchId, { installedCount: n, reason });
+          if (r && "error" in r) setError(r.error);
+          else {
+            setOpen(false);
+            setReason("");
+          }
+        });
+      }}
+    >
+      <Field label="Installed count" htmlFor={`batch-count-${batchId}`}>
+        <input id={`batch-count-${batchId}`} type="number" min={1} step={1} className="field num" value={count} onChange={(e) => setCount(e.target.value)} required />
+      </Field>
+      <Field label="Why this is being corrected" htmlFor={`batch-count-reason-${batchId}`}>
+        <input
+          id={`batch-count-reason-${batchId}`}
+          className="field"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Logged before subtracting the lights already installed on the demo circuit."
           required
         />
       </Field>

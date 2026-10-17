@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  demoCountFeedsTotal,
   demoLightsInstalled,
   describeLights,
   fullFromTotal,
@@ -29,6 +30,84 @@ describe("demoLightsInstalled", () => {
   it("no inventory: the demo's count", () => {
     expect(demoLightsInstalled({ meteredLightCount: 40, demos: [], devices: [] })).toBe(40);
   });
+
+  // Aditya Urban Casa's Basement circuit (2026-10-17, user-caught: "736 =
+  // 614 + 100 + 22") — two real demos, each on its own split line
+  // (CircuitDevice.demoId), combine "batch" (different lights, adds).
+  it("two demos, different lights (batch) — both add", () => {
+    expect(
+      demoLightsInstalled({
+        meteredLightCount: 122,
+        demos: [
+          { id: "d1", meteredLightCount: 100 },
+          { id: "d2", meteredLightCount: 22, combine: "batch" },
+        ],
+        devices: [
+          { count: 100, replacementCount: 100, excludedFromCalculation: false, demoId: "d1" },
+          { count: 22, replacementCount: null, excludedFromCalculation: false, demoId: "d2" },
+        ],
+      }),
+    ).toBe(122);
+  });
+
+  it("two demos, the second a rerun of the same lights — only the first counts", () => {
+    expect(
+      demoLightsInstalled({
+        meteredLightCount: 63,
+        demos: [
+          { id: "d1", meteredLightCount: 63 },
+          { id: "d2", meteredLightCount: 63, combine: "rerun" },
+        ],
+        devices: [{ count: 63, replacementCount: 55, excludedFromCalculation: false, demoId: "d1" }],
+      }),
+    ).toBe(55);
+  });
+
+  it("each split demo's own cap comes from its own line, not the whole circuit's", () => {
+    // Demo 2 (22, fully replaced) must not be capped by demo 1's own
+    // 100-light line, and vice versa — each demo's devices are scoped to it.
+    expect(
+      demoLightsInstalled({
+        meteredLightCount: 122,
+        demos: [
+          { id: "d1", meteredLightCount: 100 },
+          { id: "d2", meteredLightCount: 22, combine: "batch" },
+        ],
+        devices: [
+          { count: 100, replacementCount: 90, excludedFromCalculation: false, demoId: "d1" }, // 10 kept on d1's own line
+          { count: 22, replacementCount: 22, excludedFromCalculation: false, demoId: "d2" },
+        ],
+      }),
+    ).toBe(90 + 22);
+  });
+
+  it("an unsplit circuit's lines (no demoId) still belong to every demo, as before", () => {
+    expect(
+      demoLightsInstalled({
+        meteredLightCount: 100,
+        demos: [{ id: "d1", meteredLightCount: 100 }],
+        devices: [{ count: 100, replacementCount: 95, excludedFromCalculation: false, demoId: null }],
+      }),
+    ).toBe(95);
+  });
+});
+
+describe("demoCountFeedsTotal", () => {
+  const demos = [
+    { id: "d1", combine: "rerun" as const },
+    { id: "d2", combine: "batch" as const },
+    { id: "d3", combine: "rerun" as const },
+  ];
+  it("the first live demo always feeds the total, whatever its own combine says", () => {
+    expect(demoCountFeedsTotal(demos, "d1")).toBe(true);
+  });
+  it("a later demo feeds it only when it is a separate (batch) population", () => {
+    expect(demoCountFeedsTotal(demos, "d2")).toBe(true);
+    expect(demoCountFeedsTotal(demos, "d3")).toBe(false);
+  });
+  it("a demo not on the list feeds nothing", () => {
+    expect(demoCountFeedsTotal(demos, "nope")).toBe(false);
+  });
 });
 
 describe("full installation and total", () => {
@@ -50,29 +129,29 @@ describe("full installation and total", () => {
 // 911 full installation + 40 demo to 907 full installation + 44 demo.
 describe("representedCountAfterDemoCorrection", () => {
   it("the installed total stays fixed: 911+40=951 -> 907+44=951", () => {
-    const r = representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 44 });
+    const r = representedCountAfterDemoCorrection({ countsTowardTotal: true, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 44 });
     expect(r).toEqual({ changed: true, newRepresentedLightCount: 907 });
     expect(totalLights(907, 44)).toBe(951);
     expect(totalLights(911, 40)).toBe(951);
   });
   it("reverses the same way", () => {
-    expect(representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 907, oldDemoCount: 44, newDemoCount: 40 })).toEqual({
+    expect(representedCountAfterDemoCorrection({ countsTowardTotal: true, representedLightCount: 907, oldDemoCount: 44, newDemoCount: 40 })).toEqual({
       changed: true,
       newRepresentedLightCount: 911,
     });
   });
   it("a later demo (not the initial one) never touches the split", () => {
-    expect(representedCountAfterDemoCorrection({ isInitialDemo: false, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 44 })).toEqual({
+    expect(representedCountAfterDemoCorrection({ countsTowardTotal: false, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 44 })).toEqual({
       changed: false,
     });
   });
   it("no real change, nothing to do", () => {
-    expect(representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 40 })).toEqual({
+    expect(representedCountAfterDemoCorrection({ countsTowardTotal: true, representedLightCount: 911, oldDemoCount: 40, newDemoCount: 40 })).toEqual({
       changed: false,
     });
   });
   it("refuses rather than driving the full installation to zero or below", () => {
-    const r = representedCountAfterDemoCorrection({ isInitialDemo: true, representedLightCount: 10, oldDemoCount: 40, newDemoCount: 55 });
+    const r = representedCountAfterDemoCorrection({ countsTowardTotal: true, representedLightCount: 10, oldDemoCount: 40, newDemoCount: 55 });
     expect("error" in r && r.error).toMatch(/more than zero/);
   });
 });

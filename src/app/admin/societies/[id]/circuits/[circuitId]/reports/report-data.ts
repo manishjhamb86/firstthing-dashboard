@@ -111,19 +111,24 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
 
   const demo =
     (demoId ? circuit.demos.find((d) => d.id === demoId) : null) ?? currentDemoOf(circuit.demos) ?? null;
+  // A line split across demos (CircuitDevice.demoId, 2026-10-17) belongs to
+  // ONE demo only — a line with no demoId still belongs to every demo, the
+  // ordinary one-demo-per-circuit case. This demo's own report must only
+  // read ITS OWN lines, the same scoping recordDemoReplacementAs applies.
+  const demoDevices = demo ? circuit.devices.filter((d) => d.demoId === null || d.demoId === demo.id) : circuit.devices;
   // A demo's own light count can be corrected (demo mode) without touching
   // the circuit's inventory — "a demo is measured on the lights it was run
   // on" — so the report's own theoretical has to follow THAT demo's count,
   // the same rule the meter's one-time load test already applies, not the
   // raw inventory total (2026-10-02, user-caught).
   const theoretical = demo
-    ? expectedDailyKwh({ meteredLightCount: demo.meteredLightCount, wattage: circuit.wattage, workingHours: circuit.workingHours ?? 24, devices: circuit.devices })
-    : circuit.devices.length > 0
-      ? theoreticalDailyKwh(circuit.devices)
+    ? expectedDailyKwh({ meteredLightCount: demo.meteredLightCount, wattage: circuit.wattage, workingHours: circuit.workingHours ?? 24, devices: demoDevices })
+    : demoDevices.length > 0
+      ? theoreticalDailyKwh(demoDevices)
       : null;
   // Fixtures left on the circuit unreplaced: their draw comes off both the
   // before and after figures before any saving is stated (2026-09-26).
-  const exclusion = exclusionFromDevices(circuit.devices);
+  const exclusion = exclusionFromDevices(demoDevices);
   // The monthly report is monitoring: what the full installation recorded
   // about the kept fixtures applies (2026-09-27). The demo's reports keep the
   // deduction as it was at the demo.
@@ -199,7 +204,7 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
     monitoringExclusion,
     society: circuit.society,
     demo,
-    demos: circuit.demos.map((d) => ({ id: d.id, sequence: d.sequence, rejected: d.rejected })),
+    demos: circuit.demos.map((d) => ({ id: d.id, sequence: d.sequence, rejected: d.rejected, combine: d.combine })),
     theoretical,
     preDays,
     postDays,

@@ -14,7 +14,7 @@ import { logChange } from "@/lib/change-log";
 import { demoLockState } from "@/lib/demo-lock";
 import { planCountCorrection } from "@/lib/count-correction";
 import { resyncCircuitFigures } from "@/lib/circuit-figures";
-import { representedCountAfterDemoCorrection } from "@/lib/light-population";
+import { demoCountFeedsTotal, representedCountAfterDemoCorrection } from "@/lib/light-population";
 
 type Outcome = { error: string } | { ok: true };
 
@@ -226,7 +226,11 @@ export async function correctLockedCount(input: { lineId: string; count: number;
       representedLightCount: true,
       siteSurvey: { select: { pipelineId: true } },
       devices: { select: { id: true, count: true, replacementCount: true } },
-      demos: { where: { voidedAt: null }, orderBy: { sequence: "asc" }, select: { id: true, sequence: true, meteredLightCount: true, unlockedUntil: true } },
+      demos: {
+        where: { voidedAt: null, rejected: false },
+        orderBy: { sequence: "asc" },
+        select: { id: true, sequence: true, meteredLightCount: true, unlockedUntil: true, combine: true },
+      },
     },
   });
   if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
@@ -240,14 +244,19 @@ export async function correctLockedCount(input: { lineId: string; count: number;
   });
   if ("error" in plan) return { error: plan.error };
 
-  // Only the circuit's current INITIAL (first live, by sequence) demo feeds
-  // the full-installation/demo split (2026-10-05) — if the correction reaches
-  // it, the full installation absorbs the opposite change so the total
-  // actually installed stays what it always was.
-  const initialDemo = circuit.demos[0];
-  const representedAdjustment = initialDemo && plan.demoIds.includes(initialDemo.id)
+  // The first live demo always feeds the full-installation/demo split; any
+  // OTHER live demo only does when its own `combine` is "batch" (a separate
+  // population) rather than "rerun" (2026-10-17, generalised from "the
+  // initial demo only"). NOTE — this line-level correction path does not yet
+  // know which SPLIT line a multi-demo circuit's count came from (it still
+  // matches by the figure being equal to the whole line total, not by
+  // CircuitDevice.demoId); it is left exactly as narrow as before rather
+  // than guessed at here. Correcting a specific demo's own count is
+  // `setDemoLightCount`, which is split-aware.
+  const feedingDemoId = plan.demoIds.find((id) => demoCountFeedsTotal(circuit.demos, id));
+  const representedAdjustment = feedingDemoId
     ? representedCountAfterDemoCorrection({
-        isInitialDemo: true,
+        countsTowardTotal: true,
         representedLightCount: circuit.representedLightCount,
         oldDemoCount: plan.totalOld,
         newDemoCount: plan.totalNew,
@@ -300,7 +309,7 @@ export async function correctLockedCount(input: { lineId: string; count: number;
         kind: "edit",
         field: "representedLightCount",
         circuitId: circuit.id,
-        demoId: initialDemo?.id ?? null,
+        demoId: feedingDemoId ?? null,
         oldValue: circuit.representedLightCount,
         newValue: representedAdjustment.newRepresentedLightCount,
         reason: `The demo's own light count was corrected ${plan.totalOld} → ${plan.totalNew} — the full installation moved by the same amount the other way, so the total installed stays unchanged.`,

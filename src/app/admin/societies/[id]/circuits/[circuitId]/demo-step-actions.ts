@@ -25,7 +25,7 @@ import { isDemoMode } from "@/lib/demo-mode";
 import { liveDemoCountCorrectionAllowed } from "@/lib/operations-flags";
 import { scheduleJob } from "@/lib/jobs";
 import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
-import { representedCountAfterDemoCorrection } from "@/lib/light-population";
+import { demoCountFeedsTotal, representedCountAfterDemoCorrection } from "@/lib/light-population";
 import { refuseUnlock, unlockUntil } from "@/lib/demo-lock";
 import { periodDates, periodOfDay, refuseDemoPeriods, type PeriodInput } from "@/lib/demo-periods";
 import { acceptanceOf, refuseAcceptance } from "@/lib/demo-acceptance";
@@ -630,16 +630,19 @@ export async function setDemoLightCount(input: { demoId: string; count: number; 
   const demo = g.demo;
   if (demo.meteredLightCount === input.count) return { error: "That is already the demo's light count." };
 
-  // Only the circuit's current INITIAL (first live, by sequence) demo feeds
-  // the full-installation/demo split at all (2026-10-05) — demoLightsInstalled()
-  // reads only that one, so correcting any other demo's count never moves it.
-  const initial = await db.circuitDemo.findFirst({
-    where: { circuitId: demo.circuitId, voidedAt: null },
+  // The first live demo always feeds the full-installation/demo split; any
+  // OTHER live demo only does when its own `combine` says it is a separate
+  // population ("batch") rather than the same lights measured again
+  // ("rerun") — demoLightsInstalled() adds exactly those (2026-10-17,
+  // generalised from "the initial demo only" once a circuit's two real
+  // demos both turned out to need to count).
+  const liveDemos = await db.circuitDemo.findMany({
+    where: { circuitId: demo.circuitId, voidedAt: null, rejected: false },
     orderBy: { sequence: "asc" },
-    select: { id: true },
+    select: { id: true, combine: true },
   });
   const adjustment = representedCountAfterDemoCorrection({
-    isInitialDemo: initial?.id === demo.id,
+    countsTowardTotal: demoCountFeedsTotal(liveDemos, demo.id),
     representedLightCount: demo.circuit.representedLightCount,
     oldDemoCount: demo.meteredLightCount,
     newDemoCount: input.count,

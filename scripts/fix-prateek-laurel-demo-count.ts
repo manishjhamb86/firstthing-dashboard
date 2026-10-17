@@ -85,7 +85,7 @@ async function main() {
   if (refusal) throw new Error(`Unlock would be refused: ${refusal} — aborting.`);
 
   const adjustment = representedCountAfterDemoCorrection({
-    isInitialDemo: true,
+    countsTowardTotal: true,
     representedLightCount: demo.circuit.representedLightCount,
     oldDemoCount: demo.meteredLightCount,
     newDemoCount: NEW_COUNT,

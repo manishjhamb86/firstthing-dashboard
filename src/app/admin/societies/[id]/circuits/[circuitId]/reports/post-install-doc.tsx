@@ -31,14 +31,30 @@ export function PostInstallDoc({ report, backHref }: { report: Report; backHref:
   const replaced = inventory.filter((l) => l.replacementName || l.excluded);
   const generated = shortDate(new Date());
 
+  // A circuit run as more than one live demo (2026-10-17, user-caught: a
+  // report showing 48% as "Well under... below the level the commercial
+  // model is built on" directly beside "the confirmed benchmark of 66.7% is
+  // fixed" — the demo's own figure was being judged against the single-demo
+  // 60-80% band, when it is really one of two whose MEAN produces that
+  // confirmed figure (Urban Casa's own 48.28%/85.19% averaging to 66.72%,
+  // the rule this codebase has used since 2026-08-27). Judging one
+  // contributor against the band a COMBINED figure must land in is the
+  // wrong comparison, not a real shortfall.
+  const liveSiblings = report.demos.filter((d) => !d.rejected);
+  const isCombinedDemo = liveSiblings.length > 1;
+
   const verdict =
     summary.savingsPct === null
       ? "No savings figure can be computed yet."
-      : circuit.benchmarkSavingsPct !== null
-        ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in. The confirmed benchmark of ${circuit.benchmarkSavingsPct.toFixed(1)}% is fixed for the contract term.`
-        : summary.savingsPct >= BENCHMARK_MIN_PCT && summary.savingsPct <= BENCHMARK_MAX_PCT
-          ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in.`
-          : `Outside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in — routed to review rather than confirmed; no benchmark is written until that review resolves.`;
+      : isCombinedDemo
+        ? `This demo is one of ${liveSiblings.length} on this circuit — their mean is what produces the confirmed benchmark of ${
+            circuit.benchmarkSavingsPct !== null ? `${circuit.benchmarkSavingsPct.toFixed(1)}%` : "—"
+          }, fixed for the contract term. This demo's own figure is not judged against the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band on its own.`
+        : circuit.benchmarkSavingsPct !== null
+          ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in. The confirmed benchmark of ${circuit.benchmarkSavingsPct.toFixed(1)}% is fixed for the contract term.`
+          : summary.savingsPct >= BENCHMARK_MIN_PCT && summary.savingsPct <= BENCHMARK_MAX_PCT
+            ? `Inside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in.`
+            : `Outside the ${BENCHMARK_MIN_PCT}–${BENCHMARK_MAX_PCT}% band a valid benchmark must land in — routed to review rather than confirmed; no benchmark is written until that review resolves.`;
 
   return (
     <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
@@ -89,7 +105,10 @@ export function PostInstallDoc({ report, backHref }: { report: Report; backHref:
               >
                 {summary.savingsPct === null ? "—" : pct(summary.savingsPct)}
               </span>
-              {summary.band && (
+              {/* The band chip judges a figure against the 60-80% band a
+                  CONFIRMED benchmark must land in — not meaningful for one
+                  of several demos whose mean produces that benchmark. */}
+              {summary.band && !isCombinedDemo && (
                 <StatusChip tone={BAND_TONE[summary.band]}>
                   {SAVINGS_BAND_META[summary.band].label}
                 </StatusChip>
@@ -103,7 +122,8 @@ export function PostInstallDoc({ report, backHref }: { report: Report; backHref:
             <strong className="num text-[var(--text)]">{effBaselineNow?.toFixed(2) ?? "—"}</strong>{" "}
             kWh/day baseline.{" "}
             {verdict}
-            {summary.warn &&
+            {!isCombinedDemo &&
+              summary.warn &&
               summary.savingsPct !== null &&
               summary.savingsPct < SAVINGS_WARN_BELOW && (
                 <strong className="text-[var(--text)]">

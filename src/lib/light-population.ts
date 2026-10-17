@@ -19,21 +19,32 @@
 
 export type DemoLightsInput = {
   meteredLightCount: number;
-  /** The circuit's first live demo, if the demo was recorded in the app. */
-  demos?: { meteredLightCount: number }[];
-  devices?: { count: number; replacementCount: number | null; excludedFromCalculation: boolean }[];
+  /** Every live (non-voided, non-rejected) demo on the circuit, lowest
+   *  sequence first. The first one always counts; any OTHER live demo whose
+   *  own `combine` is "batch" (different lights from the first — the
+   *  circuit's own label, set when the demo was started) genuinely
+   *  represents a SEPARATE population and adds its own count on top; one
+   *  whose `combine` is "rerun" (the same lights, re-measured) does not, since
+   *  it is the identical lights the first demo already counts (2026-10-17,
+   *  user-caught: "736 = 614 + 100 + 22" — two real demos on one circuit, not
+   *  one demo and a number nobody is counting). */
+  demos?: { id?: string; meteredLightCount: number; combine?: "batch" | "rerun" }[];
+  /** A line's own `demoId` scopes it to one demo once the circuit's
+   *  inventory has been split across them (CircuitDevice.demoId,
+   *  2026-10-17); a line with no demoId belongs to every demo, the ordinary
+   *  one-demo-per-circuit case. */
+  devices?: { count: number; replacementCount: number | null; excludedFromCalculation: boolean; demoId?: string | null }[];
 };
 
 /** Select this on a circuit to be able to call `demoLightsInstalled`. */
 export const DEMO_LIGHTS_SELECT = {
   meteredLightCount: true,
   demos: {
-    where: { voidedAt: null },
+    where: { voidedAt: null, rejected: false },
     orderBy: { sequence: "asc" as const },
-    take: 1,
-    select: { meteredLightCount: true },
+    select: { id: true, meteredLightCount: true, combine: true },
   },
-  devices: { select: { count: true, replacementCount: true, excludedFromCalculation: true } },
+  devices: { select: { count: true, replacementCount: true, excludedFromCalculation: true, demoId: true } },
 } as const;
 
 /** The same, as an `include` alongside a circuit's scalar fields. */
@@ -43,17 +54,30 @@ export const DEMO_LIGHTS_INCLUDE = {
 } as const;
 
 /**
- * The demo lights FirsThing installed on this circuit: the initial demo's
+ * The demo lights FirsThing installed on this circuit: the first live demo's
  * light count (the circuit's metered count when the demo was on paper, before
- * this system), capped at what was actually replaced on the circuit.
+ * this system), capped at what was actually replaced on the circuit —
+ * PLUS, for a circuit genuinely run as more than one demo, any other live
+ * demo's own count the same way, when that demo's own `combine` says it is
+ * a separate population rather than the same lights measured again.
  */
 export function demoLightsInstalled(c: DemoLightsInput): number {
-  const demo = c.demos?.[0]?.meteredLightCount ?? c.meteredLightCount;
+  const demos = c.demos ?? [];
   const devices = c.devices ?? [];
-  const replaced = devices.length > 0
-    ? devices.filter((d) => !d.excludedFromCalculation).reduce((n, d) => n + (d.replacementCount ?? d.count), 0)
-    : null;
-  return Math.max(0, replaced === null || replaced === 0 ? demo : Math.min(demo, replaced));
+  const split = devices.some((d) => d.demoId != null);
+  const capFor = (count: number, demoId?: string): number => {
+    const own = split && demoId != null ? devices.filter((d) => d.demoId == null || d.demoId === demoId) : devices;
+    const replaced = own.length > 0
+      ? own.filter((d) => !d.excludedFromCalculation).reduce((n, d) => n + (d.replacementCount ?? d.count), 0)
+      : null;
+    return Math.max(0, replaced === null || replaced === 0 ? count : Math.min(count, replaced));
+  };
+  const first = demos[0]?.meteredLightCount ?? c.meteredLightCount;
+  let total = capFor(first, demos[0]?.id);
+  for (const d of demos.slice(1)) {
+    if (d.combine === "batch") total += capFor(d.meteredLightCount, d.id);
+  }
+  return total;
 }
 
 /** Every light FirsThing installed of this circuit's type: full installation + demo lights. */
@@ -88,28 +112,48 @@ export function describeLights(fullInstallation: number, demoLights: number): st
 }
 
 /**
- * When the circuit's INITIAL demo's own light count is corrected — through
- * `setDemoLightCount` or the inventory's "Correct count" — the circuit's
- * full-installation figure has to absorb the opposite change, so the total
- * actually installed (full installation + demo lights) stays exactly what
- * it always was. A correction says a number was typed wrong, not that new
- * lights went in (2026-10-05, user-asked, from an ATS Greens Paradiso
- * report: 951 installed must still read 951 lights whichever way the
- * demo's own count later moves — 911 full installation + 40 demo becomes
- * 907 full installation + 44 demo, not 951 full installation + 44 demo).
+ * Whether correcting one demo's count moves the total at all — the first
+ * live demo always does; any OTHER live demo only does when its own
+ * `combine` is "batch" (a separate population, added on top by
+ * `demoLightsInstalled`) rather than "rerun" (the same lights the first
+ * demo already counts). Callers use this to build
+ * `representedCountAfterDemoCorrection`'s own `countsTowardTotal`.
+ */
+export function demoCountFeedsTotal(
+  demos: { id: string; combine?: "batch" | "rerun" }[],
+  demoId: string,
+): boolean {
+  const i = demos.findIndex((d) => d.id === demoId);
+  if (i < 0) return false;
+  return i === 0 || demos[i].combine === "batch";
+}
+
+/**
+ * When a demo's own light count is corrected — through `setDemoLightCount`
+ * or the inventory's "Correct count" — the circuit's full-installation
+ * figure has to absorb the opposite change, so the total actually installed
+ * (full installation + demo lights) stays exactly what it always was. A
+ * correction says a number was typed wrong, not that new lights went in
+ * (2026-10-05, user-asked, from an ATS Greens Paradiso report: 951 installed
+ * must still read 951 lights whichever way the demo's own count later moves
+ * — 911 full installation + 40 demo becomes 907 full installation + 44
+ * demo, not 951 full installation + 44 demo).
  *
- * Only the circuit's current initial (first live, by sequence) demo's count
- * feeds the split at all — `demoLightsInstalled()` reads only that one, so
- * correcting any OTHER demo's count never touches the full-installation
- * figure, and this returns `{changed: false}` for it.
+ * Only a demo `demoCountFeedsTotal` says counts toward the total feeds the
+ * split at all — `demoLightsInstalled()` only adds such a demo's count, so
+ * correcting any OTHER demo (a "rerun" of the same lights, not the first)
+ * never touches the full-installation figure, and this returns
+ * `{changed: false}` for it (2026-10-17, generalised from "the initial demo
+ * only" once a circuit's two real demos — 100 and 22 — both turned out to
+ * need to count).
  */
 export function representedCountAfterDemoCorrection(input: {
-  isInitialDemo: boolean;
+  countsTowardTotal: boolean;
   representedLightCount: number;
   oldDemoCount: number;
   newDemoCount: number;
 }): { changed: false } | { changed: true; newRepresentedLightCount: number } | { error: string } {
-  if (!input.isInitialDemo || input.oldDemoCount === input.newDemoCount) return { changed: false };
+  if (!input.countsTowardTotal || input.oldDemoCount === input.newDemoCount) return { changed: false };
   const next = input.representedLightCount - (input.newDemoCount - input.oldDemoCount);
   const err = refuseFullInstallationCount(next);
   if (err) {

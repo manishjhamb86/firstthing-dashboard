@@ -135,4 +135,28 @@ describe("refuseWorksheet", () => {
     expect(refuseWorksheet(deriveWorksheet({ circuits: [liftLobby], unitElectricityRate: 7, monthlyFee: 0 }), bounds)).toBe("invalid-fee");
     expect(refuseWorksheet(deriveWorksheet({ circuits: [liftLobby], unitElectricityRate: 7.24, monthlyFee: 99_999 }), bounds)).toBe("fee-exceeds-saving");
   });
+  it("accepts an out-of-band agreed benchmark that exactly matches the circuit's own recorded override (2026-10-20, Amrapali Princely Estate)", () => {
+    const overridden = deriveWorksheet({
+      circuits: [{ ...liftLobby, agreedBenchmarkSavingsPct: 58.65, benchmarkOverridePct: 58.65 }],
+      unitElectricityRate: 7,
+      monthlyFee: 1,
+    });
+    expect(refuseWorksheet(overridden, bounds)).toBeNull();
+  });
+  it("still refuses an out-of-band agreed benchmark with no matching override on record", () => {
+    // No override at all.
+    expect(
+      refuseWorksheet(
+        deriveWorksheet({ circuits: [{ ...liftLobby, agreedBenchmarkSavingsPct: 58.65, benchmarkOverridePct: null }], unitElectricityRate: 7, monthlyFee: 1 }),
+        bounds,
+      ),
+    ).toBe("invalid-benchmark");
+    // An override exists, but for a different figure than what's being typed in.
+    expect(
+      refuseWorksheet(
+        deriveWorksheet({ circuits: [{ ...liftLobby, agreedBenchmarkSavingsPct: 58.65, benchmarkOverridePct: 50 }], unitElectricityRate: 7, monthlyFee: 1 }),
+        bounds,
+      ),
+    ).toBe("invalid-benchmark");
+  });
 });

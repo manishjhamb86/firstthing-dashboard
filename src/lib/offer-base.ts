@@ -24,6 +24,15 @@ export type OfferBaseRow = {
   preInstallBaseline: number | null;
   demoBenchmarkSavingsPct: number | null;
   /**
+   * An agreed figure already on record for this circuit (2026-10-20,
+   * user-confirmed) — set through the circuit's own override control, with
+   * its own required reason, outside CON-20's 60-80% band when the demos
+   * alone couldn't land there. The worksheet's own band check accepts an
+   * agreed benchmark EXACTLY equal to this, never any other out-of-band
+   * value: the authorization already happened, at the circuit, not here.
+   */
+  benchmarkOverridePct: number | null;
+  /**
    * The OLD fittings' per-light watts and daily hours — the theoretical basis
    * (lights × watts × hours). From the circuit's load inventory where it has
    * one (count-weighted over the lines being retrofitted), else the circuit's
@@ -67,6 +76,7 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
               representedLightCount: true,
               preInstallBaseline: true,
               benchmarkSavingsPct: true,
+              benchmarkOverridePct: true,
               wattage: true,
               workingHours: true,
               devices: { select: { count: true, wattage: true, hoursPerDay: true, excludedFromCalculation: true, replacementCount: true } },
@@ -94,6 +104,9 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
         demoLightCount: live.get(c.circuitId) ? demoLightsInstalled(live.get(c.circuitId)!) : 0,
         preInstallBaseline: c.preInstallBaseline,
         demoBenchmarkSavingsPct: c.benchmarkSavingsPct,
+        // The live record wins here too — an override set (or corrected)
+        // after the report was generated is still the agreed figure.
+        benchmarkOverridePct: live.get(c.circuitId)?.benchmarkOverridePct ?? null,
         ...(live.get(c.circuitId) ? loadFigures(live.get(c.circuitId)!) : { wattagePerLight: null, hoursPerDay: null }),
       })),
     };
@@ -109,6 +122,7 @@ export async function offerBaseRows(pipelineId: string): Promise<{ rows: OfferBa
       demoLightCount: demoLightsInstalled(c),
       preInstallBaseline: c.preInstallBaseline,
       demoBenchmarkSavingsPct: c.benchmarkSavingsPct,
+      benchmarkOverridePct: c.benchmarkOverridePct,
       ...loadFigures(c),
     })),
   };

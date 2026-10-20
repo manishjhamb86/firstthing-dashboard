@@ -22,6 +22,14 @@ export type WorksheetCircuitInput = {
   preInstallBaseline: number | null;
   /** What the demo measured — null when there was no demo. */
   demoBenchmarkSavingsPct: number | null;
+  /**
+   * An agreed figure already on record for this circuit (2026-10-20,
+   * user-confirmed), set through its own override control with its own
+   * required reason — outside CON-20's 60-80% band when the demos alone
+   * couldn't land there. `refuseWorksheet` accepts an agreed benchmark
+   * EXACTLY equal to this; any other out-of-band value still refuses.
+   */
+  benchmarkOverridePct?: number | null;
   /** Lights to install as per the agreement — the FULL INSTALLATION, not counting the demo lights (2026-09-27). */
   agreedLightCount: number;
   /**
@@ -199,10 +207,14 @@ export function refuseWorksheet(
   if (ws.circuits.length === 0) return "no-circuits";
   for (const c of ws.circuits) {
     if (!Number.isInteger(c.agreedLightCount) || c.agreedLightCount <= 0) return "invalid-light-count";
+    const matchesRecordedOverride =
+      c.benchmarkOverridePct !== null &&
+      c.benchmarkOverridePct !== undefined &&
+      c.agreedBenchmarkSavingsPct === c.benchmarkOverridePct;
     if (
       !Number.isFinite(c.agreedBenchmarkSavingsPct) ||
-      c.agreedBenchmarkSavingsPct < bounds.benchmarkMinPct ||
-      c.agreedBenchmarkSavingsPct > bounds.benchmarkMaxPct
+      (!matchesRecordedOverride &&
+        (c.agreedBenchmarkSavingsPct < bounds.benchmarkMinPct || c.agreedBenchmarkSavingsPct > bounds.benchmarkMaxPct))
     ) {
       return "invalid-benchmark";
     }

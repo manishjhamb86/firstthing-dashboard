@@ -121,6 +121,7 @@ async function buildOfferRecord(pipelineId: string, input: OfferTermInput): Prom
       meteredLightCount: r.meteredLightCount,
       preInstallBaseline: r.preInstallBaseline,
       demoBenchmarkSavingsPct: r.demoBenchmarkSavingsPct,
+      benchmarkOverridePct: r.benchmarkOverridePct,
       agreedLightCount: c?.agreedLightCount ?? r.representedLightCount,
       demoLightCount: r.demoLightCount,
       agreedBenchmarkSavingsPct: c?.agreedBenchmarkSavingsPct ?? r.demoBenchmarkSavingsPct ?? NaN,

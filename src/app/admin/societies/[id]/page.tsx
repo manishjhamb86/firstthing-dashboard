@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { SocietyFmCard } from "./fm-card";
 import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
@@ -320,10 +321,18 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
           <Card className="p-6 min-w-0">
             <CardTitle>Service lines</CardTitle>
 
-            {/* Every line, always — enrolled or not. The dropdown showed
-                only what was already there and hid the rest. */}
-            <ul className="space-y-0">
-              {ALL_SERVICE_LINES.map((line) => {
+            {/* A real grid, not flowing text (2026-10-20, user-caught: "i
+                like things if everything have its designated location and
+                space... the name, the status, the info") — every row, a
+                service line's own or one of its deals, lands in the same
+                four columns, so a status chip is always in the same place
+                whether it is reading "Active" for the line or "Closed /
+                lost" for one of its parts. Single-column below `sm` so
+                nothing overflows a phone; the grid only applies from there. */}
+            <div
+              className="mt-3 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-[minmax(150px,auto)_minmax(110px,auto)_1fr_auto] sm:items-center"
+            >
+              {ALL_SERVICE_LINES.map((line, lineIndex) => {
                 const engagement = engagements.find((e) => e.serviceLine === line);
                 // Closed/rejected parts sink to the bottom (2026-10-20,
                 // user-asked) — a line's own "Active" chip only ever spoke
@@ -336,84 +345,24 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                 );
                 const status = engagement ? statusMeta(ENGAGEMENT_STATUS, engagement.status) : null;
                 const canEnrol = pipelines.length > 0;
+                // Enrolment comes AFTER a lead, not before it: a society is
+                // engaged on a line because a deal was opened and a meeting
+                // happened. Without one on record the row says so instead of
+                // offering the control.
+                const showEnroll = canEnrol && (!engagement || engagement.status !== "active");
                 return (
-                  <li
-                    key={line}
-                    className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-[var(--border-subtle)] py-3 first:border-t-0 first:pt-0"
-                  >
-                    <span className="min-w-0">
-                      <span
-                        className={engagement ? "font-medium" : "font-medium text-[var(--text-muted)]"}
-                      >
-                        {SERVICE_LINE_LABEL[line] ?? line}
-                      </span>
-                      <span className="block text-xs text-[var(--text-muted)] mt-0.5">
-                        {!engagement ? (
-                          canEnrol ? (
-                            "Not enrolled"
-                          ) : (
-                            "Not enrolled — enrolment follows a lead"
-                          )
-                        ) : lineDeals.length === 1 ? (
-                          <>
-                            <span className="inline-flex flex-wrap items-center gap-1.5">
-                              <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="link-arrow">
-                                Open the deal →
-                              </Link>
-                              <StatusChip tone={statusMeta(PIPELINE_STAGE, lineDeals[0].stage).tone}>
-                                {statusMeta(PIPELINE_STAGE, lineDeals[0].stage).label}
-                              </StatusChip>
-                            </span>
-                            {billingByPipeline.get(lineDeals[0].id)?.billingStart && (
-                              <span className="block">
-                                Billing since {formatDate(billingByPipeline.get(lineDeals[0].id)!.billingStart!)}
-                              </span>
-                            )}
-                          </>
-                        ) : lineDeals.length > 1 ? (
-                          // Each part is its own deal; the scope is what
-                          // tells them apart, and each gets its OWN stage —
-                          // the line's single "Active" chip (to the right)
-                          // only ever spoke for the engagement as a whole.
-                          <span className="flex flex-col gap-1">
-                            {lineDeals.map((d) => {
-                              const billing = billingByPipeline.get(d.id);
-                              const meta = statusMeta(PIPELINE_STAGE, d.stage);
-                              return (
-                                <span key={d.id} className="inline-flex flex-wrap items-center gap-1.5">
-                                  <Link href={`/admin/pipeline/${d.id}`} className="link-arrow">
-                                    {d.dealScope ?? "Unnamed part"} →
-                                  </Link>
-                                  <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
-                                  {billing?.billingStart && (
-                                    <span className="text-[var(--text-muted)]">billing since {formatDate(billing.billingStart)}</span>
-                                  )}
-                                </span>
-                              );
-                            })}
-                          </span>
-                        ) : (
-                          <>
-                            Enrolled, but no deal running.{" "}
-                            <Link
-                              href={`/admin/pipeline/new?societyId=${society.id}`}
-                              className="underline"
-                            >
-                              Log a lead
-                            </Link>
-                            .
-                          </>
-                        )}
-                      </span>
+                  <Fragment key={line}>
+                    {lineIndex > 0 && <div className="sm:col-span-4 border-t border-[var(--border-subtle)] pt-2" />}
+
+                    <span className={engagement ? "font-medium" : "font-medium text-[var(--text-muted)]"}>
+                      {SERVICE_LINE_LABEL[line] ?? line}
                     </span>
-                    <span className="flex flex-wrap items-center gap-2 shrink-0">
-                      {status && <StatusChip tone={status.tone}>{status.label}</StatusChip>}
-                      {/* Enrolment comes AFTER a lead, not before it: a
-                          society is engaged on a line because a deal was
-                          opened and a meeting happened. Without one on
-                          record the row says so instead of offering the
-                          control. */}
-                      {canEnrol && (!engagement || engagement.status !== "active") && (
+                    <span>{status && <StatusChip tone={status.tone}>{status.label}</StatusChip>}</span>
+                    <span className="text-xs text-[var(--text-muted)]">
+                      {!engagement && (canEnrol ? "Not enrolled" : "Not enrolled — enrolment follows a lead")}
+                    </span>
+                    <span className="sm:justify-self-end">
+                      {showEnroll && (
                         <EnrollServiceLineButton
                           societyId={society.id}
                           serviceLine={line}
@@ -421,10 +370,48 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                         />
                       )}
                     </span>
-                  </li>
+
+                    {/* Each part is its own deal; the scope is what tells
+                        them apart once there is more than one. */}
+                    {lineDeals.map((d) => {
+                      const billing = billingByPipeline.get(d.id);
+                      const meta = statusMeta(PIPELINE_STAGE, d.stage);
+                      return (
+                        <Fragment key={d.id}>
+                          <span className="sm:pl-4 text-sm min-w-0">
+                            <Link href={`/admin/pipeline/${d.id}`} className="link-arrow">
+                              {lineDeals.length > 1 ? d.dealScope ?? "Unnamed part" : "Open the deal"} →
+                            </Link>
+                          </span>
+                          <span>
+                            <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                          </span>
+                          <span className="text-xs text-[var(--text-muted)]">
+                            {billing?.billingStart ? `Billing since ${formatDate(billing.billingStart)}` : null}
+                          </span>
+                          <span />
+                        </Fragment>
+                      );
+                    })}
+
+                    {engagement && lineDeals.length === 0 && (
+                      <>
+                        <span className="sm:pl-4 text-xs text-[var(--text-muted)]">—</span>
+                        <span />
+                        <span className="text-xs text-[var(--text-muted)]">
+                          Enrolled, but no deal running.{" "}
+                          <Link href={`/admin/pipeline/new?societyId=${society.id}`} className="underline">
+                            Log a lead
+                          </Link>
+                          .
+                        </span>
+                        <span />
+                      </>
+                    )}
+                  </Fragment>
                 );
               })}
-            </ul>
+            </div>
 
             {pipelines.length === 0 && (
               <p className="mt-4 pt-4 border-t border-[var(--border-subtle)] text-sm text-[var(--text-muted)]">

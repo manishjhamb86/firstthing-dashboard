@@ -10,6 +10,7 @@ import {
   checkAccountDeactivate,
   checkOfficeBearerTransfer,
 } from "@/lib/portal-authority";
+import { refusePasswordChange } from "@/lib/password-policy";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 
 // FEAT-108-AC-5 (office-bearer transfers the designation to another account
@@ -64,6 +65,42 @@ export async function transferOfficeBearer(targetProfileId: string): Promise<{ e
 
   revalidatePath("/portal");
   return {};
+}
+
+// ── A member changes their own password (2026-10-20, user-asked) ──────────
+//
+// Self-service, no authority check beyond being signed in — any portal role
+// may change their own credential. The current password is verified against
+// the viewer's OWN stored hash (never the request's own societyId/role
+// claims) so this can never be used to probe or change anyone else's.
+
+export async function changeMyPassword(input: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}): Promise<{ error?: string; ok?: true }> {
+  const viewer = await resolvePortalViewer();
+  if (!viewer) return { error: "Your session is no longer valid. Sign in again." };
+
+  const refusal = refusePasswordChange(input);
+  if (refusal) return { error: refusal };
+
+  const profile = await db.profile.findUnique({ where: { id: viewer.id }, select: { passwordHash: true } });
+  if (!profile) return { error: "Your session is no longer valid. Sign in again." };
+
+  const matches = await bcrypt.compare(input.currentPassword, profile.passwordHash);
+  if (!matches) {
+    logger.warn("portal_account.password_change_refused", { actorId: viewer.id, reason: "wrong_current_password" });
+    return { error: "Your current password is incorrect." };
+  }
+
+  await db.profile.update({
+    where: { id: viewer.id },
+    data: { passwordHash: await bcrypt.hash(input.newPassword, 10) },
+  });
+
+  logger.info("portal_account.password_changed", { actorId: viewer.id, societyId: viewer.societyId });
+  return { ok: true };
 }
 
 // ── FEAT-108-AC-9 — the society adds and removes its own accounts ─────────

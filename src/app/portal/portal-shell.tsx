@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { NavShell, type NavItem } from "@/components/nav-shell";
 import { NotificationBell } from "@/components/notification-bell";
 import type { ThemeId } from "@/lib/theme";
@@ -81,6 +82,11 @@ export function PortalShell({
       footerNote="FirsThing · your society's portal"
       extras={<NotificationBell count={bellCount} href="/portal/notifications" surface="content" />}
       mobileTabBar={mobileTabBar}
+      accountExtra={
+        <Link href="/portal/account" className="font-medium hover:opacity-80">
+          Change password
+        </Link>
+      }
     >
       {children}
     </NavShell>

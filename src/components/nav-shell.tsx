@@ -77,6 +77,7 @@ export function NavShell({
   settings,
   mobileStatus,
   mobileTabBar,
+  accountExtra,
   children,
 }: {
   theme: ThemeId;
@@ -108,6 +109,10 @@ export function NavShell({
    * bar, so nothing reachable through the old drawer becomes unreachable.
    */
   mobileTabBar?: NavItem[];
+  /** An extra link beside Sign out, in both the desktop identity block and
+   *  the mobile dropdown — e.g. the portal's "Change password" (2026-10-20).
+   *  Omitted, this component is unchanged (admin passes nothing). */
+  accountExtra?: ReactNode;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -289,7 +294,10 @@ export function NavShell({
           <p className="text-[13px] font-semibold truncate max-w-[180px]" title={email}>
             {email}
           </p>
-          <SignOutButton className="text-xs font-medium hover:opacity-80" style={{ color: "var(--text-muted)" }} />
+          <span className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
+            {accountExtra}
+            <SignOutButton className="font-medium hover:opacity-80" />
+          </span>
         </div>
         {identityOpen && (
           <div
@@ -304,7 +312,8 @@ export function NavShell({
               <ThemeSwitcher current={theme} surface="content" />
             </div>
             {settings && <div className="mt-2 flex flex-wrap items-center gap-2">{settings}</div>}
-            <div className="mt-3 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
+            <div className="mt-3 flex flex-col items-start gap-2 border-t pt-2" style={{ borderColor: "var(--border-subtle)" }}>
+              {accountExtra}
               <SignOutButton
                 className="text-[13px] font-medium hover:opacity-80"
                 style={{ color: "var(--text-muted)" }}

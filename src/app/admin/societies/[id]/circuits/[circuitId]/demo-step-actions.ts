@@ -27,6 +27,7 @@ import { scheduleJob } from "@/lib/jobs";
 import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
 import { demoCountFeedsTotal, representedCountAfterDemoCorrection } from "@/lib/light-population";
 import { refuseUnlock, unlockUntil } from "@/lib/demo-lock";
+import { requireSuperApproval } from "@/lib/pending-approval";
 import { periodDates, periodOfDay, refuseDemoPeriods, type PeriodInput } from "@/lib/demo-periods";
 import { acceptanceOf, refuseAcceptance } from "@/lib/demo-acceptance";
 import { refreshDemoFromMeter } from "@/lib/demo-refresh";
@@ -123,6 +124,15 @@ export async function overrideDemoLoad(demoId: string, reason: string): Promise<
   const g = await editableDemo(demoId, a.admin.id, "load_override");
   if ("error" in g) return { error: g.error };
   if (g.demo.meterDisplayedLoad === null) return { error: "No load reading has been recorded yet." };
+  const gate = await requireSuperApproval({
+    actorId: a.admin.id,
+    actorEmail: a.admin.email,
+    kind: "overrideDemoLoad",
+    summary: `Override the failed load test on Demo ${g.demo.sequence}, ${g.demo.circuit.society.name} — ${reason.trim()}`,
+    societyId: g.demo.circuit.societyId,
+    args: { demoId, reason },
+  });
+  if (gate) return gate;
   await db.$transaction(async (tx) => {
     await tx.circuitDemo.update({ where: { id: demoId }, data: { loadValidationOverrideById: a.admin.id, loadValidationOverrideReason: reason.trim() } });
     await logChange(tx, { entity: "circuit_demo", entityId: demoId, kind: "edit", field: "load_override", circuitId: g.demo.circuitId, demoId, newValue: { reason: reason.trim() }, reason: reason.trim(), actorId: a.admin.id });
@@ -572,6 +582,15 @@ export async function unlockDemo(demoId: string, reason: string): Promise<Outcom
     return { error: refusal };
   }
   const until = unlockUntil(new Date());
+  const gate = await requireSuperApproval({
+    actorId: admin.id,
+    actorEmail: admin.email,
+    kind: "unlockDemo",
+    summary: `Unlock Demo ${demo.sequence}, ${demo.circuit.society.name}, for editing after its report was shared — ${reason.trim()}`,
+    societyId: demo.circuit.societyId,
+    args: { demoId, reason },
+  });
+  if (gate) return gate;
   await db.$transaction(async (tx) => {
     await tx.circuitDemo.update({ where: { id: demoId }, data: { unlockedUntil: until, unlockedById: admin.id, unlockReason: reason.trim() } });
     await logChange(tx, { entity: "circuit_demo", entityId: demoId, kind: "unlock", circuitId: demo.circuitId, demoId, newValue: { until: until.toISOString() }, reason: reason.trim(), actorId: admin.id });
@@ -650,6 +669,18 @@ export async function setDemoLightCount(input: { demoId: string; count: number; 
   if ("error" in adjustment) {
     logger.warn("demo.light_count_refused", { actorId: a.admin.id, demoId: demo.id, reason: "represented_floor" });
     return { error: adjustment.error };
+  }
+
+  if (!demoMode) {
+    const gate = await requireSuperApproval({
+      actorId: a.admin.id,
+      actorEmail: a.admin.email,
+      kind: "setDemoLightCount",
+      summary: `Correct Demo ${demo.sequence}'s light count on ${demo.circuit.society.name} — ${demo.meteredLightCount} → ${input.count}`,
+      societyId: demo.circuit.societyId,
+      args: input,
+    });
+    if (gate) return gate;
   }
 
   await db.$transaction(async (tx) => {
@@ -747,6 +778,17 @@ export async function removeDemo(input: { demoId: string; reason: string }): Pro
   const g = await editableDemo(input.demoId, a.admin.id, "remove");
   if ("error" in g) return { error: g.error };
   const demo = g.demo;
+  if (!whitewash) {
+    const gate = await requireSuperApproval({
+      actorId: a.admin.id,
+      actorEmail: a.admin.email,
+      kind: "removeDemo",
+      summary: `Remove Demo ${demo.sequence}, ${demo.circuit.society.name} — ${reason}`,
+      societyId: demo.circuit.societyId,
+      args: input,
+    });
+    if (gate) return gate;
+  }
   await db.$transaction(async (tx) => {
     if (whitewash) {
       await purgeDemo(tx, demo);
@@ -793,6 +835,17 @@ export async function setDemoRejected(input: { demoId: string; rejected: boolean
   if (input.rejected && !input.reason?.trim()) return { error: "Say why this demo is being rejected — a rejection with no stated reason cannot be reviewed later." };
   const demo = await db.circuitDemo.findUnique({ where: { id: input.demoId }, select: demoSelect });
   if (!demo) return { error: "That demo is no longer on record." };
+  if (!(await isDemoMode())) {
+    const gate = await requireSuperApproval({
+      actorId: a.admin.id,
+      actorEmail: a.admin.email,
+      kind: "setDemoRejected",
+      summary: `${input.rejected ? "Reject" : "Un-reject"} Demo ${demo.sequence}, ${demo.circuit.society.name}${input.reason ? ` — ${input.reason}` : ""}`,
+      societyId: demo.circuit.societyId,
+      args: input,
+    });
+    if (gate) return gate;
+  }
   await db.$transaction(async (tx) => {
     await tx.circuitDemo.update({
       where: { id: input.demoId },
@@ -813,8 +866,25 @@ export async function setBenchmarkOverride(input: { circuitId: string; pct: numb
     if (!Number.isFinite(input.pct) || input.pct <= 0 || input.pct >= 100) return { error: "A savings benchmark is a percentage between 0 and 100." };
     if (!input.reason?.trim()) return { error: "Say why — an overridden benchmark with no stated reason is indistinguishable from a typo." };
   }
-  const circuit = await db.circuit.findUnique({ where: { id: input.circuitId }, select: { id: true, societyId: true, benchmarkOverridePct: true } });
+  const circuit = await db.circuit.findUnique({
+    where: { id: input.circuitId },
+    select: { id: true, societyId: true, benchmarkOverridePct: true, society: { select: { name: true } } },
+  });
   if (!circuit) return { error: "That circuit no longer exists." };
+  if (!(await isDemoMode())) {
+    const gate = await requireSuperApproval({
+      actorId: a.admin.id,
+      actorEmail: a.admin.email,
+      kind: "setBenchmarkOverride",
+      summary:
+        input.pct === null
+          ? `Clear the benchmark override on ${circuit.society.name} — was ${circuit.benchmarkOverridePct}%`
+          : `Set the benchmark override on ${circuit.society.name} — ${circuit.benchmarkOverridePct ?? "the demo's measured figure"} → ${input.pct}% — ${input.reason!.trim()}`,
+      societyId: circuit.societyId,
+      args: input,
+    });
+    if (gate) return gate;
+  }
   await db.$transaction(async (tx) => {
     await tx.circuit.update({
       where: { id: input.circuitId },

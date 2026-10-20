@@ -25,6 +25,7 @@ import {
   Mail,
   Wrench,
   Inbox,
+  ShieldCheck,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -109,6 +110,10 @@ export function AppShell({
       // Every society's checked chronology, and the date change requests
       // (2026-09-28). Any admin may read it, like each society's own timeline.
       { href: "/admin/timeline", label: "Timeline", icon: History },
+      // Corrections to the demo process, benchmark, light-count change and
+      // agreement, queued for one named account's approval (2026-10-20).
+      // Any admin may read it, same transparency as the date-change queue.
+      { href: "/admin/approvals", label: "Pending approvals", icon: ShieldCheck },
       // The monthly per-society motion-sensor checklist (2026-09-12) — field
       // work, same gate as gate passes and benchmark rescale entry.
       showField && { href: "/admin/inspections", label: "Inspections", icon: ClipboardCheck },

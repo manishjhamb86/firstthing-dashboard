@@ -8,6 +8,7 @@ import { logger } from "@/lib/logger";
 import { isDemoMode } from "@/lib/demo-mode";
 import { REFUSAL_MESSAGE, refuseRescale, refuseVoid, rescaleBaseline } from "@/lib/benchmark-rescale";
 import { utcMidnight as startOfDayUTC } from "@/lib/circuit-load";
+import { requireSuperApproval } from "@/lib/pending-approval";
 
 export type RescaleResult = { error?: string };
 
@@ -15,7 +16,7 @@ export type RescaleResult = { error?: string };
 // (both manage_survey and manage_pipeline). Refuses by RETURNING: a Server
 // Action that throws reaches the browser as an opaque digest in production,
 // so the operator would be told nothing at all.
-async function requireRescaleOps(): Promise<{ error: string } | { actorId: string }> {
+async function requireRescaleOps(): Promise<{ error: string } | { actorId: string; actorEmail: string }> {
   const admin = await resolveAdmin();
   if (!admin) return { error: "Your session is no longer valid. Sign in again." };
   if (!admin.permissions.includes("manage_survey") || !admin.permissions.includes("manage_pipeline")) {
@@ -24,7 +25,7 @@ async function requireRescaleOps(): Promise<{ error: string } | { actorId: strin
         "Recording or voiding a light-count change is an operations lead action. It needs both pipeline and field-survey authority.",
     };
   }
-  return { actorId: admin.id };
+  return { actorId: admin.id, actorEmail: admin.email };
 }
 
 // FEAT-041 — record a verified light-count change and the deterministic
@@ -65,6 +66,16 @@ export async function recordLightCountChange(
   // Non-null past refuseRescale, which checks both.
   const previousBaseline = circuit.preInstallBaseline!;
   const rescaledBaseline = rescaleBaseline(previousBaseline, circuit.meteredLightCount, input.newLightCount);
+
+  const approval = await requireSuperApproval({
+    actorId: gate.actorId,
+    actorEmail: gate.actorEmail,
+    kind: "recordLightCountChange",
+    summary: `Record a light-count change on circuit ${circuitId} — ${circuit.meteredLightCount} → ${input.newLightCount} lights, effective ${input.effectiveDate}`,
+    societyId: circuit.societyId,
+    args: { circuitId, input },
+  });
+  if (approval) return approval;
 
   // The event and the circuit's current count move together — a count
   // without its event, or an event without the count, would each leave the
@@ -159,6 +170,16 @@ export async function voidRescaleEvent(eventId: string, reason: string): Promise
   const restoredCount = survivors.length
     ? survivors[survivors.length - 1].newLightCount
     : event.previousLightCount;
+
+  const approval = await requireSuperApproval({
+    actorId: gate.actorId,
+    actorEmail: gate.actorEmail,
+    kind: "voidRescaleEvent",
+    summary: `Void a light-count change on circuit ${event.circuitId} — was ${event.previousLightCount} → ${event.newLightCount} — ${reason.trim()}`,
+    societyId: event.circuit.societyId,
+    args: { eventId, reason },
+  });
+  if (approval) return approval;
 
   await db.$transaction([
     db.benchmarkRescaleEvent.update({
@@ -267,6 +288,16 @@ export async function correctRescaleEvent(
     event.previousLightCount,
     input.newLightCount,
   );
+
+  const approval = await requireSuperApproval({
+    actorId: gate.actorId,
+    actorEmail: gate.actorEmail,
+    kind: "correctRescaleEvent",
+    summary: `Correct a light-count change on circuit ${event.circuitId} — ${event.newLightCount} → ${input.newLightCount} lights — ${input.reason.trim()}`,
+    societyId: event.circuit.societyId,
+    args: { eventId, input },
+  });
+  if (approval) return approval;
 
   await db.$transaction(async (tx) => {
     const replacement = await tx.benchmarkRescaleEvent.create({

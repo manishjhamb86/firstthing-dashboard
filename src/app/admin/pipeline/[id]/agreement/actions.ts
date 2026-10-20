@@ -12,6 +12,7 @@ import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
 import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
 import { refuseOrderedDate } from "@/lib/step-dates";
+import { requireSuperApproval } from "@/lib/pending-approval";
 import { KYC_TYPE_LABEL } from "@/lib/kyc";
 import { bestKycAcross, kycMissing } from "@/lib/kyc-society";
 import type { OfferCircuitTerm } from "@/lib/offer";
@@ -417,6 +418,21 @@ export async function correctAgreementDates(pipelineId: string, input: Agreement
     }
   }
 
+  if (!(await isDemoMode())) {
+    const pipelineForGate = await db.pipeline.findUnique({ where: { id: pipelineId }, select: { societyId: true, society: { select: { name: true } } } });
+    if (pipelineForGate) {
+      const approval = await requireSuperApproval({
+        actorId: admin.id,
+        actorEmail: admin.email,
+        kind: "correctAgreementDates",
+        summary: `Correct agreement/contract dates on ${pipelineForGate.society.name} — ${[...agreementChanges, ...contractChanges].map(([f]) => f).join(", ")}`,
+        societyId: pipelineForGate.societyId,
+        args: { pipelineId, input },
+      });
+      if (approval) return approval;
+    }
+  }
+
   const reason = input.reason.trim() || null;
   await db.$transaction(async (tx) => {
     if (agreementChanges.length > 0) {
@@ -506,6 +522,21 @@ export async function correctUnitElectricityRate(pipelineId: string, rate: numbe
   const current = contract.versions[0];
   if (!current) return { error: "The contract has no terms recorded yet." };
   if (current.unitElectricityRate === rate) return { error: "That is already the recorded rate." };
+
+  if (!(await isDemoMode())) {
+    const pipelineForGate = await db.pipeline.findUnique({ where: { id: pipelineId }, select: { societyId: true, society: { select: { name: true } } } });
+    if (pipelineForGate) {
+      const approval = await requireSuperApproval({
+        actorId: admin.id,
+        actorEmail: admin.email,
+        kind: "correctUnitElectricityRate",
+        summary: `Correct the unit electricity rate on ${pipelineForGate.society.name} — ₹${current.unitElectricityRate} → ₹${rate}/kWh — ${reason.trim()}`,
+        societyId: pipelineForGate.societyId,
+        args: { pipelineId, rate, reason },
+      });
+      if (approval) return approval;
+    }
+  }
 
   const oldRate = current.unitElectricityRate;
   const reasonTrim = reason.trim() || null;

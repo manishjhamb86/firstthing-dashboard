@@ -376,6 +376,7 @@ model Society {
   inspections             Inspection[]
   fmEngagements           SocietyFmEngagement[]
   dateChangeRequests      DateChangeRequest[]
+  pendingApprovals        PendingApproval[]
   replacementFollowUps    DemoReplacementFollowUp[]
 
   @@map("societies")
@@ -612,6 +613,11 @@ model AdminUser {
 
   dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
   dateChangesDecided   DateChangeRequest[] @relation("DateChangeDecidedBy")
+
+  // Corrections to the demo process, benchmark, light-count change and
+  // agreement queue for one named account's sign-off (2026-10-20, user-asked).
+  pendingApprovalsRequested PendingApproval[] @relation("PendingApprovalRequestedBy")
+  pendingApprovalsDecided   PendingApproval[] @relation("PendingApprovalDecidedBy")
 
   @@map("admin_users")
 }
@@ -1635,6 +1641,53 @@ enum DateChangeStatus {
   superseded
 
   @@map("date_change_status")
+}
+
+/// Corrections to the demo process, benchmark, light-count change and
+/// agreement, made by anyone other than the one named account
+/// (src/lib/super-admin.ts), queue here instead of writing (2026-10-20,
+/// user-asked). `args` is exactly what the owning action needs to re-run —
+/// the SAME call, invoked again once that account approves, re-validating
+/// against whatever is true then rather than trusting a stale snapshot.
+model PendingApproval {
+  id        String  @id @default(cuid())
+  /// A key of PENDING_APPROVAL_KINDS (src/lib/pending-approval.ts).
+  kind      String
+  /// Human-readable, for the queue — computed once, at request time.
+  summary   String
+  societyId String  @map("society_id")
+  society   Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  /// The owning action's own parameters, JSON-serializable by construction
+  /// (every gated action takes only strings/numbers/booleans/plain objects).
+  args Json
+
+  status PendingApprovalStatus @default(pending)
+
+  requestedById String    @map("requested_by_id")
+  requestedAt   DateTime  @default(now()) @map("requested_at")
+  decidedById   String?   @map("decided_by_id")
+  decidedAt     DateTime? @map("decided_at")
+  decisionNote  String?   @map("decision_note")
+  /// Set when approving re-ran the action and it refused — state moved
+  /// underneath the request. The row stays pending so it can be retried or
+  /// withdrawn; this is shown so it is clear retrying needs a fresh look.
+  appliedError String? @map("applied_error")
+
+  requestedBy AdminUser  @relation("PendingApprovalRequestedBy", fields: [requestedById], references: [id])
+  decidedBy   AdminUser? @relation("PendingApprovalDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([societyId, status])
+  @@index([status, requestedAt])
+  @@map("pending_approvals")
+}
+
+enum PendingApprovalStatus {
+  pending
+  approved
+  rejected
+  withdrawn
+
+  @@map("pending_approval_status")
 }
 
 model BenchmarkRescaleEvent {

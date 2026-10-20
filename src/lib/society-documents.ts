@@ -57,7 +57,22 @@ export type SocietyDocRow = {
 const kb = (n: number) => (n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
 const month = (d: Date) => d.toISOString().slice(0, 7);
 
-export async function societyDocuments(societyId: string): Promise<{ agreement: SocietyDocRow | null; rows: SocietyDocRow[] }> {
+/** Whether an operator has filed a real historical savings report for this
+ *  society (StoredDocument, docType "savingsReport") — when one exists, the
+ *  system's own generated reports (the monthly PublishedSavingsReport and
+ *  the demo DemoReport) are suppressed from the resident-facing surfaces
+ *  only, so a committee is never shown two competing "savings report"
+ *  artefacts (2026-10-17, user-asked). The back office keeps seeing both —
+ *  `societyDocuments` below only suppresses when explicitly told to. */
+export async function hasManualSavingsReport(societyId: string): Promise<boolean> {
+  const count = await db.storedDocument.count({ where: { societyId, docType: "savingsReport", voidedAt: null } });
+  return count > 0;
+}
+
+export async function societyDocuments(
+  societyId: string,
+  opts: { hideGeneratedReportsIfManualExists?: boolean } = {},
+): Promise<{ agreement: SocietyDocRow | null; rows: SocietyDocRow[] }> {
   const [docs, published, demoReports, inspections] = await Promise.all([
     db.storedDocument.findMany({
       where: {
@@ -120,10 +135,12 @@ export async function societyDocuments(societyId: string): Promise<{ agreement: 
     }),
   );
   const agreement = stored.find((d) => d.docType === "agreement") ?? null;
+  const suppressGenerated =
+    opts.hideGeneratedReportsIfManualExists && stored.some((d) => d.docType === "savingsReport");
 
   const rows: SocietyDocRow[] = [
     ...stored.filter((d) => d.id !== agreement?.id),
-    ...[...latestPublished.values()].map((r): SocietyDocRow => {
+    ...(suppressGenerated ? [] : [...latestPublished.values()]).map((r): SocietyDocRow => {
       const snap = r.snapshot as { circuitLabel?: string };
       return {
         id: r.id,
@@ -136,7 +153,7 @@ export async function societyDocuments(societyId: string): Promise<{ agreement: 
         external: false,
       };
     }),
-    ...[...latestDemo.values()].map(
+    ...(suppressGenerated ? [] : [...latestDemo.values()]).map(
       (r): SocietyDocRow => ({
         id: r.id,
         docType: "demoReport",

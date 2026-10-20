@@ -7,7 +7,7 @@ import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
 import { Card, EmptyState, InfoNote, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { publicS3Url } from "@/lib/s3";
-import { SOCIETY_DOC_TYPES, societyDocuments } from "@/lib/society-documents";
+import { SOCIETY_DOC_TYPES, societyDocuments, hasManualSavingsReport } from "@/lib/society-documents";
 import { monthName } from "../portal-widgets";
 import { inspectionSummary } from "@/lib/inspection";
 import { InspectionFindingsSummary } from "./inspection-findings";
@@ -77,8 +77,12 @@ export default async function PortalDocumentsPage({
   });
 
   // One loader decides what a society can see and download — the back
-  // office's society page lists the same set (society-documents.ts).
-  const { agreement, rows } = await societyDocuments(societyId);
+  // office's society page lists the same set (society-documents.ts). A real
+  // historical savings report filed by hand suppresses the system's own
+  // generated ones on this, the customer-facing surface only (2026-10-17,
+  // user-asked) — the back office keeps seeing both.
+  const manualReportOnFile = await hasManualSavingsReport(societyId);
+  const { agreement, rows } = await societyDocuments(societyId, { hideGeneratedReportsIfManualExists: true });
   const typesPresent = [...new Set([...(agreement ? ["agreement"] : []), ...rows.map((d) => d.docType)])];
   const shown = activeType ? rows.filter((d) => d.docType === activeType) : rows;
   const byPeriod = new Map<string, typeof rows>();
@@ -89,12 +93,16 @@ export default async function PortalDocumentsPage({
 
   // Demo reports FirsThing has shared, and each demo's pre-/post-installation
   // report (2026-09-27, user-asked) — built from the accepted days each time
-  // they open, so they are always current.
-  const sharedReports = await db.demoReport.findMany({
-    where: { status: "shared", pipeline: { societyId } },
-    orderBy: { version: "desc" },
-    select: { id: true, pipelineId: true, version: true, sharedAt: true, demoIds: true },
-  });
+  // they open, so they are always current. Skipped outright once a manual
+  // savings report is on file — this card is a generated-report surface, the
+  // same suppression as societyDocuments's own rows above.
+  const sharedReports = manualReportOnFile
+    ? []
+    : await db.demoReport.findMany({
+        where: { status: "shared", pipeline: { societyId } },
+        orderBy: { version: "desc" },
+        select: { id: true, pipelineId: true, version: true, sharedAt: true, demoIds: true },
+      });
   const latestShared = sharedReports.filter((r, i) => sharedReports.findIndex((x) => x.pipelineId === r.pipelineId) === i);
   const demos = await db.circuitDemo.findMany({
     where: { id: { in: [...new Set(latestShared.flatMap((r) => r.demoIds))] }, voidedAt: null, circuit: { societyId, voidedAt: null } },

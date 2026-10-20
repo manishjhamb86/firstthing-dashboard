@@ -13,6 +13,7 @@ import { publishedMonthsFor } from "@/lib/published-months-loader";
 import { formatDate } from "@/lib/format-date";
 import { societyMeterRows } from "@/lib/meter-view";
 import { societyEvents } from "@/lib/portal-notifications";
+import { hasManualSavingsReport } from "@/lib/society-documents";
 import { inspectionSummary } from "@/lib/inspection";
 import { Card, CardTitle, ChartPending, PageHeader, StatusChip } from "@/components/ui";
 import Link from "next/link";
@@ -46,13 +47,20 @@ export default async function PortalHomePage() {
   const societyId = viewer.societyId;
   const grants = effectiveGrants(viewer.role, viewer.grants);
 
+  // A real historical savings report filed by hand suppresses the system's
+  // own generated ones on this, the customer-facing dashboard only
+  // (2026-10-17, user-asked) — same rule as the Documents page.
+  const manualReportOnFile = await hasManualSavingsReport(societyId);
+
   const [society, sharedReports, openOffers, tanks, installations] = await Promise.all([
     db.society.findUnique({ where: { id: societyId } }),
-    db.demoReport.findMany({
-      where: { status: "shared", pipeline: { societyId } },
-      orderBy: { version: "desc" },
-      include: { pipeline: true },
-    }),
+    manualReportOnFile
+      ? Promise.resolve([])
+      : db.demoReport.findMany({
+          where: { status: "shared", pipeline: { societyId } },
+          orderBy: { version: "desc" },
+          include: { pipeline: true },
+        }),
     // Every part's open offer, not just the newest — a line delivered in
     // parts (CON-24 as amended) can have two deals awaiting a response at
     // once, and hiding one behind the other loses a binding decision.

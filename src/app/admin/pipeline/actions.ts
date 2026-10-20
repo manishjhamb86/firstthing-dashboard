@@ -337,28 +337,34 @@ export async function approveLead(pipelineId: string) {
  * fails in precisely the direction people correct in.** A chain of correctable
  * dates is only as backdatable as its earliest uncorrectable link.
  *
- * Demo mode only, and OPERATIONS only — the same split as updateLeadDetails:
- * acting on a deal is the assignee's or ops' business, but correcting what the
- * record SAYS about when something happened is ops' alone. Every ordering rule
- * still holds, in both directions: it cannot precede the meeting or the lead,
- * cannot be in the future, and cannot be moved forward past a meter install
- * already recorded against a circuit this survey selected — which would break
- * the very rule this exists to unblock, from the other side.
+ * OPERATIONS only — the same split as updateLeadDetails: acting on a deal is
+ * the assignee's or ops' business, but correcting what the record SAYS about
+ * when something happened is ops' alone. Every ordering rule still holds, in
+ * both directions: it cannot precede the meeting or the lead, cannot be in
+ * the future, and cannot be moved forward past a meter install already
+ * recorded against a circuit this survey selected — which would break the
+ * very rule this exists to unblock, from the other side.
+ *
+ * Demo mode free, live mode with a reason (2026-10-20, user-caught: this was
+ * the one timeline date with no live-mode route to fix it at all, once the
+ * request queue's `live` flag made every direct edit demo-mode-only). Live,
+ * a correction only ever arrives through the timeline's own request/accept
+ * flow (`applyTimelineDate`), whose reason is the request's own and is never
+ * blank — the check here is the same defence-in-depth every sibling
+ * correction (`refuseDateCorrector`) already applies.
  */
 export async function correctProposalDate(
   pipelineId: string,
   decidedOn: string,
+  reason = "",
 ): Promise<{ error?: string; ok?: true }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
   if (!isOperations(actor.team) || !actor.permissions.includes("manage_pipeline")) {
     return { error: "Correcting a deal's recorded dates is an operations action." };
   }
-  if (!(await isDemoMode())) {
-    return {
-      error:
-        "The decision date is stamped when the proposal is recorded. Correcting it by hand is a demo-mode action.",
-    };
+  if (!(await isDemoMode()) && !reason.trim()) {
+    return { error: "Say why the decision date is being corrected — it is kept with the old date." };
   }
 
   const pipeline = await db.pipeline.findUnique({
@@ -383,7 +389,8 @@ export async function correctProposalDate(
   // A decision that was never timestamped is written here too, not just a
   // wrong one corrected (2026-10-01, user-asked: the timeline flags exactly
   // this case — later steps have dates, this one doesn't, so it happened and
-  // nobody recorded when) — demo mode already gates who may do either.
+  // nobody recorded when) — the ops-permission check above already gates who
+  // may do either, in any mode.
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(decidedOn)) return { error: "Pick a valid decision date." };
   const decided = new Date(`${decidedOn}T00:00:00.000Z`);

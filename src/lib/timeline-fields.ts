@@ -15,9 +15,12 @@ export const TIMELINE_FIELDS = {
   "engagement.createdAt": { label: "Service line enrolled", range: false, live: true },
   "pipeline.createdAt": { label: "Lead logged", range: false, live: true },
   "pipeline.meetingDate": { label: "Demo meeting held", range: false, live: true },
-  // correctProposalDate is a demo-mode act only: the decision is stamped when
-  // the proposal is recorded, and moving it once live needs its own decision.
-  "pipeline.proposalDecidedAt": { label: "Proposal decided", range: false, live: false },
+  // Correctable live through the request queue too (2026-10-20, user-caught:
+  // "Proposal decided" was the one timeline field with no route to fix it at
+  // all once go-live made its direct edit demo-mode-only) — correctProposalDate
+  // now takes the same demo-mode-free / live-mode-with-a-reason shape as the
+  // sibling date corrections it previously didn't share.
+  "pipeline.proposalDecidedAt": { label: "Proposal decided", range: false, live: true },
   "pipeline.surveyAssignedAt": { label: "Survey assigned", range: false, live: true },
   "pipeline.survey": { label: "Site survey done", range: false, live: true },
   "demo.meterInstalledAt": { label: "Meter installed", range: false, live: true },

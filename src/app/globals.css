@@ -2044,6 +2044,7 @@ details[open] > .tl-bhead .tl-chev { transform: rotate(90deg); }
 .tl-step[data-state="bad"] .tl-what { color: var(--bad-fg); }
 .tl-gap, .tl-prov { font-size: 12px; color: var(--text-subtle); }
 .tl-msg { font-size: 12.5px; padding: 7px 10px; border-radius: 8px; border: 1px solid; max-width: 640px; }
+.tl-msg + .tl-msg { margin-top: 6px; }
 .tl-msg[data-tone="bad"] { background: var(--bad-bg); color: var(--bad-fg); border-color: var(--bad-line); }
 .tl-msg[data-tone="warn"] { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--warn-line); }
 .tl-msg[data-tone="info"] { background: var(--info-bg); color: var(--info-fg); border-color: var(--info-line); }

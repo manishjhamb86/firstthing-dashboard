@@ -116,7 +116,7 @@ export async function applyTimelineDate(i: ApplyInput): Promise<Result> {
     case "pipeline.proposalDecidedAt": {
       const p = await db.pipeline.findUnique({ where: { id: i.entityId }, select: { id: true, proposalDecidedAt: true } });
       if (!p) return { error: "That deal is no longer on record." };
-      const r = await correctProposalDate(p.id, day);
+      const r = await correctProposalDate(p.id, day, reason);
       if (r.error) return errorOf(r);
       await note("pipeline", p.id, "proposalDecidedAt", p.proposalDecidedAt, day, reason, i.actorId);
       return {};

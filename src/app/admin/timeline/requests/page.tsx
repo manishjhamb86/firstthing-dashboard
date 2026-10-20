@@ -1,4 +1,5 @@
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { requestQueue } from "@/lib/date-change-request-loader";
 import { RequestCard } from "@/app/admin/societies/[id]/timeline/request-card";
@@ -16,6 +17,7 @@ export default async function DateChangeRequestsPage() {
   await requireAdminPage();
   const viewer = (await resolveAdmin())!;
   const canApprove = viewer.permissions.includes("approve_date_changes");
+  const selfApproveAllowed = isSuperAdmin(viewer.email);
   const { pending, decided } = await requestQueue(viewer.id);
 
   return (
@@ -35,7 +37,7 @@ export default async function DateChangeRequestsPage() {
         {pending.length === 0 ? (
           <EmptyState title="Nothing waiting">No date change is waiting for a decision.</EmptyState>
         ) : (
-          pending.map((r) => <RequestCard key={r.id} r={r} canApprove={canApprove} showSociety />)
+          pending.map((r) => <RequestCard key={r.id} r={r} canApprove={canApprove} selfApproveAllowed={selfApproveAllowed} showSociety />)
         )}
       </section>
       {decided.length > 0 && (

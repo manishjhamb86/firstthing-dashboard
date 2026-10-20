@@ -47,9 +47,12 @@ export type ApprovalDecision =
   | { action: "apply" };
 
 /**
- * Accepting. No self-approval — refused at the decision, not just hidden from
- * the list (Jira Service Management's rule), because a hidden button proves
- * nothing about the server.
+ * Accepting. No self-approval by default — refused at the decision, not just
+ * hidden from the list (Jira Service Management's rule), because a hidden
+ * button proves nothing about the server. `selfApprovalAllowed` is a named
+ * exception (2026-10-20, user-asked): the head of department needs nobody
+ * else's sign-off on their own requests — still gated on the permission
+ * itself, so this only skips the self/other check, never the whole rule.
  */
 export function decideApproval(i: {
   status: RequestStatus;
@@ -58,10 +61,12 @@ export function decideApproval(i: {
   canApprove: boolean;
   fromValue: string | null;
   currentValue: string | null;
+  selfApprovalAllowed?: boolean;
 }): ApprovalDecision {
   if (!i.canApprove) return { action: "refuse", message: "Accepting a date change needs the “Approve date changes” permission.", log: "no_permission" };
   if (i.status !== "pending") return { action: "refuse", message: "This request has already been decided.", log: "not_pending" };
-  if (i.requesterId === i.approverId) return { action: "refuse", message: "You raised this request, so another admin decides it.", log: "self_approval" };
+  if (i.requesterId === i.approverId && !i.selfApprovalAllowed)
+    return { action: "refuse", message: "You raised this request, so another admin decides it.", log: "self_approval" };
   if (i.fromValue !== i.currentValue) {
     return { action: "supersede", message: "The recorded date changed after this was asked, so it can no longer be applied. It has been closed; raise a new request if it is still wrong." };
   }

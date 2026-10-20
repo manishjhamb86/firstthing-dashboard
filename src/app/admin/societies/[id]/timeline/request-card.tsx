@@ -12,9 +12,12 @@ import { acceptDateChange, rejectDateChange, withdrawDateChange } from "./action
  * One date change request, as the approver decides it (2026-09-28): where the
  * date is, old → new, the requester's reason, and any rule warnings they went
  * ahead with. The requester sees Withdraw instead of Accept — the server
- * refuses self-approval whatever this renders.
+ * refuses self-approval whatever this renders — except for the one account
+ * `selfApproveAllowed` names (2026-10-20, user-asked: the head of department
+ * needs nobody else's sign-off on their own requests), where the server
+ * agrees and accepting works the same as for anyone else's request.
  */
-export function RequestCard({ r, canApprove, showSociety }: { r: RequestCardData; canApprove: boolean; showSociety?: boolean }) {
+export function RequestCard({ r, canApprove, selfApproveAllowed, showSociety }: { r: RequestCardData; canApprove: boolean; selfApproveAllowed?: boolean; showSociety?: boolean }) {
   const router = useRouter();
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState("");
@@ -79,7 +82,7 @@ export function RequestCard({ r, canApprove, showSociety }: { r: RequestCardData
       </div>
       {open && (
         <div className="decide">
-          {r.mine ? (
+          {r.mine && !selfApproveAllowed ? (
             <>
               <span className="text-[12.5px] text-[var(--text-subtle)]">You raised this, so another admin decides.</span>
               <button type="button" className="btn-outline btn-sm" disabled={pending} onClick={() => run(() => withdrawDateChange(r.id))}>

@@ -15,6 +15,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isDemoMode } from "@/lib/demo-mode";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { logger } from "@/lib/logger";
 import { loadSocietyTimeline } from "@/lib/society-timeline-loader";
 import { currentValue, locate, proposalWarnings, refuseProposal } from "@/lib/society-chronology";
@@ -180,6 +181,7 @@ export async function acceptDateChange(requestId: string): Promise<Outcome> {
     canApprove: admin.permissions.includes("approve_date_changes"),
     fromValue: req.fromValue,
     currentValue: now.found ? now.value : null,
+    selfApprovalAllowed: isSuperAdmin(admin.email),
   });
   if (decision.action === "refuse") {
     logger.warn("timeline.accept_refused", { actorId: admin.id, requestId, reason: decision.log });

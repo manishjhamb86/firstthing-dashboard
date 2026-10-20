@@ -20,6 +20,12 @@ describe("decideApproval", () => {
   it("applies a fresh request decided by someone else", () => expect(decideApproval(base)).toEqual({ action: "apply" }));
   it("refuses self-approval", () => expect(decideApproval({ ...base, approverId: "a" })).toMatchObject({ action: "refuse", log: "self_approval" }));
   it("refuses without the permission", () => expect(decideApproval({ ...base, canApprove: false })).toMatchObject({ action: "refuse", log: "no_permission" }));
+  it("lets the named exception approve their own request (2026-10-20)", () => {
+    expect(decideApproval({ ...base, approverId: "a", selfApprovalAllowed: true })).toEqual({ action: "apply" });
+  });
+  it("the exception still needs the permission", () => {
+    expect(decideApproval({ ...base, approverId: "a", selfApprovalAllowed: true, canApprove: false })).toMatchObject({ action: "refuse", log: "no_permission" });
+  });
   it("refuses a decided request", () => expect(decideApproval({ ...base, status: "approved" })).toMatchObject({ action: "refuse", log: "not_pending" }));
   it("supersedes when the date moved underneath the request", () => {
     expect(decideApproval({ ...base, currentValue: "2025-03-15" }).action).toBe("supersede");

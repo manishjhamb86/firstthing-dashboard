@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isDemoMode } from "@/lib/demo-mode";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { PageHeader, StatusChip } from "@/components/ui";
 import { loadSocietyTimeline } from "@/lib/society-timeline-loader";
 import { checkSocietyChronology, summarise } from "@/lib/society-chronology";
@@ -34,6 +35,7 @@ export default async function SocietyTimelinePage({ params }: { params: Promise<
   const requests = await societyRequests(id, loaded.root, viewer.id);
   const tree = buildTimelineView(loaded.root, issues, requests.byRef);
   const canApprove = viewer.permissions.includes("approve_date_changes");
+  const selfApproveAllowed = isSuperAdmin(viewer.email);
 
   // Each count jumps to the first row it counts.
   const first = (kind: string) => issues.find((i) => i.kind === kind)?.stepId;
@@ -90,7 +92,7 @@ export default async function SocietyTimelinePage({ params }: { params: Promise<
             <span className="text-[12.5px] text-[var(--text-subtle)]">Nobody accepts their own request.</span>
           </div>
           {requests.cards.map((r) => (
-            <RequestCard key={r.id} r={r} canApprove={canApprove} />
+            <RequestCard key={r.id} r={r} canApprove={canApprove} selfApproveAllowed={selfApproveAllowed} />
           ))}
         </section>
       )}

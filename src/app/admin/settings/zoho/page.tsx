@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { isOperations } from "@/lib/admin-teams";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { formatInstant } from "@/lib/format-date";
 import { ZOHO_SCOPES } from "@/lib/zoho-invoice";
@@ -11,11 +11,12 @@ import { ZohoSettingsForm } from "./settings-form";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Zoho Invoice" };
 
-// Operations only: the connection reads every invoice in the company's account.
+// Bound to one named account (2026-10-20, user-asked): the connection reads
+// every invoice in the company's account.
 export default async function ZohoSettingsPage() {
   await requireAdminPage();
   const actor = await resolveAdmin();
-  if (!actor || !isOperations(actor.team)) redirect("/admin");
+  if (!actor || !isSuperAdmin(actor.email)) redirect("/admin");
   const [config, fetched] = await Promise.all([
     db.zohoInvoiceConfig.findUnique({ where: { id: "singleton" }, include: { updatedBy: { select: { name: true, email: true } } } }),
     db.invoiceIntake.count({ where: { zohoInvoiceId: { not: null } } }),

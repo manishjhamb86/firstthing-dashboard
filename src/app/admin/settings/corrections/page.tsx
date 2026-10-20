@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { formatInstant } from "@/lib/format-date";
 import { ToggleForm } from "./toggle-form";
@@ -8,21 +9,18 @@ import { ToggleForm } from "./toggle-form";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Data corrections" };
 
-function isOps(permissions: string[]): boolean {
-  return permissions.includes("manage_survey") && permissions.includes("manage_pipeline");
-}
-
 /**
  * One temporary toggle (2026-10-12, user-asked): whether an operations lead
  * may correct a demo's own historical light count outside demo mode. Built
  * to fix one specific batch of wrong records; meant to be switched off
  * again once that cleanup is done, and switched back on only if genuinely
- * needed later — no redeploy either way. Operations only.
+ * needed later — no redeploy either way. Bound to one named account
+ * (2026-10-20, user-asked), not the broader ops permission it started on.
  */
 export default async function DataCorrectionsPage() {
   await requireAdminPage();
   const actor = await resolveAdmin();
-  if (!actor || !isOps(actor.permissions as string[])) redirect("/admin");
+  if (!actor || !isSuperAdmin(actor.email)) redirect("/admin");
 
   const flag = await db.operationsFlag.findUnique({
     where: { id: "singleton" },

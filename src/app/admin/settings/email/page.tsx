@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { isOperations } from "@/lib/admin-teams";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { sesConfigured } from "@/lib/ses";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { TestSendForm } from "./test-send-form";
@@ -8,17 +8,18 @@ import { TestSendForm } from "./test-send-form";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Email" };
 
-// Operations only. Credentials are env-only (AWS_REGION/AWS_ACCESS_KEY_ID/
-// AWS_SECRET_ACCESS_KEY — the same AWS account the S3 bucket already uses,
-// just with its own ses:SendEmail grant), not stored in the DB: this page
-// states whether SES is configured and offers a test send, it never holds a
-// secret (2026-10-02, matching s3.ts's own convention rather than the
-// OAuth-shaped settings pages like Zoho/Google Calendar, which genuinely
-// need a UI to capture and rotate a credential).
+// Bound to one named account (2026-10-20, user-asked). Credentials are
+// env-only (AWS_REGION/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY — the same AWS
+// account the S3 bucket already uses, just with its own ses:SendEmail
+// grant), not stored in the DB: this page states whether SES is configured
+// and offers a test send, it never holds a secret (2026-10-02, matching
+// s3.ts's own convention rather than the OAuth-shaped settings pages like
+// Zoho/Google Calendar, which genuinely need a UI to capture and rotate a
+// credential).
 export default async function EmailSettingsPage() {
   await requireAdminPage();
   const actor = await resolveAdmin();
-  if (!actor || !isOperations(actor.team)) redirect("/admin");
+  if (!actor || !isSuperAdmin(actor.email)) redirect("/admin");
   const configured = sesConfigured();
 
   return (

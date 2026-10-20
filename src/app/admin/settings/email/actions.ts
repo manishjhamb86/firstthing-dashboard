@@ -1,16 +1,16 @@
 "use server";
 
 import { resolveAdmin } from "@/lib/admin-permissions";
-import { isOperations } from "@/lib/admin-teams";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { logger } from "@/lib/logger";
 import { sendEmail, sesConfigured } from "@/lib/ses";
 
 export async function sendTestEmail(to: string): Promise<{ ok?: true; error?: string }> {
   const admin = await resolveAdmin();
   if (!admin) return { error: "Your session is no longer valid. Sign in again." };
-  if (!isOperations(admin.team)) {
+  if (!isSuperAdmin(admin.email)) {
     logger.warn("email.test_refused", { actorId: admin.id });
-    return { error: "Sending a test email is an operations action." };
+    return { error: "Sending a test email is restricted to one account." };
   }
   if (!sesConfigured()) return { error: "Email is not configured — set SES_FROM_EMAIL and AWS_REGION first." };
   const address = to.trim();

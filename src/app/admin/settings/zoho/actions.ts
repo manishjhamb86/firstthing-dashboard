@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { resolveAdmin } from "@/lib/admin-permissions";
-import { isOperations } from "@/lib/admin-teams";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { exchangeGrantCode, listOrganizations, refreshAccessToken, zohoDataCenters } from "@/lib/zoho-invoice";
 
 const PATH = "/admin/settings/zoho";
@@ -26,9 +26,9 @@ export async function saveZohoConfig(input: {
 }): Promise<{ error?: string; organizationName?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
-  if (!isOperations(actor.team)) {
+  if (!isSuperAdmin(actor.email)) {
     logger.warn("zoho.config_refused", { actorId: actor.id, actorTeam: actor.team });
-    return { error: "Connecting Zoho is an operations action." };
+    return { error: "Connecting Zoho is restricted to one account." };
   }
   const dataCenter = input.dataCenter.trim();
   const organizationId = input.organizationId.trim();
@@ -91,7 +91,7 @@ export async function saveZohoConfig(input: {
 export async function setZohoEnabled(enabled: boolean): Promise<{ error?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
-  if (!isOperations(actor.team)) return { error: "Connecting Zoho is an operations action." };
+  if (!isSuperAdmin(actor.email)) return { error: "Connecting Zoho is restricted to one account." };
   const r = await db.zohoInvoiceConfig.updateMany({ where: { id: "singleton" }, data: { enabled, updatedById: actor.id } });
   if (r.count === 0) return { error: "Nothing is connected yet." };
   logger.info("zoho.config_enabled", { actorId: actor.id, enabled });

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { isOperations } from "@/lib/admin-teams";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { formatInstant } from "@/lib/format-date";
 import { calendarFake } from "@/lib/google-calendar";
@@ -10,11 +10,12 @@ import { CalendarSettingsForm } from "./settings-form";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Google Calendar" };
 
-// Operations only: this key can write to the calendar of anyone on the domain.
+// Bound to one named account (2026-10-20, user-asked): this key can write to
+// the calendar of anyone on the domain.
 export default async function GoogleCalendarSettingsPage() {
   await requireAdminPage();
   const actor = await resolveAdmin();
-  if (!actor || !isOperations(actor.team)) redirect("/admin");
+  if (!actor || !isSuperAdmin(actor.email)) redirect("/admin");
   const [config, failing, pushed] = await Promise.all([
     db.googleCalendarConfig.findUnique({ where: { id: "singleton" }, include: { updatedBy: { select: { name: true, email: true } } } }),
     db.scheduledEvent.count({ where: { calendarSyncError: { not: null }, status: "scheduled" } }),

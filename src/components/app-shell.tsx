@@ -29,6 +29,7 @@ import {
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
 import { NavShell, type NavEntry, type NavGroup, type NavItem } from "@/components/nav-shell";
+import { isSuperAdmin } from "@/lib/super-admin";
 import type { ThemeId } from "@/lib/theme";
 
 // The admin surface's nav. The chrome itself lives in NavShell, which the
@@ -79,6 +80,12 @@ export function AppShell({
     const visible = entries.filter((e): e is NavItem => e !== false);
     return visible.length > 0 ? [{ id, label, icon, items: visible }] : [];
   };
+  // Bound to one named account (2026-10-20, user-asked): these integration
+  // credentials and the data-correction switch are narrower than the
+  // broader manage_admins permission the rest of Settings uses — hiding the
+  // nav entries, not just gating the pages, is the courtesy half of it; the
+  // pages and their Server Actions re-check the same account independently.
+  const superAdmin = isSuperAdmin(email);
 
   const items: NavEntry[] = [
     { href: "/admin", label: "Portfolio", icon: LayoutDashboard, exact: true },
@@ -164,17 +171,17 @@ export function AppShell({
     ...group("settings", "Settings", Settings, [
       showUsers && { href: "/admin/users", label: "Admin users", icon: Users },
       (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
-      // Operations-only page; shown under the same broad flag, the page redirects anyone else.
-      showUsers && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },
-      // Operations-only page, same pattern (2026-09-30).
-      showUsers && { href: "/admin/settings/zoho", label: "Zoho Invoice", icon: Receipt },
-      // Operations-only page (2026-10-02) — credentials are env-only (same
-      // AWS account as S3), this just states whether it's configured and
-      // offers a test send.
-      showUsers && { href: "/admin/settings/email", label: "Email", icon: Mail },
-      // Operations-only page (2026-10-12) — temporary, admin-toggleable
-      // capabilities for one-time cleanup work.
-      showUsers && { href: "/admin/settings/corrections", label: "Data corrections", icon: Wrench },
+      // Bound to one named account (2026-10-20).
+      superAdmin && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },
+      // Bound to one named account (2026-10-20).
+      superAdmin && { href: "/admin/settings/zoho", label: "Zoho Invoice", icon: Receipt },
+      // Bound to one named account (2026-10-20) — credentials are env-only
+      // (same AWS account as S3), this just states whether it's configured
+      // and offers a test send.
+      superAdmin && { href: "/admin/settings/email", label: "Email", icon: Mail },
+      // Bound to one named account (2026-10-20) — temporary, admin-
+      // toggleable capabilities for one-time cleanup work.
+      superAdmin && { href: "/admin/settings/corrections", label: "Data corrections", icon: Wrench },
     ]),
   ];
 

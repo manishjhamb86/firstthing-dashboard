@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { resolveAdmin } from "@/lib/admin-permissions";
-import { isOperations } from "@/lib/admin-teams";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { isEmail } from "@/lib/calendar-event";
 import { parseServiceAccount, testCalendarConfig, type CalendarConfig } from "@/lib/google-calendar";
 
@@ -20,9 +20,9 @@ export async function saveCalendarConfig(input: {
 }): Promise<{ error?: string; clientEmail?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
-  if (!isOperations(actor.team)) {
+  if (!isSuperAdmin(actor.email)) {
     logger.warn("calendar.config_refused", { actorId: actor.id, actorTeam: actor.team });
-    return { error: "Connecting Google Calendar is an operations action." };
+    return { error: "Connecting Google Calendar is restricted to one account." };
   }
   const domain = input.workspaceDomain.trim().toLowerCase().replace(/^@/, "");
   const fallback = input.fallbackOrganizer.trim().toLowerCase();
@@ -57,7 +57,7 @@ export async function saveCalendarConfig(input: {
 export async function setCalendarEnabled(enabled: boolean): Promise<{ error?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
-  if (!isOperations(actor.team)) return { error: "Connecting Google Calendar is an operations action." };
+  if (!isSuperAdmin(actor.email)) return { error: "Connecting Google Calendar is restricted to one account." };
   const r = await db.googleCalendarConfig.updateMany({ where: { id: "singleton" }, data: { enabled, updatedById: actor.id } });
   if (r.count === 0) return { error: "Nothing is connected yet." };
   logger.info("calendar.config_enabled", { actorId: actor.id, enabled });

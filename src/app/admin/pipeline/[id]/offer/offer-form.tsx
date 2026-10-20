@@ -512,3 +512,36 @@ export function OfferForm({
     </div>
   );
 }
+
+/**
+ * Recording a counter is an occasional correction, not this screen's primary
+ * task (that's "Record the society's response" just above it) — so, unlike
+ * the generate/edit forms, it stays closed behind a button by default
+ * (user-caught 2026-10-20, a screenshot of it standing open with every
+ * field pre-filled). Same closed-by-default/Cancel shape as the circuit
+ * page's "Record an agreed benchmark" control.
+ */
+export function CounterOfferPanel(props: {
+  pipelineId: string;
+  counterOfId: string;
+  baseRows: OfferBaseRow[];
+  hasDemoReport: boolean;
+  defaults?: OfferFormDefaults;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>
+        Record a counter
+      </button>
+    );
+  }
+  return (
+    <div className="space-y-3">
+      <OfferForm {...props} mode="counter" />
+      <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>
+        Cancel
+      </button>
+    </div>
+  );
+}

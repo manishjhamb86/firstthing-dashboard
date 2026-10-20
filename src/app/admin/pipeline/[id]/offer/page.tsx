@@ -11,7 +11,7 @@ import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/component
 import { BENCHMARK_SOURCE_LABEL, OFFER_STATUS, statusMeta } from "@/lib/status-maps";
 import { termPricedLights, type OfferCircuitTerm } from "@/lib/offer";
 import { offerBaseRows, worksheetInputsFromTerms } from "@/lib/offer-base";
-import { OfferForm, type OfferFormDefaults } from "./offer-form";
+import { CounterOfferPanel, OfferForm, type OfferFormDefaults } from "./offer-form";
 import { OfferDatesForm } from "./offer-dates-form";
 
 const inr = (n: number) => `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -480,9 +480,8 @@ export default async function OfferPage({ params }: { params: Promise<{ id: stri
                 <p className="text-sm text-[var(--text-muted)] mt-1 mb-4">
                   Creates a new version with the requested terms. This one stays retrievable exactly as issued.
                 </p>
-                <OfferForm
+                <CounterOfferPanel
                   pipelineId={pipeline.id}
-                  mode="counter"
                   counterOfId={current.id}
                   baseRows={baseRows}
                   hasDemoReport={!!demoReport}

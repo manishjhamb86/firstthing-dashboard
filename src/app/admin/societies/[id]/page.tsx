@@ -325,7 +325,15 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             <ul className="space-y-0">
               {ALL_SERVICE_LINES.map((line) => {
                 const engagement = engagements.find((e) => e.serviceLine === line);
-                const lineDeals = dealsFor(line);
+                // Closed/rejected parts sink to the bottom (2026-10-20,
+                // user-asked) — a line's own "Active" chip only ever spoke
+                // for the engagement as a whole, so a part closed months ago
+                // sat indistinguishably among live ones with nothing saying
+                // so. Stable: deals keep their existing newest-first order
+                // within each group.
+                const lineDeals = [...dealsFor(line)].sort(
+                  (a, b) => Number(a.stage === "closed_lost") - Number(b.stage === "closed_lost"),
+                );
                 const status = engagement ? statusMeta(ENGAGEMENT_STATUS, engagement.status) : null;
                 const canEnrol = pipelines.length > 0;
                 return (
@@ -348,9 +356,14 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                           )
                         ) : lineDeals.length === 1 ? (
                           <>
-                            <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="link-arrow">
-                              Open the deal →
-                            </Link>
+                            <span className="inline-flex flex-wrap items-center gap-1.5">
+                              <Link href={`/admin/pipeline/${lineDeals[0].id}`} className="link-arrow">
+                                Open the deal →
+                              </Link>
+                              <StatusChip tone={statusMeta(PIPELINE_STAGE, lineDeals[0].stage).tone}>
+                                {statusMeta(PIPELINE_STAGE, lineDeals[0].stage).label}
+                              </StatusChip>
+                            </span>
                             {billingByPipeline.get(lineDeals[0].id)?.billingStart && (
                               <span className="block">
                                 Billing since {formatDate(billingByPipeline.get(lineDeals[0].id)!.billingStart!)}
@@ -359,16 +372,22 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                           </>
                         ) : lineDeals.length > 1 ? (
                           // Each part is its own deal; the scope is what
-                          // tells them apart.
-                          <span className="flex flex-col gap-0.5">
+                          // tells them apart, and each gets its OWN stage —
+                          // the line's single "Active" chip (to the right)
+                          // only ever spoke for the engagement as a whole.
+                          <span className="flex flex-col gap-1">
                             {lineDeals.map((d) => {
                               const billing = billingByPipeline.get(d.id);
+                              const meta = statusMeta(PIPELINE_STAGE, d.stage);
                               return (
-                                <span key={d.id}>
+                                <span key={d.id} className="inline-flex flex-wrap items-center gap-1.5">
                                   <Link href={`/admin/pipeline/${d.id}`} className="link-arrow">
                                     {d.dealScope ?? "Unnamed part"} →
                                   </Link>
-                                  {billing?.billingStart && ` · billing since ${formatDate(billing.billingStart)}`}
+                                  <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
+                                  {billing?.billingStart && (
+                                    <span className="text-[var(--text-muted)]">billing since {formatDate(billing.billingStart)}</span>
+                                  )}
                                 </span>
                               );
                             })}

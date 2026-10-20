@@ -435,6 +435,33 @@ export default async function PipelineDetailPage({
             </Card>
           )}
 
+          {/* The step map's own rank-OR-artifact rule marks "Assign the
+              survey" done once the survey itself exists, even with no stored
+              owner — honest ("no stored record") rather than fabricated, but
+              it left nobody a way to add the missing detail afterward
+              (user-caught 2026-10-20). Same control, same gate, as the two
+              sites above — assignSurveyOwner itself has no restriction on
+              the survey already being done. */}
+          {!pipeline.surveyOwner && pipeline.siteSurvey && approval.allowed && (
+            <Card className="p-6">
+              <CardTitle>Survey visit</CardTitle>
+              <p className="mt-1 text-sm text-[var(--text-muted)]">
+                No stored record — add who actually ran the survey, if it is known.
+              </p>
+              <div className="mt-3">
+                <AssignSurvey
+                  pipelineId={pipeline.id}
+                  current={null}
+                  candidates={fieldCandidates.map((c) => ({
+                    id: c.id,
+                    name: c.name ?? c.email,
+                    team: teamMeta(c.team).label,
+                  }))}
+                />
+              </div>
+            </Card>
+          )}
+
           {/* the recorded proposal, once one exists — previously the outcome
               vanished from the UI the moment the stage moved on */}
           {pipeline.proposalOutcome && (

@@ -28,6 +28,7 @@ import { MAX_DEMOS_PER_CIRCUIT } from "@/lib/deal-scope";
 import { demoCountFeedsTotal, representedCountAfterDemoCorrection } from "@/lib/light-population";
 import { refuseUnlock, unlockUntil } from "@/lib/demo-lock";
 import { requireSuperApproval } from "@/lib/pending-approval";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { periodDates, periodOfDay, refuseDemoPeriods, type PeriodInput } from "@/lib/demo-periods";
 import { acceptanceOf, refuseAcceptance } from "@/lib/demo-acceptance";
 import { refreshDemoFromMeter } from "@/lib/demo-refresh";
@@ -364,7 +365,13 @@ export async function deleteDemoDay(readingId: string): Promise<Outcome> {
   if ("error" in a) return { error: a.error };
   const r = await db.circuitDemoReading.findUnique({ where: { id: readingId }, select: { id: true, demoId: true, date: true, phase: true, kWh: true, source: true } });
   if (!r) return { error: "That reading is no longer on record." };
-  if (r.source === "meter") {
+  // A meter day ordinarily stays — the next "Fill from the meter" would bring
+  // it straight back, so untick is the honest control for everyone else. The
+  // named account may remove it anyway (2026-10-21, user-asked), for the
+  // case this rule doesn't cover: the day belongs to the demo's own period
+  // but the figure itself is wrong (e.g. it came from a meter whose history
+  // was misattributed — the exact class of bug this session kept finding).
+  if (r.source === "meter" && !isSuperAdmin(a.admin.email)) {
     return { error: "The meter recorded that day, so it stays on the demo — untick it to leave it out of the average." };
   }
   const g = await editableDemo(r.demoId, a.admin.id, "delete_day");

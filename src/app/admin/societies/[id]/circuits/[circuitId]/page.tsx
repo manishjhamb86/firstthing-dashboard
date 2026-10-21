@@ -20,6 +20,7 @@ import { inventoryCountFor } from "@/lib/light-type";
 import { RepresentedCountForm } from "./represented-count-form";
 import { RESOLUTION_LABEL, reviewUrgency } from "@/lib/demo-result-review";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { formatDate } from "@/lib/format-date";
 import { AssignReplacement } from "./assign-replacement";
 import { VisitDetails } from "@/components/visit-details";
@@ -677,6 +678,7 @@ export default async function CircuitDetailPage({
                         })}
                         baseline={facts.preAverage}
                         exclusion={exclusion}
+                        canForceRemove={isSuperAdmin(session.user.email)}
                       />
                       {/* The report is built from the accepted days each time it
                           opens, so it is never stale and there is nothing to

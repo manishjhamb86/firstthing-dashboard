@@ -45,10 +45,18 @@ export function DemoReadingsPanel({
   theoretical,
   baseline,
   exclusion,
+  canForceRemove = false,
 }: {
   demoId: string;
   phase: "pre" | "post";
   editable: boolean;
+  /**
+   * The one named account may remove even a meter-sourced day (2026-10-21,
+   * user-asked) — ordinarily left on the demo since the next "Fill from the
+   * meter" would bring it straight back (still true here: this is a
+   * targeted correction, not a change to that rule for anyone else).
+   */
+  canForceRemove?: boolean;
   periods: { preFrom: string; preTo: string; postFrom: string; postTo: string };
   suggested: { from: string; to: string } | null;
   days: DemoDayDTO[];
@@ -376,14 +384,18 @@ export function DemoReadingsPanel({
                                 Use meter
                               </button>
                             )}
-                            {d.source !== "meter" && (
+                            {(d.source !== "meter" || canForceRemove) && (
                               <button
                                 type="button"
                                 className="btn-ghost btn-sm"
                                 disabled={pending}
                                 aria-label={`Remove ${d.date} from the period`}
                                 onClick={() => {
-                                  if (window.confirm(`Take ${d.date} out of this demo period? The typed figure is removed (kept in the change log).`)) run(async () => {
+                                  const prompt =
+                                    d.source === "meter"
+                                      ? `Take ${d.date} out of this demo period? It was recorded from the meter, so re-filling from the meter would bring it straight back — this only removes it now.`
+                                      : `Take ${d.date} out of this demo period? The typed figure is removed (kept in the change log).`;
+                                  if (window.confirm(prompt)) run(async () => {
                                       const r = await deleteDemoDay(d.id);
                                       if (!r.error) setRemoved((cur) => [...cur, d.date]);
                                       return r;

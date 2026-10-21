@@ -56,4 +56,12 @@ export const PERMISSION_OPTIONS: {
     label: "Approve date changes",
     scope: "Accept or reject another admin's request to correct a recorded date on a society's timeline.",
   },
+  // Added 2026-10-21 with the star partner showcase. Showing one society to
+  // every other society is a public statement about it, so it is a named
+  // decision — and never on one's own manual proposal.
+  {
+    value: "approve_showcase",
+    label: "Approve star societies",
+    scope: "Decide which societies other societies see as star partners on their portal.",
+  },
 ];

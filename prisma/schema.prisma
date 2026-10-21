@@ -55,6 +55,11 @@ enum AdminPermission {
   // at the decision, not just hidden.
   approve_date_changes
 
+  // Star partner societies (2026-10-21): approves a society for the star
+  // showcase other societies see on their portal. A manual proposal is never
+  // approved by the admin who made it — refused at the decision.
+  approve_showcase
+
   @@map("admin_permission")
 }
 
@@ -388,6 +393,8 @@ model Society {
   dateChangeRequests      DateChangeRequest[]
   pendingApprovals        PendingApproval[]
   replacementFollowUps    DemoReplacementFollowUp[]
+  showcaseConsents        ShowcaseConsent[]
+  starListings            StarListing[]
 
   @@map("societies")
 }
@@ -623,6 +630,12 @@ model AdminUser {
 
   dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
   dateChangesDecided   DateChangeRequest[] @relation("DateChangeDecidedBy")
+
+  showcaseConsentsRecorded  ShowcaseConsent[] @relation("ShowcaseConsentRecordedBy")
+  showcaseConsentsWithdrawn ShowcaseConsent[] @relation("ShowcaseConsentWithdrawnBy")
+  starListingsProposed      StarListing[]     @relation("StarListingProposedBy")
+  starListingsDecided       StarListing[]     @relation("StarListingDecidedBy")
+  starListingsWithdrawn     StarListing[]     @relation("StarListingWithdrawnBy")
 
   // Corrections to the demo process, benchmark, light-count change and
   // agreement queue for one named account's sign-off (2026-10-20, user-asked).
@@ -5274,4 +5287,95 @@ model HelpMessage {
 
   @@index([reportId, createdAt])
   @@map("help_messages")
+}
+
+/// A society committee's agreement to be shown as a star partner to other
+/// societies (2026-10-21, user's call: "record consent"). A row is never
+/// deleted; withdrawing stamps it and ends any live listing in the same act.
+/// The consent in force is the newest row not withdrawn.
+model ShowcaseConsent {
+  id        String   @id @default(cuid())
+  societyId String   @map("society_id")
+  /// Who agreed, as they signed — "Asha Rao, Secretary". No portal account
+  /// is required: a committee often agrees by letter or at a meeting.
+  givenBy   String   @map("given_by")
+  givenOn   DateTime @map("given_on")
+  note      String?
+
+  recordedById String   @map("recorded_by_id")
+  recordedAt   DateTime @default(now()) @map("recorded_at")
+
+  withdrawnAt     DateTime? @map("withdrawn_at")
+  withdrawnById   String?   @map("withdrawn_by_id")
+  withdrawnReason String?   @map("withdrawn_reason")
+
+  society     Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  recordedBy  AdminUser  @relation("ShowcaseConsentRecordedBy", fields: [recordedById], references: [id])
+  withdrawnBy AdminUser? @relation("ShowcaseConsentWithdrawnBy", fields: [withdrawnById], references: [id])
+
+  @@index([societyId, withdrawnAt])
+  @@map("showcase_consents")
+}
+
+enum StarListingOrigin {
+  /// The system found the society qualifies (src/lib/payment-rating.ts).
+  auto
+  /// An admin proposed it; a different admin must approve.
+  manual
+}
+
+enum StarListingStatus {
+  proposed
+  approved
+  rejected
+  withdrawn
+  /// The facts changed before a decision (rating fell, consent withdrawn).
+  superseded
+  /// An approved listing past its expiry, closed when the society is next
+  /// reviewed. Until then an approved row past `expiresAt` is simply not shown.
+  expired
+}
+
+/// One society's place on the star showcase (2026-10-21). Approved listings
+/// are shown to every society until `expiresAt` (about 90 days), after which
+/// the society must qualify and be approved again — a listing cannot outlive
+/// the record it was approved on. At most one live (proposed or approved) row
+/// per society: a partial unique index in the migration. Never deleted.
+model StarListing {
+  id        String            @id @default(cuid())
+  societyId String            @map("society_id")
+  origin    StarListingOrigin
+  status    StarListingStatus @default(proposed)
+
+  /// The figures behind it, as they stood when proposed or approved.
+  ratingStars  Int?    @map("rating_stars")
+  avgDaysLate  Float?  @map("avg_days_late")
+  invoiceCount Int     @default(0) @map("invoice_count")
+  /// Generated from the figures (starSummary), never typed.
+  summary      String?
+  /// Whether the card shows the summary line (the user's "choose if content
+  /// text should be visible").
+  showSummary  Boolean @default(true) @map("show_summary")
+
+  proposedById String?  @map("proposed_by_id")
+  proposedAt   DateTime @default(now()) @map("proposed_at")
+  proposalNote String?  @map("proposal_note")
+
+  decidedById  String?   @map("decided_by_id")
+  decidedAt    DateTime? @map("decided_at")
+  decisionNote String?   @map("decision_note")
+  expiresAt    DateTime? @map("expires_at")
+
+  withdrawnAt     DateTime? @map("withdrawn_at")
+  withdrawnById   String?   @map("withdrawn_by_id")
+  withdrawnReason String?   @map("withdrawn_reason")
+
+  society     Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  proposedBy  AdminUser? @relation("StarListingProposedBy", fields: [proposedById], references: [id])
+  decidedBy   AdminUser? @relation("StarListingDecidedBy", fields: [decidedById], references: [id])
+  withdrawnBy AdminUser? @relation("StarListingWithdrawnBy", fields: [withdrawnById], references: [id])
+
+  @@index([status, expiresAt])
+  @@index([societyId, status])
+  @@map("star_listings")
 }

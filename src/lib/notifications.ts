@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { loadShowcaseAdmin } from "@/lib/star-showcase-loader";
 import { db } from "@/lib/db";
 import { circuitLabelOf } from "@/lib/meter-view";
 import { isCircuitInactive } from "@/lib/circuit-standing";
@@ -49,6 +50,7 @@ export const NOTIFICATION_KIND_LABEL: Record<string, string> = {
   demo_pre_variance: "Demo reading — before range",
   demo_post_variance: "Demo reading — after range",
   demo_readings_missing: "Demo readings missing",
+  showcase_review: "Star partner to review",
 };
 
 // "offline"/"billing_suspended"/an unrecognised future kind default to the
@@ -63,6 +65,7 @@ const CALM_KINDS = new Set([
   "ticket_open",
   "help_open",
   "replacement_followup_open",
+  "showcase_review",
 ]);
 export function notificationTone(kind: string): "bad" | "warn" {
   return CALM_KINDS.has(kind) ? "warn" : "bad";
@@ -80,6 +83,7 @@ export function notificationActionLabel(kind: string): string {
   if (kind === "help_open") return "Open request →";
   if (kind === "ticket_open") return "Open the desk →";
   if (kind === "replacement_followup_open") return "Open circuit →";
+  if (kind === "showcase_review") return "Review →";
   return "Open meter →";
 }
 
@@ -641,6 +645,45 @@ export const unreadNotificationCount = cache(async (): Promise<number> => {
 });
 
 /**
+ * Star partners waiting on a person (2026-10-21): societies the system raised
+ * as paying on time, and proposals made by hand. One aggregate row — the
+ * review happens on the star page, not here. Derived, like every other
+ * source in this feed; nothing is written to raise it.
+ */
+const openShowcaseNotifications = cache(async (): Promise<Notification[]> => {
+  const rows = await loadShowcaseAdmin();
+  const raised = rows.filter((r) => r.candidate).length;
+  const proposed = rows.filter((r) => r.pending).length;
+  const waiting = raised + proposed;
+  if (waiting === 0) return [];
+  const parts = [
+    raised > 0 && `${raised} ${raised === 1 ? "society qualifies" : "societies qualify"} as a star partner`,
+    proposed > 0 && `${proposed} ${proposed === 1 ? "proposal awaits" : "proposals await"} a decision`,
+  ].filter(Boolean);
+  const oldest = rows
+    .flatMap((r) => (r.pending ? [r.pending.proposedAt] : []))
+    .sort((a, b) => a.getTime() - b.getTime())[0];
+  return [
+    {
+      id: "showcase-review",
+      kind: "showcase_review",
+      message: `${parts.join("; ")}.`,
+      openedAt: (oldest ?? new Date()).toISOString(),
+      closedAt: null,
+      closedReason: null,
+      acknowledgedAt: null,
+      raiseCount: 1,
+      subject: "Star partners",
+      societyName: null,
+      societyId: null,
+      circuitLabel: null,
+      ownerLabel: null,
+      href: "/admin/star-societies",
+    },
+  ];
+});
+
+/**
  * Everything still open, worst-first by age — EXCLUDING any society marked a
  * defaulter (2026-10-21, user-asked: "the notifications of those societies
  * will not be part of main notification window"). Its notifications are not
@@ -665,6 +708,7 @@ export const openNotifications = cache(async (): Promise<Notification[]> => {
     ...ticketNotifications,
     ...helpNotifications,
     ...followUpNotifications,
+    ...(await openShowcaseNotifications()),
   ];
   return all
     .filter((n) => !isDefaulterNotification(n, defaulterIds))

@@ -20,6 +20,10 @@ import Link from "next/link";
 import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 import { DemoReportView } from "@/components/demo-report-view";
 import { OfferCard } from "./offer-card";
+import { StarShowcase } from "./star-showcase";
+import { OwnPaymentRating } from "@/components/own-payment-rating";
+import { publicStarCards, showcaseStats } from "@/lib/star-showcase-loader";
+import { societyPaymentRating } from "@/lib/payment-rating-loader";
 import { BatchReviewCard } from "./batch-review-card";
 import { reviewDeadlineFor } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
@@ -112,6 +116,22 @@ export default async function PortalHomePage() {
           select: { number: true, amount: true, dueDate: true, status: true },
         })
       : null;
+
+  // Star partners (2026-10-21): every society sees the showcase and the
+  // aggregate figures; only this society's own rating, and only for a
+  // member who can see billing — a low rating is never shown to another
+  // society.
+  const now = new Date();
+  const [starCards, starStats, ownRating, ownListing] = await Promise.all([
+    publicStarCards(now),
+    showcaseStats(now),
+    grants.has("billing") ? societyPaymentRating(societyId, now) : Promise.resolve(null),
+    db.starListing.findFirst({
+      where: { societyId, status: "approved", expiresAt: { gt: now } },
+      select: { expiresAt: true },
+    }),
+  ]);
+  const ownListedUntil = ownListing && starCards.some((c) => c.societyId === societyId) ? ownListing.expiresAt : null;
 
   const gates = installations
     .map((installation) => {
@@ -493,6 +513,8 @@ export default async function PortalHomePage() {
         </Card>
       )}
 
+      <StarShowcase cards={starCards} stats={starStats} />
+
       {/* Mobile first (2026-09-26, user-caught: "very awkward arrangement").
           On a phone every card is one column, in the order a resident reads
           it: the trend, their circuits, the bill, this month's readings, the
@@ -646,6 +668,7 @@ export default async function PortalHomePage() {
               </Link>
             </Card>
           )}
+          {ownRating && <OwnPaymentRating rating={ownRating} listedUntil={ownListedUntil} />}
           </div>
           <div className="order-5 flex min-w-0 flex-col gap-5 empty:hidden xl:order-none">
           {grants.has("documents") && (

@@ -7,6 +7,9 @@ import { hasGrant } from "@/lib/portal-access";
 import { Card, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { formatDate, monthLabel } from "@/lib/format-date";
 import { DownloadInvoiceButton } from "./download-button";
+import { OwnPaymentRating } from "@/components/own-payment-rating";
+import { societyPaymentRating } from "@/lib/payment-rating-loader";
+import { publicStarCards } from "@/lib/star-showcase-loader";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Billing" };
@@ -55,10 +58,26 @@ export default async function PortalBillingPage() {
   });
 
   const [latest, ...past] = invoices;
+  // This society's own payment rating, with the rule and every unpaid bill
+  // stated (2026-10-21). Only ever this society's — never another's.
+  const now = new Date();
+  const [rating, listing, cards] = await Promise.all([
+    societyPaymentRating(viewer.societyId, now),
+    db.starListing.findFirst({ where: { societyId: viewer.societyId, status: "approved", expiresAt: { gt: now } }, select: { expiresAt: true } }),
+    publicStarCards(now),
+  ]);
+  // Shown only while the showcase itself would show it — the same check.
+  const listedUntil = listing && cards.some((c) => c.societyId === viewer.societyId) ? listing.expiresAt : null;
 
   return (
     <>
       <PageHeader title="Billing" subtitle="Your invoices, as issued by FirsThing." />
+
+      {invoices.length > 0 && (
+        <div id="payment-rating" className="mb-5 scroll-mt-24">
+          <OwnPaymentRating rating={rating} listedUntil={listedUntil} full />
+        </div>
+      )}
 
       {invoices.length === 0 ? (
         <EmptyState title="No invoices yet">

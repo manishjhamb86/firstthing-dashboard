@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-10-05 (a Zoho-changed invoice refetches and re-reads itself automatically — see below)
+2026-10-21 (star partner societies and a private payment rating — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -9099,3 +9099,76 @@ same way everywhere else in this codebase):**
 neighbouring sync/projection functions in this codebase and has no unit test file of its own; the
 change reuses `fillFromZoho`, which the existing manual-refetch path already exercises) all clean.
 Not yet deployed — this branch is not merged.
+
+## Star partner societies, and each society's own payment rating (2026-10-21) — user-asked, researched first
+
+**The ask.** The user wanted a section on the customer portal's home page showing "star" and "defaulter" societies. Societies would be ranked by payment punctuality, defaulter status and staff behaviour. The system would flag them, the back office would approve each one, and the back office could add one by hand with optional text. The cards would auto-scroll, with a stats strip above them.
+
+**Research first.** The research is in `docs/research/reports/Star and defaulter society showcase.md`. It found that most of the effect comes from a private warning, not from public naming. No comparable product publishes a list of worst customers. Under Indian law, a peer-visible "defaulter" board carries real risk (the Kerala High Court case, BNS s.356, DPDP).
+
+**The user's decisions.** These were put to the user one at a time:
+- **Defaulters.** There is no public defaulter list. Each society gets a payment rating out of 5 instead. Other societies see only highly rated societies that agreed to be shown. Every society sees its own rating and nobody else's.
+- **Consent.** The committee's consent is recorded before a society is shown.
+- **Staff behaviour.** Left out for now; payment punctuality is the only factor.
+- **Layout.** An auto-scrolling carousel.
+
+**The rating** (`src/lib/payment-rating.ts`, pure, with tests):
+- **Which invoices.** Every released, unvoided invoice due in the last 365 days.
+- **Days late.** Each invoice counts its days late, measured on the day the last rupee arrived. TDS counts as paid, and an extension moves the due date. Paying within 2 days of the due date counts as on time.
+- **Unpaid invoices.** An unpaid invoice counts its days overdue so far. A society that does not pay never looks better than one that pays late.
+- **Average.** Days late are averaged weighted by amount, then mapped to stars by a published table: up to 2 days late is 5★, up to 7 days 4★, up to 15 days 3★, up to 30 days 2★, more than that 1★.
+- **Cap.** An invoice unpaid more than 30 days holds the rating at 2★, and the society is told that reason rather than a band that does not match its average.
+- **Too little history.** Fewer than 3 counted invoices means no rating at all.
+- **Loader.** `payment-rating-loader.ts` reads the rows.
+
+**The showcase** (`src/lib/star-showcase.ts`, pure, with tests):
+- **Getting on and staying on.** It is harder to get on than to stay on. A society is raised for review at 5★ with nothing unpaid past due, and it stays shown at 4★ or more with nothing unpaid past due.
+- **Expiry.** A listing lasts 90 days.
+- **Turned down.** A society that is turned down is not raised again for 90 days.
+- **Closed or defaulter.** A society that is closed, or marked a defaulter (the existing internal flag), is never raised.
+- **Re-check at approval.** Approval runs the facts again against fresh rows. An approval without consent is refused. A manual proposal is never decided by the admin who made it. A proposal whose facts changed is closed as `superseded`, with the reason.
+- **Kept true afterwards.** The portal shows a listing only while `stillShowable` holds. A society that falls behind simply stops showing, and nothing negative replaces it.
+- **Card text.** The card's line is generated from the payments ("Paid all 12 invoices on time since July 2025."), never typed. The back office can only show or hide it.
+
+**Schema.** Migration `20261021150000_star_showcase` is additive:
+- `ShowcaseConsent` records who agreed, as they signed. Its rows are never deleted. Withdrawing consent ends any live listing in the same act.
+- `StarListing` records the origin (auto or manual), the status (proposed, approved, rejected, withdrawn, superseded or expired), the figures at the time, the expiry and every actor. A partial unique index allows one live row per society.
+- A new permission, `approve_showcase` ("Approve star societies"), gates approving.
+
+**Back office.** The new page is `/admin/star-societies`, linked as "Star partners" under Societies. It has five sections:
+- **Raised for review**, with Show and Not now;
+- **Proposals awaiting a decision**;
+- **On the showcase**, with show or hide for the line, Take off, and the reason a listing is hidden right now;
+- **Every society's rating**, for the back office only;
+- **Earlier decisions**.
+
+The notification feed gains one aggregate row, "Star partner to review". Like every other source in the feed, it is derived from the rows rather than stored.
+
+**Portal.**
+- **Dashboard.** The home page shows "Star partner societies" to every member, with:
+  - a stats strip: societies served, star partners, and how many societies have nothing unpaid past due (aggregate only);
+  - the carousel: it advances every 5 s, has a visible Pause control, pauses on hover and focus, and starts paused for reduced motion, as WCAG 2.2 SC 2.2.2 and the W3C carousel pattern require; it is also a scroller a phone can swipe;
+  - a "See all" link to `/portal/star-societies`.
+- **Own rating.** A member with the billing grant sees "Your payment rating" on the dashboard. The billing page (`#payment-rating`) shows the full version: each unpaid invoice stated plainly ("Invoice FT/… of ₹… was due on … and is unpaid as of …"), and the published rule. The word "defaulter" never appears on the portal.
+
+**Verified.** On a scratch database built from every migration, with fixtures for three cases: a society paying on time, one with a bill 41 days unpaid, and an unrated one.
+- **Browser, 28/28, zero console errors:**
+  - the notification is raised;
+  - only the on-time society is raised, and Show is disabled until consent is recorded;
+  - the consent is stored, and the approval writes the generated line with a 90-day expiry;
+  - the proposer is not offered Approve on their own proposal;
+  - approval without consent is refused in words, and a different admin approves after consent;
+  - the portal shows both stars, the line and "1 of 2" with nothing unpaid past due;
+  - the late society sees its own unpaid invoice stated plainly and "Held at 2 stars…", and never appears on the showcase or the full list;
+  - reduced motion starts paused, and there is no sideways scroll at 390px;
+  - withdrawing consent takes a society off the portal.
+- **Server refusal.** `approve_showcase` was revoked in Postgres behind the open dialog. The server refused by name, wrote nothing and logged `showcase.approve_refused`.
+- **Checks.** 1,511 unit tests pass (25 new); `tsc`, `lint` and `build` are clean.
+
+**Not built, and why:**
+- **Staff behaviour.** Left out at the user's call.
+- **Private notice-and-reply.** The report's recommended sequence (a dated notice in the portal, at least 15 days to pay or dispute, and a dispute that pauses the flag) is not built. The own-rating card already states each unpaid invoice plainly.
+- **Disputes.** The rating has no dispute exclusion because invoices have no dispute record yet.
+
+**Before launch, counsel should check four things:** the consent wording, the confidentiality clauses in the agreements, the MSMED Act's applicability, and the final text of the BNS exceptions.
+

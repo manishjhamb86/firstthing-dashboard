@@ -16,7 +16,7 @@ type Item = Notification & {
   acknowledgeable: boolean;
 };
 
-const CATEGORY_ORDER: NotificationCategory[] = ["meter", "billing", "inspection", "request", "help", "followup"];
+const CATEGORY_ORDER: NotificationCategory[] = ["meter", "billing", "inspection", "request", "help", "followup", "showcase"];
 
 function matches(n: Item, query: string): boolean {
   if (!query.trim()) return true;

@@ -27,6 +27,7 @@ import {
   Inbox,
   ShieldCheck,
   ShieldAlert,
+  Star,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -113,6 +114,10 @@ export function AppShell({
       // alerts/billing/requests moved into. Any admin may read it, the same
       // transparency as Timeline and Pending approvals below.
       { href: "/admin/defaulters", label: "Defaulter societies", icon: ShieldAlert },
+      // Societies that pay on time, shown to other societies with consent
+      // and approval (2026-10-21). Any admin may read it; acting is gated in
+      // the actions.
+      { href: "/admin/star-societies", label: "Star partners", icon: Star },
       // Every society's checked chronology, and the date change requests
       // (2026-09-28). Any admin may read it, like each society's own timeline.
       { href: "/admin/timeline", label: "Timeline", icon: History },

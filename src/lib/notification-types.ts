@@ -37,7 +37,7 @@ export type Notification = {
  * when the open list runs past a screenful. Kept separate from `kind` itself
  * since several kinds (the three `billing_*` phases, say) are one category.
  */
-export type NotificationCategory = "meter" | "billing" | "inspection" | "request" | "help" | "followup";
+export type NotificationCategory = "meter" | "billing" | "inspection" | "request" | "help" | "followup" | "showcase";
 
 export const NOTIFICATION_CATEGORY_LABEL: Record<NotificationCategory, string> = {
   meter: "Meters",
@@ -46,6 +46,7 @@ export const NOTIFICATION_CATEGORY_LABEL: Record<NotificationCategory, string> =
   request: "Society requests",
   help: "Field help",
   followup: "Replacement follow-ups",
+  showcase: "Star partners",
 };
 
 export function notificationCategory(kind: string): NotificationCategory {
@@ -54,5 +55,6 @@ export function notificationCategory(kind: string): NotificationCategory {
   if (kind === "ticket_open") return "request";
   if (kind === "help_open") return "help";
   if (kind === "replacement_followup_open") return "followup";
+  if (kind === "showcase_review") return "showcase";
   return "meter";
 }

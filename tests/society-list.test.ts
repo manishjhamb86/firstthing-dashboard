@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { matchesQuery, societyStanding, sortSocieties, startedOn, type SocietyRow } from "@/lib/society-list";
 
 const row = (o: Partial<SocietyRow> & { id: string }): SocietyRow => ({
-  name: o.id, location: "Noida", flatCount: null, lights: null, circuits: 0, serviceLines: [], status: "active", standing: "active", paying: false, billingStart: null, signedOn: null, ...o,
+  name: o.id, location: "Noida", flatCount: null, lights: null, circuits: 0, serviceLines: [], status: "active", standing: "active", paying: false, billingStart: null, signedOn: null, defaulter: false, ...o,
 });
 const rows = [
   row({ id: "A", billingStart: "2025-11-15" }),

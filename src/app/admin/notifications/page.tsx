@@ -4,6 +4,7 @@ import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import {
   NOTIFICATION_KIND_LABEL,
+  defaulterSocietyIds,
   isAcknowledgeableKind,
   notificationActionLabel,
   notificationCategory,
@@ -41,7 +42,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const showAllHistory = history === "all";
   const now = new Date();
   const since = showAllHistory ? null : new Date(now.getTime() - RESOLVED_WINDOW_DAYS * 86_400_000);
-  const [open, past] = await Promise.all([openNotifications(), pastNotifications({ since })]);
+  const [open, past, defaulterIds] = await Promise.all([openNotifications(), pastNotifications({ since }), defaulterSocietyIds()]);
   const canAck = actor.user.adminPermissions.includes("manage_users");
   const unattended = open.filter((n) => n.acknowledgedAt === null).length;
 
@@ -67,6 +68,19 @@ export default async function NotificationsPage({ searchParams }: { searchParams
           )
         }
       />
+
+      {/* Where a defaulter society's own notifications went (2026-10-21) —
+          stated here since this is the page they used to be on. */}
+      {defaulterIds.size > 0 && (
+        <p className="mb-4 text-[13px] text-[var(--text-muted)]">
+          {defaulterIds.size} {defaulterIds.size === 1 ? "society" : "societies"} marked a defaulter — their notifications
+          are kept out of this window and shown on{" "}
+          <Link href="/admin/defaulters" className="link-arrow">
+            Defaulter societies
+          </Link>
+          .
+        </p>
+      )}
 
       <NotificationsClient items={items} />
 

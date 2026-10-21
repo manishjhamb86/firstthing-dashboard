@@ -2,6 +2,7 @@ import { Fragment } from "react";
 import { notFound } from "next/navigation";
 import { SocietyFmCard } from "./fm-card";
 import { CloseDealDialog, ReopenButton } from "@/components/close-deal-dialog";
+import { MarkDefaulterDialog, UnmarkDefaulterButton } from "@/components/mark-defaulter-dialog";
 import { closePreview, societyReopenBlocker } from "@/lib/deal-close-loader";
 import { dealLabel } from "@/lib/deal-scope";
 import Link from "next/link";
@@ -211,9 +212,37 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
             {isOps && !society.closedAt && closeDialog && (
               <CloseDealDialog mode="society" id={society.id} today={todayIso} {...closeDialog} />
             )}
+            {/* Independent of Reject/terminate — a society can still have a
+                running deal and simply have stopped paying (2026-10-21). */}
+            {isOps &&
+              (society.markedDefaulterAt ? (
+                <UnmarkDefaulterButton societyId={society.id} />
+              ) : (
+                <MarkDefaulterDialog societyId={society.id} />
+              ))}
           </div>
         }
       />
+
+      {society.markedDefaulterAt && (
+        <div
+          className="mb-5 flex flex-wrap items-start justify-between gap-3 rounded-[var(--r-md)] border p-4 text-[13.5px]"
+          style={{ background: "var(--bad-bg)", borderColor: "var(--bad-line)", color: "var(--bad-fg)" }}
+        >
+          <div>
+            <p className="font-bold">Marked a defaulter {formatDate(society.markedDefaulterAt)}</p>
+            {society.markedDefaulterReason && <p className="mt-0.5">{society.markedDefaulterReason}</p>}
+            <p className="mt-0.5">
+              Billing is unchanged — invoices it owes stay owed and keep being followed up. Its notifications have
+              moved out of the main window into the{" "}
+              <Link href="/admin/defaulters" className="underline">
+                Defaulter societies
+              </Link>{" "}
+              section.
+            </p>
+          </div>
+        </div>
+      )}
 
       {society.closedAt && (
         <div

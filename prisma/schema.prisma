@@ -338,6 +338,16 @@ model Society {
   closedAt                      DateTime?     @map("closed_at")
   closedById                    String?       @map("closed_by_id")
   closedReason                  String?       @map("closed_reason")
+  /// A society that has stopped paying, or never paid at all (2026-10-21,
+  /// user-asked) — a stated, reversible flag an operator sets by hand, kept
+  /// deliberately separate from CON-13's own automatic arrears clock: this
+  /// changes nothing about billing or suspension (deal-close.ts's own rule
+  /// stands — unpaid invoices stay owed and keep being followed up). Its
+  /// only effect is where this society's notifications are read: out of the
+  /// main feed (src/lib/notifications.ts), into their own section.
+  markedDefaulterAt             DateTime?     @map("marked_defaulter_at")
+  markedDefaulterById           String?       @map("marked_defaulter_by_id")
+  markedDefaulterReason         String?       @map("marked_defaulter_reason")
   nextElectionDate              DateTime?     @map("next_election_date") // CON-28a — a prompt, never enforced
   /// KYC facts a deal can move forward on without the document in hand
   /// (user's call 2026-09-15): the GSTIN, and the tariff a recent bill would

@@ -26,6 +26,7 @@ import {
   Wrench,
   Inbox,
   ShieldCheck,
+  ShieldAlert,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -107,6 +108,11 @@ export function AppShell({
     ]),
     ...group("societies", "Societies", Building2, [
       { href: "/admin/societies", label: "Societies", icon: Building2 },
+      // Societies that have stopped paying, or never paid at all
+      // (2026-10-21) — and the section of the notification feed their own
+      // alerts/billing/requests moved into. Any admin may read it, the same
+      // transparency as Timeline and Pending approvals below.
+      { href: "/admin/defaulters", label: "Defaulter societies", icon: ShieldAlert },
       // Every society's checked chronology, and the date change requests
       // (2026-09-28). Any admin may read it, like each society's own timeline.
       { href: "/admin/timeline", label: "Timeline", icon: History },

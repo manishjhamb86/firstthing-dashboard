@@ -26,6 +26,8 @@ export type SocietyRow = {
   billingStart: string | null;
   /** ISO day the (earliest) agreement was signed, or null. */
   signedOn: string | null;
+  /** Marked a defaulter (2026-10-21) — independent of standing/status. */
+  defaulter: boolean;
 };
 
 export type SortKey = "started" | "name" | "flats" | "lights" | "serviceLines" | "circuits" | "status";

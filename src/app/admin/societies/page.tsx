@@ -61,6 +61,7 @@ export default async function SocietiesPage({
     paying: standings.get(s.id)?.paying ?? false,
     billingStart: standings.get(s.id)?.billingStart ?? null,
     signedOn: standings.get(s.id)?.signedOn ?? null,
+    defaulter: s.markedDefaulterAt !== null,
   }));
 
   const count = (st: string) => rows.filter((r) => r.standing === st).length;

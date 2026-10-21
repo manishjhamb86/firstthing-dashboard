@@ -171,6 +171,7 @@ function invoiceToNotification(i: InvoiceRow): Notification {
     raiseCount: 1,
     subject: `Invoice ${i.number}`,
     societyName: i.calculation.society.name,
+    societyId: i.calculation.societyId,
     circuitLabel: null,
     ownerLabel: null,
     href: `/admin/billing/${i.calculation.id}`,
@@ -220,6 +221,7 @@ function invoicesToNotifications(rows: InvoiceRow[]): Notification[] {
       raiseCount: 1,
       subject: `${group.length} invoices`,
       societyName,
+      societyId,
       circuitLabel: null,
       ownerLabel: null,
       href: `/admin/societies/${societyId}`,
@@ -238,6 +240,26 @@ const openInvoiceNotifications = cache(async (): Promise<Notification[]> => {
   });
   return invoicesToNotifications(rows);
 });
+
+/**
+ * Societies marked a defaulter (2026-10-21) — a stated, reversible operator
+ * flag (src/lib/defaulter.ts), not CON-13's own automatic arrears clock.
+ * Wrapped in cache() so every builder below that needs it in the same
+ * request shares one query and one Set, rather than a fresh lookup each.
+ */
+export const defaulterSocietyIds = cache(async (): Promise<Set<string>> => {
+  const rows = await db.society.findMany({ where: { markedDefaulterAt: { not: null } }, select: { id: true } });
+  return new Set(rows.map((r) => r.id));
+});
+
+/** Whether to route a notification to the defaulter section rather than the
+ *  main one — true only when it names exactly one society and that society
+ *  is marked a defaulter. An aggregate spanning several societies (or a
+ *  notification about nothing society-specific) always stays in the main
+ *  list, since it cannot be wholly attributed to a defaulter. */
+function isDefaulterNotification(n: Notification, defaulterIds: Set<string>): boolean {
+  return n.societyId !== null && defaulterIds.has(n.societyId);
+}
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
@@ -349,16 +371,20 @@ export const societiesMissingInspection = cache(
  * A single overdue society still gets its own named row: "Ace City's 2026-08
  * inspection was never filed" is more useful than "1 society has not filed",
  * and it links straight to that society's prefilled form.
+ *
+ * Shared by both the main feed and the defaulter feed (2026-10-21): each
+ * calls this with its own slice of `missing` — the aggregate-or-single rule
+ * applies independently inside each slice, so a defaulter society never
+ * surfaces inside a MAIN aggregate's count, and vice versa. `idSuffix`
+ * keeps a multi-society aggregate's id from colliding when both slices
+ * happen to produce one in the same request.
  */
-const openInspectionOverdueNotifications = cache(async (): Promise<Notification[]> => {
-  const now = new Date();
-  const period = inspectionReminderPeriod(now);
-  // Start of the current IST month — the moment the previous period closed,
-  // used only to order these rows in the feed.
-  const cur = istMonth(now, 0);
-  const closedAt = new Date(Date.UTC(cur.year, cur.month, 1) - IST_OFFSET_MS);
-
-  const missing = await societiesMissingInspection(period);
+function buildInspectionOverdueNotifications(
+  missing: { societyId: string; name: string }[],
+  period: string,
+  closedAt: Date,
+  idSuffix: string,
+): Notification[] {
   if (missing.length === 0) return [];
 
   const base = {
@@ -381,6 +407,7 @@ const openInspectionOverdueNotifications = cache(async (): Promise<Notification[
         id: `inspection-overdue-${only.societyId}-${period}`,
         message: `${only.name}'s ${period} inspection was never filed.`,
         societyName: only.name,
+        societyId: only.societyId,
         href: `/admin/inspections/new?societyId=${only.societyId}`,
       },
     ];
@@ -389,12 +416,43 @@ const openInspectionOverdueNotifications = cache(async (): Promise<Notification[
   return [
     {
       ...base,
-      id: `inspection-overdue-${period}`,
+      id: `inspection-overdue-${period}${idSuffix}`,
       message: `${missing.length} societies have no ${period} inspection on file.`,
       societyName: null,
+      // Several societies, no single one to attribute this to — see
+      // isDefaulterNotification's own comment on why that keeps it out of
+      // the defaulter split by construction, not by a special case here.
+      societyId: null,
       href: `/admin/inspections?missing=${period}`,
     },
   ];
+}
+
+/** `{period, closedAt}` the inspection-overdue builders share, computed once. */
+function inspectionOverduePeriod(now: Date): { period: string; closedAt: Date } {
+  const period = inspectionReminderPeriod(now);
+  // Start of the current IST month — the moment the previous period closed,
+  // used only to order these rows in the feed.
+  const cur = istMonth(now, 0);
+  return { period, closedAt: new Date(Date.UTC(cur.year, cur.month, 1) - IST_OFFSET_MS) };
+}
+
+const openInspectionOverdueNotifications = cache(async (): Promise<Notification[]> => {
+  const now = new Date();
+  const { period, closedAt } = inspectionOverduePeriod(now);
+  const [missing, defaulterIds] = await Promise.all([societiesMissingInspection(period), defaulterSocietyIds()]);
+  const normal = missing.filter((m) => !defaulterIds.has(m.societyId));
+  return buildInspectionOverdueNotifications(normal, period, closedAt, "");
+});
+
+/** The defaulter-society slice of the same reminder — read only by
+ *  defaulterNotifications() below. */
+const openDefaulterInspectionOverdueNotifications = cache(async (): Promise<Notification[]> => {
+  const now = new Date();
+  const { period, closedAt } = inspectionOverduePeriod(now);
+  const [missing, defaulterIds] = await Promise.all([societiesMissingInspection(period), defaulterSocietyIds()]);
+  const defaulterMissing = missing.filter((m) => defaulterIds.has(m.societyId));
+  return buildInspectionOverdueNotifications(defaulterMissing, period, closedAt, "-defaulter");
 });
 
 /**
@@ -431,6 +489,7 @@ const openTicketNotifications = cache(async (): Promise<Notification[]> => {
     raiseCount: 1,
     subject: t.subject,
     societyName: t.society.name,
+    societyId: t.societyId,
     circuitLabel: null,
     ownerLabel: null,
     href: "/admin/tickets",
@@ -460,6 +519,7 @@ const openHelpNotifications = cache(async (): Promise<Notification[]> => {
     raiseCount: 1,
     subject: r.title ?? "Help request",
     societyName: null,
+    societyId: null,
     circuitLabel: null,
     ownerLabel: null,
     href: `/admin/help/${r.id}`,
@@ -501,6 +561,7 @@ const openReplacementFollowUpNotifications = cache(async (): Promise<Notificatio
         raiseCount: 1,
         subject: label,
         societyName: f.circuit.society.name,
+        societyId: f.circuit.societyId,
         circuitLabel: label,
         ownerLabel: null,
         href: `/admin/societies/${f.circuit.societyId}/circuits/${f.circuit.id}`,
@@ -541,6 +602,7 @@ function toNotification(a: Row): Notification {
     raiseCount: a.raiseCount,
     subject: a.meter?.name ?? (circuit ? circuitLabelOf(circuit.location, circuit.lightType) : "Unknown"),
     societyName: a.meter?.society?.name ?? a.circuit?.society?.name ?? null,
+    societyId: circuit?.societyId ?? a.meter?.societyId ?? null,
     circuitLabel: circuit ? circuitLabelOf(circuit.location, circuit.lightType) : null,
     ownerLabel: owner ? (owner.name ?? owner.email) : null,
     // A commercial shortfall belongs on the monitoring screen where the
@@ -578,9 +640,15 @@ export const unreadNotificationCount = cache(async (): Promise<number> => {
   return open.filter((n) => n.acknowledgedAt === null).length;
 });
 
-/** Everything still open, worst-first by age. */
+/**
+ * Everything still open, worst-first by age — EXCLUDING any society marked a
+ * defaulter (2026-10-21, user-asked: "the notifications of those societies
+ * will not be part of main notification window"). Its notifications are not
+ * dropped, only moved: see defaulterNotifications() below, which reads the
+ * identical rows and keeps exactly the ones this filters out.
+ */
 export const openNotifications = cache(async (): Promise<Notification[]> => {
-  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications, helpNotifications, followUpNotifications] =
+  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications, helpNotifications, followUpNotifications, defaulterIds] =
     await Promise.all([
       db.meterAlert.findMany({ where: { closedAt: null }, orderBy: { openedAt: "asc" }, include }),
       openInvoiceNotifications(),
@@ -588,15 +656,49 @@ export const openNotifications = cache(async (): Promise<Notification[]> => {
       openTicketNotifications(),
       openHelpNotifications(),
       openReplacementFollowUpNotifications(),
+      defaulterSocietyIds(),
     ]);
-  return [
+  const all = [
     ...alertRows.filter((a) => !alertContextClosed(a)).map(toNotification),
     ...invoiceNotifications,
     ...inspectionNotifications,
     ...ticketNotifications,
     ...helpNotifications,
     ...followUpNotifications,
-  ].sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
+  ];
+  return all
+    .filter((n) => !isDefaulterNotification(n, defaulterIds))
+    .sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
+});
+
+/**
+ * The flip side of openNotifications() — everything open that names a
+ * society marked a defaulter, grouped here instead of the main window
+ * (2026-10-21). Reads the same underlying rows (invoices, meter alerts,
+ * tickets, replacement follow-ups, the inspection reminder in its own
+ * defaulter-only slice); nothing here is a second write path, only a second
+ * read of the same rows of record.
+ */
+export const defaulterNotifications = cache(async (): Promise<Notification[]> => {
+  const defaulterIds = await defaulterSocietyIds();
+  if (defaulterIds.size === 0) return [];
+  const [alertRows, invoiceNotifications, inspectionNotifications, ticketNotifications, followUpNotifications] = await Promise.all([
+    db.meterAlert.findMany({ where: { closedAt: null }, orderBy: { openedAt: "asc" }, include }),
+    openInvoiceNotifications(),
+    openDefaulterInspectionOverdueNotifications(),
+    openTicketNotifications(),
+    openReplacementFollowUpNotifications(),
+  ]);
+  const all = [
+    ...alertRows.filter((a) => !alertContextClosed(a)).map(toNotification),
+    ...invoiceNotifications,
+    ...inspectionNotifications,
+    ...ticketNotifications,
+    ...followUpNotifications,
+  ];
+  return all
+    .filter((n) => isDefaulterNotification(n, defaulterIds))
+    .sort((a, b) => new Date(a.openedAt).getTime() - new Date(b.openedAt).getTime());
 });
 
 /** The history — resolved alerts, most recently closed first. */

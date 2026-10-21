@@ -237,6 +237,11 @@ export function SocietiesTable({
                     <td className="num hidden md:table-cell">{s.circuits === 0 ? muted : s.circuits}</td>
                     <td>
                       <StatusChip tone={st.tone}>{st.label}</StatusChip>
+                      {s.defaulter && (
+                        <span className="ml-1 inline-block">
+                          <StatusChip tone="bad">Defaulter</StatusChip>
+                        </span>
+                      )}
                       {s.standing === "active" && (
                         <span className="block text-xs text-[var(--text-muted)]">{s.paying ? "paying" : "no payment yet"}</span>
                       )}

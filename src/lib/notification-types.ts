@@ -22,6 +22,10 @@ export type Notification = {
   /** What the alert is about — a meter's name, or a circuit's label. */
   subject: string;
   societyName: string | null;
+  /** The one society this notification is about, when there is exactly one
+   *  (null for an aggregate spanning several, or for a notification with no
+   *  society at all) — what src/lib/notifications.ts's defaulter split reads. */
+  societyId: string | null;
   circuitLabel: string | null;
   ownerLabel: string | null;
   href: string;

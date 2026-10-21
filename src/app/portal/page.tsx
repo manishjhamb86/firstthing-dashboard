@@ -402,7 +402,11 @@ export default async function PortalHomePage() {
                   not the desktop 4-tile row simply reflowed to one column
                   (user-caught 2026-09-21, side by side with the mockup). */}
               <div className="mb-6 flex flex-col gap-3 sm:hidden">
-                <HeroSavedTile value={rupeesText} detail={rupeesDetail} />
+                <HeroSavedTile
+                  value={rupeesText}
+                  detail={rupeesDetail}
+                  label={sinceStart ? "Total saved" : "Saved this month"}
+                />
                 <div className="grid grid-cols-2 gap-3">
                   <CompactTile tone="info" value={kwhText} label="Energy saved" />
                   <CompactTile tone="ok" value={pctText} label="Savings achieved" />

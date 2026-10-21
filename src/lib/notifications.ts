@@ -132,7 +132,7 @@ const include = {
 type Row = Awaited<ReturnType<typeof db.meterAlert.findMany<{ include: typeof include }>>>[number];
 
 const invoiceInclude = {
-  calculation: { select: { id: true, period: true, society: { select: { name: true } } } },
+  calculation: { select: { id: true, period: true, societyId: true, society: { select: { name: true } } } },
 } as const;
 
 type InvoiceRow = Awaited<
@@ -144,6 +144,10 @@ const INVOICE_PHASE_MESSAGE: Record<string, string> = {
   warning: "is overdue and approaching suspension",
   suspended: "is suspended — field servicing is paused",
 };
+
+function invoiceOpenedAt(i: InvoiceRow): Date {
+  return i.overdueTrackingAt ?? i.releasedAt ?? i.uploadedAt;
+}
 
 /**
  * CON-13's overdue/warning/suspended invoices, folded into the same
@@ -160,7 +164,7 @@ function invoiceToNotification(i: InvoiceRow): Notification {
     id: i.id,
     kind: `billing_${i.status}`,
     message: `${i.calculation.society.name}'s ${i.calculation.period} invoice ${INVOICE_PHASE_MESSAGE[i.status] ?? i.status}.`,
-    openedAt: (i.overdueTrackingAt ?? i.releasedAt ?? i.uploadedAt).toISOString(),
+    openedAt: invoiceOpenedAt(i).toISOString(),
     closedAt: null,
     closedReason: null,
     acknowledgedAt: null,
@@ -173,6 +177,57 @@ function invoiceToNotification(i: InvoiceRow): Notification {
   };
 }
 
+const STATUS_SEVERITY: Record<string, number> = { overdue: 0, warning: 1, suspended: 2 };
+const INVOICE_GROUP_PHASE_MESSAGE: Record<string, string> = {
+  overdue: "",
+  warning: " — approaching suspension",
+  suspended: " — suspended, field servicing is paused",
+};
+
+/**
+ * One row per invoice buried a society under its own repeat offenders — four
+ * months overdue read as four identical-looking rows (2026-10-21,
+ * user-asked). Collapsed to one per society, same "a single one still gets
+ * its own named row, several collapse with the count" rule
+ * `societiesMissingInspection` already applies — grouped by society because
+ * that's who actually gets chased, not by month.
+ */
+function invoicesToNotifications(rows: InvoiceRow[]): Notification[] {
+  const bySociety = new Map<string, InvoiceRow[]>();
+  for (const r of rows) {
+    const key = r.calculation.societyId;
+    const g = bySociety.get(key);
+    if (g) g.push(r);
+    else bySociety.set(key, [r]);
+  }
+  const out: Notification[] = [];
+  for (const [societyId, group] of bySociety) {
+    if (group.length === 1) {
+      out.push(invoiceToNotification(group[0]));
+      continue;
+    }
+    const worst = group.reduce((a, b) => (STATUS_SEVERITY[b.status] > STATUS_SEVERITY[a.status] ? b : a));
+    const societyName = group[0].calculation.society.name;
+    const earliest = group.reduce((min, g) => (invoiceOpenedAt(g) < min ? invoiceOpenedAt(g) : min), invoiceOpenedAt(group[0]));
+    out.push({
+      id: `billing:${societyId}`,
+      kind: `billing_${worst.status}`,
+      message: `${societyName} has ${group.length} invoices overdue${INVOICE_GROUP_PHASE_MESSAGE[worst.status] ?? ""}.`,
+      openedAt: earliest.toISOString(),
+      closedAt: null,
+      closedReason: null,
+      acknowledgedAt: null,
+      raiseCount: 1,
+      subject: `${group.length} invoices`,
+      societyName,
+      circuitLabel: null,
+      ownerLabel: null,
+      href: `/admin/societies/${societyId}`,
+    });
+  }
+  return out;
+}
+
 // Wrapped in cache() so the notifications page — where the nav badge
 // (unreadNotificationCount) and the page body (openNotifications) both run in
 // one request — issues this query once, not twice.
@@ -181,7 +236,7 @@ const openInvoiceNotifications = cache(async (): Promise<Notification[]> => {
     where: { voidedAt: null, status: { in: ["overdue", "warning", "suspended"] } },
     include: invoiceInclude,
   });
-  return rows.map(invoiceToNotification);
+  return invoicesToNotifications(rows);
 });
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;

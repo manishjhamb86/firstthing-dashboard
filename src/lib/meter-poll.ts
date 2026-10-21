@@ -239,10 +239,19 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
         message,
       });
     }
-    if (health.recovered && assigned) {
+    // Closing runs off the CURRENT state, not the one-shot `recovered`
+    // transition (2026-10-21, user-caught: a meter renamed and reassigned
+    // in eWeLink kept a month-old "not reachable" alert open, because it had
+    // recovered while briefly unassigned between circuits — the exact poll
+    // `recovered` fires on requires `assigned` too, and those two can fall
+    // out of sync and never realign). `closeAlert` is an idempotent
+    // no-op when nothing is open, so running it on every healthy, assigned
+    // poll — not only the transition poll — costs nothing and sweeps up
+    // exactly this case. `out_of_range`, below, has always worked this way.
+    if (health.state === "reporting" && assigned) {
       const { closed } = await closeAlert({ meterId: m.id, kind: "offline", reason: "The meter is reporting again." });
       result.alertsClosed += closed;
-      logger.info("meter.recovered", { meterId: m.id, ownerEmail: m.owner?.email ?? null });
+      if (health.recovered) logger.info("meter.recovered", { meterId: m.id, ownerEmail: m.owner?.email ?? null });
     }
 
     // --- 2. Is the day's consumption physically possible? ---

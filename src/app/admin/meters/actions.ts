@@ -10,6 +10,7 @@ import { movedRanges, planSpanAssignment, toUtcMidnight, type SpanPlan } from "@
 import { afterHistoryChange, applySpanPlan, lockedDemosTouched, syncMeterCache } from "@/lib/meter-history";
 import { logChange } from "@/lib/change-log";
 import { isDemoMode } from "@/lib/demo-mode";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { formatDate } from "@/lib/format-date";
 import { authorizeUrl, EWELINK_STATE_COOKIE } from "@/lib/ewelink-sign";
 import { resolveEwelinkConfig, syncMeterDevices, EwelinkNeedsAuthorisation } from "@/lib/ewelink";
@@ -206,8 +207,19 @@ export async function assignMeter(input: {
     if ("error" in plan) return { error: plan.error };
     const rewrites = plan.changes.some((c) => c.kind !== "trim-end" || c.stay.removedAt !== null);
     if (rewrites) {
-      logger.warn("meter.assign_refused", { actorId: actor.id, meterId: meter.id, reason: "history_rewrite" });
-      return { error: "That date falls inside earlier recorded history (this meter's or another meter's on that circuit). Correcting past history is done in demo mode from the meter's page." };
+      if (!isSuperAdmin(actor.email)) {
+        logger.warn("meter.assign_refused", { actorId: actor.id, meterId: meter.id, reason: "history_rewrite" });
+        return { error: "That date falls inside earlier recorded history (this meter's or another meter's on that circuit). Correcting past history is done in demo mode from the meter's page." };
+      }
+      // The named account may rewrite history live too (2026-10-21, user-asked),
+      // the same exception every other "demo mode only" correction gets — but
+      // never past a released day, the one protection assignMeterSpan's own
+      // dedicated editor already has and this path was never built to need,
+      // since it was never allowed to rewrite before.
+      const preview = await describePlan(plan);
+      if (preview.releasedDays > 0) {
+        return { error: `${preview.releasedDays} of the days this would move are on a released bill — they cannot move.` };
+      }
     }
     const locked = await lockedDemosTouched(plan.changes.map((c) => ({ circuitId: c.stay.circuitId, from: at, to: null })));
     if (locked.length > 0) return { error: `That would move readings under ${locked.join(", ")}, whose report has been shared. Unlock it first.` };
@@ -300,7 +312,12 @@ async function demoModeHistoryActor() {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." } as const;
   if (!actor.permissions.includes("manage_users")) return { error: "Changing a meter's history is a society-management action (Manage users)." } as const;
-  if (!(await isDemoMode())) {
+  // Demo mode free, live mode for the named account only (2026-10-21,
+  // user-asked) — the same exception assignMeter's own rewrite check gets,
+  // applied here too so both routes to a history correction agree. The
+  // released-bill and locked-demo checks below run regardless of who is
+  // asking — this only lifts the demo-mode gate, not either protection.
+  if (!(await isDemoMode()) && !isSuperAdmin(actor.email)) {
     logger.warn("meter.history_edit_refused", { actorId: actor.id, reason: "not_demo_mode" });
     return { error: "Correcting a meter's past history is a demo-mode action — after go-live the history only moves forward." } as const;
   }

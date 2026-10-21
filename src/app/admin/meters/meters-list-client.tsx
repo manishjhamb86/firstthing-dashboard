@@ -18,25 +18,23 @@ type Filter = "assigned" | "attention" | "unassigned" | "all" | "deleted";
 // Assigned first and by default: an unassigned device is mirrored but not
 // watched, so it is not yet this product's problem — and on an account where
 // 30 of 45 are unbound, they bury the ones that are.
-// A device deleted in the eWeLink account is a DELETED METER, and no chip but
-// its own includes it — "All devices" included it until 2026-09-10, which is
-// how the chips came to read 28 + 7 against an All of 45 (user-caught, with a
-// screenshot: "all meters should exclude the deleted meters. deleted meter
-// should show only when clicked deleted meters or if its still assigned and
-// attached then under assigned").
 //
-// The one exception is the user's own: a deleted meter STILL BOUND to a
-// circuit stays under Assigned, because it is still what that circuit bills
-// through. It stays in Needs attention too — billing through a meter the
-// account no longer has is a fault somebody must see, and hiding it is the
-// dead end this project keeps fixing — but Assigned is where the inventory is
-// read, so that is where it has to appear.
+// The main list is live work only (2026-10-21, user-asked — superseding the
+// 2026-09-10 exception below): a meter stops counting as Assigned or Needs
+// attention the moment either it is deleted from the eWeLink account, or the
+// circuit it is on is no longer active (voided, or its own deal closed lost,
+// or its contract terminated — `circuitInactive`). Both land in Historic
+// instead, which is the one place a meter's whole past — deleted or not,
+// closed deal or not — is still there to read. "All devices" still means
+// what it always has: every device currently in the account, whatever its
+// circuit's own standing, which is a different question from "what is live
+// work right now".
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "assigned", label: "Assigned" },
   { key: "attention", label: "Needs attention" },
   { key: "unassigned", label: "Not assigned" },
   { key: "all", label: "All devices" },
-  { key: "deleted", label: "Deleted meters" },
+  { key: "deleted", label: "Historic" },
 ];
 
 type SortKey = "name" | "society" | "state" | "power" | "today" | "history" | "owner";
@@ -120,12 +118,17 @@ export function MetersListClient({
       if (!q_ok) return false;
 
       const gone = m.removedFromAccountAt !== null;
-      if (filter === "deleted") return gone;
-      // Every other chip describes the account as it stands — All devices
-      // included. A deleted meter still bound to a circuit is the one thing
-      // that survives that, under both chips that describe assigned work.
-      if (gone) return (filter === "assigned" || filter === "attention") && m.assigned;
-
+      // Historic: deleted from the account, or assigned to a circuit that is
+      // no longer active — whichever reason, it is no longer live work.
+      const closedCircuit = m.assigned && m.circuitInactive;
+      if (filter === "deleted") return gone || closedCircuit;
+      // A deleted meter is gone from the account, so every other question
+      // ("what's in the account", "what needs doing") correctly excludes it —
+      // unchanged from before. A closed-circuit meter is still a real device
+      // in the account, so it stays under "All devices"/"Not assigned"; only
+      // the two LIVE-WORK questions (Assigned, Needs attention) exclude it.
+      if (gone) return false;
+      if ((filter === "assigned" || filter === "attention") && closedCircuit) return false;
       if (filter === "assigned" && !m.assigned) return false;
       if (
         filter === "attention" &&
@@ -151,16 +154,17 @@ export function MetersListClient({
   }
 
   const counts: Record<Filter, number> = {
-    // Deleted-but-still-bound counts here, matching what the chip shows.
-    assigned: meters.filter((m) => m.assigned).length,
+    // Live work only — a deleted meter or a closed-circuit one is Historic's,
+    // not these two's, matching the shown-filter above exactly.
+    assigned: meters.filter((m) => m.assigned && m.removedFromAccountAt === null && !m.circuitInactive).length,
     attention: meters.filter(
       (m) =>
-        (m.removedFromAccountAt !== null && m.assigned) ||
-        (m.removedFromAccountAt === null &&
-          ((m.assigned && m.state !== null && m.state !== "reporting") || m.openAlerts.length > 0)),
+        m.removedFromAccountAt === null &&
+        !m.circuitInactive &&
+        ((m.assigned && m.state !== null && m.state !== "reporting") || m.openAlerts.length > 0),
     ).length,
     unassigned: meters.filter((m) => !m.assigned && m.hasEnergySignal && m.removedFromAccountAt === null).length,
-    deleted: meters.filter((m) => m.removedFromAccountAt !== null).length,
+    deleted: meters.filter((m) => m.removedFromAccountAt !== null || (m.assigned && m.circuitInactive)).length,
     all: meters.filter((m) => m.removedFromAccountAt === null).length,
   };
 
@@ -268,28 +272,30 @@ export function MetersListClient({
         )}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className="chip"
-            style={
-              filter === f.key
-                ? { background: "var(--accent)", color: "var(--text-on-accent)", borderColor: "var(--accent)" }
-                : undefined
-            }
-          >
-            <span className="flex items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Filter meters" className="flex flex-wrap gap-x-5 gap-y-1 border-b" style={{ borderColor: "var(--border-subtle)" }}>
+          {FILTERS.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              role="tab"
+              aria-selected={filter === f.key}
+              onClick={() => setFilter(f.key)}
+              className="-mb-px flex items-center gap-1.5 border-b-2 px-0.5 pb-2 text-[14px] font-medium transition-colors"
+              style={
+                filter === f.key
+                  ? { borderColor: "var(--accent)", color: "var(--accent)" }
+                  : { borderColor: "transparent", color: "var(--text-muted)" }
+              }
+            >
               {f.label}
               <span className="num text-[12px] opacity-75">{counts[f.key]}</span>
-            </span>
-          </button>
-        ))}
+            </button>
+          ))}
+        </div>
         <input
           type="search"
-          className="search-field ml-auto"
+          className="search-field"
           placeholder="Search meter, society or circuit"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -309,7 +315,7 @@ export function MetersListClient({
           {meters.length === 0
             ? "No devices have been mirrored from the eWeLink account yet."
             : filter === "deleted"
-              ? "Nothing has been deleted — every mirrored device is still in the eWeLink account."
+              ? "Nothing here yet — no device has been deleted from the eWeLink account, and no assigned meter is on a closed circuit."
               : "No device matches this filter or search."}
         </EmptyState>
       ) : (
@@ -392,6 +398,12 @@ export function MetersListClient({
                       Still listed against {m.societyName}, on no circuit — nothing billed through it.
                     </p>
                   ) : null}
+                </div>
+              )}
+
+              {!m.removedFromAccountAt && m.circuitInactive && (
+                <div className="mt-1.5">
+                  <StatusChip tone="neu">Circuit closed — {m.circuitLabel ?? "its circuit"} is no longer active</StatusChip>
                 </div>
               )}
 
@@ -526,6 +538,13 @@ export function MetersListClient({
                             billed through it.
                           </div>
                         ) : null}
+                      </div>
+                    )}
+                    {!m.removedFromAccountAt && m.circuitInactive && (
+                      <div className="mt-1">
+                        <StatusChip tone="neu">
+                          Circuit closed — {m.circuitLabel ?? "its circuit"} is no longer active
+                        </StatusChip>
                       </div>
                     )}
                     {m.openAlerts.length > 0 && (

@@ -58,6 +58,16 @@ export type MeterRow = {
   societyName: string | null;
   circuitId: string | null;
   circuitLabel: string | null;
+  /**
+   * True when the circuit this meter is on is voided, or its own deal was
+   * closed lost, or its contract was terminated (2026-10-21, user-asked:
+   * these belong in Historic, not the main list — a circuit staying voidedAt
+   * null when its deal closes is normal; this is the live check that still
+   * catches it). False for an unassigned meter or one on a genuinely live
+   * circuit — never true by default, since an unknown state must not hide a
+   * meter that is in fact still being worked.
+   */
+  circuitInactive: boolean;
   /** kWh/day if everything on the circuit ran flat out — the alert ceiling. */
   capacityKwh: number | null;
   /** Watts if everything on the circuit ran at once — the gauge's scale. */
@@ -87,7 +97,20 @@ const meterInclude = {
       id: true,
       location: true,
       lightType: true,
+      voidedAt: true,
       devices: { select: { count: true, wattage: true, hoursPerDay: true } },
+      // Whether the circuit's own DEAL is still live (2026-10-21, user-caught:
+      // AIPL's circuit was never voided when its deal closed, so its meter
+      // kept reading as ordinary, active work). A circuit with no survey at
+      // all (a handful of backfilled historical rows) has nothing to check
+      // here and is treated as active — there is no deal state to read.
+      siteSurvey: {
+        select: {
+          pipeline: {
+            select: { closedLostStage: true, contract: { select: { status: true } } },
+          },
+        },
+      },
     },
   },
   society: { select: { id: true, name: true } },
@@ -189,6 +212,11 @@ function toRow(
     societyName: m.society?.name ?? null,
     circuitId: m.circuitId,
     circuitLabel,
+    circuitInactive: Boolean(
+      m.circuit?.voidedAt ||
+        m.circuit?.siteSurvey?.pipeline?.closedLostStage ||
+        m.circuit?.siteSurvey?.pipeline?.contract?.status === "terminated",
+    ),
     capacityKwh: devices.length > 0 ? theoreticalDailyKwh(devices) : null,
     connectedLoadW: devices.length > 0 ? devices.reduce((sum, d) => sum + d.count * d.wattage, 0) : null,
     spark: spark ?? [],

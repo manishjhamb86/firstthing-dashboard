@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { circuitLabelOf } from "@/lib/meter-view";
+import { isCircuitInactive } from "@/lib/circuit-standing";
 import {
   notificationCategory,
   NOTIFICATION_CATEGORY_LABEL,
@@ -92,13 +93,23 @@ export function isAcknowledgeableKind(kind: string): boolean {
   return METER_ALERT_KINDS.has(kind);
 }
 
+// Shared with meter-view.ts's isCircuitInactive — the fields it needs to say
+// whether this circuit's own deal is still live, nested wherever a circuit is
+// selected below.
+const circuitStandingSelect = {
+  siteSurvey: { select: { pipeline: { select: { closedLostStage: true, contract: { select: { status: true } } } } } },
+} as const;
+
 const include = {
   meter: {
     select: {
       id: true,
       name: true,
+      removedFromAccountAt: true,
+      circuitId: true,
+      societyId: true,
       society: { select: { name: true } },
-      circuit: { select: { id: true, societyId: true, location: true, lightType: true } },
+      circuit: { select: { id: true, societyId: true, location: true, lightType: true, voidedAt: true, ...circuitStandingSelect } },
       owner: { select: { name: true, email: true } },
     },
   },
@@ -110,6 +121,8 @@ const include = {
       societyId: true,
       location: true,
       lightType: true,
+      voidedAt: true,
+      ...circuitStandingSelect,
       society: { select: { name: true } },
       meterDevice: { select: { owner: { select: { name: true, email: true } } } },
     },
@@ -408,29 +421,56 @@ const openReplacementFollowUpNotifications = cache(async (): Promise<Notificatio
   const rows = await db.demoReplacementFollowUp.findMany({
     where: { plan: "society_completes", completedAt: null, voidedAt: null },
     orderBy: { raisedAt: "asc" },
-    include: { circuit: { select: { id: true, societyId: true, location: true, lightType: true, society: { select: { name: true } } } } },
+    include: {
+      circuit: {
+        select: { id: true, societyId: true, location: true, lightType: true, voidedAt: true, ...circuitStandingSelect, society: { select: { name: true } } },
+      },
+    },
   });
-  return rows.map((f) => {
-    const remaining = Array.isArray(f.remaining) ? (f.remaining as { remainingCount?: number }[]) : [];
-    const total = remaining.reduce((n, l) => n + (Number(l.remainingCount) || 0), 0);
-    const label = circuitLabelOf(f.circuit.location, f.circuit.lightType);
-    return {
-      id: f.id,
-      kind: "replacement_followup_open",
-      message: `${f.circuit.society.name} · ${label}: ${total} light${total === 1 ? "" : "s"} still waiting on the society.`,
-      openedAt: f.raisedAt.toISOString(),
-      closedAt: null,
-      closedReason: null,
-      acknowledgedAt: null,
-      raiseCount: 1,
-      subject: label,
-      societyName: f.circuit.society.name,
-      circuitLabel: label,
-      ownerLabel: null,
-      href: `/admin/societies/${f.circuit.societyId}/circuits/${f.circuit.id}`,
-    };
-  });
+  // Chasing a society to finish lights on a deal that has since closed is
+  // pointless — the same circuit-closed rule the meter alerts use (2026-10-21).
+  return rows
+    .filter((f) => !isCircuitInactive(f.circuit))
+    .map((f) => {
+      const remaining = Array.isArray(f.remaining) ? (f.remaining as { remainingCount?: number }[]) : [];
+      const total = remaining.reduce((n, l) => n + (Number(l.remainingCount) || 0), 0);
+      const label = circuitLabelOf(f.circuit.location, f.circuit.lightType);
+      return {
+        id: f.id,
+        kind: "replacement_followup_open",
+        message: `${f.circuit.society.name} · ${label}: ${total} light${total === 1 ? "" : "s"} still waiting on the society.`,
+        openedAt: f.raisedAt.toISOString(),
+        closedAt: null,
+        closedReason: null,
+        acknowledgedAt: null,
+        raiseCount: 1,
+        subject: label,
+        societyName: f.circuit.society.name,
+        circuitLabel: label,
+        ownerLabel: null,
+        href: `/admin/societies/${f.circuit.societyId}/circuits/${f.circuit.id}`,
+      };
+    });
 });
+
+/**
+ * Whether this alert's own context has closed — the meter deleted from the
+ * account, detached from everything, or assigned to a circuit that is no
+ * longer live (2026-10-21, user-asked: "if a society is closed, a circuit is
+ * closed, meter detached... the alerts should disappear"). Computed live
+ * from the rows that are already the source of truth, not a stored marker:
+ * a deal reopening or a circuit coming back un-suppresses the SAME alert for
+ * free, with no second write path to remember — the drift risk is exactly
+ * what left the AIPL alert open for five weeks in the first place.
+ */
+function alertContextClosed(a: Row): boolean {
+  if (a.meter) {
+    if (a.meter.removedFromAccountAt !== null) return true;
+    if (a.meter.circuitId === null && a.meter.societyId === null) return true;
+    return isCircuitInactive(a.meter.circuit);
+  }
+  return isCircuitInactive(a.circuit);
+}
 
 function toNotification(a: Row): Notification {
   const circuit = a.circuit ?? a.meter?.circuit ?? null;
@@ -495,7 +535,7 @@ export const openNotifications = cache(async (): Promise<Notification[]> => {
       openReplacementFollowUpNotifications(),
     ]);
   return [
-    ...alertRows.map(toNotification),
+    ...alertRows.filter((a) => !alertContextClosed(a)).map(toNotification),
     ...invoiceNotifications,
     ...inspectionNotifications,
     ...ticketNotifications,

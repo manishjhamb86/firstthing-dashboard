@@ -6,6 +6,7 @@ import { effectiveBaselineAt, lastVerifiedAt, type RescaleEvent } from "@/lib/be
 import { evaluateMeterHealth, outageMessage, outageMinutes, type MeterState } from "@/lib/meter-health";
 import { freshnessLabel, isStale } from "@/lib/meter-live";
 import { circuitLabelOf } from "@/lib/circuit-label";
+import { isCircuitInactive } from "@/lib/circuit-standing";
 import { monthLabel } from "@/lib/format-date";
 
 /**
@@ -212,11 +213,7 @@ function toRow(
     societyName: m.society?.name ?? null,
     circuitId: m.circuitId,
     circuitLabel,
-    circuitInactive: Boolean(
-      m.circuit?.voidedAt ||
-        m.circuit?.siteSurvey?.pipeline?.closedLostStage ||
-        m.circuit?.siteSurvey?.pipeline?.contract?.status === "terminated",
-    ),
+    circuitInactive: isCircuitInactive(m.circuit),
     capacityKwh: devices.length > 0 ? theoreticalDailyKwh(devices) : null,
     connectedLoadW: devices.length > 0 ? devices.reduce((sum, d) => sum + d.count * d.wattage, 0) : null,
     spark: spark ?? [],

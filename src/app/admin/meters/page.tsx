@@ -64,9 +64,13 @@ export default async function MetersPage() {
   // has taken responsibility for.
   const watched = live.filter((r) => r.assigned);
   const reporting = watched.filter((r) => r.state === "reporting");
-  const alerts = live.flatMap((r) =>
-    r.openAlerts.map((a) => ({ ...a, meterId: r.id, meterName: r.name, ownerLabel: r.ownerLabel })),
-  );
+  // An alert whose own circuit is no longer live, or whose meter has been
+  // detached entirely, belongs in Historic, not here — "Needs attention" is
+  // nobody's to chase once there is no longer any live work behind it
+  // (2026-10-21, user-asked: the same rule the Historic tab enforces).
+  const alerts = live
+    .filter((r) => r.assigned && !r.circuitInactive)
+    .flatMap((r) => r.openAlerts.map((a) => ({ ...a, meterId: r.id, meterName: r.name, ownerLabel: r.ownerLabel })));
   const unassigned = metering.filter((r) => !r.assigned);
   // History is every hour ever stored, removed devices included: those hours
   // were really recorded and some are behind billed figures (INV-02).

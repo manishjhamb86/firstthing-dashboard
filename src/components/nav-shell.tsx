@@ -78,6 +78,7 @@ export function NavShell({
   mobileStatus,
   mobileTabBar,
   accountExtra,
+  identityInSidebar = false,
   children,
 }: {
   theme: ThemeId;
@@ -113,6 +114,20 @@ export function NavShell({
    *  the mobile dropdown — e.g. the portal's "Change password" (2026-10-20).
    *  Omitted, this component is unchanged (admin passes nothing). */
   accountExtra?: ReactNode;
+  /**
+   * Moves the avatar/email/Change-password/Sign-out block out of the header
+   * and into the bottom of the left sidebar instead — most consoles put
+   * account identity there rather than top-right (user's ask, 2026-10-22,
+   * naming this app's own prior pattern as the example to drop: "most
+   * websites... even the claude website have the same"). Scoped to the
+   * portal only; admin passes nothing and keeps the header placement it has
+   * always had, so this is additive, not a rewrite of the shared shell.
+   * Only takes effect at `lg` and up, where the sidebar itself is visible
+   * (`hidden lg:flex`) — below that there is no sidebar to hold it, so the
+   * header keeps its existing `sm:block` row and the phone avatar-toggle
+   * dropdown exactly as before at every narrower width.
+   */
+  identityInSidebar?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -267,8 +282,16 @@ export function NavShell({
       <div className="hidden sm:block">
         <ThemeSwitcher current={theme} surface="content" />
       </div>
-      <div aria-hidden className="h-6 w-px hidden sm:block" style={{ background: "var(--border)" }} />
-      <div ref={identityRef} className="relative flex items-center gap-2.5">
+      <div
+        aria-hidden
+        className={`h-6 w-px hidden sm:block ${identityInSidebar ? "lg:hidden" : ""}`}
+        style={{ background: "var(--border)" }}
+      />
+      {/* Below `lg`, when `identityInSidebar` is set, this is unchanged from
+          always — there is no sidebar at that width to hold it. At `lg` and
+          up it hides entirely, since the sidebar's own identity block (below
+          `<nav>`) is the one visible then (2026-10-22). */}
+      <div ref={identityRef} className={`relative flex items-center gap-2.5 ${identityInSidebar ? "lg:hidden" : ""}`}>
         {/*
           Below `sm` the email + Sign out block used to be `hidden sm:block`
           — genuinely unreachable, not just visually tight: the avatar next
@@ -348,6 +371,34 @@ export function NavShell({
           </p>
           <div className="space-y-1">{navLinks()}</div>
         </nav>
+        {/* Account identity, bottom of the sidebar — the common pattern this
+            was asked to match (Claude's own sidebar among them), replacing
+            the top-right header placement at this width. The header still
+            carries this below `lg` (no sidebar there to hold it) — see the
+            identity block's own comment. Same content as that block, just
+            themed for the dark chrome surface instead of the light header. */}
+        {identityInSidebar && (
+          <div className="border-t px-4 py-3.5" style={{ borderColor: "var(--chrome-border)" }}>
+            <div className="flex items-center gap-2.5">
+              <span
+                aria-hidden
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
+                style={{ background: "var(--accent-subtle)", color: "var(--accent)" }}
+              >
+                {initial}
+              </span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-[13px] font-semibold" style={{ color: "var(--chrome-text)" }} title={email}>
+                  {email}
+                </p>
+                <span className="flex items-center gap-2 text-xs" style={{ color: "var(--chrome-muted)" }}>
+                  {accountExtra}
+                  <SignOutButton className="font-medium hover:opacity-80" />
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
         <p className="px-6 py-5 text-[11px]" style={{ color: "var(--chrome-subtle)" }}>
           {footerNote}
         </p>

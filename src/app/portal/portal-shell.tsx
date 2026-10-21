@@ -82,6 +82,11 @@ export function PortalShell({
       footerNote="FirsThing · your society's portal"
       extras={<NotificationBell count={bellCount} href="/portal/notifications" surface="content" />}
       mobileTabBar={mobileTabBar}
+      // Account identity moved to the bottom of the sidebar (user-ask,
+      // 2026-10-22: "most websites do... even the claude website have the
+      // same"), rather than the top-right header. Admin is untouched — it
+      // passes nothing and keeps the header placement.
+      identityInSidebar
       accountExtra={
         <Link href="/portal/account" className="font-medium hover:opacity-80">
           Change password

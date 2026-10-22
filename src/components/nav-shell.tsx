@@ -79,6 +79,7 @@ export function NavShell({
   mobileTabBar,
   accountExtra,
   identityInSidebar = false,
+  displayName,
   children,
 }: {
   theme: ThemeId;
@@ -128,11 +129,23 @@ export function NavShell({
    * dropdown exactly as before at every narrower width.
    */
   identityInSidebar?: boolean;
+  /** Shown instead of the raw email wherever identity renders — the account's
+   *  own name, when it has one (user-ask, 2026-10-22: "instead of email show
+   *  name of user"). Omitted or empty, every identity line falls back to
+   *  email exactly as before; admin passes nothing. */
+  displayName?: string | null;
   children: ReactNode;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [identityOpen, setIdentityOpen] = useState(false);
+  // The sidebar identity block's own reveal state (2026-10-22): "Change
+  // password" stays out of sight until the block is hovered OR clicked —
+  // not always visible, the way it first shipped — while Sign out stays a
+  // plainly visible button regardless (user's own two-part ask). Hover is
+  // handled in CSS (`group-hover`); this state is the click/keyboard side of
+  // the same reveal, for a touch device or a tab stop with no hover at all.
+  const [sidebarIdentityOpen, setSidebarIdentityOpen] = useState(false);
   // Opened, it only closed on its own toggle — tapping the toggle again, or
   // a link inside it — never on tapping anywhere else on the page, which
   // reads as broken (user-caught, 2026-10-07, the "More" sheet left open
@@ -170,7 +183,8 @@ export function NavShell({
   // Sidebar/menu panel sit on chrome; the header sits on content surface.
   const sidebarBrandVariant = theme === "light" ? "light" : "dark";
   const headerBrandVariant = theme === "dark" ? "dark" : "light";
-  const initial = (email[0] ?? "?").toUpperCase();
+  const identityLabel = displayName?.trim() || email;
+  const initial = (identityLabel[0] ?? "?").toUpperCase();
 
   const allItems = items.flatMap((e) => (isGroup(e) ? e.items : [e]));
 
@@ -309,13 +323,13 @@ export function NavShell({
           onClick={() => setIdentityOpen((v) => !v)}
           aria-expanded={identityOpen}
           aria-haspopup="true"
-          aria-label={`Account menu — signed in as ${email}`}
+          aria-label={`Account menu — signed in as ${identityLabel}`}
         >
           {initial}
         </button>
         <div className="hidden sm:block leading-tight">
           <p className="text-[13px] font-semibold truncate max-w-[180px]" title={email}>
-            {email}
+            {identityLabel}
           </p>
           <span className="flex items-center gap-2 text-xs" style={{ color: "var(--text-muted)" }}>
             {accountExtra}
@@ -328,7 +342,7 @@ export function NavShell({
             style={{ background: "var(--surface)", borderColor: "var(--border)", boxShadow: "var(--e2)" }}
           >
             <p className="text-[13px] font-semibold truncate" title={email}>
-              {email}
+              {identityLabel}
             </p>
             <div className="mt-3 flex items-center justify-between gap-2">
               <span className="text-xs text-[var(--text-muted)]">Theme</span>
@@ -375,11 +389,27 @@ export function NavShell({
             was asked to match (Claude's own sidebar among them), replacing
             the top-right header placement at this width. The header still
             carries this below `lg` (no sidebar there to hold it) — see the
-            identity block's own comment. Same content as that block, just
-            themed for the dark chrome surface instead of the light header. */}
+            identity block's own comment.
+            Reworked the same day, three corrections against this exact block
+            (user, 2026-10-22, looking at it live): the name/avatar row is
+            the toggle — click it, or just hover the block — and only THEN
+            does "Change password" fade in; it stays out of the way otherwise
+            rather than sitting there always. Sign out is the opposite call:
+            a real solid button, always visible, never something to go
+            looking for. And the bold line reads the account's own name
+            (falling back to email only when there isn't one) rather than
+            the email itself — `identityLabel` above, shared with the header
+            placement at narrower widths so the two can't say two different
+            things about who's signed in. */}
         {identityInSidebar && (
-          <div className="border-t px-4 py-3.5" style={{ borderColor: "var(--chrome-border)" }}>
-            <div className="flex items-center gap-2.5">
+          <div className="group border-t px-4 py-3.5" style={{ borderColor: "var(--chrome-border)" }}>
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 text-left"
+              onClick={() => setSidebarIdentityOpen((v) => !v)}
+              aria-expanded={sidebarIdentityOpen}
+              aria-label={`Account — signed in as ${identityLabel}. Press to reveal Change password.`}
+            >
               <span
                 aria-hidden
                 className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-bold"
@@ -387,15 +417,20 @@ export function NavShell({
               >
                 {initial}
               </span>
-              <div className="min-w-0 leading-tight">
-                <p className="truncate text-[13px] font-semibold" style={{ color: "var(--chrome-text)" }} title={email}>
-                  {email}
-                </p>
-                <span className="flex items-center gap-2 text-xs" style={{ color: "var(--chrome-muted)" }}>
-                  {accountExtra}
-                  <SignOutButton className="font-medium hover:opacity-80" />
-                </span>
-              </div>
+              <span className="min-w-0 truncate text-[13px] font-semibold leading-tight" style={{ color: "var(--chrome-text)" }} title={email}>
+                {identityLabel}
+              </span>
+            </button>
+            <div className="mt-2 flex items-center justify-between gap-2 pl-[42px]">
+              <span
+                className={`text-xs font-medium transition-opacity hover:opacity-80 ${
+                  sidebarIdentityOpen ? "opacity-100" : "opacity-0 focus-within:opacity-100 group-hover:opacity-100"
+                }`}
+                style={{ color: "var(--chrome-muted)" }}
+              >
+                {accountExtra}
+              </span>
+              <SignOutButton className="btn-secondary btn-sm shrink-0" />
             </div>
           </div>
         )}

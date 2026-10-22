@@ -126,7 +126,14 @@ export type ShowcaseStats = {
 /** The figures above the showcase — aggregates only, no society named. */
 export async function showcaseStats(now = new Date()): Promise<ShowcaseStats> {
   const [standings, ratings, cards] = await Promise.all([loadSocietyStandings(), allPaymentRatings(now), publicStarCards(now)]);
-  const served = [...standings.values()].filter((s) => s.standing === "active").length;
+  // Every society on record, whether billing has started or not — the
+  // earlier count filtered to `standing === "active"` (billing already
+  // running), which undercounted against what "societies served" actually
+  // means (user-corrected, 2026-10-22: "should be total number of societies
+  // in the list, whether agreement done or not"). `loadSocietyStandings()`
+  // already returns one entry per society with no status filter of its own,
+  // so its size is that total for free.
+  const served = standings.size;
   const due = [...ratings.values()].filter((r: PaymentRating) => r.counted > 0);
   return {
     societiesServed: served,

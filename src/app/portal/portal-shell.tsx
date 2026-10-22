@@ -37,6 +37,7 @@ export type PortalNavEntry = {
 export function PortalShell({
   theme,
   email,
+  name,
   societyName,
   entries,
   bellCount,
@@ -44,6 +45,9 @@ export function PortalShell({
 }: {
   theme: ThemeId;
   email: string;
+  /** Shown in the identity block instead of the raw email, when set
+   *  (2026-10-22, user-ask: "instead of email show name of user"). */
+  name?: string | null;
   /** Named in the sidebar, so whose data this is never has to be inferred. */
   societyName: string;
   entries: PortalNavEntry[];
@@ -77,6 +81,7 @@ export function PortalShell({
     <NavShell
       theme={theme}
       email={email}
+      displayName={name}
       items={items}
       navLabel={societyName}
       footerNote="FirsThing · your society's portal"

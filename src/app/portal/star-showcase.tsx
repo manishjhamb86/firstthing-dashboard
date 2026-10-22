@@ -44,6 +44,23 @@ export function StarShowcase({ cards, stats }: { cards: StarCard[]; stats: Showc
     if (el && card) el.scrollTo({ left: card.offsetLeft - el.offsetLeft, behavior: "smooth" });
   }, [index]);
 
+  // Nothing to show, nothing rendered — the earlier version still drew the
+  // card and a "no star partners yet" line even when there were none, and
+  // alongside it a stats row disclosing OTHER societies' aggregate payment
+  // status ("Nothing unpaid past due — 14 of 18 societies") to every signed-
+  // in resident. A resident should never be told anything about a society
+  // besides their own having an unpaid bill, even in aggregate and even with
+  // no name attached (user-caught, 2026-10-22: "why you showing paid unpaid
+  // to customers?", then "just show star societies, that too if there is
+  // any"). The two aggregate counts that stayed open to that same reading —
+  // how many societies exist, how many are star partners — are dropped too,
+  // rather than judging which aggregate is safe to keep; only the star
+  // societies themselves, and only when there's at least one, says nothing
+  // about anyone who isn't on this list by name and by their own committee's
+  // consent. The back-office page (`/admin/star-societies`) still shows ops
+  // staff the full picture — this is the resident-facing surface only.
+  if (cards.length === 0) return null;
+
   const asOf = formatDate(new Date(stats.asOf));
   return (
     <section aria-labelledby="star-showcase-title" className="card mb-6 p-5">
@@ -75,64 +92,39 @@ export function StarShowcase({ cards, stats }: { cards: StarCard[]; stats: Showc
         </div>
       </div>
 
-      <dl className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <div>
-          <dt className="lbl">Societies served</dt>
-          <dd className="num text-[20px] font-extrabold">{stats.societiesServed}</dd>
-        </div>
-        <div>
-          <dt className="lbl">Star partners</dt>
-          <dd className="num text-[20px] font-extrabold">{stats.starCount}</dd>
-        </div>
-        {stats.withInvoicesDue > 0 && (
-          <div className="col-span-2 sm:col-span-1">
-            <dt className="lbl">Nothing unpaid past due</dt>
-            <dd className="num text-[20px] font-extrabold">
-              {stats.fullyPaid} <span className="text-[13px] font-semibold" style={{ color: "var(--text-subtle)" }}>of {stats.withInvoicesDue} societies</span>
-            </dd>
-          </div>
-        )}
-      </dl>
-
-      {cards.length === 0 ? (
-        <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-          No star partners are shown yet. Societies that pay every invoice by its due date can be shown here.
-        </p>
-      ) : (
-        <div
-          ref={track}
-          role="region"
-          aria-roledescription="carousel"
-          aria-label="Star partner societies"
-          aria-live={playing && !hovered && !focused ? "off" : "polite"}
-          className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2"
-          onMouseEnter={() => setHovered(true)}
-          onMouseLeave={() => setHovered(false)}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
-        >
-          {cards.map((c, i) => (
-            <article
-              key={c.societyId}
-              aria-roledescription="slide"
-              aria-label={`${i + 1} of ${cards.length}: ${c.name}`}
-              tabIndex={0}
-              className="min-w-[240px] max-w-[300px] flex-1 snap-start rounded-[var(--r-md)] border p-4"
-              style={{ borderColor: "var(--border)", background: "var(--surface)" }}
-            >
-              <p className="font-bold leading-tight">{c.name}</p>
-              <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                {c.location}
-              </p>
-              <StarRating stars={c.stars} size={16} />
-              {c.summary && <p className="mt-2 text-[13px]">{c.summary}</p>}
-              <p className="mt-2 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-                Star partner since {formatDate(new Date(c.since))}
-              </p>
-            </article>
-          ))}
-        </div>
-      )}
+      <div
+        ref={track}
+        role="region"
+        aria-roledescription="carousel"
+        aria-label="Star partner societies"
+        aria-live={playing && !hovered && !focused ? "off" : "polite"}
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      >
+        {cards.map((c, i) => (
+          <article
+            key={c.societyId}
+            aria-roledescription="slide"
+            aria-label={`${i + 1} of ${cards.length}: ${c.name}`}
+            tabIndex={0}
+            className="min-w-[240px] max-w-[300px] flex-1 snap-start rounded-[var(--r-md)] border p-4"
+            style={{ borderColor: "var(--border)", background: "var(--surface)" }}
+          >
+            <p className="font-bold leading-tight">{c.name}</p>
+            <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+              {c.location}
+            </p>
+            <StarRating stars={c.stars} size={16} />
+            {c.summary && <p className="mt-2 text-[13px]">{c.summary}</p>}
+            <p className="mt-2 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+              Star partner since {formatDate(new Date(c.since))}
+            </p>
+          </article>
+        ))}
+      </div>
       <p className="mt-2 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
         As of {asOf}.
       </p>

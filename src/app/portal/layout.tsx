@@ -67,6 +67,7 @@ export default async function PortalLayout({ children }: { children: ReactNode }
       <PortalShell
         theme={theme}
         email={viewer.email}
+        name={viewer.name}
         societyName={society.name}
         entries={entries}
         bellCount={unseen}

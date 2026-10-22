@@ -83,6 +83,7 @@ export function PortalShell({
       email={email}
       displayName={name}
       items={items}
+      homeHref="/portal"
       navLabel={societyName}
       footerNote="FirsThing · your society's portal"
       extras={<NotificationBell count={bellCount} href="/portal/notifications" surface="content" />}

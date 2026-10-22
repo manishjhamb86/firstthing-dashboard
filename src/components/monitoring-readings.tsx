@@ -283,7 +283,15 @@ function DaysChart({ days, ceilingOf }: { days: MonitoringDay[]; ceilingOf: (b: 
         );
       })}
       {lastCeiling !== null && (
-        <text x={padX + 2} y={y(ceilings.find((c) => c !== null) ?? lastCeiling) - 5} fontSize={10.5} fontWeight={600} fill="var(--text-muted)" className="num">
+        // Fixed in the chart's own top margin, never at the ceiling line's own
+        // y — a day that DRAWS MORE than the ceiling (the whole point of
+        // drawing the ceiling at all) rises right into that same vertical
+        // band, and painting the label last in the SVG only put it on top of
+        // the bar's fill, not clear of it — still unreadable against a solid
+        // blue bar (user-caught, 2026-10-22, "text is hidden behind"). `max`
+        // is always at least 1.12× the tallest bar/ceiling, which keeps every
+        // bar's top comfortably below y=top+15 — well clear of this fixed row.
+        <text x={padX + 2} y={14} fontSize={10.5} fontWeight={600} fill="var(--text-muted)" className="num">
           at most {kwh(ceilings.find((c) => c !== null) ?? lastCeiling)} kWh to meet the benchmark
         </text>
       )}

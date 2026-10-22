@@ -206,6 +206,7 @@ export function AppShell({
       theme={theme}
       email={email}
       items={items}
+      homeHref="/admin"
       footerNote="FirsThing · verified savings"
       extras={<NotificationBell count={unreadCount} />}
       settings={demoAvailable ? <DemoModeToggle on={demoMode} surface="content" /> : undefined}

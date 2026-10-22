@@ -71,6 +71,7 @@ export function NavShell({
   theme,
   email,
   items,
+  homeHref,
   navLabel = "Menu",
   footerNote,
   extras,
@@ -85,6 +86,15 @@ export function NavShell({
   theme: ThemeId;
   email: string;
   items: NavEntry[];
+  /**
+   * Where the brand mark goes when clicked — the one thing every other
+   * console on the web lets you do (user-caught, 2026-10-22: "the logo is
+   * not clickable, ideally it should also take us back to
+   * dashboard/homepage"). Both renders of `BrandMark` (sidebar and mobile
+   * header) become a real `Link` to this; omitted, the mark stays inert
+   * exactly as before.
+   */
+  homeHref?: string;
   /** The sidebar's section heading — the society's name, on the portal. */
   navLabel?: string;
   footerNote: string;
@@ -369,7 +379,13 @@ export function NavShell({
         style={{ background: "var(--chrome)", borderRight: "1px solid var(--chrome-border)" }}
       >
         <div className="px-6 pt-7 pb-6">
-          <BrandMark variant={sidebarBrandVariant} className="h-7" />
+          {homeHref ? (
+            <Link href={homeHref} aria-label="Home">
+              <BrandMark variant={sidebarBrandVariant} className="h-7" />
+            </Link>
+          ) : (
+            <BrandMark variant={sidebarBrandVariant} className="h-7" />
+          )}
         </div>
         {/* min-h-0 + overflow-y-auto: a fixed, full-height flex column does not
             scroll on its own, so with several groups open the last items were
@@ -474,7 +490,13 @@ export function NavShell({
                 </button>
               )}
               <span className="lg:hidden shrink-0">
-                <BrandMark variant={headerBrandVariant} className="h-6 w-auto max-w-none" />
+                {homeHref ? (
+                  <Link href={homeHref} aria-label="Home">
+                    <BrandMark variant={headerBrandVariant} className="h-6 w-auto max-w-none" />
+                  </Link>
+                ) : (
+                  <BrandMark variant={headerBrandVariant} className="h-6 w-auto max-w-none" />
+                )}
               </span>
               {mobileStatus && <span className="sm:hidden shrink-0">{mobileStatus}</span>}
             </div>

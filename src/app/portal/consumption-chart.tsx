@@ -177,6 +177,13 @@ export function ConsumptionChart({
   const bw = Math.max(1.5, (plotW - gap * (bars.length - 1)) / bars.length);
   const perBucket = bucket === "daily" ? "day" : "bucket";
   const active = hover !== null ? (bars[hover] ?? null) : null;
+  // The richest-shaped bar available — one carrying every optional clause
+  // ("before FirsThing… saved…%", "over N days") — used only to size the
+  // two hover-state layers below while idle, so a LATER real hover can
+  // never need more room than was already reserved (labels are uniform
+  // length within one bucket/bars render; what varies is which clauses
+  // appear at all, not their digit width).
+  const sample = bars.find((b) => !b.underReview && b.baseline !== null && b.days > 1) ?? bars.find((b) => !b.underReview && b.baseline !== null) ?? bars.find((b) => !b.underReview) ?? bars[0] ?? null;
 
   return (
     <div>
@@ -358,53 +365,81 @@ export function ConsumptionChart({
       {/* The readout is a fixed strip, not a floating tooltip: it uses real
           type, wraps like everything else, and — because it is always drawn —
           reading a bar cannot change the card's height (user-asked
-          2026-08-31). Same shape as the admin tank chart's readout. */}
+          2026-08-31). Same shape as the admin tank chart's readout.
+          A plain min-height only reserves a FLOOR, not a fixed footprint —
+          on a phone-width column the active readout's longer sentence wraps
+          to a second line while the idle prompt stays on one, so the box
+          still grew the moment a bar was touched (user-caught, 2026-10-22:
+          "the size of this box changes on hover... a hard rule for all the
+          cards to have a stable fixed size unless screen size is changed").
+          Fixed properly with a grid stack: all three possible states render
+          into the SAME grid cell at once (grid-area 1/1), so the cell's own
+          height is always the tallest of the three at whatever width the
+          viewport has reflowed text to — only a hover/focus switches which
+          one is `visible` vs `invisible`, never which one exists in the DOM,
+          so the box's footprint can only change when the viewport itself
+          does. `sample` keeps the two hidden layers' content real (the first
+          bar's own figures) rather than fabricated, purely so their wrapping
+          — and therefore the reserved height — matches what a real hover
+          would actually produce. */}
       <div
-        className="mt-2 flex min-h-[42px] flex-wrap items-center gap-x-3 gap-y-1 rounded-[var(--r-sm)] border px-3 py-2 text-[13px]"
+        className="relative mt-2 grid rounded-[var(--r-sm)] border px-3 py-2 text-[13px]"
         style={{
           borderColor: active ? "var(--accent-line)" : "var(--border-subtle)",
           background: active ? "var(--accent-subtle)" : "var(--surface-sunken)",
         }}
         aria-live="polite"
       >
-        {active ? active.underReview ? (
-          <>
-            <span className="text-base font-bold" style={{ color: "var(--warn-fg)" }}>
-              Under review
-            </span>
-            <span className="num" style={{ color: "var(--text-muted)" }}>
-              {active.label}
-            </span>
-            <span style={{ color: "var(--text-subtle)" }}>
-              a reading this day could not be trusted — an admin reviews it before it counts.
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="num text-base font-bold">{active.kWh.toFixed(2)} kWh</span>
-            <span className="num" style={{ color: "var(--text-muted)" }}>
-              {active.label}
-            </span>
-            {active.baseline !== null && (
-              <span style={{ color: "var(--text-subtle)" }}>
-                before FirsThing{" "}
-                <span className="num">{active.baseline.toFixed(2)} kWh</span> — saved{" "}
-                <span className="num">
-                  {(((active.baseline - active.kWh) / active.baseline) * 100).toFixed(1)}%
+        <div
+          className={`col-start-1 row-start-1 flex flex-wrap items-center gap-x-3 gap-y-1 ${active?.underReview ? "" : "invisible"}`}
+          aria-hidden={!active?.underReview}
+        >
+          <span className="text-base font-bold" style={{ color: "var(--warn-fg)" }}>
+            Under review
+          </span>
+          <span className="num" style={{ color: "var(--text-muted)" }}>
+            {(active?.underReview ? active : sample)?.label}
+          </span>
+          <span style={{ color: "var(--text-subtle)" }}>
+            a reading this day could not be trusted — an admin reviews it before it counts.
+          </span>
+        </div>
+        <div
+          className={`col-start-1 row-start-1 flex flex-wrap items-center gap-x-3 gap-y-1 ${active && !active.underReview ? "" : "invisible"}`}
+          aria-hidden={!active || active.underReview}
+        >
+          {(() => {
+            const shown = active && !active.underReview ? active : sample;
+            if (!shown || shown.underReview) return null;
+            return (
+              <>
+                <span className="num text-base font-bold">{shown.kWh.toFixed(2)} kWh</span>
+                <span className="num" style={{ color: "var(--text-muted)" }}>
+                  {shown.label}
                 </span>
-              </span>
-            )}
-            {active.days > 1 && (
-              <span style={{ color: "var(--text-subtle)" }}>
-                over <span className="num">{active.days}</span> days
-              </span>
-            )}
-          </>
-        ) : (
+                {shown.baseline !== null && (
+                  <span style={{ color: "var(--text-subtle)" }}>
+                    before FirsThing{" "}
+                    <span className="num">{shown.baseline.toFixed(2)} kWh</span> — saved{" "}
+                    <span className="num">
+                      {(((shown.baseline - shown.kWh) / shown.baseline) * 100).toFixed(1)}%
+                    </span>
+                  </span>
+                )}
+                {shown.days > 1 && (
+                  <span style={{ color: "var(--text-subtle)" }}>
+                    over <span className="num">{shown.days}</span> days
+                  </span>
+                )}
+              </>
+            );
+          })()}
+        </div>
+        <div className={`col-start-1 row-start-1 flex items-center ${active ? "invisible" : ""}`} aria-hidden={!!active}>
           <span style={{ color: "var(--text-muted)" }}>
             {bars.length} {bucket === "daily" ? "days" : "periods"} — hover one for its figures.
           </span>
-        )}
+        </div>
       </div>
 
       {!baselineFits && avgBaseline !== null && (

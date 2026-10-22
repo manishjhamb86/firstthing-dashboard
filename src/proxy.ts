@@ -64,11 +64,12 @@ export default auth((req) => {
 
   // Staging access gate (2026-10-14, user-asked): on stage, with the secret
   // configured, NOTHING below this runs for a visitor who lacks the cookie —
-  // not the marketing page, not /login, not an API route. The cookie is set
-  // by hand (a browser extension), never through a sign-in flow this app
-  // provides, so there is nothing to redirect to; a stranger gets a bare
-  // refusal and nothing else about the app is ever reached.
-  if (isStageEnvironment() && stageAccessRequired()) {
+  // not the marketing page, not /login, not an API route. The one exception
+  // is the link that GRANTS the cookie itself (/api/stage-access/[token],
+  // 2026-10-22) — a route whose entire job is handing out the cookie cannot
+  // itself demand the cookie first, the same reasoning /api/session-ended
+  // already stands on for the opposite act (clearing one).
+  if (isStageEnvironment() && stageAccessRequired() && !pathname.startsWith("/api/stage-access/")) {
     const presented = req.cookies.get(STAGE_ACCESS_COOKIE)?.value;
     if (!stageAccessGranted(presented)) {
       return new NextResponse("Access restricted.", { status: 403 });

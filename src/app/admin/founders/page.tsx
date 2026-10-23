@@ -235,47 +235,66 @@ export default async function FoundersPage() {
         }
       />
 
-      {summaryParts.length > 0 && <p className="mb-5 text-[14px] text-[var(--text-subtle)]">{summaryParts.join(" · ")}</p>}
-
+      {/* Collapsed by default, a click away (user's call, 2026-10-23: "keep
+          the listing separate and only show the summary... user can choose
+          to click and open the list"). Native <details>, same hook-free,
+          Server-Component-renderable pattern StepSection's own done-step
+          toggle uses — the summary line IS the clickable trigger, not a
+          caption above it. */}
       <Card className="mb-6 p-0">
-        <div className="p-5 pb-0">
-          <CardTitle>Not on time</CardTitle>
-        </div>
         {rows.length === 0 ? (
           <div className="p-5">
-            <EmptyState title="Nothing is late">Every tracked item is inside its own deadline.</EmptyState>
+            <CardTitle>Not on time</CardTitle>
+            <div className="mt-3">
+              <EmptyState title="Nothing is late">Every tracked item is inside its own deadline.</EmptyState>
+            </div>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Type</th>
-                  <th>Society</th>
-                  <th>Item</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i}>
-                    <td className="whitespace-nowrap">{r.kind}</td>
-                    <td className="whitespace-nowrap font-medium">{r.societyName}</td>
-                    <td className="min-w-0">{r.itemLabel}</td>
-                    <td className="whitespace-nowrap">
-                      <StatusChip tone={TONE_CHIP[r.tone] ?? "warn"}>{r.clock}</StatusChip>
-                    </td>
-                    <td className="whitespace-nowrap">
-                      <Link href={r.href} className="text-[13px] font-semibold underline">
-                        {r.actionLabel}
-                      </Link>
-                    </td>
+          <details className="group">
+            <summary className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-5 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
+              <div className="min-w-0">
+                <CardTitle>Not on time</CardTitle>
+                <p className="mt-1 text-[14px] text-[var(--text-subtle)]">{summaryParts.join(" · ")}</p>
+              </div>
+              <span
+                className="shrink-0 rounded-[var(--r-sm)] px-2.5 py-1 text-xs font-medium"
+                style={{ background: "var(--surface-sunken)", color: "var(--text-muted)" }}
+              >
+                <span className="group-open:hidden">View the list</span>
+                <span className="hidden group-open:inline">Close</span>
+              </span>
+            </summary>
+            <div className="overflow-x-auto border-t" style={{ borderColor: "var(--border-subtle)" }}>
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>Society</th>
+                    <th>Item</th>
+                    <th>Status</th>
+                    <th></th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i}>
+                      <td className="whitespace-nowrap">{r.kind}</td>
+                      <td className="whitespace-nowrap font-medium">{r.societyName}</td>
+                      <td className="min-w-0">{r.itemLabel}</td>
+                      <td className="whitespace-nowrap">
+                        <StatusChip tone={TONE_CHIP[r.tone] ?? "warn"}>{r.clock}</StatusChip>
+                      </td>
+                      <td className="whitespace-nowrap">
+                        <Link href={r.href} className="text-[13px] font-semibold underline">
+                          {r.actionLabel}
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
         )}
       </Card>
 

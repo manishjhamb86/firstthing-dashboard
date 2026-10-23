@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Receipt, Zap, HardHat, LifeBuoy, Activity } from "lucide-react";
+import { Receipt, Zap, HardHat, LifeBuoy, Activity, Clock } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
-import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { DAY_GATE_STATUS } from "@/lib/status-maps";
 import { ticketLateness, meterAlertLateness, type LatenessTone } from "@/lib/lateness";
 import { paymentSummary, installationBoard, demoBoard, type PaymentSummary, type InstallationRow, type DemoBoard } from "@/lib/founder-dashboard-loaders";
@@ -44,6 +44,18 @@ const CATEGORY = {
   installations: { icon: HardHat, chip: "chip-purple", bg: "var(--purple-bg)", fg: "var(--purple-fg)" },
   complaints: { icon: LifeBuoy, chip: "chip-pink", bg: "var(--pink-bg)", fg: "var(--pink-fg)" },
   demos: { icon: Activity, chip: "chip-violet", bg: "var(--violet-bg)", fg: "var(--violet-fg)" },
+  // Not a domain — the one entry here that ISN'T about "which of the five
+  // business domains is this," used for the one card on this page that
+  // genuinely spans all five (the merged "Not on time" list) rather than
+  // belonging to one. Reuses the app's own existing, already-proven
+  // neutral-grey tone (.chip-neu) rather than inventing a sixth "no colour"
+  // hue — the point is to be VISIBLY, deliberately neutral, with the exact
+  // same badge/border grammar every domain card uses, so "this card has no
+  // colour" reads as a stated rule (this one spans every domain) rather
+  // than as an unfinished or forgotten card sitting beside five decorated
+  // ones (user-caught, 2026-10-23: "randomly coloured or left white... very
+  // immature").
+  neu: { icon: Clock, chip: "chip-neu", bg: "var(--neu-bg)", fg: "var(--neu-fg)" },
 } as const;
 
 type Domain = keyof typeof CATEGORY;
@@ -327,10 +339,13 @@ export default async function FoundersPage() {
           Server-Component-renderable pattern StepSection's own done-step
           toggle uses — the summary line IS the clickable trigger, not a
           caption above it. */}
-      <Card className="mb-6 p-0">
+      <CatCard domain="neu" className="mb-6 p-0">
         {rows.length === 0 ? (
           <div className="p-5">
-            <CardTitle>Not on time</CardTitle>
+            <div className="mb-0 flex items-center gap-2.5" style={{ color: CATEGORY.neu.fg }}>
+              <CategoryBadge domain="neu" />
+              <CardTitle className="mb-0">Not on time</CardTitle>
+            </div>
             <div className="mt-3">
               <EmptyState title="Nothing is late">Every tracked item is inside its own deadline.</EmptyState>
             </div>
@@ -339,7 +354,10 @@ export default async function FoundersPage() {
           <details className="group">
             <summary className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 p-5 cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden">
               <div className="min-w-0">
-                <CardTitle>Not on time</CardTitle>
+                <div className="mb-0 flex items-center gap-2.5" style={{ color: CATEGORY.neu.fg }}>
+                  <CategoryBadge domain="neu" />
+                  <CardTitle className="mb-0">Not on time</CardTitle>
+                </div>
                 <p className="mt-1 text-[14px] text-[var(--text-subtle)]">{summaryParts.join(" · ")}</p>
               </div>
               <span
@@ -384,12 +402,17 @@ export default async function FoundersPage() {
             </div>
           </details>
         )}
-      </Card>
+      </CatCard>
 
-      <div className="mb-6">
-        <CardTitle className="mb-2">My meetings</CardTitle>
-        <YourTasks userId={session.user.id} />
-      </div>
+      {/* No separate "My meetings" wrapper — YourTasks already renders its
+          own complete, titled card ("Your tasks"); the page was putting a
+          second, bare, uncarded heading above an already-finished card,
+          which is its own share of the inconsistency just reported (one
+          section with no card chrome at all, sitting between two that have
+          it). YourTasks is shared with Portfolio, so its own card stays
+          plain — this page doesn't get to redecorate a component it
+          doesn't own. */}
+      <YourTasks userId={session.user.id} />
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-2">
         <CatCard id="payments" domain="payments" className="min-w-0 p-5">

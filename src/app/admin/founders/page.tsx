@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { DAY_GATE_STATUS } from "@/lib/status-maps";
-import { circuitLabelOf } from "@/lib/circuit-label";
 import { ticketLateness, meterAlertLateness, type LatenessTone } from "@/lib/lateness";
 import { paymentSummary, installationBoard, demoBoard, type PaymentSummary, type InstallationRow, type DemoBoard } from "@/lib/founder-dashboard-loaders";
 import { YourTasks } from "../your-tasks";
@@ -56,7 +55,7 @@ type MeterAlertRow = {
   openedAt: Date;
   acknowledgedAt: Date | null;
   meter: { name: string; society: { name: string } | null; owner: { name: string | null; email: string } | null } | null;
-  circuit: { location: string | null; lightType: string; society: { name: string } } | null;
+  circuit: { society: { name: string } } | null;
 };
 
 export default async function FoundersPage() {
@@ -86,7 +85,7 @@ export default async function FoundersPage() {
         openedAt: true,
         acknowledgedAt: true,
         meter: { select: { name: true, society: { select: { name: true } }, owner: { select: { name: true, email: true } } } },
-        circuit: { select: { location: true, lightType: true, society: { select: { name: true } } } },
+        circuit: { select: { society: { select: { name: true } } } },
       },
       orderBy: { openedAt: "asc" },
     }) as Promise<MeterAlertRow[]>,
@@ -144,28 +143,40 @@ export default async function FoundersPage() {
   }
 
   for (const inst of installations) {
-    for (const hd of inst.heldDays) {
-      rows.push({
-        tone: hd.status === "blocked" ? "bad" : "warn",
-        kind: "Installation",
-        societyName: inst.societyName,
-        itemLabel: `Day ${hd.day} — ${DAY_GATE_STATUS[hd.status]?.label ?? hd.status}`,
-        clock: hd.reason ?? "",
-        href: `/admin/pipeline/${inst.pipelineId}/installation`,
-        actionLabel: "Review",
-      });
-    }
+    // One row per project, not one per held day: a day blocked only because
+    // an EARLIER day hasn't started yet carries no information of its own —
+    // evaluateDayGateChain cascades the identical "days run in order" reason
+    // onto every day after the real cause (ascending by day, so [0] is it).
+    // The count past it is kept, so "4 days held" doesn't silently become
+    // "1 day held".
+    const [first, ...rest] = inst.heldDays;
+    if (!first) continue;
+    rows.push({
+      tone: first.status === "blocked" ? "bad" : "warn",
+      kind: "Installation",
+      societyName: inst.societyName,
+      // The chip (below) is the short status word, matching every other row
+      // kind — the full sentence belongs in the wrapping Item cell, not in a
+      // `white-space: nowrap` chip, which is what ran text off the table.
+      itemLabel: `Day ${first.day}${first.reason ? ` — ${first.reason}` : ""}${rest.length > 0 ? ` (${rest.length} more day${rest.length === 1 ? "" : "s"} waiting on it)` : ""}`,
+      clock: DAY_GATE_STATUS[first.status]?.label ?? first.status,
+      href: `/admin/pipeline/${inst.pipelineId}/installation`,
+      actionLabel: "Review",
+    });
   }
 
   for (const a of openMeterAlerts) {
     const l = meterAlertLateness({ kind: a.kind, openedAt: a.openedAt, acknowledgedAt: a.acknowledgedAt, now });
     const societyName = a.meter?.society?.name ?? a.circuit?.society?.name ?? "—";
-    const subject = a.meter?.name ?? (a.circuit ? circuitLabelOf(a.circuit.location, a.circuit.lightType) : "Meter");
     rows.push({
       tone: l.tone,
       kind: "Meter",
       societyName,
-      itemLabel: `${subject} — ${a.message}`,
+      // a.message is already the complete, self-naming sentence
+      // (outageMessage()/evaluateCapacity()/the band check all lead with the
+      // meter or circuit's own name) — prefixing a second copy of that same
+      // name read as "X — X on Y is not reachable".
+      itemLabel: a.message,
       clock: l.clock,
       href: "#meters",
       actionLabel: a.meter?.owner ? `Chase ${a.meter.owner.name ?? a.meter.owner.email}` : "Assign",
@@ -338,12 +349,12 @@ export default async function FoundersPage() {
             <ul className="space-y-2 text-[13px]">
               {openMeterAlerts.slice(0, 8).map((a) => {
                 const l = meterAlertLateness({ kind: a.kind, openedAt: a.openedAt, acknowledgedAt: a.acknowledgedAt, now });
-                const societyName = a.meter?.society?.name ?? a.circuit?.society?.name ?? "—";
                 return (
                   <li key={a.id} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate">
-                      <span className="font-medium">{societyName}</span> — {a.message}
-                    </span>
+                    {/* a.message already names the meter/circuit and its
+                        society — no separate prefix needed, see the merged
+                        list above for the duplication this was producing. */}
+                    <span className="min-w-0 truncate">{a.message}</span>
                     <StatusChip tone={TONE_CHIP[l.tone]}>{l.clock}</StatusChip>
                   </li>
                 );

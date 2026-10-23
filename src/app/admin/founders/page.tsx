@@ -70,27 +70,10 @@ function CategoryPill({ domain, children }: { domain: Domain; children: ReactNod
   );
 }
 
-/**
- * Card, tinted across its whole surface in its domain's own colour, with a
- * bolder same-hue left border on top — not just a border on an otherwise
- * white card. A 4px edge plus a 32px icon badge on an all-white card (the
- * first version of this) barely registered against five mostly-white cards
- * on a mostly-white page (user-caught, 2026-10-23: "looks the same to me").
- * The research itself (Dashboard card colour design.md) is explicit that a
- * BOLD SATURATED FILL is the wrong move — but a light, low-chroma tint
- * across the surface is exactly the fill half of its own light-tint/
- * saturated-accent formula, just sized to the card rather than to an icon.
- * The Stat tiles nested inside stay on `--surface` (plain white/near-black)
- * so the figures inside still read as crisply as before — only the card's
- * own ground and header take the tint.
- */
+/** Card, with a left accent border in its domain's own colour. */
 function CatCard({ id, domain, className, children }: { id?: string; domain: Domain; className?: string; children: ReactNode }) {
   return (
-    <div
-      id={id}
-      className={`card ${className ?? ""}`}
-      style={{ background: CATEGORY[domain].bg, borderLeftWidth: 5, borderLeftColor: CATEGORY[domain].fg }}
-    >
+    <div id={id} className={`card ${className ?? ""}`} style={{ borderLeftWidth: 4, borderLeftColor: CATEGORY[domain].fg }}>
       {children}
     </div>
   );
@@ -410,7 +393,7 @@ export default async function FoundersPage() {
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-2">
         <CatCard id="payments" domain="payments" className="min-w-0 p-5">
-          <div className="mb-4 flex items-center gap-2.5" style={{ color: CATEGORY.payments.fg }}>
+          <div className="mb-4 flex items-center gap-2.5">
             <CategoryBadge domain="payments" />
             <CardTitle className="mb-0">Payments</CardTitle>
           </div>
@@ -461,7 +444,7 @@ export default async function FoundersPage() {
         </CatCard>
 
         <CatCard id="meters" domain="meters" className="min-w-0 p-5">
-          <div className="mb-4 flex items-center gap-2.5" style={{ color: CATEGORY.meters.fg }}>
+          <div className="mb-4 flex items-center gap-2.5">
             <CategoryBadge domain="meters" />
             <CardTitle className="mb-0">Meters</CardTitle>
           </div>
@@ -497,7 +480,7 @@ export default async function FoundersPage() {
         </CatCard>
 
         <CatCard id="installations" domain="installations" className="min-w-0 p-5">
-          <div className="mb-4 flex items-center gap-2.5" style={{ color: CATEGORY.installations.fg }}>
+          <div className="mb-4 flex items-center gap-2.5">
             <CategoryBadge domain="installations" />
             <CardTitle className="mb-0">Installations</CardTitle>
           </div>
@@ -530,7 +513,7 @@ export default async function FoundersPage() {
         </CatCard>
 
         <CatCard id="complaints" domain="complaints" className="min-w-0 p-5">
-          <div className="mb-4 flex items-center gap-2.5" style={{ color: CATEGORY.complaints.fg }}>
+          <div className="mb-4 flex items-center gap-2.5">
             <CategoryBadge domain="complaints" />
             <CardTitle className="mb-0">Complaints</CardTitle>
           </div>
@@ -562,7 +545,7 @@ export default async function FoundersPage() {
         </CatCard>
 
         <CatCard id="demos" domain="demos" className="min-w-0 p-5 lg:col-span-2">
-          <div className="mb-4 flex items-center gap-2.5" style={{ color: CATEGORY.demos.fg }}>
+          <div className="mb-4 flex items-center gap-2.5">
             <CategoryBadge domain="demos" />
             <CardTitle className="mb-0">Demos</CardTitle>
           </div>

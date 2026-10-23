@@ -17,18 +17,32 @@ import { logger } from "@/lib/logger";
 // (see ui.tsx's own STAT_TONE comment) — that rule is about a FIGURE'S
 // severity, which is untouched here; this is a CATEGORY colour, answering
 // "which of the five domains is this", a different question the app has
-// never needed answered before this exec-only page. Four reuse the existing
-// ok/warn/bad/info hues (each already proven across three themes); Demos
-// gets the one new hue added for this (--violet-*/.chip-violet in
-// globals.css) since none of the other four was free. Kept local to this
-// page rather than widening the shared ChipTone union, which two other
-// files exhaustively switch over — a sixth tone there would force an
+// never needed answered before this exec-only page.
+//
+// A first pass here reused the app's own ok/warn/bad/info status tones —
+// researched afterward (docs/research/reports/Dashboard card colour
+// design.md) once the result read as barely different from before, and
+// that research names the exact mistake: those four tones are deliberately
+// pale and meant for a rare callout, so repainting them at card scale for
+// five PERMANENT labels mostly reproduced the same subtle pastels; and
+// reusing a STATUS hue (ok=green/"fine", bad=red/"wrong") as a CATEGORY
+// label is the one thing every source in that research converges on
+// avoiding — the same colour meaning two different things on one screen.
+// Four hues are now genuinely new (--cyan-*/--purple-*/--pink-*/--violet-*
+// plus their .chip-* classes in globals.css); Payments is the one
+// exception, and deliberately so — it takes the product's own primary
+// brand accent (.chip-accent, also new) rather than a sixth invented hue,
+// since it is the single most central domain on this page. Kept local to
+// this page rather than widening the shared ChipTone union, which two
+// other files exhaustively switch over — a sixth tone there would force an
 // unrelated case onto both.
 const CATEGORY = {
-  payments: { icon: Receipt, chip: "chip-info", bg: "var(--info-bg)", fg: "var(--info-fg)" },
-  meters: { icon: Zap, chip: "chip-warn", bg: "var(--warn-bg)", fg: "var(--warn-fg)" },
-  installations: { icon: HardHat, chip: "chip-ok", bg: "var(--ok-bg)", fg: "var(--ok-fg)" },
-  complaints: { icon: LifeBuoy, chip: "chip-bad", bg: "var(--bad-bg)", fg: "var(--bad-fg)" },
+  // Payments gets the product's own primary brand colour — the most
+  // central domain in its own accent, not a sixth invented hue.
+  payments: { icon: Receipt, chip: "chip-accent", bg: "var(--accent-subtle)", fg: "var(--accent)" },
+  meters: { icon: Zap, chip: "chip-cyan", bg: "var(--cyan-bg)", fg: "var(--cyan-fg)" },
+  installations: { icon: HardHat, chip: "chip-purple", bg: "var(--purple-bg)", fg: "var(--purple-fg)" },
+  complaints: { icon: LifeBuoy, chip: "chip-pink", bg: "var(--pink-bg)", fg: "var(--pink-fg)" },
   demos: { icon: Activity, chip: "chip-violet", bg: "var(--violet-bg)", fg: "var(--violet-fg)" },
 } as const;
 

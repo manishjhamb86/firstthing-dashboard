@@ -88,13 +88,34 @@
   --neu-bg: #EDF2F6;
   --neu-fg: #52657A;
   --neu-line: #DCE4EC;
-  /* A sixth hue alongside ok/warn/bad/info/neu — not a status tone (it never
-     means good/bad/waiting), a CATEGORY one: the founders' page (2026-10-23,
-     user-asked: "use more colours so things are easily distinguishable...
-     should look classic") is the first caller, giving its Demos card a hue
-     none of the other four domain cards already claim. Defined globally,
-     the same way every other themed hue in this file is, rather than as a
-     page-local literal, so a second categorical caller has it ready. */
+  /* A dedicated CATEGORY palette, for a label that answers "which of several
+     business domains is this" — a different question from ok/warn/bad/info,
+     which answer "is this fine, waiting, or wrong." Researched 2026-10-23
+     (docs/research/reports/Dashboard card colour design.md) after the
+     founders' page's first colour pass — which had reused ok/warn/bad/info
+     directly — read as barely different from before: those four are
+     deliberately pale, low-stakes tones meant for a rare callout, so
+     repurposing them at card scale for five permanent labels just repainted
+     the same subtle pastels, and reusing a STATUS hue (ok=green, bad=red) as
+     a CATEGORY label is the one thing every source in that research agrees
+     to avoid outright — the same colour meaning two different things on one
+     screen is the textbook failure case. Three genuinely new hues (plus the
+     violet already added), each built to the one pattern every real system
+     researched converges on: a light, low-chroma tint for the fill, a
+     markedly darker, more saturated step of the SAME hue reserved for an
+     icon or text accent — never a bold fill as the surface itself — held to
+     a similar lightness/chroma band to one another and to the existing
+     ok/warn/bad/info tones, so the new hues read as part of one considered
+     palette rather than a louder, separate one bolted on. */
+  --cyan-bg: #E2F7F7;
+  --cyan-fg: #0E7C86;
+  --cyan-line: #C2EDED;
+  --purple-bg: #F0E8FD;
+  --purple-fg: #7C3AED;
+  --purple-line: #DCC9FA;
+  --pink-bg: #FDE7F0;
+  --pink-fg: #BE1E6B;
+  --pink-line: #F7C7DD;
   --violet-bg: #F3ECFB;
   --violet-fg: #6D3FA6;
   --violet-line: #E0CEF5;
@@ -205,6 +226,15 @@
   --neu-line: #2C2C31;
   /* Selected, not flipped — same rule as --chart-mark above: a lighter,
      more saturated mid-tone the dark ground can actually carry. */
+  --cyan-bg: #0B2A2C;
+  --cyan-fg: #4FD1D9;
+  --cyan-line: #164042;
+  --purple-bg: #241B3D;
+  --purple-fg: #B794F6;
+  --purple-line: #3A2B5C;
+  --pink-bg: #33152A;
+  --pink-fg: #F06FA8;
+  --pink-line: #4D2440;
   --violet-bg: #241B35;
   --violet-fg: #C79FF0;
   --violet-line: #3C2B57;
@@ -743,6 +773,29 @@ textarea.field {
   background: var(--neu-bg);
   color: var(--neu-fg);
   border-color: var(--neu-line);
+}
+.chip-cyan {
+  background: var(--cyan-bg);
+  color: var(--cyan-fg);
+  border-color: var(--cyan-line);
+}
+.chip-purple {
+  background: var(--purple-bg);
+  color: var(--purple-fg);
+  border-color: var(--purple-line);
+}
+.chip-pink {
+  background: var(--pink-bg);
+  color: var(--pink-fg);
+  border-color: var(--pink-line);
+}
+/* The primary brand hue, as a chip — none of ok/warn/bad/info/neu is it, and
+   a category label for the dashboard's own most central domain (payments)
+   reads better in the product's own accent than in a sixth invented hue. */
+.chip-accent {
+  background: var(--accent-subtle);
+  color: var(--accent);
+  border-color: var(--accent-line);
 }
 .chip-violet {
   background: var(--violet-bg);

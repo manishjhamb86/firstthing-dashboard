@@ -1,4 +1,6 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
+import { Receipt, Zap, HardHat, LifeBuoy, Activity } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -7,6 +9,69 @@ import { ticketLateness, meterAlertLateness, type LatenessTone } from "@/lib/lat
 import { paymentSummary, installationBoard, demoBoard, type PaymentSummary, type InstallationRow, type DemoBoard } from "@/lib/founder-dashboard-loaders";
 import { YourTasks } from "../your-tasks";
 import { logger } from "@/lib/logger";
+
+// Five domains, five colours (2026-10-23, user-asked: "use more colours so
+// things are easily distinguishable... should look classic and beautiful
+// and distinct"). This deliberately departs from the rest of the app's own
+// standing rule that a Stat's number is tinted only when it needs attention
+// (see ui.tsx's own STAT_TONE comment) — that rule is about a FIGURE'S
+// severity, which is untouched here; this is a CATEGORY colour, answering
+// "which of the five domains is this", a different question the app has
+// never needed answered before this exec-only page. Four reuse the existing
+// ok/warn/bad/info hues (each already proven across three themes); Demos
+// gets the one new hue added for this (--violet-*/.chip-violet in
+// globals.css) since none of the other four was free. Kept local to this
+// page rather than widening the shared ChipTone union, which two other
+// files exhaustively switch over — a sixth tone there would force an
+// unrelated case onto both.
+const CATEGORY = {
+  payments: { icon: Receipt, chip: "chip-info", bg: "var(--info-bg)", fg: "var(--info-fg)" },
+  meters: { icon: Zap, chip: "chip-warn", bg: "var(--warn-bg)", fg: "var(--warn-fg)" },
+  installations: { icon: HardHat, chip: "chip-ok", bg: "var(--ok-bg)", fg: "var(--ok-fg)" },
+  complaints: { icon: LifeBuoy, chip: "chip-bad", bg: "var(--bad-bg)", fg: "var(--bad-fg)" },
+  demos: { icon: Activity, chip: "chip-violet", bg: "var(--violet-bg)", fg: "var(--violet-fg)" },
+} as const;
+
+type Domain = keyof typeof CATEGORY;
+
+function CategoryBadge({ domain }: { domain: Domain }) {
+  const { icon: Icon, bg, fg } = CATEGORY[domain];
+  return (
+    <span
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--r-sm)]"
+      style={{ background: bg, color: fg }}
+      aria-hidden
+    >
+      <Icon size={16} strokeWidth={2.25} />
+    </span>
+  );
+}
+
+function CategoryPill({ domain, children }: { domain: Domain; children: ReactNode }) {
+  return (
+    <span className={`chip ${CATEGORY[domain].chip}`}>
+      <span className="chip-dot" aria-hidden />
+      {children}
+    </span>
+  );
+}
+
+/** Card, with a left accent border in its domain's own colour. */
+function CatCard({ id, domain, className, children }: { id?: string; domain: Domain; className?: string; children: ReactNode }) {
+  return (
+    <div id={id} className={`card ${className ?? ""}`} style={{ borderLeftWidth: 4, borderLeftColor: CATEGORY[domain].fg }}>
+      {children}
+    </div>
+  );
+}
+
+function CatLink({ domain, href, children }: { domain: Domain; href: string; children: ReactNode }) {
+  return (
+    <Link href={href} className="mt-4 inline-block text-[13px] font-semibold underline" style={{ color: CATEGORY[domain].fg }}>
+      {children}
+    </Link>
+  );
+}
 
 // The founders' "what is not on time" page (2026-10-22,
 // docs/research/reports/Founder operations dashboard.md). A dedicated route
@@ -26,6 +91,7 @@ const rupees = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
 
 type LateRow = {
   tone: LatenessTone | "bad" | "warn";
+  domain: Domain;
   kind: string;
   societyName: string;
   itemLabel: string;
@@ -119,6 +185,7 @@ export default async function FoundersPage() {
   for (const s of payments.topOverdueSocieties) {
     rows.push({
       tone: s.oldestDays >= 15 ? "red" : "amber",
+      domain: "payments",
       kind: "Payment",
       societyName: s.societyName,
       itemLabel: `${s.count} invoice${s.count === 1 ? "" : "s"} overdue, oldest ${s.oldestDays}d`,
@@ -133,6 +200,7 @@ export default async function FoundersPage() {
     if (!l) continue;
     rows.push({
       tone: l.tone,
+      domain: "complaints",
       kind: t.type === "device_replacement" ? "Replacement" : t.type === "pickup" ? "Pickup" : "Complaint",
       societyName: t.society.name,
       itemLabel: t.subject,
@@ -153,6 +221,7 @@ export default async function FoundersPage() {
     if (!first) continue;
     rows.push({
       tone: first.status === "blocked" ? "bad" : "warn",
+      domain: "installations",
       kind: "Installation",
       societyName: inst.societyName,
       // The chip (below) is the short status word, matching every other row
@@ -170,6 +239,7 @@ export default async function FoundersPage() {
     const societyName = a.meter?.society?.name ?? a.circuit?.society?.name ?? "—";
     rows.push({
       tone: l.tone,
+      domain: "meters",
       kind: "Meter",
       societyName,
       // a.message is already the complete, self-naming sentence
@@ -186,6 +256,7 @@ export default async function FoundersPage() {
   for (const r of demos.reviews) {
     rows.push({
       tone: r.urgency.tone,
+      domain: "demos",
       kind: "Demo review",
       societyName: r.societyName,
       itemLabel: r.circuitLabel,
@@ -197,6 +268,7 @@ export default async function FoundersPage() {
   for (const d of demos.delays) {
     rows.push({
       tone: d.lateness.tone,
+      domain: "demos",
       kind: d.kind === "replacement" ? "Demo replacement" : "Demo window",
       societyName: d.societyName,
       itemLabel: d.circuitLabel,
@@ -278,7 +350,9 @@ export default async function FoundersPage() {
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={i}>
-                      <td className="whitespace-nowrap">{r.kind}</td>
+                      <td className="whitespace-nowrap">
+                        <CategoryPill domain={r.domain}>{r.kind}</CategoryPill>
+                      </td>
                       <td className="whitespace-nowrap font-medium">{r.societyName}</td>
                       <td className="min-w-0">{r.itemLabel}</td>
                       <td className="whitespace-nowrap">
@@ -304,8 +378,11 @@ export default async function FoundersPage() {
       </div>
 
       <div className="grid min-w-0 gap-5 lg:grid-cols-2">
-        <Card id="payments" className="min-w-0 p-5">
-          <CardTitle>Payments</CardTitle>
+        <CatCard id="payments" domain="payments" className="min-w-0 p-5">
+          <div className="mb-4 flex items-center gap-2.5">
+            <CategoryBadge domain="payments" />
+            <CardTitle className="mb-0">Payments</CardTitle>
+          </div>
           {failedCards.has("payments") && (
             <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
               Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
@@ -347,13 +424,16 @@ export default async function FoundersPage() {
               Plus {payments.retail.unpaidCount} unpaid retail invoice{payments.retail.unpaidCount === 1 ? "" : "s"} ({rupees(payments.retail.owed)}) — a separate ledger.
             </p>
           )}
-          <Link href="/admin/billing/release-queue" className="mt-4 inline-block text-[13px] font-semibold underline">
+          <CatLink domain="payments" href="/admin/billing/release-queue">
             Release queue →
-          </Link>
-        </Card>
+          </CatLink>
+        </CatCard>
 
-        <Card id="meters" className="min-w-0 p-5">
-          <CardTitle>Meters</CardTitle>
+        <CatCard id="meters" domain="meters" className="min-w-0 p-5">
+          <div className="mb-4 flex items-center gap-2.5">
+            <CategoryBadge domain="meters" />
+            <CardTitle className="mb-0">Meters</CardTitle>
+          </div>
           {failedCards.has("meters") && (
             <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
               Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
@@ -380,13 +460,16 @@ export default async function FoundersPage() {
               })}
             </ul>
           )}
-          <Link href="/admin/notifications" className="mt-4 inline-block text-[13px] font-semibold underline">
+          <CatLink domain="meters" href="/admin/notifications">
             Notification centre →
-          </Link>
-        </Card>
+          </CatLink>
+        </CatCard>
 
-        <Card id="installations" className="min-w-0 p-5">
-          <CardTitle>Installations</CardTitle>
+        <CatCard id="installations" domain="installations" className="min-w-0 p-5">
+          <div className="mb-4 flex items-center gap-2.5">
+            <CategoryBadge domain="installations" />
+            <CardTitle className="mb-0">Installations</CardTitle>
+          </div>
           {failedCards.has("installations") && (
             <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
               Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
@@ -413,10 +496,13 @@ export default async function FoundersPage() {
               ))}
             </ul>
           )}
-        </Card>
+        </CatCard>
 
-        <Card id="complaints" className="min-w-0 p-5">
-          <CardTitle>Complaints</CardTitle>
+        <CatCard id="complaints" domain="complaints" className="min-w-0 p-5">
+          <div className="mb-4 flex items-center gap-2.5">
+            <CategoryBadge domain="complaints" />
+            <CardTitle className="mb-0">Complaints</CardTitle>
+          </div>
           {failedCards.has("complaints") && (
             <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
               Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
@@ -439,13 +525,16 @@ export default async function FoundersPage() {
               })}
             </ul>
           )}
-          <Link href="/admin/tickets" className="mt-4 inline-block text-[13px] font-semibold underline">
+          <CatLink domain="complaints" href="/admin/tickets">
             Support desk →
-          </Link>
-        </Card>
+          </CatLink>
+        </CatCard>
 
-        <Card id="demos" className="min-w-0 p-5 lg:col-span-2">
-          <CardTitle>Demos</CardTitle>
+        <CatCard id="demos" domain="demos" className="min-w-0 p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2.5">
+            <CategoryBadge domain="demos" />
+            <CardTitle className="mb-0">Demos</CardTitle>
+          </div>
           {failedCards.has("demos") && (
             <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
               Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
@@ -457,10 +546,10 @@ export default async function FoundersPage() {
             <Stat label="Post-install window open" value={demos.stepCounts.postWindow} />
             <Stat label="Reviews open" value={demos.stepCounts.reviewOpen} tone={demos.stepCounts.reviewOpen > 0 ? "warn" : "accent"} />
           </StatRow>
-          <Link href="/admin/demo-monitoring" className="mt-4 inline-block text-[13px] font-semibold underline">
+          <CatLink domain="demos" href="/admin/demo-monitoring">
             Demo monitoring →
-          </Link>
-        </Card>
+          </CatLink>
+        </CatCard>
       </div>
     </div>
   );

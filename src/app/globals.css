@@ -88,6 +88,16 @@
   --neu-bg: #EDF2F6;
   --neu-fg: #52657A;
   --neu-line: #DCE4EC;
+  /* A sixth hue alongside ok/warn/bad/info/neu — not a status tone (it never
+     means good/bad/waiting), a CATEGORY one: the founders' page (2026-10-23,
+     user-asked: "use more colours so things are easily distinguishable...
+     should look classic") is the first caller, giving its Demos card a hue
+     none of the other four domain cards already claim. Defined globally,
+     the same way every other themed hue in this file is, rather than as a
+     page-local literal, so a second categorical caller has it ready. */
+  --violet-bg: #F3ECFB;
+  --violet-fg: #6D3FA6;
+  --violet-line: #E0CEF5;
 
   /* chrome — Slate default: NextAdmin's navy shell, light content */
   --chrome: #1C2434;
@@ -193,6 +203,11 @@
   --neu-bg: #1E1E22;
   --neu-fg: #A6A6AF;
   --neu-line: #2C2C31;
+  /* Selected, not flipped — same rule as --chart-mark above: a lighter,
+     more saturated mid-tone the dark ground can actually carry. */
+  --violet-bg: #241B35;
+  --violet-fg: #C79FF0;
+  --violet-line: #3C2B57;
 
   --chrome: #09090B;
   --chrome-hover: #18181B;
@@ -728,6 +743,11 @@ textarea.field {
   background: var(--neu-bg);
   color: var(--neu-fg);
   border-color: var(--neu-line);
+}
+.chip-violet {
+  background: var(--violet-bg);
+  color: var(--violet-fg);
+  border-color: var(--violet-line);
 }
 
 /* table — column headers in the label style, row hover, hairline rows */

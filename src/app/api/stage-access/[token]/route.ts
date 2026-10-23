@@ -28,7 +28,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ toke
   if (!stageAccessGranted(token)) {
     return new NextResponse("Not found.", { status: 404 });
   }
-  const res = NextResponse.redirect(new URL("/", req.url));
+  // A self-hosted next start process behind nginx has no way to see the
+  // public host from req.url alone — it redirected to https://localhost:3005/
+  // on real stage, the identical class of bug this codebase already fixed
+  // once for NextAuth's own redirects (see PROJECT_CONTEXT.md's "AUTH_URL"
+  // entry). Reusing that same env var here rather than inventing a second
+  // one: it is already set correctly on every environment that needs this
+  // gate at all (stage only — production and local dev carry neither var).
+  const base = process.env.AUTH_URL ?? req.url;
+  const res = NextResponse.redirect(new URL("/", base));
   res.cookies.set(STAGE_ACCESS_COOKIE, token, {
     httpOnly: true,
     secure: true,

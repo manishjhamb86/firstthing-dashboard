@@ -57,6 +57,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       showBilling={perms.includes("manage_pipeline") || perms.includes("release_billing")}
       showUsers={perms.includes("manage_admins")}
       showSupport={perms.includes("manage_users")}
+      showFounders={perms.includes("view_founder_dashboard")}
     >
       {children}
     </AppShell>

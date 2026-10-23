@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-10-21 (star partner societies and a private payment rating — see below)
+2026-10-23 (the founders' "what is not on time" page — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -9171,4 +9171,71 @@ The notification feed gains one aggregate row, "Star partner to review". Like ev
 - **Disputes.** The rating has no dispute exclusion because invoices have no dispute record yet.
 
 **Before launch, counsel should check four things:** the consent wording, the confidentiality clauses in the agreements, the MSMED Act's applicability, and the final text of the BNS exceptions.
+
+## The founders' "what is not on time" page (2026-10-23) — user-asked, researched first
+
+**The ask, verbatim**: "Dashboard for Manish and Yogesh... 4 things — How many payments, live
+metering issues, current installation status, my meetings, all customer complaints, demo status —
+which are not on time." Researched first (`docs/research/reports/Founder operations dashboard.md`):
+about two thirds of the data Portfolio already loads (meters, below-band circuits, the notification
+feed, meetings), and the real gap across every domain was that "not on time" meant something
+different in each one, or nothing at all, nowhere written down in one place.
+
+**One new permission, one new page, one pure rule table.** `AdminPermission.view_founder_dashboard`
+(migration `20261022210000_founder_dashboard_permission`, additive — one enum value), granted via
+`/admin/users` like `approve_showcase` already is, not a second hard-wired email alongside
+`isSuperAdmin` (whose own comment already says that is "not a general pattern"). `/admin/founders`
+is a dedicated route, not an extension of Portfolio — Portfolio already runs 13 reads every admin
+pays for, and this page's payment aggregates, installation board and demo facts are reads nobody
+else needs. `src/lib/lateness.ts` holds every threshold in one written table, with tests: six item
+types already had a real deadline somewhere in the code (invoices, tasks/visits via `taskState()`,
+installation days via `evaluateDayGateChain()`, demo result reviews via `reviewUrgency()`, monthly
+inspections, gate passes); three had none at all (complaint tickets, meter alerts, demo
+pre/post-install windows) and are **PROPOSED** thresholds the report argues from industry/Indian
+practice, named as proposals rather than facts — 1 day to take up a complaint / 5 to resolve it, a
+meter alert reading red at 48h (offline) or 24h (out of range) with an unacknowledged marker at 4h,
+a demo window reading amber at 7 days open / red at 10, a booked replacement 2 days overdue.
+
+**The page**: a header chip + one-line summary ("1 meter issue · 1 open ticket"), a never-collapsed
+"Not on time" table merging all five domains into one row grammar (type, society, item, a clock in
+words, a tone chip, a named action link) — overdue invoices collapse to one row per society (the
+same rule this codebase already learned once 14 identical inspection reminders made a bell
+meaningless) — then a meetings strip (`<YourTasks>`, reused unchanged, not re-derived), then five
+cards: Payments (received this month, outstanding, the 5-bucket aging bar matching Zoho's own
+defaults so the founders can cross-check the source system, top-5 overdue societies, retail
+invoices kept as a separate line since they are a different ledger and whether they count was the
+user's call, not a default), Meters, Installations, Complaints, Demos.
+
+**Each card degrades on its own.** The five reads run through `Promise.allSettled`, not `Promise.all`
+— a thrown query loses only that one card's rows (logged as `founders_dashboard.card_failed`,
+shown on the card as "Couldn't load this card's figures just now — the rest of the page is
+unaffected"), never the whole page. INV-06's own rule ("every list surface defines loading, empty,
+error and degraded states") was the reason to build this rather than let one bad read take the
+founders' own page down.
+
+**Deliberately not built, stated rather than silently dropped** (per the report's own list): deal-
+stage ageing (needs a `stageEnteredAt` migration this pass didn't add); the CON-13 phase
+(overdue/warning/suspended) as a line separate from "past due" on each invoice row — the figure is
+correct, the extra phase label is a refinement for a follow-up, not required for the page to be
+honest; per-card `<Suspense>` streaming (the degrade-on-failure behaviour is built, the latency
+optimisation is not); pushing a notification when something breaches its threshold (the report's own
+explicit "not in v1" call, to avoid training the founders to ignore a second alert channel).
+
+**Verified in a browser (4/4 plus an earlier 2/2 refusal check, zero console errors)**: a non-founder
+account sees no sidebar link and is redirected server-side on a direct URL hit (the gate is real, not
+a hidden button); a real disposable fixture (one 6-day-old open ticket, one 50-hour-old offline meter
+alert with no owner) rendered correctly in both the merged table and its own card, with the right
+tone and the right fallback action ("Assign" rather than crashing on a null owner), then removed and
+confirmed by count; the happy path shows no degraded-card notice and "All clear" when nothing is
+late; no horizontal overflow at 390px. 1,540 unit tests (22 new in `tests/lateness.test.ts`),
+`tsc`/`lint`/`build` all clean. Not yet deployed — this work is on its own branch,
+`feat/leadership-dashboard-blocks`, not merged into `android-app`.
+
+**One process note worth keeping**: a long-lived `next dev` process from earlier the same session
+(up since 10:16AM) started throwing "Sign-in is unavailable right now" for every login attempt —
+not a wrong password, `authorize()` genuinely throwing — because it had been running since before
+the `view_founder_dashboard` migration landed and was holding a stale Prisma client. This is the
+same lesson this file has recorded several times before (CLAUDE.md's own standing rule): restart
+`next dev` after any migration, a long-lived process does not pick up a new generated client on its
+own, and the symptom can look exactly like a credential failure rather than a stale-client one.
 

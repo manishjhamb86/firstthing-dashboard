@@ -64,4 +64,12 @@ export const PERMISSION_OPTIONS: {
     label: "Approve star societies",
     scope: "Decide which societies other societies see as star partners on their portal.",
   },
+  // Added 2026-10-22 with the founders' page. It gathers payments, meters,
+  // installations, complaints and demos on one screen, some of which have
+  // narrower gates of their own, so seeing it is granted by name.
+  {
+    value: "view_founder_dashboard",
+    label: "View founders' page",
+    scope: "See everything that is late across payments, meters, installations, complaints and demos on one page.",
+  },
 ];

@@ -28,6 +28,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Star,
+  Flag,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -51,6 +52,7 @@ export function AppShell({
   showUsers,
   showBilling,
   showSupport,
+  showFounders,
   demoMode = false,
   demoAvailable = false,
   unreadCount = 0,
@@ -73,6 +75,8 @@ export function AppShell({
   showUsers: boolean;
   showBilling: boolean;
   showSupport: boolean;
+  /** Manish and Yogesh only (view_founder_dashboard) — the one page that reads across every domain's own narrower gate. */
+  showFounders: boolean;
   children: ReactNode;
 }) {
   // CMP-19 (2026-09-15, user-asked: "too many menu tabs… few main sections
@@ -99,6 +103,11 @@ export function AppShell({
     // Tasks (2026-09-25): everyone's own work as line items — tasks set for
     // each other plus the deal's own assignments. Not permission-gated.
     { href: "/admin/tasks", label: "Tasks", icon: ListChecks },
+    // Manish and Yogesh only (view_founder_dashboard, 2026-10-22) — the
+    // portfolio-wide "not on time" view across every domain's own narrower
+    // gate, so it sits beside Portfolio/Schedule/Tasks rather than inside a
+    // domain group it does not belong to any one of.
+    ...(showFounders ? [{ href: "/admin/founders", label: "Founders' page", icon: Flag }] : []),
     ...group("deals", "Deals", Target, [
       showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
       // The field team's own list — they do not get the deal (2026-08-24).

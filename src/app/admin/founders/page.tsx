@@ -1,0 +1,437 @@
+import Link from "next/link";
+import { db } from "@/lib/db";
+import { requireAdminPage } from "@/lib/admin-permissions";
+import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
+import { DAY_GATE_STATUS } from "@/lib/status-maps";
+import { circuitLabelOf } from "@/lib/circuit-label";
+import { ticketLateness, meterAlertLateness, type LatenessTone } from "@/lib/lateness";
+import { paymentSummary, installationBoard, demoBoard, type PaymentSummary, type InstallationRow, type DemoBoard } from "@/lib/founder-dashboard-loaders";
+import { YourTasks } from "../your-tasks";
+import { logger } from "@/lib/logger";
+
+// The founders' "what is not on time" page (2026-10-22,
+// docs/research/reports/Founder operations dashboard.md). A dedicated route
+// rather than extending Portfolio — Portfolio already runs 13 reads every
+// admin pays for on every visit, and this page's payment aggregates,
+// installation board and demo facts are reads nobody else needs.
+//
+// Gated by its own named permission (view_founder_dashboard) rather than a
+// second hard-wired email like isSuperAdmin, whose own comment says that is
+// "not a general pattern" — granted to whoever should see it from
+// /admin/users, the same way approve_showcase already is. This page reads
+// billing, meter and ticket data whose own pages have narrower gates — that
+// is a deliberate decision, recorded here and in the research report, not an
+// accidental widening.
+
+const rupees = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+
+type LateRow = {
+  tone: LatenessTone | "bad" | "warn";
+  kind: string;
+  societyName: string;
+  itemLabel: string;
+  clock: string;
+  href: string;
+  actionLabel: string;
+};
+
+const TONE_CHIP: Record<string, "ok" | "warn" | "bad"> = { ok: "ok", amber: "warn", red: "bad", warn: "warn", bad: "bad" };
+
+const EMPTY_PAYMENTS: PaymentSummary = {
+  receivedThisMonth: 0,
+  outstandingTotal: 0,
+  buckets: { notYetDue: 0, d1to15: 0, d16to30: 0, d31to45: 0, over45: 0 },
+  overdueInvoices: [],
+  topOverdueSocieties: [],
+  retail: { unpaidCount: 0, owed: 0 },
+};
+const EMPTY_INSTALLATIONS: InstallationRow[] = [];
+const EMPTY_DEMOS: DemoBoard = { reviews: [], delays: [], stepCounts: { preWindow: 0, awaitingReplacement: 0, postWindow: 0, reviewOpen: 0 } };
+
+type TicketRow = { id: string; type: string; status: "open" | "in_progress" | "resolved"; subject: string; createdAt: Date; society: { name: string } };
+type MeterAlertRow = {
+  id: string;
+  kind: string;
+  message: string;
+  openedAt: Date;
+  acknowledgedAt: Date | null;
+  meter: { name: string; society: { name: string } | null; owner: { name: string | null; email: string } | null } | null;
+  circuit: { location: string | null; lightType: string; society: { name: string } } | null;
+};
+
+export default async function FoundersPage() {
+  const session = await requireAdminPage("view_founder_dashboard");
+  const now = new Date();
+
+  // Each card is its own concern (INV-06's error/degraded states, the
+  // handoff plan's own checklist item: "each card degrades independently
+  // when its query fails") — allSettled rather than all, so one query
+  // throwing (a demo circuit with a shape this page's own read did not
+  // expect, say) loses that one card's rows, not the whole page.
+  const [paymentsR, installationsR, demosR, ticketsR, metersR] = await Promise.allSettled([
+    paymentSummary(now),
+    installationBoard(now),
+    demoBoard(now),
+    db.ticket.findMany({
+      where: { status: { not: "resolved" }, type: { not: "enquiry" } },
+      select: { id: true, type: true, status: true, subject: true, createdAt: true, society: { select: { name: true } } },
+      orderBy: { createdAt: "asc" },
+    }) as Promise<TicketRow[]>,
+    db.meterAlert.findMany({
+      where: { closedAt: null },
+      select: {
+        id: true,
+        kind: true,
+        message: true,
+        openedAt: true,
+        acknowledgedAt: true,
+        meter: { select: { name: true, society: { select: { name: true } }, owner: { select: { name: true, email: true } } } },
+        circuit: { select: { location: true, lightType: true, society: { select: { name: true } } } },
+      },
+      orderBy: { openedAt: "asc" },
+    }) as Promise<MeterAlertRow[]>,
+  ]);
+
+  const settle = <T,>(r: PromiseSettledResult<T>, fallback: T, card: string): T => {
+    if (r.status === "fulfilled") return r.value;
+    logger.error("founders_dashboard.card_failed", { card, error: String(r.reason) });
+    return fallback;
+  };
+
+  const payments = settle(paymentsR, EMPTY_PAYMENTS, "payments");
+  const installations = settle(installationsR, EMPTY_INSTALLATIONS, "installations");
+  const demos = settle(demosR, EMPTY_DEMOS, "demos");
+  const openTickets = settle(ticketsR, [], "complaints");
+  const openMeterAlerts = settle(metersR, [], "meters");
+
+  const failedCards = new Set(
+    [
+      paymentsR.status === "rejected" && "payments",
+      installationsR.status === "rejected" && "installations",
+      demosR.status === "rejected" && "demos",
+      ticketsR.status === "rejected" && "complaints",
+      metersR.status === "rejected" && "meters",
+    ].filter((x): x is string => x !== false),
+  );
+
+  // --- Build the merged "Not on time" list -----------------------------
+  const rows: LateRow[] = [];
+
+  for (const s of payments.topOverdueSocieties) {
+    rows.push({
+      tone: s.oldestDays >= 15 ? "red" : "amber",
+      kind: "Payment",
+      societyName: s.societyName,
+      itemLabel: `${s.count} invoice${s.count === 1 ? "" : "s"} overdue, oldest ${s.oldestDays}d`,
+      clock: `${rupees(s.outstanding)} outstanding`,
+      href: "#payments",
+      actionLabel: "Chase",
+    });
+  }
+
+  for (const t of openTickets) {
+    const l = ticketLateness({ status: t.status, createdAt: t.createdAt, now });
+    if (!l) continue;
+    rows.push({
+      tone: l.tone,
+      kind: t.type === "device_replacement" ? "Replacement" : t.type === "pickup" ? "Pickup" : "Complaint",
+      societyName: t.society.name,
+      itemLabel: t.subject,
+      clock: l.clock,
+      href: "#complaints",
+      actionLabel: "Open",
+    });
+  }
+
+  for (const inst of installations) {
+    for (const hd of inst.heldDays) {
+      rows.push({
+        tone: hd.status === "blocked" ? "bad" : "warn",
+        kind: "Installation",
+        societyName: inst.societyName,
+        itemLabel: `Day ${hd.day} — ${DAY_GATE_STATUS[hd.status]?.label ?? hd.status}`,
+        clock: hd.reason ?? "",
+        href: `/admin/pipeline/${inst.pipelineId}/installation`,
+        actionLabel: "Review",
+      });
+    }
+  }
+
+  for (const a of openMeterAlerts) {
+    const l = meterAlertLateness({ kind: a.kind, openedAt: a.openedAt, acknowledgedAt: a.acknowledgedAt, now });
+    const societyName = a.meter?.society?.name ?? a.circuit?.society?.name ?? "—";
+    const subject = a.meter?.name ?? (a.circuit ? circuitLabelOf(a.circuit.location, a.circuit.lightType) : "Meter");
+    rows.push({
+      tone: l.tone,
+      kind: "Meter",
+      societyName,
+      itemLabel: `${subject} — ${a.message}`,
+      clock: l.clock,
+      href: "#meters",
+      actionLabel: a.meter?.owner ? `Chase ${a.meter.owner.name ?? a.meter.owner.email}` : "Assign",
+    });
+  }
+
+  for (const r of demos.reviews) {
+    rows.push({
+      tone: r.urgency.tone,
+      kind: "Demo review",
+      societyName: r.societyName,
+      itemLabel: r.circuitLabel,
+      clock: r.urgency.label,
+      href: "/admin/demo-monitoring",
+      actionLabel: "Resolve",
+    });
+  }
+  for (const d of demos.delays) {
+    rows.push({
+      tone: d.lateness.tone,
+      kind: d.kind === "replacement" ? "Demo replacement" : "Demo window",
+      societyName: d.societyName,
+      itemLabel: d.circuitLabel,
+      clock: d.lateness.clock,
+      href: "/admin/demo-monitoring",
+      actionLabel: "Open",
+    });
+  }
+
+  const toneRank = (t: LateRow["tone"]) => (t === "red" || t === "bad" ? 0 : 1);
+  rows.sort((a, b) => toneRank(a.tone) - toneRank(b.tone));
+
+  const redCount = rows.filter((r) => toneRank(r.tone) === 0).length;
+
+  const summaryParts = [
+    payments.overdueInvoices.length > 0 ? `${payments.overdueInvoices.length} invoice${payments.overdueInvoices.length === 1 ? "" : "s"} overdue` : null,
+    openMeterAlerts.length > 0 ? `${openMeterAlerts.length} meter issue${openMeterAlerts.length === 1 ? "" : "s"}` : null,
+    installations.some((i) => i.heldDays.length > 0)
+      ? `${installations.reduce((n, i) => n + i.heldDays.length, 0)} installation day${installations.reduce((n, i) => n + i.heldDays.length, 0) === 1 ? "" : "s"} held up`
+      : null,
+    openTickets.length > 0 ? `${openTickets.length} open ticket${openTickets.length === 1 ? "" : "s"}` : null,
+    demos.reviews.length + demos.delays.length > 0 ? `${demos.reviews.length + demos.delays.length} demo item${demos.reviews.length + demos.delays.length === 1 ? "" : "s"}` : null,
+  ].filter((x): x is string => x !== null);
+
+  return (
+    <div>
+      <PageHeader
+        title="Founders' page"
+        subtitle="What is not on time, across payments, meters, installations, complaints and demos."
+        chip={
+          rows.length > 0 ? (
+            <StatusChip tone={redCount > 0 ? "bad" : "warn"}>{rows.length} not on time</StatusChip>
+          ) : (
+            <StatusChip tone="ok">All clear</StatusChip>
+          )
+        }
+      />
+
+      {summaryParts.length > 0 && <p className="mb-5 text-[14px] text-[var(--text-subtle)]">{summaryParts.join(" · ")}</p>}
+
+      <Card className="mb-6 p-0">
+        <div className="p-5 pb-0">
+          <CardTitle>Not on time</CardTitle>
+        </div>
+        {rows.length === 0 ? (
+          <div className="p-5">
+            <EmptyState title="Nothing is late">Every tracked item is inside its own deadline.</EmptyState>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Type</th>
+                  <th>Society</th>
+                  <th>Item</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i}>
+                    <td className="whitespace-nowrap">{r.kind}</td>
+                    <td className="whitespace-nowrap font-medium">{r.societyName}</td>
+                    <td className="min-w-0">{r.itemLabel}</td>
+                    <td className="whitespace-nowrap">
+                      <StatusChip tone={TONE_CHIP[r.tone] ?? "warn"}>{r.clock}</StatusChip>
+                    </td>
+                    <td className="whitespace-nowrap">
+                      <Link href={r.href} className="text-[13px] font-semibold underline">
+                        {r.actionLabel}
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      <div className="mb-6">
+        <CardTitle className="mb-2">My meetings</CardTitle>
+        <YourTasks userId={session.user.id} />
+      </div>
+
+      <div className="grid min-w-0 gap-5 lg:grid-cols-2">
+        <Card id="payments" className="min-w-0 p-5">
+          <CardTitle>Payments</CardTitle>
+          {failedCards.has("payments") && (
+            <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
+              Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
+            </p>
+          )}
+          <StatRow>
+            <Stat label="Received this month" value={rupees(payments.receivedThisMonth)} />
+            <Stat label="Outstanding" value={rupees(payments.outstandingTotal)} tone={payments.outstandingTotal > 0 ? "warn" : "accent"} />
+            <Stat
+              label="Overdue"
+              value={payments.overdueInvoices.length}
+              tone={payments.overdueInvoices.length > 0 ? "bad" : "accent"}
+              detail={rupees(payments.overdueInvoices.reduce((n, r) => n + r.outstanding, 0))}
+            />
+          </StatRow>
+          <p className="mt-4 mb-2 text-[12.5px] font-semibold uppercase tracking-[0.04em] text-[var(--text-subtle)]">Aging</p>
+          <div className="space-y-1 text-[13px]">
+            <div className="flex justify-between"><span>Not yet due</span><span className="num">{rupees(payments.buckets.notYetDue)}</span></div>
+            <div className="flex justify-between"><span>1–15 days</span><span className="num">{rupees(payments.buckets.d1to15)}</span></div>
+            <div className="flex justify-between"><span>16–30 days</span><span className="num">{rupees(payments.buckets.d16to30)}</span></div>
+            <div className="flex justify-between"><span>31–45 days</span><span className="num">{rupees(payments.buckets.d31to45)}</span></div>
+            <div className="flex justify-between"><span>Over 45 days</span><span className="num">{rupees(payments.buckets.over45)}</span></div>
+          </div>
+          {payments.topOverdueSocieties.length > 0 && (
+            <>
+              <p className="mt-4 mb-2 text-[12.5px] font-semibold uppercase tracking-[0.04em] text-[var(--text-subtle)]">Top overdue societies</p>
+              <ul className="space-y-1 text-[13px]">
+                {payments.topOverdueSocieties.map((s) => (
+                  <li key={s.societyId} className="flex justify-between gap-2">
+                    <span className="truncate">{s.societyName}</span>
+                    <span className="num shrink-0">{rupees(s.outstanding)} · {s.oldestDays}d</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {payments.retail.unpaidCount > 0 && (
+            <p className="mt-3 text-[12.5px] text-[var(--text-subtle)]">
+              Plus {payments.retail.unpaidCount} unpaid retail invoice{payments.retail.unpaidCount === 1 ? "" : "s"} ({rupees(payments.retail.owed)}) — a separate ledger.
+            </p>
+          )}
+          <Link href="/admin/billing/release-queue" className="mt-4 inline-block text-[13px] font-semibold underline">
+            Release queue →
+          </Link>
+        </Card>
+
+        <Card id="meters" className="min-w-0 p-5">
+          <CardTitle>Meters</CardTitle>
+          {failedCards.has("meters") && (
+            <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
+              Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
+            </p>
+          )}
+          <p className="mb-3 text-[14px]">
+            {openMeterAlerts.length === 0 ? "No open alerts." : `${openMeterAlerts.length} open alert${openMeterAlerts.length === 1 ? "" : "s"}.`}
+          </p>
+          {openMeterAlerts.length === 0 ? (
+            <EmptyState title="All reporting">No open meter alerts right now.</EmptyState>
+          ) : (
+            <ul className="space-y-2 text-[13px]">
+              {openMeterAlerts.slice(0, 8).map((a) => {
+                const l = meterAlertLateness({ kind: a.kind, openedAt: a.openedAt, acknowledgedAt: a.acknowledgedAt, now });
+                const societyName = a.meter?.society?.name ?? a.circuit?.society?.name ?? "—";
+                return (
+                  <li key={a.id} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium">{societyName}</span> — {a.message}
+                    </span>
+                    <StatusChip tone={TONE_CHIP[l.tone]}>{l.clock}</StatusChip>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <Link href="/admin/notifications" className="mt-4 inline-block text-[13px] font-semibold underline">
+            Notification centre →
+          </Link>
+        </Card>
+
+        <Card id="installations" className="min-w-0 p-5">
+          <CardTitle>Installations</CardTitle>
+          {failedCards.has("installations") && (
+            <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
+              Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
+            </p>
+          )}
+          {installations.length === 0 ? (
+            <EmptyState title="Nothing active">No installation projects are currently running.</EmptyState>
+          ) : (
+            <ul className="space-y-2 text-[13px]">
+              {installations.map((inst) => (
+                <li key={inst.projectId} className="flex items-center justify-between gap-2">
+                  <Link href={`/admin/pipeline/${inst.pipelineId}/installation`} className="min-w-0 truncate underline">
+                    {inst.societyName}
+                  </Link>
+                  <span className="num shrink-0 text-[var(--text-subtle)]">
+                    {inst.installedCount}/{inst.contractedCount}
+                    {inst.heldDays.length > 0 && (
+                      <StatusChip tone={inst.heldDays.some((h) => h.status === "blocked") ? "bad" : "warn"}>
+                        {inst.heldDays.length} held
+                      </StatusChip>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+
+        <Card id="complaints" className="min-w-0 p-5">
+          <CardTitle>Complaints</CardTitle>
+          {failedCards.has("complaints") && (
+            <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
+              Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
+            </p>
+          )}
+          {openTickets.length === 0 ? (
+            <EmptyState title="Nothing open">No open complaints or replacement/pickup requests.</EmptyState>
+          ) : (
+            <ul className="space-y-2 text-[13px]">
+              {openTickets.slice(0, 8).map((t) => {
+                const l = ticketLateness({ status: t.status, createdAt: t.createdAt, now });
+                return (
+                  <li key={t.id} className="flex items-center justify-between gap-2">
+                    <span className="min-w-0 truncate">
+                      <span className="font-medium">{t.society.name}</span> — {t.subject}
+                    </span>
+                    {l ? <StatusChip tone={TONE_CHIP[l.tone]}>{l.clock}</StatusChip> : <StatusChip tone="ok">{t.status === "in_progress" ? "In progress" : "Open"}</StatusChip>}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          <Link href="/admin/tickets" className="mt-4 inline-block text-[13px] font-semibold underline">
+            Support desk →
+          </Link>
+        </Card>
+
+        <Card id="demos" className="min-w-0 p-5 lg:col-span-2">
+          <CardTitle>Demos</CardTitle>
+          {failedCards.has("demos") && (
+            <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
+              Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
+            </p>
+          )}
+          <StatRow>
+            <Stat label="Pre-install window open" value={demos.stepCounts.preWindow} />
+            <Stat label="Awaiting replacement" value={demos.stepCounts.awaitingReplacement} />
+            <Stat label="Post-install window open" value={demos.stepCounts.postWindow} />
+            <Stat label="Reviews open" value={demos.stepCounts.reviewOpen} tone={demos.stepCounts.reviewOpen > 0 ? "warn" : "accent"} />
+          </StatRow>
+          <Link href="/admin/demo-monitoring" className="mt-4 inline-block text-[13px] font-semibold underline">
+            Demo monitoring →
+          </Link>
+        </Card>
+      </div>
+    </div>
+  );
+}

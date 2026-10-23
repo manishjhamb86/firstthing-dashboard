@@ -17,8 +17,12 @@ export function StatusChip({ tone, children }: { tone: ChipTone; children: React
   );
 }
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={`card ${className ?? ""}`}>{children}</div>;
+export function Card({ id, className, children }: { id?: string; className?: string; children: ReactNode }) {
+  return (
+    <div id={id} className={`card ${className ?? ""}`}>
+      {children}
+    </div>
+  );
 }
 
 /**

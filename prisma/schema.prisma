@@ -60,6 +60,12 @@ enum AdminPermission {
   // approved by the admin who made it — refused at the decision.
   approve_showcase
 
+  // Founders' operations page (2026-10-22): the portfolio-wide "not on time"
+  // view across payments, meters, installations, complaints and demos. It
+  // reads data whose own pages have narrower gates, so seeing it is a named
+  // grant (docs/research/reports/Founder operations dashboard.md).
+  view_founder_dashboard
+
   @@map("admin_permission")
 }
 

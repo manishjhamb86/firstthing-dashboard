@@ -30,6 +30,10 @@ export type InventoryLine = {
   /** Set only when this line was split to belong to one specific demo
    *  (2026-10-17) — e.g. "Demo 1". Null means it belongs to every demo. */
   demoLabel: string | null;
+  /** Set only for a fixture added by a light-count change, well after
+   *  commissioning — distinct from a demo-era kept/excluded line, which
+   *  this is not: it never existed on the circuit at the demo. */
+  addedViaRescaleDate: string | null;
 };
 
 export type CatalogOption = { id: string; name: string; defaultWattage: number | null };
@@ -388,7 +392,9 @@ function LineRow({
       <td className="num">{line.hoursPerDay} h</td>
       <td className="num">{lineKwh(line).toFixed(2)}</td>
       <td className="text-[var(--text-muted)]">
-        {line.excluded
+        {line.addedViaRescaleDate
+          ? `Added ${line.addedViaRescaleDate} via a light-count change — excluded from this benchmark`
+          : line.excluded
           ? "Kept — not replaced; left out of the saving"
           : line.replacementName
           ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}${
@@ -512,10 +518,22 @@ export function LoadInventoryPanel({
 }) {
   const theoretical = lines.reduce((s, l) => s + lineKwh(l), 0);
   const anyReplacement = lines.some((l) => l.replacementName || l.excluded);
+  // A rescale-added line is excluded too, but it was never "kept, not
+  // replaced" — it did not exist on the circuit at the demo, so it is
+  // counted and worded separately rather than folded into the same figure.
   const keptCount = lines.reduce(
-    (n, l) => n + (l.excluded ? l.count : l.replacementCount != null && l.replacementCount < l.count ? l.count - l.replacementCount : 0),
+    (n, l) =>
+      n +
+      (l.addedViaRescaleDate
+        ? 0
+        : l.excluded
+          ? l.count
+          : l.replacementCount != null && l.replacementCount < l.count
+            ? l.count - l.replacementCount
+            : 0),
     0,
   );
+  const addedViaRescaleCount = lines.reduce((n, l) => n + (l.addedViaRescaleDate ? l.count : 0), 0);
 
   // A locked inventory is a finished record, so it folds like every other
   // finished thing on this page — header, figure, done (user-reported
@@ -545,6 +563,11 @@ export function LoadInventoryPanel({
             {keptCount > 0 && (
               <span className="text-xs text-[var(--text-muted)]">
                 <span className="num">{keptCount}</span> fixture{keptCount === 1 ? "" : "s"} kept, not replaced — left out of the saving
+              </span>
+            )}
+            {addedViaRescaleCount > 0 && (
+              <span className="text-xs text-[var(--text-muted)]">
+                <span className="num">{addedViaRescaleCount}</span> added since via a light-count change — excluded
               </span>
             )}
           </span>
@@ -617,6 +640,23 @@ export function LoadInventoryPanel({
           shown as their own line (or as &ldquo;N kept&rdquo; on a partly replaced line). The saving leaves them out: kept lights of the
           same kind come off as their share of what the meter measured; any other item comes off at its rated draw. To change how many
           were kept, use <em>Correct what was replaced and kept</em> on the demo&apos;s Light replacement step.
+        </p>
+      )}
+
+      {addedViaRescaleCount > 0 && (
+        // A different fact from the one above — this fixture did not exist
+        // on the circuit at the demo at all. It was added later, as part of
+        // a light-count change, through the rescale form itself (the load
+        // inventory is locked by then) — so neither the wording nor the
+        // correction path above applies to it.
+        <p className="text-sm text-[var(--text-muted)]">
+          <strong className="text-[var(--text)]">
+            {addedViaRescaleCount} fixture{addedViaRescaleCount === 1 ? "" : "s"} added since commissioning.
+          </strong>{" "}
+          {addedViaRescaleCount === 1 ? "It was" : "They were"} recorded later, through a light-count change, not
+          through the demo &mdash; {addedViaRescaleCount === 1 ? "it" : "they"} never existed on this circuit when
+          the benchmark was measured. {addedViaRescaleCount === 1 ? "Its" : "Their"} rated draw is excluded the same
+          way a kept fixture&rsquo;s is. To correct it, use Correct count / Correct device on its own line above.
         </p>
       )}
 

@@ -133,7 +133,11 @@ export default async function CircuitDetailPage({
       },
       devices: {
         orderBy: { createdAt: "asc" },
-        include: { deviceType: { select: { name: true } }, replacementType: { select: { name: true } } },
+        include: {
+          deviceType: { select: { name: true } },
+          replacementType: { select: { name: true } },
+          addedViaRescaleEvent: { select: { effectiveDate: true } },
+        },
       },
       demos: {
         where: { voidedAt: null },
@@ -275,6 +279,11 @@ export default async function CircuitDetailPage({
     replacementCount: l.replacementCount,
     replacementWattage: l.replacementWattage,
     demoLabel: demoLabelOf(l.demoId),
+    // Set only for a fixture a light-count change added — distinct from a
+    // demo-era kept/excluded line, and the UI reads it to say so (2026-10-26,
+    // user-caught: both were shown with the same "kept, not replaced"
+    // wording, which is wrong for one that never existed at commissioning).
+    addedViaRescaleDate: l.addedViaRescaleEvent ? formatDate(l.addedViaRescaleEvent.effectiveDate) : null,
   }));
   const theoretical = circuit.devices.length > 0 ? theoreticalDailyKwh(circuit.devices) : null;
   const anyMeterInstalled = circuit.demos.some((d) => d.meterInstalledAt !== null);

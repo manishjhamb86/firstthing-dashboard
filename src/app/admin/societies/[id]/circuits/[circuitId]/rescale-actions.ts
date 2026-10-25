@@ -119,25 +119,12 @@ export async function recordLightCountChange(
   // different fixture, not part of the uniform population being rescaled)
   // moves with them in the same transaction — otherwise a failure partway
   // through could leave the rescale recorded with no trace of why the
-  // circuit's real fixture count no longer matches it.
-  await db.$transaction([
-    ...(input.newExcludedLine
-      ? [
-          db.circuitDevice.create({
-            data: {
-              circuitId,
-              deviceTypeId: input.newExcludedLine.deviceTypeId,
-              count: input.newExcludedLine.count,
-              wattage: input.newExcludedLine.wattage,
-              hoursPerDay: input.newExcludedLine.hoursPerDay,
-              note: input.newExcludedLine.note?.trim() || null,
-              excludedFromCalculation: true,
-              recordedById: session.user.id,
-            },
-          }),
-        ]
-      : []),
-    db.benchmarkRescaleEvent.create({
+  // circuit's real fixture count no longer matches it. Callback-style
+  // (not the array form every other transaction here uses) because the new
+  // device line has to reference the event's own real id — the whole point
+  // of recording WHICH rescale introduced it, not just THAT one did.
+  await db.$transaction(async (tx) => {
+    const event = await tx.benchmarkRescaleEvent.create({
       data: {
         circuitId,
         previousLightCount: circuit.meteredLightCount,
@@ -149,7 +136,22 @@ export async function recordLightCountChange(
         effectiveDate: effectiveDate!,
         recordedById: session.user.id,
       },
-    }),
+    });
+    if (input.newExcludedLine) {
+      await tx.circuitDevice.create({
+        data: {
+          circuitId,
+          deviceTypeId: input.newExcludedLine.deviceTypeId,
+          count: input.newExcludedLine.count,
+          wattage: input.newExcludedLine.wattage,
+          hoursPerDay: input.newExcludedLine.hoursPerDay,
+          note: input.newExcludedLine.note?.trim() || null,
+          excludedFromCalculation: true,
+          recordedById: session.user.id,
+          addedViaRescaleEventId: event.id,
+        },
+      });
+    }
     // meteredLightCount is current state and does move. preInstallBaseline
     // is deliberately NOT touched: it stays as commissioned forever, and
     // the baseline in force is replayed from the events (ADR-005's
@@ -157,11 +159,11 @@ export async function recordLightCountChange(
     // construction). representedLightCount is left alone — CON-11 scopes
     // it to the light *type*, so it changes only if the society-wide count
     // of that type changed too, which is FEAT-040's config edit.
-    db.circuit.update({
+    await tx.circuit.update({
       where: { id: circuitId },
       data: { meteredLightCount: input.newLightCount },
-    }),
-  ]);
+    });
+  });
 
   logger.info("circuit.benchmark_rescaled", {
     actorId: session.user.id,

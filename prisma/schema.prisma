@@ -1764,6 +1764,7 @@ model BenchmarkRescaleEvent {
   voidedBy    AdminUser?             @relation("BenchmarkRescaleVoidedBy", fields: [voidedById], references: [id])
   correctedBy BenchmarkRescaleEvent? @relation("RescaleCorrection", fields: [correctedByEventId], references: [id])
   corrects    BenchmarkRescaleEvent? @relation("RescaleCorrection")
+  addedDeviceLines CircuitDevice[]   @relation("CircuitDeviceAddedViaRescale")
 
   @@index([circuitId, effectiveDate])
   @@map("benchmark_rescale_events")
@@ -3689,17 +3690,36 @@ model CircuitDevice {
   historicalNote String? @map("historical_note")
   recordedById   String? @map("recorded_by_id")
 
+  // A genuinely different fixture, recorded well after commissioning as
+  // part of a light-count change (2026-10-26, user-caught: the LOCKED
+  // inventory above has no "add" control once the meter is installed, so
+  // this is the one path left — and displaying what it adds using the
+  // DEMO-era "kept, not replaced" wording was a real mistake: it implied
+  // this fixture was present at commissioning and simply never swapped
+  // out, when it did not exist on the circuit until this event. Distinct
+  // from `historical` (a pre-system backfill, entered after the fact but
+  // dated AT commissioning) — this fixture's own existence postdates
+  // commissioning. Its theoretical draw still comes off the benchmark the
+  // same way any `excludedFromCalculation` line's does; only the WORDING
+  // branches on this field, in the UI, not the arithmetic.
+  addedViaRescaleEventId String? @map("added_via_rescale_event_id")
+
   createdAt DateTime @default(now()) @map("created_at")
 
-  circuit         Circuit     @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  deviceType      DeviceType  @relation("CircuitDeviceType", fields: [deviceTypeId], references: [id])
-  replacementType DeviceType? @relation("CircuitReplacementType", fields: [replacementTypeId], references: [id])
-  replacedBy      AdminUser?  @relation("CircuitDeviceReplacedBy", fields: [replacedById], references: [id])
-  recordedBy      AdminUser?  @relation("CircuitDeviceRecordedBy", fields: [recordedById], references: [id])
-  demo            CircuitDemo? @relation(fields: [demoId], references: [id])
+  circuit         Circuit                @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  deviceType      DeviceType             @relation("CircuitDeviceType", fields: [deviceTypeId], references: [id])
+  replacementType DeviceType?            @relation("CircuitReplacementType", fields: [replacementTypeId], references: [id])
+  replacedBy      AdminUser?             @relation("CircuitDeviceReplacedBy", fields: [replacedById], references: [id])
+  recordedBy      AdminUser?             @relation("CircuitDeviceRecordedBy", fields: [recordedById], references: [id])
+  demo            CircuitDemo?           @relation(fields: [demoId], references: [id])
+  // SetNull, not Cascade: the fixture is still physically on the circuit
+  // even if the rescale event that introduced it is later voided — the
+  // line survives, it just loses its "added via" provenance note.
+  addedViaRescaleEvent BenchmarkRescaleEvent? @relation("CircuitDeviceAddedViaRescale", fields: [addedViaRescaleEventId], references: [id], onDelete: SetNull)
 
   @@index([circuitId])
   @@index([demoId])
+  @@index([addedViaRescaleEventId])
   @@map("circuit_devices")
 }
 

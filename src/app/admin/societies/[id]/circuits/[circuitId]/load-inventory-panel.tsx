@@ -12,7 +12,7 @@ import {
   splitLockedDeviceLine,
   updateCircuitDevice,
 } from "./inventory-actions";
-import { removeRescaleAddedDevice } from "./rescale-actions";
+import { removeExcludedDeviceLine } from "./rescale-actions";
 
 export type InventoryLine = {
   id: string;
@@ -414,9 +414,10 @@ function LineRow({
             {line.demoLabel === null && line.replacementCount === null && demos.length >= 2 && (
               <SplitLine line={line} demos={demos} />
             )}
-            {/* Only a fixture added via a light-count change — never a
-                genuine demo-era line, which stays Correct-only. */}
-            {line.addedViaRescaleDate !== null && <RemoveRescaleAddedLine line={line} />}
+            {/* Any excluded/kept line — never a normal replaced line, which
+                stays Correct-only (2026-10-26: widened from rescale-added
+                lines only, see RemoveExcludedLine's own comment). */}
+            {line.excluded && <RemoveExcludedLine line={line} />}
           </span>
         </td>
       )}
@@ -838,22 +839,27 @@ function CorrectDeviceType({ line, catalog }: { line: InventoryLine; catalog: Ca
 }
 
 /**
- * Removing a fixture added via a light-count change (2026-10-26,
- * user-caught) — the ordinary Remove button above is gated to before the
- * meter is installed, same as Add, so a line added by mistake through the
- * rescale form had no way back once the circuit is commissioned. Scoped to
- * exactly that case server-side (removeRescaleAddedDevice refuses outright
- * on any line without addedViaRescaleDate) — a genuine demo-era line stays
- * Correct-only, never removable once locked.
+ * Removing an excluded/kept line (2026-10-26, user-caught, then widened the
+ * same day) — the ordinary Remove button above is gated to before the meter
+ * is installed, same as Add, so an excluded line entered by mistake had no
+ * way back once the circuit is commissioned. First scoped to only a fixture
+ * added via the new rescale-form path; widened once that narrower version
+ * got in the way of correcting a line that predated the provenance field
+ * and so had nothing to satisfy it with — correctLockedCount/
+ * correctLockedDeviceType already let ops rewrite ANY locked line with just
+ * a reason, so removal of an excluded line doesn't need to be stricter.
+ * Still refused server-side on a normal replaced line (removeExcludedDeviceLine
+ * checks excludedFromCalculation) — the circuit's actual retrofit record
+ * stays Correct-only, never removable once locked.
  */
-function RemoveRescaleAddedLine({ line }: { line: InventoryLine }) {
+function RemoveExcludedLine({ line }: { line: InventoryLine }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | undefined>();
   const [pending, start] = useTransition();
   function save() {
     start(async () => {
-      const r = await removeRescaleAddedDevice(line.id, reason);
+      const r = await removeExcludedDeviceLine(line.id, reason);
       if ("error" in r) setError(r.error);
       else setOpen(false);
     });
@@ -875,8 +881,8 @@ function RemoveRescaleAddedLine({ line }: { line: InventoryLine }) {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title={`Remove this fixture — ${line.deviceTypeName}`}
-        description="For a fixture recorded by mistake through a light-count change — picked the wrong catalog entry, or added twice. This deletes the line; it is not kept on record."
+        title={`Remove this line — ${line.deviceTypeName}`}
+        description="For an excluded/kept line recorded by mistake — picked the wrong catalog entry, added twice, or never a real fixture. This deletes the line; it is not kept on record."
         footer={
           <>
             <button type="button" onClick={save} disabled={pending || reason.trim() === ""} className="btn-danger">

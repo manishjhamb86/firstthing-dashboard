@@ -490,43 +490,49 @@ export async function removeRescaleEvent(eventId: string): Promise<RescaleResult
 }
 
 /**
- * Remove a fixture added via a light-count change — the one gap the feature
- * shipped with (2026-10-26, user-caught): the load inventory's own "Remove"
- * is gated to BEFORE the meter is installed, same as "Add a device line",
- * so once a circuit is commissioned there was no way back for a line added
- * by mistake through this path. Scoped tightly to exactly that case —
- * `addedViaRescaleEventId` has to be set, so this can never touch a
- * genuine demo-era line (that stays Correct count / Correct device only,
- * never removable once commissioned — a stronger rule, deliberately left
- * alone). A hard delete, matching removeCircuitDevice's own existing
- * behaviour for this model (CircuitDevice carries no void fields at all) —
- * the reason is what survives, in the log line, not the row.
+ * Remove an excluded/kept device line — originally scoped to only a fixture
+ * added via a light-count change (2026-10-26), narrowed on the reasoning
+ * that a genuine demo-era kept fixture should stay permanent record.
+ * Widened the same day, user-asked twice over, once the narrower version
+ * got in the way of correcting a line that genuinely was a mistake and
+ * simply predated `addedViaRescaleEventId` existing at all (so it had
+ * nothing to satisfy that check with). Reconsidered against the rest of
+ * this file: `correctLockedCount`/`correctLockedDeviceType` already let
+ * ops rewrite ANY locked line's count or device type with just a stated
+ * reason, no provenance check at all — a REMOVAL does not need to be
+ * stricter than a CORRECTION already is. Still scoped to `excludedFromCalculation`
+ * only, never a normal replaced line — deleting the circuit's actual
+ * retrofit record is a materially bigger, different kind of edit than
+ * striking an excluded line, and stays out of reach here. A hard delete,
+ * matching removeCircuitDevice's own existing behaviour for this model
+ * (CircuitDevice carries no void fields at all) — the reason is what
+ * survives, in the log line, not the row.
  */
-export async function removeRescaleAddedDevice(lineId: string, reason: string): Promise<RescaleResult> {
+export async function removeExcludedDeviceLine(lineId: string, reason: string): Promise<RescaleResult> {
   const gate = await requireRescaleOps();
   if ("error" in gate) return gate;
   if (!reason.trim()) {
-    logger.warn("inventory.rescale_added_device_remove_refused", { actorId: gate.actorId, lineId, reason: "no-reason" });
-    return { error: "Record why this fixture is being removed." };
+    logger.warn("inventory.excluded_line_remove_refused", { actorId: gate.actorId, lineId, reason: "no-reason" });
+    return { error: "Record why this line is being removed." };
   }
   const line = await db.circuitDevice.findUnique({
     where: { id: lineId },
     include: { circuit: { select: { id: true, societyId: true } } },
   });
   if (!line) return { error: "That line no longer exists." };
-  if (!line.addedViaRescaleEventId) {
+  if (!line.excludedFromCalculation) {
     return {
-      error:
-        "This line wasn't added through a light-count change, so it can't be removed this way — use Correct count or Correct device instead.",
+      error: "This line is part of the replaced retrofit record, so it can't be removed this way — use Correct count or Correct device instead.",
     };
   }
   await db.circuitDevice.delete({ where: { id: lineId } });
-  logger.info("inventory.rescale_added_device_removed", {
+  logger.info("inventory.excluded_line_removed", {
     actorId: gate.actorId,
     lineId,
     circuitId: line.circuitId,
     deviceTypeId: line.deviceTypeId,
     count: line.count,
+    wasAddedViaRescale: line.addedViaRescaleEventId !== null,
     reason: reason.trim(),
   });
   revalidatePath(`/admin/societies/${line.circuit.societyId}/circuits/${line.circuitId}`);

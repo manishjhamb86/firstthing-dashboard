@@ -12,6 +12,9 @@ type Props = {
   previousBaseline: number;
   effectiveDate: string;
   verificationNote: string;
+  /** The circuit's own single wattage — rescaleBaseline assumes every
+   *  counted unit draws it (CON-11). */
+  wattage: number;
   /** Demo mode (before go-live): the entry can be removed completely. */
   canRemove?: boolean;
   /** Already voided: only removal is offered. */
@@ -40,6 +43,7 @@ export function RescaleRowActions(props: Props) {
   const [count, setCount] = useState(String(props.newLightCount));
   const [note, setNote] = useState(props.verificationNote);
   const [date, setDate] = useState(props.effectiveDate);
+  const [sameWattageConfirmed, setSameWattageConfirmed] = useState(false);
 
   function close() {
     setMode(null);
@@ -48,6 +52,7 @@ export function RescaleRowActions(props: Props) {
     setCount(String(props.newLightCount));
     setNote(props.verificationNote);
     setDate(props.effectiveDate);
+    setSameWattageConfirmed(false);
   }
 
   function submit() {
@@ -61,6 +66,7 @@ export function RescaleRowActions(props: Props) {
               verificationNote: note,
               effectiveDate: date,
               reason,
+              sameWattageConfirmed,
             });
       if (result?.error) {
         setError(result.error);
@@ -144,6 +150,22 @@ export function RescaleRowActions(props: Props) {
             Rescales from {props.previousBaseline.toFixed(2)} kWh/day at {props.previousLightCount} lights — the
             same starting point as the entry being replaced, so a mistake is undone rather than compounded.
           </p>
+          <label className="flex items-start gap-2 text-xs cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sameWattageConfirmed}
+              onChange={(e) => setSameWattageConfirmed(e.target.checked)}
+              className="mt-0.5"
+            />
+            <span>
+              All units are the same {props.wattage}W type as this circuit&rsquo;s existing fixtures — a different
+              wattage belongs on the{" "}
+              <a href="#load-inventory" className="underline">
+                load inventory
+              </a>{" "}
+              instead.
+            </span>
+          </label>
         </>
       )}
       <Field
@@ -165,7 +187,12 @@ export function RescaleRowActions(props: Props) {
       )}
       {error && <ErrorText>{error}</ErrorText>}
       <div className="flex gap-2">
-        <button type="button" className={mode === "void" ? "btn-danger btn-sm" : "btn-primary btn-sm"} onClick={submit} disabled={pending}>
+        <button
+          type="button"
+          className={mode === "void" ? "btn-danger btn-sm" : "btn-primary btn-sm"}
+          onClick={submit}
+          disabled={pending || (mode === "correct" && !sameWattageConfirmed)}
+        >
           {pending ? "Saving…" : mode === "void" ? "Void entry" : "Save correction"}
         </button>
         <button type="button" className="btn-ghost btn-sm" onClick={close} disabled={pending}>

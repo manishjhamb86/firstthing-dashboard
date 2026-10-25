@@ -443,7 +443,7 @@ export default async function CircuitDetailPage({
           figure every pre-installation reading is judged against. Editable
           until the lights are replaced, frozen after — the inventory is what
           the replacement was recorded against. */}
-      <section className="max-w-none mb-8">
+      <section id="load-inventory" className="max-w-none mb-8">
         {/* Only while the inventory is still being built. Once it is locked
             the panel folds to a header carrying its own figure, and this
             explanation of a rule nobody can act on any more is just noise
@@ -921,6 +921,7 @@ export default async function CircuitDetailPage({
                             previousBaseline={e.previousBaseline}
                             effectiveDate={e.effectiveDate.toISOString().slice(0, 10)}
                             verificationNote={e.verificationNote}
+                            wattage={circuit.wattage}
                             canRemove={demoMode}
                           />
                         </td>
@@ -977,6 +978,7 @@ export default async function CircuitDetailPage({
                               previousBaseline={e.previousBaseline}
                               effectiveDate={e.effectiveDate.toISOString().slice(0, 10)}
                               verificationNote={e.verificationNote}
+                              wattage={circuit.wattage}
                               canRemove
                               voided
                             />
@@ -1004,6 +1006,7 @@ export default async function CircuitDetailPage({
                   circuitId={circuit.id}
                   currentLightCount={circuit.meteredLightCount}
                   effectiveBaseline={effectiveBaseline}
+                  wattage={circuit.wattage}
                 />
               </div>
             </details>

@@ -13,15 +13,21 @@ export function RescaleForm({
   circuitId,
   currentLightCount,
   effectiveBaseline,
+  wattage,
 }: {
   circuitId: string;
   currentLightCount: number;
   effectiveBaseline: number;
+  /** The circuit's own single wattage (CON-11 — one circuit, one light
+   *  type). rescaleBaseline scales the measured baseline by count alone,
+   *  which only holds if every new unit draws THIS wattage. */
+  wattage: number;
 }) {
   const [newLightCount, setNewLightCount] = useState("");
   const [verificationNote, setVerificationNote] = useState("");
   const [verificationPhotoUrl, setVerificationPhotoUrl] = useState("");
   const [effectiveDate, setEffectiveDate] = useState(todayISO());
+  const [sameWattageConfirmed, setSameWattageConfirmed] = useState(false);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
 
@@ -39,6 +45,7 @@ export function RescaleForm({
         verificationNote,
         verificationPhotoUrl,
         effectiveDate,
+        sameWattageConfirmed,
       });
       if (result?.error) {
         setError(result.error);
@@ -48,6 +55,7 @@ export function RescaleForm({
       setNewLightCount("");
       setVerificationNote("");
       setVerificationPhotoUrl("");
+      setSameWattageConfirmed(false);
     });
   }
 
@@ -104,6 +112,33 @@ export function RescaleForm({
         </div>
       )}
 
+      {/* rescaleBaseline scales the baseline by count alone — correct only
+          when every new unit draws the circuit's own wattage, which this
+          form has no other way to know. A changed mix (a different-wattage
+          fixture folded into the same count) would silently overstate or
+          understate the rescaled figure, so the operator has to say so
+          directly rather than it being assumed. */}
+      <label className="flex items-start gap-2.5 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          checked={sameWattageConfirmed}
+          onChange={(e) => setSameWattageConfirmed(e.target.checked)}
+          disabled={pending}
+          className="mt-0.5"
+        />
+        <span>
+          All {newLightCount || "the new"} units are the same {wattage}W type as this circuit&rsquo;s existing
+          fixtures.{" "}
+          <span className="text-[var(--text-muted)]">
+            If not — a different wattage or fixture — record it on the{" "}
+            <a href="#load-inventory" className="underline">
+              load inventory
+            </a>{" "}
+            instead, excluded from calculation if it isn&rsquo;t part of this benchmark.
+          </span>
+        </span>
+      </label>
+
       <Field
         label="How was the new count verified?"
         htmlFor="rs-note"
@@ -136,7 +171,7 @@ export function RescaleForm({
       <button
         type="button"
         onClick={submit}
-        disabled={pending || !newLightCount.trim() || !verificationNote.trim()}
+        disabled={pending || !newLightCount.trim() || !verificationNote.trim() || !sameWattageConfirmed}
         className="btn-primary"
       >
         {pending ? "Recording…" : "Record verified count change"}

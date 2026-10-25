@@ -52,6 +52,7 @@ export function rescaleBaseline(baseline: number, previousLightCount: number, ne
 export type RescaleRefusal =
   | "no-baseline"
   | "unverified"
+  | "composition-unconfirmed"
   | "same-count"
   | "invalid-count"
   | "invalid-date";
@@ -71,11 +72,28 @@ export function refuseRescale(input: {
   newLightCount: number;
   verificationNote: string;
   effectiveDate: Date | null;
+  /**
+   * `rescaleBaseline` is pure count arithmetic — it scales the MEASURED
+   * baseline by `newCount ÷ oldCount`, which only holds when every one of
+   * the new units draws the same wattage the old ones did (the circuit's
+   * own single `wattage` field, per CON-11's "one circuit, one light
+   * type"). It has no way to tell a count bump of identical fixtures apart
+   * from a mix that has quietly changed composition — 39 × 20W battens
+   * becoming 46 lights where one is a 12W surface light would scale as if
+   * that 46th unit also drew 20W, overstating the real new baseline. There
+   * is nowhere else in this flow that catches that, so the operator has to
+   * attest to it directly (2026-10-26, user-asked after walking through
+   * exactly this scenario) — a genuinely different fixture belongs on the
+   * circuit's load inventory instead, excluded from calculation if it
+   * isn't part of this benchmark's population.
+   */
+  sameWattageConfirmed: boolean;
 }): RescaleRefusal | null {
   // FEAT-041-AC-2's other half — a circuit with no commissioned baseline
   // has nothing to rescale; there is no "original" to scale from yet.
   if (input.commissionedBaseline == null || input.commissionedBaseline <= 0) return "no-baseline";
   if (!input.verificationNote.trim()) return "unverified";
+  if (!input.sameWattageConfirmed) return "composition-unconfirmed";
   if (!Number.isInteger(input.newLightCount) || input.newLightCount <= 0) return "invalid-count";
   if (input.newLightCount === input.currentLightCount) return "same-count";
   if (!input.effectiveDate || Number.isNaN(input.effectiveDate.getTime())) return "invalid-date";
@@ -87,6 +105,8 @@ export const REFUSAL_MESSAGE: Record<RescaleRefusal, string> = {
     "This circuit has no commissioned baseline yet — finish the pre-install monitoring window before recording a light-count change.",
   unverified:
     "A rescale needs supporting verification — record how the new count was verified. An unverified count change is exactly what this guards against.",
+  "composition-unconfirmed":
+    "Confirm the new units are the same wattage as this circuit's existing fixtures. A different wattage or fixture type changes the math this rescale does — record it on the load inventory instead, excluded from calculation if it isn't part of this benchmark.",
   "same-count": "The new light count is the same as the current one — nothing to rescale.",
   "invalid-count": "The new light count must be a whole number greater than zero.",
   "invalid-date": "An effective date is required.",

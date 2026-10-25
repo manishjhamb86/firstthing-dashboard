@@ -34,7 +34,13 @@ async function requireRescaleOps(): Promise<{ error: string } | { actorId: strin
 // the actual rule and is where the unit tests point.
 export async function recordLightCountChange(
   circuitId: string,
-  input: { newLightCount: number; verificationNote: string; verificationPhotoUrl?: string; effectiveDate: string },
+  input: {
+    newLightCount: number;
+    verificationNote: string;
+    verificationPhotoUrl?: string;
+    effectiveDate: string;
+    sameWattageConfirmed: boolean;
+  },
 ): Promise<RescaleResult> {
   // PER-04 can read the circuit but not rescale it.
   const gate = await requireRescaleOps();
@@ -52,6 +58,7 @@ export async function recordLightCountChange(
     newLightCount: input.newLightCount,
     verificationNote: input.verificationNote,
     effectiveDate,
+    sameWattageConfirmed: input.sameWattageConfirmed,
   });
   if (refusal) {
     logger.warn("circuit.rescale_refused", {
@@ -218,7 +225,13 @@ export async function voidRescaleEvent(eventId: string, reason: string): Promise
  */
 export async function correctRescaleEvent(
   eventId: string,
-  input: { newLightCount: number; verificationNote: string; effectiveDate: string; reason: string },
+  input: {
+    newLightCount: number;
+    verificationNote: string;
+    effectiveDate: string;
+    reason: string;
+    sameWattageConfirmed: boolean;
+  },
 ): Promise<RescaleResult> {
   const gate = await requireRescaleOps();
   if ("error" in gate) return gate;
@@ -277,6 +290,7 @@ export async function correctRescaleEvent(
     newLightCount: input.newLightCount,
     verificationNote: input.verificationNote,
     effectiveDate,
+    sameWattageConfirmed: input.sameWattageConfirmed,
   });
   if (refusal) {
     logger.warn("circuit.rescale_correction_refused", { actorId: gate.actorId, eventId, reason: refusal });

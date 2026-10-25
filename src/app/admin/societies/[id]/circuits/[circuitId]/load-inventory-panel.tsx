@@ -12,6 +12,7 @@ import {
   splitLockedDeviceLine,
   updateCircuitDevice,
 } from "./inventory-actions";
+import { removeRescaleAddedDevice } from "./rescale-actions";
 
 export type InventoryLine = {
   id: string;
@@ -413,6 +414,9 @@ function LineRow({
             {line.demoLabel === null && line.replacementCount === null && demos.length >= 2 && (
               <SplitLine line={line} demos={demos} />
             )}
+            {/* Only a fixture added via a light-count change — never a
+                genuine demo-era line, which stays Correct-only. */}
+            {line.addedViaRescaleDate !== null && <RemoveRescaleAddedLine line={line} />}
           </span>
         </td>
       )}
@@ -824,6 +828,75 @@ function CorrectDeviceType({ line, catalog }: { line: InventoryLine; catalog: Ca
               disabled={pending}
               className="field"
               placeholder="e.g. surface light picked instead of tube light"
+            />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+        </div>
+      </Modal>
+    </>
+  );
+}
+
+/**
+ * Removing a fixture added via a light-count change (2026-10-26,
+ * user-caught) — the ordinary Remove button above is gated to before the
+ * meter is installed, same as Add, so a line added by mistake through the
+ * rescale form had no way back once the circuit is commissioned. Scoped to
+ * exactly that case server-side (removeRescaleAddedDevice refuses outright
+ * on any line without addedViaRescaleDate) — a genuine demo-era line stays
+ * Correct-only, never removable once locked.
+ */
+function RemoveRescaleAddedLine({ line }: { line: InventoryLine }) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, start] = useTransition();
+  function save() {
+    start(async () => {
+      const r = await removeRescaleAddedDevice(line.id, reason);
+      if ("error" in r) setError(r.error);
+      else setOpen(false);
+    });
+  }
+  return (
+    <>
+      <button
+        type="button"
+        className="btn-ghost text-xs"
+        style={{ color: "var(--bad-fg)" }}
+        onClick={() => {
+          setReason("");
+          setError(undefined);
+          setOpen(true);
+        }}
+      >
+        Remove
+      </button>
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={`Remove this fixture — ${line.deviceTypeName}`}
+        description="For a fixture recorded by mistake through a light-count change — picked the wrong catalog entry, or added twice. This deletes the line; it is not kept on record."
+        footer={
+          <>
+            <button type="button" onClick={save} disabled={pending || reason.trim() === ""} className="btn-danger">
+              {pending ? "Removing…" : "Remove"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} disabled={pending} className="btn-ghost">
+              Cancel
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Field label="Why is this being removed?" htmlFor={`rm-${line.id}`}>
+            <input
+              id={`rm-${line.id}`}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={pending}
+              className="field"
+              placeholder="e.g. added while testing, not a real fixture"
             />
           </Field>
           {error && <ErrorText>{error}</ErrorText>}

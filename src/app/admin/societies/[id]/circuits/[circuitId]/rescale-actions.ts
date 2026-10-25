@@ -488,3 +488,47 @@ export async function removeRescaleEvent(eventId: string): Promise<RescaleResult
   revalidatePath(`/admin/live-monitoring/${event.circuitId}`);
   return {};
 }
+
+/**
+ * Remove a fixture added via a light-count change — the one gap the feature
+ * shipped with (2026-10-26, user-caught): the load inventory's own "Remove"
+ * is gated to BEFORE the meter is installed, same as "Add a device line",
+ * so once a circuit is commissioned there was no way back for a line added
+ * by mistake through this path. Scoped tightly to exactly that case —
+ * `addedViaRescaleEventId` has to be set, so this can never touch a
+ * genuine demo-era line (that stays Correct count / Correct device only,
+ * never removable once commissioned — a stronger rule, deliberately left
+ * alone). A hard delete, matching removeCircuitDevice's own existing
+ * behaviour for this model (CircuitDevice carries no void fields at all) —
+ * the reason is what survives, in the log line, not the row.
+ */
+export async function removeRescaleAddedDevice(lineId: string, reason: string): Promise<RescaleResult> {
+  const gate = await requireRescaleOps();
+  if ("error" in gate) return gate;
+  if (!reason.trim()) {
+    logger.warn("inventory.rescale_added_device_remove_refused", { actorId: gate.actorId, lineId, reason: "no-reason" });
+    return { error: "Record why this fixture is being removed." };
+  }
+  const line = await db.circuitDevice.findUnique({
+    where: { id: lineId },
+    include: { circuit: { select: { id: true, societyId: true } } },
+  });
+  if (!line) return { error: "That line no longer exists." };
+  if (!line.addedViaRescaleEventId) {
+    return {
+      error:
+        "This line wasn't added through a light-count change, so it can't be removed this way — use Correct count or Correct device instead.",
+    };
+  }
+  await db.circuitDevice.delete({ where: { id: lineId } });
+  logger.info("inventory.rescale_added_device_removed", {
+    actorId: gate.actorId,
+    lineId,
+    circuitId: line.circuitId,
+    deviceTypeId: line.deviceTypeId,
+    count: line.count,
+    reason: reason.trim(),
+  });
+  revalidatePath(`/admin/societies/${line.circuit.societyId}/circuits/${line.circuitId}`);
+  return {};
+}

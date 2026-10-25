@@ -444,6 +444,26 @@ export function retrofitLightCount(items: LoadItem[]): number {
   return items.filter((i) => !i.excludedFromCalculation).reduce((n, i) => n + i.count, 0);
 }
 
+/**
+ * The bounds a load-inventory line must satisfy, wherever one is written.
+ * Shared by `inventory-actions.ts`'s own `addCircuitDevice` and by the
+ * rescale flow (2026-10-26) — a "use server" file may only export async
+ * functions, so a rule two separate action modules both need lives here,
+ * not duplicated in each and risking drift between them.
+ */
+export function validateDeviceLine(input: { count: number; wattage: number; hoursPerDay: number }): string | null {
+  if (!Number.isInteger(input.count) || input.count < 1 || input.count > 5000) {
+    return "Count must be a whole number between 1 and 5000.";
+  }
+  if (!Number.isFinite(input.wattage) || input.wattage <= 0 || input.wattage > 2000) {
+    return "Per-unit wattage must be between 1 and 2000 W.";
+  }
+  if (!Number.isFinite(input.hoursPerDay) || input.hoursPerDay <= 0 || input.hoursPerDay > 24) {
+    return "Hours per day must be between 1 and 24.";
+  }
+  return null;
+}
+
 // ── Pre-install: variance against theoretical ────────────────────────────
 
 export type VarianceBand = "ok" | "flag" | "warn";

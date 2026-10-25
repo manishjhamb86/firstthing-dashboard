@@ -41,7 +41,7 @@ function lineKwh(l: { count: number; wattage: number; hoursPerDay: number }) {
 
 const HOURS_PRESETS = ["24", "12", "custom"] as const;
 
-function HoursInput({
+export function HoursInput({
   id,
   hours,
   setHours,

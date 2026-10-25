@@ -15,6 +15,7 @@ import { demoLockState } from "@/lib/demo-lock";
 import { planCountCorrection } from "@/lib/count-correction";
 import { resyncCircuitFigures } from "@/lib/circuit-figures";
 import { demoCountFeedsTotal, representedCountAfterDemoCorrection } from "@/lib/light-population";
+import { validateDeviceLine } from "@/lib/circuit-load";
 
 type Outcome = { error: string } | { ok: true };
 
@@ -79,19 +80,6 @@ async function editableCircuit(circuitId: string, historical = false): Promise<E
   return { circuit: { id: circuit.id, societyId: circuit.societyId } };
 }
 
-function validateLine(input: { count: number; wattage: number; hoursPerDay: number }) {
-  if (!Number.isInteger(input.count) || input.count < 1 || input.count > 5000) {
-    return "Count must be a whole number between 1 and 5000.";
-  }
-  if (!Number.isFinite(input.wattage) || input.wattage <= 0 || input.wattage > 2000) {
-    return "Per-unit wattage must be between 1 and 2000 W.";
-  }
-  if (!Number.isFinite(input.hoursPerDay) || input.hoursPerDay <= 0 || input.hoursPerDay > 24) {
-    return "Hours per day must be between 1 and 24.";
-  }
-  return null;
-}
-
 export async function addCircuitDevice(input: {
   circuitId: string;
   deviceTypeId: string;
@@ -116,7 +104,7 @@ export async function addCircuitDevice(input: {
   if (!type || !type.active || type.role !== "original") {
     return { error: "Pick a device from the catalog — if it's missing, ops can add it there." };
   }
-  const invalid = validateLine(input);
+  const invalid = validateDeviceLine(input);
   if (invalid) return { error: invalid };
 
   await db.circuitDevice.create({
@@ -163,7 +151,7 @@ export async function updateCircuitDevice(input: {
   const gate = await editableCircuit(line.circuitId, line.historical);
   if (gate.error !== undefined) return { error: gate.error };
 
-  const invalid = validateLine(input);
+  const invalid = validateDeviceLine(input);
   if (invalid) return { error: invalid };
 
   await db.circuitDevice.update({

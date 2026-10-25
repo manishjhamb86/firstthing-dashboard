@@ -80,20 +80,25 @@ export function refuseRescale(input: {
    * type"). It has no way to tell a count bump of identical fixtures apart
    * from a mix that has quietly changed composition — 39 × 20W battens
    * becoming 46 lights where one is a 12W surface light would scale as if
-   * that 46th unit also drew 20W, overstating the real new baseline. There
-   * is nowhere else in this flow that catches that, so the operator has to
-   * attest to it directly (2026-10-26, user-asked after walking through
-   * exactly this scenario) — a genuinely different fixture belongs on the
-   * circuit's load inventory instead, excluded from calculation if it
-   * isn't part of this benchmark's population.
+   * that 46th unit also drew 20W, overstating the real new baseline.
+   *
+   * True two ways, both decided by the caller before this is called: the
+   * operator attests every new unit is the same wattage, OR a genuinely
+   * different fixture was recorded as its own excluded load-inventory line
+   * in the same submission (2026-10-26, user-caught: the load inventory is
+   * LOCKED once the meter is installed — addCircuitDevice refuses outright
+   * outside demo mode — so a hint pointing an operator there after
+   * commissioning was a dead end; the rescale flow now creates that line
+   * itself, through its own operations gate, rather than sending the
+   * operator to a control they cannot use).
    */
-  sameWattageConfirmed: boolean;
+  compositionHandled: boolean;
 }): RescaleRefusal | null {
   // FEAT-041-AC-2's other half — a circuit with no commissioned baseline
   // has nothing to rescale; there is no "original" to scale from yet.
   if (input.commissionedBaseline == null || input.commissionedBaseline <= 0) return "no-baseline";
   if (!input.verificationNote.trim()) return "unverified";
-  if (!input.sameWattageConfirmed) return "composition-unconfirmed";
+  if (!input.compositionHandled) return "composition-unconfirmed";
   if (!Number.isInteger(input.newLightCount) || input.newLightCount <= 0) return "invalid-count";
   if (input.newLightCount === input.currentLightCount) return "same-count";
   if (!input.effectiveDate || Number.isNaN(input.effectiveDate.getTime())) return "invalid-date";
@@ -106,7 +111,7 @@ export const REFUSAL_MESSAGE: Record<RescaleRefusal, string> = {
   unverified:
     "A rescale needs supporting verification — record how the new count was verified. An unverified count change is exactly what this guards against.",
   "composition-unconfirmed":
-    "Confirm the new units are the same wattage as this circuit's existing fixtures. A different wattage or fixture type changes the math this rescale does — record it on the load inventory instead, excluded from calculation if it isn't part of this benchmark.",
+    "Confirm the new units are the same wattage as this circuit's existing fixtures, or record the different fixture below — a different wattage changes the math this rescale does.",
   "same-count": "The new light count is the same as the current one — nothing to rescale.",
   "invalid-count": "The new light count must be a whole number greater than zero.",
   "invalid-date": "An effective date is required.",

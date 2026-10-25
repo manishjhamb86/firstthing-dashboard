@@ -1007,6 +1007,7 @@ export default async function CircuitDetailPage({
                   currentLightCount={circuit.meteredLightCount}
                   effectiveBaseline={effectiveBaseline}
                   wattage={circuit.wattage}
+                  catalog={catalogOriginals}
                 />
               </div>
             </details>

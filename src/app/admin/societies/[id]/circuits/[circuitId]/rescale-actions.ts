@@ -7,10 +7,31 @@ import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
 import { isDemoMode } from "@/lib/demo-mode";
 import { REFUSAL_MESSAGE, refuseRescale, refuseVoid, rescaleBaseline } from "@/lib/benchmark-rescale";
-import { utcMidnight as startOfDayUTC } from "@/lib/circuit-load";
+import { utcMidnight as startOfDayUTC, validateDeviceLine } from "@/lib/circuit-load";
 import { requireSuperApproval } from "@/lib/pending-approval";
 
 export type RescaleResult = { error?: string };
+
+/**
+ * A genuinely different fixture folded into the same count change — the
+ * load inventory is LOCKED once the meter is installed (addCircuitDevice
+ * refuses outright outside demo mode), so this is the one place left that
+ * can record it once a circuit is commissioned. Created `excludedFromCalculation`
+ * — it is on the circuit and the meter sees it, but it is not part of the
+ * uniform population `newLightCount` rescales, same rule an unreplaced
+ * surface light already gets.
+ */
+type NewExcludedLine = { deviceTypeId: string; count: number; wattage: number; hoursPerDay: number; note?: string };
+
+async function validateNewExcludedLine(line: NewExcludedLine): Promise<string | null> {
+  const lineError = validateDeviceLine(line);
+  if (lineError) return lineError;
+  const type = await db.deviceType.findUnique({ where: { id: line.deviceTypeId } });
+  if (!type || !type.active || type.role !== "original") {
+    return "Pick the different fixture from the catalog — if it's missing, ops can add it there.";
+  }
+  return null;
+}
 
 // FEAT-041-AC-4 — PER-01 only, via this codebase's standing technical proxy
 // (both manage_survey and manage_pipeline). Refuses by RETURNING: a Server
@@ -40,6 +61,9 @@ export async function recordLightCountChange(
     verificationPhotoUrl?: string;
     effectiveDate: string;
     sameWattageConfirmed: boolean;
+    /** Set when sameWattageConfirmed is false — the different fixture,
+     *  recorded as its own excluded line rather than folded into the count. */
+    newExcludedLine?: NewExcludedLine;
   },
 ): Promise<RescaleResult> {
   // PER-04 can read the circuit but not rescale it.
@@ -52,13 +76,18 @@ export async function recordLightCountChange(
 
   const effectiveDate = input.effectiveDate ? startOfDayUTC(new Date(input.effectiveDate)) : null;
 
+  if (input.newExcludedLine) {
+    const lineError = await validateNewExcludedLine(input.newExcludedLine);
+    if (lineError) return { error: lineError };
+  }
+
   const refusal = refuseRescale({
     commissionedBaseline: circuit.preInstallBaseline,
     currentLightCount: circuit.meteredLightCount,
     newLightCount: input.newLightCount,
     verificationNote: input.verificationNote,
     effectiveDate,
-    sameWattageConfirmed: input.sameWattageConfirmed,
+    compositionHandled: input.sameWattageConfirmed || !!input.newExcludedLine,
   });
   if (refusal) {
     logger.warn("circuit.rescale_refused", {
@@ -78,7 +107,7 @@ export async function recordLightCountChange(
     actorId: gate.actorId,
     actorEmail: gate.actorEmail,
     kind: "recordLightCountChange",
-    summary: `Record a light-count change on circuit ${circuitId} — ${circuit.meteredLightCount} → ${input.newLightCount} lights, effective ${input.effectiveDate}`,
+    summary: `Record a light-count change on circuit ${circuitId} — ${circuit.meteredLightCount} → ${input.newLightCount} lights, effective ${input.effectiveDate}${input.newExcludedLine ? ", plus a different fixture recorded on the load inventory" : ""}`,
     societyId: circuit.societyId,
     args: { circuitId, input },
   });
@@ -86,8 +115,28 @@ export async function recordLightCountChange(
 
   // The event and the circuit's current count move together — a count
   // without its event, or an event without the count, would each leave the
-  // audit trail lying about the other.
+  // audit trail lying about the other. A new excluded line (a genuinely
+  // different fixture, not part of the uniform population being rescaled)
+  // moves with them in the same transaction — otherwise a failure partway
+  // through could leave the rescale recorded with no trace of why the
+  // circuit's real fixture count no longer matches it.
   await db.$transaction([
+    ...(input.newExcludedLine
+      ? [
+          db.circuitDevice.create({
+            data: {
+              circuitId,
+              deviceTypeId: input.newExcludedLine.deviceTypeId,
+              count: input.newExcludedLine.count,
+              wattage: input.newExcludedLine.wattage,
+              hoursPerDay: input.newExcludedLine.hoursPerDay,
+              note: input.newExcludedLine.note?.trim() || null,
+              excludedFromCalculation: true,
+              recordedById: session.user.id,
+            },
+          }),
+        ]
+      : []),
     db.benchmarkRescaleEvent.create({
       data: {
         circuitId,
@@ -122,6 +171,9 @@ export async function recordLightCountChange(
     previousBaseline,
     rescaledBaseline,
     effectiveDate: effectiveDate!.toISOString(),
+    newExcludedLine: input.newExcludedLine
+      ? { deviceTypeId: input.newExcludedLine.deviceTypeId, count: input.newExcludedLine.count }
+      : null,
   });
 
   // The society's published months from the effective month on follow the
@@ -290,7 +342,7 @@ export async function correctRescaleEvent(
     newLightCount: input.newLightCount,
     verificationNote: input.verificationNote,
     effectiveDate,
-    sameWattageConfirmed: input.sameWattageConfirmed,
+    compositionHandled: input.sameWattageConfirmed,
   });
   if (refusal) {
     logger.warn("circuit.rescale_correction_refused", { actorId: gate.actorId, eventId, reason: refusal });

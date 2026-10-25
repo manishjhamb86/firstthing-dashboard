@@ -51,7 +51,7 @@ describe("TC-041-3 — refuseRescale (FEAT-041-AC-3 and input rules)", () => {
     newLightCount: 54,
     verificationNote: "Counted on site with the society's electrician; photo attached.",
     effectiveDate: d("2026-09-01"),
-    sameWattageConfirmed: true,
+    compositionHandled: true,
   };
 
   it("allows a fully verified change", () => {
@@ -63,7 +63,7 @@ describe("TC-041-3 — refuseRescale (FEAT-041-AC-3 and input rules)", () => {
   });
 
   it("refuses a count change that doesn't confirm the new units are the same wattage — rescaleBaseline assumes uniform wattage and has no other way to catch a changed mix", () => {
-    expect(refuseRescale({ ...ok, sameWattageConfirmed: false })).toBe("composition-unconfirmed");
+    expect(refuseRescale({ ...ok, compositionHandled: false })).toBe("composition-unconfirmed");
   });
 
   it("refuses when the circuit has no commissioned baseline yet", () => {
@@ -257,7 +257,7 @@ describe("a correction that changes nothing", () => {
         newLightCount: entry.newLightCount, // 54, unchanged — yet allowed
         verificationNote: "walked",
         effectiveDate: new Date("2026-09-01"),
-        sameWattageConfirmed: true,
+        compositionHandled: true,
       }),
     ).toBeNull();
   });
@@ -272,7 +272,7 @@ describe("a correction that changes nothing", () => {
         newLightCount: 54,
         verificationNote: "walked",
         effectiveDate: new Date("2026-09-01"),
-        sameWattageConfirmed: true,
+        compositionHandled: true,
       }),
     ).toBe("same-count");
   });

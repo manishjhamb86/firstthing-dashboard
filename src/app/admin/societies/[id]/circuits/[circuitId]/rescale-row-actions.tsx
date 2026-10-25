@@ -158,12 +158,9 @@ export function RescaleRowActions(props: Props) {
               className="mt-0.5"
             />
             <span>
-              All units are the same {props.wattage}W type as this circuit&rsquo;s existing fixtures — a different
-              wattage belongs on the{" "}
-              <a href="#load-inventory" className="underline">
-                load inventory
-              </a>{" "}
-              instead.
+              All units are the same {props.wattage}W type as this circuit&rsquo;s existing fixtures. If a
+              different-wattage fixture needs recording too, cancel this correction and use &ldquo;Record a verified
+              light-count change&rdquo; below instead — it can record the fixture in the same step.
             </span>
           </label>
         </>

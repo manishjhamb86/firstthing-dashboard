@@ -174,6 +174,8 @@ export type MeetingInput = {
   time: string;
   minutes: number;
   inviteeIds: string[];
+  /** Portal accounts (office-bearer/committee/manager) of the selected society, by Profile id. */
+  societyInviteeIds: string[];
   otherEmails: string;
   societyId: string;
   addMeet: boolean;
@@ -195,7 +197,7 @@ export function refuseMeeting(m: MeetingInput): string | null {
   if (!Number.isInteger(m.minutes) || m.minutes < 5 || m.minutes > 8 * 60) return "Choose how long it runs.";
   const bad = parseEmailList(m.otherEmails).filter((e) => !isEmail(e));
   if (bad.length) return `Not an email address: ${bad.join(", ")}`;
-  if (m.inviteeIds.length === 0 && parseEmailList(m.otherEmails).length === 0) return "Invite at least one person.";
+  if (m.inviteeIds.length === 0 && m.societyInviteeIds.length === 0 && parseEmailList(m.otherEmails).length === 0) return "Invite at least one person.";
   return null;
 }
 

@@ -1,19 +1,21 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/modal";
 import { ErrorText, Field } from "@/components/ui";
+import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 import type { MeetingInput } from "@/lib/calendar-event";
-import { cancelMeeting, createMeeting, retryCalendarSync, updateMeeting } from "./actions";
+import { cancelMeeting, createMeeting, retryCalendarSync, societyMembersForMeeting, updateMeeting } from "./actions";
 
 export type Person = { id: string; name: string; email: string };
+type SocietyPerson = { id: string; name: string; email: string; portalAuthority: string };
 export type MeetingEdit = { id: string; input: MeetingInput };
 
 const DURATIONS = [15, 30, 45, 60, 90, 120];
 
 function blank(today: string): MeetingInput {
-  return { title: "", agenda: "", date: today, time: "11:00", minutes: 30, inviteeIds: [], otherEmails: "", societyId: "", addMeet: true };
+  return { title: "", agenda: "", date: today, time: "11:00", minutes: 30, inviteeIds: [], societyInviteeIds: [], otherEmails: "", societyId: "", addMeet: true };
 }
 
 /**
@@ -48,12 +50,31 @@ function MeetingForm({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [societyPeople, setSocietyPeople] = useState<SocietyPerson[]>([]);
+  const [loadedSocietyId, setLoadedSocietyId] = useState("");
   const others = people.filter((p) => p.id !== me);
   const matches = useMemo(() => {
     const n = q.trim().toLowerCase();
     return others.filter((p) => !f.inviteeIds.includes(p.id) && (!n || `${p.name} ${p.email}`.toLowerCase().includes(n))).slice(0, 8);
   }, [others, f.inviteeIds, q]);
   const set = <K extends keyof MeetingInput>(k: K, v: MeetingInput[K]) => setF((x) => ({ ...x, [k]: v }));
+  const loadingSocietyPeople = !!f.societyId && loadedSocietyId !== f.societyId;
+
+  // Load this society's own portal users (office-bearer/committee/manager) whenever the selected
+  // society changes, so one can be picked straight from the form instead of typed by hand.
+  useEffect(() => {
+    if (!f.societyId) return;
+    let cancelled = false;
+    societyMembersForMeeting(f.societyId).then((rows) => {
+      if (!cancelled) {
+        setSocietyPeople(rows);
+        setLoadedSocietyId(f.societyId);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [f.societyId]);
 
   function save() {
     setError(null);
@@ -160,7 +181,15 @@ function MeetingForm({
           <textarea id="mt-agenda" className="field" rows={3} value={f.agenda} onChange={(e) => set("agenda", e.target.value)} />
         </Field>
         <Field label="About a society (optional)" htmlFor="mt-society">
-          <select id="mt-society" className="field" value={f.societyId} onChange={(e) => set("societyId", e.target.value)}>
+          <select
+            id="mt-society"
+            className="field"
+            value={f.societyId}
+            onChange={(e) => {
+              set("societyId", e.target.value);
+              set("societyInviteeIds", []);
+            }}
+          >
             <option value="">Not about a society</option>
             {societies.map((s) => (
               <option key={s.id} value={s.id}>
@@ -169,6 +198,41 @@ function MeetingForm({
             ))}
           </select>
         </Field>
+        {f.societyId &&
+          (loadingSocietyPeople ? (
+            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>Looking up this society&apos;s portal users…</p>
+          ) : societyPeople.length === 0 ? (
+            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+              This society has no portal accounts yet — use &ldquo;Anyone else, by email&rdquo; above instead.
+            </p>
+          ) : (
+            <Field label="Invite someone from this society">
+              <div className="flex flex-wrap gap-1.5">
+                {societyPeople.map((p) => {
+                  const picked = f.societyInviteeIds.includes(p.id);
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className="chip"
+                      aria-pressed={picked}
+                      style={picked ? { background: "var(--accent-subtle)", borderColor: "var(--accent)" } : undefined}
+                      onClick={() =>
+                        set(
+                          "societyInviteeIds",
+                          picked ? f.societyInviteeIds.filter((x) => x !== p.id) : [...f.societyInviteeIds, p.id],
+                        )
+                      }
+                      title={p.email}
+                    >
+                      {p.name} <span style={{ color: "var(--text-subtle)" }}>· {PORTAL_AUTHORITY_LABEL[p.portalAuthority] ?? p.portalAuthority}</span>
+                      {picked ? " ✓" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          ))}
         <label className="flex items-center gap-2 text-[13.5px]">
           <input type="checkbox" checked={f.addMeet} onChange={(e) => set("addMeet", e.target.checked)} />
           Add a Google Meet video link

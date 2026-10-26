@@ -207,6 +207,7 @@ export default async function SchedulePage({
                         time: iso(row.startAt).slice(11, 16),
                         minutes: row.endAt ? Math.round((row.endAt.getTime() - row.startAt.getTime()) / 60_000) : 30,
                         inviteeIds: row.attendees.filter((a) => a.adminUserId).map((a) => a.adminUserId!),
+                        societyInviteeIds: [],
                         otherEmails: row.attendees.filter((a) => !a.adminUserId).map((a) => a.email).join(", "),
                         societyId: row.societyId ?? "",
                         addMeet: row.addMeet,

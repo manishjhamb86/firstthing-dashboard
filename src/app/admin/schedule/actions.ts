@@ -30,6 +30,20 @@ async function invitees(input: MeetingInput) {
     : [];
   const byEmail = new Map<string, { adminUserId: string | null; email: string }>();
   for (const p of people) byEmail.set(p.email.toLowerCase(), { adminUserId: p.id, email: p.email.toLowerCase() });
+  // A society's portal account — office-bearer, committee or manager — invited by picking them from the
+  // society the meeting is about. `ScheduledEventAttendee.adminUserId` only ever links to `AdminUser`
+  // (Profile accounts can't mint an admin session, INV-01), so this is recorded as email-only, same as
+  // a typed address that doesn't match a colleague.
+  const societyPeople = input.societyInviteeIds.length
+    ? await db.profile.findMany({
+        where: { id: { in: input.societyInviteeIds }, isActive: true, portalAuthority: { not: null } },
+        select: { email: true },
+      })
+    : [];
+  for (const p of societyPeople) {
+    const e = p.email.toLowerCase();
+    if (!byEmail.has(e)) byEmail.set(e, { adminUserId: null, email: e });
+  }
   // An address typed by hand that belongs to a colleague is linked to them, so it shows on their schedule.
   const typed = parseEmailList(input.otherEmails);
   const known = typed.length
@@ -38,6 +52,18 @@ async function invitees(input: MeetingInput) {
   const knownMap = new Map(known.map((k) => [k.email.toLowerCase(), k.id]));
   for (const e of typed) if (!byEmail.has(e)) byEmail.set(e, { adminUserId: knownMap.get(e) ?? null, email: e });
   return [...byEmail.values()];
+}
+
+/** The society's own portal accounts, to invite them straight from the meeting form. */
+export async function societyMembersForMeeting(societyId: string): Promise<{ id: string; name: string; email: string; portalAuthority: string }[]> {
+  const actor = await resolveAdmin();
+  if (!actor || !societyId) return [];
+  const rows = await db.profile.findMany({
+    where: { societyId, isActive: true, portalAuthority: { not: null } },
+    select: { id: true, name: true, email: true, portalAuthority: true },
+    orderBy: { name: "asc" },
+  });
+  return rows.map((p) => ({ id: p.id, name: p.name ?? p.email, email: p.email, portalAuthority: p.portalAuthority as string }));
 }
 
 function times(input: MeetingInput) {

@@ -86,9 +86,22 @@ describe("googleEventBody", () => {
 });
 
 describe("refuseMeeting", () => {
-  const m = { title: "Weekly ops", agenda: "", date: "2026-09-26", time: "11:00", minutes: 30, inviteeIds: ["u1"], otherEmails: "", societyId: "", addMeet: true };
+  const m = {
+    title: "Weekly ops",
+    agenda: "",
+    date: "2026-09-26",
+    time: "11:00",
+    minutes: 30,
+    inviteeIds: ["u1"],
+    societyInviteeIds: [],
+    otherEmails: "",
+    societyId: "",
+    addMeet: true,
+  };
   it("accepts a complete meeting", () => expect(refuseMeeting(m)).toBeNull());
   it("needs someone invited", () => expect(refuseMeeting({ ...m, inviteeIds: [] })).toMatch(/Invite/));
+  it("a society portal account counts as invited", () =>
+    expect(refuseMeeting({ ...m, inviteeIds: [], societyInviteeIds: ["p1"] })).toBeNull());
   it("names a bad address", () => expect(refuseMeeting({ ...m, otherEmails: "ok@x.in, notanemail" })).toMatch(/notanemail/));
   it("needs a start time", () => expect(refuseMeeting({ ...m, time: "" })).toMatch(/start time/));
   it("parses a pasted list", () => expect(parseEmailList("a@x.in; B@y.com\nc@z.org")).toEqual(["a@x.in", "b@y.com", "c@z.org"]));

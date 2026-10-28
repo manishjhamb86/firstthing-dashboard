@@ -377,6 +377,121 @@ export async function correctLockedDeviceType(input: { lineId: string; deviceTyp
 }
 
 /**
+ * Add a brand-new line to an already-locked inventory — a device that was on
+ * the circuit all along but the survey never recorded (a fan, a TV, a street
+ * light sharing the circuit), found only once the meter was installed and
+ * the lights replaced (2026-10-28, user-caught: a 60W ceiling fan). The
+ * ordinary add path (`addCircuitDevice`) refuses outright once locked, for
+ * good reason — adding more of the retrofitted light type there would
+ * silently inflate the billed population with no trace anything moved. This
+ * is narrower and does the opposite: it can only ever create an EXCLUDED
+ * line (on the circuit, not part of the retrofit — the same deduction a
+ * demo-era kept fixture already gets, `exclusionFromDevices`), ops-only,
+ * with a reason. Same gate and demo-lock shape as `correctLockedCount`
+ * above: a new excluded line changes every live demo's derived savings
+ * figure (the deduction is computed circuit-wide, not per demo), so a demo
+ * already shown to the society in a shared report is unlocked first, the
+ * same as any other correction that changes what they were shown.
+ */
+export async function addLockedDeviceLine(input: {
+  circuitId: string;
+  deviceTypeId: string;
+  count: number;
+  wattage: number;
+  hoursPerDay: number;
+  note?: string;
+  reason: string;
+}): Promise<Outcome> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  const p = admin.permissions as string[];
+  if (!(p.includes("manage_survey") && p.includes("manage_pipeline"))) {
+    logger.warn("inventory.locked_line_add_refused", { actorId: admin.id, circuitId: input.circuitId, reason: "not_ops" });
+    return { error: "Adding a line to a locked inventory is an operations lead action." };
+  }
+  const reason = input.reason?.trim() ?? "";
+  if (!reason) return { error: "Say what this device is and why it was missed — a correction with no stated reason cannot be reviewed later." };
+
+  const type = await db.deviceType.findUnique({ where: { id: input.deviceTypeId } });
+  if (!type || !type.active || type.role !== "original") {
+    return { error: "Pick a device from the catalog — if it's missing, ops can add it there." };
+  }
+  const invalid = validateDeviceLine(input);
+  if (invalid) return { error: invalid };
+
+  const circuit = await db.circuit.findUnique({
+    where: { id: input.circuitId },
+    select: {
+      id: true,
+      societyId: true,
+      voidedAt: true,
+      siteSurvey: { select: { pipelineId: true } },
+      demos: { where: { voidedAt: null, rejected: false }, select: { id: true, sequence: true, unlockedUntil: true } },
+    },
+  });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit no longer exists." };
+
+  // A demo the society has seen in a shared report is locked: a new excluded
+  // line changes the figure it was shown, so it is unlocked first, as for
+  // any other correction with this effect.
+  const pipelineId = circuit.siteSurvey?.pipelineId;
+  const demoMode = await isDemoMode();
+  if (pipelineId && !demoMode && circuit.demos.length > 0) {
+    const shared = new Set(
+      (await db.demoReport.findMany({ where: { pipelineId, status: "shared" }, select: { demoIds: true } })).flatMap((r) => r.demoIds),
+    );
+    const locked = circuit.demos.filter(
+      (d) => !demoLockState({ sharedInReport: shared.has(d.id), unlockedUntil: d.unlockedUntil, demoMode, now: new Date() }).editable,
+    );
+    if (locked.length > 0) {
+      logger.warn("inventory.locked_line_add_refused", { actorId: admin.id, circuitId: input.circuitId, reason: "demo_locked" });
+      return {
+        error: `Demo ${locked.map((d) => d.sequence).join(", ")} is in a report shared with the society, and this changes what they were shown — unlock it for correction first.`,
+      };
+    }
+  }
+
+  await db.$transaction(async (tx) => {
+    const line = await tx.circuitDevice.create({
+      data: {
+        circuitId: circuit.id,
+        deviceTypeId: type.id,
+        count: input.count,
+        wattage: input.wattage,
+        hoursPerDay: input.hoursPerDay,
+        note: input.note?.trim() || null,
+        excludedFromCalculation: true,
+        recordedById: admin.id,
+      },
+    });
+    await logChange(tx, {
+      entity: "circuit_device",
+      entityId: line.id,
+      kind: "edit",
+      field: "added_to_locked_inventory",
+      circuitId: circuit.id,
+      oldValue: null,
+      newValue: { deviceTypeId: type.id, count: input.count, wattage: input.wattage, hoursPerDay: input.hoursPerDay },
+      reason,
+      actorId: admin.id,
+    });
+    await resyncCircuitFigures(tx, circuit.id, admin.id);
+  });
+
+  logger.info("inventory.locked_line_added", {
+    actorId: admin.id,
+    circuitId: circuit.id,
+    deviceTypeId: type.id,
+    count: input.count,
+    wattage: input.wattage,
+    hoursPerDay: input.hoursPerDay,
+    reason,
+  });
+  revalidatePath(circuitPath(circuit.societyId, circuit.id));
+  return { ok: true };
+}
+
+/**
  * Split one inventory line across two or more of the circuit's own demos
  * (2026-10-17, user-caught): two demos on one circuit had been sharing a
  * single 122-light line, each expected to record its OWN share as a

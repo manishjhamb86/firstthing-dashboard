@@ -6,6 +6,7 @@ import { Modal } from "@/components/modal";
 import { StepMarker } from "@/components/deal-stepper";
 import {
   addCircuitDevice,
+  addLockedDeviceLine,
   correctLockedCount,
   correctLockedDeviceType,
   removeCircuitDevice,
@@ -690,9 +691,171 @@ export function LoadInventoryPanel({
                 </div>
               </details>
             ))}
+          {/* A device that was on the circuit all along but the survey never
+              recorded (a fan, a TV, a street light), found only once the
+              inventory had already locked (2026-10-28, user-caught). Ops
+              only — same technical proxy as Correct count/device above. */}
+          {canCorrectCount && <AddMissedDeviceForm circuitId={circuitId} catalog={catalog} />}
         </div>
       ) : null}
     </Card>
+  );
+}
+
+/**
+ * A device that was on the circuit all along but never recorded, found only
+ * after the inventory locked (2026-10-28, user-caught: a 60W ceiling fan the
+ * survey missed). `addCircuitDevice` refuses outright once locked — for
+ * good reason, since adding more of the retrofitted light type there would
+ * silently inflate the billed population with no sign anything moved. This
+ * is narrower and does the opposite: it can only ever add an EXCLUDED line
+ * (on the circuit, not part of the retrofit — the same deduction a
+ * demo-era kept fixture already gets), ops-only, with a reason.
+ */
+function AddMissedDeviceForm({ circuitId, catalog }: { circuitId: string; catalog: CatalogOption[] }) {
+  const [open, setOpen] = useState(false);
+  const [typeId, setTypeId] = useState("");
+  const [count, setCount] = useState("");
+  const [wattage, setWattage] = useState("");
+  const [hours, setHours] = useState("24");
+  const [note, setNote] = useState("");
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  function pickType(id: string) {
+    setTypeId(id);
+    const t = catalog.find((c) => c.id === id);
+    if (t?.defaultWattage && wattage.trim() === "") setWattage(String(t.defaultWattage));
+  }
+
+  function reset() {
+    setTypeId("");
+    setCount("");
+    setWattage("");
+    setHours("24");
+    setNote("");
+    setReason("");
+    setError(undefined);
+  }
+
+  function submit() {
+    startTransition(async () => {
+      const result = await addLockedDeviceLine({
+        circuitId,
+        deviceTypeId: typeId,
+        count: Number(count),
+        wattage: Number(wattage),
+        hoursPerDay: Number(hours),
+        note,
+        reason,
+      });
+      if ("error" in result) {
+        setError(result.error);
+      } else {
+        reset();
+        setOpen(false);
+      }
+    });
+  }
+
+  const incomplete = !typeId || count.trim() === "" || wattage.trim() === "" || hours.trim() === "" || reason.trim() === "";
+  const preview = !incomplete ? ((Number(count) || 0) * (Number(wattage) || 0) * (Number(hours) || 0)) / 1000 : null;
+
+  return (
+    <>
+      <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
+        Add a device that was missed
+      </button>
+      <Modal
+        open={open}
+        onClose={() => {
+          reset();
+          setOpen(false);
+        }}
+        title="A device that was on the circuit all along"
+        description="A fan, a TV, a street light — something on this circuit the survey never recorded. It goes on excluded: on the circuit, but not part of the retrofit, so its draw comes off the saving the same way a kept fixture's does."
+        footer={
+          <>
+            <button type="button" onClick={submit} disabled={pending || incomplete} className="btn-primary">
+              {pending ? "Adding…" : "Add it"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setOpen(false);
+              }}
+              disabled={pending}
+              className="btn-ghost"
+            >
+              Cancel
+            </button>
+            <span className="num ml-auto text-sm text-[var(--text-muted)]">
+              {preview === null ? "—" : `${preview.toFixed(2)} kWh/day`}
+            </span>
+          </>
+        }
+      >
+        <Field label="Device" htmlFor="miss-type" hint="From the catalog — its wattage fills in and stays editable.">
+          <select id="miss-type" value={typeId} onChange={(e) => pickType(e.target.value)} disabled={pending} className="field">
+            <option value="">Pick from the catalog…</option>
+            {catalog.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <div className="grid grid-cols-2 gap-4">
+          <Field label="Count" htmlFor="miss-count">
+            <input
+              id="miss-count"
+              type="number"
+              min={1}
+              value={count}
+              onChange={(e) => setCount(e.target.value)}
+              disabled={pending}
+              className="field"
+            />
+          </Field>
+          <Field label="Watts each" htmlFor="miss-watt">
+            <input
+              id="miss-watt"
+              type="number"
+              min={1}
+              step="0.5"
+              value={wattage}
+              onChange={(e) => setWattage(e.target.value)}
+              disabled={pending}
+              className="field"
+            />
+          </Field>
+        </div>
+
+        <Field label="Runs for" htmlFor="miss-hours">
+          <HoursInput id="miss-hours" hours={hours} setHours={setHours} disabled={pending} />
+        </Field>
+
+        <Field label="Note" htmlFor="miss-note" hint="Optional.">
+          <input id="miss-note" value={note} onChange={(e) => setNote(e.target.value)} disabled={pending} className="field" />
+        </Field>
+
+        <Field label="Why it was missed" htmlFor="miss-reason">
+          <input
+            id="miss-reason"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            disabled={pending}
+            className="field"
+            placeholder="e.g. a ceiling fan the survey didn't record"
+          />
+        </Field>
+
+        {error && <ErrorText>{error}</ErrorText>}
+      </Modal>
+    </>
   );
 }
 

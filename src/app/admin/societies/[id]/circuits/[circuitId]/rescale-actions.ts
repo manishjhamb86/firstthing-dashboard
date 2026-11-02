@@ -9,6 +9,7 @@ import { isDemoMode } from "@/lib/demo-mode";
 import { REFUSAL_MESSAGE, refuseRescale, refuseVoid, rescaleBaseline } from "@/lib/benchmark-rescale";
 import { utcMidnight as startOfDayUTC, validateDeviceLine } from "@/lib/circuit-load";
 import { requireSuperApproval } from "@/lib/pending-approval";
+import { resyncCircuitFigures } from "@/lib/circuit-figures";
 
 export type RescaleResult = { error?: string };
 
@@ -525,7 +526,15 @@ export async function removeExcludedDeviceLine(lineId: string, reason: string): 
       error: "This line is part of the replaced retrofit record, so it can't be removed this way — use Correct count or Correct device instead.",
     };
   }
-  await db.circuitDevice.delete({ where: { id: lineId } });
+  // The line's own theoretical draw is what every demo's savings figure
+  // deducts (exclusionFromDevices) — removing it without re-deriving left a
+  // circuit's demo-measured % computed against a deduction that no longer
+  // exists, found 2026-11-02 on a real production circuit whose figure read
+  // 73.86% off a line that had already been removed by other means.
+  await db.$transaction(async (tx) => {
+    await tx.circuitDevice.delete({ where: { id: lineId } });
+    await resyncCircuitFigures(tx, line.circuitId, gate.actorId);
+  });
   logger.info("inventory.excluded_line_removed", {
     actorId: gate.actorId,
     lineId,

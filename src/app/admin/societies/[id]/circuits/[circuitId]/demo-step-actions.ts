@@ -745,6 +745,44 @@ export async function setDemoLightCount(input: { demoId: string; count: number; 
 }
 
 /**
+ * Correct a replacement line's own physical-unit count, directly — not
+ * through the full replacement form, which re-asks for every line's type,
+ * count and wattage at once (2026-11-04, user-asked: a lighter, one-field
+ * edit for the one figure that's actually wrong). Display only — never
+ * touches replacementCount, so unlike every other correction on this line
+ * it needs no circuit-figure resync and cannot move the benchmark.
+ */
+export async function correctReplacementUnitsInstalled(input: { demoId: string; lineId: string; physicalUnits: number | null; reason: string }): Promise<Outcome> {
+  const demoMode = await isDemoMode();
+  const a = await actor(demoMode ? "field" : "ops");
+  if ("error" in a) return { error: a.error };
+  if (!input.reason.trim()) return { error: "Say what was wrong — a correction with no stated reason cannot be reviewed later." };
+  if (input.physicalUnits !== null && (!Number.isInteger(input.physicalUnits) || input.physicalUnits < 1)) {
+    return { error: "The physical unit count must be a whole number of 1 or more, or left blank to match Replaced." };
+  }
+  const g = await editableDemo(input.demoId, a.admin.id, "replacement_units");
+  if ("error" in g) return { error: g.error };
+  const line = await db.circuitDevice.findUnique({
+    where: { id: input.lineId },
+    select: { id: true, circuitId: true, replacementUnitsInstalled: true },
+  });
+  if (!line || line.circuitId !== g.demo.circuitId) return { error: "That inventory line is no longer on record." };
+
+  await db.$transaction(async (tx) => {
+    await tx.circuitDevice.update({ where: { id: input.lineId }, data: { replacementUnitsInstalled: input.physicalUnits } });
+    await logChange(tx, {
+      entity: "circuit_device", entityId: input.lineId, kind: "edit", field: "replacementUnitsInstalled",
+      circuitId: g.demo.circuitId, demoId: input.demoId,
+      oldValue: line.replacementUnitsInstalled, newValue: input.physicalUnits,
+      reason: input.reason.trim(), actorId: a.admin.id,
+    });
+  });
+  logger.info("demo.replacement_units_corrected", { actorId: a.admin.id, demoId: input.demoId, lineId: input.lineId, from: line.replacementUnitsInstalled, to: input.physicalUnits });
+  revalidatePath(pathOf(g.demo));
+  return { ok: true };
+}
+
+/**
  * Delete a demo completely — until go-live (2026-09-26, the user's call:
  * "when user deletes a demo it should get deleted completely, no history, no
  * record remains"). Demo mode is the pre-go-live switch (production runs

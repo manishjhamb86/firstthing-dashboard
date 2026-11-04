@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { recordDemoReplacement, type DemoReplacementLine as ReplacementLine } from "./demo-step-actions";
+import { correctReplacementUnitsInstalled, recordDemoReplacement, type DemoReplacementLine as ReplacementLine } from "./demo-step-actions";
 import { Card, ErrorText, Field } from "@/components/ui";
 
 function todayISO() {
@@ -22,6 +22,7 @@ export type ReplacementFormLine = {
   /** What the replacement recorded for this line, when it has been recorded. */
   recorded?: {
     replacementTypeId: string | null;
+    replacementTypeName: string | null;
     replacementCount: number | null;
     replacementWattage: number | null;
     /** Physical units actually installed, when different from
@@ -461,6 +462,99 @@ export function ReplacementFollowUpStatus({ followUps }: { followUps: FollowUpRo
  * line, and a way to correct it — the kept count is whatever the lines say,
  * so moving 8 kept to 9 is changing how many on a line were replaced.
  */
+/** The physical-unit count's own small, one-field correction — a lighter
+ *  edit than reopening the whole replacement form, since this is the only
+ *  figure that's ever genuinely wrong in isolation (2026-11-04, user-asked).
+ *  Closed by default (ClickToEdit's own shape), open only on request. */
+function PhysicalUnitsEdit({ demoId, lineId, current, replacedCount }: { demoId: string; lineId: string; current: number | null; replacedCount: number }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(current ?? replacedCount));
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        className="text-xs underline"
+        style={{ color: "var(--accent)" }}
+        onClick={() => setEditing(true)}
+      >
+        {current != null ? "Correct the physical unit count" : "Record a different physical unit count"}
+      </button>
+    );
+  }
+
+  function save() {
+    const n = Number(value.trim());
+    if (!value.trim()) {
+      // Blank means "same as Replaced" — clear the override.
+      startTransition(async () => {
+        const result = await correctReplacementUnitsInstalled({ demoId, lineId, physicalUnits: null, reason: reason.trim() || "Matches Replaced again." });
+        setError(result?.error);
+        if (!result?.error) {
+          setEditing(false);
+          router.refresh();
+        }
+      });
+      return;
+    }
+    if (!Number.isInteger(n) || n < 1) {
+      setError("Enter a whole number of 1 or more, or leave it blank.");
+      return;
+    }
+    if (!reason.trim()) {
+      setError("Say what was wrong — a correction with no stated reason cannot be reviewed later.");
+      return;
+    }
+    startTransition(async () => {
+      const result = await correctReplacementUnitsInstalled({ demoId, lineId, physicalUnits: n, reason: reason.trim() });
+      setError(result?.error);
+      if (!result?.error) {
+        setEditing(false);
+        router.refresh();
+      }
+    });
+  }
+
+  return (
+    <div className="mt-1 space-y-1.5 rounded-md border border-[var(--field-border)] p-2">
+      <label className="flex items-center gap-2 text-xs">
+        <span>Physical units actually installed:</span>
+        <input
+          type="number"
+          min={1}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          disabled={pending}
+          aria-label="Physical units actually installed"
+          className="field field-auto w-16"
+        />
+      </label>
+      <input
+        type="text"
+        placeholder="Why this is being corrected"
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        disabled={pending}
+        aria-label="Reason for the correction"
+        className="field w-full text-xs"
+      />
+      {error && <ErrorText>{error}</ErrorText>}
+      <div className="flex gap-2">
+        <button type="button" onClick={save} disabled={pending} className="btn-primary btn-sm">
+          {pending ? "Saving…" : "Save"}
+        </button>
+        <button type="button" onClick={() => setEditing(false)} disabled={pending} className="btn-ghost btn-sm">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function ReplacementRecord({
   demoId,
   lines,
@@ -476,9 +570,9 @@ export function ReplacementRecord({
   const replaced = (l: ReplacementFormLine) => (l.excluded ? 0 : (l.recorded?.replacementCount ?? 0));
   // The physical fixture count, when it genuinely differs from how many
   // original positions were addressed (a consolidation — fewer, wider-
-  // coverage fixtures than before). Shown as a note only; the Replaced/Kept
-  // columns stay driven by replacementCount, which is what the savings
-  // formula actually reads (2026-11-04, user-caught).
+  // coverage fixtures than before). The Replaced/Kept columns stay driven
+  // by replacementCount, which is what the savings formula actually reads
+  // (2026-11-04, user-caught).
   const physicalUnits = (l: ReplacementFormLine) =>
     l.excluded ? null : (l.recorded?.replacementUnitsInstalled ?? null);
   if (lines.length === 0) return null;
@@ -496,13 +590,20 @@ export function ReplacementRecord({
           <tbody>
             {lines.map((l) => {
               const units = physicalUnits(l);
+              const name = l.recorded?.replacementTypeName;
               return (
                 <tr key={l.lineId}>
                   <td>
                     {l.count} × {l.deviceName}
-                    {units != null && units !== replaced(l) && (
-                      <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-                        {units} physical {units === 1 ? "unit" : "units"} installed
+                    {!l.excluded && name && (
+                      <div className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+                        → {units ?? replaced(l)} × {name}
+                        {units != null && units !== replaced(l) && " (consolidated — fewer, wider-coverage fixtures)"}
+                      </div>
+                    )}
+                    {!l.excluded && canCorrect && (
+                      <div className="mt-1">
+                        <PhysicalUnitsEdit demoId={demoId} lineId={l.lineId} current={units} replacedCount={replaced(l)} />
                       </div>
                     )}
                   </td>

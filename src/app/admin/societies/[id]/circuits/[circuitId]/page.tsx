@@ -257,6 +257,7 @@ export default async function CircuitDetailPage({
     recorded: l.replacedAt
       ? {
           replacementTypeId: l.replacementTypeId,
+          replacementTypeName: l.replacementType?.name ?? null,
           replacementCount: l.replacementCount,
           replacementWattage: l.replacementWattage,
           replacementUnitsInstalled: l.replacementUnitsInstalled,

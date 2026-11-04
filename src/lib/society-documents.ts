@@ -4,14 +4,21 @@
  * back office's society page lists the same set, so what FirsThing sees as
  * "shared with the society" and what the society actually sees cannot drift.
  *
- * Four sources:
+ * Five sources:
  *   - filed documents (StoredDocument) of the resident-facing types — the
  *     internal ones (meter exports, KYC files) are deliberately absent, and
  *     filed invoices appear only once released to the society;
  *   - monthly savings reports FirsThing has published (latest version of each
  *     circuit-month);
  *   - demo savings reports shared with the society (latest version per deal);
- *   - finalised inspections.
+ *   - finalised inspections;
+ *   - installation batch photos (2026-11-04, user-caught: "the approval
+ *     sheet that was uploaded should be visible" — a batch's own photo
+ *     evidence, recorded when a day's installation work is submitted, had
+ *     no path into this list at all; it only ever lived on
+ *     InstallationBatch.photoKeys, read solely by the installation page
+ *     itself). Only a SUBMITTED batch's (state != draft) photos count — a
+ *     draft is still being worked on, nothing to show yet.
  */
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/format-date";
@@ -27,6 +34,7 @@ export const SOCIETY_DOC_TYPES: Record<string, { label: string; tone: ChipTone }
   postDemoReport: { label: "Demo report (after)", tone: "neu" },
   inspectionReport: { label: "Inspection report", tone: "ok" },
   gatePass: { label: "Gate pass", tone: "neu" },
+  installationPhoto: { label: "Installation photo", tone: "neu" },
   invoiceCopy: { label: "Invoice", tone: "warn" },
   nonServiceInvoice: { label: "Invoice (other charges)", tone: "warn" },
 };
@@ -73,7 +81,7 @@ export async function societyDocuments(
   societyId: string,
   opts: { hideGeneratedReportsIfManualExists?: boolean } = {},
 ): Promise<{ agreement: SocietyDocRow | null; rows: SocietyDocRow[] }> {
-  const [docs, published, demoReports, inspections] = await Promise.all([
+  const [docs, published, demoReports, inspections, installBatches] = await Promise.all([
     db.storedDocument.findMany({
       where: {
         societyId,
@@ -109,6 +117,18 @@ export async function societyDocuments(
       orderBy: { inspectedAt: "desc" },
       select: { id: true, period: true, area: true, inspectedAt: true, inspectorName: true },
     }),
+    db.installationBatch.findMany({
+      where: { state: { not: "draft" }, project: { pipeline: { societyId } } },
+      orderBy: { submittedAt: "desc" },
+      select: {
+        id: true,
+        day: true,
+        areaKey: true,
+        submittedAt: true,
+        photoKeys: true,
+        project: { select: { pipeline: { select: { id: true, serviceLine: true, dealScope: true } } } },
+      },
+    }),
   ]);
 
   // Only the LATEST version of each slot: superseded versions are the back
@@ -120,6 +140,7 @@ export async function societyDocuments(
   const latestDemo = new Map<string, (typeof demoReports)[number]>();
   for (const r of demoReports) if (!latestDemo.has(r.pipelineId)) latestDemo.set(r.pipelineId, r);
   const deals = new Set(demoReports.map((r) => r.pipelineId)).size;
+  const installDeals = new Set(installBatches.map((b) => b.project.pipeline.id)).size;
 
   const stored = [...latestDoc.values()].map(
     (d): SocietyDocRow => ({
@@ -177,6 +198,22 @@ export async function societyDocuments(
         external: false,
       }),
     ),
+    ...installBatches.flatMap((b): SocietyDocRow[] => {
+      const keys = (b.photoKeys as string[] | null) ?? [];
+      const dealSuffix = installDeals > 1 ? ` — ${dealLabel(b.project.pipeline.serviceLine, b.project.pipeline.dealScope)}` : "";
+      return keys.map(
+        (key, i): SocietyDocRow => ({
+          id: `${b.id}-${i}`,
+          docType: "installationPhoto",
+          period: month(b.submittedAt ?? new Date()),
+          title: `Installation photo — Day ${b.day}, ${b.areaKey}${keys.length > 1 ? ` (${i + 1} of ${keys.length})` : ""}${dealSuffix}`,
+          detail: b.submittedAt ? `filed ${formatDate(b.submittedAt)}` : "filed",
+          portalHref: publicS3Url(key),
+          adminHref: publicS3Url(key),
+          external: true,
+        }),
+      );
+    }),
   ].sort((a, b) => (a.period < b.period ? 1 : a.period > b.period ? -1 : 0));
 
   return { agreement, rows };

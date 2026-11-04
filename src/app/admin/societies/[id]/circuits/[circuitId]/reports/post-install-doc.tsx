@@ -207,7 +207,7 @@ export function PostInstallDoc({ report, backHref }: { report: Report; backHref:
                           {l.excluded
                             ? "Kept — not replaced"
                             : l.replacementName
-                              ? `${l.replacementCount ?? l.count} × ${l.replacementName}${l.replacementWattage ? ` (${l.replacementWattage}W)` : ""}${
+                              ? `${l.replacementUnitsInstalled ?? l.replacementCount ?? l.count} × ${l.replacementName}${l.replacementWattage ? ` (${l.replacementWattage}W)` : ""}${
                                   l.replacementCount != null && l.replacementCount < l.count ? ` · ${l.count - l.replacementCount} kept, not replaced` : ""
                                 }`
                               : "—"}

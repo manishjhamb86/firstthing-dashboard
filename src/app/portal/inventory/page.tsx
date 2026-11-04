@@ -55,6 +55,7 @@ export default async function PortalInventoryPage() {
             wattage: true,
             replacementCount: true,
             replacementWattage: true,
+            replacementUnitsInstalled: true,
             historical: true,
             excludedFromCalculation: true,
             deviceType: { select: { name: true } },
@@ -294,7 +295,7 @@ export default async function PortalInventoryPage() {
                               </p>
                             </div>
                             <span className="num text-[15px] font-bold">
-                              {(d.replacementType ? (d.replacementCount ?? d.count) : d.count).toLocaleString("en-IN")}
+                              {(d.replacementType ? (d.replacementUnitsInstalled ?? d.replacementCount ?? d.count) : d.count).toLocaleString("en-IN")}
                             </span>
                           </div>
                         ))}

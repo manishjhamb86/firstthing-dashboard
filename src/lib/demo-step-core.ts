@@ -271,7 +271,21 @@ export async function recordDemoMeterAs(admin: { id: string }, input: {
  * draw is subtracted from both the before and after averages when the
  * benchmark is worked out, and the reports say so (2026-09-26, user-specified).
  */
-export type DemoReplacementLine = { lineId: string; replacementTypeId: string; count: number; wattage: number; exclude?: boolean };
+export type DemoReplacementLine = {
+  lineId: string;
+  replacementTypeId: string;
+  count: number;
+  wattage: number;
+  exclude?: boolean;
+  /** Physical units actually installed, only when different from `count` —
+   *  a consolidation (fewer, more-efficient fixtures than original
+   *  positions). Read-only for display; never fed into the savings
+   *  formula, which stays driven by `count` alone (2026-11-04, user-caught:
+   *  setting count itself to the physical figure produced an impossible
+   *  >100% saving, since count-replacementCount is what the kept-fixture
+   *  deduction reads). */
+  physicalUnits?: number;
+};
 
 /**
  * Record the replacement (the pivot day) — or correct it. The work has to be
@@ -354,12 +368,28 @@ export async function recordDemoReplacementAs(
         if (r.exclude) {
           await tx.circuitDevice.update({
             where: { id: line.id },
-            data: { excludedFromCalculation: true, replacementTypeId: null, replacementCount: null, replacementWattage: null, replacedAt: null, replacedById: admin.id },
+            data: { excludedFromCalculation: true, replacementTypeId: null, replacementCount: null, replacementWattage: null, replacementUnitsInstalled: null, replacedAt: null, replacedById: admin.id },
           });
         } else {
           await tx.circuitDevice.update({
             where: { id: line.id },
-            data: { excludedFromCalculation: false, replacementTypeId: r.replacementTypeId, replacementCount: r.count, replacementWattage: r.wattage, replacedAt: date, replacedById: admin.id },
+            data: {
+              excludedFromCalculation: false,
+              replacementTypeId: r.replacementTypeId,
+              replacementCount: r.count,
+              replacementWattage: r.wattage,
+              replacementUnitsInstalled: r.physicalUnits ?? null,
+              replacedAt: date,
+              replacedById: admin.id,
+            },
+          });
+        }
+        if (line.replacementUnitsInstalled !== (r.exclude ? null : (r.physicalUnits ?? null))) {
+          await logChange(tx, {
+            entity: "circuit_device", entityId: line.id, kind: "edit", field: "replacementUnitsInstalled",
+            circuitId: demo.circuitId, demoId: demo.id,
+            oldValue: line.replacementUnitsInstalled, newValue: r.exclude ? null : (r.physicalUnits ?? null),
+            actorId: admin.id,
           });
         }
         if (line.excludedFromCalculation !== Boolean(r.exclude)) {

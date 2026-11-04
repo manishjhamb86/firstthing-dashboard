@@ -255,7 +255,12 @@ export default async function CircuitDetailPage({
     // Marked at the survey as not part of the retrofit: opens as excluded.
     excluded: l.excludedFromCalculation,
     recorded: l.replacedAt
-      ? { replacementTypeId: l.replacementTypeId, replacementCount: l.replacementCount, replacementWattage: l.replacementWattage }
+      ? {
+          replacementTypeId: l.replacementTypeId,
+          replacementCount: l.replacementCount,
+          replacementWattage: l.replacementWattage,
+          replacementUnitsInstalled: l.replacementUnitsInstalled,
+        }
       : null,
     options: replacementOptionRows
       .filter((o) => o.originalTypeId === l.deviceTypeId && o.replacement.active)
@@ -278,6 +283,7 @@ export default async function CircuitDetailPage({
     replacementName: l.replacementType?.name ?? null,
     replacementCount: l.replacementCount,
     replacementWattage: l.replacementWattage,
+    replacementUnitsInstalled: l.replacementUnitsInstalled,
     demoLabel: demoLabelOf(l.demoId),
     // Set only for a fixture a light-count change added — distinct from a
     // demo-era kept/excluded line, and the UI reads it to say so (2026-10-26,

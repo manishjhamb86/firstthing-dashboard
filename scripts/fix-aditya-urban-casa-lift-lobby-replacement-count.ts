@@ -73,7 +73,7 @@ async function main() {
       data: {
         entity: "circuit_device", entityId: LINE_ID, kind: "edit", field: "replacementCount",
         circuitId: CIRCUIT_ID, demoId: DEMO_ID,
-        oldValue: line.replacementCount, newValue: NEW_REPLACEMENT_COUNT,
+        oldValue: line.replacementCount ?? undefined, newValue: NEW_REPLACEMENT_COUNT,
         reason: "All 16 original 9W Surface Lights were removed, but only 8 new 12W motion-enabled fixtures were installed (a consolidation, not a 1:1 replacement) — the record had incorrectly shown 16 replaced.",
         actorId: ACTOR_ID,
       },

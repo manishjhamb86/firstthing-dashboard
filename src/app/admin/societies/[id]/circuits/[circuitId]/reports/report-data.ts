@@ -236,6 +236,7 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
       replacementName: l.replacementType?.name ?? null,
       replacementCount: l.replacementCount,
       replacementWattage: l.replacementWattage,
+      replacementUnitsInstalled: l.replacementUnitsInstalled,
       excluded: l.excludedFromCalculation,
     })),
   };

@@ -26,6 +26,11 @@ export type InventoryLine = {
   replacementName: string | null;
   replacementCount: number | null;
   replacementWattage: number | null;
+  /** Physical units actually installed, when different from
+   *  replacementCount (a consolidation — fewer, more-efficient fixtures
+   *  than original positions). Null means "same as replacementCount". Shown
+   *  only in the label; replacementCount alone still drives "kept". */
+  replacementUnitsInstalled: number | null;
   historical: boolean;
   /** Stays on the circuit unreplaced; its draw comes off the benchmark. */
   excluded: boolean;
@@ -399,7 +404,7 @@ function LineRow({
           : line.excluded
           ? "Kept — not replaced; left out of the saving"
           : line.replacementName
-          ? `${line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}${
+          ? `${line.replacementUnitsInstalled ?? line.replacementCount ?? line.count} × ${line.replacementName}${line.replacementWattage ? ` (${line.replacementWattage}W)` : ""}${
               line.replacementCount != null && line.replacementCount < line.count ? ` · ${line.count - line.replacementCount} kept` : ""
             }`
           : line.note ?? "—"}

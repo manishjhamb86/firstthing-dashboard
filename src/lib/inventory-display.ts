@@ -19,6 +19,14 @@ export type InventoryDevice = {
   wattage: number;
   replacementCount: number | null;
   replacementWattage: number | null;
+  /** How many PHYSICAL units actually exist, when different from
+   *  replacementCount (2026-11-04) — e.g. 16 original fixtures consolidated
+   *  into 8 new ones. Null means "same as replacementCount", the ordinary
+   *  1:1 case. This is what "installed" should count: a resident or an
+   *  installer reconciling against the real fixtures wants the physical
+   *  number, not the savings-formula's "how many no longer draw the old
+   *  wattage" figure. */
+  replacementUnitsInstalled: number | null;
   historical: boolean;
   excludedFromCalculation: boolean;
   deviceType: { name: string };
@@ -26,7 +34,7 @@ export type InventoryDevice = {
 };
 
 export function installedCount(c: { lightReplacementDate: Date | null }, d: InventoryDevice): number {
-  if (d.replacementType) return d.replacementCount ?? d.count;
+  if (d.replacementType) return d.replacementUnitsInstalled ?? d.replacementCount ?? d.count;
   if (d.historical && !d.excludedFromCalculation && c.lightReplacementDate) return d.count;
   return 0;
 }

@@ -3667,6 +3667,20 @@ model CircuitDevice {
   replacedAt         DateTime? @map("replaced_at")
   replacedById       String?   @map("replaced_by_id")
 
+  /// How many PHYSICAL units of the replacement type actually exist — read
+  /// only for display (2026-11-04, user-caught: a 16-light line consolidated
+  /// to 8 new motion fixtures showed "16 x ..." in the inventory, which was
+  /// wrong, but setting replacementCount itself to 8 produced an impossible
+  /// 155.95% saving, since count-replacementCount feeds the kept-fixture
+  /// deduction formula — replacementCount has to stay what it always meant,
+  /// "how many of the original positions no longer draw the old wattage"
+  /// (16, i.e. all of them, zero kept), which is a DIFFERENT question from
+  /// "how many physical fixtures were installed" (8). Null (the default,
+  /// true for every line recorded before this field existed) means "same as
+  /// replacementCount" — the ordinary 1:1 case, no display change anywhere.
+  /// Never read by any savings/billing calculation.
+  replacementUnitsInstalled Int? @map("replacement_units_installed")
+
   // What became of the fixtures KEPT on this line during the demo (the whole
   // line when excluded, else count − replacementCount), recorded at the full
   // installation (2026-09-27, user-specified). Null = not recorded: the demo's

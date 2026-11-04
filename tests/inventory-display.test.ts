@@ -7,6 +7,7 @@ function device(p: Partial<InventoryDevice>): InventoryDevice {
     wattage: 20,
     replacementCount: null,
     replacementWattage: null,
+    replacementUnitsInstalled: null,
     historical: false,
     excludedFromCalculation: false,
     deviceType: { name: "Tube light" },
@@ -24,6 +25,16 @@ describe("installedCount", () => {
   it("a replacement with no stated count falls back to the original count", () => {
     const d = device({ count: 10, replacementCount: null, replacementType: { name: "Batten" } });
     expect(installedCount({ lightReplacementDate: null }, d)).toBe(10);
+  });
+
+  it("a consolidation (fewer physical units than replacementCount) counts the physical units, not the savings-formula count", () => {
+    const d = device({ count: 16, replacementCount: 16, replacementUnitsInstalled: 8, replacementType: { name: "Motion-Enabled Dimmable Surface Light 12W" } });
+    expect(installedCount({ lightReplacementDate: null }, d)).toBe(8);
+  });
+
+  it("with no stated physical-unit count, falls back to replacementCount as before", () => {
+    const d = device({ count: 16, replacementCount: 16, replacementUnitsInstalled: null, replacementType: { name: "Batten" } });
+    expect(installedCount({ lightReplacementDate: null }, d)).toBe(16);
   });
 
   it("a historical line on a replaced circuit counts itself", () => {

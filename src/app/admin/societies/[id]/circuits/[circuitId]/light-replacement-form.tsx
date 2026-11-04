@@ -20,14 +20,22 @@ export type ReplacementFormLine = {
   /** Already marked at the survey (or at the replacement) as kept, not replaced. */
   excluded: boolean;
   /** What the replacement recorded for this line, when it has been recorded. */
-  recorded?: { replacementTypeId: string | null; replacementCount: number | null; replacementWattage: number | null } | null;
+  recorded?: {
+    replacementTypeId: string | null;
+    replacementCount: number | null;
+    replacementWattage: number | null;
+    /** Physical units actually installed, when different from
+     *  replacementCount — a consolidation, e.g. 16 old positions covered by
+     *  8 new, wider-coverage fixtures. Null means "same as replacementCount". */
+    replacementUnitsInstalled: number | null;
+  } | null;
   options: { id: string; name: string; defaultWattage: number | null }[];
 };
 
 /** The select's value for "this line stays on the circuit, unreplaced". */
 const EXCLUDE = "__exclude__";
 
-type LineState = { replacementTypeId: string; count: string; wattage: string };
+type LineState = { replacementTypeId: string; count: string; wattage: string; physicalUnits: string };
 
 const kwhPerDay = (l: ReplacementFormLine) => (l.count * l.wattage * l.hoursPerDay) / 1000;
 
@@ -65,11 +73,12 @@ export function LightReplacementForm({
       lines.map((l) => [
         l.lineId,
         l.excluded
-          ? { replacementTypeId: EXCLUDE, count: String(l.count), wattage: "" }
+          ? { replacementTypeId: EXCLUDE, count: String(l.count), wattage: "", physicalUnits: "" }
           : {
               replacementTypeId: l.recorded?.replacementTypeId ?? "",
               count: String(l.recorded?.replacementCount ?? l.count),
               wattage: l.recorded?.replacementWattage != null ? String(l.recorded.replacementWattage) : "",
+              physicalUnits: String(l.recorded?.replacementUnitsInstalled ?? l.recorded?.replacementCount ?? l.count),
             },
       ]),
     ),
@@ -149,16 +158,21 @@ export function LightReplacementForm({
       }
     }
     startTransition(async () => {
-      const replacements: ReplacementLine[] = lines.map((l) =>
-        isExcluded(l)
-          ? { lineId: l.lineId, replacementTypeId: "", count: l.count, wattage: l.wattage, exclude: true }
-          : {
-              lineId: l.lineId,
-              replacementTypeId: lineState[l.lineId].replacementTypeId,
-              count: Number(lineState[l.lineId].count),
-              wattage: Number(lineState[l.lineId].wattage),
-            },
-      );
+      const replacements: ReplacementLine[] = lines.map((l) => {
+        if (isExcluded(l)) return { lineId: l.lineId, replacementTypeId: "", count: l.count, wattage: l.wattage, exclude: true };
+        const count = Number(lineState[l.lineId].count);
+        const units = Number(lineState[l.lineId]?.physicalUnits);
+        return {
+          lineId: l.lineId,
+          replacementTypeId: lineState[l.lineId].replacementTypeId,
+          count,
+          wattage: Number(lineState[l.lineId].wattage),
+          // Only sent when it genuinely differs from Replaced — a fewer,
+          // more-efficient fixture count than original positions. Omitted
+          // (undefined) means "same as Replaced", the ordinary case.
+          physicalUnits: Number.isFinite(units) && units > 0 && units !== count ? units : undefined,
+        };
+      });
       const result = await recordDemoReplacement({
         demoId,
         replacedOn: date,
@@ -249,6 +263,22 @@ export function LightReplacementForm({
                           of {l.count} · {l.count - Number(lineState[l.lineId]?.count)} kept
                         </span>
                       )}
+                      {/* Rarely needed — only when fewer physical fixtures
+                          cover the same positions (e.g. wider-coverage
+                          motion sensors). Left at Replaced's own value
+                          changes nothing; this never feeds the saving. */}
+                      <label className="mt-1 flex items-center gap-1 text-xs text-[var(--text-muted)]">
+                        <span>Physical units, if different:</span>
+                        <input
+                          type="number"
+                          min={1}
+                          value={lineState[l.lineId]?.physicalUnits ?? ""}
+                          onChange={(e) => setLine(l.lineId, { physicalUnits: e.target.value })}
+                          disabled={pending}
+                          aria-label={`Physical units installed for ${l.deviceName}, if different from Replaced`}
+                          className="field field-auto w-16"
+                        />
+                      </label>
                     </td>
                     <td>
                       <input
@@ -444,6 +474,13 @@ export function ReplacementRecord({
 }) {
   const [open, setOpen] = useState(false);
   const replaced = (l: ReplacementFormLine) => (l.excluded ? 0 : (l.recorded?.replacementCount ?? 0));
+  // The physical fixture count, when it genuinely differs from how many
+  // original positions were addressed (a consolidation — fewer, wider-
+  // coverage fixtures than before). Shown as a note only; the Replaced/Kept
+  // columns stay driven by replacementCount, which is what the savings
+  // formula actually reads (2026-11-04, user-caught).
+  const physicalUnits = (l: ReplacementFormLine) =>
+    l.excluded ? null : (l.recorded?.replacementUnitsInstalled ?? null);
   if (lines.length === 0) return null;
   return (
     <div className="space-y-3">
@@ -457,15 +494,23 @@ export function ReplacementRecord({
             </tr>
           </thead>
           <tbody>
-            {lines.map((l) => (
-              <tr key={l.lineId}>
-                <td>
-                  {l.count} × {l.deviceName}
-                </td>
-                <td className="num text-right">{replaced(l)}</td>
-                <td className="num text-right">{l.count - replaced(l)}</td>
-              </tr>
-            ))}
+            {lines.map((l) => {
+              const units = physicalUnits(l);
+              return (
+                <tr key={l.lineId}>
+                  <td>
+                    {l.count} × {l.deviceName}
+                    {units != null && units !== replaced(l) && (
+                      <div className="text-xs" style={{ color: "var(--text-muted)" }}>
+                        {units} physical {units === 1 ? "unit" : "units"} installed
+                      </div>
+                    )}
+                  </td>
+                  <td className="num text-right">{replaced(l)}</td>
+                  <td className="num text-right">{l.count - replaced(l)}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

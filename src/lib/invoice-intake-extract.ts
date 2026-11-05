@@ -182,6 +182,20 @@ export async function runIntakeExtraction(
     const raw = err instanceof Error ? err.message : String(err);
     const friendly = friendlyExtractionError(raw);
     logger.warn("intake.extraction_failed", { actorId, intakeId, message: raw.slice(0, 300) });
+    // A RETRY's own failure must never discard an earlier successful read —
+    // the "status became reading" update above only touched status/
+    // extractionError, so a good `extraction`/`review` from a prior attempt
+    // is still sitting on the row (2026-11-05, user-caught: FT/2026-27/114
+    // showed "could not be read" with a complete, correct extraction and
+    // review already stored — a retry had failed AFTER an earlier read had
+    // already succeeded, and this path overwrote the status regardless).
+    // Re-derive the real status from what's already there instead of
+    // reporting a failure that misstates what the row actually holds.
+    const existing = intake.extraction as unknown as ExtractedInvoice | null;
+    if (existing && existing.lines?.length > 0) {
+      logger.warn("intake.retry_failed_kept_prior_extraction", { actorId, intakeId });
+      return storeExtraction(intakeId, existing, actorId, adjust);
+    }
     await db.invoiceIntake.update({ where: { id: intakeId }, data: { status: "could_not_read", extractionError: friendly } });
     return { error: friendly };
   }

@@ -18,6 +18,14 @@ import { formatDate } from "@/lib/format-date";
 import { eventTitle } from "@/lib/schedule";
 import { logChange } from "@/lib/change-log";
 
+// The PER-01 permission proxy, same local helper demo-step-actions.ts
+// already defines for its own near-identical "arrange this visit" gate
+// (2026-11-09, user-caught: a support-team account holding both these
+// permissions by hand was refused here because this check read `team`,
+// not permissions — the two sibling gates disagreed on what "operations"
+// means for the same class of action).
+const isOps = (p: string[]) => p.includes("manage_survey") && p.includes("manage_pipeline");
+
 const SERVICE_LINES = ["lighting", "pumps", "solar", "wastewater"] as const;
 
 // FEAT-001: log a new lead. Creates the Society (quick, prospect-only —
@@ -792,7 +800,7 @@ export async function updateSurveyVisit(
     return { error: "Assign the survey to someone first — the visit is theirs to arrange." };
   }
   const mine = pipeline.surveyOwnerId === actor.id;
-  if (!mine && !isOperations(actor.team)) {
+  if (!mine && !isOps(actor.permissions as string[])) {
     logger.warn("pipeline.survey_visit_refused", { pipelineId, actorId: actor.id, reason: "not-assignee" });
     return { error: "Only the assignee or operations can arrange this visit." };
   }

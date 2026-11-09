@@ -230,6 +230,10 @@ enum JobType {
   // reading against the circuit's expected load/savings, and whether
   // yesterday's reading landed at all.
   demo_monitoring_sweep
+  // EMS pump-room energy meter: poll the dedicated mailbox, match each
+  // email to a classified pump room by its subject label, derive one daily
+  // kWh figure by differencing the cumulative register.
+  pump_room_email_sweep
 
   @@map("job_type")
 }
@@ -376,6 +380,7 @@ model Society {
   pipelines          Pipeline[]
   scheduledEvents    ScheduledEvent[]
   waterTanks         WaterTank[]
+  emsPumpMeters      EmsPumpMeter[]
   meterDevices       MeterDevice[]
   meterInstallations MeterInstallation[]
   contracts          Contract[]
@@ -647,6 +652,9 @@ model AdminUser {
   // agreement queue for one named account's sign-off (2026-10-20, user-asked).
   pendingApprovalsRequested PendingApproval[] @relation("PendingApprovalRequestedBy")
   pendingApprovalsDecided   PendingApproval[] @relation("PendingApprovalDecidedBy")
+
+  googleGmailConfigUpdated GoogleGmailConfig[] @relation("GoogleGmailConfigUpdatedBy")
+  emsPumpMetersAssigned    EmsPumpMeter[]      @relation("EmsPumpMeterAssignedBy")
 
   @@map("admin_users")
 }
@@ -931,6 +939,30 @@ model GoogleCalendarConfig {
   updatedBy AdminUser? @relation("GoogleCalendarConfigUpdatedBy", fields: [updatedById], references: [id])
 
   @@map("google_calendar_config")
+}
+
+/// Same domain-wide-delegation mechanism as GoogleCalendarConfig, scoped to
+/// gmail.readonly — but simpler: Calendar impersonates whichever user
+/// organizes a given event, this only ever impersonates ONE fixed mailbox
+/// (`mailbox`, a dedicated address the EMS vendor's daily email is
+/// forwarded to — never a real person's inbox, see the pump-room models
+/// below).
+model GoogleGmailConfig {
+  id               String    @id @default("singleton")
+  clientEmail      String    @map("client_email")
+  privateKey       String    @map("private_key")
+  mailbox          String    @map("mailbox")
+  enabled          Boolean   @default(true)
+  updatedById      String?   @map("updated_by_id")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  lastOkAt         DateTime? @map("last_ok_at")
+  lastError        String?   @map("last_error")
+  lastSweepAt      DateTime? @map("last_sweep_at")
+  lastSweepSummary String?   @map("last_sweep_summary")
+
+  updatedBy AdminUser? @relation("GoogleGmailConfigUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("google_gmail_config")
 }
 
 /// Operations-controlled switches for a temporary, one-time capability
@@ -3901,6 +3933,137 @@ model TankAlert {
   @@index([tankId, openedAt])
   @@index([closedAt])
   @@map("tank_alerts")
+}
+
+// ---- EMS pump-room energy meter -----------------------------------------
+// A daily vendor email (ems_support@sses.co.in, subject "EMS-Automated
+// daily Report : {Society}") with an Excel attachment (ts, kw, kwh,
+// total_flow) reporting a society's pump-room backup energy meter. Read
+// automatically via Gmail (GoogleGmailConfig above), classified by hand
+// once (mirrors WaterTank's own setupType/societyId assignment), then read
+// forever. `PumpRoomAudit`/`PumpRoomUnit` already name something else — the
+// survey-time equipment checklist tied to a SiteSurvey (SCR-013) — so every
+// model here is prefixed EmsPump to keep the two apart.
+
+/// A pump room's own three categories — deliberately a different enum from
+/// TankSetup (domestic/flush/stp): the user's own words for this asset.
+enum PumpRoomKind {
+  domestic
+  stp
+  fire
+
+  @@map("pump_room_kind")
+}
+
+enum EmsPumpIngestStatus {
+  /// The subject's label matches no classified EmsPumpMeter yet.
+  needs_assignment
+  applied
+  parse_failed
+
+  @@map("ems_pump_ingest_status")
+}
+
+/// The physical pump room — mirrors WaterTank's shape (classified and
+/// assigned by hand, cached last-reading columns for list views) but scoped
+/// to one room per society for now; extend when a real multi-room case
+/// shows up rather than guessing at the shape today.
+model EmsPumpMeter {
+  id String @id @default(cuid())
+
+  /// The exact text after "EMS-Automated daily Report : " in the vendor's
+  /// subject — recorded once, by hand, and matched verbatim on every later
+  /// email from then on (src/lib/pump-room-ingest.ts). Deliberately NOT
+  /// re-matched by fuzzy text per email: the same string arrives daily for
+  /// the life of this room, so a one-time classification (same shape as
+  /// WaterTank.assignedAt) solves the matching problem permanently, where a
+  /// fuzzy match would carry a small, compounding mismatch risk every day.
+  vendorSubjectLabel String        @unique @map("vendor_subject_label")
+  roomType           PumpRoomKind? @map("room_type")
+  societyId          String?       @map("society_id")
+  assignedAt         DateTime?     @map("assigned_at")
+  assignedById       String?       @map("assigned_by_id")
+
+  /// Cache of the last-applied register, refreshed on every applied ingest —
+  /// same pattern as WaterTank's lastLevelPercent/lastReportedAt.
+  lastKwh       Float?    @map("last_kwh")
+  lastTotalFlow Float?    @map("last_total_flow")
+  lastReadingAt DateTime? @map("last_reading_at")
+  lastIngestAt  DateTime? @map("last_ingest_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  society    Society?             @relation(fields: [societyId], references: [id], onDelete: SetNull)
+  assignedBy AdminUser?           @relation("EmsPumpMeterAssignedBy", fields: [assignedById], references: [id])
+  readings   EmsPumpReading[]
+  ingests    EmsPumpEmailIngest[]
+
+  @@index([societyId])
+  @@map("ems_pump_meters")
+}
+
+/// The durable dedupe ledger — one row per Gmail message ever seen. This IS
+/// the record of the email (not a copy of anything else), so a worker
+/// restart can never re-apply the same day twice: the check is a DB column,
+/// not an in-memory "seen this session" set.
+model EmsPumpEmailIngest {
+  id             String              @id @default(cuid())
+  gmailMessageId String              @unique @map("gmail_message_id")
+  gmailThreadId  String?             @map("gmail_thread_id")
+  subjectLabel   String              @map("subject_label")
+  receivedAt     DateTime            @map("received_at")
+  pumpMeterId    String?             @map("pump_meter_id")
+  /// Raw bytes land in S3 (CON-30 — before interpretation) regardless of
+  /// whether a meter is matched yet; a later classification backfills from
+  /// here rather than needing the email re-fetched.
+  s3Key          String              @map("s3_key")
+  fileHash       String              @map("file_hash")
+  byteSize       Int                 @map("byte_size")
+  rowCount       Int?                @map("row_count")
+  status         EmsPumpIngestStatus @default(needs_assignment)
+  parseError     String?             @map("parse_error")
+  appliedAt      DateTime?           @map("applied_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  pumpMeter EmsPumpMeter?    @relation(fields: [pumpMeterId], references: [id], onDelete: SetNull)
+  readings  EmsPumpReading[]
+
+  @@index([pumpMeterId, status])
+  @@index([status, receivedAt])
+  @@map("ems_pump_email_ingests")
+}
+
+/// One derived row per meter per calendar day — the day's closing register
+/// sample and the consumption derived from it by differencing against the
+/// PREVIOUS day's own closing sample (day-closing, not per-interval —
+/// trivially idempotent, since recomputing a day depends only on two fixed
+/// rows of record; the raw bytes stay in S3 either way, so a finer-grained
+/// re-derivation later is never precluded).
+model EmsPumpReading {
+  id            String   @id @default(cuid())
+  pumpMeterId   String   @map("pump_meter_id")
+  date          DateTime @map("date") // UTC midnight
+  lastKwh       Float    @map("last_kwh")
+  lastTotalFlow Float?   @map("last_total_flow")
+  lastTs        DateTime @map("last_ts")
+
+  /// Null when there is no valid prior day to diff against (first-ever
+  /// reading — "correct, not a loss", reading-normalize.ts's own words) or
+  /// the register went backwards that day — never a negative number
+  /// (reading-normalize.ts's cumulative-register rule, reused here at
+  /// day-closing granularity). The raw lastKwh/lastTotalFlow above are
+  /// still stored either way; only the derived figure is withheld.
+  dailyKwh              Float?  @map("daily_kwh")
+  registerWentBackwards Boolean @default(false) @map("register_went_backwards")
+
+  sourceIngestId String?  @map("source_ingest_id")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  pumpMeter    EmsPumpMeter        @relation(fields: [pumpMeterId], references: [id], onDelete: Cascade)
+  sourceIngest EmsPumpEmailIngest? @relation(fields: [sourceIngestId], references: [id], onDelete: SetNull)
+
+  @@unique([pumpMeterId, date])
+  @@index([pumpMeterId, date])
+  @@map("ems_pump_readings")
 }
 
 // ---- eWeLink (SONOFF) meter mirror -------------------------------------

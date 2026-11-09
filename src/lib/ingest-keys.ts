@@ -89,3 +89,16 @@ export function buildMeterImportKey(params: { meterId: string; fileName: string;
   const ext = (params.fileName.split(".").pop() ?? "csv").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
   return `Ingest/Meters/${params.meterId}/${stamp}_${name}.${ext}`;
 }
+
+/**
+ * The EMS pump-room vendor's daily email attachment — a backup energy
+ * meter export, same sensitivity class as every other vendor meter file
+ * under `Ingest/`. Keyed by the vendor's own subject label (not a society
+ * id — a label with no classified pump room yet has no society to key on)
+ * and the Gmail message id, so a re-fetch of the same email can never
+ * collide with the file it would otherwise overwrite.
+ */
+export function buildPumpRoomIngestKey(params: { subjectLabel: string; gmailMessageId: string; receivedAt: Date }): string {
+  const stamp = params.receivedAt.toISOString().replace(/[:.]/g, "-");
+  return `Ingest/PumpRooms/${slug(params.subjectLabel)}/${stamp}_${params.gmailMessageId}.xlsx`;
+}

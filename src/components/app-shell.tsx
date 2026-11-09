@@ -169,6 +169,8 @@ export function AppShell({
     // society-management's to run. Its own service line, its own group.
     ...group("water", "Water", Droplets, [
       showTanks && { href: "/admin/water-tanks", label: "Water tanks", icon: Droplets },
+      // EMS pump-room energy meter — same society-management gate as tanks.
+      showTanks && { href: "/admin/pump-rooms", label: "Pump rooms", icon: Zap },
     ]),
     // Inventory & device lifecycle (2026-09-25) — stock is received and moved
     // by the field and pipeline teams.
@@ -198,6 +200,9 @@ export function AppShell({
       (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
       // Bound to one named account (2026-10-20).
       superAdmin && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },
+      // Bound to one named account — reads the dedicated pump-room mailbox
+      // only, nothing else.
+      superAdmin && { href: "/admin/settings/google-gmail", label: "Google Gmail", icon: Mail },
       // Bound to one named account (2026-10-20).
       superAdmin && { href: "/admin/settings/zoho", label: "Zoho Invoice", icon: Receipt },
       // Bound to one named account (2026-10-20) — credentials are env-only

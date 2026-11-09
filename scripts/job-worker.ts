@@ -12,6 +12,7 @@ import { runHelpTriageSweep } from "../src/lib/help-triage";
 import { settledTotal } from "../src/lib/payment";
 import { syncDemoMonitoringAlerts } from "../src/lib/demo-monitoring-alerts";
 import { closeTankAlert, evaluateTankConditions, openTankAlert } from "../src/lib/tank-alerts";
+import { sweepPumpRoomEmails } from "../src/lib/pump-room-ingest";
 
 // ADR-003 — the dedicated worker process for the Postgres-backed job queue.
 // Run alongside the Next.js app (`pnpm worker`, its own pm2 process in
@@ -86,6 +87,13 @@ const HELP_TRIAGE_INTERVAL_MS = 10 * 60 * 1000;
  * there is nothing fresher to check more often than this against.
  */
 const DEMO_MONITORING_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * EMS pump-room email ingestion: the vendor sends one email a day, so
+ * hourly is ample margin to catch it promptly without hammering Gmail —
+ * the same cadence logic as METER_POLL_INTERVAL_MS above.
+ */
+const PUMP_ROOM_EMAIL_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
 
 /**
  * Nothing this writes persists an actor as a foreign key (confirmed by
@@ -184,6 +192,9 @@ async function processJob(job: { id: string; type: string }) {
       break;
     case "demo_monitoring_sweep":
       await runDemoMonitoringSweep();
+      break;
+    case "pump_room_email_sweep":
+      await runPumpRoomEmailSweep();
       break;
     default:
       throw new Error(`Unknown job type: ${job.type}`);
@@ -675,6 +686,37 @@ async function ensureTankSampleScheduled() {
   }
 }
 
+async function runPumpRoomEmailSweep() {
+  try {
+    const r = await sweepPumpRoomEmails();
+    if (r.checked > 0) logger.info("job.pump_room_email_sweep_done", r);
+  } finally {
+    // Reschedule even after a failure — a bad email or a Gmail hiccup must
+    // not kill the chain, only skip a pass, same discipline as every other
+    // recurring job here.
+    await schedulePumpRoomEmailSweep(new Date(Date.now() + PUMP_ROOM_EMAIL_SWEEP_INTERVAL_MS));
+  }
+}
+
+async function schedulePumpRoomEmailSweep(runAt: Date) {
+  const existing = await db.job.findFirst({ where: { type: "pump_room_email_sweep", status: "pending" } });
+  if (existing) {
+    logger.warn("job.pump_room_email_sweep_duplicate_suppressed", { existingJobId: existing.id });
+    return;
+  }
+  await db.job.create({ data: { type: "pump_room_email_sweep", runAt } });
+}
+
+async function ensurePumpRoomEmailSweepScheduled() {
+  const existing = await db.job.findFirst({
+    where: { type: "pump_room_email_sweep", status: { in: ["pending", "running"] } },
+  });
+  if (!existing) {
+    await db.job.create({ data: { type: "pump_room_email_sweep", runAt: new Date() } });
+    logger.info("job.pump_room_email_sweep_seeded", {});
+  }
+}
+
 /** Releases anything a dead process left claimed, so the chain can resume. */
 async function reclaimStaleJobs() {
   const released = await db.job.updateMany({
@@ -795,6 +837,7 @@ async function main() {
   await ensureZohoInvoiceSyncScheduled();
   await ensureHelpTriageScheduled();
   await ensureDemoMonitoringSweepScheduled();
+  await ensurePumpRoomEmailSweepScheduled();
   for (;;) {
     await tick();
     await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));

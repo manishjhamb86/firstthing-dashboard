@@ -177,31 +177,76 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
 }
 
 /**
- * Applies every `needs_assignment` ingest a meter is holding, oldest
- * `receivedAt` first — the one place that enforces the order
- * applyIngestToMeter's own backward-looking differencing depends on.
- * Shared by the live sweep (above) and classify-from-queue's backfill
- * (src/app/admin/pump-rooms/actions.ts), so there is exactly one piece of
- * code that gets this ordering right rather than two that have to agree.
+ * Applies every `needs_assignment` ingest a meter is holding, in order of
+ * the CALENDAR DAY each file's own data covers — the one place that
+ * enforces the order applyIngestToMeter's own backward-looking
+ * differencing depends on. Shared by the live sweep (above) and
+ * classify-from-queue's backfill (src/app/admin/pump-rooms/actions.ts), so
+ * there is exactly one piece of code that gets this ordering right rather
+ * than two that have to agree.
+ *
+ * Deliberately NOT sorted by `receivedAt` (when Gmail says the email
+ * arrived) — found wrong by testing (2026-11-10): a backfill forwards
+ * historical days out of their original order on purpose (the very first
+ * test email, forwarded hours before a 6-day batch, carried the LATEST
+ * calendar day of the whole set but the EARLIEST receivedAt). receivedAt
+ * only happens to match data order for a same-day automated feed; a
+ * backfill is exactly the case where it doesn't. So every pending file is
+ * read and parsed once here — more work than trusting a DB column, but the
+ * only way to be right regardless of how or when the emails arrived. An
+ * unreadable file sorts last and is still applied, so it surfaces its own
+ * parse_failed status rather than being silently skipped.
  */
 export async function applyPendingIngestsForMeter(meterId: string): Promise<{ applied: number; failed: number }> {
   const pending = await db.emsPumpEmailIngest.findMany({
     where: { pumpMeterId: meterId, status: "needs_assignment" },
-    orderBy: { receivedAt: "asc" },
-    select: { id: true },
+    select: { id: true, s3Key: true },
   });
+
+  const withDay: { id: string; day: number | null }[] = [];
+  for (const p of pending) {
+    const read = await readAndParseIngest(p.s3Key);
+    const day = "error" in read ? null : utcDayOf(read.parsed.rows[read.parsed.rows.length - 1].ts).getTime();
+    withDay.push({ id: p.id, day });
+  }
+  withDay.sort((a, b) => {
+    if (a.day === null) return 1;
+    if (b.day === null) return -1;
+    return a.day - b.day;
+  });
+
   let applied = 0;
   let failed = 0;
-  for (const p of pending) {
+  for (const { id } of withDay) {
     try {
-      await applyIngestToMeter(p.id, meterId);
+      await applyIngestToMeter(id, meterId);
       applied++;
     } catch (err) {
-      logger.warn("pump_room.apply_pending_failed", { ingestId: p.id, meterId, error: String(err) });
+      logger.warn("pump_room.apply_pending_failed", { ingestId: id, meterId, error: String(err) });
       failed++;
     }
   }
   return { applied, failed };
+}
+
+/**
+ * Reads an ingest's stored bytes back from S3 and parses them — the one
+ * place both `applyIngestToMeter` and the ordering step below do this, so
+ * a file is read the identical way whichever one reads it.
+ */
+async function readAndParseIngest(s3Key: string): Promise<{ parsed: import("@/lib/pump-room-xlsx").PumpRoomParseResult } | { error: string }> {
+  let bytes: Uint8Array;
+  try {
+    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key }));
+    bytes = await obj.Body!.transformToByteArray();
+  } catch {
+    return { error: "The file could not be read back from storage." };
+  }
+  const parsed = readPumpRoomWorkbook(bytes);
+  if (parsed.rows.length === 0) {
+    return { error: parsed.problems.join(" ") || "No usable rows were found in this file." };
+  }
+  return { parsed };
 }
 
 /**
@@ -221,39 +266,22 @@ export async function applyPendingIngestsForMeter(meterId: string): Promise<{ ap
  * precluded.
  *
  * Backfill ordering: when called as part of a multi-day backfill, the
- * caller MUST process ingests in `receivedAt` ascending order — this
- * function only ever looks BACKWARD for a prior day, so applying days out
- * of order would wrongly leave the earlier one looking like it has no
- * predecessor.
+ * caller MUST process ingests in order of the CALENDAR DAY each file's own
+ * data covers, not when the email arrived — see applyPendingIngestsForMeter.
  */
 export async function applyIngestToMeter(ingestId: string, meterId: string): Promise<void> {
   const ingest = await db.emsPumpEmailIngest.findUnique({ where: { id: ingestId } });
   if (!ingest) throw new Error("That ingest no longer exists.");
 
-  let bytes: Uint8Array;
-  try {
-    const obj = await s3.send(new GetObjectCommand({ Bucket: S3_BUCKET, Key: ingest.s3Key }));
-    bytes = await obj.Body!.transformToByteArray();
-  } catch {
+  const read = await readAndParseIngest(ingest.s3Key);
+  if ("error" in read) {
     await db.emsPumpEmailIngest.update({
       where: { id: ingestId },
-      data: { status: "parse_failed", parseError: "The file could not be read back from storage.", pumpMeterId: meterId },
+      data: { status: "parse_failed", parseError: read.error, pumpMeterId: meterId },
     });
     return;
   }
-
-  const parsed = readPumpRoomWorkbook(bytes);
-  if (parsed.rows.length === 0) {
-    await db.emsPumpEmailIngest.update({
-      where: { id: ingestId },
-      data: {
-        status: "parse_failed",
-        parseError: parsed.problems.join(" ") || "No usable rows were found in this file.",
-        pumpMeterId: meterId,
-      },
-    });
-    return;
-  }
+  const parsed = read.parsed;
 
   const opening = parsed.rows[0]; // earliest ts in the file — parsePumpRoomSheet's own sort guarantees this
   const closing = parsed.rows[parsed.rows.length - 1]; // latest ts in the file

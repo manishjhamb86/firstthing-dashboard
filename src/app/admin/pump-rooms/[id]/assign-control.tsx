@@ -18,11 +18,14 @@ export function AssignControl({
   currentSocietyId,
   currentRoomType,
   societies,
+  onSaved,
 }: {
   meterId: string;
   currentSocietyId: string | null;
   currentRoomType: RoomType | null;
   societies: { id: string; name: string; location: string }[];
+  /** Called after a successful save — the modal closes on it. */
+  onSaved?: () => void;
 }) {
   const router = useRouter();
   const [societyId, setSocietyId] = useState<string | null>(currentSocietyId);
@@ -44,6 +47,7 @@ export function AssignControl({
           setSaved(true);
           if (nextSocietyId === null) setSocietyId(null);
           router.refresh();
+          onSaved?.();
         }
       } catch {
         setError("Could not save — the page may be out of date. Reload and try again.");

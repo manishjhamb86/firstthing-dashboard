@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { sweepPumpRoomEmails, applyIngestToMeter } from "@/lib/pump-room-ingest";
+import { sweepPumpRoomEmails, applyIngestToMeter, applyPendingIngestsForMeter } from "@/lib/pump-room-ingest";
 
 const ROOM_TYPES = ["domestic", "stp", "fire"] as const;
 type RoomType = (typeof ROOM_TYPES)[number];
@@ -89,20 +89,15 @@ export async function createPumpRoomFromIngest(input: {
     },
   });
 
-  const backlog = await db.emsPumpEmailIngest.findMany({
-    where: { subjectLabel: input.subjectLabel, status: "needs_assignment" },
-    orderBy: { receivedAt: "asc" },
-    select: { id: true },
+  // Point the existing backlog at this meter before applying it —
+  // applyPendingIngestsForMeter matches on pumpMeterId, and these rows were
+  // stored with none, since the meter did not exist yet when they arrived.
+  await db.emsPumpEmailIngest.updateMany({
+    where: { subjectLabel: input.subjectLabel, status: "needs_assignment", pumpMeterId: null },
+    data: { pumpMeterId: meter.id },
   });
-  let backfilled = 0;
-  for (const ingest of backlog) {
-    try {
-      await applyIngestToMeter(ingest.id, meter.id);
-      backfilled++;
-    } catch (err) {
-      logger.warn("pump_room.backfill_failed", { ingestId: ingest.id, meterId: meter.id, error: String(err) });
-    }
-  }
+  const { applied: backfilled, failed } = await applyPendingIngestsForMeter(meter.id);
+  if (failed > 0) logger.warn("pump_room.backfill_had_failures", { meterId: meter.id, subjectLabel: input.subjectLabel, failed });
 
   logger.info("pump_room.classified", { actorId: actor.id, meterId: meter.id, subjectLabel: input.subjectLabel, societyId: input.societyId, roomType: input.roomType, backfilled });
   revalidatePath("/admin/pump-rooms");

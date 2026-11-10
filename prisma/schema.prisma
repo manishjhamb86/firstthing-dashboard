@@ -4055,6 +4055,14 @@ model EmsPumpReading {
   dailyKwh              Float?  @map("daily_kwh")
   registerWentBackwards Boolean @default(false) @map("register_went_backwards")
 
+  /// Water, in kilolitres — `total_flow` is a cumulative register exactly
+  /// like `kwh` (2026-11-10, user-asked), differenced the identical way.
+  /// Named distinctly from the electricity pair above rather than
+  /// generalised into one shared pair of columns: the two are read and
+  /// reasoned about separately everywhere a human looks at this row.
+  dailyKl            Float?  @map("daily_kl")
+  waterWentBackwards Boolean @default(false) @map("water_went_backwards")
+
   sourceIngestId String?  @map("source_ingest_id")
   updatedAt      DateTime @updatedAt @map("updated_at")
 

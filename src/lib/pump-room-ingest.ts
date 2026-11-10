@@ -46,26 +46,36 @@ export function subjectLabelOf(subject: string): string {
   return (match ? match[1] : subject).trim();
 }
 
-export type DailyFigure = { dailyKwh: number | null; registerWentBackwards: boolean };
+export type DailyFigure = { daily: number | null; wentBackwards: boolean; basedOnSameDayOpening: boolean };
 
 /**
- * The one piece of arithmetic that decides a day's consumption — factored
- * out as a pure function (this codebase's standing "the decision is pure,
- * the action is a thin DB shell" convention) so it is unit-testable without
- * a database.
+ * The one piece of arithmetic that decides a day's figure — factored out as
+ * a pure function (this codebase's standing "the decision is pure, the
+ * action is a thin DB shell" convention) so it is unit-testable without a
+ * database. Shared between electricity (kwh) and water (kl) — both are
+ * cumulative registers read the same way, differenced the same way.
  *
- * No prior day is correct, not a loss — the consumption before the first
- * reading genuinely is not in this account's history
- * (reading-normalize.ts's own stated reasoning for a cumulative register's
- * first point). A backwards register is stored but never treated as
- * consumption, at day-closing granularity instead of
- * reading-normalize.ts's per-interval one.
+ * With a previous day on record, diffs against ITS closing sample — the
+ * precise figure, since it also captures whatever happened overnight
+ * between readings. With no previous day (the meter's first-ever reading,
+ * most commonly), falls back to this day's OWN opening sample instead of
+ * withholding a figure entirely (2026-11-10, user-asked: "it should at
+ * least show the total consumption from that sheet, end minus start") —
+ * necessarily an approximation (it misses whatever happened before the
+ * file's own first row), which is why `basedOnSameDayOpening` is returned
+ * alongside the figure rather than silently blended into the same kind of
+ * number as a true day-over-day one.
+ *
+ * A backwards register is stored but never treated as consumption, at
+ * day-closing granularity instead of reading-normalize.ts's per-interval
+ * one — same rule, same reasoning, either basis.
  */
-export function deriveDailyFigure(closingKwh: number, priorKwh: number | null): DailyFigure {
-  if (priorKwh === null) return { dailyKwh: null, registerWentBackwards: false };
-  const delta = closingKwh - priorKwh;
-  if (delta < 0) return { dailyKwh: null, registerWentBackwards: true };
-  return { dailyKwh: delta, registerWentBackwards: false };
+export function deriveDailyFigure(closing: number, opening: number, priorClosing: number | null): DailyFigure {
+  const basedOnSameDayOpening = priorClosing === null;
+  const base = priorClosing ?? opening;
+  const delta = closing - base;
+  if (delta < 0) return { daily: null, wentBackwards: true, basedOnSameDayOpening };
+  return { daily: delta, wentBackwards: false, basedOnSameDayOpening };
 }
 
 export type SweepResult = { checked: number; applied: number; needsAssignment: number; failed: number };
@@ -81,9 +91,19 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
 
   const messages = await listMessages(cfg, `subject:"EMS-Automated daily Report"`, 25);
   let checked = 0;
-  let applied = 0;
   let needsAssignment = 0;
   let failed = 0;
+  // Storing is order-independent (each email's bytes are just filed to
+  // S3 and a row created) — applying is NOT (day-closing differencing only
+  // ever looks backward). Gmail's own list order is not guaranteed to be
+  // chronological, and when several of a meter's emails arrive in one
+  // sweep pass (2026-11-10, found by testing: 6 forwarded at once), naively
+  // applying each the moment it's stored would compute every one of them
+  // against "no prior day" — silently wrong for every day but whichever
+  // happens to be processed first. So this pass only STORES; applying
+  // happens afterward, once per touched meter, in the one place that
+  // enforces the real order (applyPendingIngestsForMeter).
+  const touchedMeterIds = new Set<string>();
 
   for (const m of messages) {
     // The one durable dedupe check, before any heavy work — a DB column,
@@ -124,7 +144,7 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
       // every single day.
       const meter = await db.emsPumpMeter.findUnique({ where: { vendorSubjectLabel: subjectLabel }, select: { id: true } });
 
-      const ingest = await db.emsPumpEmailIngest.create({
+      await db.emsPumpEmailIngest.create({
         data: {
           gmailMessageId: m.id,
           gmailThreadId: msg.threadId,
@@ -138,24 +158,50 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
         },
       });
 
-      if (meter) {
-        try {
-          await applyIngestToMeter(ingest.id, meter.id);
-          applied++;
-        } catch (err) {
-          logger.warn("job.pump_room_email_sweep_apply_failed", { ingestId: ingest.id, error: String(err) });
-          failed++;
-        }
-      } else {
-        needsAssignment++;
-      }
+      if (meter) touchedMeterIds.add(meter.id);
+      else needsAssignment++;
     } catch (err) {
       logger.warn("job.pump_room_email_sweep_message_failed", { gmailMessageId: m.id, error: String(err) });
       failed++;
     }
   }
 
+  let applied = 0;
+  for (const meterId of touchedMeterIds) {
+    const r = await applyPendingIngestsForMeter(meterId);
+    applied += r.applied;
+    failed += r.failed;
+  }
+
   return { checked, applied, needsAssignment, failed };
+}
+
+/**
+ * Applies every `needs_assignment` ingest a meter is holding, oldest
+ * `receivedAt` first — the one place that enforces the order
+ * applyIngestToMeter's own backward-looking differencing depends on.
+ * Shared by the live sweep (above) and classify-from-queue's backfill
+ * (src/app/admin/pump-rooms/actions.ts), so there is exactly one piece of
+ * code that gets this ordering right rather than two that have to agree.
+ */
+export async function applyPendingIngestsForMeter(meterId: string): Promise<{ applied: number; failed: number }> {
+  const pending = await db.emsPumpEmailIngest.findMany({
+    where: { pumpMeterId: meterId, status: "needs_assignment" },
+    orderBy: { receivedAt: "asc" },
+    select: { id: true },
+  });
+  let applied = 0;
+  let failed = 0;
+  for (const p of pending) {
+    try {
+      await applyIngestToMeter(p.id, meterId);
+      applied++;
+    } catch (err) {
+      logger.warn("pump_room.apply_pending_failed", { ingestId: p.id, meterId, error: String(err) });
+      failed++;
+    }
+  }
+  return { applied, failed };
 }
 
 /**
@@ -209,6 +255,7 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
     return;
   }
 
+  const opening = parsed.rows[0]; // earliest ts in the file — parsePumpRoomSheet's own sort guarantees this
   const closing = parsed.rows[parsed.rows.length - 1]; // latest ts in the file
   const day = utcDayOf(closing.ts);
 
@@ -216,23 +263,32 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
     db.emsPumpReading.findFirst({
       where: { pumpMeterId: meterId, date: { lt: day } },
       orderBy: { date: "desc" },
-      select: { lastKwh: true },
+      select: { lastKwh: true, lastTotalFlow: true },
     }),
     db.emsPumpReading.findUnique({ where: { pumpMeterId_date: { pumpMeterId: meterId, date: day } }, select: { lastTs: true } }),
   ]);
 
   // A resend whose closing sample is no later than what's already stored
-  // for this day is a harmless no-op.
+  // for this day is a harmless no-op — still clears a stale parseError
+  // from an earlier failed attempt (2026-11-10, user-caught: a retried,
+  // now-successful row kept showing the error text from its first,
+  // failed try, because nothing had ever cleared it).
   if (existingDay && existingDay.lastTs.getTime() >= closing.ts.getTime()) {
     logger.info("pump_room.ingest_duplicate_day", { ingestId, meterId, day: day.toISOString() });
     await db.emsPumpEmailIngest.update({
       where: { id: ingestId },
-      data: { status: "applied", appliedAt: new Date(), pumpMeterId: meterId, rowCount: parsed.rows.length },
+      data: { status: "applied", appliedAt: new Date(), pumpMeterId: meterId, rowCount: parsed.rows.length, parseError: null },
     });
     return;
   }
 
-  const { dailyKwh, registerWentBackwards } = deriveDailyFigure(closing.kwh, prior?.lastKwh ?? null);
+  const kwhFigure = deriveDailyFigure(closing.kwh, opening.kwh, prior?.lastKwh ?? null);
+  // Water is optional — a day's file may not carry the total_flow column at
+  // all, and that is not the same fact as "zero water that day".
+  const flowFigure =
+    closing.totalFlow !== null && opening.totalFlow !== null
+      ? deriveDailyFigure(closing.totalFlow, opening.totalFlow, prior?.lastTotalFlow ?? null)
+      : null;
 
   await db.$transaction([
     db.emsPumpReading.upsert({
@@ -243,16 +299,20 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
         lastKwh: closing.kwh,
         lastTotalFlow: closing.totalFlow,
         lastTs: closing.ts,
-        dailyKwh,
-        registerWentBackwards,
+        dailyKwh: kwhFigure.daily,
+        registerWentBackwards: kwhFigure.wentBackwards,
+        dailyKl: flowFigure?.daily ?? null,
+        waterWentBackwards: flowFigure?.wentBackwards ?? false,
         sourceIngestId: ingestId,
       },
       update: {
         lastKwh: closing.kwh,
         lastTotalFlow: closing.totalFlow,
         lastTs: closing.ts,
-        dailyKwh,
-        registerWentBackwards,
+        dailyKwh: kwhFigure.daily,
+        registerWentBackwards: kwhFigure.wentBackwards,
+        dailyKl: flowFigure?.daily ?? null,
+        waterWentBackwards: flowFigure?.wentBackwards ?? false,
         sourceIngestId: ingestId,
       },
     }),
@@ -262,7 +322,7 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
     }),
     db.emsPumpEmailIngest.update({
       where: { id: ingestId },
-      data: { status: "applied", appliedAt: new Date(), pumpMeterId: meterId, rowCount: parsed.rows.length },
+      data: { status: "applied", appliedAt: new Date(), pumpMeterId: meterId, rowCount: parsed.rows.length, parseError: null },
     }),
   ]);
 }

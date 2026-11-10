@@ -25,19 +25,24 @@ describe("subjectLabelOf", () => {
 });
 
 describe("deriveDailyFigure", () => {
-  it("has no figure for the first-ever reading — correct, not a loss", () => {
-    expect(deriveDailyFigure(120, null)).toEqual({ dailyKwh: null, registerWentBackwards: false });
+  it("falls back to this day's own opening-to-closing span when there is no prior day — approximate, stated as such", () => {
+    expect(deriveDailyFigure(132.5, 120, null)).toEqual({ daily: 12.5, wentBackwards: false, basedOnSameDayOpening: true });
   });
 
-  it("differences a normal day against the previous day's own closing sample", () => {
-    expect(deriveDailyFigure(132.5, 120)).toEqual({ dailyKwh: 12.5, registerWentBackwards: false });
+  it("differences a normal day against the previous day's own closing sample, ignoring this day's own opening", () => {
+    expect(deriveDailyFigure(132.5, 999, 120)).toEqual({ daily: 12.5, wentBackwards: false, basedOnSameDayOpening: false });
   });
 
-  it("a flat day (no consumption) is a real zero, not withheld", () => {
-    expect(deriveDailyFigure(120, 120)).toEqual({ dailyKwh: 0, registerWentBackwards: false });
+  it("a flat day (no change) is a real zero, not withheld, on either basis", () => {
+    expect(deriveDailyFigure(120, 120, null)).toEqual({ daily: 0, wentBackwards: false, basedOnSameDayOpening: true });
+    expect(deriveDailyFigure(120, 999, 120)).toEqual({ daily: 0, wentBackwards: false, basedOnSameDayOpening: false });
   });
 
-  it("flags a backwards register and withholds the figure, never a negative number", () => {
-    expect(deriveDailyFigure(50, 120)).toEqual({ dailyKwh: null, registerWentBackwards: true });
+  it("flags a backwards register against the previous day and withholds the figure, never a negative number", () => {
+    expect(deriveDailyFigure(50, 999, 120)).toEqual({ daily: null, wentBackwards: true, basedOnSameDayOpening: false });
+  });
+
+  it("flags a backwards register within the same file (closing below opening) when there is no prior day either", () => {
+    expect(deriveDailyFigure(50, 120, null)).toEqual({ daily: null, wentBackwards: true, basedOnSameDayOpening: true });
   });
 });

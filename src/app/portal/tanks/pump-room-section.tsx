@@ -1,7 +1,9 @@
 import { db } from "@/lib/db";
 import { Card, StatusChip } from "@/components/ui";
 import { DailyBars } from "@/components/meter-ui";
+import { PumpRoomEfficiency } from "@/components/pump-room-efficiency";
 import { formatInstant } from "@/lib/format-date";
+import { electricityBars, efficiencyRows, waterBars } from "@/lib/pump-room-view";
 
 /**
  * The resident's single pump room (one per society for now — see
@@ -21,11 +23,10 @@ export async function PumpRoomSection({ societyId }: { societyId: string }) {
   });
   if (!meter) return null;
 
-  const days = meter.readings.map((r) => ({
-    day: r.date.toISOString().slice(0, 10),
-    total: r.dailyKwh ?? 0,
-    intervalCount: r.registerWentBackwards || r.dailyKwh === null ? 0 : 24,
-  }));
+  const electricityDays = electricityBars(meter.readings);
+  const waterDays = waterBars(meter.readings);
+  const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
+  const efficiency = efficiencyRows(meter.readings);
 
   return (
     <Card className="mb-7 p-5 sm:p-6">
@@ -40,12 +41,23 @@ export async function PumpRoomSection({ societyId }: { societyId: string }) {
       <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
         Backup energy meter, read from the daily EMS report.
       </p>
-      {days.length === 0 ? (
+      {electricityDays.length === 0 ? (
         <p className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
           A history appears here once a first day lands.
         </p>
       ) : (
-        <DailyBars days={days} />
+        <>
+          <p className="lbl mb-2">Electricity (kWh/day)</p>
+          <DailyBars days={electricityDays} />
+          {hasWater && (
+            <>
+              <p className="lbl mb-2 mt-5">Water (KL/day)</p>
+              <DailyBars days={waterDays} />
+              <p className="lbl mb-2 mt-5">Energy per kilolitre</p>
+              <PumpRoomEfficiency rows={efficiency} />
+            </>
+          )}
+        </>
       )}
     </Card>
   );

@@ -4,7 +4,9 @@ import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { BackButton } from "@/components/back-button";
 import { Card, CardTitle, PageHeader } from "@/components/ui";
 import { DailyBars } from "@/components/meter-ui";
+import { PumpRoomEfficiency } from "@/components/pump-room-efficiency";
 import { formatDate, formatInstant } from "@/lib/format-date";
+import { electricityBars, efficiencyRows, waterBars } from "@/lib/pump-room-view";
 import { AssignControl } from "./assign-control";
 import { IngestHistory } from "./ingest-history";
 
@@ -30,15 +32,10 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
   ]);
   if (!meter) notFound();
 
-  const days = meter.readings.map((r) => ({
-    day: r.date.toISOString().slice(0, 10),
-    total: r.dailyKwh ?? 0,
-    // A day with no derived figure (no predecessor yet, or the register
-    // went backwards) renders as a flagged partial bar — the same visual
-    // language DailyBars already uses for a short meter CSV upload, never
-    // a quiet zero that reads as "nothing was consumed".
-    intervalCount: r.registerWentBackwards || r.dailyKwh === null ? 0 : 24,
-  }));
+  const electricityDays = electricityBars(meter.readings);
+  const waterDays = waterBars(meter.readings);
+  const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
+  const efficiency = efficiencyRows(meter.readings);
 
   return (
     <>
@@ -75,7 +72,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
               <dd className="text-right num">{meter.lastKwh !== null ? meter.lastKwh.toFixed(2) : "—"}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt style={{ color: "var(--text-muted)" }}>Total flow</dt>
+              <dt style={{ color: "var(--text-muted)" }}>Water register (KL)</dt>
               <dd className="text-right num">{meter.lastTotalFlow !== null ? meter.lastTotalFlow.toFixed(2) : "—"}</dd>
             </div>
             <div className="flex justify-between gap-4">
@@ -87,15 +84,45 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
       </div>
 
       <Card className="mt-5 p-5 sm:p-6">
-        <CardTitle>Daily consumption</CardTitle>
-        {days.length === 0 ? (
+        <CardTitle>Daily electricity (kWh)</CardTitle>
+        {electricityDays.length === 0 ? (
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
             No days have landed yet.
           </p>
         ) : (
-          <DailyBars days={days} />
+          <>
+            <DailyBars days={electricityDays} />
+            <p className="mt-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>
+              A day with no earlier day on record (most often the first day ever read) shows that day&apos;s own
+              opening-to-closing span rather than a comparison to a previous day — an approximation, not a loss.
+            </p>
+          </>
         )}
       </Card>
+
+      {hasWater && (
+        <Card className="mt-5 p-5 sm:p-6">
+          <CardTitle>Daily water (KL)</CardTitle>
+          {waterDays.length === 0 ? (
+            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
+              No days have landed yet.
+            </p>
+          ) : (
+            <DailyBars days={waterDays} />
+          )}
+        </Card>
+      )}
+
+      {hasWater && (
+        <Card className="mt-5 p-5 sm:p-6">
+          <CardTitle>Energy per kilolitre</CardTitle>
+          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            How much electricity this room uses to move each kilolitre of water — the real efficiency question a pump
+            room answers.
+          </p>
+          <PumpRoomEfficiency rows={efficiency} />
+        </Card>
+      )}
 
       <Card className="mt-5 p-5 sm:p-6">
         <CardTitle>Emails received</CardTitle>

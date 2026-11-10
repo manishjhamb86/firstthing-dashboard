@@ -2,10 +2,11 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { BackButton } from "@/components/back-button";
-import { Card, CardTitle, PageHeader, Stat, StatRow } from "@/components/ui";
-import { TrendChart } from "@/components/trend-chart";
+import { Card, CardTitle, PageHeader } from "@/components/ui";
+import { PumpMetricBlock } from "@/components/pump-metric-block";
+import { PumpDayTable } from "@/components/pump-day-table";
 import { formatInstant } from "@/lib/format-date";
-import { indexToFirst, trendData } from "@/lib/pump-room-view";
+import { TYPICAL_SPECIFIC_ENERGY, dayRows, isReporting, periodTotals, trendData } from "@/lib/pump-room-view";
 import { AssignControl } from "./assign-control";
 import { ReassignButton } from "./reassign-button";
 import { IngestHistory } from "./ingest-history";
@@ -34,6 +35,12 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
 
   const trend = trendData(meter.readings);
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
+  const rows = dayRows(trend);
+  const totals = periodTotals(trend);
+  const reporting = isReporting(meter.lastReadingAt);
+  const aboveBandDays = trend.efficiency.filter((v) => v !== null && v > TYPICAL_SPECIFIC_ENERGY.high).length;
+  const latestEff = [...trend.efficiency].reverse().find((v) => v !== null) ?? null;
+  const appliedCount = meter.ingests.filter((i) => i.status === "applied").length;
 
   return (
     <>
@@ -42,7 +49,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
       </div>
       <PageHeader
         title={meter.society ? meter.society.name : meter.vendorSubjectLabel}
-        subtitle={`${meter.vendorSubjectLabel} · ${meter.roomType ?? "not classified"}`}
+        subtitle={`${meter.roomType ? `${meter.roomType} pump room` : "Pump room — not classified"} · EMS daily report`}
         action={
           meter.society ? (
             <ReassignButton
@@ -56,94 +63,170 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
         }
       />
 
-      {/* Once assigned the form moves behind Reassign (2026-11-10, user-caught:
-          it sat inline taking half the page for something already done) — the
-          same pattern water tanks already use. A room with no society yet
-          still shows the form here, since there's nothing to reassign. */}
-      {meter.society ? (
-        <StatRow>
-          <Stat label="Last reading" value={meter.lastReadingAt ? formatInstant(meter.lastReadingAt) : "—"} />
-          <Stat label="Register" value={meter.lastKwh !== null ? meter.lastKwh.toFixed(2) : "—"} detail="kWh" />
-          <Stat label="Water register" value={meter.lastTotalFlow !== null ? meter.lastTotalFlow.toFixed(2) : "—"} detail="KL" />
-          <Stat label="Last email applied" value={meter.lastIngestAt ? formatInstant(meter.lastIngestAt) : "—"} />
-        </StatRow>
-      ) : (
-        <Card className="p-5 sm:p-6">
+      {/* Feed health is one line, not two tiles (2026-11-10 redesign). */}
+      {meter.society && (
+        <p className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px]" style={{ color: "var(--text-muted)" }}>
+          <span className="inline-block h-2 w-2 shrink-0 rounded-full" style={{ background: reporting ? "var(--ok-fg)" : "var(--warn-fg)" }} />
+          <span>
+            {reporting ? "Reporting" : "Not reporting"} · last reading{" "}
+            <span className="num" style={{ color: "var(--text)" }}>
+              {meter.lastReadingAt ? formatInstant(meter.lastReadingAt) : "—"}
+            </span>{" "}
+            · email applied{" "}
+            <span className="num" style={{ color: "var(--text)" }}>
+              {meter.lastIngestAt ? formatInstant(meter.lastIngestAt) : "—"}
+            </span>
+          </span>
+        </p>
+      )}
+
+      {!meter.society && (
+        <Card className="mb-4 p-5 sm:p-6">
           <CardTitle>Assignment</CardTitle>
-          <AssignControl
-            meterId={meter.id}
-            currentSocietyId={null}
-            currentRoomType={meter.roomType}
-            societies={societies}
-          />
+          <AssignControl meterId={meter.id} currentSocietyId={null} currentRoomType={meter.roomType} societies={societies} />
         </Card>
       )}
 
-      <Card className="mt-5 p-5 sm:p-6">
-        <CardTitle>{hasWater ? "Electricity & water" : "Electricity (kWh/day)"}</CardTitle>
-        {trend.days.length === 0 ? (
+      {trend.days.length === 0 ? (
+        <Card className="p-5 sm:p-6">
+          <CardTitle>Daily figures</CardTitle>
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
             No days have landed yet.
           </p>
-        ) : hasWater ? (
-          <>
-            <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-              Each line starts at 100 on its own first day, so two raw quantities of different units — kWh and KL —
-              read on one chart: do they move together, or apart? Hover a point for the real figure behind it.
-            </p>
-            <TrendChart
-              days={trend.days}
-              series={[
-                { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh), rawPoints: trend.kwh, rawUnit: "kWh" },
-                { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl), rawPoints: trend.kl, rawUnit: "KL" },
-              ]}
-              unit="= 100 on day 1"
+        </Card>
+      ) : (
+        <>
+          {/* Three metric blocks: the figure, the delta, and the days underneath. */}
+          <div className={`grid gap-4 ${hasWater ? "lg:grid-cols-3" : ""}`}>
+            <PumpMetricBlock
+              label="Electricity"
+              unit="kWh"
               decimals={0}
-            />
-
-            {/* A SEPARATE chart, not a third line on the one above
-                (2026-11-10, user-caught: the merged three-series readout
-                was unreadable, and efficiency "should be on a different
-                level" — it's right on both counts: kWh/KL is a RATIO, not
-                a raw quantity, so indexing it to 100 alongside electricity
-                and water compares a trend to its own derivative and means
-                nothing. It keeps its own real units instead of borrowing
-                the index axis above it. */}
-            <p className="lbl mb-2 mt-6">Energy per kilolitre</p>
-            <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-              How much electricity this room uses to move each kilolitre of water — the efficiency question, kept on
-              its own scale rather than indexed alongside the two raw quantities above.
-            </p>
-            <TrendChart
               days={trend.days}
-              series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
-              unit="kWh/KL"
-              decimals={2}
+              points={trend.kwh}
+              kind="bars"
+              color="var(--chart-mark)"
+              approximateFirst={rows[rows.length - 1]?.approximate}
             />
-          </>
-        ) : (
-          <>
-            <TrendChart days={trend.days} series={[{ key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: trend.kwh }]} unit="kWh" />
-            <p className="mt-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>
-              A day with no earlier day on record (most often the first day ever read) shows that day&apos;s own
-              opening-to-closing span rather than a comparison to a previous day — an approximation, not a loss.
-            </p>
-          </>
-        )}
-      </Card>
+            {hasWater && (
+              <PumpMetricBlock
+                label="Water pumped"
+                unit="KL"
+                decimals={0}
+                days={trend.days}
+                points={trend.kl}
+                kind="bars"
+                color="var(--chart-mark-2)"
+                approximateFirst={rows[rows.length - 1]?.approximate}
+              />
+            )}
+            {hasWater && (
+              <PumpMetricBlock
+                label="Energy per kilolitre"
+                unit="kWh / KL"
+                decimals={2}
+                days={trend.days}
+                points={trend.efficiency}
+                kind="line"
+                color="var(--chart-mark-3)"
+                band={{ ...TYPICAL_SPECIFIC_ENERGY, label: `typical urban range ≤ ${TYPICAL_SPECIFIC_ENERGY.high.toFixed(2)}` }}
+                approximateFirst={rows[rows.length - 1]?.approximate}
+                tone={latestEff !== null && latestEff > TYPICAL_SPECIFIC_ENERGY.high ? "warn" : undefined}
+                note={
+                  aboveBandDays > 0
+                    ? `Above the ${TYPICAL_SPECIFIC_ENERGY.low.toFixed(2)}–${TYPICAL_SPECIFIC_ENERGY.high.toFixed(2)} kWh/KL typical urban pumping range on ${aboveBandDays} of ${trend.days.length} days (CPHEEO). Worth checking pump head and efficiency.`
+                    : `Inside the ${TYPICAL_SPECIFIC_ENERGY.low.toFixed(2)}–${TYPICAL_SPECIFIC_ENERGY.high.toFixed(2)} kWh/KL typical urban pumping range (CPHEEO).`
+                }
+              />
+            )}
+          </div>
 
-      <Card className="mt-5 p-5 sm:p-6">
-        <CardTitle>Emails received</CardTitle>
-        <IngestHistory
-          rows={meter.ingests.map((i) => ({
-            id: i.id,
-            receivedAt: i.receivedAt.toISOString(),
-            status: i.status,
-            parseError: i.parseError,
-            rowCount: i.rowCount,
-          }))}
-        />
-      </Card>
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+            <Card className="min-w-0 p-4 lg:col-span-2 sm:p-5">
+              <div className="mb-2 flex items-baseline justify-between gap-2">
+                <CardTitle className="mb-0">Day by day</CardTitle>
+                <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>
+                  newest first
+                </span>
+              </div>
+              <PumpDayTable rows={rows} totals={totals} hasWater={hasWater} />
+            </Card>
+
+            <div className="flex min-w-0 flex-col gap-4">
+              <Card className="grid grid-cols-2 gap-3 p-4">
+                <div className="flex flex-col gap-0.5">
+                  <span className="lbl">Energy register</span>
+                  <span className="num text-[15px] font-bold">
+                    {meter.lastKwh !== null ? meter.lastKwh.toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—"}
+                    <span className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
+                      {" "}
+                      kWh
+                    </span>
+                  </span>
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  <span className="lbl">Water register</span>
+                  <span className="num text-[15px] font-bold">
+                    {meter.lastTotalFlow !== null ? meter.lastTotalFlow.toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "—"}
+                    <span className="text-[11px] font-semibold" style={{ color: "var(--text-muted)" }}>
+                      {" "}
+                      KL
+                    </span>
+                  </span>
+                </div>
+              </Card>
+
+              <Card className="p-4">
+                <details>
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="lbl">Emails received</span>
+                      <span className="text-[13px]">
+                        {appliedCount} applied of {meter.ingests.length}
+                        {meter.lastIngestAt && (
+                          <>
+                            {" "}
+                            · latest <span className="num">{formatInstant(meter.lastIngestAt)}</span>
+                          </>
+                        )}
+                      </span>
+                    </span>
+                    <span className="text-[12px] font-semibold" style={{ color: "var(--accent)" }}>
+                      Show
+                    </span>
+                  </summary>
+                  <div className="mt-3">
+                    <IngestHistory
+                      rows={meter.ingests.map((i) => ({
+                        id: i.id,
+                        receivedAt: i.receivedAt.toISOString(),
+                        status: i.status,
+                        parseError: i.parseError,
+                        rowCount: i.rowCount,
+                      }))}
+                    />
+                  </div>
+                </details>
+              </Card>
+            </div>
+          </div>
+        </>
+      )}
+
+      {trend.days.length === 0 && (
+        <Card className="mt-4 p-4 sm:p-5">
+          <CardTitle>Emails received</CardTitle>
+          <IngestHistory
+            rows={meter.ingests.map((i) => ({
+              id: i.id,
+              receivedAt: i.receivedAt.toISOString(),
+              status: i.status,
+              parseError: i.parseError,
+              rowCount: i.rowCount,
+            }))}
+          />
+        </Card>
+      )}
     </>
   );
 }

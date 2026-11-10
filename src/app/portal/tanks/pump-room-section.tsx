@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
 import { Card, StatusChip } from "@/components/ui";
-import { TrendChart } from "@/components/trend-chart";
+import { PumpMetricBlock } from "@/components/pump-metric-block";
+import { PumpDayTable } from "@/components/pump-day-table";
 import { formatInstant } from "@/lib/format-date";
-import { indexToFirst, trendData } from "@/lib/pump-room-view";
+import { TYPICAL_SPECIFIC_ENERGY, dayRows, periodTotals, trendData } from "@/lib/pump-room-view";
 
 /**
  * The resident's single pump room (one per society for now — see
@@ -10,6 +11,9 @@ import { indexToFirst, trendData } from "@/lib/pump-room-view";
  * like the tank query above it (INV-05). Renders nothing when the society
  * has no classified pump room yet — same "absent is a stated state, never
  * guessed at" rule as the water tanks it sits beside.
+ *
+ * Same metric blocks and day table as the back office (2026-11-10): the
+ * society and the operator read one view, never two that can disagree.
  */
 export async function PumpRoomSection({ societyId }: { societyId: string }) {
   // Not a unique constraint — "one room per society" is today's matching
@@ -24,11 +28,14 @@ export async function PumpRoomSection({ societyId }: { societyId: string }) {
 
   const trend = trendData(meter.readings);
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
+  const rows = dayRows(trend);
+  const totals = periodTotals(trend);
+  const latestEff = [...trend.efficiency].reverse().find((v) => v !== null) ?? null;
 
   return (
-    <Card className="mb-7 p-5 sm:p-6">
+    <Card className="mb-7 p-4 sm:p-6">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
-        <h2 className="text-[15px] font-bold capitalize">{meter.roomType ?? "Pump room"}</h2>
+        <h2 className="text-[15px] font-bold capitalize">{meter.roomType ? `${meter.roomType} pump room` : "Pump room"}</h2>
         {meter.lastReadingAt ? (
           <StatusChip tone="ok">Last reading {formatInstant(meter.lastReadingAt)}</StatusChip>
         ) : (
@@ -42,38 +49,52 @@ export async function PumpRoomSection({ societyId }: { societyId: string }) {
         <p className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
           A history appears here once a first day lands.
         </p>
-      ) : hasWater ? (
-        <>
-          <p className="lbl mb-2">Electricity & water</p>
-          <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
-            Each line starts at 100 on its own first day, so kWh and KL read on one chart. Tap a point for the real
-            figure.
-          </p>
-          <TrendChart
-            days={trend.days}
-            series={[
-              { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh), rawPoints: trend.kwh, rawUnit: "kWh" },
-              { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl), rawPoints: trend.kl, rawUnit: "KL" },
-            ]}
-            unit="= 100 on day 1"
-            decimals={0}
-          />
-
-          {/* Its own chart, its own scale — a ratio (kWh/KL) belongs on
-              neither raw quantity's index (2026-11-10, user-caught). */}
-          <p className="lbl mb-2 mt-5">Energy per kilolitre</p>
-          <TrendChart
-            days={trend.days}
-            series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
-            unit="kWh/KL"
-            decimals={2}
-          />
-        </>
       ) : (
-        <>
-          <p className="lbl mb-2">Electricity (kWh/day)</p>
-          <TrendChart days={trend.days} series={[{ key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: trend.kwh }]} unit="kWh" />
-        </>
+        <div className="flex flex-col gap-4">
+          <div className={`grid gap-4 ${hasWater ? "xl:grid-cols-3" : ""}`}>
+            <PumpMetricBlock
+              label="Electricity"
+              unit="kWh"
+              decimals={0}
+              days={trend.days}
+              points={trend.kwh}
+              kind="bars"
+              color="var(--chart-mark)"
+              approximateFirst={rows[rows.length - 1]?.approximate}
+            />
+            {hasWater && (
+              <PumpMetricBlock
+                label="Water pumped"
+                unit="KL"
+                decimals={0}
+                days={trend.days}
+                points={trend.kl}
+                kind="bars"
+                color="var(--chart-mark-2)"
+                approximateFirst={rows[rows.length - 1]?.approximate}
+              />
+            )}
+            {hasWater && (
+              <PumpMetricBlock
+                label="Energy per kilolitre"
+                unit="kWh / KL"
+                decimals={2}
+                days={trend.days}
+                points={trend.efficiency}
+                kind="line"
+                color="var(--chart-mark-3)"
+                band={{ ...TYPICAL_SPECIFIC_ENERGY, label: `typical urban range ≤ ${TYPICAL_SPECIFIC_ENERGY.high.toFixed(2)}` }}
+                approximateFirst={rows[rows.length - 1]?.approximate}
+                tone={latestEff !== null && latestEff > TYPICAL_SPECIFIC_ENERGY.high ? "warn" : undefined}
+                note="Electricity used to move each kilolitre of water. The shaded band is the typical urban pumping range."
+              />
+            )}
+          </div>
+          <div>
+            <p className="lbl mb-2">Day by day</p>
+            <PumpDayTable rows={rows} totals={totals} hasWater={hasWater} />
+          </div>
+        </div>
       )}
     </Card>
   );

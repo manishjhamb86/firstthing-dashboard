@@ -1329,45 +1329,62 @@ textarea.field {
   }
 }
 
+/* Mobile-first: compact is the DEFAULT, covering the whole 2-column range
+   (anything below the 860px container query above that switches to 4
+   columns) — not a narrower sub-breakpoint of its own. A first cut gated
+   the compact sizing at <=480px only, which left the entire 2-column range
+   above that (a tablet, or simply any phone/emulator wider than 480 CSS
+   px) still rendering the desktop-sized tile below, where a long value
+   ("10-Nov-2026 · 05:12") wraps to three lines and blows past its own
+   min-height (2026-11-10, user-caught screenshot, twice: "these cards are
+   too big" — the 480px cutoff fixed nothing visible, since every 2-column
+   width is exactly where the roomy sizing is wrong). Desktop then
+   EXPANDS back to the original spacing at >=860px, right where the row
+   itself gains its extra columns. */
 .stat-tile {
-  min-height: 118px;
-  padding: 1rem;
+  min-height: 0;
+  padding: 0.625rem 0.75rem;
+}
+.stat-tile .lbl {
+  min-height: 0;
+  font-size: 10px;
+  margin-bottom: 0.25rem;
+}
+.stat-tile .num {
+  font-size: 15px;
+  line-height: 1.2;
 }
 .stat-detail {
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  /* Two lines reserved AND two lines maximum — a tile is the same height
-     whether its detail is one word, two lines, or absent. */
-  min-height: 2.7em;
+  min-height: 0;
+  font-size: 10.5px;
 }
-
-/* A phone's stat row is still 2-up (the >=860px container query above
-   doesn't apply here), so each tile is ~half the screen width minus the
-   gutter — a long value ("10-Nov-2026 · 05:12") wrapped to three lines
-   inside the desktop-sized tile and blew past its own min-height
-   (2026-11-10, user-caught screenshot: "these cards are too big"). Tighter
-   padding and type at a narrow container keeps every page using StatRow
-   compact on a phone without touching the >=860px desktop sizing above. */
-@container (max-width: 480px) {
+@container (min-width: 860px) {
   .stat-tile {
-    min-height: 0;
-    padding: 0.625rem 0.75rem;
+    min-height: 118px;
+    padding: 1rem;
   }
   .stat-tile .lbl {
-    min-height: 0;
-    font-size: 10px;
-    margin-bottom: 0.25rem;
+    /* Two lines reserved, so the value's baseline lines up across tiles
+       whose labels happen to wrap and ones that don't (see Stat in
+       ui.tsx). Only worth reserving once a row has the width to spare. */
+    min-height: 2.25rem;
+    font-size: 11px;
+    margin-bottom: 0.375rem;
   }
   .stat-tile .num {
-    font-size: 15px;
-    line-height: 1.2;
+    font-size: 20px;
+    line-height: 1;
   }
   .stat-detail {
-    min-height: 0;
-    -webkit-line-clamp: 1;
-    font-size: 10.5px;
+    -webkit-line-clamp: 2;
+    /* Two lines reserved AND two lines maximum — a tile is the same
+       height whether its detail is one word, two lines, or absent. */
+    min-height: 2.7em;
+    font-size: 12px;
   }
 }
 

@@ -80,7 +80,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
       )}
 
       <Card className="mt-5 p-5 sm:p-6">
-        <CardTitle>{hasWater ? "Electricity, water & efficiency" : "Electricity (kWh/day)"}</CardTitle>
+        <CardTitle>{hasWater ? "Electricity & water" : "Electricity (kWh/day)"}</CardTitle>
         {trend.days.length === 0 ? (
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
             No days have landed yet.
@@ -88,26 +88,37 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
         ) : hasWater ? (
           <>
             <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-              Each line starts at 100 on its own first day, so three different units — kWh, KL, kWh/KL — read on one
-              chart: do they move together, or apart? Hover a point for the real figure behind it.
+              Each line starts at 100 on its own first day, so two raw quantities of different units — kWh and KL —
+              read on one chart: do they move together, or apart? Hover a point for the real figure behind it.
             </p>
             <TrendChart
               days={trend.days}
               series={[
                 { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh), rawPoints: trend.kwh, rawUnit: "kWh" },
                 { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl), rawPoints: trend.kl, rawUnit: "KL" },
-                {
-                  key: "eff",
-                  label: "kWh per KL",
-                  color: "var(--chart-mark-3)",
-                  points: indexToFirst(trend.efficiency),
-                  rawPoints: trend.efficiency,
-                  rawUnit: "kWh/KL",
-                  rawDecimals: 2,
-                },
               ]}
               unit="= 100 on day 1"
               decimals={0}
+            />
+
+            {/* A SEPARATE chart, not a third line on the one above
+                (2026-11-10, user-caught: the merged three-series readout
+                was unreadable, and efficiency "should be on a different
+                level" — it's right on both counts: kWh/KL is a RATIO, not
+                a raw quantity, so indexing it to 100 alongside electricity
+                and water compares a trend to its own derivative and means
+                nothing. It keeps its own real units instead of borrowing
+                the index axis above it. */}
+            <p className="lbl mb-2 mt-6">Energy per kilolitre</p>
+            <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+              How much electricity this room uses to move each kilolitre of water — the efficiency question, kept on
+              its own scale rather than indexed alongside the two raw quantities above.
+            </p>
+            <TrendChart
+              days={trend.days}
+              series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
+              unit="kWh/KL"
+              decimals={2}
             />
           </>
         ) : (

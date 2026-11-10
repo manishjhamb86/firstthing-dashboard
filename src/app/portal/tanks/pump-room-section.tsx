@@ -44,28 +44,29 @@ export async function PumpRoomSection({ societyId }: { societyId: string }) {
         </p>
       ) : hasWater ? (
         <>
-          <p className="lbl mb-2">Electricity, water & efficiency</p>
+          <p className="lbl mb-2">Electricity & water</p>
           <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
-            Each line starts at 100 on its own first day, so kWh, KL and kWh/KL read on one chart. Tap a point for
-            the real figure.
+            Each line starts at 100 on its own first day, so kWh and KL read on one chart. Tap a point for the real
+            figure.
           </p>
           <TrendChart
             days={trend.days}
             series={[
               { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh), rawPoints: trend.kwh, rawUnit: "kWh" },
               { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl), rawPoints: trend.kl, rawUnit: "KL" },
-              {
-                key: "eff",
-                label: "kWh per KL",
-                color: "var(--chart-mark-3)",
-                points: indexToFirst(trend.efficiency),
-                rawPoints: trend.efficiency,
-                rawUnit: "kWh/KL",
-                rawDecimals: 2,
-              },
             ]}
             unit="= 100 on day 1"
             decimals={0}
+          />
+
+          {/* Its own chart, its own scale — a ratio (kWh/KL) belongs on
+              neither raw quantity's index (2026-11-10, user-caught). */}
+          <p className="lbl mb-2 mt-5">Energy per kilolitre</p>
+          <TrendChart
+            days={trend.days}
+            series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
+            unit="kWh/KL"
+            decimals={2}
           />
         </>
       ) : (

@@ -1331,6 +1331,7 @@ textarea.field {
 
 .stat-tile {
   min-height: 118px;
+  padding: 1rem;
 }
 .stat-detail {
   display: -webkit-box;
@@ -1340,6 +1341,34 @@ textarea.field {
   /* Two lines reserved AND two lines maximum — a tile is the same height
      whether its detail is one word, two lines, or absent. */
   min-height: 2.7em;
+}
+
+/* A phone's stat row is still 2-up (the >=860px container query above
+   doesn't apply here), so each tile is ~half the screen width minus the
+   gutter — a long value ("10-Nov-2026 · 05:12") wrapped to three lines
+   inside the desktop-sized tile and blew past its own min-height
+   (2026-11-10, user-caught screenshot: "these cards are too big"). Tighter
+   padding and type at a narrow container keeps every page using StatRow
+   compact on a phone without touching the >=860px desktop sizing above. */
+@container (max-width: 480px) {
+  .stat-tile {
+    min-height: 0;
+    padding: 0.625rem 0.75rem;
+  }
+  .stat-tile .lbl {
+    min-height: 0;
+    font-size: 10px;
+    margin-bottom: 0.25rem;
+  }
+  .stat-tile .num {
+    font-size: 15px;
+    line-height: 1.2;
+  }
+  .stat-detail {
+    min-height: 0;
+    -webkit-line-clamp: 1;
+    font-size: 10.5px;
+  }
 }
 
 /* A printed report's tables still have to survive a phone. Every table in

@@ -7,8 +7,16 @@ export type TrendSeries = {
   key: string;
   label: string;
   color: string;
-  /** One value per day, same length/order as `days`. Null breaks the line over that gap rather than bridging it. */
+  /** One value per day, same length/order as `days` — what gets PLOTTED. Null breaks the line over that gap rather than bridging it. */
   points: (number | null)[];
+  /** The real figure behind an indexed/normalised point, shown alongside it
+      on hover so consolidating several units onto one shared axis never
+      hides the actual number (dataviz skill: "a tooltip enhances, it
+      never gates" — every value stays reachable). Omit when `points`
+      already IS the real figure. */
+  rawPoints?: (number | null)[];
+  rawUnit?: string;
+  rawDecimals?: number;
 };
 
 /** Rounds a chart's top to a clean step (0 / step / 2·step / …) rather than the raw max. */
@@ -139,7 +147,13 @@ export function TrendChart({
             >
               <title>
                 {formatDate(d)}:{" "}
-                {series.map((s) => `${s.label} ${s.points[i] === null ? "—" : fmt(s.points[i]!)}${unit ? ` ${unit}` : ""}`).join(" · ")}
+                {series
+                  .map((s) => {
+                    const plotted = s.points[i] === null ? "—" : `${fmt(s.points[i]!)}${unit ? ` ${unit}` : ""}`;
+                    const raw = s.rawPoints && s.rawPoints[i] !== null ? ` (${s.rawPoints[i]!.toFixed(s.rawDecimals ?? 1)}${s.rawUnit ? ` ${s.rawUnit}` : ""})` : "";
+                    return `${s.label} ${plotted}${raw}`;
+                  })
+                  .join(" · ")}
               </title>
             </rect>
           ))}
@@ -187,14 +201,23 @@ export function TrendChart({
             <span className="num" style={{ color: "var(--text-muted)" }}>
               {formatDate(days[hover])}
             </span>
-            {series.map((s) => (
-              <span key={s.key} className="flex items-center gap-1.5">
-                <span className="inline-block h-[2px] w-4" style={{ background: s.color }} />
-                <span className="num text-base font-bold leading-6">{s.points[hover] === null ? "—" : fmt(s.points[hover]!)}</span>
-                {unit && <span style={{ color: "var(--text-subtle)" }}>{unit}</span>}
-                {series.length > 1 && <span style={{ color: "var(--text-subtle)" }}>{s.label}</span>}
-              </span>
-            ))}
+            {series.map((s) => {
+              const raw = s.rawPoints?.[hover] ?? null;
+              return (
+                <span key={s.key} className="flex items-center gap-1.5">
+                  <span className="inline-block h-[2px] w-4" style={{ background: s.color }} />
+                  <span className="num text-base font-bold leading-6">{s.points[hover] === null ? "—" : fmt(s.points[hover]!)}</span>
+                  {unit && <span style={{ color: "var(--text-subtle)" }}>{unit}</span>}
+                  {raw !== null && (
+                    <span className="num" style={{ color: "var(--text-subtle)" }}>
+                      ({raw.toFixed(s.rawDecimals ?? 1)}
+                      {s.rawUnit ? ` ${s.rawUnit}` : ""})
+                    </span>
+                  )}
+                  {series.length > 1 && <span style={{ color: "var(--text-subtle)" }}>{s.label}</span>}
+                </span>
+              );
+            })}
           </>
         ) : (
           <span style={{ color: "var(--text-muted)" }}>{days.length} days — hover (or tab to) a point to see its value.</span>

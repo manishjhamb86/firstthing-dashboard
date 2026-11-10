@@ -80,11 +80,36 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
       )}
 
       <Card className="mt-5 p-5 sm:p-6">
-        <CardTitle>Electricity (kWh/day)</CardTitle>
+        <CardTitle>{hasWater ? "Electricity, water & efficiency" : "Electricity (kWh/day)"}</CardTitle>
         {trend.days.length === 0 ? (
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
             No days have landed yet.
           </p>
+        ) : hasWater ? (
+          <>
+            <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+              Each line starts at 100 on its own first day, so three different units — kWh, KL, kWh/KL — read on one
+              chart: do they move together, or apart? Hover a point for the real figure behind it.
+            </p>
+            <TrendChart
+              days={trend.days}
+              series={[
+                { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh), rawPoints: trend.kwh, rawUnit: "kWh" },
+                { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl), rawPoints: trend.kl, rawUnit: "KL" },
+                {
+                  key: "eff",
+                  label: "kWh per KL",
+                  color: "var(--chart-mark-3)",
+                  points: indexToFirst(trend.efficiency),
+                  rawPoints: trend.efficiency,
+                  rawUnit: "kWh/KL",
+                  rawDecimals: 2,
+                },
+              ]}
+              unit="= 100 on day 1"
+              decimals={0}
+            />
+          </>
         ) : (
           <>
             <TrendChart days={trend.days} series={[{ key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: trend.kwh }]} unit="kWh" />
@@ -95,48 +120,6 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
           </>
         )}
       </Card>
-
-      {hasWater && trend.days.length > 0 && (
-        <Card className="mt-5 p-5 sm:p-6">
-          <CardTitle>Water (KL/day)</CardTitle>
-          <TrendChart days={trend.days} series={[{ key: "kl", label: "Water", color: "var(--chart-mark-2)", points: trend.kl }]} unit="KL" />
-        </Card>
-      )}
-
-      {hasWater && trend.days.length > 1 && (
-        <Card className="mt-5 p-5 sm:p-6">
-          <CardTitle>Electricity vs. water, indexed</CardTitle>
-          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Both lines start at 100 on their own first day, so the two trends — different units, different scales —
-            can be read on one chart: do they move together, or apart?
-          </p>
-          <TrendChart
-            days={trend.days}
-            series={[
-              { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh) },
-              { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl) },
-            ]}
-            unit="= 100 on day 1"
-            decimals={0}
-          />
-        </Card>
-      )}
-
-      {hasWater && trend.days.length > 0 && (
-        <Card className="mt-5 p-5 sm:p-6">
-          <CardTitle>Energy per kilolitre</CardTitle>
-          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            How much electricity this room uses to move each kilolitre of water — the real efficiency question a pump
-            room answers.
-          </p>
-          <TrendChart
-            days={trend.days}
-            series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
-            unit="kWh/KL"
-            decimals={2}
-          />
-        </Card>
-      )}
 
       <Card className="mt-5 p-5 sm:p-6">
         <CardTitle>Emails received</CardTitle>

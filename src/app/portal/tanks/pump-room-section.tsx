@@ -42,40 +42,36 @@ export async function PumpRoomSection({ societyId }: { societyId: string }) {
         <p className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
           A history appears here once a first day lands.
         </p>
+      ) : hasWater ? (
+        <>
+          <p className="lbl mb-2">Electricity, water & efficiency</p>
+          <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+            Each line starts at 100 on its own first day, so kWh, KL and kWh/KL read on one chart. Tap a point for
+            the real figure.
+          </p>
+          <TrendChart
+            days={trend.days}
+            series={[
+              { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh), rawPoints: trend.kwh, rawUnit: "kWh" },
+              { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl), rawPoints: trend.kl, rawUnit: "KL" },
+              {
+                key: "eff",
+                label: "kWh per KL",
+                color: "var(--chart-mark-3)",
+                points: indexToFirst(trend.efficiency),
+                rawPoints: trend.efficiency,
+                rawUnit: "kWh/KL",
+                rawDecimals: 2,
+              },
+            ]}
+            unit="= 100 on day 1"
+            decimals={0}
+          />
+        </>
       ) : (
         <>
           <p className="lbl mb-2">Electricity (kWh/day)</p>
           <TrendChart days={trend.days} series={[{ key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: trend.kwh }]} unit="kWh" />
-          {hasWater && (
-            <>
-              <p className="lbl mb-2 mt-5">Water (KL/day)</p>
-              <TrendChart days={trend.days} series={[{ key: "kl", label: "Water", color: "var(--chart-mark-2)", points: trend.kl }]} unit="KL" />
-              {trend.days.length > 1 && (
-                <>
-                  <p className="lbl mb-2 mt-5">Electricity vs. water, indexed</p>
-                  <p className="mb-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
-                    Both lines start at 100 on the first day, so the two trends can be read on one chart.
-                  </p>
-                  <TrendChart
-                    days={trend.days}
-                    series={[
-                      { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh) },
-                      { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl) },
-                    ]}
-                    unit="= 100 on day 1"
-                    decimals={0}
-                  />
-                </>
-              )}
-              <p className="lbl mb-2 mt-5">Energy per kilolitre</p>
-              <TrendChart
-                days={trend.days}
-                series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
-                unit="kWh/KL"
-                decimals={2}
-              />
-            </>
-          )}
         </>
       )}
     </Card>

@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { StatusChip } from "@/components/ui";
 import { formatInstant } from "@/lib/format-date";
-import { getPumpRoomIngestUrl } from "../actions";
+import { getPumpRoomIngestUrl, retryPumpRoomIngest } from "../actions";
 
 type Row = {
   id: string;
@@ -26,9 +27,12 @@ const LABEL: Record<Row["status"], string> = {
 };
 
 export function IngestHistory({ rows }: { rows: Row[] }) {
+  const router = useRouter();
   const [openId, setOpenId] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [retrying, startRetry] = useTransition();
 
   function view(id: string) {
     setError(null);
@@ -38,6 +42,17 @@ export function IngestHistory({ rows }: { rows: Row[] }) {
       if ("error" in r) setError(r.error);
       else window.open(r.url, "_blank", "noopener,noreferrer");
       setOpenId(null);
+    });
+  }
+
+  function retry(id: string) {
+    setError(null);
+    setRetryingId(id);
+    startRetry(async () => {
+      const r = await retryPumpRoomIngest(id);
+      if (r.error) setError(r.error);
+      router.refresh();
+      setRetryingId(null);
     });
   }
 
@@ -66,6 +81,11 @@ export function IngestHistory({ rows }: { rows: Row[] }) {
           </div>
           <div className="flex items-center gap-2">
             <StatusChip tone={TONE[r.status]}>{LABEL[r.status]}</StatusChip>
+            {r.status === "parse_failed" && (
+              <button type="button" className="btn-ghost" disabled={retrying && retryingId === r.id} onClick={() => retry(r.id)}>
+                {retrying && retryingId === r.id ? "Retrying…" : "Retry"}
+              </button>
+            )}
             <button type="button" className="btn-ghost" disabled={pending && openId === r.id} onClick={() => view(r.id)}>
               {pending && openId === r.id ? "Opening…" : "View file"}
             </button>

@@ -123,6 +123,30 @@ export async function sweepPumpRoomEmailsNow(): Promise<{ error?: string; checke
   return r;
 }
 
+/**
+ * Re-runs the parse — the raw file in S3 is untouched; only the reason to
+ * retry changes (a parser fix, most likely). Same shape as invoice
+ * intake's own retryIntake: re-reads from the row of record rather than
+ * trusting anything the client still holds.
+ */
+export async function retryPumpRoomIngest(ingestId: string): Promise<{ error?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!actor.permissions.includes("manage_users")) {
+    return { error: "Retrying a pump-room file is a society-management action (Manage users)." };
+  }
+  const ingest = await db.emsPumpEmailIngest.findUnique({ where: { id: ingestId }, select: { status: true, pumpMeterId: true } });
+  if (!ingest) return { error: "That file is no longer on record." };
+  if (ingest.status !== "parse_failed" || !ingest.pumpMeterId) {
+    return { error: "Only a file that failed to parse can be retried." };
+  }
+  await applyIngestToMeter(ingestId, ingest.pumpMeterId);
+  logger.info("pump_room.ingest_retried", { actorId: actor.id, ingestId, meterId: ingest.pumpMeterId });
+  revalidatePath("/admin/pump-rooms");
+  revalidatePath(`/admin/pump-rooms/${ingest.pumpMeterId}`);
+  return {};
+}
+
 /** A short-lived link to one ingest's raw file — the private Ingest/ prefix, never rendered directly. */
 export async function getPumpRoomIngestUrl(ingestId: string): Promise<{ url: string } | { error: string }> {
   const actor = await resolveAdmin();

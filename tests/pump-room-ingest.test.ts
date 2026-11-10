@@ -1,5 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { deriveDailyFigure } from "@/lib/pump-room-ingest";
+import { deriveDailyFigure, subjectLabelOf } from "@/lib/pump-room-ingest";
+
+describe("subjectLabelOf", () => {
+  it("reads the label after the colon from a plain subject", () => {
+    expect(subjectLabelOf("EMS-Automated daily Report : RG Residency")).toBe("RG Residency");
+  });
+
+  it("strips a manual-forward prefix, which a real auto-forward never adds but a test copy always does", () => {
+    expect(subjectLabelOf("Fwd: EMS-Automated daily Report : RG Residency")).toBe("RG Residency");
+    expect(subjectLabelOf("Fw: EMS-Automated daily Report : RG Residency")).toBe("RG Residency");
+  });
+
+  it("strips a stacked forward-of-a-reply prefix", () => {
+    expect(subjectLabelOf("Fwd: Re: EMS-Automated daily Report : RG Residency")).toBe("RG Residency");
+  });
+
+  it("is case-insensitive on both the prefix and the vendor boilerplate", () => {
+    expect(subjectLabelOf("FWD: ems-automated daily report : RG Residency")).toBe("RG Residency");
+  });
+
+  it("falls back to the whole trimmed subject when the pattern does not match at all — never silently dropped", () => {
+    expect(subjectLabelOf("  Something else entirely  ")).toBe("Something else entirely");
+  });
+});
 
 describe("deriveDailyFigure", () => {
   it("has no figure for the first-ever reading — correct, not a loss", () => {

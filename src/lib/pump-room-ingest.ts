@@ -20,8 +20,31 @@ import { buildPumpRoomIngestKey } from "@/lib/ingest-keys";
 import { readPumpRoomWorkbook } from "@/lib/pump-room-xlsx";
 import { utcDayOf } from "@/lib/reading-normalize";
 
-const SENDER = "ems_support@sses.co.in";
-const SUBJECT_PATTERN = /^EMS-Automated daily Report\s*:\s*(.+)$/i;
+// The subject line is the real filter, not the sender (2026-11-10,
+// user-asked "how do I test this"): a genuine mail-forwarding RULE usually
+// preserves the original From header, but that is not guaranteed across
+// every forwarding mechanism, and a manually-forwarded test copy (clicking
+// Forward in Gmail) never does — it carries the forwarder's own address and
+// a "Fwd:" subject prefix instead. A hard `from:` filter would then risk
+// silently matching nothing, forever, which is the worst failure shape —
+// no error, just an empty inbox read as "nothing has arrived yet". The
+// dedicated mailbox exists for exactly one purpose, so the subject pattern
+// alone is a safe enough filter, and it is tolerant of a forward/reply
+// prefix for the same reason.
+const SUBJECT_PATTERN = /^(?:(?:fwd?|re)\s*:\s*)*EMS-Automated daily Report\s*:\s*(.+)$/i;
+
+/**
+ * The exact label after the colon, with any forward/reply prefix and the
+ * vendor's own boilerplate stripped — the thing an operator actually
+ * classifies against. Falls back to the whole (trimmed) subject when it
+ * doesn't match the pattern at all, so a mis-shaped subject still lands
+ * somewhere an operator can see and classify by hand, rather than being
+ * silently dropped.
+ */
+export function subjectLabelOf(subject: string): string {
+  const match = subject.match(SUBJECT_PATTERN);
+  return (match ? match[1] : subject).trim();
+}
 
 export type DailyFigure = { dailyKwh: number | null; registerWentBackwards: boolean };
 
@@ -56,7 +79,7 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
     return { checked: 0, applied: 0, needsAssignment: 0, failed: 0 };
   }
 
-  const messages = await listMessages(cfg, `from:${SENDER} subject:"EMS-Automated daily Report"`, 25);
+  const messages = await listMessages(cfg, `subject:"EMS-Automated daily Report"`, 25);
   let checked = 0;
   let applied = 0;
   let needsAssignment = 0;
@@ -72,8 +95,7 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
 
     try {
       const msg = await getMessage(cfg, m.id);
-      const subjectMatch = msg.subject.match(SUBJECT_PATTERN);
-      const subjectLabel = (subjectMatch ? subjectMatch[1] : msg.subject).trim();
+      const subjectLabel = subjectLabelOf(msg.subject);
       const attachment = msg.attachments.find((a) => /\.xlsx?$/i.test(a.filename)) ?? msg.attachments[0];
       if (!attachment) {
         logger.warn("job.pump_room_email_sweep_no_attachment", { gmailMessageId: m.id, subject: msg.subject });

@@ -36,16 +36,21 @@ export function TrendChart({
   days,
   series,
   unit,
-  valueFormat,
+  decimals = 1,
 }: {
   /** YYYY-MM-DD, oldest first. */
   days: string[];
   series: TrendSeries[];
   unit?: string;
-  valueFormat?: (v: number) => string;
+  /** How many decimal places to show — a plain number, not a formatter
+      function: this component is a Client Component, and a Server
+      Component page cannot pass a function prop across that boundary
+      (found by deploying, 2026-11-10 — "Functions cannot be passed
+      directly to Client Components"). */
+  decimals?: number;
 }) {
   const [hover, setHover] = useState<number | null>(null);
-  const fmt = valueFormat ?? ((v: number) => v.toFixed(1));
+  const fmt = (v: number) => v.toFixed(decimals);
 
   if (days.length < 2) {
     return (

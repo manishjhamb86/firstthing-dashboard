@@ -117,7 +117,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
               { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl) },
             ]}
             unit="= 100 on day 1"
-            valueFormat={(v) => v.toFixed(0)}
+            decimals={0}
           />
         </Card>
       )}
@@ -133,7 +133,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
             days={trend.days}
             series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
             unit="kWh/KL"
-            valueFormat={(v) => v.toFixed(2)}
+            decimals={2}
           />
         </Card>
       )}

@@ -13,41 +13,35 @@ export type PumpRoomReadingRow = {
   waterWentBackwards: boolean;
 };
 
-export type DailyBar = { day: string; total: number; intervalCount: number };
+export type TrendData = {
+  /** YYYY-MM-DD, oldest first — TrendChart's own expected order. */
+  days: string[];
+  kwh: (number | null)[];
+  kl: (number | null)[];
+  /** kWh used per kilolitre pumped — null wherever either figure is missing, or water is zero (not a meaningful denominator). */
+  efficiency: (number | null)[];
+};
 
-// DailyBars (src/components/meter-ui.tsx) expects newest-first input (it
-// reverses internally) and renders anything with intervalCount < 24 as a
-// flagged, amber "partial" bar rather than a quiet zero — reused here for
-// the same reason it already serves meter readings: a day with no real
-// figure must never look like a day of zero consumption.
-export function electricityBars(readings: PumpRoomReadingRow[]): DailyBar[] {
-  return readings.map((r) => ({
-    day: r.date.toISOString().slice(0, 10),
-    total: r.dailyKwh ?? 0,
-    intervalCount: r.registerWentBackwards || r.dailyKwh === null ? 0 : 24,
-  }));
+/** `readings` arrives newest-first (every caller fetches it that way); this reverses once, here, rather than in every page. */
+export function trendData(readings: PumpRoomReadingRow[]): TrendData {
+  const ordered = [...readings].reverse();
+  return {
+    days: ordered.map((r) => r.date.toISOString().slice(0, 10)),
+    kwh: ordered.map((r) => r.dailyKwh),
+    kl: ordered.map((r) => r.dailyKl),
+    efficiency: ordered.map((r) => (r.dailyKwh !== null && r.dailyKl !== null && r.dailyKl > 0 ? r.dailyKwh / r.dailyKl : null)),
+  };
 }
-
-export function waterBars(readings: PumpRoomReadingRow[]): DailyBar[] {
-  return readings.map((r) => ({
-    day: r.date.toISOString().slice(0, 10),
-    total: r.dailyKl ?? 0,
-    intervalCount: r.waterWentBackwards || r.dailyKl === null ? 0 : 24,
-  }));
-}
-
-export type EfficiencyRow = { day: string; kwhPerKl: number | null };
 
 /**
- * Energy used per kilolitre pumped — the real operational question a pump
- * room answers (2026-11-10, user-asked). Only computed where both figures
- * are real for the same day; a missing or zero water figure is not a
- * meaningful denominator and must not produce an undefined or infinite
- * ratio.
+ * Indexes a series to its own first real value = 100 — the way to put two
+ * measures of different units (kWh, KL) on ONE shared axis without a
+ * dual-axis chart (the dataviz skill's own rule: never two y-scales; index
+ * to a common base instead). A leading run of nulls has nothing to index
+ * against yet, so it stays null until the first real value anchors it.
  */
-export function efficiencyRows(readings: PumpRoomReadingRow[]): EfficiencyRow[] {
-  return readings.map((r) => ({
-    day: r.date.toISOString().slice(0, 10),
-    kwhPerKl: r.dailyKwh !== null && r.dailyKl !== null && r.dailyKl > 0 ? r.dailyKwh / r.dailyKl : null,
-  }));
+export function indexToFirst(points: (number | null)[]): (number | null)[] {
+  const base = points.find((v): v is number => v !== null && v !== 0);
+  if (base === undefined) return points.map(() => null);
+  return points.map((v) => (v === null ? null : (v / base) * 100));
 }

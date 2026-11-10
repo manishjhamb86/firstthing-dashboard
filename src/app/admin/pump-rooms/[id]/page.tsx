@@ -3,10 +3,9 @@ import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { BackButton } from "@/components/back-button";
 import { Card, CardTitle, PageHeader, Stat, StatRow } from "@/components/ui";
-import { DailyBars } from "@/components/meter-ui";
-import { PumpRoomEfficiency } from "@/components/pump-room-efficiency";
+import { TrendChart } from "@/components/trend-chart";
 import { formatInstant } from "@/lib/format-date";
-import { electricityBars, efficiencyRows, waterBars } from "@/lib/pump-room-view";
+import { indexToFirst, trendData } from "@/lib/pump-room-view";
 import { AssignControl } from "./assign-control";
 import { ReassignButton } from "./reassign-button";
 import { IngestHistory } from "./ingest-history";
@@ -33,10 +32,8 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
   ]);
   if (!meter) notFound();
 
-  const electricityDays = electricityBars(meter.readings);
-  const waterDays = waterBars(meter.readings);
+  const trend = trendData(meter.readings);
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
-  const efficiency = efficiencyRows(meter.readings);
 
   return (
     <>
@@ -83,14 +80,14 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
       )}
 
       <Card className="mt-5 p-5 sm:p-6">
-        <CardTitle>Daily electricity (kWh)</CardTitle>
-        {electricityDays.length === 0 ? (
+        <CardTitle>Electricity (kWh/day)</CardTitle>
+        {trend.days.length === 0 ? (
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
             No days have landed yet.
           </p>
         ) : (
           <>
-            <DailyBars days={electricityDays} />
+            <TrendChart days={trend.days} series={[{ key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: trend.kwh }]} unit="kWh" />
             <p className="mt-3 text-[11px]" style={{ color: "var(--text-subtle)" }}>
               A day with no earlier day on record (most often the first day ever read) shows that day&apos;s own
               opening-to-closing span rather than a comparison to a previous day — an approximation, not a loss.
@@ -99,27 +96,45 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
         )}
       </Card>
 
-      {hasWater && (
+      {hasWater && trend.days.length > 0 && (
         <Card className="mt-5 p-5 sm:p-6">
-          <CardTitle>Daily water (KL)</CardTitle>
-          {waterDays.length === 0 ? (
-            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-              No days have landed yet.
-            </p>
-          ) : (
-            <DailyBars days={waterDays} />
-          )}
+          <CardTitle>Water (KL/day)</CardTitle>
+          <TrendChart days={trend.days} series={[{ key: "kl", label: "Water", color: "var(--chart-mark-2)", points: trend.kl }]} unit="KL" />
         </Card>
       )}
 
-      {hasWater && (
+      {hasWater && trend.days.length > 1 && (
+        <Card className="mt-5 p-5 sm:p-6">
+          <CardTitle>Electricity vs. water, indexed</CardTitle>
+          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            Both lines start at 100 on their own first day, so the two trends — different units, different scales —
+            can be read on one chart: do they move together, or apart?
+          </p>
+          <TrendChart
+            days={trend.days}
+            series={[
+              { key: "kwh", label: "Electricity", color: "var(--chart-mark)", points: indexToFirst(trend.kwh) },
+              { key: "kl", label: "Water", color: "var(--chart-mark-2)", points: indexToFirst(trend.kl) },
+            ]}
+            unit="= 100 on day 1"
+            valueFormat={(v) => v.toFixed(0)}
+          />
+        </Card>
+      )}
+
+      {hasWater && trend.days.length > 0 && (
         <Card className="mt-5 p-5 sm:p-6">
           <CardTitle>Energy per kilolitre</CardTitle>
           <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
             How much electricity this room uses to move each kilolitre of water — the real efficiency question a pump
             room answers.
           </p>
-          <PumpRoomEfficiency rows={efficiency} />
+          <TrendChart
+            days={trend.days}
+            series={[{ key: "eff", label: "kWh per KL", color: "var(--chart-mark-3)", points: trend.efficiency }]}
+            unit="kWh/KL"
+            valueFormat={(v) => v.toFixed(2)}
+          />
         </Card>
       )}
 

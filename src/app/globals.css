@@ -78,6 +78,12 @@
   --chart-mark-alert: #8A6410;
   --chart-mark-inert: #94A3B8;
   --chart-rule: #5A6A85;
+  /* Pump-room trend chart's second and third series (2026-11-10) — validated
+     against --chart-mark and each other via the dataviz skill's
+     validate_palette.js (light, surface #FFFFFF): all CVD/contrast checks
+     pass for the 3-slot set #4560E6 / #0E9F8A / #A4319A. */
+  --chart-mark-2: #0E9F8A;
+  --chart-mark-3: #A4319A;
   --warn-line: #F6E3B8;
   --bad-bg: #FDEDE8;
   --bad-fg: #BA4A32;
@@ -265,6 +271,10 @@
   --chart-mark-alert: #B6842B;
   --chart-mark-inert: #6B7A90;
   --chart-rule: #8A99AE;
+  /* Same 3-slot pump-room palette, re-stepped for the dark L 0.48–0.67 band
+     and re-validated (surface #18181B): all checks pass. */
+  --chart-mark-2: #0D9488;
+  --chart-mark-3: #D15ECB;
 }
 
 /* Slate repeats :root verbatim — stamping it is idempotent, same as never

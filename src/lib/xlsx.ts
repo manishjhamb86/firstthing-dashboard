@@ -113,36 +113,58 @@ export function readWorkbook(bytes: Uint8Array): Sheet[] {
 
   const relsXml = get("xl/_rels/workbook.xml.rels") ?? "";
   const rels = new Map<string, string>();
-  for (const m of relsXml.matchAll(/<Relationship\b[^>]*?Id="([^"]+)"[^>]*?Target="([^"]+)"/g)) {
-    rels.set(m[1], m[2].replace(/^\/?xl\//, "").replace(/^\.\//, ""));
+  // Same attribute-order trap as the <sheet> tag above: Excel's own writer
+  // happens to emit Id before Target, but that is not a rule — the same
+  // real vendor file puts Type, then Target, then Id. Extracted
+  // independently rather than in one fixed-order match.
+  for (const m of relsXml.matchAll(/<Relationship\b([^>]*)\/>/g)) {
+    const attrs = m[1];
+    const id = /\bId="([^"]*)"/.exec(attrs)?.[1];
+    const target = /\bTarget="([^"]*)"/.exec(attrs)?.[1];
+    if (!id || !target) continue;
+    rels.set(id, target.replace(/^\/?xl\//, "").replace(/^\.\//, ""));
   }
 
   const shared: string[] = [];
   const sharedXml = get("xl/sharedStrings.xml");
   if (sharedXml) {
-    for (const m of sharedXml.matchAll(/<si>([\s\S]*?)<\/si>/g)) {
+    for (const m of sharedXml.matchAll(/<(?:\w+:)?si\b[^>]*>([\s\S]*?)<\/(?:\w+:)?si>/g)) {
       // A string can be split across runs (<r><t>..</t></r>); the value is
       // every <t> concatenated, not the first one.
-      const text = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join("");
+      const text = [...m[1].matchAll(/<(?:\w+:)?t\b[^>]*>([\s\S]*?)<\/(?:\w+:)?t>/g)].map((t) => t[1]).join("");
       shared.push(unescapeXml(text));
     }
   }
 
   const sheets: Sheet[] = [];
-  for (const m of workbook.matchAll(/<sheet\b[^>]*?name="([^"]+)"[^>]*?r:id="([^"]+)"[^>]*\/>/g)) {
-    const target = rels.get(m[2]);
+  // Every <sheet> tag, whatever namespace prefix it carries (plain Excel
+  // writes <sheet>; some generators — e.g. EPPlus-shaped exports, as a real
+  // EMS vendor workbook turned out to be, 2026-11-10 — prefix every
+  // spreadsheetml element: <x:sheet>) and whatever order its attributes are
+  // in (name before r:id is Excel's own habit, not a rule other writers
+  // follow). `\b` after "sheet" keeps this from matching <sheetData>,
+  // <x:sheets> and friends, same as it always has.
+  for (const m of workbook.matchAll(/<(?:\w+:)?sheet\b([^>]*)\/>/g)) {
+    const attrs = m[1];
+    const name = /name="([^"]*)"/.exec(attrs)?.[1];
+    const rId = /r:id="([^"]*)"/.exec(attrs)?.[1];
+    if (!name || !rId) continue;
+    const target = rels.get(rId);
     const xml = target ? get(`xl/${target}`) : null;
     if (!xml) continue;
-    sheets.push({ name: unescapeXml(m[1]), rows: readSheet(xml, shared) });
+    sheets.push({ name: unescapeXml(name), rows: readSheet(xml, shared) });
   }
   return sheets;
 }
 
 function readSheet(xml: string, shared: string[]): string[][] {
   const rows: string[][] = [];
-  for (const rm of xml.matchAll(/<row\b[^>]*>([\s\S]*?)<\/row>/g)) {
+  // Same namespace-prefix tolerance as the sheet/relationship matching
+  // above — this real vendor writer prefixes <row>, <c>, <v> and <t>
+  // throughout the worksheet XML too (<x:row>, <x:c>, <x:v>, <x:t>).
+  for (const rm of xml.matchAll(/<(?:\w+:)?row\b[^>]*>([\s\S]*?)<\/(?:\w+:)?row>/g)) {
     const cells: string[] = [];
-    for (const cm of rm[1].matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
+    for (const cm of rm[1].matchAll(/<(?:\w+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g)) {
       const attrs = cm[1];
       const inner = cm[2] ?? "";
       const ref = /r="([A-Z]+)\d+"/.exec(attrs);
@@ -150,9 +172,9 @@ function readSheet(xml: string, shared: string[]): string[][] {
       const type = /t="([^"]+)"/.exec(attrs)?.[1] ?? "n";
       let value = "";
       if (type === "inlineStr") {
-        value = [...inner.matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map((t) => t[1]).join("");
+        value = [...inner.matchAll(/<(?:\w+:)?t\b[^>]*>([\s\S]*?)<\/(?:\w+:)?t>/g)].map((t) => t[1]).join("");
       } else {
-        const v = /<v>([\s\S]*?)<\/v>/.exec(inner)?.[1] ?? "";
+        const v = /<(?:\w+:)?v\b[^>]*>([\s\S]*?)<\/(?:\w+:)?v>/.exec(inner)?.[1] ?? "";
         value = type === "s" ? (shared[Number(v)] ?? "") : v;
       }
       while (cells.length < at) cells.push("");

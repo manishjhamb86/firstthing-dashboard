@@ -3,6 +3,7 @@ import {
   Boxes,
   Droplets,
   FileText,
+  Gauge,
   LayoutDashboard,
   LifeBuoy,
   Receipt,
@@ -31,6 +32,7 @@ export const PORTAL_NAV_ICONS = {
   dashboard: LayoutDashboard,
   electricity: Zap,
   water: Droplets,
+  pumpRoom: Gauge,
   documents: FileText,
   inventory: Boxes,
   support: LifeBuoy,
@@ -57,6 +59,13 @@ export function portalNavEntries(grants: Set<PortalGrant>): PortalNavEntry[] {
       : []),
     ...(grants.has("water_tanks")
       ? [{ key: "water" as const, href: "/portal/tanks", label: "Water tanks" }]
+      : []),
+    // The pump room is its own tab (2026-11-11, user-asked) under the same
+    // grant as the tanks — both are the society's water infrastructure, and a
+    // separate grant would need a migration plus a backfill for a split
+    // nobody has asked for.
+    ...(grants.has("water_tanks")
+      ? [{ key: "pumpRoom" as const, href: "/portal/pump-room", label: "Pump room" }]
       : []),
     ...(grants.has("billing")
       ? [{ key: "billing" as const, href: "/portal/billing", label: "Billing" }]

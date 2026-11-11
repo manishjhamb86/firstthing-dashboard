@@ -7,7 +7,6 @@ import { hasGrant } from "@/lib/portal-access";
 import { publishedMonthsFor } from "@/lib/published-months-loader";
 import { formatDate } from "@/lib/format-date";
 import { WaterPitch } from "./water-pitch";
-import { PumpRoomSection } from "./pump-room-section";
 import { TankVisual } from "@/components/tank-visual";
 import { TankHistory, type LevelPoint } from "./tank-history";
 import { formatInstant, timeAgo } from "@/lib/format-date";
@@ -245,15 +244,13 @@ export default async function PortalTanksPage() {
         title="Water tanks"
         subtitle={
           tanks.length === 0
-            ? "Your society's tanks and pump room"
+            ? "Your society's tanks"
             : flat
               ? "Live levels — each tank says which supply and tower it serves."
               : "Live levels, grouped by what each setup supplies."
         }
         chip={headerChip}
       />
-
-      <PumpRoomSection societyId={societyId} />
 
       {tanks.length === 0 ? (
         <WaterPitch

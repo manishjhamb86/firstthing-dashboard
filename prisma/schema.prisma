@@ -526,45 +526,45 @@ model AdminUser {
   deletedBy AdminUser?  @relation("AdminDeletedBy", fields: [deletedById], references: [id], onDelete: SetNull)
   deleted   AdminUser[] @relation("AdminDeletedBy")
 
-  pipelinesOwned              Pipeline[]                  @relation("PipelineSalesOwner")
-  pipelinesSurveying          Pipeline[]                  @relation("PipelineSurveyOwner")
-  pipelinesSurveyAssigned     Pipeline[]                  @relation("PipelineSurveyAssignedBy")
-  scheduledEvents             ScheduledEvent[]            @relation("ScheduledEventAssignee")
-  demosReplacing              CircuitDemo[]               @relation("DemoReplacementOwner")
-  demoReplacementsAssigned    CircuitDemo[]               @relation("DemoReplacementAssignedBy")
-  demosUnlocked               CircuitDemo[]               @relation("DemoUnlockedBy")
-  demoAcceptances             CircuitDemoAcceptance[]
-  replacementFollowUpsRaised    DemoReplacementFollowUp[] @relation("FollowUpRaisedBy")
-  replacementFollowUpsCompleted DemoReplacementFollowUp[] @relation("FollowUpCompletedByAdmin")
-  waterTanksAssigned          WaterTank[]                 @relation("WaterTankAssignedBy")
-  meterDevicesAssigned        MeterDevice[]               @relation("MeterDeviceAssignedBy")
-  meterInstallationsOpened    MeterInstallation[]         @relation("MeterInstalledBy")
-  meterInstallationsClosed    MeterInstallation[]         @relation("MeterRemovedBy")
-  meterDevicesOwned           MeterDevice[]               @relation("MeterDeviceOwner")
-  meterAlertsAcknowledged     MeterAlert[]                @relation("MeterAlertAcknowledgedBy")
-  meterCsvImports             MeterCsvImport[]            @relation("MeterCsvImportUploadedBy")
-  storedDocuments             StoredDocument[]            @relation("StoredDocumentUploadedBy")
-  ticketsTouched              Ticket[]                    @relation("TicketStatusByAdmin")
-  ticketsAssigned             Ticket[]                    @relation("TicketAssignedTo")
-  marketingEnquiriesFollowedUp MarketingEnquiry[]         @relation("MarketingEnquiryFollowedUpBy")
-  storedDocumentsVoided       StoredDocument[]            @relation("StoredDocumentVoidedBy")
-  savingsReportsPublished     PublishedSavingsReport[]    @relation("SavingsReportPublishedBy")
-  savingsReportsVoided        PublishedSavingsReport[]    @relation("SavingsReportVoidedBy")
-  documentExtractions         DocumentExtraction[]        @relation("DocumentExtractionConfirmedBy")
-  ewelinkConfigsUpdated       EwelinkApiConfig[]          @relation("EwelinkApiConfigUpdatedBy")
-  tankApiConfigUpdated        TankApiConfig[]             @relation("TankApiConfigUpdatedBy")
-  googleCalendarConfigUpdated GoogleCalendarConfig[]      @relation("GoogleCalendarConfigUpdatedBy")
-  zohoInvoiceConfigUpdated    ZohoInvoiceConfig[]         @relation("ZohoInvoiceConfigUpdatedBy")
-  operationsFlagUpdated       OperationsFlag[]            @relation("OperationsFlagUpdatedBy")
-  helpReportsRaised           HelpReport[]                @relation("HelpReportReporter")
-  helpReportsResolved         HelpReport[]                @relation("HelpReportResolvedBy")
-  helpMessages                HelpMessage[]               @relation("HelpMessageAuthor")
-  fmCompaniesCreated          FacilityManagementCompany[] @relation("FmCompanyCreatedBy")
-  fmEngagementsRecorded       SocietyFmEngagement[]       @relation("FmEngagementRecordedBy")
-  fmEmploymentsRecorded       FmEmployment[]              @relation("FmEmploymentRecordedBy")
-  meetingInvitations          ScheduledEventAttendee[]    @relation("ScheduledEventAttendeeUser")
-  scheduledEventsCreated      ScheduledEvent[]            @relation("ScheduledEventCreatedBy")
-  pipelinesLogged             Pipeline[]                  @relation("PipelineLoggedBy")
+  pipelinesOwned                Pipeline[]                  @relation("PipelineSalesOwner")
+  pipelinesSurveying            Pipeline[]                  @relation("PipelineSurveyOwner")
+  pipelinesSurveyAssigned       Pipeline[]                  @relation("PipelineSurveyAssignedBy")
+  scheduledEvents               ScheduledEvent[]            @relation("ScheduledEventAssignee")
+  demosReplacing                CircuitDemo[]               @relation("DemoReplacementOwner")
+  demoReplacementsAssigned      CircuitDemo[]               @relation("DemoReplacementAssignedBy")
+  demosUnlocked                 CircuitDemo[]               @relation("DemoUnlockedBy")
+  demoAcceptances               CircuitDemoAcceptance[]
+  replacementFollowUpsRaised    DemoReplacementFollowUp[]   @relation("FollowUpRaisedBy")
+  replacementFollowUpsCompleted DemoReplacementFollowUp[]   @relation("FollowUpCompletedByAdmin")
+  waterTanksAssigned            WaterTank[]                 @relation("WaterTankAssignedBy")
+  meterDevicesAssigned          MeterDevice[]               @relation("MeterDeviceAssignedBy")
+  meterInstallationsOpened      MeterInstallation[]         @relation("MeterInstalledBy")
+  meterInstallationsClosed      MeterInstallation[]         @relation("MeterRemovedBy")
+  meterDevicesOwned             MeterDevice[]               @relation("MeterDeviceOwner")
+  meterAlertsAcknowledged       MeterAlert[]                @relation("MeterAlertAcknowledgedBy")
+  meterCsvImports               MeterCsvImport[]            @relation("MeterCsvImportUploadedBy")
+  storedDocuments               StoredDocument[]            @relation("StoredDocumentUploadedBy")
+  ticketsTouched                Ticket[]                    @relation("TicketStatusByAdmin")
+  ticketsAssigned               Ticket[]                    @relation("TicketAssignedTo")
+  marketingEnquiriesFollowedUp  MarketingEnquiry[]          @relation("MarketingEnquiryFollowedUpBy")
+  storedDocumentsVoided         StoredDocument[]            @relation("StoredDocumentVoidedBy")
+  savingsReportsPublished       PublishedSavingsReport[]    @relation("SavingsReportPublishedBy")
+  savingsReportsVoided          PublishedSavingsReport[]    @relation("SavingsReportVoidedBy")
+  documentExtractions           DocumentExtraction[]        @relation("DocumentExtractionConfirmedBy")
+  ewelinkConfigsUpdated         EwelinkApiConfig[]          @relation("EwelinkApiConfigUpdatedBy")
+  tankApiConfigUpdated          TankApiConfig[]             @relation("TankApiConfigUpdatedBy")
+  googleCalendarConfigUpdated   GoogleCalendarConfig[]      @relation("GoogleCalendarConfigUpdatedBy")
+  zohoInvoiceConfigUpdated      ZohoInvoiceConfig[]         @relation("ZohoInvoiceConfigUpdatedBy")
+  operationsFlagUpdated         OperationsFlag[]            @relation("OperationsFlagUpdatedBy")
+  helpReportsRaised             HelpReport[]                @relation("HelpReportReporter")
+  helpReportsResolved           HelpReport[]                @relation("HelpReportResolvedBy")
+  helpMessages                  HelpMessage[]               @relation("HelpMessageAuthor")
+  fmCompaniesCreated            FacilityManagementCompany[] @relation("FmCompanyCreatedBy")
+  fmEngagementsRecorded         SocietyFmEngagement[]       @relation("FmEngagementRecordedBy")
+  fmEmploymentsRecorded         FmEmployment[]              @relation("FmEmploymentRecordedBy")
+  meetingInvitations            ScheduledEventAttendee[]    @relation("ScheduledEventAttendeeUser")
+  scheduledEventsCreated        ScheduledEvent[]            @relation("ScheduledEventCreatedBy")
+  pipelinesLogged               Pipeline[]                  @relation("PipelineLoggedBy")
 
   circuitsCreated           Circuit[]               @relation("CircuitCreatedBy")
   circuitsVoided            Circuit[]               @relation("CircuitVoidedBy")
@@ -633,11 +633,11 @@ model AdminUser {
   deviceTypesApproved DeviceType[]         @relation("DeviceTypeApprovedBy")
 
   // Monthly inspection checklist (2026-09-12)
-  inspectionsFiled   Inspection[]        @relation("InspectionFiledBy")
-  fieldSyncReceipts  FieldSyncReceipt[]
-  pushSubscriptions  PushSubscription[]
-  inspectionsVoided  Inspection[]        @relation("InspectionVoidedBy")
-  findingsAdded      InspectionFinding[] @relation("InspectionFindingAddedBy")
+  inspectionsFiled  Inspection[]        @relation("InspectionFiledBy")
+  fieldSyncReceipts FieldSyncReceipt[]
+  pushSubscriptions PushSubscription[]
+  inspectionsVoided Inspection[]        @relation("InspectionVoidedBy")
+  findingsAdded     InspectionFinding[] @relation("InspectionFindingAddedBy")
 
   dateChangesRequested DateChangeRequest[] @relation("DateChangeRequestedBy")
   dateChangesDecided   DateChangeRequest[] @relation("DateChangeDecidedBy")
@@ -653,8 +653,10 @@ model AdminUser {
   pendingApprovalsRequested PendingApproval[] @relation("PendingApprovalRequestedBy")
   pendingApprovalsDecided   PendingApproval[] @relation("PendingApprovalDecidedBy")
 
-  googleGmailConfigUpdated GoogleGmailConfig[] @relation("GoogleGmailConfigUpdatedBy")
-  emsPumpMetersAssigned    EmsPumpMeter[]      @relation("EmsPumpMeterAssignedBy")
+  googleGmailConfigUpdated   GoogleGmailConfig[] @relation("GoogleGmailConfigUpdatedBy")
+  emsPumpMetersAssigned      EmsPumpMeter[]      @relation("EmsPumpMeterAssignedBy")
+  emsPumpBaselinesRecorded   EmsPumpBaseline[]   @relation("EmsPumpBaselineRecordedBy")
+  emsPumpBaselinesSuperseded EmsPumpBaseline[]   @relation("EmsPumpBaselineSupersededBy")
 
   @@map("admin_users")
 }
@@ -1264,7 +1266,7 @@ model Circuit {
   // the survey and demo period" — so it reads THIS instead, captured once,
   // the first time the demo locks in (state first reaches benchmark_confirmed),
   // and never touched again by resyncCircuitFigures.ts afterward.
-  lightCountAtDemoLock           Int?        @map("light_count_at_demo_lock")
+  lightCountAtDemoLock          Int?        @map("light_count_at_demo_lock")
   wattage                       Float
   workingHours                  Float?      @map("working_hours") // metadata only, never triggers a rescale — CON-10
   // FEAT-040-AC-5 — when workingHours last changed; recorded so a later
@@ -1452,11 +1454,11 @@ model CircuitDemo {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at")
 
-  circuit               Circuit                 @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  meter                 MeterDevice?            @relation(fields: [meterId], references: [id], onDelete: SetNull)
-  replacementOwner      AdminUser?              @relation("DemoReplacementOwner", fields: [replacementOwnerId], references: [id])
-  replacementAssignedBy AdminUser?              @relation("DemoReplacementAssignedBy", fields: [replacementAssignedById], references: [id])
-  unlockedBy            AdminUser?              @relation("DemoUnlockedBy", fields: [unlockedById], references: [id])
+  circuit               Circuit                   @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  meter                 MeterDevice?              @relation(fields: [meterId], references: [id], onDelete: SetNull)
+  replacementOwner      AdminUser?                @relation("DemoReplacementOwner", fields: [replacementOwnerId], references: [id])
+  replacementAssignedBy AdminUser?                @relation("DemoReplacementAssignedBy", fields: [replacementAssignedById], references: [id])
+  unlockedBy            AdminUser?                @relation("DemoUnlockedBy", fields: [unlockedById], references: [id])
   readings              CircuitDemoReading[]
   acceptances           CircuitDemoAcceptance[]
   gatePasses            GatePass[]
@@ -1720,7 +1722,7 @@ model PendingApproval {
   society   Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
   /// The owning action's own parameters, JSON-serializable by construction
   /// (every gated action takes only strings/numbers/booleans/plain objects).
-  args Json
+  args      Json
 
   status PendingApprovalStatus @default(pending)
 
@@ -1732,7 +1734,7 @@ model PendingApproval {
   /// Set when approving re-ran the action and it refused — state moved
   /// underneath the request. The row stays pending so it can be retried or
   /// withdrawn; this is shown so it is clear retrying needs a fresh look.
-  appliedError String? @map("applied_error")
+  appliedError  String?   @map("applied_error")
 
   requestedBy AdminUser  @relation("PendingApprovalRequestedBy", fields: [requestedById], references: [id])
   decidedBy   AdminUser? @relation("PendingApprovalDecidedBy", fields: [decidedById], references: [id])
@@ -1791,12 +1793,12 @@ model BenchmarkRescaleEvent {
   voidReason         String?   @map("void_reason")
   correctedByEventId String?   @unique @map("corrected_by_event_id")
 
-  circuit     Circuit                @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  recordedBy  AdminUser              @relation("BenchmarkRescaleRecordedBy", fields: [recordedById], references: [id])
-  voidedBy    AdminUser?             @relation("BenchmarkRescaleVoidedBy", fields: [voidedById], references: [id])
-  correctedBy BenchmarkRescaleEvent? @relation("RescaleCorrection", fields: [correctedByEventId], references: [id])
-  corrects    BenchmarkRescaleEvent? @relation("RescaleCorrection")
-  addedDeviceLines CircuitDevice[]   @relation("CircuitDeviceAddedViaRescale")
+  circuit          Circuit                @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  recordedBy       AdminUser              @relation("BenchmarkRescaleRecordedBy", fields: [recordedById], references: [id])
+  voidedBy         AdminUser?             @relation("BenchmarkRescaleVoidedBy", fields: [voidedById], references: [id])
+  correctedBy      BenchmarkRescaleEvent? @relation("RescaleCorrection", fields: [correctedByEventId], references: [id])
+  corrects         BenchmarkRescaleEvent? @relation("RescaleCorrection")
+  addedDeviceLines CircuitDevice[]        @relation("CircuitDeviceAddedViaRescale")
 
   @@index([circuitId, effectiveDate])
   @@map("benchmark_rescale_events")
@@ -2857,11 +2859,11 @@ model MeterReading {
   /// migration history pending the one-time backfill). `offline`/`suspect`
   /// are NOT here; they stay a live check against the baseline in force,
   /// since baking them in would go stale the moment a circuit is rescaled.
-  dayClass             ReadingDayClass? @map("day_class")
+  dayClass              ReadingDayClass? @map("day_class")
   /// How many of the circuit's EXPECTED hours that day actually had — the
   /// evidence shown beside the chip ("18 of 24"), not itself the decision.
-  dayClassHoursExpected Int?            @map("day_class_hours_expected")
-  dayClassHoursPresent  Int?            @map("day_class_hours_present")
+  dayClassHoursExpected Int?             @map("day_class_hours_expected")
+  dayClassHoursPresent  Int?             @map("day_class_hours_present")
 
   /// An operator's explicit confirmation that a day `dayClass` calls
   /// `partial` should still count (2026-10-05, user-asked) — the one manual
@@ -3752,12 +3754,12 @@ model CircuitDevice {
 
   createdAt DateTime @default(now()) @map("created_at")
 
-  circuit         Circuit                @relation(fields: [circuitId], references: [id], onDelete: Cascade)
-  deviceType      DeviceType             @relation("CircuitDeviceType", fields: [deviceTypeId], references: [id])
-  replacementType DeviceType?            @relation("CircuitReplacementType", fields: [replacementTypeId], references: [id])
-  replacedBy      AdminUser?             @relation("CircuitDeviceReplacedBy", fields: [replacedById], references: [id])
-  recordedBy      AdminUser?             @relation("CircuitDeviceRecordedBy", fields: [recordedById], references: [id])
-  demo            CircuitDemo?           @relation(fields: [demoId], references: [id])
+  circuit              Circuit                @relation(fields: [circuitId], references: [id], onDelete: Cascade)
+  deviceType           DeviceType             @relation("CircuitDeviceType", fields: [deviceTypeId], references: [id])
+  replacementType      DeviceType?            @relation("CircuitReplacementType", fields: [replacementTypeId], references: [id])
+  replacedBy           AdminUser?             @relation("CircuitDeviceReplacedBy", fields: [replacedById], references: [id])
+  recordedBy           AdminUser?             @relation("CircuitDeviceRecordedBy", fields: [recordedById], references: [id])
+  demo                 CircuitDemo?           @relation(fields: [demoId], references: [id])
   // SetNull, not Cascade: the fixture is still physically on the circuit
   // even if the rescale event that introduced it is later voided — the
   // line survives, it just loses its "added via" provenance note.
@@ -3996,9 +3998,60 @@ model EmsPumpMeter {
   assignedBy AdminUser?           @relation("EmsPumpMeterAssignedBy", fields: [assignedById], references: [id])
   readings   EmsPumpReading[]
   ingests    EmsPumpEmailIngest[]
+  baselines  EmsPumpBaseline[]
 
   @@index([societyId])
   @@map("ems_pump_meters")
+}
+
+/// Where a day's figures came from. `ems_email` is the vendor's daily
+/// report differenced from its registers; `report` is a day typed in from
+/// a filed savings report (the 15 post-optimisation days RG's report
+/// prints), which carries no register values at all.
+enum EmsPumpReadingOrigin {
+  ems_email
+  report
+
+  @@map("ems_pump_reading_origin")
+}
+
+/// The pump room's "before FirsThing" figure (2026-11-13, user-asked): the
+/// kWh per kilolitre it ran at before the automation, measured over a
+/// stated period and read off a filed document. Every saving a society
+/// sees is (this figure − the day's kWh/KL) × the day's KL, so it is
+/// versioned-not-mutated (ADR-005): a correction supersedes the row and
+/// writes a new one; the live baseline is the one with `supersededAt` null.
+/// `kwhPerKl` is derived from `kwh ÷ kl` at record time and stored, so the
+/// figure a society was shown is the figure on record, never recomputed
+/// under it.
+model EmsPumpBaseline {
+  id          String   @id @default(cuid())
+  pumpMeterId String   @map("pump_meter_id")
+  periodFrom  DateTime @map("period_from") // UTC midnight
+  periodTo    DateTime @map("period_to") // UTC midnight, inclusive
+  kwh         Float
+  kl          Float
+  kwhPerKl    Float    @map("kwh_per_kl")
+  /// The first day savings count from — the day the automation went live
+  /// (the report's post-optimisation start). Every calendar day from here
+  /// to yesterday is shown, read or estimated (src/lib/pump-savings.ts).
+  savingsFrom DateTime @map("savings_from")
+
+  sourceDocumentId String? @map("source_document_id")
+  note             String?
+
+  recordedAt     DateTime  @default(now()) @map("recorded_at")
+  recordedById   String    @map("recorded_by_id")
+  supersededAt   DateTime? @map("superseded_at")
+  supersededById String?   @map("superseded_by_id")
+
+  pumpMeter      EmsPumpMeter    @relation(fields: [pumpMeterId], references: [id], onDelete: Cascade)
+  sourceDocument StoredDocument? @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
+  recordedBy     AdminUser       @relation("EmsPumpBaselineRecordedBy", fields: [recordedById], references: [id])
+  supersededBy   AdminUser?      @relation("EmsPumpBaselineSupersededBy", fields: [supersededById], references: [id])
+
+  @@index([pumpMeterId, supersededAt])
+  @@map("ems_pump_baselines")
 }
 
 /// The durable dedupe ledger — one row per Gmail message ever seen. This IS
@@ -4039,12 +4092,17 @@ model EmsPumpEmailIngest {
 /// rows of record; the raw bytes stay in S3 either way, so a finer-grained
 /// re-derivation later is never precluded).
 model EmsPumpReading {
-  id            String   @id @default(cuid())
-  pumpMeterId   String   @map("pump_meter_id")
-  date          DateTime @map("date") // UTC midnight
-  lastKwh       Float    @map("last_kwh")
-  lastTotalFlow Float?   @map("last_total_flow")
-  lastTs        DateTime @map("last_ts")
+  id               String               @id @default(cuid())
+  pumpMeterId      String               @map("pump_meter_id")
+  date             DateTime             @map("date") // UTC midnight
+  /// Register values and the closing sample's time — null on a `report`
+  /// day, which carries only the printed daily figures (2026-11-13).
+  lastKwh          Float?               @map("last_kwh")
+  lastTotalFlow    Float?               @map("last_total_flow")
+  lastTs           DateTime?            @map("last_ts")
+  origin           EmsPumpReadingOrigin @default(ems_email)
+  /// The filed document a `report` day was typed in from.
+  sourceDocumentId String?              @map("source_document_id")
 
   /// Null when there is no valid prior day to diff against (first-ever
   /// reading — "correct, not a loss", reading-normalize.ts's own words) or
@@ -4066,8 +4124,9 @@ model EmsPumpReading {
   sourceIngestId String?  @map("source_ingest_id")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  pumpMeter    EmsPumpMeter        @relation(fields: [pumpMeterId], references: [id], onDelete: Cascade)
-  sourceIngest EmsPumpEmailIngest? @relation(fields: [sourceIngestId], references: [id], onDelete: SetNull)
+  pumpMeter      EmsPumpMeter        @relation(fields: [pumpMeterId], references: [id], onDelete: Cascade)
+  sourceIngest   EmsPumpEmailIngest? @relation(fields: [sourceIngestId], references: [id], onDelete: SetNull)
+  sourceDocument StoredDocument?     @relation(fields: [sourceDocumentId], references: [id], onDelete: SetNull)
 
   @@unique([pumpMeterId, date])
   @@index([pumpMeterId, date])
@@ -4605,10 +4664,12 @@ model StoredDocument {
   uploadedById String   @map("uploaded_by_id")
   uploadedAt   DateTime @default(now()) @map("uploaded_at")
 
-  society    Society             @relation(fields: [societyId], references: [id], onDelete: Cascade)
-  uploadedBy AdminUser           @relation("StoredDocumentUploadedBy", fields: [uploadedById], references: [id])
-  voidedBy   AdminUser?          @relation("StoredDocumentVoidedBy", fields: [voidedById], references: [id])
-  extraction DocumentExtraction?
+  society          Society             @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  uploadedBy       AdminUser           @relation("StoredDocumentUploadedBy", fields: [uploadedById], references: [id])
+  voidedBy         AdminUser?          @relation("StoredDocumentVoidedBy", fields: [voidedById], references: [id])
+  emsPumpBaselines EmsPumpBaseline[]
+  emsPumpReadings  EmsPumpReading[]
+  extraction       DocumentExtraction?
 
   /// When an invoice filed from intake (invoiceCopy / nonServiceInvoice) was
   /// released to the society's portal, and by whom (2026-09-25). Filing does
@@ -5106,7 +5167,7 @@ model InventoryBatch {
   purchaseId           String?       @map("purchase_id")
   /// True for exactly that case — surfaced wherever a batch is shown, so a
   /// pre-system count is never mistaken for a real, invoiced delivery.
-  historical            Boolean       @default(false)
+  historical           Boolean       @default(false)
   /// The office it arrived at, or — for a historical, already-deployed entry
   /// — the society's own site.
   receivedAtLocationId String        @map("received_at_location_id")
@@ -5363,12 +5424,12 @@ model FieldSyncReceipt {
 /// push service says the subscription is gone (404/410) or the person turns
 /// notifications off.
 model PushSubscription {
-  id        String  @id @default(cuid())
+  id         String    @id @default(cuid())
   /// Exactly one of adminId/profileId is set (checked, `push_subscriptions_one_subject`) —
   /// a field-app phone subscribes an AdminUser, a portal phone subscribes a
   /// Profile (2026-10-14, water-tank alerts), never both.
-  adminId   String? @map("admin_id")
-  profileId String? @map("profile_id")
+  adminId    String?   @map("admin_id")
+  profileId  String?   @map("profile_id")
   endpoint   String    @unique
   p256dh     String
   auth       String

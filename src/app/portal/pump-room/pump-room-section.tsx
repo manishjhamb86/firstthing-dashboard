@@ -2,6 +2,8 @@ import { db } from "@/lib/db";
 import { Card, EmptyState } from "@/components/ui";
 import { PumpMetricBlock } from "@/components/pump-metric-block";
 import { PumpDayTable } from "@/components/pump-day-table";
+import { PumpSavingsPanel } from "@/components/pump-savings-panel";
+import { loadPumpSavings } from "@/lib/pump-savings-loader";
 import { TYPICAL_SPECIFIC_ENERGY, dayRows, periodTotals, trendData } from "@/lib/pump-room-view";
 
 /**
@@ -9,13 +11,12 @@ import { TYPICAL_SPECIFIC_ENERGY, dayRows, periodTotals, trendData } from "@/lib
  * src/lib/pump-room-ingest.ts), scoped server-side by societyId exactly
  * like the tank query (INV-05).
  *
- * Same metric blocks and day table as the back office (2026-11-10): the
- * society and the operator read one view, never two that can disagree.
+ * Same metric blocks and day table as the back office (2026-11-10), and
+ * since 2026-11-13 the same savings panel: the society and the operator
+ * read one view, never two that can disagree.
  *
  * Its own tab since 2026-11-11 (user-asked) — so with no pump room on
- * record it states that rather than rendering nothing: a tab that opens
- * blank reads as broken, where a section inside the tanks page could
- * simply be absent (INV-06).
+ * record it states that rather than rendering nothing (INV-06).
  */
 export async function loadPumpRoom(societyId: string) {
   // Not a unique constraint — "one room per society" is today's matching
@@ -28,7 +29,7 @@ export async function loadPumpRoom(societyId: string) {
   });
 }
 
-export function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typeof loadPumpRoom>> }) {
+export async function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typeof loadPumpRoom>> }) {
   if (!meter) {
     return (
       <Card className="p-5 sm:p-6">
@@ -39,13 +40,14 @@ export function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typeof lo
     );
   }
 
+  const savings = await loadPumpSavings(meter.id);
   const trend = trendData(meter.readings);
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
   const rows = dayRows(trend);
   const totals = periodTotals(trend);
   const latestEff = [...trend.efficiency].reverse().find((v) => v !== null) ?? null;
 
-  if (trend.days.length === 0) {
+  if (trend.days.length === 0 && !savings) {
     return (
       <Card className="p-5 sm:p-6">
         <p className="text-[13px]" style={{ color: "var(--text-subtle)" }}>
@@ -57,54 +59,40 @@ export function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typeof lo
 
   return (
     <div className="flex flex-col gap-4">
-      <div className={`grid gap-4 ${hasWater ? "lg:grid-cols-3" : ""}`}>
-        <PumpMetricBlock
-          label="Electricity"
-          unit="kWh"
-          decimals={0}
-          days={trend.days}
-          points={trend.kwh}
-          kind="bars"
-          color="var(--chart-mark)"
-          approximateFirst={rows[rows.length - 1]?.approximate}
-        />
-        {hasWater && (
-          <PumpMetricBlock
-            label="Water pumped"
-            unit="KL"
-            decimals={0}
-            days={trend.days}
-            points={trend.kl}
-            kind="bars"
-            color="var(--chart-mark-2)"
-            approximateFirst={rows[rows.length - 1]?.approximate}
-          />
-        )}
-        {hasWater && (
-          <PumpMetricBlock
-            label="Energy per kilolitre"
-            unit="kWh / KL"
-            decimals={2}
-            days={trend.days}
-            points={trend.efficiency}
-            kind="line"
-            color="var(--chart-mark-3)"
-            band={{ ...TYPICAL_SPECIFIC_ENERGY, label: `typical urban range ≤ ${TYPICAL_SPECIFIC_ENERGY.high.toFixed(2)}` }}
-            approximateFirst={rows[rows.length - 1]?.approximate}
-            tone={latestEff !== null && latestEff > TYPICAL_SPECIFIC_ENERGY.high ? "warn" : undefined}
-            note="Electricity used to move each kilolitre of water. The shaded band is the typical urban pumping range."
-          />
-        )}
-      </div>
-      <Card className="p-4 sm:p-5">
-        <div className="mb-2 flex items-baseline justify-between gap-2">
-          <p className="lbl mb-0">Day by day</p>
-          <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>
-            newest first
-          </span>
+      {savings && <PumpSavingsPanel view={savings} />}
+      {trend.days.length > 0 && (
+        <div className={`grid gap-4 ${hasWater ? "lg:grid-cols-3" : ""}`}>
+          <PumpMetricBlock label="Electricity" unit="kWh" decimals={0} days={trend.days} points={trend.kwh} kind="bars" color="var(--chart-mark)" approximateFirst={rows[rows.length - 1]?.approximate} />
+          {hasWater && (
+            <PumpMetricBlock label="Water pumped" unit="KL" decimals={0} days={trend.days} points={trend.kl} kind="bars" color="var(--chart-mark-2)" approximateFirst={rows[rows.length - 1]?.approximate} />
+          )}
+          {hasWater && (
+            <PumpMetricBlock
+              label="Energy per kilolitre"
+              unit="kWh / KL"
+              decimals={2}
+              days={trend.days}
+              points={trend.efficiency}
+              kind="line"
+              color="var(--chart-mark-3)"
+              band={{ ...TYPICAL_SPECIFIC_ENERGY, label: `typical urban range ≤ ${TYPICAL_SPECIFIC_ENERGY.high.toFixed(2)}` }}
+              approximateFirst={rows[rows.length - 1]?.approximate}
+              tone={latestEff !== null && latestEff > TYPICAL_SPECIFIC_ENERGY.high ? "warn" : undefined}
+              note="Electricity used to move each kilolitre of water. The shaded band is the typical urban pumping range."
+            />
+          )}
         </div>
-        <PumpDayTable rows={rows} totals={totals} hasWater={hasWater} />
-      </Card>
+      )}
+      {/* Without a baseline the plain day table is the readout; with one, the savings panel's own table carries every figure. */}
+      {!savings && trend.days.length > 0 && (
+        <Card className="p-4 sm:p-5">
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <p className="lbl mb-0">Day by day</p>
+            <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>newest first</span>
+          </div>
+          <PumpDayTable rows={rows} totals={totals} hasWater={hasWater} />
+        </Card>
+      )}
     </div>
   );
 }

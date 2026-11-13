@@ -288,8 +288,10 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
   const day = utcDayOf(closing.ts);
 
   const [prior, existingDay] = await Promise.all([
+    // Only a register-bearing day can be differenced against — a day typed
+    // in from a report carries no registers at all (2026-11-13).
     db.emsPumpReading.findFirst({
-      where: { pumpMeterId: meterId, date: { lt: day } },
+      where: { pumpMeterId: meterId, date: { lt: day }, origin: "ems_email" },
       orderBy: { date: "desc" },
       select: { lastKwh: true, lastTotalFlow: true },
     }),
@@ -301,7 +303,7 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
   // from an earlier failed attempt (2026-11-10, user-caught: a retried,
   // now-successful row kept showing the error text from its first,
   // failed try, because nothing had ever cleared it).
-  if (existingDay && existingDay.lastTs.getTime() >= closing.ts.getTime()) {
+  if (existingDay?.lastTs && existingDay.lastTs.getTime() >= closing.ts.getTime()) {
     logger.info("pump_room.ingest_duplicate_day", { ingestId, meterId, day: day.toISOString() });
     await db.emsPumpEmailIngest.update({
       where: { id: ingestId },
@@ -334,6 +336,10 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
         sourceIngestId: ingestId,
       },
       update: {
+        // A day first typed in from a report becomes a read day the moment
+        // the vendor's own email for it lands — origin flips with it.
+        origin: "ems_email",
+        sourceDocumentId: null,
         lastKwh: closing.kwh,
         lastTotalFlow: closing.totalFlow,
         lastTs: closing.ts,

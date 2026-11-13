@@ -10,6 +10,11 @@ import { TYPICAL_SPECIFIC_ENERGY, dayRows, isReporting, periodTotals, trendData 
 import { AssignControl } from "./assign-control";
 import { ReassignButton } from "./reassign-button";
 import { IngestHistory } from "./ingest-history";
+import { BaselineForm } from "./baseline-form";
+import { PumpSavingsPanel } from "@/components/pump-savings-panel";
+import { loadPumpSavings } from "@/lib/pump-savings-loader";
+import { documentType } from "@/lib/document-catalog";
+import { isoDate } from "@/lib/format-date";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +37,21 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
   ]);
   if (!meter) notFound();
+  const isOps = actor.permissions.includes("manage_pipeline") && actor.permissions.includes("manage_survey");
+  const [savings, documents] = await Promise.all([
+    loadPumpSavings(meter.id),
+    meter.society
+      ? db.storedDocument.findMany({
+          where: { societyId: meter.society.id, voidedAt: null },
+          orderBy: [{ period: "desc" }, { version: "desc" }],
+          select: { id: true, docType: true, period: true, fileName: true, version: true },
+        })
+      : Promise.resolve([]),
+  ]);
+  const documentOptions = documents.map((d) => ({
+    id: d.id,
+    label: `${documentType(d.docType)?.label ?? d.docType} · ${d.period} · ${d.fileName}${d.version > 1 ? ` (v${d.version})` : ""}`,
+  }));
 
   const trend = trendData(meter.readings);
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
@@ -85,6 +105,43 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
           <CardTitle>Assignment</CardTitle>
           <AssignControl meterId={meter.id} currentSocietyId={null} currentRoomType={meter.roomType} societies={societies} />
         </Card>
+      )}
+
+      {meter.society && (
+        <Card className="mb-4 p-5 sm:p-6">
+          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+            <CardTitle className="mb-0">Before-FirsThing baseline</CardTitle>
+            {savings && (
+              <span className="num text-[13px]" style={{ color: "var(--text-muted)" }}>
+                <strong style={{ color: "var(--text)" }}>{savings.baseline.kwhPerKl.toFixed(2)} kWh/KL</strong> · savings counted from {isoDate(savings.baseline.savingsFrom)}
+              </span>
+            )}
+          </div>
+          <p className="mb-3 text-[12.5px] leading-snug" style={{ color: "var(--text-muted)" }}>
+            The kWh per kilolitre the pump ran at before the automation. Every saving the society sees is measured against it, so it is recorded once from a filed document, with its period stated — never typed from memory.
+          </p>
+          {isOps ? (
+            <BaselineForm
+              meterId={meter.id}
+              documents={documentOptions}
+              current={
+                savings
+                  ? { kwhPerKl: savings.baseline.kwhPerKl, periodFrom: isoDate(savings.baseline.periodFrom), periodTo: isoDate(savings.baseline.periodTo), savingsFrom: isoDate(savings.baseline.savingsFrom) }
+                  : null
+              }
+            />
+          ) : (
+            <p className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+              {savings ? "Only an operations lead can replace the baseline." : "No baseline recorded yet — an operations lead records it."}
+            </p>
+          )}
+        </Card>
+      )}
+
+      {savings && (
+        <div className="mb-4">
+          <PumpSavingsPanel view={savings} />
+        </div>
       )}
 
       {trend.days.length === 0 ? (
@@ -141,7 +198,8 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
             )}
           </div>
 
-          <div className="mt-4 grid gap-4 lg:grid-cols-3">
+          <div className={`mt-4 grid gap-4 ${savings ? "" : "lg:grid-cols-3"}`}>
+            {!savings && (
             <Card className="min-w-0 p-4 lg:col-span-2 sm:p-5">
               <div className="mb-2 flex items-baseline justify-between gap-2">
                 <CardTitle className="mb-0">Day by day</CardTitle>
@@ -151,9 +209,10 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
               </div>
               <PumpDayTable rows={rows} totals={totals} hasWater={hasWater} />
             </Card>
+            )}
 
-            <div className="flex min-w-0 flex-col gap-4">
-              <Card className="grid grid-cols-2 gap-3 p-4">
+            <div className={`flex min-w-0 gap-4 ${savings ? "flex-col sm:flex-row" : "flex-col"}`}>
+              <Card className="grid flex-1 grid-cols-2 gap-3 p-4">
                 <div className="flex flex-col gap-0.5">
                   <span className="lbl">Energy register</span>
                   <span className="num text-[15px] font-bold">
@@ -176,7 +235,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
                 </div>
               </Card>
 
-              <Card className="p-4">
+              <Card className="flex-1 p-4">
                 <details>
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-2">
                     <span className="flex min-w-0 flex-col gap-0.5">

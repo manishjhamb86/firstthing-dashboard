@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-10-23 (the founders' "what is not on time" page — see below)
+2026-11-13 (pump-room savings against the before-FirsThing baseline — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -7172,6 +7172,79 @@ Migration `20260930120000_field_help` is additive.
 **Not tested in a real browser:** dictation and voice recording, which need a real phone's microphone.
 
 **Found while testing:** the S3 bucket's CORS rule allows uploads only from `localhost:3005` and stage, so the field app's photo uploads fail from any other local port.
+
+## Pump room: savings against the before-FirsThing baseline, every day since the automation (2026-11-13) — user-specified from RG's own report
+
+**The ask**, from RG Residency's *Water Pump Energy Savings Report* (30 Jul 2026): show the kWh per
+kilolitre BEFORE the automation against now; from the difference, what the society saves in
+electricity and money per day, month and overall, at the society's own unit price; the overall ₹
+on the dashboard, everything else on the pump-room page. Then, the same day: the pump runs every
+day, so every day since the installation must be shown whether its reading arrived or not — a day
+with no data carries the average of the days read so far, marked as such, and the real figure
+replaces it when the reading lands. Designed first on a canvas (four boards, drawn with the
+report's figures and RG's live November days), then built.
+
+**The baseline is a versioned record, never a typed figure.** `EmsPumpBaseline` (migration
+`20261113060000`, additive) holds the period, its kWh and KL totals and the kWh/KL DERIVED from
+them at record time (17,270 ÷ 21,868 = 0.7897 for RG — the report prints 0.79), the day savings
+count from (the report's post-optimisation start, 24 Jun 2026), and the filed document it came
+from. A correction supersedes the row with a reason and writes a new one (ADR-005); the live one
+is the row with `supersededAt` null. Recording it is the operations-lead act (both
+`manage_pipeline` and `manage_survey`) — it decides what a society is told it saved — not the
+society-management permission that assigns a room. `refuseBaseline` refuses a start inside or
+before the period, a future start, zero water, and a ratio no pump produces (> 5 kWh/KL).
+
+**The rules live in `src/lib/pump-savings.ts`, pure, 17 cases**, read by one loader
+(`pump-savings-loader.ts`) that the admin page, the portal page and the dashboard card all use:
+- a day's saving = baseline × that day's KL − that day's kWh ("what the old pump would have drawn
+  for today's water, less what it drew"); no projection, no 30-day month — only days count;
+- `fillEveryDay` gives EVERY calendar day from `savingsFrom` to India's wall-clock yesterday a
+  row; a day with no reading is ESTIMATED from the read-day average (kWh and KL averaged
+  separately, so a day whose water register went backwards still contributes its electricity);
+  a half-read day keeps its real figure and fills only the missing one. **Nothing is stored for an
+  estimated day** — it is computed from the gaps at read time, so when the reading lands the gap
+  closes and there is no stale estimate to clean up. With nothing read yet it returns [] rather
+  than a page of invented days;
+- ₹ = kWh × `Society.electricityUnitRate`; without a tariff the kWh shows and the ₹ is stated
+  as missing, never assumed (RG's tariff is not yet on record on any environment);
+- "Now" (the figure compared against the baseline) is total kWh ÷ total KL over the READ days in
+  the last 30 — never the mean of ratios, never an estimate, which is the average by construction.
+
+**Report days.** `EmsPumpReading` gained `origin` (`ems_email` | `report`) and
+`sourceDocumentId`, with `lastKwh`/`lastTs` made nullable: the report's own daily table (RG's
+15 post-optimisation days) can be pasted in one line per day (`parseReportDays`: a named month
+or ISO; a numeric date with no month word is refused as ambiguous, and a bad line refuses the whole
+paste by line number rather than silently dropping a day that would then read as estimated). A day
+the meter has already reported is never overwritten by a typed figure, and the ingest's prior-day
+lookup now filters `origin: ems_email`, since a report day carries no registers to difference.
+
+**Screens.** Admin pump-room page: a "Before-FirsThing baseline" card (the form derives the
+kWh/KL and will not let it be typed; source document picked from the society's filed documents)
+and the shared `PumpSavingsPanel`: before/now bars on one scale with the −N% headline; Saved
+tiles (yesterday · this month · since we started, each naming its estimated days); an amber
+"N of M days are estimated" note; the day-by-day table newest first, the current month open and
+earlier months behind `<details>`, estimated rows muted with an `est.` mark, a "would have
+used at 0.79" column so a committee can check the arithmetic. Portal `/portal/pump-room` shows
+the identical panel; the dashboard gets ONE card — "Pump room · saved with FirsThing", the overall
+₹, 0.79 → 0.56, and the estimated-day count — linking to the page.
+
+**Verified 27/27 in a browser** (system Chrome — the Playwright cache was gone) against a
+disposable RG fixture on dev: a start inside the period refused with nothing written; the row
+lands at 0.7897 from 24 Jun; 0.79 vs 0.56, −29%; every day since 24 Jun present (142) with 134
+estimated, falling to 119 once the 15 report days are pasted; a bad line refuses the paste; without
+a tariff the tiles are kWh-only; with ₹7 recorded the overall reads **₹1,84,999, matching an
+independent SQL of the same rule to the rupee** (two earlier failures were the check's own
+rounding — the baseline rounded to 0.7897, then kWh rounded before × 7 — not the page's); the
+dashboard card and the portal page carry the same figures at 390px with no overflow; another
+society sees no card; `manage_pipeline` revoked behind the open form → refused by the server,
+nothing written, `pump_room.baseline_refused` logged. Fixture removed by its own id, RG's tariff
+restored to null. 1,589 unit tests, `tsc`/`lint` clean.
+
+**Stated, not hidden**: with 119 of 142 days estimated, RG's overall figure is ~84% average — the
+rule the user asked for, and every surface says how many days are estimated. The 9 Jul – 1 Nov
+gap is where almost all of them sit; the vendor re-sending those reports would read them in and
+the estimates would vanish. Not yet deployed; RG's baseline and report days are entered on
+production through the admin form once it is.
 
 ## Current Phase (archived application — history)
 

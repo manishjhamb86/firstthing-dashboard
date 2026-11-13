@@ -27,6 +27,7 @@ import { societyPaymentRating } from "@/lib/payment-rating-loader";
 import { BatchReviewCard } from "./batch-review-card";
 import { reviewDeadlineFor } from "@/lib/installation-gate";
 import { publicS3Url } from "@/lib/s3";
+import { loadSocietyPumpSavings } from "@/lib/pump-savings-loader";
 import { BAND_TONE, monthName, timeAgoShort } from "./portal-widgets";
 import { ConsumptionChart } from "./consumption-chart";
 import { LightCountHistory } from "./light-count-history";
@@ -191,6 +192,9 @@ export default async function PortalHomePage() {
   // Who is signed in (2026-09-26, user-asked): the name, with the email the
   // account signs in with in brackets — the email alone read as a stranger.
   const signedInAs = viewer.name?.trim() ? `${viewer.name.trim()} (${viewer.email})` : viewer.email;
+
+  // The pump room's own saving — ONE number on the dashboard, the page has the rest (2026-11-13).
+  const pumpSavings = grants.has("water_tanks") ? await loadSocietyPumpSavings(societyId) : null;
 
   return (
     <>
@@ -515,6 +519,42 @@ export default async function PortalHomePage() {
             ))}
           </div>
         </Card>
+      )}
+
+      {pumpSavings && pumpSavings.days.length > 0 && (
+        <Link href="/portal/pump-room" className="mb-6 block" style={{ color: "inherit" }}>
+          <Card className="p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="lbl mb-0">Pump room · saved with FirsThing</p>
+              <span className="text-[12.5px] font-semibold" style={{ color: "var(--accent)" }}>Open →</span>
+            </div>
+            <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <span className="num text-[30px] font-extrabold leading-none" style={{ color: "var(--ok-fg)" }}>
+                {pumpSavings.summary.overall.savedValue !== null
+                  ? `₹${Math.round(pumpSavings.summary.overall.savedValue).toLocaleString("en-IN")}`
+                  : `${Math.round(pumpSavings.summary.overall.savedKwh).toLocaleString("en-IN")} kWh`}
+              </span>
+              <span className="num text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                {pumpSavings.summary.overall.savedValue !== null && `${Math.round(pumpSavings.summary.overall.savedKwh).toLocaleString("en-IN")} kWh · `}
+                {pumpSavings.summary.overall.days} days since {formatDate(pumpSavings.baseline.savingsFrom)}
+              </span>
+            </div>
+            {pumpSavings.now && (
+              <p className="mt-1.5 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                <span className="num font-bold" style={{ color: "var(--text)" }}>
+                  {pumpSavings.baseline.kwhPerKl.toFixed(2)} → {pumpSavings.now.kwhPerKl.toFixed(2)} kWh/KL
+                </span>{" "}
+                · {Math.abs((pumpSavings.now.kwhPerKl / pumpSavings.baseline.kwhPerKl - 1) * 100).toFixed(0)}%{" "}
+                {pumpSavings.now.kwhPerKl < pumpSavings.baseline.kwhPerKl ? "less" : "more"} electricity per kilolitre
+              </p>
+            )}
+            {pumpSavings.summary.overall.estimatedDays > 0 && (
+              <p className="mt-1 text-[11.5px]" style={{ color: "var(--warn-fg)" }}>
+                {pumpSavings.summary.overall.estimatedDays} days estimated from the average of read days — see the page.
+              </p>
+            )}
+          </Card>
+        </Link>
       )}
 
       <StarShowcase cards={starCards} stats={starStats} />

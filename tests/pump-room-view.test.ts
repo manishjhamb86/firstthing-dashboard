@@ -82,3 +82,13 @@ describe("dayRows", () => {
     expect(rows[1].approximate).toBe(false);
   });
 });
+
+describe("dayRows across a gap in the reports", () => {
+  it("marks the first day after a gap as approximate, not only the oldest", () => {
+    const rows = dayRows(trendData([row("2026-11-17", 480, 860), row("2026-11-10", 501, 839), row("2026-11-09", 496, 839)].map((r) => r)));
+    const byDay = Object.fromEntries(rows.map((r) => [r.day, r.approximate]));
+    expect(byDay["2026-11-17"]).toBe(true);
+    expect(byDay["2026-11-10"]).toBe(false);
+    expect(byDay["2026-11-09"]).toBe(true);
+  });
+});

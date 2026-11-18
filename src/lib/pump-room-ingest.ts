@@ -293,7 +293,7 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
     db.emsPumpReading.findFirst({
       where: { pumpMeterId: meterId, date: { lt: day }, origin: "ems_email" },
       orderBy: { date: "desc" },
-      select: { lastKwh: true, lastTotalFlow: true },
+      select: { date: true, lastKwh: true, lastTotalFlow: true },
     }),
     db.emsPumpReading.findUnique({ where: { pumpMeterId_date: { pumpMeterId: meterId, date: day } }, select: { lastTs: true } }),
   ]);
@@ -312,12 +312,21 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
     return;
   }
 
-  const kwhFigure = deriveDailyFigure(closing.kwh, opening.kwh, prior?.lastKwh ?? null);
+  // Difference against the previous register only when it closed the day
+  // BEFORE this one. Across a gap (2026-11-18, user-caught on RG: no reports
+  // 11–16 Nov, so 17 Nov read 3,440 kWh — seven days on one) the register
+  // delta spans several days and cannot be pinned on this one; the day's own
+  // file then gives its opening-to-closing span, the same approximation the
+  // first day on record already uses, and the missing days are estimated by
+  // the savings view rather than carried here.
+  const consecutive = prior !== null && day.getTime() - prior.date.getTime() === 86_400_000;
+  const priorBase = consecutive ? prior : null;
+  const kwhFigure = deriveDailyFigure(closing.kwh, opening.kwh, priorBase?.lastKwh ?? null);
   // Water is optional — a day's file may not carry the total_flow column at
   // all, and that is not the same fact as "zero water that day".
   const flowFigure =
     closing.totalFlow !== null && opening.totalFlow !== null
-      ? deriveDailyFigure(closing.totalFlow, opening.totalFlow, prior?.lastTotalFlow ?? null)
+      ? deriveDailyFigure(closing.totalFlow, opening.totalFlow, priorBase?.lastTotalFlow ?? null)
       : null;
 
   await db.$transaction([

@@ -66,7 +66,7 @@ export function PumpDayTable({ rows, totals, hasWater }: { rows: DayRow[]; total
       </div>
       {anyApprox && (
         <p className="text-[11px] leading-[1.45]" style={{ color: "var(--text-subtle)" }}>
-          ≈ first day on record — its own opening-to-closing span, not a comparison to a previous day.
+          ≈ no report for the day before (the first day on record, or the first after a gap) — its own opening-to-closing span, not a comparison to a previous day.
         </p>
       )}
     </div>

@@ -93,7 +93,7 @@ export type DayRow = {
   kwh: number | null;
   kl: number | null;
   efficiency: number | null;
-  /** The oldest day on record has no earlier day to diff against — its figure is its own opening-to-closing span (see deriveDailyFigure), an approximation the table marks rather than hides. */
+  /** A day with no stored day immediately before it — the oldest on record, or the first after a gap in the reports — has no previous register to diff against; its figure is its own opening-to-closing span (see deriveDailyFigure), an approximation the table marks rather than hides. */
   approximate: boolean;
 };
 
@@ -104,7 +104,7 @@ export function dayRows(trend: TrendData): DayRow[] {
     kwh: trend.kwh[i],
     kl: trend.kl[i],
     efficiency: trend.efficiency[i],
-    approximate: i === 0 && (trend.kwh[i] !== null || trend.kl[i] !== null),
+    approximate: (i === 0 || Date.parse(`${day}T00:00:00Z`) - Date.parse(`${trend.days[i - 1]}T00:00:00Z`) !== 86_400_000) && (trend.kwh[i] !== null || trend.kl[i] !== null),
   }));
   return rows.reverse();
 }

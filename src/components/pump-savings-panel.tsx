@@ -1,6 +1,7 @@
 import { dayAxis, formatDate, monthLabel } from "@/lib/format-date";
 import type { PumpSavingsView } from "@/lib/pump-savings-loader";
 import type { SavingsDay } from "@/lib/pump-savings";
+import { SpreadMark } from "@/components/pump-day-table";
 
 /**
  * The savings story of a pump room — before vs now, what it is worth, and
@@ -138,9 +139,10 @@ function DayTable({ days, tariff, baseline }: { days: SavingsDay[]; tariff: numb
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.day} style={r.estimated ? { color: "var(--text-subtle)", fontStyle: "italic" } : undefined}>
+                  <tr key={r.day} style={r.estimated || r.spread ? { color: "var(--text-subtle)", fontStyle: "italic" } : undefined}>
                     <Td align="left">
                       {dayAxis(r.day)}
+                      {r.spread && <SpreadMark />}
                       {r.estimated && <span className="ml-1 rounded px-1 text-[9.5px] font-bold not-italic" style={{ color: "var(--warn-fg)", background: "var(--warn-bg)" }}>est.</span>}
                     </Td>
                     <Td>{r.kwh.toFixed(0)}</Td>
@@ -171,6 +173,7 @@ function DayTable({ days, tariff, baseline }: { days: SavingsDay[]; tariff: numb
         );
       })}
       <p className="text-[11px] leading-snug" style={{ color: "var(--text-subtle)" }}>
+        <span className="font-bold" style={{ color: "var(--warn-fg)" }}>spread</span>{" "}no report came for this day — the meter&apos;s total across the missing days is divided evenly between them.{" "}
         <span className="font-bold" style={{ color: "var(--warn-fg)" }}>est.</span> no reading for this day yet — the average of every day read so far is shown and is replaced when the reading arrives. &quot;Now&quot; uses read days only.
       </p>
     </section>
@@ -178,7 +181,7 @@ function DayTable({ days, tariff, baseline }: { days: SavingsDay[]; tariff: numb
 }
 
 function Th({ children, align = "right" }: { children: React.ReactNode; align?: "left" | "right" }) {
-  return <th className={`lbl pb-2 ${align === "left" ? "text-left" : "text-right"}`} style={{ fontSize: 10 }}>{children}</th>;
+  return <th className={`pb-2 font-semibold uppercase tracking-[0.06em] ${align === "left" ? "text-left" : "text-right"}`} style={{ fontSize: 10, color: "var(--text-muted)" }}>{children}</th>;
 }
 function Td({ children, align = "right", muted, good }: { children: React.ReactNode; align?: "left" | "right"; muted?: boolean; good?: boolean }) {
   return (

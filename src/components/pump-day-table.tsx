@@ -9,6 +9,7 @@ import { TYPICAL_SPECIFIC_ENERGY } from "@/lib/pump-room-view";
  */
 export function PumpDayTable({ rows, totals, hasWater }: { rows: DayRow[]; totals: PeriodTotals; hasWater: boolean }) {
   const anyApprox = rows.some((r) => r.approximate);
+  const anySpread = rows.some((r) => r.spread);
   return (
     <div className="flex flex-col gap-2.5">
       <div className="overflow-x-auto">
@@ -23,9 +24,10 @@ export function PumpDayTable({ rows, totals, hasWater }: { rows: DayRow[]; total
           </thead>
           <tbody>
             {rows.map((r, idx) => (
-              <tr key={r.day}>
+              <tr key={r.day} style={r.spread ? { color: "var(--text-subtle)", fontStyle: "italic" } : undefined}>
                 <Td align="left">
                   {dayAxis(r.day)}
+                  {r.spread && <SpreadMark />}
                   {r.approximate && (
                     <span className="ml-1" style={{ color: "var(--text-subtle)" }}>
                       ≈
@@ -64,6 +66,11 @@ export function PumpDayTable({ rows, totals, hasWater }: { rows: DayRow[]; total
           </span>
         )}
       </div>
+      {anySpread && (
+        <p className="text-[11px] leading-[1.45]" style={{ color: "var(--text-subtle)" }}>
+          <span className="font-bold not-italic" style={{ color: "var(--warn-fg)" }}>spread</span>{" "}no report came for this day — the meter&apos;s total across the missing days is divided evenly between them, so the totals match the meter. Replaced when the day&apos;s report arrives.
+        </p>
+      )}
       {anyApprox && (
         <p className="text-[11px] leading-[1.45]" style={{ color: "var(--text-subtle)" }}>
           ≈ no report for the day before (the first day on record, or the first after a gap) — its own opening-to-closing span, not a comparison to a previous day.
@@ -73,9 +80,17 @@ export function PumpDayTable({ rows, totals, hasWater }: { rows: DayRow[]; total
   );
 }
 
+export function SpreadMark() {
+  return (
+    <span className="ml-1 rounded px-1 text-[9.5px] font-bold not-italic" style={{ color: "var(--warn-fg)", background: "var(--warn-bg)" }} title="No report came for this day — a share of the meter's total across the missing days">
+      spread
+    </span>
+  );
+}
+
 function Th({ children, align = "right" }: { children: React.ReactNode; align?: "left" | "right" }) {
   return (
-    <th className={`lbl pb-2 ${align === "left" ? "text-left" : "text-right"}`} style={{ fontSize: 10 }}>
+    <th className={`pb-2 font-semibold uppercase tracking-[0.06em] ${align === "left" ? "text-left" : "text-right"}`} style={{ fontSize: 10, color: "var(--text-muted)" }}>
       {children}
     </th>
   );

@@ -4011,6 +4011,11 @@ model EmsPumpMeter {
 enum EmsPumpReadingOrigin {
   ems_email
   report
+  /// No report came for this day: the register rise across a run of missing
+  /// days (last report's closing → the next report's opening) divided
+  /// equally between them (2026-11-18, user-specified). Never differenced
+  /// against; replaced the moment that day's own report arrives.
+  distributed
 
   @@map("ems_pump_reading_origin")
 }
@@ -4100,6 +4105,12 @@ model EmsPumpReading {
   lastKwh          Float?               @map("last_kwh")
   lastTotalFlow    Float?               @map("last_total_flow")
   lastTs           DateTime?            @map("last_ts")
+  /// The day's FIRST register values in its own file — what a gap before it
+  /// is measured up to, and its own span when there is no report the day
+  /// before. Null on a report or distributed day, and on days stored before
+  /// 2026-11-18.
+  openingKwh       Float?               @map("opening_kwh")
+  openingTotalFlow Float?               @map("opening_total_flow")
   origin           EmsPumpReadingOrigin @default(ems_email)
   /// The filed document a `report` day was typed in from.
   sourceDocumentId String?              @map("source_document_id")

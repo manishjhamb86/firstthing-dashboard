@@ -11,6 +11,8 @@ export type PumpRoomReadingRow = {
   dailyKl: number | null;
   registerWentBackwards: boolean;
   waterWentBackwards: boolean;
+  /** "distributed" — no report came that day; its figure is a share of the register rise across the gap (src/lib/pump-gap.ts). */
+  origin?: string;
 };
 
 export type TrendData = {
@@ -20,6 +22,8 @@ export type TrendData = {
   kl: (number | null)[];
   /** kWh used per kilolitre pumped — null wherever either figure is missing, or water is zero (not a meaningful denominator). */
   efficiency: (number | null)[];
+  /** True where no report came for the day and the figure is a share of the gap (marked, never shown as a reading). */
+  spread: boolean[];
 };
 
 /**
@@ -46,6 +50,7 @@ export function trendData(readings: PumpRoomReadingRow[]): TrendData {
     kwh: ordered.map((r) => r.dailyKwh),
     kl: ordered.map((r) => r.dailyKl),
     efficiency: ordered.map((r) => (r.dailyKwh !== null && r.dailyKl !== null && r.dailyKl > 0 ? r.dailyKwh / r.dailyKl : null)),
+    spread: ordered.map((r) => r.origin === "distributed"),
   };
 }
 
@@ -95,6 +100,8 @@ export type DayRow = {
   efficiency: number | null;
   /** A day with no stored day immediately before it — the oldest on record, or the first after a gap in the reports — has no previous register to diff against; its figure is its own opening-to-closing span (see deriveDailyFigure), an approximation the table marks rather than hides. */
   approximate: boolean;
+  /** No report came for this day — see TrendData.spread. */
+  spread: boolean;
 };
 
 /** The day-by-day readout, newest first — on a phone there is no hover, so this IS where every figure is read. */
@@ -104,7 +111,8 @@ export function dayRows(trend: TrendData): DayRow[] {
     kwh: trend.kwh[i],
     kl: trend.kl[i],
     efficiency: trend.efficiency[i],
-    approximate: (i === 0 || Date.parse(`${day}T00:00:00Z`) - Date.parse(`${trend.days[i - 1]}T00:00:00Z`) !== 86_400_000) && (trend.kwh[i] !== null || trend.kl[i] !== null),
+    spread: trend.spread?.[i] ?? false,
+    approximate: !(trend.spread?.[i] ?? false) && (i === 0 || Date.parse(`${day}T00:00:00Z`) - Date.parse(`${trend.days[i - 1]}T00:00:00Z`) !== 86_400_000) && (trend.kwh[i] !== null || trend.kl[i] !== null),
   }));
   return rows.reverse();
 }

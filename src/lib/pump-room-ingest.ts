@@ -11,6 +11,8 @@
  */
 
 import { createHash } from "node:crypto";
+import type { Prisma } from "@prisma/client";
+import { spreadGap } from "@/lib/pump-gap";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { s3, S3_BUCKET } from "@/lib/s3";
@@ -312,14 +314,13 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
     return;
   }
 
-  // Difference against the previous register only when it closed the day
-  // BEFORE this one. Across a gap (2026-11-18, user-caught on RG: no reports
-  // 11–16 Nov, so 17 Nov read 3,440 kWh — seven days on one) the register
-  // delta spans several days and cannot be pinned on this one; the day's own
-  // file then gives its opening-to-closing span, the same approximation the
-  // first day on record already uses, and the missing days are estimated by
-  // the savings view rather than carried here.
-  const consecutive = prior !== null && day.getTime() - prior.date.getTime() === 86_400_000;
+  // A day is differenced against the report of the day BEFORE it; with no
+  // report that day it is its own file's opening-to-closing span — "for the
+  // current available data take the reading available in the sheet" — and
+  // the missing days in between are SPREAD from the register rise across
+  // them (src/lib/pump-gap.ts; 2026-11-18, user-specified after RG's 17 Nov
+  // read 3,440 kWh, seven days on one).
+  const consecutive = prior !== null && day.getTime() - prior.date.getTime() === DAY_MS;
   const priorBase = consecutive ? prior : null;
   const kwhFigure = deriveDailyFigure(closing.kwh, opening.kwh, priorBase?.lastKwh ?? null);
   // Water is optional — a day's file may not carry the total_flow column at
@@ -329,43 +330,113 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
       ? deriveDailyFigure(closing.totalFlow, opening.totalFlow, priorBase?.lastTotalFlow ?? null)
       : null;
 
-  await db.$transaction([
-    db.emsPumpReading.upsert({
+  const dayFields = {
+    lastKwh: closing.kwh,
+    lastTotalFlow: closing.totalFlow,
+    lastTs: closing.ts,
+    openingKwh: opening.kwh,
+    openingTotalFlow: opening.totalFlow,
+    dailyKwh: kwhFigure.daily,
+    registerWentBackwards: kwhFigure.wentBackwards,
+    dailyKl: flowFigure?.daily ?? null,
+    waterWentBackwards: flowFigure?.wentBackwards ?? false,
+    sourceIngestId: ingestId,
+  };
+
+  await db.$transaction(async (tx) => {
+    await tx.emsPumpReading.upsert({
       where: { pumpMeterId_date: { pumpMeterId: meterId, date: day } },
-      create: {
-        pumpMeterId: meterId,
-        date: day,
-        lastKwh: closing.kwh,
-        lastTotalFlow: closing.totalFlow,
-        lastTs: closing.ts,
-        dailyKwh: kwhFigure.daily,
-        registerWentBackwards: kwhFigure.wentBackwards,
-        dailyKl: flowFigure?.daily ?? null,
-        waterWentBackwards: flowFigure?.wentBackwards ?? false,
-        sourceIngestId: ingestId,
-      },
-      update: {
-        // A day first typed in from a report becomes a read day the moment
-        // the vendor's own email for it lands — origin flips with it.
-        origin: "ems_email",
-        sourceDocumentId: null,
-        lastKwh: closing.kwh,
-        lastTotalFlow: closing.totalFlow,
-        lastTs: closing.ts,
-        dailyKwh: kwhFigure.daily,
-        registerWentBackwards: kwhFigure.wentBackwards,
-        dailyKl: flowFigure?.daily ?? null,
-        waterWentBackwards: flowFigure?.wentBackwards ?? false,
-        sourceIngestId: ingestId,
-      },
-    }),
-    db.emsPumpMeter.update({
+      create: { pumpMeterId: meterId, date: day, ...dayFields },
+      // A day first typed in from a report, or spread across a gap, becomes a
+      // read day the moment the vendor's own email for it lands.
+      update: { origin: "ems_email", sourceDocumentId: null, ...dayFields },
+    });
+
+    // The gap before this day, measured up to this day's opening register.
+    if (prior && !consecutive) {
+      await respreadGap(tx, meterId, { date: prior.date, closingKwh: prior.lastKwh, closingFlow: prior.lastTotalFlow }, { date: day, openingKwh: opening.kwh, openingFlow: opening.totalFlow });
+    }
+
+    // The next report after this day was measured across a gap that this day
+    // may have just closed or shortened — re-derive it and its gap.
+    const next = await tx.emsPumpReading.findFirst({
+      where: { pumpMeterId: meterId, date: { gt: day }, origin: "ems_email" },
+      orderBy: { date: "asc" },
+      select: { id: true, date: true, lastKwh: true, lastTotalFlow: true, openingKwh: true, openingTotalFlow: true, dailyKwh: true, dailyKl: true },
+    });
+    if (next) {
+      if (next.date.getTime() - day.getTime() === DAY_MS) {
+        const k = next.lastKwh !== null ? deriveDailyFigure(next.lastKwh, next.openingKwh ?? next.lastKwh, closing.kwh) : null;
+        const f =
+          next.lastTotalFlow !== null && closing.totalFlow !== null
+            ? deriveDailyFigure(next.lastTotalFlow, next.openingTotalFlow ?? next.lastTotalFlow, closing.totalFlow)
+            : null;
+        await tx.emsPumpReading.update({
+          where: { id: next.id },
+          data: {
+            ...(k ? { dailyKwh: k.daily, registerWentBackwards: k.wentBackwards } : {}),
+            ...(f ? { dailyKl: f.daily, waterWentBackwards: f.wentBackwards } : {}),
+          },
+        });
+      } else {
+        // Still a gap after this day: the next report keeps its own span, and
+        // the days between are re-spread from this day's closing. A report
+        // stored before opening values were kept recovers its opening from
+        // its own span.
+        const nextOpeningKwh = next.openingKwh ?? (next.lastKwh !== null && next.dailyKwh !== null ? next.lastKwh - next.dailyKwh : null);
+        const nextOpeningFlow = next.openingTotalFlow ?? (next.lastTotalFlow !== null && next.dailyKl !== null ? next.lastTotalFlow - next.dailyKl : null);
+        await respreadGap(tx, meterId, { date: day, closingKwh: closing.kwh, closingFlow: closing.totalFlow }, { date: next.date, openingKwh: nextOpeningKwh, openingFlow: nextOpeningFlow });
+      }
+    }
+
+    await tx.emsPumpMeter.update({
       where: { id: meterId },
       data: { lastKwh: closing.kwh, lastTotalFlow: closing.totalFlow, lastReadingAt: closing.ts, lastIngestAt: new Date() },
-    }),
-    db.emsPumpEmailIngest.update({
+    });
+    await tx.emsPumpEmailIngest.update({
       where: { id: ingestId },
       data: { status: "applied", appliedAt: new Date(), pumpMeterId: meterId, rowCount: parsed.rows.length, parseError: null },
-    }),
-  ]);
+    });
+  });
+}
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Replace the spread days between two reports. Days typed in from a filed
+ * report sit in the same table and are never overwritten by a spread — if
+ * any falls inside the gap, the gap is left as it is (the savings view then
+ * estimates it), since dividing the register rise across days that already
+ * carry their own figure would count that consumption twice.
+ */
+async function respreadGap(
+  tx: Prisma.TransactionClient,
+  meterId: string,
+  prev: { date: Date; closingKwh: number | null; closingFlow: number | null },
+  next: { date: Date; openingKwh: number | null; openingFlow: number | null },
+): Promise<void> {
+  const inside = { gt: prev.date, lt: next.date };
+  await tx.emsPumpReading.deleteMany({ where: { pumpMeterId: meterId, origin: "distributed", date: inside } });
+  const occupied = await tx.emsPumpReading.count({ where: { pumpMeterId: meterId, date: inside } });
+  if (occupied > 0) return;
+  const spread = spreadGap({
+    prevDate: prev.date,
+    prevClosingKwh: prev.closingKwh,
+    prevClosingFlow: prev.closingFlow,
+    nextDate: next.date,
+    nextOpeningKwh: next.openingKwh,
+    nextOpeningFlow: next.openingFlow,
+  });
+  if (!spread) return;
+  await tx.emsPumpReading.createMany({
+    data: spread.dates.map((date) => ({ pumpMeterId: meterId, date, origin: "distributed" as const, dailyKwh: spread.kwhPerDay, dailyKl: spread.klPerDay })),
+  });
+  logger.info("pump_room.gap_spread", {
+    meterId,
+    from: prev.date.toISOString().slice(0, 10),
+    to: next.date.toISOString().slice(0, 10),
+    days: spread.dates.length,
+    kwhPerDay: spread.kwhPerDay,
+    klPerDay: spread.klPerDay,
+  });
 }

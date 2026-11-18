@@ -92,3 +92,15 @@ describe("dayRows across a gap in the reports", () => {
     expect(byDay["2026-11-09"]).toBe(true);
   });
 });
+
+describe("spread days", () => {
+  it("carries the spread mark and never calls a spread day approximate", () => {
+    const spreadRow = { ...row("2026-11-11", 492.5, 883), origin: "distributed" };
+    const rows = dayRows(trendData([row("2026-11-12", 480, 860), spreadRow, row("2026-11-10", 501, 839)]));
+    const by = Object.fromEntries(rows.map((r) => [r.day, r]));
+    expect(by["2026-11-11"].spread).toBe(true);
+    expect(by["2026-11-11"].approximate).toBe(false);
+    expect(by["2026-11-12"].spread).toBe(false);
+    expect(by["2026-11-12"].approximate).toBe(false);
+  });
+});

@@ -63,9 +63,9 @@ export async function loadPumpSavings(meterId: string, now: Date = new Date()): 
   const readings = await db.emsPumpReading.findMany({
     where: { pumpMeterId: meterId, date: { gte: baseline.savingsFrom, lte: new Date(`${yesterday}T00:00:00Z`) } },
     orderBy: { date: "asc" },
-    select: { date: true, dailyKwh: true, dailyKl: true },
+    select: { date: true, dailyKwh: true, dailyKl: true, origin: true },
   });
-  const readDays: ReadDay[] = readings.map((r) => ({ day: r.date.toISOString().slice(0, 10), kwh: r.dailyKwh, kl: r.dailyKl }));
+  const readDays: ReadDay[] = readings.map((r) => ({ day: r.date.toISOString().slice(0, 10), kwh: r.dailyKwh, kl: r.dailyKl, spread: r.origin === "distributed" }));
   const tariff = meter.society?.electricityUnitRate ?? null;
   const from = baseline.savingsFrom.toISOString().slice(0, 10);
   const days = from <= yesterday ? fillEveryDay({ from, to: yesterday, readDays, baselineKwhPerKl: baseline.kwhPerKl }) : [];

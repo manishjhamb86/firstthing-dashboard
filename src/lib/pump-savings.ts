@@ -33,7 +33,7 @@
 import { istWallClock } from "@/lib/field-today";
 import { readLooseDate } from "@/lib/loose-date";
 
-export type ReadDay = { day: string; kwh: number | null; kl: number | null };
+export type ReadDay = { day: string; kwh: number | null; kl: number | null; spread?: boolean };
 
 export type SavingsDay = {
   day: string;
@@ -43,6 +43,8 @@ export type SavingsDay = {
   savedKwh: number;
   /** No reading (or no usable figure) for this day: kwh/kl are the read-day average. */
   estimated: boolean;
+  /** No report came, but the meter's total across the gap was divided onto this day — real consumption, evenly shared, marked. */
+  spread: boolean;
 };
 
 export type ReadAverage = { kwh: number; kl: number; kwhDays: number; klDays: number };
@@ -110,6 +112,7 @@ export function fillEveryDay(input: { from: string; to: string; readDays: ReadDa
       kwhPerKl: kl > 0 ? kwh / kl : null,
       savedKwh: input.baselineKwhPerKl * kl - kwh,
       estimated,
+      spread: !estimated && (r?.spread ?? false),
     });
   }
   return out;

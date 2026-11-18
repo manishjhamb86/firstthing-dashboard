@@ -385,7 +385,9 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
             </div>
             <div>
               <dt className="lbl">Surveyed</dt>
-              <dd className="num">{project.surveyedLightCount}</dd>
+              {/* The survey as it stands now (2026-11-18, user-caught): a corrected
+                  survey count must show here, not the copy taken at setup. */}
+              <dd className="num">{surveyed}</dd>
             </div>
             <div>
               {/* Named for what it counts. "Installed 0" sat on the same

@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { isSuperAdmin } from "@/lib/super-admin";
-import { sesConfigured } from "@/lib/ses";
+import { emailAllowedHere, sesConfigured } from "@/lib/ses";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { TestSendForm } from "./test-send-form";
 
@@ -21,6 +21,7 @@ export default async function EmailSettingsPage() {
   const actor = await resolveAdmin();
   if (!actor || !isSuperAdmin(actor.email)) redirect("/admin");
   const configured = sesConfigured();
+  const allowed = emailAllowedHere();
 
   return (
     <>
@@ -28,9 +29,14 @@ export default async function EmailSettingsPage() {
         backHref="/admin"
         title="Email"
         subtitle="Sent through AWS SES when an invoice is released, to every portal account holding the billing grant for that society."
-        chip={configured ? <StatusChip tone="ok">Configured</StatusChip> : <StatusChip tone="neu">Not configured</StatusChip>}
+        chip={!allowed ? <StatusChip tone="warn">Switched off here</StatusChip> : configured ? <StatusChip tone="ok">Configured</StatusChip> : <StatusChip tone="neu">Not configured</StatusChip>}
       />
       <div className="max-w-2xl">
+        {!allowed && (
+          <p className="card mb-4 p-4 text-[13.5px]" style={{ background: "var(--warn-bg)", color: "var(--warn-fg)", borderColor: "var(--warn-line)" }}>
+            Email is switched off on this server. It is only ever sent from production (APP_ENV=production), so no society can receive a mail from staging or a test copy.
+          </p>
+        )}
         <Card className="p-6">
           <CardTitle>Connection</CardTitle>
           <p className="mt-2 text-[13px]" style={{ color: "var(--text-muted)" }}>

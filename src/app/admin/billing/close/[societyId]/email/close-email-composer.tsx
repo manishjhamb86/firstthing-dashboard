@@ -10,10 +10,10 @@ type Person = { id: string; name: string; email: string; role: string };
 
 /** The message as it will go out, who gets it, and the one Send. */
 export function CloseEmailComposer({
-  societyId, period, societyName, subject, body, attachments, people, canSend, emailConfigured, from, backHref,
+  societyId, period, societyName, subject, body, attachments, people, canSend, emailBlocked, from, backHref,
 }: {
   societyId: string; period: string; societyName: string; subject: string; body: string; attachments: string[];
-  people: Person[]; canSend: boolean; emailConfigured: boolean; from: string | null; backHref: string;
+  people: Person[]; canSend: boolean; emailBlocked: string | null; from: string | null; backHref: string;
 }) {
   const router = useRouter();
   const [off, setOff] = useState<Record<string, boolean>>({});
@@ -72,8 +72,8 @@ export function CloseEmailComposer({
           <p className="text-[12.5px] text-[var(--text-muted)]">From the society&apos;s member register.</p>
         </section>
         <section className="card flex flex-col gap-3 p-5">
-          {!emailConfigured ? (
-            <p className="text-[13.5px]" style={{ color: "var(--warn-fg)" }}>Email is not set up on this server yet — see Settings → Email.</p>
+          {emailBlocked ? (
+            <p className="text-[13.5px]" style={{ color: "var(--warn-fg)" }}>{emailBlocked}</p>
           ) : !canSend ? (
             <p className="text-[13.5px] text-[var(--text-muted)]">Sending is an operations lead action.</p>
           ) : (

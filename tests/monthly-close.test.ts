@@ -67,3 +67,25 @@ describe("monthly close — the savings report attachment", () => {
     expect(savingsReportFileName("The Hyde Park", "2026-10")).toBe("The_Hyde_Park_Savings_Report_2026-10.pdf");
   });
 });
+
+import { emailAllowedHere, emailBlockedReason, sendEmail } from "@/lib/ses";
+
+describe("email leaves only from production", () => {
+  it("refuses to send unless APP_ENV is production, whatever else is set", async () => {
+    const prev = { app: process.env.APP_ENV, from: process.env.SES_FROM_EMAIL, region: process.env.AWS_REGION };
+    process.env.SES_FROM_EMAIL = "billing@example.com";
+    process.env.AWS_REGION = "ap-south-1";
+    for (const env of [undefined, "staging", "development", "Production"]) {
+      if (env === undefined) delete process.env.APP_ENV; else process.env.APP_ENV = env;
+      expect(emailAllowedHere()).toBe(false);
+      expect(emailBlockedReason()).toMatch(/only ever sent from production/);
+      const r = await sendEmail({ to: ["someone@example.com"], subject: "x", html: "x", text: "x" });
+      expect(r.error).toMatch(/only ever sent from production/);
+    }
+    process.env.APP_ENV = "production";
+    expect(emailAllowedHere()).toBe(true);
+    expect(emailBlockedReason()).toBeNull();
+    Object.assign(process.env, { APP_ENV: prev.app ?? "", SES_FROM_EMAIL: prev.from ?? "", AWS_REGION: prev.region ?? "" });
+    if (!prev.app) delete process.env.APP_ENV;
+  });
+});

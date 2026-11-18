@@ -3,7 +3,7 @@
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isSuperAdmin } from "@/lib/super-admin";
 import { logger } from "@/lib/logger";
-import { sendEmail, sesConfigured } from "@/lib/ses";
+import { emailBlockedReason, sendEmail } from "@/lib/ses";
 
 export async function sendTestEmail(to: string): Promise<{ ok?: true; error?: string }> {
   const admin = await resolveAdmin();
@@ -12,7 +12,8 @@ export async function sendTestEmail(to: string): Promise<{ ok?: true; error?: st
     logger.warn("email.test_refused", { actorId: admin.id });
     return { error: "Sending a test email is restricted to one account." };
   }
-  if (!sesConfigured()) return { error: "Email is not configured — set SES_FROM_EMAIL and AWS_REGION first." };
+  const blocked = emailBlockedReason();
+  if (blocked) return { error: blocked };
   const address = to.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) return { error: "That doesn't look like an email address." };
 

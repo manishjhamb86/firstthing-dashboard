@@ -156,12 +156,18 @@ export async function societyDocuments(
     }),
   );
   const agreement = stored.find((d) => d.docType === "agreement") ?? null;
-  const suppressGenerated =
-    opts.hideGeneratedReportsIfManualExists && stored.some((d) => d.docType === "savingsReport");
+  // A hand-filed savings report stands in for the system's published one
+  // FOR ITS OWN MONTH only (2026-11-18, user-caught). This was every month:
+  // one filed July report hid every month published after it, so a
+  // society's newly published October report never reached its portal.
+  const manualPeriods = new Set(stored.filter((d) => d.docType === "savingsReport").map((d) => d.period));
+  const shownPublished = [...latestPublished.values()].filter(
+    (r) => !(opts.hideGeneratedReportsIfManualExists && manualPeriods.has(r.period)),
+  );
 
   const rows: SocietyDocRow[] = [
     ...stored.filter((d) => d.id !== agreement?.id),
-    ...(suppressGenerated ? [] : [...latestPublished.values()]).map((r): SocietyDocRow => {
+    ...shownPublished.map((r): SocietyDocRow => {
       const snap = r.snapshot as { circuitLabel?: string };
       return {
         id: r.id,
@@ -174,7 +180,7 @@ export async function societyDocuments(
         external: false,
       };
     }),
-    ...(suppressGenerated ? [] : [...latestDemo.values()]).map(
+    ...(opts.hideGeneratedReportsIfManualExists && manualPeriods.size > 0 ? [] : [...latestDemo.values()]).map(
       (r): SocietyDocRow => ({
         id: r.id,
         docType: "demoReport",

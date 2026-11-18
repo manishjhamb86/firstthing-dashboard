@@ -7360,6 +7360,23 @@ actual SES send** — this machine has no `SES_FROM_EMAIL`, so the screen correc
 real send happens on stage. Note: releasing a bill still sends the existing "invoice is ready" link
 email too, so a society gets that plus the close email. Fixtures removed by id. Not deployed.
 
+## Email leaves only from production; a filed report hides only its own month (2026-11-18) — user's rule, user-caught
+
+**The rule, verbatim: "Never send mail to customer from staging, in fact anywhere other than
+production."** Every email in the app goes through `sendEmail` (`src/lib/ses.ts`), so the guard is
+there: nothing is sent unless the server says `APP_ENV=production`. Stage, dev and any copy default
+to not sending, whatever SES settings they carry; a suppressed send logs
+`email.suppressed_non_production`. `emailBlockedReason()` gives the screens the words (the monthly
+close email step, Settings → Email's test send and its banner). **When production for this build is
+stood up, set `APP_ENV=production` in its `.env.local`** — and only there.
+
+**Published savings reports were hidden from the portal.** The 2026-10-17 rule — a hand-filed savings
+report suppresses the system's generated ones on the portal — applied to the whole society, so one
+filed July report hid every month published after it (French Apartment's published October never
+reached its Documents tab; the same for every society with a filed report). It now applies per
+month: a filed report replaces the published one for ITS month only (`society-documents.ts`). The
+demo-report suppression on the dashboard and Documents is unchanged.
+
 ## Current Phase (archived application — history)
 
 Backend migration Phases 2 and 3 are now **runtime-verified**, not just code-complete (2026-08-05 — Postgres container recreated, migrated, seeded, and actually driven end-to-end in a browser; see Validation History). Phase 1 (local Postgres + Prisma + NextAuth v5 + `proxy.ts` route protection) remains stood up. The rest of the app (11 files: `inspection/*`, `inspection-reports/*`, `energy-chart.tsx`, `FileUploader.tsx`) is still Supabase-backed — see Next Actions for Phases 4-7.

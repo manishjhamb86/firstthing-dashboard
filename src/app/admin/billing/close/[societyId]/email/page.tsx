@@ -7,7 +7,7 @@ import { defaultClosePeriod } from "@/lib/monthly-close";
 import { closeRecipients } from "@/lib/monthly-close-loader";
 import { closeEmailValues } from "@/lib/monthly-close-email";
 import { savingsReportFileName } from "@/lib/savings-report-pdf";
-import { sesConfigured } from "@/lib/ses";
+import { emailBlockedReason } from "@/lib/ses";
 import { isOps, requireBillingReader } from "../../../access";
 import { validPeriod } from "../../close-ui";
 import { CloseEmailComposer } from "./close-email-composer";
@@ -70,7 +70,7 @@ export default async function CloseEmailPage({
         attachments={attachments}
         people={people}
         canSend={isOps(gate.actor)}
-        emailConfigured={sesConfigured()}
+        emailBlocked={emailBlockedReason()}
         from={process.env.SES_FROM_EMAIL ?? null}
         backHref={back}
       />

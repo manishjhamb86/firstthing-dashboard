@@ -20,6 +20,27 @@ import { logger } from "@/lib/logger";
  */
 const ses = new SESv2Client({ region: process.env.AWS_REGION });
 
+/**
+ * Email leaves ONLY from production (2026-11-18, the user's standing rule:
+ * "never send mail to customer from staging, in fact anywhere other than
+ * production"). A server must say so explicitly with APP_ENV=production —
+ * stage, dev and any copy of the app default to not sending, so a society
+ * can never get an email from a test or staging run, whatever else is
+ * configured. Enforced here because every email in the app goes through
+ * sendEmail below; screens read emailBlockedReason() to say why instead of
+ * offering a Send that cannot work.
+ */
+export function emailAllowedHere(): boolean {
+  return process.env.APP_ENV === "production";
+}
+
+/** Why this server cannot send email right now, in words — or null when it can. */
+export function emailBlockedReason(): string | null {
+  if (!emailAllowedHere()) return "Email is switched off on this server: it is only ever sent from production.";
+  if (!sesConfigured()) return "Email is not set up on this server yet (SES_FROM_EMAIL/AWS_REGION missing).";
+  return null;
+}
+
 export function sesConfigured(): boolean {
   return Boolean(process.env.SES_FROM_EMAIL && process.env.AWS_REGION);
 }
@@ -32,6 +53,10 @@ export async function sendEmail(input: {
   /** Files sent with the message (2026-11-18, the monthly-close email). SES limits a message to 40 MB in all. */
   attachments?: { fileName: string; contentType: string; bytes: Uint8Array }[];
 }): Promise<{ error?: string; messageId?: string }> {
+  if (!emailAllowedHere()) {
+    logger.info("email.suppressed_non_production", { to: input.to.length, subject: input.subject, appEnv: process.env.APP_ENV ?? null });
+    return { error: "Email is switched off on this server: it is only ever sent from production." };
+  }
   if (!sesConfigured()) return { error: "Email is not configured (SES_FROM_EMAIL/AWS_REGION missing)." };
   if (input.to.length === 0) return { error: "No recipient." };
   try {

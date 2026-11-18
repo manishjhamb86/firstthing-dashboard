@@ -5,7 +5,7 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
-import { sendEmail, sesConfigured } from "@/lib/ses";
+import { emailBlockedReason, sendEmail } from "@/lib/ses";
 import { runZohoSync, describeSync } from "@/lib/zoho-invoice-sync";
 import { requireBillingOps } from "../access";
 import { publishSavingsReport } from "@/app/admin/societies/[id]/circuits/[circuitId]/reports/monthly/actions";
@@ -96,7 +96,11 @@ export async function sendCloseEmail(input: { societyId: string; period: string;
   const ops = await requireBillingOps();
   if (!ops.ok) return { error: ops.error };
   if (!PERIOD_RE.test(input.period)) return { error: "Choose a month first." };
-  if (!sesConfigured()) return { error: "Email is not set up on this server yet — see Settings → Email." };
+  const blocked = emailBlockedReason();
+  if (blocked) {
+    logger.warn("monthly_close.email_refused", { actorId: ops.actor.id, societyId: input.societyId, period: input.period, reason: "email_blocked_here" });
+    return { error: blocked };
+  }
   const to = cleanRecipients(input.recipients);
   if (to.length === 0) return { error: "Choose at least one person to send it to." };
 

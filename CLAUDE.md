@@ -42,6 +42,8 @@ pnpm prisma migrate deploy / generate / db seed / studio
 - `.env` holds `DATABASE_URL`/`PORT` (read by the Prisma CLI too); `.env.local` holds `AUTH_SECRET`,
   AWS S3, `GEMINI_API_KEY`, and optionally `DEMO_MODE=true` / `EWELINK_FAKE_METERS=1`.
 - Seeded logins (dev + stage) all use password `password123`; the admin is `yogesh@firsthing.earth`.
+- **Email is only ever sent from production** (the user's rule): `sendEmail` refuses unless
+  `APP_ENV=production`. Never set it on stage or dev, and never send a test mail to a customer.
 
 ## Architecture (the live `src/`, not the README's)
 

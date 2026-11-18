@@ -1,16 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
-import { Camera, Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { circuitLabelOf } from "@/lib/circuit-label";
 import { monthLabel } from "@/lib/format-date";
 import { parseInspectionPayload, SENSOR_STATUSES, type FieldInspectionPayload, type SensorStatus } from "@/lib/field-sync";
 import { refuseInspectionFinalize, SENSOR_STATUS_META } from "@/lib/inspection";
 import type { InspectionCircuitChoice, InspectionSocietyChoice } from "@/lib/inspection-choices";
-import { clearDraft, enqueue, readDraft, writeDraft, type OutboxItem, type StoredPhoto } from "../../outbox-db";
+import { clearDraft, enqueue, readDraft, writeDraft, type OutboxItem } from "../../outbox-db";
 import { useOutbox } from "../../outbox-provider";
-import { preparePhoto } from "../../photo";
+import { FieldInspectionDone } from "./field-inspection-done";
 
 type Finding = FieldInspectionPayload["findings"][number];
 
@@ -24,7 +23,8 @@ type Draft = {
   repName: string;
   notes: string;
   findings: Finding[];
-  photo: { blob: Blob; contentType: string; fileName: string } | null;
+  /** No longer asked here — the signed copy is photographed after the report is downloaded. Kept so an older saved draft still reads. */
+  photo?: unknown;
 };
 
 const DRAFT_KEY = "inspection-new";
@@ -41,7 +41,6 @@ export function FieldInspectionForm({
   initialPeriod: string;
   initialInspectedAt: string;
 }) {
-  const router = useRouter();
   const outbox = useOutbox();
   const [d, setD] = useState<Draft>({
     societyId: "",
@@ -53,11 +52,11 @@ export function FieldInspectionForm({
     repName: "",
     notes: "",
     findings: [],
-    photo: null,
   });
   const [restored, setRestored] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState<{ itemId: string; societyName: string; period: string } | null>(null);
   const loaded = useRef(false);
 
   // A form in progress lives on the phone, not just in this tab: a closed
@@ -91,11 +90,6 @@ export function FieldInspectionForm({
   const circuit = societyCircuits.find((c) => c.id === d.circuitId) ?? null;
   const society = societies.find((s) => s.id === d.societyId) ?? null;
 
-  const photoUrl = useMemo(() => (d.photo ? URL.createObjectURL(d.photo.blob) : null), [d.photo]);
-  useEffect(() => () => {
-    if (photoUrl) URL.revokeObjectURL(photoUrl);
-  }, [photoUrl]);
-
   const set = (patch: Partial<Draft>) => setD((prev) => ({ ...prev, ...patch }));
   const setFinding = (i: number, patch: Partial<Finding>) =>
     setD((prev) => ({ ...prev, findings: prev.findings.map((f, j) => (j === i ? { ...f, ...patch } : f)) }));
@@ -104,11 +98,6 @@ export function FieldInspectionForm({
     const c = societyCircuits.find((x) => x.id === id);
     // The total starts at every light the circuit has — until someone types.
     set({ circuitId: id, ...(c && !d.totalTouched ? { total: String(c.representedLightCount) } : {}) });
-  }
-
-  async function takePhoto(file: File | undefined) {
-    if (!file) return;
-    set({ photo: await preparePhoto(file) });
   }
 
   async function save() {
@@ -139,24 +128,14 @@ export function FieldInspectionForm({
       const label = `Inspection · ${society?.name ?? "society"} · ${monthLabel(d.period)}`;
       const base = { createdAt: Date.now(), refusals: 0, failures: 0, lastError: null, state: "pending" as const };
       const items: OutboxItem[] = [{ id: itemId, kind: "inspection.file", payload: parsed, label, ...base }];
-      const photos: StoredPhoto[] = [];
-      if (d.photo) {
-        const photoId = crypto.randomUUID();
-        photos.push({ id: photoId, ...d.photo });
-        items.push({
-          id: crypto.randomUUID(),
-          kind: "inspection.photo",
-          payload: { inspectionItemId: itemId },
-          photoId,
-          label: `Signed checklist photo · ${society?.name ?? "society"} · ${monthLabel(d.period)}`,
-          ...base,
-        });
-      }
       // Saved on the phone first — only then is it anyone's job to send it.
-      await enqueue(items, photos);
+      await enqueue(items);
       await clearDraft(DRAFT_KEY);
       void outbox.refresh().then(() => outbox.sendNow());
-      router.push("/field/inspections?saved=1");
+      // Stay on this page: the report download and the signed-copy photo come
+      // next, and a new page might not open with no signal.
+      setDone({ itemId, societyName: society?.name ?? "society", period: d.period });
+      setSaving(false);
     } catch {
       setError("Could not save on this phone. Nothing was lost from the form — try Save again.");
       setSaving(false);
@@ -176,12 +155,13 @@ export function FieldInspectionForm({
       repName: "",
       notes: "",
       findings: [],
-      photo: null,
     });
     setRestored(false);
   }
 
   const field = "field min-h-[48px] text-[16px]";
+
+  if (done) return <FieldInspectionDone {...done} />;
 
   return (
     <div className="space-y-5">
@@ -310,26 +290,6 @@ export function FieldInspectionForm({
         <div className="space-y-1.5">
           <label htmlFor="fi-notes" className="lbl">Notes</label>
           <textarea id="fi-notes" className="field text-[16px]" rows={3} value={d.notes} onChange={(e) => set({ notes: e.target.value })} />
-        </div>
-        <div className="space-y-2">
-          <span className="lbl block">Photo of the signed checklist</span>
-          {photoUrl && (
-            // eslint-disable-next-line @next/next/no-img-element -- a local blob preview
-            <img src={photoUrl} alt="The signed checklist, as photographed" className="w-full max-h-64 object-contain rounded-[var(--r-md)] border border-[var(--border)]" />
-          )}
-          <label className="w-full min-h-[48px] rounded-[var(--r-md)] border border-[var(--field-border)] font-semibold flex items-center justify-center gap-2 cursor-pointer">
-            <Camera size={20} aria-hidden />
-            {d.photo ? "Retake the photo" : "Take a photo"}
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              className="sr-only"
-              aria-label="Photo of the signed checklist"
-              onChange={(e) => void takePhoto(e.target.files?.[0])}
-            />
-          </label>
-          <p className="text-[var(--text-muted)]">Optional. Both signatures and the stamp in one frame. It uploads after the inspection itself.</p>
         </div>
       </section>
 

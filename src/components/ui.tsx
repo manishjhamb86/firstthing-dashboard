@@ -164,6 +164,7 @@ const RIBBON_TONE: Record<string, { bg: string; fg: string; line: string }> = {
   warn: { bg: "var(--warn-bg)", fg: "var(--warn-fg)", line: "var(--warn-line)" },
   bad: { bg: "var(--bad-bg)", fg: "var(--bad-fg)", line: "var(--bad-line)" },
   info: { bg: "var(--info-bg)", fg: "var(--info-fg)", line: "var(--info-line)" },
+  ok: { bg: "var(--ok-bg)", fg: "var(--ok-fg)", line: "var(--ok-line)" },
   neutral: { bg: "var(--neu-bg)", fg: "var(--neu-fg)", line: "var(--neu-line)" },
 };
 

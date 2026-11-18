@@ -11,7 +11,8 @@ import { StatusChip } from "@/components/ui";
 import { BackButton } from "@/components/back-button";
 import { publicS3Url } from "@/lib/s3";
 import { inspectionSummary, SENSOR_STATUS_META } from "@/lib/inspection";
-import { PrintInspectionButton } from "./print-button";
+import { InspectionReportSteps } from "@/components/inspection-report-steps";
+import { attachPortalSignedCopy, getPortalSignedCopyUploadUrl } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -57,9 +58,21 @@ export default async function PortalInspectionReportPage({ params }: { params: P
     <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
       <div className="no-print mb-5 flex flex-wrap items-center gap-3">
         <BackButton fallbackHref="/portal/documents" />
-        <div className="flex-1" />
-        <PrintInspectionButton />
       </div>
+
+      {/* The report as a real PDF, then the signed copy (2026-11-18): the
+          society can download it, sign it, and upload the signed copy itself. */}
+      <section className="no-print card mb-5 p-4 sm:p-5">
+        <p className="mb-3 text-[15px] font-semibold">Inspection report (PDF)</p>
+        <InspectionReportSteps
+          inspectionId={inspection.id}
+          downloadHref={`/api/inspections/${inspection.id}/pdf`}
+          signedHref={inspection.evidencePhotoKey ? publicS3Url(inspection.evidencePhotoKey) : null}
+          signedIsPdf={!!inspection.evidencePhotoKey?.toLowerCase().endsWith(".pdf")}
+          presign={getPortalSignedCopyUploadUrl}
+          attach={attachPortalSignedCopy}
+        />
+      </section>
 
       <Letterhead>
       <article className="report-sheet">
@@ -170,19 +183,6 @@ export default async function PortalInspectionReportPage({ params }: { params: P
             </p>
           )}
 
-          {inspection.evidencePhotoKey && (
-            <p className="mt-4 text-xs no-print">
-              <a
-                href={publicS3Url(inspection.evidencePhotoKey)}
-                target="_blank"
-                rel="noreferrer"
-                className="font-semibold underline"
-                style={{ color: "var(--accent)" }}
-              >
-                View the signed checklist photo
-              </a>
-            </p>
-          )}
         </section>
 
         <footer className="report-footer">

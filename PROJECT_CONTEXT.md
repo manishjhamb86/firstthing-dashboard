@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-11-18 (pump-room missing days spread from the meter's total — see below)
+2026-11-18 (inspection report generated as a PDF; the signed copy uploaded after it — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -7272,6 +7272,45 @@ post-deploy setup never ran. Recorded now, at the user's go: 12 May – 2 Jun 20
 `report` days. RG's tariff was already on record at ₹7.24/kWh (not the report's ₹7) and was left as it
 is. Live view read back on production: now 0.56 kWh/KL over 16 days; 147 days since 24 Jun, 116 of them
 estimated (mostly 9 Jul – 1 Nov, before the EMS feed began).
+
+## The inspection report is a PDF, and the signed copy comes after it (2026-11-18) — user-asked
+
+**The ask**: once an inspector submits an inspection, a PDF report is generated automatically and can
+be downloaded and signed from the customer portal and the admin panel; the inspector can download it
+from the submit success page; the upload comes after the download. Two answers: a real PDF file, and
+signing is print, sign on paper, upload a photo or scan — by the inspector or by the society.
+
+**Research Gate — the decision**: `pdf-lib@1.17.1` (MIT, pure JS, no native or headless browser),
+generating on demand from the filed record at `GET /api/inspections/[id]/pdf`. Nothing is stored, so
+the PDF can never disagree with the inspection after an edit, and no orphan objects land in a bucket
+this app cannot delete from. `src/lib/inspection-pdf.ts` is the pure builder: letterhead with the FT
+mark drawn as vectors, visit details, the three summary figures, the findings table (paginated,
+header repeated), notes, and two signature blocks (inspector; society representative with a stamp
+box), footer with the company line and page numbers. The standard Helvetica faces carry WinAnsi only,
+so every string passes through `safe()` (₹ → Rs., anything else undrawable → ?). The route sits under
+`/api`, outside proxy.ts, so it gates itself: any active admin, or a portal member of THAT society
+with the documents grant (INV-05); only a finished, unvoided inspection has a report.
+
+**The photo moved out of filing.** Neither the back office's close-out nor the phone's form asks for
+the signed-checklist photo any more. After the back office saves a visit it lands on the
+inspection's page with an ok ribbon and a "Report" card (`InspectionReportSteps`, shared with the
+portal): 1 Download PDF, 2 Upload the signed copy — offered only after the download or "next", a
+photo or a PDF scan. The phone shows the same two steps in place of the form (not a new page, which
+might not open with no signal): the download appears once the office has the inspection (polled
+through `GET /api/field/inspection-receipt`, the sender's own receipt only), and the photo is queued
+as the existing `inspection.photo` outbox item, so it works offline. The society's portal page
+(`/portal/inspection/[id]`) replaced its print button with the same card, uploading through its own
+actions scoped by the viewer's society and documents grant. All paths store into the one
+`Inspection.evidencePhotoKey`, accepting only a key presigned for that inspection; every refusal is
+logged as `inspection.signed_copy_refused`.
+
+**Verified on dev** (system Chrome, rows and log lines asserted): admin 13/13 — no photo while
+filing, ribbon and steps after save, upload offered only after the download, a real PDF downloaded,
+the photo stored under the inspection's key; manage_survey revoked behind the open form → refused by
+the server, logged, key unchanged; signed out and another society's member both get 404; the society
+downloaded it and replaced the photo with a PDF scan; fits 390px. Field 7/7 at Pixel 7 size — saved,
+download appeared once synced, the photo reached the office through the queue. 7 new unit cases;
+1,607 total, `tsc`/`lint` clean. Fixtures removed by id. Not deployed.
 
 ## Current Phase (archived application — history)
 

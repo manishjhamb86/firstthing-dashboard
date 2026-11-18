@@ -111,6 +111,11 @@ export async function fileInspection(
   return { inspectionId: created.id };
 }
 
+/** A signed copy is a photo of the paper, or a PDF scan of it. */
+export function isSignedCopyType(contentType: string): boolean {
+  return contentType.startsWith("image/") || contentType === "application/pdf";
+}
+
 /**
  * The upload URL for the photo of the signed, stamped paper form — one key
  * builder for the back office and the phone, under the public Documents/ tree

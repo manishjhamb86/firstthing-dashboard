@@ -1,10 +1,9 @@
 "use client";
 
-import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field } from "@/components/ui";
-import { finalizeInspection, getInspectionEvidenceUploadUrl } from "../actions";
+import { finalizeInspection } from "../actions";
 
 /**
  * The draft's own close-out (2026-10-06, user-asked) — the moment someone
@@ -22,32 +21,22 @@ export function FinishDraftForm({ inspectionId, defaultTotal, findingsSoFar }: {
   const [totalLightsChecked, setTotalLightsChecked] = useState(defaultTotal != null ? String(defaultTotal) : "");
   const [societyRepName, setSocietyRepName] = useState("");
   const [notes, setNotes] = useState("");
-  const [evidencePhoto, setEvidencePhoto] = useState<File | null>(null);
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     startTransition(async () => {
-      let evidencePhotoKey: string | null = null;
-      if (evidencePhoto) {
-        const presign = await getInspectionEvidenceUploadUrl({
-          inspectionId,
-          fileName: evidencePhoto.name,
-          contentType: evidencePhoto.type || "image/jpeg",
-        });
-        if ("error" in presign) return setError(presign.error);
-        const put = await fetch(presign.uploadUrl, { method: "PUT", body: evidencePhoto });
-        if (!put.ok) return setError("The photo upload failed — try again.");
-        evidencePhotoKey = presign.key;
-      }
       const result = await finalizeInspection({
         id: inspectionId,
         totalLightsChecked: Number(totalLightsChecked),
         societyRepName,
         notes,
-        evidencePhotoKey,
+        evidencePhotoKey: null,
       });
       if (result.error) return setError(result.error);
+      // The report exists from this moment: land on the visit's own page with
+      // its download first and the signed-copy upload after it.
+      router.push(`/admin/inspections/${inspectionId}?done=1`);
       router.refresh();
     });
   }
@@ -58,7 +47,7 @@ export function FinishDraftForm({ inspectionId, defaultTotal, findingsSoFar }: {
         <p className="mb-3 font-semibold">Finish the visit</p>
         <p className="mb-3 text-[13px]" style={{ color: "var(--text-muted)" }}>
           {findingsSoFar} fixture{findingsSoFar === 1 ? "" : "s"} logged above. Once this is saved the checklist is
-          locked — correct a fixture from the edit screen after this instead.
+          locked — correct a fixture from the edit screen after this instead. The report PDF is generated the moment it is saved.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field
@@ -84,11 +73,6 @@ export function FinishDraftForm({ inspectionId, defaultTotal, findingsSoFar }: {
         <div className="mt-3">
           <Field label="Notes" htmlFor="notes">
             <textarea id="notes" className="field" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} disabled={pending} />
-          </Field>
-        </div>
-        <div className="mt-3">
-          <Field label="Photo of the signed checklist" htmlFor="evidencePhoto" hint="One photo covering both signature blocks and the stamp — optional, but the only proof kept that the visit was signed off.">
-            <FileDrop id="evidencePhoto" accept="image/*" files={evidencePhoto ? [evidencePhoto] : []} onFiles={(f) => setEvidencePhoto(f[0] ?? null)} disabled={pending} />
           </Field>
         </div>
         {error && (

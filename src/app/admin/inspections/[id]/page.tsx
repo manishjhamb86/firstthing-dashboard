@@ -9,6 +9,8 @@ import { formatDateTime, monthLabel } from "@/lib/format-date";
 import { inspectionSummary } from "@/lib/inspection";
 import { publicS3Url } from "@/lib/s3";
 import { VoidInspectionButton } from "./void-button";
+import { InspectionReportSteps } from "@/components/inspection-report-steps";
+import { attachSignedInspection, getInspectionEvidenceUploadUrl } from "../actions";
 import { DiscardDraftButton } from "./discard-draft-button";
 import { FinalizeInspectionForm } from "./finalize-inspection-form";
 import { FinishDraftForm } from "./finish-draft-form";
@@ -24,14 +26,14 @@ export default async function InspectionDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ edit?: string }>;
+  searchParams: Promise<{ edit?: string; done?: string }>;
 }) {
   await requireAdminPage();
   const actor = await resolveAdmin();
   if (!actor?.permissions.includes("manage_survey")) redirect("/admin");
 
   const { id } = await params;
-  const { edit } = await searchParams;
+  const { edit, done } = await searchParams;
   const inspection = await db.inspection.findUnique({
     where: { id },
     include: {
@@ -93,6 +95,12 @@ export default async function InspectionDetailPage({
           This inspection was voided by {inspection.voidedBy?.name ?? inspection.voidedBy?.email ?? "—"} on{" "}
           <span className="num">{formatDateTime(inspection.voidedAt)}</span> — {inspection.voidReason}. The
           record is kept for history but no longer counts as the society&apos;s inspection for this month.
+        </PageRibbon>
+      )}
+
+      {done === "1" && !isDraft && !inspection.voidedAt && (
+        <PageRibbon tone="ok">
+          Visit saved. Its report is ready — download it, have the society representative sign it, then upload the signed copy below.
         </PageRibbon>
       )}
 
@@ -194,29 +202,25 @@ export default async function InspectionDetailPage({
             <Stat label="Faulty %" value={`${summary.faultyPct.toFixed(1)}%`} />
           </StatRow>
 
-          {(inspection.notes || inspection.evidencePhotoKey) && (
-            <div className="mb-6 space-y-1.5">
-              {inspection.notes && (
-                <p className="text-[13.5px]">
-                  <span className="lbl mr-1.5">Notes</span>
-                  {inspection.notes}
-                </p>
-              )}
-              {inspection.evidencePhotoKey && (
-                <p className="text-[13.5px]">
-                  <span className="lbl mr-1.5">Signed checklist</span>
-                  <a
-                    href={publicS3Url(inspection.evidencePhotoKey)}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-semibold underline"
-                    style={{ color: "var(--accent)" }}
-                  >
-                    View the photo
-                  </a>
-                </p>
-              )}
-            </div>
+          {inspection.notes && (
+            <p className="mb-6 text-[13.5px]">
+              <span className="lbl mr-1.5">Notes</span>
+              {inspection.notes}
+            </p>
+          )}
+
+          {!inspection.voidedAt && (
+            <Card className="mb-6 p-4 sm:p-6">
+              <CardTitle>Report</CardTitle>
+              <InspectionReportSteps
+                inspectionId={inspection.id}
+                downloadHref={`/api/inspections/${inspection.id}/pdf`}
+                signedHref={inspection.evidencePhotoKey ? publicS3Url(inspection.evidencePhotoKey) : null}
+                signedIsPdf={!!inspection.evidencePhotoKey?.toLowerCase().endsWith(".pdf")}
+                presign={getInspectionEvidenceUploadUrl}
+                attach={attachSignedInspection}
+              />
+            </Card>
           )}
 
           <Card className="p-4 sm:p-6">

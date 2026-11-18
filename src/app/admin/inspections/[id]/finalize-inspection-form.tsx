@@ -1,10 +1,9 @@
 "use client";
 
-import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field } from "@/components/ui";
-import { finalizeInspection, getInspectionEvidenceUploadUrl, updateInspection } from "../actions";
+import { finalizeInspection, updateInspection } from "../actions";
 import type { InspectionSensorStatus } from "@prisma/client";
 
 const SENSOR_OPTIONS: { value: InspectionSensorStatus; label: string }[] = [
@@ -64,7 +63,6 @@ export function FinalizeInspectionForm({
   );
   const [societyRepName, setSocietyRepName] = useState(initial?.societyRepName ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
-  const [evidencePhoto, setEvidencePhoto] = useState<File | null>(null);
   const [rows, setRows] = useState<Row[]>(() => (initial?.findings ?? []).map((f, i) => ({ ...f, key: i + 1 })));
   const [nextKey, setNextKey] = useState((initial?.findings.length ?? 0) + 1);
 
@@ -83,25 +81,13 @@ export function FinalizeInspectionForm({
     e.preventDefault();
     setError(null);
     startTransition(async () => {
-      let evidencePhotoKey: string | null = null;
-      if (evidencePhoto) {
-        const presign = await getInspectionEvidenceUploadUrl({
-          inspectionId,
-          fileName: evidencePhoto.name,
-          contentType: evidencePhoto.type || "image/jpeg",
-        });
-        if ("error" in presign) return setError(presign.error);
-        const put = await fetch(presign.uploadUrl, { method: "PUT", body: evidencePhoto });
-        if (!put.ok) return setError("The photo upload failed — try again.");
-        evidencePhotoKey = presign.key;
-      }
 
       const result = await (editing ? updateInspection : finalizeInspection)({
         id: inspectionId,
         totalLightsChecked: Number(totalLightsChecked),
         societyRepName,
         notes,
-        evidencePhotoKey,
+        evidencePhotoKey: null,
         findings: rows.map((r) => ({
           location: r.location,
           sensorStatus: r.sensorStatus,
@@ -243,19 +229,6 @@ export function FinalizeInspectionForm({
         <div className="mt-3">
           <Field label="Notes" htmlFor="notes">
             <textarea id="notes" className="field" rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </Field>
-        </div>
-        <div className="mt-3">
-          <Field
-            label="Photo of the signed checklist"
-            htmlFor="evidencePhoto"
-            hint={
-              editing && initial?.hasPhoto
-                ? "A photo is already on file — choose one only to replace it."
-                : "One photo covering both signature blocks and the stamp — optional, but the only proof kept that the visit was signed off."
-            }
-          >
-            <FileDrop id="evidencePhoto" accept="image/*" files={evidencePhoto ? [evidencePhoto] : []} onFiles={(f) => setEvidencePhoto(f[0] ?? null)} disabled={pending} />
           </Field>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-3">

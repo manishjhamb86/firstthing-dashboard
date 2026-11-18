@@ -15,7 +15,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { inspectionNow, presignInspectionEvidence } from "@/lib/inspection-file";
+import { inspectionNow, isSignedCopyType, presignInspectionEvidence } from "@/lib/inspection-file";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
@@ -195,10 +195,11 @@ export async function getInspectionEvidenceUploadUrl(input: {
   const admin = await resolveAdmin();
   if (!admin) return { error: "Your session is no longer valid. Sign in again." };
   if (!admin.permissions.includes("manage_survey")) {
+    logger.warn("inspection.signed_copy_refused", { actorId: admin.id, inspectionId: input.inspectionId, reason: "permission", step: "presign" });
     return { error: "Filing an inspection is field work (Manage survey)." };
   }
-  if (!input.contentType.startsWith("image/")) {
-    return { error: "Only an image — a photo of the signed form — can be uploaded here." };
+  if (!isSignedCopyType(input.contentType)) {
+    return { error: "Upload a photo or a PDF scan of the signed report." };
   }
 
   const inspection = await db.inspection.findUnique({
@@ -610,5 +611,33 @@ export async function removeInspectionFinding(inspectionId: string, findingId: s
   logger.info("inspection.finding_removed", { actorId: admin.id, inspectionId, findingId });
   revalidatePath(`/admin/inspections/${inspectionId}`);
   revalidatePath("/admin/inspections");
+  return {};
+}
+
+/**
+ * The signed copy of the generated report (2026-11-18, user-asked): the
+ * society representative signs the printed PDF on paper and a photo or scan
+ * of it is attached here — after the download, never as part of filing the
+ * visit. Any field account may attach or replace it while the inspection is
+ * finished and not voided; the key must be one presigned for THIS inspection.
+ */
+export async function attachSignedInspection(input: { id: string; key: string }): Promise<{ error?: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session is no longer valid. Sign in again." };
+  if (!admin.permissions.includes("manage_survey")) {
+    logger.warn("inspection.signed_copy_refused", { actorId: admin.id, inspectionId: input.id, reason: "permission" });
+    return { error: "Attaching the signed report is field work (Manage survey)." };
+  }
+  const inspection = await db.inspection.findUnique({ where: { id: input.id }, select: { voidedAt: true, totalLightsChecked: true } });
+  if (!inspection) return { error: "That inspection no longer exists." };
+  if (inspection.voidedAt) return { error: "This inspection has been voided." };
+  if (inspection.totalLightsChecked === null) return { error: "Finish the visit first — the report is generated once it is saved." };
+  if (!input.key.startsWith("Documents/") || !input.key.includes(input.id)) {
+    logger.warn("inspection.signed_copy_refused", { actorId: admin.id, inspectionId: input.id, reason: "foreign_key" });
+    return { error: "That upload does not belong to this inspection — upload it again." };
+  }
+  await db.inspection.update({ where: { id: input.id }, data: { evidencePhotoKey: input.key } });
+  logger.info("inspection.signed_copy_attached", { actorId: admin.id, inspectionId: input.id, key: input.key, via: "admin" });
+  revalidatePath(`/admin/inspections/${input.id}`);
   return {};
 }

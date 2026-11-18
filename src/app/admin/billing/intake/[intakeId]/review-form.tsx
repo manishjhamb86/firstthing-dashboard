@@ -137,6 +137,7 @@ export function ReviewForm({
 
   const open = preview?.openItems ?? [];
   const circuitOptions = preview?.circuitOptions ?? [];
+  const pumpRooms = preview?.pumpRooms ?? [];
   const arithmetic = preview?.arithmetic ?? null;
   const derived = preview?.derived ?? null;
   const duplicate = preview?.duplicateOf ?? null;
@@ -442,7 +443,7 @@ export function ReviewForm({
                     </div>}
                   </div>
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {([["qty", l.kind === "service" && !retail ? "Qty (lights)" : "Qty"], ["rate", "Rate"], ["discount", "Discount"], ["amount", "Amount"]] as const).map(([k, label]) => (
+                    {([["qty", l.kind === "service" && !retail && !l.pumpMeterId ? "Qty (lights)" : "Qty"], ["rate", "Rate"], ["discount", "Discount"], ["amount", "Amount"]] as const).map(([k, label]) => (
                       <label key={k} className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
                         {label}
                         <input type="number" step="any" inputMode="decimal" className="field num mt-1" value={k === "discount" ? String(l.discount) : numInput(l[k])} onChange={(e) => setLine(l.lineNo, k === "discount" ? { discount: parseNum(e.target.value) ?? 0 } : ({ [k]: parseNum(e.target.value) } as Partial<ReviewLine>))} />
@@ -551,21 +552,49 @@ export function ReviewForm({
                         <>
                           <label className="text-[11px] font-semibold uppercase tracking-[0.06em]" style={{ color: "var(--text-muted)" }}>
                             Circuit
-                            <select className="field mt-1" value={l.circuitId ?? ""} onChange={(e) => setLine(l.lineNo, { circuitId: e.target.value || null, applyCountForward: false })} disabled={!review.societyId}>
-                              <option value="">{review.societyId ? (circuitOptions.length ? "Choose the circuit this line bills…" : "This society has no circuits yet") : "Confirm the society first"}</option>
-                              {circuitOptions.map((c) => (
-                                <option key={c.circuitId} value={c.circuitId}>
-                                  {c.label} · {num(c.lightCount)} lights
-                                </option>
-                              ))}
+                            <select
+                              className="field mt-1"
+                              value={l.pumpMeterId ? `pump:${l.pumpMeterId}` : (l.circuitId ?? "")}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                // A pump room is a target of its own: it takes no light count and no split.
+                                if (v.startsWith("pump:")) setLine(l.lineNo, { pumpMeterId: v.slice(5), circuitId: null, split: undefined, applyCountForward: false });
+                                else setLine(l.lineNo, { circuitId: v || null, pumpMeterId: null, applyCountForward: false });
+                              }}
+                              disabled={!review.societyId}
+                            >
+                              <option value="">{review.societyId ? (circuitOptions.length || pumpRooms.length ? "Choose what this line bills…" : "This society has no circuits yet") : "Confirm the society first"}</option>
+                              {circuitOptions.length > 0 && (
+                                <optgroup label="Lighting circuits">
+                                  {circuitOptions.map((c) => (
+                                    <option key={c.circuitId} value={c.circuitId}>
+                                      {c.label} · {num(c.lightCount)} lights
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {pumpRooms.length > 0 && (
+                                <optgroup label="Pump room">
+                                  {pumpRooms.map((p) => (
+                                    <option key={p.id} value={`pump:${p.id}`}>
+                                      {p.label}
+                                    </option>
+                                  ))}
+                                </optgroup>
+                              )}
                             </select>
                           </label>
-                          {!l.circuitId && review.societyId && circuitOptions.length === 0 && (
+                          {l.pumpMeterId && (
+                            <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                              Billed to the pump room: counts in the invoice total. It makes no lighting saving — the pump room&apos;s savings come from its own baseline.
+                            </p>
+                          )}
+                          {!l.circuitId && !l.pumpMeterId && review.societyId && circuitOptions.length === 0 && pumpRooms.length === 0 && (
                             <p className="mt-1 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
                               No circuit on record for this society — create it from its deal&apos;s survey (or the document backfill) first.
                             </p>
                           )}
-                          {circuitOptions.length >= 2 && (
+                          {circuitOptions.length >= 2 && !l.pumpMeterId && (
                             <button
                               type="button"
                               className="btn-ghost btn-sm mt-1"

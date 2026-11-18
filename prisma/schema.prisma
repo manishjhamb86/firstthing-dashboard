@@ -3401,8 +3401,14 @@ model BillingInvoiceLine {
   // qty (FEAT-109-AC-6). Null when they agreed.
   countDisagreement Int?    @map("count_disagreement")
 
-  invoice BillingInvoice @relation(fields: [billingInvoiceId], references: [id], onDelete: Cascade)
-  circuit Circuit?       @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  invoice     BillingInvoice @relation(fields: [billingInvoiceId], references: [id], onDelete: Cascade)
+  circuit     Circuit?       @relation(fields: [circuitId], references: [id], onDelete: SetNull)
+  /// A service line billed to a pump room rather than a lighting circuit
+  /// (2026-11-19, user-asked: pump automation on a lighting society's
+  /// invoice). Counts in the invoice total; the pump room's savings come from
+  /// its own baseline, never from this line.
+  pumpMeterId String?        @map("pump_meter_id")
+  pumpMeter   EmsPumpMeter?  @relation(fields: [pumpMeterId], references: [id], onDelete: SetNull)
 
   @@unique([billingInvoiceId, lineNo])
   @@index([circuitId])
@@ -4014,6 +4020,8 @@ model EmsPumpMeter {
   readings   EmsPumpReading[]
   ingests    EmsPumpEmailIngest[]
   baselines  EmsPumpBaseline[]
+
+  invoiceLines BillingInvoiceLine[]
 
   @@index([societyId])
   @@map("ems_pump_meters")

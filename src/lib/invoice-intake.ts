@@ -182,6 +182,14 @@ export type ReviewLine = {
    * add up to the line's quantity. Absent or shorter → the single circuit.
    */
   split?: LineSplitEntry[];
+  /**
+   * A service line billed to the society's pump room instead of a lighting
+   * circuit (2026-11-19, user-asked — pump automation on the same invoice).
+   * It counts in the invoice total and asks for no light count; it makes no
+   * lighting fee line, because the pump room's savings come from its own
+   * baseline, never from this invoice line.
+   */
+  pumpMeterId?: string | null;
 };
 
 export type LineSplitEntry = {
@@ -194,7 +202,8 @@ export type LineSplitEntry = {
 /** One entry per circuit the line bills — the single circuit, or the split. */
 export type LineAllocation = { circuitId: string; lights: number | null; applyCountForward: boolean };
 
-export function lineAllocations(l: Pick<ReviewLine, "circuitId" | "qty" | "applyCountForward" | "split">): LineAllocation[] {
+export function lineAllocations(l: Pick<ReviewLine, "circuitId" | "qty" | "applyCountForward" | "split" | "pumpMeterId">): LineAllocation[] {
+  if (l.pumpMeterId) return [];
   if (l.split && l.split.length >= 2) return l.split;
   return l.circuitId ? [{ circuitId: l.circuitId, lights: l.qty, applyCountForward: l.applyCountForward }] : [];
 }
@@ -221,7 +230,7 @@ export function refuseSplit(l: Pick<ReviewLine, "lineNo" | "qty" | "split">): st
  * the parts add back to the printed amount exactly (INV-02: the fee lines
  * must sum to the invoice line).
  */
-export function allocateLine(l: Pick<ReviewLine, "lineNo" | "qty" | "amount" | "circuitId" | "applyCountForward" | "split">): { lineNo: number; circuitId: string; lightsBilled: number; amount: number }[] {
+export function allocateLine(l: Pick<ReviewLine, "lineNo" | "qty" | "amount" | "circuitId" | "applyCountForward" | "split" | "pumpMeterId">): { lineNo: number; circuitId: string; lightsBilled: number; amount: number }[] {
   if (l.qty === null || l.amount === null || !(l.qty > 0)) return [];
   const allocs = lineAllocations(l).filter((a) => a.circuitId && a.lights !== null && a.lights > 0);
   if (allocs.length === 0) return [];
@@ -284,6 +293,8 @@ export type Review = {
 export type ReviewContext = {
   /** A live invoice already holds this society-month. */
   duplicateOf: { number: string; sameNumber?: boolean } | null;
+  /** The society's pump rooms — a line billed to any other is refused. Absent: not checked. */
+  pumpMeterIds?: string[];
 };
 
 export type ArithmeticReport = {
@@ -332,6 +343,11 @@ export function openItems(review: Review, context: ReviewContext): string[] {
     items.push(`Line ${service[0].lineNo} is marked "Service" — mark every line "Other", or un-check "not an energy-savings invoice" (step 2)`);
   const seen = new Map<string, number>();
   for (const l of service) {
+    // Billed to the pump room: no circuit and no light count to ask for.
+    if (l.pumpMeterId) {
+      if (context.pumpMeterIds && !context.pumpMeterIds.includes(l.pumpMeterId)) items.push(`Line ${l.lineNo}'s pump room is not this society's (step 2)`);
+      continue;
+    }
     const allocs = lineAllocations(l);
     if (allocs.length === 0) items.push(`Line ${l.lineNo} has no circuit (step 2)`);
     if (l.qty === null || !(l.qty > 0)) items.push(`Line ${l.lineNo} has no light count (step 2)`);

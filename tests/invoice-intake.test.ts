@@ -233,3 +233,16 @@ describe("openItems — a retail sale", () => {
     expect(openItems({ ...retail, retailCustomerId: "rc1" }, { duplicateOf: null })).toEqual([]);
   });
 });
+
+describe("a service line billed to the pump room (2026-11-19)", () => {
+  const pumpLine = { ...CLEAN.lines[0], lineNo: 2, description: "Smart Pump Automation Service", qty: 1, rate: 17487, discount: 0, amount: 17487, circuitId: null, pumpMeterId: "pump-1" };
+  const withPump = { ...CLEAN, lines: [CLEAN.lines[0], pumpLine] };
+  it("asks for no circuit or light count, and makes no lighting allocation", () => {
+    const items = openItems(withPump, { duplicateOf: null, pumpMeterIds: ["pump-1"] });
+    expect(items.filter((i) => i.startsWith("Line 2"))).toEqual([]);
+    expect(allocateLine(pumpLine)).toEqual([]);
+  });
+  it("refuses a pump room that is not the society's", () => {
+    expect(openItems(withPump, { duplicateOf: null, pumpMeterIds: ["other"] })).toContain("Line 2's pump room is not this society's (step 2)");
+  });
+});

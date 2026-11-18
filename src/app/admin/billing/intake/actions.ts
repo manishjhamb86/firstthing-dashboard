@@ -213,13 +213,24 @@ export type IntakePreview = {
   arithmetic: ReturnType<typeof arithmeticReport>;
   derived: DerivedMonth | null;
   circuitOptions: CircuitOption[];
+  /** The society's pump rooms, offered beside the circuits for a pump service line. */
+  pumpRooms: { id: string; label: string }[];
   contextNotes: string[];
   duplicateOf: InvoiceDuplicate | null;
 };
 
+/** A society's pump rooms as the line picker offers them. */
+async function pumpRoomsOf(societyId: string | null) {
+  if (!societyId) return [];
+  const rooms = await db.emsPumpMeter.findMany({ where: { societyId }, orderBy: { assignedAt: "asc" }, select: { id: true, roomType: true, vendorSubjectLabel: true } });
+  const kind: Record<string, string> = { domestic: "Domestic", stp: "STP", fire: "Fire" };
+  return rooms.map((r) => ({ id: r.id, label: `Pump room${r.roomType ? ` · ${kind[r.roomType] ?? r.roomType}` : ""} · ${r.vendorSubjectLabel}` }));
+}
+
 async function buildPreview(review: Review): Promise<IntakePreview> {
   const duplicateOf = await duplicateFor(review);
-  const items = openItems(review, { duplicateOf });
+  const pumpRooms = review.retailSale ? [] : await pumpRoomsOf(review.societyId);
+  const items = openItems(review, { duplicateOf, pumpMeterIds: pumpRooms.map((p) => p.id) });
   const arithmetic = arithmeticReport(review);
   let derived: DerivedMonth | null = null;
   let circuitOptions: CircuitOption[] = [];
@@ -236,7 +247,7 @@ async function buildPreview(review: Review): Promise<IntakePreview> {
       derived = deriveInvoiceMonth({ period: review.period, parts: ctx.parts, lines: serviceLines, readingsByCircuit: ctx.readingsByCircuit });
     }
   }
-  return { openItems: items, arithmetic, derived, circuitOptions, contextNotes, duplicateOf };
+  return { openItems: items, arithmetic, derived, circuitOptions, pumpRooms, contextNotes, duplicateOf };
 }
 
 export async function previewIntake(intakeId: string, review: Review): Promise<Result<IntakePreview>> {
@@ -254,7 +265,7 @@ export async function saveIntakeReview(intakeId: string, review: Review): Promis
   if (!intake) return { error: "That upload no longer exists." };
   if (intake.status === "submitted") return { error: "This invoice has already been submitted." };
   const duplicateOf = await duplicateFor(review);
-  const items = openItems(review, { duplicateOf });
+  const items = openItems(review, { duplicateOf, pumpMeterIds: (await pumpRoomsOf(review.retailSale ? null : review.societyId)).map((p) => p.id) });
   const status = duplicateRefuses(duplicateOf, review.nonServiceInvoice) ? "refused_duplicate" : items.length === 0 ? "ready" : "needs_review";
   await db.invoiceIntake.update({
     where: { id: intakeId },
@@ -540,6 +551,7 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
             // A split line bills several circuits; the fee lines carry each
             // circuit's own share, so the invoice line points at none.
             circuitId: l.kind === "service" && lineAllocations(l).length === 1 ? lineAllocations(l)[0].circuitId : null,
+            pumpMeterId: l.kind === "service" && l.pumpMeterId ? l.pumpMeterId : null,
             arithmeticOk: preview.arithmetic.lines.find((a) => a.lineNo === l.lineNo)?.check.ok ?? true,
             // A rounded-off line is reconciled and says so; the note stays on the record either way.
             arithmeticNote: (() => {

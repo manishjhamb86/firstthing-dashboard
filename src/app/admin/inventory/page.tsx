@@ -6,6 +6,7 @@ import { formatDate } from "@/lib/format-date";
 import { valueHoldings } from "@/lib/inventory";
 import { warrantyView } from "@/lib/inventory-warranty-view";
 import { requireInventoryPage } from "./access";
+import { normaliseInvoiceNumber } from "@/lib/invoice-number";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Stock" };
@@ -24,6 +25,20 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     const batch = await db.inventoryBatch.findUnique({ where: { code: c }, select: { id: true } });
     if (batch) redirect(`/admin/inventory/batches/${batch.id}`);
   }
+  // A supplier's invoice number finds the batches it brought (2026-11-18,
+  // user-asked): one batch opens straight away, several are listed.
+  let invoiceMatches: { invoiceNumber: string; supplier: string; batches: { id: string; code: string; quantity: number; item: string; unit: string }[] }[] = [];
+  if (code?.trim()) {
+    const want = normaliseInvoiceNumber(code);
+    const purchases = await db.inventoryPurchase.findMany({
+      select: { invoiceNumber: true, supplier: { select: { name: true } }, batches: { orderBy: { code: "asc" }, select: { id: true, code: true, quantity: true, itemType: { select: { name: true, unit: true } } } } },
+    });
+    invoiceMatches = purchases
+      .filter((p) => want.length >= 3 && normaliseInvoiceNumber(p.invoiceNumber).includes(want))
+      .map((p) => ({ invoiceNumber: p.invoiceNumber, supplier: p.supplier.name, batches: p.batches.map((b) => ({ id: b.id, code: b.code, quantity: b.quantity, item: b.itemType.name, unit: b.itemType.unit })) }));
+    const all = invoiceMatches.flatMap((m) => m.batches);
+    if (all.length === 1) redirect(`/admin/inventory/batches/${all[0].id}`);
+  }
 
   const [items, locations, unitGroups, qtyMoves, batches, statusCounts] = await Promise.all([
     db.inventoryItemType.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }], select: { id: true, name: true, unit: true, tracking: true } }),
@@ -33,7 +48,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     db.inventoryBatch.findMany({
       orderBy: { createdAt: "desc" },
       take: 12,
-      include: { itemType: { select: { name: true, unit: true } }, purchase: { select: { invoiceDate: true, supplier: { select: { name: true } } } } },
+      include: { itemType: { select: { name: true, unit: true } }, purchase: { select: { invoiceNumber: true, invoiceDate: true, supplier: { select: { name: true } } } } },
     }),
     db.inventoryUnit.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
@@ -104,12 +119,40 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         }
       />
       <form className="mb-5 flex gap-2" action="/admin/inventory">
-        <input name="code" defaultValue={code ?? ""} className="field" placeholder="Unit code, batch code or maker's serial — e.g. B2609-017-00042" aria-label="Find by code" autoFocus />
+        <input name="code" defaultValue={code ?? ""} className="field" placeholder="Unit code, batch code, maker's serial or supplier invoice no. — e.g. B2609-017-00042, SQ262713" aria-label="Find by code or invoice number" autoFocus />
         <button type="submit" className="btn-secondary">
           Find
         </button>
       </form>
-      {code?.trim() && <p className="-mt-3 mb-4 text-[13px]" style={{ color: "var(--warn-fg)" }}>Nothing has the code “{code.trim()}”.</p>}
+      {code?.trim() && invoiceMatches.length === 0 && <p className="-mt-3 mb-4 text-[13px]" style={{ color: "var(--warn-fg)" }}>Nothing has the code or invoice number “{code.trim()}”.</p>}
+      {invoiceMatches.length > 0 && (
+        <Card className="mb-5 p-5">
+          <CardTitle>Batches on invoice “{code?.trim()}”</CardTitle>
+          <ul className="space-y-3 text-[13.5px]">
+            {invoiceMatches.map((m) => (
+              <li key={m.invoiceNumber + m.supplier}>
+                <p className="font-semibold">
+                  {m.invoiceNumber} · {m.supplier}
+                </p>
+                {m.batches.length === 0 ? (
+                  <p style={{ color: "var(--text-muted)" }}>No batches recorded on it.</p>
+                ) : (
+                  <ul className="mt-1 space-y-1">
+                    {m.batches.map((b) => (
+                      <li key={b.id}>
+                        <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold">
+                          {b.code}
+                        </Link>{" "}
+                        · {b.item} · {b.quantity} {b.unit}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       <StatRow>
         <Stat label="In stock" value={count("in_stock").toLocaleString("en-IN")} detail="working, at offices" />
@@ -220,7 +263,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                     )}
                     <span style={{ color: "var(--text-subtle)" }}>
                       {" "}
-                      · {b.purchase ? b.purchase.supplier.name : "existing stock"}, {formatDate(b.receivedOn)}
+                      · {b.purchase ? `${b.purchase.supplier.name}, invoice ${b.purchase.invoiceNumber}` : "existing stock"}, {formatDate(b.receivedOn)}
                     </span>
                   </li>
                 ))}

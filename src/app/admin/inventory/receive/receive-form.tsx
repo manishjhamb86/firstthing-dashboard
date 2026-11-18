@@ -1,12 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { FileDrop } from "@/components/file-drop";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
 import { SerialScanButton } from "@/components/serial-scan";
 import { formatInstant } from "@/lib/format-date";
-import { beginSupplierInvoiceUpload, extractSupplierInvoiceForm, receiveDelivery } from "../actions";
+import { beginSupplierInvoiceUpload, extractSupplierInvoiceForm, linkUploadToPurchase, receiveDelivery } from "../actions";
 
 type PendingUpload = {
   id: string;
@@ -14,6 +15,8 @@ type PendingUpload = {
   status: "uploaded" | "read" | "could_not_read" | "processed";
   uploadedAt: string;
   errorMessage: string | null;
+  /** Its invoice was already received — the delivery it became. */
+  alreadyReceived: { purchaseId: string; invoiceNumber: string; supplierName: string; receivedOn: string; batches: { id: string; code: string }[] } | null;
 };
 
 async function sha256Hex(file: File): Promise<string> {
@@ -78,6 +81,14 @@ export function ReceiveForm({
   const router = useRouter();
   const [head, setHead] = useState({ supplierId: "", invoiceNumber: "", invoiceDate: today, total: "", officeId: offices[0]?.id ?? "", receivedOn: today, notes: "" });
   const [file, setFile] = useState<File | null>(null);
+  const [linking, setLinking] = useState<string | null>(null);
+  async function linkToReceived(uploadId: string, purchaseId: string) {
+    setLinking(uploadId);
+    const r = await linkUploadToPurchase(uploadId, purchaseId);
+    setLinking(null);
+    if (r.error) return setError(r.error);
+    router.refresh();
+  }
   // The upload this form is tied to, once one exists — submit() marks THIS
   // row processed (2026-10-16), and it's what a re-read button re-reads.
   const [uploadId, setUploadId] = useState<string | null>(null);
@@ -251,12 +262,38 @@ export function ReceiveForm({
                     uploaded {formatInstant(new Date(u.uploadedAt))}
                     {u.status === "could_not_read" && u.errorMessage ? ` · ${u.errorMessage}` : ""}
                   </p>
+                  {u.alreadyReceived && (
+                    <p className="mt-1 text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+                      Invoice {u.alreadyReceived.invoiceNumber} from {u.alreadyReceived.supplierName} was already received on{" "}
+                      {formatInstant(new Date(u.alreadyReceived.receivedOn))} as{" "}
+                      {u.alreadyReceived.batches.map((b, i) => (
+                        <span key={b.id}>
+                          {i > 0 && ", "}
+                          <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold" style={{ color: "var(--accent)" }}>
+                            {b.code}
+                          </Link>
+                        </span>
+                      ))}
+                      . This is another copy of it.
+                    </p>
+                  )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <StatusChip tone={STATUS_TONE[u.status]}>{STATUS_LABEL[u.status]}</StatusChip>
-                  <button type="button" className="btn-secondary btn-sm" onClick={() => resumeUpload(u.id)}>
-                    Process this
-                  </button>
+                  {u.alreadyReceived ? (
+                    <>
+                      <StatusChip tone="ok">Already received</StatusChip>
+                      <button type="button" className="btn-secondary btn-sm" disabled={linking === u.id} onClick={() => linkToReceived(u.id, u.alreadyReceived!.purchaseId)}>
+                        {linking === u.id ? "Saving…" : "Remove from this list"}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <StatusChip tone={STATUS_TONE[u.status]}>{STATUS_LABEL[u.status]}</StatusChip>
+                      <button type="button" className="btn-secondary btn-sm" onClick={() => resumeUpload(u.id)}>
+                        Process this
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { requireInventoryPage } from "../access";
 import { ReceiveForm } from "./receive-form";
+import { normaliseInvoiceNumber } from "@/lib/invoice-number";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Receive stock" };
@@ -25,9 +26,23 @@ export default async function ReceivePage({ searchParams }: { searchParams: Prom
       where: { status: { not: "processed" } },
       orderBy: { uploadedAt: "desc" },
       take: 20,
-      select: { id: true, fileName: true, status: true, uploadedAt: true, errorMessage: true },
+      select: { id: true, fileName: true, status: true, uploadedAt: true, errorMessage: true, extraction: true },
     }),
   ]);
+  // An upload whose invoice was already received — by hand, or from another
+  // copy of the same PDF — is recognised by its invoice number and offered
+  // as "already received" with its batches, never "Process this" (2026-11-18).
+  const purchases = pendingUploads.some((u) => u.extraction)
+    ? await db.inventoryPurchase.findMany({
+        select: { id: true, invoiceNumber: true, createdAt: true, supplier: { select: { name: true } }, batches: { select: { id: true, code: true } } },
+      })
+    : [];
+  const byNumber = new Map(purchases.map((p) => [normaliseInvoiceNumber(p.invoiceNumber), p]));
+  const receivedAs = (extraction: unknown) => {
+    const n = (extraction as { invoiceNumber?: { value?: string } } | null)?.invoiceNumber?.value ?? "";
+    const p = n ? byNumber.get(normaliseInvoiceNumber(n)) : undefined;
+    return p ? { purchaseId: p.id, invoiceNumber: p.invoiceNumber, supplierName: p.supplier.name, receivedOn: p.createdAt.toISOString(), batches: p.batches } : null;
+  };
   const today = new Date().toISOString().slice(0, 10);
   return (
     <>
@@ -58,6 +73,7 @@ export default async function ReceivePage({ searchParams }: { searchParams: Prom
             status: u.status,
             uploadedAt: u.uploadedAt.toISOString(),
             errorMessage: u.errorMessage,
+            alreadyReceived: receivedAs(u.extraction),
           }))}
           resumeUploadId={upload ?? null}
         />

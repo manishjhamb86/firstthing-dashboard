@@ -9,6 +9,7 @@ import { revalidatePath } from "next/cache";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { db } from "@/lib/db";
+import { formatDate } from "@/lib/format-date";
 import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
@@ -30,6 +31,7 @@ import {
   type ExtractedSupplierInvoice,
 } from "@/lib/supplier-invoice-extract";
 import { proposeItemType, proposeSupplier } from "@/lib/supplier-invoice-match";
+import { normaliseInvoiceNumber } from "@/lib/invoice-number";
 
 type Result<T = object> = ({ error: string } & Partial<T>) | ({ error?: undefined } & T);
 
@@ -363,8 +365,13 @@ export async function receiveDelivery(input: {
   if (!office || office.kind !== "office") return { error: "Choose the office it arrived at." };
   const dup = await db.inventoryPurchase.findUnique({
     where: { supplierId_invoiceNumber: { supplierId: input.supplierId, invoiceNumber: input.invoiceNumber.trim() } },
+    select: { createdAt: true, batches: { select: { code: true } } },
   });
-  if (dup) return { error: `Invoice ${input.invoiceNumber.trim()} from this supplier is already received.` };
+  if (dup) {
+    // Say where it went, so nobody is left wondering whether the stock exists.
+    const codes = dup.batches.map((b) => b.code).join(", ");
+    return { error: `Invoice ${input.invoiceNumber.trim()} from this supplier was already received on ${formatDate(dup.createdAt)}${codes ? ` as ${codes}` : ""} — open it from Inventory rather than receiving it again.` };
+  }
 
   let upload: { id: string; s3Key: string; fileName: string } | null = null;
   if (input.uploadId) {
@@ -723,4 +730,40 @@ export async function receiveHistoricalStock(input: {
   logger.info("inventory.historical_received", { actorId: admin.id, batchId, itemTypeId: type.id, count: input.count, locationId, deployed: deploy });
   revalidatePath("/admin/inventory");
   return { batchId };
+}
+
+/**
+ * An uploaded invoice whose delivery was already received some other way
+ * (typed in by hand, or from an earlier copy of the same PDF) — link the
+ * upload to that delivery so it leaves the "not yet received" list
+ * (2026-11-18, user-caught: SQ262713 was received on 16 Oct as B2610-002,
+ * re-uploaded on 27 Oct, and kept offering "Process this"). The invoice
+ * number must match the delivery's, so an upload can never be filed against
+ * someone else's invoice.
+ */
+export async function linkUploadToPurchase(uploadId: string, purchaseId: string): Promise<{ error?: string }> {
+  const admin = await requireStockStaff();
+  if (!admin) return { error: REFUSED };
+  const [upload, purchase] = await Promise.all([
+    db.supplierInvoiceUpload.findUnique({ where: { id: uploadId } }),
+    db.inventoryPurchase.findUnique({ where: { id: purchaseId }, select: { id: true, invoiceNumber: true } }),
+  ]);
+  if (!upload) return { error: "That upload is no longer on record." };
+  if (!purchase) return { error: "That delivery is no longer on record." };
+  if (upload.status === "processed") return {};
+  const read = (upload.extraction as { invoiceNumber?: { value?: string } } | null)?.invoiceNumber?.value ?? "";
+  if (normaliseInvoiceNumber(read) !== normaliseInvoiceNumber(purchase.invoiceNumber)) {
+    logger.warn("inventory.upload_link_refused", { actorId: admin.id, uploadId, purchaseId, reason: "invoice_number_mismatch" });
+    return { error: "This upload's invoice number does not match that delivery." };
+  }
+  // One upload per delivery: if another upload already holds the link, this
+  // copy is marked processed without taking it.
+  const taken = await db.supplierInvoiceUpload.findUnique({ where: { purchaseId }, select: { id: true } });
+  await db.supplierInvoiceUpload.update({
+    where: { id: uploadId },
+    data: { status: "processed", ...(taken ? {} : { purchaseId }) },
+  });
+  logger.info("inventory.upload_linked_to_purchase", { actorId: admin.id, uploadId, purchaseId, linked: !taken });
+  revalidatePath("/admin/inventory/receive");
+  return {};
 }

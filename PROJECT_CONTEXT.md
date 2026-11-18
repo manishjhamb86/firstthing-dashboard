@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-11-13 (pump-room savings against the before-FirsThing baseline — see below)
+2026-11-18 (pump-room missing days spread from the meter's total — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -7245,6 +7245,33 @@ rule the user asked for, and every surface says how many days are estimated. The
 gap is where almost all of them sit; the vendor re-sending those reports would read them in and
 the estimates would vanish. Not yet deployed; RG's baseline and report days are entered on
 production through the admin form once it is.
+
+## Pump room: missing days are spread from the meter's total, and RG's baseline is live (2026-11-18) — user-caught, user-specified
+
+**Reported**: RG's 17 Nov read 3,440 kWh / 6,166 KL. No reports reached the mailbox from the evening of
+10 Nov to the morning of 18 Nov (the hourly sweep ran all 206 times and picks each report up within
+~20 minutes, so the gap is upstream — the vendor or the forwarding), and the ingest differenced 17 Nov
+against the last register on record, 10 Nov's: seven days on one.
+
+**The user's rule, built as stated**: a day is differenced against the day BEFORE it; with no report
+that day it takes its own sheet's opening-to-closing span, and the meter's rise across the missing days
+(last report's closing → the next report's opening) is divided equally between them, each stored as its
+own day with origin `distributed` and marked **spread** — so the totals equal the meter and no day is
+blank. `src/lib/pump-gap.ts` (pure, `spreadGap`); `EmsPumpReading.openingKwh/openingTotalFlow` now
+stored (migration `20261118090000`). A late report replaces its spread figure and the rest of the gap is
+re-spread on both sides; a register that went backwards spreads nothing; days typed in from a report are
+never overwritten. Driven end to end on dev through the real ingest and S3 (14/14): a fresh gap, a late
+day splitting it, a late day closing it — 11–17 Nov totalled the meter's figure at every step.
+`scripts/fix-pump-gap-days.ts` re-applied production's one affected day: 17 Nov → 493 kWh / 902 KL,
+11–16 Nov 491.2 kWh / 877.3 KL each, still 3,440 / 6,166 in total. Also fixed: the day tables' header
+cells carried `.lbl` (`display: block`), which stacked them on desktop.
+
+**RG's baseline was never on production** — the 13 Nov verification recorded it on dev only, and the
+post-deploy setup never ran. Recorded now, at the user's go: 12 May – 2 Jun 2026, 17,270 kWh / 21,868 KL
+(0.7897 kWh/KL), savings from 24 Jun, source = the filed report; the report's 15 post days stored as
+`report` days. RG's tariff was already on record at ₹7.24/kWh (not the report's ₹7) and was left as it
+is. Live view read back on production: now 0.56 kWh/KL over 16 days; 147 days since 24 Jun, 116 of them
+estimated (mostly 9 Jul – 1 Nov, before the EMS feed began).
 
 ## Current Phase (archived application — history)
 

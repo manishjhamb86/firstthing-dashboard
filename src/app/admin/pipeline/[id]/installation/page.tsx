@@ -377,7 +377,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
       <div className="max-w-none space-y-6">
         <Card className="p-5">
           <CardTitle>Scope</CardTitle>
-          <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-4 text-sm">
+          <dl className="grid gap-x-6 gap-y-3 grid-cols-2 sm:grid-cols-5 text-sm">
             <div>
               <dt className="lbl">Contracted</dt>
               <dd className="num">{project.contractedLightCount}</dd>
@@ -397,6 +397,18 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   This one is the running total from the logged batches. */}
               <dt className="lbl">Logged in batches</dt>
               <dd className="num">{totalInstalled}</dd>
+            </div>
+            <div>
+              {/* The demo's own lights, replaced before the crew arrived
+                  (2026-11-18, user-asked) — so logged + demo reads against
+                  contracted on this card, not only in the plan line below. */}
+              <dt className="lbl">Installed on the demo</dt>
+              <dd className="num">{alreadyInstalled}</dd>
+              {alreadyInstalled > 0 && (
+                <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">
+                  <span className="num">{totalInstalled + alreadyInstalled}</span> with the logged days
+                </p>
+              )}
             </div>
             <div>
               <dt className="lbl">Skipped, still owed</dt>

@@ -18,6 +18,7 @@ import {
   demoWindowLateness,
   type LatenessResult,
 } from "@/lib/lateness";
+import { installationOpenReason, type InstallationOpenReason } from "@/lib/installation-open";
 import { evaluateDayGateChain, type BatchGateInput, type DayGateStatus } from "@/lib/installation-gate";
 import { reviewUrgency } from "@/lib/demo-result-review";
 import { circuitLabelOf } from "@/lib/circuit-label";
@@ -136,27 +137,45 @@ export const paymentSummary = cache(async (now: Date = new Date()): Promise<Paym
 // ---------------------------------------------------------------------------
 
 export type InstallationRow = {
-  projectId: string;
+  /** Null for a deal whose contract is active but whose installation project has not been set up. */
+  projectId: string | null;
   pipelineId: string;
   societyName: string;
+  dealScope: string | null;
+  /** Why it counts as still open — see src/lib/installation-open.ts. */
+  openReason: InstallationOpenReason | "not_set_up";
   installedCount: number;
-  contractedCount: number;
+  contractedCount: number | null;
   nextPlannedDay: { day: number; startAt: Date } | null;
   /** Only the days whose gate is actually holding something up — most projects contribute none. */
   heldDays: Array<{ day: number; status: DayGateStatus; reason: string | null; deadline: Date | null }>;
 };
 
 export const installationBoard = cache(async (now: Date = new Date()): Promise<InstallationRow[]> => {
-  const projects = await db.installationProject.findMany({
-    where: { certificate: null },
+  // Every project, filtered by installationOpenReason below — "no certificate"
+  // alone missed partial certificates and work recorded after one. A few
+  // dozen rows; the filter is a rule, not a query, so it is done here.
+  const [allProjects, notSetUp] = await Promise.all([
+    db.installationProject.findMany({
     include: {
-      pipeline: { select: { id: true, society: { select: { name: true } } } },
+      certificate: { select: { isPartial: true, completedAt: true } },
+      pipeline: { select: { id: true, dealScope: true, society: { select: { name: true } } } },
       plannedDays: { orderBy: { day: "asc" } },
       batches: { orderBy: { day: "asc" }, include: { review: { select: { reviewedAt: true } } } },
     },
-  });
+    }),
+    // A contract running with no installation project yet is an installation
+    // nobody has started planning — open by any reading.
+    db.pipeline.findMany({
+      where: { stage: { in: ["agreed", "installation"] }, installationProject: null, contract: { status: "active" } },
+      select: { id: true, dealScope: true, society: { select: { name: true } } },
+    }),
+  ]);
+  const projects = allProjects
+    .map((p) => ({ p, reason: installationOpenReason(p) }))
+    .filter((x): x is { p: (typeof allProjects)[number]; reason: InstallationOpenReason } => x.reason !== null);
 
-  return projects.map((project) => {
+  const rows: InstallationRow[] = projects.map(({ p: project, reason }) => {
     const gateInputs = (bs: typeof project.batches): BatchGateInput[] =>
       bs.map((b) => ({ id: b.id, areaKey: b.areaKey, state: b.state, submittedAt: b.submittedAt, reviewedAt: b.review?.reviewedAt ?? null }));
 
@@ -180,12 +199,28 @@ export const installationBoard = cache(async (now: Date = new Date()): Promise<I
       projectId: project.id,
       pipelineId: project.pipelineId,
       societyName: project.pipeline.society.name,
+      dealScope: project.pipeline.dealScope,
+      openReason: reason,
       installedCount: project.batches.reduce((n, b) => n + b.installedCount, 0),
       contractedCount: project.contractedLightCount,
       nextPlannedDay: nextPlanned ? { day: nextPlanned.day, startAt: nextPlanned.startAt } : null,
       heldDays,
     };
   });
+  for (const pl of notSetUp) {
+    rows.push({
+      projectId: null,
+      pipelineId: pl.id,
+      societyName: pl.society.name,
+      dealScope: pl.dealScope,
+      openReason: "not_set_up",
+      installedCount: 0,
+      contractedCount: null,
+      nextPlannedDay: null,
+      heldDays: [],
+    });
+  }
+  return rows.sort((a, b) => a.societyName.localeCompare(b.societyName));
 });
 
 // ---------------------------------------------------------------------------

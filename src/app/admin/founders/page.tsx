@@ -137,6 +137,14 @@ const EMPTY_PAYMENTS: PaymentSummary = {
   retail: { unpaidCount: 0, owed: 0 },
 };
 const EMPTY_INSTALLATIONS: InstallationRow[] = [];
+
+/** Why an installation still counts as open, beside its name — blank for the ordinary case. */
+const OPEN_REASON_NOTE: Record<InstallationRow["openReason"], string | null> = {
+  not_certified: null,
+  partial_certificate: "Partly certified — the rest still to install",
+  work_after_certificate: "Work recorded after the certificate",
+  not_set_up: "Contract active — installation not set up yet",
+};
 const EMPTY_DEMOS: DemoBoard = { reviews: [], delays: [], stepCounts: { preWindow: 0, awaitingReplacement: 0, postWindow: 0, reviewOpen: 0 } };
 
 type TicketRow = { id: string; type: string; status: "open" | "in_progress" | "resolved"; subject: string; createdAt: Date; society: { name: string } };
@@ -513,16 +521,24 @@ export default async function FoundersPage() {
             </p>
           )}
           {installations.length === 0 ? (
-            <EmptyState title="Nothing active">No installation projects are currently running.</EmptyState>
+            <EmptyState title="Nothing open">No installation is running, partly certified, or waiting to be set up.</EmptyState>
           ) : (
             <ul className="space-y-2 text-[13px]">
               {installations.map((inst) => (
-                <li key={inst.projectId} className="flex items-center justify-between gap-2">
-                  <Link href={`/admin/pipeline/${inst.pipelineId}/installation`} className="min-w-0 truncate underline">
-                    {inst.societyName}
-                  </Link>
-                  <span className="num shrink-0 text-[var(--text-subtle)]">
-                    {inst.installedCount}/{inst.contractedCount}
+                <li key={inst.pipelineId} className="flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 flex-col">
+                    <Link href={`/admin/pipeline/${inst.pipelineId}/installation`} className="truncate underline">
+                      {inst.societyName}
+                      {inst.dealScope ? ` — ${inst.dealScope}` : ""}
+                    </Link>
+                    {OPEN_REASON_NOTE[inst.openReason] && (
+                      <span className="truncate text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
+                        {OPEN_REASON_NOTE[inst.openReason]}
+                      </span>
+                    )}
+                  </span>
+                  <span className="num flex shrink-0 items-center gap-1.5 text-[var(--text-subtle)]">
+                    {inst.contractedCount === null ? "—" : `${inst.installedCount}/${inst.contractedCount}`}
                     {inst.heldDays.length > 0 && (
                       <StatusChip tone={inst.heldDays.some((h) => h.status === "blocked") ? "bad" : "warn"}>
                         {inst.heldDays.length} held

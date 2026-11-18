@@ -9518,3 +9518,12 @@ offers, each Settings page and Notifications, with the old names as keywords; pl
 Verified in a browser on dev: order, Approvals and Service contents, the Settings page and its lighting
 on inventory setup, jump-to by keyboard (old name "support" → Society requests; "hyde" → the society) and
 by click, the phone drawer with no sideways scroll. 1,630 unit tests, `tsc`/`lint` clean.
+
+**Founders' page follows the defaulter rule (2026-11-19, user-caught)**: Mahagun Puram's offline-meter
+alert showed on the Founders' page Meters card but not in the Notification centre the card links to —
+it is one of production's 3 societies marked a defaulter (with Gaur Saundaryam and Ace City), whose
+alerts the Notification centre moves to the Defaulters page. "It should be same": the Founders' page
+now leaves defaulter societies' meter alerts out of both its "Not on time" list and its Meters card,
+and the card says "N more from defaulter societies — Defaulters →". Society requests and the overdue
+list were left alone: each links to its own full list (Society requests, Release queue), which
+includes defaulters, so they already match where they point.

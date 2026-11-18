@@ -11,6 +11,7 @@ import { YourTasks } from "../your-tasks";
 import { logger } from "@/lib/logger";
 import { loadVisitBoard, staleVisitApprovals, istToday, type VisitBoard } from "@/lib/customer-visits-loader";
 import { monthLabel } from "@/lib/format-date";
+import { defaulterSocietyIds } from "@/lib/notifications";
 
 // Five domains, five colours (2026-10-23, user-asked: "use more colours so
 // things are easily distinguishable... should look classic and beautiful
@@ -159,8 +160,8 @@ type MeterAlertRow = {
   message: string;
   openedAt: Date;
   acknowledgedAt: Date | null;
-  meter: { name: string; society: { name: string } | null; owner: { name: string | null; email: string } | null } | null;
-  circuit: { society: { name: string } } | null;
+  meter: { name: string; society: { id: string; name: string } | null; owner: { name: string | null; email: string } | null } | null;
+  circuit: { society: { id: string; name: string } } | null;
 };
 
 export default async function FoundersPage() {
@@ -189,8 +190,8 @@ export default async function FoundersPage() {
         message: true,
         openedAt: true,
         acknowledgedAt: true,
-        meter: { select: { name: true, society: { select: { name: true } }, owner: { select: { name: true, email: true } } } },
-        circuit: { select: { society: { select: { name: true } } } },
+        meter: { select: { name: true, society: { select: { id: true, name: true } }, owner: { select: { name: true, email: true } } } },
+        circuit: { select: { society: { select: { id: true, name: true } } } },
       },
       orderBy: { openedAt: "asc" },
     }) as Promise<MeterAlertRow[]>,
@@ -208,7 +209,19 @@ export default async function FoundersPage() {
   const installations = settle(installationsR, EMPTY_INSTALLATIONS, "installations");
   const demos = settle(demosR, EMPTY_DEMOS, "demos");
   const openTickets = settle(ticketsR, [], "complaints");
-  const openMeterAlerts = settle(metersR, [], "meters");
+  // Societies marked a defaulter (2026-10-21): their alerts live on the
+  // Defaulters page, not in the main window. This page follows the SAME rule
+  // as the Notification centre (user-caught 2026-11-19: Mahagun Puram's alert
+  // showed here and not there — "it should be same"), so it leaves them out
+  // and says where they went.
+  const defaulterIds = await defaulterSocietyIds().catch(() => new Set<string>());
+  const isDefaulterAlert = (a: MeterAlertRow) => {
+    const id = a.meter?.society?.id ?? a.circuit?.society?.id ?? null;
+    return id !== null && defaulterIds.has(id);
+  };
+  const allMeterAlerts = settle(metersR, [], "meters");
+  const openMeterAlerts = allMeterAlerts.filter((a) => !isDefaulterAlert(a));
+  const defaulterAlertCount = allMeterAlerts.length - openMeterAlerts.length;
   const visitBoard = settle<VisitBoard | null>(visitsR, null, "visits");
   const staleApprovals = settle(visitApprovalsR, [], "visits");
 
@@ -545,9 +558,16 @@ export default async function FoundersPage() {
               })}
             </ul>
           )}
-          <CatLink domain="meters" href="/admin/notifications">
-            Notification centre →
-          </CatLink>
+          <div className="flex flex-wrap gap-x-5 gap-y-1">
+            <CatLink domain="meters" href="/admin/notifications">
+              Notification centre →
+            </CatLink>
+            {defaulterAlertCount > 0 && (
+              <CatLink domain="meters" href="/admin/defaulters">
+                {defaulterAlertCount} more from defaulter societies — Defaulters →
+              </CatLink>
+            )}
+          </div>
         </CatCard>
 
         <CatCard id="installations" domain="installations" className="min-w-0 p-5">

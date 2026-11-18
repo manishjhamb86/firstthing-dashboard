@@ -29,11 +29,13 @@ export async function sendEmail(input: {
   subject: string;
   html: string;
   text: string;
-}): Promise<{ error?: string }> {
+  /** Files sent with the message (2026-11-18, the monthly-close email). SES limits a message to 40 MB in all. */
+  attachments?: { fileName: string; contentType: string; bytes: Uint8Array }[];
+}): Promise<{ error?: string; messageId?: string }> {
   if (!sesConfigured()) return { error: "Email is not configured (SES_FROM_EMAIL/AWS_REGION missing)." };
   if (input.to.length === 0) return { error: "No recipient." };
   try {
-    await ses.send(
+    const out = await ses.send(
       new SendEmailCommand({
         FromEmailAddress: process.env.SES_FROM_EMAIL,
         Destination: { ToAddresses: input.to },
@@ -44,11 +46,21 @@ export async function sendEmail(input: {
               Html: { Data: input.html, Charset: "UTF-8" },
               Text: { Data: input.text, Charset: "UTF-8" },
             },
+            ...(input.attachments?.length
+              ? {
+                  Attachments: input.attachments.map((a) => ({
+                    RawContent: a.bytes,
+                    FileName: a.fileName,
+                    ContentType: a.contentType,
+                    ContentDisposition: "ATTACHMENT" as const,
+                  })),
+                }
+              : {}),
           },
         },
       }),
     );
-    return {};
+    return { messageId: out.MessageId };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     logger.warn("email.send_failed", { to: input.to, subject: input.subject, error: message });

@@ -407,6 +407,8 @@ model Society {
   showcaseConsents        ShowcaseConsent[]
   starListings            StarListing[]
 
+  monthlyCloseEmails MonthlyCloseEmail[]
+
   @@map("societies")
 }
 
@@ -657,6 +659,9 @@ model AdminUser {
   emsPumpMetersAssigned      EmsPumpMeter[]      @relation("EmsPumpMeterAssignedBy")
   emsPumpBaselinesRecorded   EmsPumpBaseline[]   @relation("EmsPumpBaselineRecordedBy")
   emsPumpBaselinesSuperseded EmsPumpBaseline[]   @relation("EmsPumpBaselineSupersededBy")
+
+  messageTemplatesUpdated MessageTemplate[]   @relation("MessageTemplateUpdatedBy")
+  monthlyCloseEmailsSent  MonthlyCloseEmail[] @relation("MonthlyCloseEmailSentBy")
 
   @@map("admin_users")
 }
@@ -5661,4 +5666,43 @@ model StarListing {
   @@index([status, expiresAt])
   @@index([societyId, status])
   @@map("star_listings")
+}
+
+/// One editable message used for every society (2026-11-18, user-asked) —
+/// keyed so a later template (a reminder, say) is a new row, not a new table.
+/// The monthly-close email is key "monthly_close". Words in braces are filled
+/// per society when it is sent (src/lib/monthly-close.ts).
+model MessageTemplate {
+  key         String     @id
+  subject     String
+  body        String
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+  updatedById String?    @map("updated_by_id")
+  updatedBy   AdminUser? @relation("MessageTemplateUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("message_templates")
+}
+
+/// A society's savings report and invoice sent by email from the monthly
+/// close desk (2026-11-18). One row per send, never edited: what was sent,
+/// to whom, with which attachments — so "emailed" on the list is a fact on
+/// record, and a second send is a second row.
+model MonthlyCloseEmail {
+  id               String   @id @default(cuid())
+  societyId        String   @map("society_id")
+  period           String
+  recipients       String[]
+  subject          String
+  body             String
+  attachments      String[]
+  billingInvoiceId String?  @map("billing_invoice_id")
+  reportIds        String[] @map("report_ids")
+  sentAt           DateTime @default(now()) @map("sent_at")
+  sentById         String   @map("sent_by_id")
+
+  society Society   @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  sentBy  AdminUser @relation("MonthlyCloseEmailSentBy", fields: [sentById], references: [id])
+
+  @@index([societyId, period])
+  @@map("monthly_close_emails")
 }

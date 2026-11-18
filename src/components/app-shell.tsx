@@ -184,6 +184,8 @@ export function AppShell({
       // Intake FIRST (2026-09-20): CON-47 made invoice-first the primary
       // monthly path — the platform reads the bill back rather than computing
       // it — so this is where the month actually enters.
+      // The monthly close desk (2026-11-18): report → bill → email, per society.
+      showBilling && { href: "/admin/billing/close", label: "Monthly close", icon: Receipt },
       showBilling && { href: "/admin/billing/intake", label: "Invoice intake", icon: Receipt },
       showBilling && { href: "/admin/billing", label: "Billing board", icon: Receipt },
       // Accountant-only (requireAccountant, FEAT-054-AC-4) — shown under the
@@ -197,6 +199,7 @@ export function AppShell({
     ]),
     ...group("settings", "Settings", Settings, [
       showUsers && { href: "/admin/users", label: "Admin users", icon: Users },
+      showBilling && { href: "/admin/settings/monthly-email", label: "Monthly email", icon: Mail },
       (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
       // Bound to one named account (2026-10-20).
       superAdmin && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },

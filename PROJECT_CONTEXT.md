@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-11-18 (inspection report generated as a PDF; the signed copy uploaded after it — see below)
+2026-11-18 (the monthly close desk: report → bill → email per society — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -7311,6 +7311,54 @@ the server, logged, key unchanged; signed out and another society's member both 
 downloaded it and replaced the photo with a PDF scan; fits 390px. Field 7/7 at Pixel 7 size — saved,
 download appeared once synced, the photo reached the office through the queue. 7 new unit cases;
 1,607 total, `tsc`/`lint` clean. Fixtures removed by id. Not deployed.
+
+## The monthly close desk: report → bill → email, per society (2026-11-18) — user-specified, designed first
+
+**The ask**: one screen to close each society's month — open a society, review and publish its
+savings report, fetch/process/release its Zoho bill, then email both to the customer as
+attachments with a generic template editable from the back office; the list shows each society's
+state. Designed on a canvas first (https://claude.ai/artifact/C4E8yzV7ggXicc21PxT7xy, six screens),
+then built: **Billing → Monthly close** (`/admin/billing/close`).
+
+**One door to existing decisions, not new ones.** Publishing goes through each circuit's own
+`publishSavingsReport` (frozen, versioned snapshots — a society with two circuits publishes both in
+one click); the fetch calls the same `runZohoSync` the intake's button does; checking the invoice
+is the existing intake review and releasing is the existing accountant release on the calculation
+page — the desk links to them and reads their state back. `src/lib/monthly-close.ts` (pure) owns
+the states and order: report `none|draft|partial|published`, bill
+`not_fetched|to_review|awaiting_release|released`, next step report → bill → email → done; the email
+opens only when the bill is released and no report is left unpublished. `monthly-close-loader.ts`
+is the one read for the list and the society page (a circuit "has a report" when it holds a
+monitoring day in the month on or after its monitoring start — the circuit report page's own rule).
+The default month is the one just ended, in India's time.
+
+**The email.** Recipients are only current members of the society's own register with an email
+(re-checked server-side — a typed address is refused). Attachments: the savings report as a PDF
+built with pdf-lib from the PUBLISHED snapshots (`savings-report-pdf.ts`, one page per circuit, so
+the attachment matches the portal exactly; it states the agreed and the month's saving without a
+met/not-met verdict, since tolerance is the billing run's judgment), and the Zoho invoice PDF read
+from S3. Sent through SES (`sendEmail` gained attachments) and recorded in `MonthlyCloseEmail` (who,
+when, to whom, what was attached) — "emailed" on the list is that row. The template is
+`MessageTemplate` key `monthly_close`, edited at **Settings → Monthly email** with fill-in words
+(`{society}`, `{month}`, `{savings_pct}`, `{saved_rupees}`, `{saved_kwh}`, `{invoice_no}`,
+`{invoice_total}`, `{due_date}`); an unknown word is refused on save, a missing value reads "—".
+The savings figures come from the published month (`publishedMonthsFor`), the same source as the
+portal. Publishing needs pipeline authority; fetching, sending and the template need the
+operations lead; releasing stays the accountant's. The shared PDF letterhead moved into
+`src/lib/pdf-kit.ts` (the inspection report uses it too). Migration
+`20261118120000_monthly_close` is additive (two tables).
+
+**Verified on dev** (system Chrome, rows asserted), 23/24 on a fixture society — the one miss was
+the check reading a page mid-navigation, re-confirmed rendered: the list's states, filter and
+search; email locked until both are final; the report published (one snapshot); the fetch answered
+"Zoho is not connected" in words; a submitted invoice read as awaiting release; the accountant's
+release reflected back; the email page filled the template with the society, month and invoice,
+listed both attachments and the two register members; an unknown template word refused before save;
+a saved template used on the next email; no sideways scroll at 390px. Both attachments were built
+for real (the report PDF rendered and checked; the invoice read back from S3). **Not exercised: the
+actual SES send** — this machine has no `SES_FROM_EMAIL`, so the screen correctly refuses; the first
+real send happens on stage. Note: releasing a bill still sends the existing "invoice is ready" link
+email too, so a society gets that plus the close email. Fixtures removed by id. Not deployed.
 
 ## Current Phase (archived application — history)
 

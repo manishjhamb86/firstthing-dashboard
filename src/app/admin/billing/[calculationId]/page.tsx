@@ -49,6 +49,9 @@ export default async function CalculationPage({
       },
       invoices: {
         include: {
+          // A service line billed to a pump room (2026-11-19) is part of the
+          // bill but makes no lighting fee line — listed beside them below.
+          lines: { where: { pumpMeterId: { not: null } }, orderBy: { lineNo: "asc" }, include: { pumpMeter: { select: { id: true, roomType: true, vendorSubjectLabel: true } } } },
           payments: true,
           extensions: { select: { days: true } },
           voidedBy: { select: { name: true, email: true } },
@@ -165,6 +168,9 @@ export default async function CalculationPage({
   // assertion of that, and it is shown rather than assumed.
   const lineSum = calc.feeLines.reduce((n, l) => n + l.amount, 0);
   const sumMatches = Math.abs(lineSum - calc.subtotal) < 0.005;
+  const pumpLines = calc.invoices.find((i) => !i.voidedAt)?.lines ?? [];
+  const pumpSum = pumpLines.reduce((n, l) => n + l.amount, 0);
+  const ROOM_KIND: Record<string, string> = { domestic: "Domestic", stp: "STP", fire: "Fire" };
 
   const unresolvedDeviationCount = calc.feeLines.filter(
     (l) => l.deviationReview && !["decided", "closed"].includes(l.deviationReview.state),
@@ -364,7 +370,7 @@ export default async function CalculationPage({
           <Card className="mb-6 overflow-hidden">
             <div className="px-6 pb-2 pt-6">
               <CardTitle className="mb-0 flex flex-wrap items-center gap-2">
-                Fee lines, per circuit
+                {pumpLines.length > 0 ? "Fee lines, per circuit and pump room" : "Fee lines, per circuit"}
                 {!sumMatches && (
                   <StatusChip tone="bad">Lines do not sum to the subtotal</StatusChip>
                 )}
@@ -439,14 +445,45 @@ export default async function CalculationPage({
                     <td className="num text-right font-semibold">{rupees(l.amount)}</td>
                   </tr>
                 ))}
+                {pumpLines.map((l) => (
+                  <tr key={l.id}>
+                    <td>
+                      <Link href={`/admin/pump-rooms/${l.pumpMeter!.id}`} className="font-medium hover:underline">
+                        Pump room{l.pumpMeter!.roomType ? ` · ${ROOM_KIND[l.pumpMeter!.roomType] ?? l.pumpMeter!.roomType}` : ""}
+                      </Link>
+                      <p className="text-[13px] text-[var(--text-muted)]">
+                        Invoice line {l.lineNo} · billed to the pump room — its savings come from the pump room&apos;s own baseline, not this line
+                      </p>
+                    </td>
+                    <td className="num text-right">—</td>
+                    <td className="num text-right">—</td>
+                    <td className="num text-right">—</td>
+                    <td className="num text-right">—</td>
+                    <td className="num text-right">—</td>
+                    <td>
+                      <StatusChip tone="neu">Pump room</StatusChip>
+                    </td>
+                    <td className="num text-right font-semibold">{rupees(l.amount)}</td>
+                  </tr>
+                ))}
               </tbody>
               <tfoot>
                 <tr>
                   <td colSpan={7} className="font-medium text-right">
-                    Subtotal — the sum of the lines above, not a separate figure
+                    {pumpLines.length > 0
+                      ? "Lighting subtotal — the sum of the circuit lines, the figure the savings are worked from"
+                      : "Subtotal — the sum of the lines above, not a separate figure"}
                   </td>
                   <td className="num text-right font-semibold">{rupees(calc.subtotal)}</td>
                 </tr>
+                {pumpLines.length > 0 && (
+                  <tr>
+                    <td colSpan={7} className="font-medium text-right">
+                      With the pump room — the invoice&apos;s subtotal
+                    </td>
+                    <td className="num text-right font-semibold">{rupees(calc.subtotal + pumpSum)}</td>
+                  </tr>
+                )}
                 {calc.total !== calc.subtotal && (
                   <tr>
                     <td colSpan={7} className="font-medium text-right">

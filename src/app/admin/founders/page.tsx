@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { Receipt, Zap, HardHat, LifeBuoy, Activity, Clock } from "lucide-react";
+import { Receipt, Zap, HardHat, LifeBuoy, Activity, Clock, Handshake } from "lucide-react";
 import { db } from "@/lib/db";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
@@ -9,6 +9,8 @@ import { ticketLateness, meterAlertLateness, type LatenessTone } from "@/lib/lat
 import { paymentSummary, installationBoard, demoBoard, type PaymentSummary, type InstallationRow, type DemoBoard } from "@/lib/founder-dashboard-loaders";
 import { YourTasks } from "../your-tasks";
 import { logger } from "@/lib/logger";
+import { loadVisitBoard, staleVisitApprovals, istToday, type VisitBoard } from "@/lib/customer-visits-loader";
+import { monthLabel } from "@/lib/format-date";
 
 // Five domains, five colours (2026-10-23, user-asked: "use more colours so
 // things are easily distinguishable... should look classic and beautiful
@@ -44,6 +46,9 @@ const CATEGORY = {
   installations: { icon: HardHat, chip: "chip-purple", bg: "var(--purple-bg)", fg: "var(--purple-fg)" },
   complaints: { icon: LifeBuoy, chip: "chip-pink", bg: "var(--pink-bg)", fg: "var(--pink-fg)" },
   demos: { icon: Activity, chip: "chip-violet", bg: "var(--violet-bg)", fg: "var(--violet-fg)" },
+  // Customer visits (2026-11-18) — the one domain left in green, the app's
+  // own "ok" tone, rather than a seventh invented hue.
+  visits: { icon: Handshake, chip: "chip-ok", bg: "var(--ok-bg)", fg: "var(--ok-fg)" },
   // Not a domain — the one entry here that ISN'T about "which of the five
   // business domains is this," used for the one card on this page that
   // genuinely spans all five (the merged "Not on time" list) rather than
@@ -167,7 +172,7 @@ export default async function FoundersPage() {
   // when its query fails") — allSettled rather than all, so one query
   // throwing (a demo circuit with a shape this page's own read did not
   // expect, say) loses that one card's rows, not the whole page.
-  const [paymentsR, installationsR, demosR, ticketsR, metersR] = await Promise.allSettled([
+  const [paymentsR, installationsR, demosR, ticketsR, metersR, visitsR, visitApprovalsR] = await Promise.allSettled([
     paymentSummary(now),
     installationBoard(now),
     demoBoard(now),
@@ -189,6 +194,8 @@ export default async function FoundersPage() {
       },
       orderBy: { openedAt: "asc" },
     }) as Promise<MeterAlertRow[]>,
+    loadVisitBoard(istToday(now).slice(0, 7), now),
+    staleVisitApprovals(now),
   ]);
 
   const settle = <T,>(r: PromiseSettledResult<T>, fallback: T, card: string): T => {
@@ -202,6 +209,8 @@ export default async function FoundersPage() {
   const demos = settle(demosR, EMPTY_DEMOS, "demos");
   const openTickets = settle(ticketsR, [], "complaints");
   const openMeterAlerts = settle(metersR, [], "meters");
+  const visitBoard = settle<VisitBoard | null>(visitsR, null, "visits");
+  const staleApprovals = settle(visitApprovalsR, [], "visits");
 
   const failedCards = new Set(
     [
@@ -210,6 +219,7 @@ export default async function FoundersPage() {
       demosR.status === "rejected" && "demos",
       ticketsR.status === "rejected" && "complaints",
       metersR.status === "rejected" && "meters",
+      (visitsR.status === "rejected" || visitApprovalsR.status === "rejected") && "visits",
     ].filter((x): x is string => x !== false),
   );
 
@@ -312,6 +322,35 @@ export default async function FoundersPage() {
     });
   }
 
+  // Customer visits: a society late for its feedback visit (the month's last
+  // 7 days), and a visit waiting too long for approval.
+  for (const r of visitBoard?.rows ?? []) {
+    if (!r.late) continue;
+    rows.push({
+      tone: visitBoard && visitBoard.daysLeft <= 3 ? "red" : "amber",
+      domain: "visits",
+      kind: "Visit",
+      societyName: r.name,
+      itemLabel: r.state === "pending" ? "Feedback visit logged, not yet approved" : r.state === "sent_back" ? "Feedback visit sent back, not corrected" : "No feedback visit this month",
+      clock: `${visitBoard?.daysLeft ?? 0} day${visitBoard?.daysLeft === 1 ? "" : "s"} left`,
+      href: r.feedback ? `/admin/visits/${r.feedback.id}` : `/admin/visits/new?societyId=${r.societyId}`,
+      actionLabel: r.feedback ? "Open" : "Log a visit",
+    });
+  }
+  for (const v of staleApprovals) {
+    const days = Math.floor((now.getTime() - v.loggedAt.getTime()) / 86_400_000);
+    rows.push({
+      tone: days >= 5 ? "red" : "amber",
+      domain: "visits",
+      kind: "Visit approval",
+      societyName: v.society.name,
+      itemLabel: "Visit logged, waiting for approval",
+      clock: `${days} days waiting`,
+      href: `/admin/visits/${v.id}`,
+      actionLabel: "Review",
+    });
+  }
+
   const toneRank = (t: LateRow["tone"]) => (t === "red" || t === "bad" ? 0 : 1);
   rows.sort((a, b) => toneRank(a.tone) - toneRank(b.tone));
 
@@ -325,13 +364,14 @@ export default async function FoundersPage() {
       : null,
     openTickets.length > 0 ? `${openTickets.length} open ticket${openTickets.length === 1 ? "" : "s"}` : null,
     demos.reviews.length + demos.delays.length > 0 ? `${demos.reviews.length + demos.delays.length} demo item${demos.reviews.length + demos.delays.length === 1 ? "" : "s"}` : null,
+    rows.some((r) => r.domain === "visits") ? `${rows.filter((r) => r.domain === "visits").length} visit item${rows.filter((r) => r.domain === "visits").length === 1 ? "" : "s"}` : null,
   ].filter((x): x is string => x !== null);
 
   return (
     <div>
       <PageHeader
         title="Founders' page"
-        subtitle="What is not on time, across payments, meters, installations, complaints and demos."
+        subtitle="What is not on time, across payments, meters, installations, complaints, demos and customer visits."
         chip={
           rows.length > 0 ? (
             <StatusChip tone={redCount > 0 ? "bad" : "warn"}>{rows.length} not on time</StatusChip>
@@ -601,6 +641,69 @@ export default async function FoundersPage() {
           </StatRow>
           <CatLink domain="demos" href="/admin/demo-monitoring">
             Demo monitoring →
+          </CatLink>
+        </CatCard>
+
+        <CatCard id="visits" domain="visits" className="min-w-0 p-5 lg:col-span-2">
+          <div className="mb-4 flex items-center gap-2.5">
+            <CategoryBadge domain="visits" />
+            <CardTitle className="mb-0">Customer visits · {monthLabel(istToday(now).slice(0, 7))}</CardTitle>
+          </div>
+          {failedCards.has("visits") || !visitBoard ? (
+            <p className="mb-3 text-[13px]" style={{ color: "var(--bad-fg)" }}>
+              Couldn&apos;t load this card&apos;s figures just now — the rest of the page is unaffected. Try reloading.
+            </p>
+          ) : (
+            <>
+              <div className="flex flex-wrap items-center gap-6">
+                <div className="min-w-0" style={{ flex: "1 1 300px" }}>
+                  <p className="text-[13px] text-[var(--text-muted)]">Monthly feedback visits approved</p>
+                  <p className="mt-1 text-[28px] font-bold">
+                    <span className="num">{visitBoard.counts.approved}</span> <span className="text-[15px] font-medium text-[var(--text-muted)]">of {visitBoard.counts.societies} societies</span>
+                  </p>
+                  {visitBoard.counts.societies > 0 && (
+                    <div
+                      role="img"
+                      aria-label={`${visitBoard.counts.approved} approved, ${visitBoard.counts.pendingSocieties} waiting for approval, ${visitBoard.counts.missing} not visited, of ${visitBoard.counts.societies}`}
+                      className="mt-2 flex h-3 gap-0.5 overflow-hidden rounded-full"
+                    >
+                      <div style={{ flex: visitBoard.counts.approved, background: "var(--ok-fg)" }} />
+                      <div style={{ flex: visitBoard.counts.pendingSocieties, background: "var(--accent)" }} />
+                      <div style={{ flex: visitBoard.counts.missing, background: "var(--border)" }} />
+                    </div>
+                  )}
+                  <p className="mt-2 text-[12.5px] text-[var(--text-muted)]">
+                    Approved {visitBoard.counts.approved} · waiting for approval {visitBoard.counts.pendingSocieties} · not visited {visitBoard.counts.missing} · {visitBoard.daysLeft} day{visitBoard.daysLeft === 1 ? "" : "s"} left
+                  </p>
+                </div>
+                <div className="min-w-0" style={{ flex: "1 1 320px" }}>
+                  <StatRow>
+                    <Stat label="All visits" value={visitBoard.counts.visits} />
+                    <Stat label="Average rating" value={visitBoard.counts.averageRating !== null ? `${visitBoard.counts.averageRating.toFixed(1)} / 5` : "—"} />
+                    <Stat label="Upsell leads" value={visitBoard.counts.leads} />
+                  </StatRow>
+                </div>
+              </div>
+              {visitBoard.rows.some((r) => r.state !== "approved") && (
+                <div className="mt-4 border-t pt-3" style={{ borderColor: "var(--border-subtle)" }}>
+                  <p className="mb-2 text-[13px] font-semibold">Still to visit this month</p>
+                  <ul className="flex flex-wrap gap-2">
+                    {visitBoard.rows
+                      .filter((r) => r.state !== "approved")
+                      .map((r) => (
+                        <li key={r.societyId} className="rounded-full border px-3 py-1 text-[13px]" style={{ borderColor: "var(--border)" }}>
+                          {r.name}
+                          {r.state === "pending" && <span className="text-[var(--text-muted)]"> · waiting for approval</span>}
+                          {r.state === "sent_back" && <span style={{ color: "var(--bad-fg)" }}> · sent back</span>}
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              )}
+            </>
+          )}
+          <CatLink domain="visits" href="/admin/visits">
+            Customer visits →
           </CatLink>
         </CatCard>
       </div>

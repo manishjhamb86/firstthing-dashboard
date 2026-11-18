@@ -58,6 +58,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       showUsers={perms.includes("manage_admins")}
       showSupport={perms.includes("manage_users")}
       showFounders={perms.includes("view_founder_dashboard")}
+      showVisitApprovals={perms.includes("approve_visits")}
     >
       {children}
     </AppShell>

@@ -38,7 +38,8 @@ export type DocType =
   | "surveyPhoto"
   // A task's required proof of completion (2026-10-05) — a gate pass, a
   // photo, any document the assignee uploads before marking it done.
-  | "taskProof";
+  | "taskProof"
+  | "customerVisit";
 
 const DOC_TYPE_FOLDER: Record<DocType, string> = {
   kycGstCertificate: "KYC",
@@ -56,6 +57,7 @@ const DOC_TYPE_FOLDER: Record<DocType, string> = {
   invoiceCopy: "Invoices",
   surveyPhoto: "Surveys",
   taskProof: "TaskProof",
+  customerVisit: "Visits",
 };
 
 const DOC_TYPE_LABEL: Record<DocType, string> = {
@@ -74,6 +76,7 @@ const DOC_TYPE_LABEL: Record<DocType, string> = {
   invoiceCopy: "Invoice",
   surveyPhoto: "SurveyPhoto",
   taskProof: "TaskProof",
+  customerVisit: "VisitPhoto",
 };
 
 function slugifySociety(name: string): string {

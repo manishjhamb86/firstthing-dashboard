@@ -71,5 +71,12 @@ export const PERMISSION_OPTIONS: {
     value: "view_founder_dashboard",
     label: "View founders' page",
     scope: "See everything that is late across payments, meters, installations, complaints and demos on one page.",
+  },  // Added 2026-11-18 with customer visits. A visit counts only once approved,
+  // and never by the person who logged it.
+  {
+    value: "approve_visits",
+    label: "Approve visits",
+    scope: "Approve or send back relationship managers' logged society visits, so they count for the month. Never one's own.",
   },
+
 ];

@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   Star,
   Flag,
+  Handshake,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
@@ -53,6 +54,7 @@ export function AppShell({
   showBilling,
   showSupport,
   showFounders,
+  showVisitApprovals = false,
   demoMode = false,
   demoAvailable = false,
   unreadCount = 0,
@@ -77,6 +79,7 @@ export function AppShell({
   showSupport: boolean;
   /** Manish and Yogesh only (view_founder_dashboard) — the one page that reads across every domain's own narrower gate. */
   showFounders: boolean;
+  showVisitApprovals?: boolean;
   children: ReactNode;
 }) {
   // CMP-19 (2026-09-15, user-asked: "too many menu tabs… few main sections
@@ -127,6 +130,10 @@ export function AppShell({
       // and approval (2026-10-21). Any admin may read it; acting is gated in
       // the actions.
       { href: "/admin/star-societies", label: "Star partners", icon: Star },
+      // Relationship managers' monthly society visits (2026-11-18). Any admin
+      // logs their own; approving is its own permission.
+      { href: "/admin/visits", label: "Customer visits", icon: Handshake },
+      showVisitApprovals && { href: "/admin/visits/approvals", label: "Visit approvals", icon: Handshake },
       // Every society's checked chronology, and the date change requests
       // (2026-09-28). Any admin may read it, like each society's own timeline.
       { href: "/admin/timeline", label: "Timeline", icon: History },

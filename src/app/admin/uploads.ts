@@ -49,6 +49,7 @@ const DOC_TYPE_PERMISSION: Record<DocType, "manage_pipeline" | "manage_survey"> 
   // whoever may act on the task, not a fixed admin permission) — listed
   // here only so DocType stays exhaustive.
   taskProof: "manage_survey",
+  customerVisit: "manage_pipeline",
 };
 
 export async function getUploadUrl(input: {

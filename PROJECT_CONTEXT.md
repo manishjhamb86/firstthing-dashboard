@@ -2,7 +2,7 @@
 
 ## Last Updated
 
-2026-11-18 (the monthly close desk: report → bill → email per society — see below)
+2026-11-18 (customer visits — see below)
 
 ## Decision of record — greenfield rebuild, migration deferred (2026-08-13, the user's call)
 
@@ -7376,6 +7376,43 @@ filed July report hid every month published after it (French Apartment's publish
 reached its Documents tab; the same for every society with a filed report). It now applies per
 month: a filed report replaces the published one for ITS month only (`society-documents.ts`). The
 demo-report suppression on the dashboard and Documents is unchanged.
+
+## Customer visits: logged by the relationship manager, counted once someone else approves (2026-11-18) — user-specified, designed first
+
+**The ask**: a relationship manager visits every society at least monthly and logs each visit with
+its agenda; someone in the back office approves it, and only then does it count; there can be many
+visits for many reasons, but one feedback & upselling visit is required each month; the founders'
+page summarises the month. Designed on a canvas first
+(https://claude.ai/artifact/HwxPyi4MWChd64voc7CFqw), built with the defaults the user accepted:
+a new `approve_visits` permission and never one's own visit; only an APPROVED `feedback_upsell`
+visit meets the month; the phone's location is recorded; a society is late in the month's last 7
+days.
+
+**Model** (migration `20261118140000_customer_visits`, additive): `CustomerVisit` — society, visit
+time (wall clock), period, purpose (`feedback_upsell | complaint_followup | payment_followup |
+committee_meeting | other`), agenda, outcome, who was met, rating 1–5 and service interests
+(feedback visits only), follow-ups, up to 4 photos (public `Documents/{society}/{YYYY-MM}/Visits/`),
+location with distance from the society's recorded coordinates, status `pending | approved |
+sent_back`, reviewer and note, soft withdrawal with a reason. Rules in `src/lib/customer-visits.ts`
+(pure, tested): `monthVisitState`, `isVisitLate`, `refuseVisit`, `refuseReview`, distance and its
+words (within 300 m = "at the society"). One loader (`customer-visits-loader.ts`) feeds the board and
+the founders' page; the societies owed a visit are the billing ones.
+
+**Screens**: Societies → **Customer visits** (`/admin/visits`): the month per society with its
+feedback-visit state, other visits, last visit, filters and counts. **Log a visit**
+(`/admin/visits/new`) is phone-first and asks for the location when saving (refusing it still
+saves, and the visit says so). The visit page approves or sends back with a required reason (only
+someone else holding the permission); the manager corrects a sent-back visit and it returns for
+approval; approval is a compare-and-set so two approvers cannot both decide. **Visit approvals**
+(`/admin/visits/approvals`) approves several at once; one's own are shown but not selectable. The
+founders' page gains a Customer visits card and two "not on time" rows: no approved feedback visit
+in the last 7 days, and a visit waiting over 2 days for approval.
+
+**Verified on dev** (system Chrome, two accounts, rows asserted), 13/13: logged at phone width with
+location (59 m, "At the society"); the manager offered no approval and refused the approvals page;
+bulk approval counted; send-back stored its reason, the manager corrected and it went back to
+pending; the approver's own visit (made so behind the open page) refused by the server; the board
+and the founders' card read the month. Fixtures removed. 1,623 unit tests, `tsc`/`lint` clean.
 
 ## Current Phase (archived application — history)
 

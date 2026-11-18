@@ -66,6 +66,10 @@ enum AdminPermission {
   // grant (docs/research/reports/Founder operations dashboard.md).
   view_founder_dashboard
 
+  // Customer visits (2026-11-18): approves a relationship manager's logged
+  // visit so it counts. Never one's own — refused at the decision.
+  approve_visits
+
   @@map("admin_permission")
 }
 
@@ -409,6 +413,8 @@ model Society {
 
   monthlyCloseEmails MonthlyCloseEmail[]
 
+  customerVisits CustomerVisit[]
+
   @@map("societies")
 }
 
@@ -662,6 +668,10 @@ model AdminUser {
 
   messageTemplatesUpdated MessageTemplate[]   @relation("MessageTemplateUpdatedBy")
   monthlyCloseEmailsSent  MonthlyCloseEmail[] @relation("MonthlyCloseEmailSentBy")
+
+  customerVisitsLogged   CustomerVisit[] @relation("CustomerVisitLoggedBy")
+  customerVisitsReviewed CustomerVisit[] @relation("CustomerVisitReviewedBy")
+  customerVisitsVoided   CustomerVisit[] @relation("CustomerVisitVoidedBy")
 
   @@map("admin_users")
 }
@@ -5705,4 +5715,76 @@ model MonthlyCloseEmail {
 
   @@index([societyId, period])
   @@map("monthly_close_emails")
+}
+
+/// Why a relationship manager visited a society (2026-11-18, user-specified).
+/// One approved feedback_upsell visit per society per month is the
+/// requirement; the others are recorded and never stand in for it.
+enum CustomerVisitPurpose {
+  feedback_upsell
+  complaint_followup
+  payment_followup
+  committee_meeting
+  other
+
+  @@map("customer_visit_purpose")
+}
+
+enum CustomerVisitStatus {
+  pending
+  approved
+  sent_back
+
+  @@map("customer_visit_status")
+}
+
+/// A relationship manager's visit to a society (2026-11-18). It counts only
+/// once someone else holding approve_visits approves it; sent back, it waits
+/// for the manager to correct it. Never deleted — withdrawn with a reason.
+model CustomerVisit {
+  id        String               @id @default(cuid())
+  societyId String               @map("society_id")
+  /// Wall clock, read with UTC parts — a time typed by a person (format-date.ts).
+  visitedAt DateTime             @map("visited_at")
+  /// YYYY-MM of visitedAt — the month the visit counts towards.
+  period    String
+  purpose   CustomerVisitPurpose
+  agenda    String
+  outcome   String
+  metName   String?              @map("met_name")
+  metRole   String?              @map("met_role")
+  /// 1–5, feedback visits only.
+  rating    Int?
+  /// water_tanks | pump_automation | more_lighting — feedback visits only.
+  interests String[]
+  followUps String?              @map("follow_ups")
+  photoKeys String[]             @map("photo_keys")
+
+  /// Where the phone was when the visit was logged, when it allowed it.
+  latitude          Float?
+  longitude         Float?
+  locationAccuracyM Float? @map("location_accuracy_m")
+  /// From the society's recorded location, when both are known.
+  distanceM         Float? @map("distance_m")
+
+  status       CustomerVisitStatus @default(pending)
+  loggedById   String              @map("logged_by_id")
+  loggedAt     DateTime            @default(now()) @map("logged_at")
+  updatedAt    DateTime            @updatedAt @map("updated_at")
+  reviewedById String?             @map("reviewed_by_id")
+  reviewedAt   DateTime?           @map("reviewed_at")
+  reviewNote   String?             @map("review_note")
+
+  voidedAt   DateTime? @map("voided_at")
+  voidedById String?   @map("voided_by_id")
+  voidReason String?   @map("void_reason")
+
+  society    Society    @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  loggedBy   AdminUser  @relation("CustomerVisitLoggedBy", fields: [loggedById], references: [id])
+  reviewedBy AdminUser? @relation("CustomerVisitReviewedBy", fields: [reviewedById], references: [id])
+  voidedBy   AdminUser? @relation("CustomerVisitVoidedBy", fields: [voidedById], references: [id])
+
+  @@index([period, societyId])
+  @@index([status])
+  @@map("customer_visits")
 }

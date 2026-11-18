@@ -16,7 +16,7 @@ import {
 import { NotificationsClient } from "../notifications/notifications-client";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Defaulter societies" };
+export const metadata = { title: "Defaulters" };
 
 /**
  * Societies marked a defaulter (2026-10-21, user-asked), and their own
@@ -53,7 +53,7 @@ export default async function DefaultersPage() {
   return (
     <>
       <PageHeader
-        title="Defaulter societies"
+        title="Defaulters"
         subtitle="Societies marked as having stopped paying, or never having paid at all — and their notifications, moved out of the main window."
         chip={<StatusChip tone={societies.length > 0 ? "bad" : "ok"}>{societies.length} marked</StatusChip>}
       />

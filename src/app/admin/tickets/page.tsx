@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/format-date";
 import { AdminTicketControls } from "./ticket-controls";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Support tickets" };
+export const metadata = { title: "Society requests" };
 
 const TYPE_LABEL: Record<string, string> = {
   complaint: "Complaint",
@@ -92,7 +92,7 @@ export default async function AdminTicketsPage({
   return (
     <>
       <PageHeader
-        title="Support tickets"
+        title="Society requests"
         subtitle="What societies have raised — complaints, device replacements, pickups."
         chip={
           counts.open > 0 ? <StatusChip tone="warn">{counts.open} open</StatusChip> : undefined

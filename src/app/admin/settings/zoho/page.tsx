@@ -25,7 +25,7 @@ export default async function ZohoSettingsPage() {
   return (
     <>
       <PageHeader
-        backHref="/admin"
+        backHref="/admin/settings"
         title="Zoho Invoice"
         subtitle="Invoices raised in Zoho Invoice are fetched into Invoice intake with their PDFs, every 6 hours or on request. Read only. Operations only."
         chip={

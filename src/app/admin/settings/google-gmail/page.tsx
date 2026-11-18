@@ -25,7 +25,7 @@ export default async function GoogleGmailSettingsPage() {
   return (
     <>
       <PageHeader
-        backHref="/admin"
+        backHref="/admin/settings"
         title="Google Gmail"
         subtitle="Reads the dedicated pump-room mailbox only — the EMS vendor's daily reports are forwarded here and ingested automatically. Operations only."
         chip={

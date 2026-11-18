@@ -236,7 +236,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
               Billing is unchanged — invoices it owes stay owed and keep being followed up. Its notifications have
               moved out of the main window into the{" "}
               <Link href="/admin/defaulters" className="underline">
-                Defaulter societies
+                Defaulters
               </Link>{" "}
               section.
             </p>

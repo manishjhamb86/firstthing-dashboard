@@ -24,7 +24,7 @@ export default async function GoogleCalendarSettingsPage() {
   return (
     <>
       <PageHeader
-        backHref="/admin"
+        backHref="/admin/settings"
         title="Google Calendar"
         subtitle="Tasks, site visits and meetings go onto people's Google calendars, with Meet links for meetings. Operations only."
         chip={

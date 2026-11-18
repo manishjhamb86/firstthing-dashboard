@@ -202,7 +202,7 @@ export default async function AdminHomePage() {
           is this page's subtitle; the waiting work is its chip, and the chip
           is a link, same as the catalog's and live monitoring's. */}
       <PageHeader
-        title="Portfolio"
+        title="Home"
         subtitle={today}
         action={
           // Quick access (user-asked 2026-09-25): the three places most days start.

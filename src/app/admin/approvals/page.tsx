@@ -7,7 +7,7 @@ import { PENDING_APPROVAL_KIND_LABEL } from "@/lib/pending-approval";
 import { ApprovalCard } from "./approval-card";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Pending approvals" };
+export const metadata = { title: "Corrections waiting for approval" };
 
 /**
  * Corrections to the demo process, benchmark, light-count change and
@@ -42,7 +42,7 @@ export default async function PendingApprovalsPage() {
   return (
     <>
       <PageHeader
-        title="Pending approvals"
+        title="Corrections waiting for approval"
         subtitle="Corrections to the demo process, benchmark, light-count change and agreement — anyone else's are queued here until the named account approves them."
         chip={pending.length > 0 ? <StatusChip tone="warn">{pending.length} waiting</StatusChip> : undefined}
       />

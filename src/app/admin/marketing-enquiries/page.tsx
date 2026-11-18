@@ -6,7 +6,7 @@ import { formatDate } from "@/lib/format-date";
 import { EnquiryControls } from "./enquiry-controls";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Marketing enquiries" };
+export const metadata = { title: "Website enquiries" };
 
 // The public homepage's "Request an Assessment" form lands here (2026-10-16,
 // user-asked: "wire the backend apis for contact us"). Any admin may read
@@ -55,7 +55,7 @@ export default async function MarketingEnquiriesPage({
   return (
     <>
       <PageHeader
-        title="Marketing enquiries"
+        title="Website enquiries"
         subtitle="Requests from the public homepage's assessment form."
         chip={openCount > 0 ? <StatusChip tone="warn">{openCount} open</StatusChip> : undefined}
       />

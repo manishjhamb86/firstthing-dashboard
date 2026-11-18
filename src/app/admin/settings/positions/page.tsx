@@ -18,7 +18,7 @@ export default async function PositionsPage() {
   });
   return (
     <>
-      <PageHeader title="Member positions" subtitle="The positions a society member can hold — offered as a dropdown when adding a member." />
+      <PageHeader backHref="/admin/settings" title="Member positions" subtitle="The positions a society member can hold — offered as a dropdown when adding a member." />
       <Card className="p-5">
         <PositionsClient positions={positions.map((p) => ({ id: p.id, name: p.name, active: p.active, holders: p._count.members }))} />
       </Card>

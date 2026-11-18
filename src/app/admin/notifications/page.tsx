@@ -76,7 +76,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
           {defaulterIds.size} {defaulterIds.size === 1 ? "society" : "societies"} marked a defaulter — their notifications
           are kept out of this window and shown on{" "}
           <Link href="/admin/defaulters" className="link-arrow">
-            Defaulter societies
+            Defaulters
           </Link>
           .
         </p>

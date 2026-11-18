@@ -3,6 +3,36 @@ import { resolveAdmin } from "@/lib/admin-permissions";
 import { AppShell } from "@/components/app-shell";
 import { unreadNotificationCount } from "@/lib/notifications";
 import { demoModeAvailable } from "@/lib/demo-mode";
+import { db } from "@/lib/db";
+import { isSuperAdmin } from "@/lib/super-admin";
+import type { ApprovalCounts } from "@/components/app-shell";
+
+/**
+ * What waits on THIS viewer in each approvals queue (2026-11-19). A count is
+ * a promise that the viewer can act on it, so each one follows the queue's
+ * own rule: corrections only for the named account; date changes for
+ * "Approve date changes", never one's own (the named account may); visits
+ * for "Approve visits", never one's own; release for the accountant.
+ */
+async function approvalCounts(admin: { id: string; email: string | null; permissions: string[] } | null): Promise<ApprovalCounts> {
+  if (!admin) return { corrections: 0, dates: 0, visits: 0, release: 0 };
+  const perms = admin.permissions;
+  const superAdmin = isSuperAdmin(admin.email);
+  const zero = Promise.resolve(0);
+  const [corrections, dates, visits, release] = await Promise.all([
+    superAdmin ? db.pendingApproval.count({ where: { status: "pending" } }) : zero,
+    perms.includes("approve_date_changes")
+      ? db.dateChangeRequest.count({ where: { status: "pending", ...(superAdmin ? {} : { requestedById: { not: admin.id } }) } })
+      : zero,
+    perms.includes("approve_visits")
+      ? db.customerVisit.count({ where: { status: "pending", voidedAt: null, loggedById: { not: admin.id } } })
+      : zero,
+    perms.includes("release_billing")
+      ? db.monthlyCalculation.count({ where: { source: "invoice", status: "submitted", supersededById: null } })
+      : zero,
+  ]);
+  return { corrections, dates, visits, release };
+}
 
 // One shell for every /admin route — the sidebar nav from 05a-theme-system
 // §3.7. This layout only decides what the nav shows; every page below it
@@ -32,6 +62,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const demoAvailable = demoModeAvailable();
   const demoOn = demoAvailable && admin?.demoMode === true;
   const perms = (admin?.permissions ?? []) as string[];
+  // The jump-to search's societies — a few dozen rows, read once per page.
+  const [approvals, societies] = await Promise.all([
+    approvalCounts(admin ? { id: admin.id, email: admin.email, permissions: perms } : null),
+    admin ? db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }) : Promise.resolve([]),
+  ]);
 
   return (
     <AppShell
@@ -59,6 +94,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       showSupport={perms.includes("manage_users")}
       showFounders={perms.includes("view_founder_dashboard")}
       showVisitApprovals={perms.includes("approve_visits")}
+      showRelease={perms.includes("release_billing")}
+      approvals={approvals}
+      jumpSocieties={societies}
     >
       {children}
     </AppShell>

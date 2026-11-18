@@ -7,39 +7,37 @@ import {
   Droplets,
   Building2,
   Target,
-  Activity,
-  SignalHigh,
-  Gauge,
-  HardHat,
-  Lightbulb,
   Receipt,
-  Users,
   Zap,
-  FileText,
   LifeBuoy,
-  ClipboardCheck,
   Settings,
   Package,
   ListChecks,
-  History,
-  Mail,
-  Wrench,
-  Inbox,
   ShieldCheck,
-  ShieldAlert,
-  Star,
   Flag,
-  Handshake,
 } from "lucide-react";
 import { DemoModeToggle } from "@/components/demo-mode-toggle";
 import { NotificationBell } from "@/components/notification-bell";
+import { JumpTo } from "@/components/jump-to";
 import { NavShell, type NavEntry, type NavGroup, type NavItem } from "@/components/nav-shell";
 import { isSuperAdmin } from "@/lib/super-admin";
+import { SETTINGS_ROUTES, settingsSections } from "@/lib/settings-sections";
+import type { JumpPage, JumpSociety } from "@/lib/jump-search";
 import type { ThemeId } from "@/lib/theme";
+
+/** Things waiting on this viewer, per approvals queue — read in the layout. */
+export type ApprovalCounts = { corrections: number; dates: number; visits: number; release: number };
 
 // The admin surface's nav. The chrome itself lives in NavShell, which the
 // society portal also wears (2026-08-26) — this file is now just which items
 // an admin sees, and the permission flags that decide them.
+//
+// Reorganised 2026-11-19 (user-asked: "most used prioritised to top, no
+// duplicates, each submenu under the correct menu"; designed on the canvas
+// "Admin navigation" first). The viewer's own work first (Home, Founders'
+// page, Tasks, Schedule, Approvals), then the workspace by how often it is
+// used, then Settings as one page. Every approval queue sits under Approvals;
+// after-sale work under Service; Societies keeps only society records.
 export function AppShell({
   theme,
   email,
@@ -55,6 +53,9 @@ export function AppShell({
   showSupport,
   showFounders,
   showVisitApprovals = false,
+  showRelease = false,
+  approvals = { corrections: 0, dates: 0, visits: 0, release: 0 },
+  jumpSocieties = [],
   demoMode = false,
   demoAvailable = false,
   unreadCount = 0,
@@ -80,149 +81,137 @@ export function AppShell({
   /** Manish and Yogesh only (view_founder_dashboard) — the one page that reads across every domain's own narrower gate. */
   showFounders: boolean;
   showVisitApprovals?: boolean;
+  /** The accountant's release queue (release_billing only). */
+  showRelease?: boolean;
+  approvals?: ApprovalCounts;
+  jumpSocieties?: JumpSociety[];
   children: ReactNode;
 }) {
-  // CMP-19 (2026-09-15, user-asked: "too many menu tabs… few main sections
-  // and sub sections"): two levels, grouped by the operator's domain. A group
-  // renders only when the viewer can see at least one of its items — a field
-  // account sees Portfolio, Schedule, Deals, Societies and no empty headers.
-  const group = (id: string, label: string, icon: NavGroup["icon"], entries: Array<NavItem | false>): NavEntry[] => {
+  // CMP-19: two levels. A group renders only when the viewer can see at
+  // least one of its items, so nobody gets an empty header.
+  const group = (id: string, label: string, icon: NavGroup["icon"], entries: Array<NavItem | false>, badge?: number): NavEntry[] => {
     const visible = entries.filter((e): e is NavItem => e !== false);
-    return visible.length > 0 ? [{ id, label, icon, items: visible }] : [];
+    return visible.length > 0 ? [{ id, label, icon, items: visible, badge }] : [];
   };
-  // Bound to one named account (2026-10-20, user-asked): these integration
-  // credentials and the data-correction switch are narrower than the
-  // broader manage_admins permission the rest of Settings uses — hiding the
-  // nav entries, not just gating the pages, is the courtesy half of it; the
-  // pages and their Server Actions re-check the same account independently.
+  // Bound to one named account (2026-10-20): integration credentials and the
+  // data-correction switch. Hiding the links is the courtesy half; the pages
+  // and their actions re-check the same account independently.
   const superAdmin = isSuperAdmin(email);
+  const settings = settingsSections({
+    manageAdmins: showUsers,
+    billing: showBilling,
+    pipeline: showPipeline,
+    field: showField,
+    superAdmin,
+  });
+
+  const corrections = approvals.corrections;
+  const dates = approvals.dates;
+  const visits = showVisitApprovals ? approvals.visits : 0;
+  const release = showRelease ? approvals.release : 0;
 
   const items: NavEntry[] = [
-    { href: "/admin", label: "Portfolio", icon: LayoutDashboard, exact: true },
-    // Everyone has appointments — meetings for sales, visits for the field —
-    // so this is not permission-gated (the user's call, 2026-08-25: one
-    // schedule module, visible to everyone as their own calendar).
-    { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
-    // Tasks (2026-09-25): everyone's own work as line items — tasks set for
-    // each other plus the deal's own assignments. Not permission-gated.
+    { href: "/admin", label: "Home", icon: LayoutDashboard, exact: true },
+    // Manish and Yogesh only (view_founder_dashboard, 2026-10-22) — under
+    // their home screen, since they open it as often.
+    ...(showFounders ? [{ href: "/admin/founders", label: "Founders\u2019 page", icon: Flag }] : []),
+    // Everyone's own work — not permission-gated.
     { href: "/admin/tasks", label: "Tasks", icon: ListChecks },
-    // Manish and Yogesh only (view_founder_dashboard, 2026-10-22) — the
-    // portfolio-wide "not on time" view across every domain's own narrower
-    // gate, so it sits beside Portfolio/Schedule/Tasks rather than inside a
-    // domain group it does not belong to any one of.
-    ...(showFounders ? [{ href: "/admin/founders", label: "Founders' page", icon: Flag }] : []),
-    ...group("deals", "Deals", Target, [
-      showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
-      // The field team's own list — they do not get the deal (2026-08-24).
-      showField && { href: "/admin/field", label: "Field work", icon: HardHat },
-      // The public homepage's own "Request an Assessment" form (2026-10-16)
-      // — sales territory, same gate as the pipeline itself.
-      showPipeline && { href: "/admin/marketing-enquiries", label: "Marketing enquiries", icon: Inbox },
-    ]),
+    { href: "/admin/schedule", label: "Schedule", icon: CalendarDays },
+    // Every queue of decisions, in one place (2026-11-19). Corrections and
+    // date changes are readable by any admin so a requester can follow
+    // theirs; the count is only what waits on THIS viewer.
+    ...group(
+      "approvals",
+      "Approvals",
+      ShieldCheck,
+      [
+        { href: "/admin/approvals", label: "Corrections", icon: ShieldCheck, badge: corrections },
+        { href: "/admin/timeline/requests", label: "Date changes", icon: ShieldCheck, badge: dates },
+        showVisitApprovals && { href: "/admin/visits/approvals", label: "Visit sign-off", icon: ShieldCheck, badge: visits },
+        showRelease && { href: "/admin/billing/release-queue", label: "Bill release", icon: ShieldCheck, badge: release },
+      ],
+      corrections + dates + visits + release,
+    ),
+    { divider: "workspace" },
     ...group("societies", "Societies", Building2, [
-      { href: "/admin/societies", label: "Societies", icon: Building2 },
-      // Societies that have stopped paying, or never paid at all
-      // (2026-10-21) — and the section of the notification feed their own
-      // alerts/billing/requests moved into. Any admin may read it, the same
-      // transparency as Timeline and Pending approvals below.
-      { href: "/admin/defaulters", label: "Defaulter societies", icon: ShieldAlert },
-      // Societies that pay on time, shown to other societies with consent
-      // and approval (2026-10-21). Any admin may read it; acting is gated in
-      // the actions.
-      { href: "/admin/star-societies", label: "Star partners", icon: Star },
-      // Relationship managers' monthly society visits (2026-11-18). Any admin
-      // logs their own; approving is its own permission.
-      { href: "/admin/visits", label: "Customer visits", icon: Handshake },
-      showVisitApprovals && { href: "/admin/visits/approvals", label: "Visit approvals", icon: Handshake },
-      // Every society's checked chronology, and the date change requests
-      // (2026-09-28). Any admin may read it, like each society's own timeline.
-      { href: "/admin/timeline", label: "Timeline", icon: History },
-      // Corrections to the demo process, benchmark, light-count change and
-      // agreement, queued for one named account's approval (2026-10-20).
-      // Any admin may read it, same transparency as the date-change queue.
-      { href: "/admin/approvals", label: "Pending approvals", icon: ShieldCheck },
-      // The monthly per-society motion-sensor checklist (2026-09-12) — field
-      // work, same gate as gate passes and benchmark rescale entry.
-      showField && { href: "/admin/inspections", label: "Inspections", icon: ClipboardCheck },
-      // One place to file any document, whatever kind it is (2026-08-26).
-      // Sits here rather than under Deals (2026-09-20): the screen asks which
-      // society first and scopes everything else to it, so it reads as a
-      // society surface, not a deal one.
-      showPipeline && { href: "/admin/documents", label: "Documents", icon: FileText },
-      showSupport && { href: "/admin/tickets", label: "Support tickets", icon: LifeBuoy },
-      // What the field team sends with the Help button (2026-09-30). Everyone
-      // may read it; acting is for operations, bug receivers and recipients.
-      { href: "/admin/help", label: "Team help desk", icon: LifeBuoy },
-      // Facility management companies and their people (2026-09-25).
+      { href: "/admin/societies", label: "All societies", icon: Building2 },
+      { href: "/admin/defaulters", label: "Defaulters", icon: Building2 },
+      { href: "/admin/star-societies", label: "Star partners", icon: Building2 },
+      // Asks which society first and scopes everything to it (2026-09-20).
+      showPipeline && { href: "/admin/documents", label: "Documents", icon: Building2 },
+      { href: "/admin/timeline", label: "Timeline", icon: Building2 },
       (showUsers || showPipeline) && { href: "/admin/facility-management", label: "Facility management", icon: Building2 },
     ]),
     // Two tabs, not one: a circuit chasing a benchmark and a society holding
-    // one are different questions with different cadences (2026-08-21).
+    // one are different questions (2026-08-21). Live first: checked daily.
     ...group("lighting", "Lighting", Zap, [
-      showMonitoring && { href: "/admin/demo-monitoring", label: "Demo monitoring", icon: Activity },
-      showMonitoring && { href: "/admin/live-monitoring", label: "Live monitoring", icon: SignalHigh },
-      // The eWeLink meter mirror: an account's devices, assigned to what they
-      // serve — a circuit.
+      showMonitoring && { href: "/admin/live-monitoring", label: "Live monitoring", icon: Zap },
+      showMonitoring && { href: "/admin/demo-monitoring", label: "Demo monitoring", icon: Zap },
       showMeters && { href: "/admin/meters", label: "Meters", icon: Zap },
-      // Named for what it is, not for what it holds: next to "Meters" the
-      // old label "Readings" read as a synonym for it (2026-09-20).
-      showReadings && { href: "/admin/readings", label: "Monthly uploads", icon: Gauge },
-      // Moved here from Settings (2026-10-17, user-caught: filed it looking
-      // for "where we map which light replaces with what" and couldn't find
-      // it under a generic label with no connection to lighting at all).
-      showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Lightbulb },
+      showReadings && { href: "/admin/readings", label: "Monthly uploads", icon: Zap },
+      // Moved here from Settings (2026-10-17, user-caught).
+      showCatalog && { href: "/admin/device-catalog", label: "Device catalog", icon: Zap },
     ]),
-    // Water tank monitoring (2026-08-25) — mirrors the Smart Life account,
-    // society-management's to run. Its own service line, its own group.
-    ...group("water", "Water", Droplets, [
-      showTanks && { href: "/admin/water-tanks", label: "Water tanks", icon: Droplets },
-      // EMS pump-room energy meter — same society-management gate as tanks.
-      showTanks && { href: "/admin/pump-rooms", label: "Pump rooms", icon: Zap },
+    // Looking after live societies (2026-11-19): visits, monthly
+    // inspections, what societies raise, and what the field team raises.
+    ...group("service", "Service", LifeBuoy, [
+      { href: "/admin/visits", label: "Customer visits", icon: LifeBuoy },
+      showField && { href: "/admin/inspections", label: "Inspections", icon: LifeBuoy },
+      showSupport && { href: "/admin/tickets", label: "Society requests", icon: LifeBuoy },
+      { href: "/admin/help", label: "Team help desk", icon: LifeBuoy },
     ]),
-    // Inventory & device lifecycle (2026-09-25) — stock is received and moved
-    // by the field and pipeline teams.
-    ...group("inventory", "Inventory", Package, [
-      (showField || showPipeline) && { href: "/admin/inventory", label: "Stock", icon: Package, exact: true },
-      (showField || showPipeline) && { href: "/admin/inventory/scan", label: "Scan", icon: Package },
-      (showField || showPipeline) && { href: "/admin/inventory/receive", label: "Receive stock", icon: Package },
-      (showField || showPipeline) && { href: "/admin/inventory/setup", label: "Offices, suppliers & items", icon: Package },
+    ...group("deals", "Deals", Target, [
+      showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
+      // The public homepage's "Request an Assessment" form (2026-10-16).
+      showPipeline && { href: "/admin/marketing-enquiries", label: "Website enquiries", icon: Target },
+      // The field team's own list — they do not get the deal (2026-08-24).
+      showField && { href: "/admin/field", label: "Field work", icon: Target },
     ]),
     ...group("billing", "Billing", Receipt, [
-      // Intake FIRST (2026-09-20): CON-47 made invoice-first the primary
-      // monthly path — the platform reads the bill back rather than computing
-      // it — so this is where the month actually enters.
-      // The monthly close desk (2026-11-18): report → bill → email, per society.
+      // Where each month starts: report → bill → email (2026-11-18).
       showBilling && { href: "/admin/billing/close", label: "Monthly close", icon: Receipt },
       showBilling && { href: "/admin/billing/intake", label: "Invoice intake", icon: Receipt },
       showBilling && { href: "/admin/billing", label: "Billing board", icon: Receipt },
-      // Accountant-only (requireAccountant, FEAT-054-AC-4) — shown under the
-      // same broad showBilling boolean as Deviations (ops-only, the other
-      // direction), matching this group's own established pattern of each
-      // page doing its own tighter gate and redirect.
-      showBilling && { href: "/admin/billing/release-queue", label: "Release queue", icon: Receipt },
       showBilling && { href: "/admin/billing/deviations", label: "Deviations", icon: Receipt },
-      // Retail sales (2026-09-25) — customers FirsThing sells items to directly.
       showBilling && { href: "/admin/retail-customers", label: "Retail customers", icon: Receipt },
     ]),
-    ...group("settings", "Settings", Settings, [
-      showUsers && { href: "/admin/users", label: "Admin users", icon: Users },
-      showBilling && { href: "/admin/settings/monthly-email", label: "Monthly email", icon: Mail },
-      (showUsers || showPipeline) && { href: "/admin/settings/positions", label: "Member positions", icon: Users },
-      // Bound to one named account (2026-10-20).
-      superAdmin && { href: "/admin/settings/google-calendar", label: "Google Calendar", icon: CalendarDays },
-      // Bound to one named account — reads the dedicated pump-room mailbox
-      // only, nothing else.
-      superAdmin && { href: "/admin/settings/google-gmail", label: "Google Gmail", icon: Mail },
-      // Bound to one named account (2026-10-20).
-      superAdmin && { href: "/admin/settings/zoho", label: "Zoho Invoice", icon: Receipt },
-      // Bound to one named account (2026-10-20) — credentials are env-only
-      // (same AWS account as S3), this just states whether it's configured
-      // and offers a test send.
-      superAdmin && { href: "/admin/settings/email", label: "Email", icon: Mail },
-      // Bound to one named account (2026-10-20) — temporary, admin-
-      // toggleable capabilities for one-time cleanup work.
-      superAdmin && { href: "/admin/settings/corrections", label: "Data corrections", icon: Wrench },
+    ...group("water", "Water", Droplets, [
+      showTanks && { href: "/admin/water-tanks", label: "Water tanks", icon: Droplets },
+      showTanks && { href: "/admin/pump-rooms", label: "Pump rooms", icon: Droplets },
     ]),
+    ...group("inventory", "Inventory", Package, [
+      (showField || showPipeline) && { href: "/admin/inventory", label: "Stock", icon: Package, exact: true },
+      (showField || showPipeline) && { href: "/admin/inventory/receive", label: "Receive stock", icon: Package },
+      (showField || showPipeline) && { href: "/admin/inventory/scan", label: "Scan", icon: Package },
+    ]),
+    ...(settings.length > 0
+      ? ([{ divider: "settings" }, { href: "/admin/settings", label: "Settings", icon: Settings, alsoMatches: SETTINGS_ROUTES }] as NavEntry[])
+      : []),
+  ];
+
+  // What jump-to offers: exactly the pages this sidebar offers, plus each
+  // Settings page, plus Notifications (reached by the bell, not the menu).
+  // Keywords carry the old labels so a habit still finds its page.
+  const OLD_NAMES: Record<string, string> = {
+    "/admin": "portfolio dashboard",
+    "/admin/tickets": "support tickets complaints",
+    "/admin/marketing-enquiries": "marketing enquiries assessment",
+    "/admin/defaulters": "defaulter societies",
+    "/admin/approvals": "pending approvals",
+    "/admin/timeline/requests": "date change requests",
+    "/admin/visits/approvals": "visit approvals",
+    "/admin/billing/release-queue": "release queue",
+    "/admin/societies": "societies",
+  };
+  const jumpPages: JumpPage[] = [
+    ...items.flatMap((e): JumpPage[] => {
+      if ("divider" in e) return [];
+      if ("items" in e) return e.items.map((i) => ({ label: i.label, href: i.href, group: e.label, keywords: OLD_NAMES[i.href] }));
+      return [{ label: e.label, href: e.href, keywords: OLD_NAMES[e.href] }];
+    }),
+    { label: "Notifications", href: "/admin/notifications" },
+    ...settings.flatMap((s) => s.links.map((l) => ({ label: l.label, href: l.href, group: `Settings · ${s.title}` }))),
   ];
 
   return (
@@ -230,6 +219,7 @@ export function AppShell({
       theme={theme}
       email={email}
       items={items}
+      jump={<JumpTo pages={jumpPages} societies={jumpSocieties} />}
       homeHref="/admin"
       footerNote="FirsThing · verified savings"
       extras={<NotificationBell count={unreadCount} />}

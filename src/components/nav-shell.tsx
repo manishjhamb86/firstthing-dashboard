@@ -14,6 +14,11 @@ export type NavItem = {
   label: string;
   icon: LucideIcon;
   exact?: boolean;
+  /** Other route prefixes this item owns — Settings lights for its sub-pages
+   *  that live elsewhere (/admin/users, /admin/inventory/setup). */
+  alsoMatches?: string[];
+  /** A count of things waiting on the viewer; 0 or absent shows nothing. */
+  badge?: number;
 };
 
 /**
@@ -27,12 +32,34 @@ export type NavGroup = {
   label: string;
   icon: LucideIcon;
   items: NavItem[];
+  /** Waiting-on-you total for the group; shown on the header while closed and open. */
+  badge?: number;
 };
 
-export type NavEntry = NavItem | NavGroup;
+/** A thin rule between the viewer's own work, the workspace and Settings (2026-11-19). */
+export type NavDivider = { divider: string };
+
+export type NavEntry = NavItem | NavGroup | NavDivider;
 
 function isGroup(entry: NavEntry): entry is NavGroup {
   return "items" in entry;
+}
+
+function isDivider(entry: NavEntry): entry is NavDivider {
+  return "divider" in entry;
+}
+
+function CountBadge({ n }: { n?: number }) {
+  if (!n) return null;
+  return (
+    <span
+      className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[11px] font-bold tabular-nums"
+      style={{ background: "var(--accent)", color: "var(--text-on-accent, #fff)" }}
+      aria-label={`${n} waiting`}
+    >
+      {n > 99 ? "99+" : n}
+    </span>
+  );
 }
 
 const OPEN_GROUP_KEY = "ft.nav.openGroup";
@@ -81,6 +108,7 @@ export function NavShell({
   accountExtra,
   identityInSidebar = false,
   displayName,
+  jump,
   children,
 }: {
   theme: ThemeId;
@@ -144,6 +172,9 @@ export function NavShell({
    *  name of user"). Omitted or empty, every identity line falls back to
    *  email exactly as before; admin passes nothing. */
   displayName?: string | null;
+  /** The jump-to search (admin, 2026-11-19): under the brand in the sidebar
+   *  and at the top of the phone drawer. Omitted, nothing renders there. */
+  jump?: ReactNode;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -196,18 +227,27 @@ export function NavShell({
   const identityLabel = displayName?.trim() || email;
   const initial = (identityLabel[0] ?? "?").toUpperCase();
 
-  const allItems = items.flatMap((e) => (isGroup(e) ? e.items : [e]));
+  const allItems = items.flatMap((e) => (isGroup(e) ? e.items : isDivider(e) ? [] : [e]));
 
+  const prefixMatch = (href: string) => pathname === href || pathname.startsWith(href + "/");
+  /** The length of the longest prefix of this item that matches, or -1. */
+  function matchLength(item: NavItem): number {
+    if (item.exact) return pathname === item.href ? item.href.length : -1;
+    let best = prefixMatch(item.href) ? item.href.length : -1;
+    for (const p of item.alsoMatches ?? []) if (prefixMatch(p)) best = Math.max(best, p.length);
+    return best;
+  }
   function matches(item: NavItem) {
-    return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(item.href + "/");
+    return matchLength(item) >= 0;
   }
 
   // The most specific matching item is the active one — /admin/billing and
   // /admin/billing/deviations both prefix-match a deviation page, and only
   // the deeper one should light.
   function isActive(item: NavItem) {
-    if (!matches(item)) return false;
-    return !allItems.some((other) => other !== item && matches(other) && other.href.length > item.href.length);
+    const mine = matchLength(item);
+    if (mine < 0) return false;
+    return !allItems.some((other) => other !== item && matchLength(other) > mine);
   }
 
   // ONE group open at a time (user's call, 2026-09-15: several unfolded at
@@ -264,13 +304,17 @@ export function NavShell({
         }}
       >
         {!nested && <Icon size={18} strokeWidth={1.75} aria-hidden />}
-        {item.label}
+        <span className="flex-1">{item.label}</span>
+        <CountBadge n={item.badge} />
       </Link>
     );
   };
 
   const navLinks = (onNavigate?: () => void) =>
     items.map((entry) => {
+      if (isDivider(entry)) {
+        return <div key={`divider-${entry.divider}`} aria-hidden className="mx-3.5 my-2 h-px" style={{ background: "var(--chrome-border)" }} />;
+      }
       if (!isGroup(entry)) return linkFor(entry, onNavigate);
       const open = groupOpen(entry);
       const withinActive = entry.items.some(isActive);
@@ -286,6 +330,7 @@ export function NavShell({
           >
             <Icon size={18} strokeWidth={1.75} aria-hidden />
             <span className="flex-1 text-left">{entry.label}</span>
+            <CountBadge n={entry.badge} />
             <ChevronDown
               size={16}
               strokeWidth={1.75}
@@ -387,6 +432,7 @@ export function NavShell({
             <BrandMark variant={sidebarBrandVariant} className="h-7" />
           )}
         </div>
+        {jump && <div className="px-4 pb-3">{jump}</div>}
         {/* min-h-0 + overflow-y-auto: a fixed, full-height flex column does not
             scroll on its own, so with several groups open the last items were
             clipped below the viewport (user-caught, 2026-09-15). The nav
@@ -509,6 +555,7 @@ export function NavShell({
               className="lg:hidden px-4 pb-4 pt-2 space-y-1 max-h-[calc(100vh-64px)] overflow-y-auto"
               style={{ background: "var(--chrome)", borderTop: "1px solid var(--chrome-border)", transform: "translateZ(0)" }}
             >
+              {jump && <div className="pb-2">{jump}</div>}
               {navLinks(() => setOpen(false))}
             </div>
           )}

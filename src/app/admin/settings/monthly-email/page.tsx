@@ -20,7 +20,7 @@ export default async function MonthlyEmailTemplatePage() {
   return (
     <>
       <PageHeader
-        backHref="/admin/billing/close"
+        backHref="/admin/settings"
         title="Monthly email template"
         subtitle="One message for every society. Words in braces are filled in for each society when it is sent; the savings report and the invoice are always attached."
       />

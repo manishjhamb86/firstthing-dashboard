@@ -44,7 +44,7 @@ export function MarkDefaulterDialog({ societyId }: { societyId: string }) {
         open={open}
         onClose={() => setOpen(false)}
         title="Mark this society a defaulter"
-        description="Nothing about billing changes — invoices it owes stay owed and keep being followed up. Its notifications move out of the main window into their own Defaulter societies section."
+        description="Nothing about billing changes — invoices it owes stay owed and keep being followed up. Its notifications move out of the main window into their own Defaulters section."
         footer={
           <>
             <button type="button" className="btn-ghost" onClick={() => setOpen(false)}>

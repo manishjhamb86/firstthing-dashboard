@@ -26,7 +26,7 @@ export default async function EmailSettingsPage() {
   return (
     <>
       <PageHeader
-        backHref="/admin"
+        backHref="/admin/settings"
         title="Email"
         subtitle="Sent through AWS SES when an invoice is released, to every portal account holding the billing grant for that society."
         chip={!allowed ? <StatusChip tone="warn">Switched off here</StatusChip> : configured ? <StatusChip tone="ok">Configured</StatusChip> : <StatusChip tone="neu">Not configured</StatusChip>}

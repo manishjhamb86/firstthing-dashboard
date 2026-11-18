@@ -9480,3 +9480,41 @@ same lesson this file has recorded several times before (CLAUDE.md's own standin
 `next dev` after any migration, a long-lived process does not pick up a new generated client on its
 own, and the symptom can look exactly like a credential failure rather than a stale-client one.
 
+
+## The back-office menu reorganised, with a jump-to search (2026-11-19) — user-asked, designed first
+
+**The ask**: "see everything is at its right place… most used prioritised to top, no duplicates, each
+submenu under the correct menu", researched against other products; designed on the canvas
+"Admin navigation" (https://claude.ai/artifact/WiWGqo73fwrAg15S1v9RvW) and then built, keeping the
+jump-to search. Mid-build the user added: "make sure the user access don't get affected".
+
+**The menu** (`src/components/app-shell.tsx`, CMP-19 in `00-global-patterns.md`): Home · Founders' page ·
+Tasks · Schedule · **Approvals** (Corrections, Date changes, Visit sign-off, Bill release) | Societies ·
+Lighting · **Service** (customer visits, inspections, society requests, team help desk) · Deals · Billing ·
+Water · Inventory | **Settings**. Societies went from 12 links to 6. The three approval queues that sat in
+three groups, plus the date-change queue that had a page and no link, are one group. Settings' eight links
+became one page (`/admin/settings`, sections from `src/lib/settings-sections.ts`); its link lights on any
+settings page, including `/admin/users` and `/admin/inventory/setup` (NavItem `alsoMatches`), and every
+settings page's back link goes to it. Renamed, menu and page title alike: Portfolio → Home, Marketing
+enquiries → Website enquiries, Support tickets → Society requests, Defaulter societies → Defaulters,
+Pending approvals → Corrections (page: "Corrections waiting for approval"). Order is by role cadence —
+there is no page-view data to rank by.
+
+**Access unchanged, checked rather than asserted**: a throwaway script called the old and the new
+`AppShell` for all 256 combinations of the seven permissions and the named account, and compared the
+pages each could reach (menu ∪ Settings page). Identical, with two intended exceptions: Date changes
+gained a link (the page was already open to every admin), and Bill release is hidden from anyone without
+`release_billing` (the page always redirected them). No page's own gate changed.
+
+**Counts** only on Approvals, and only what waits on this viewer (layout `approvalCounts`): corrections
+for the named account; date changes for `approve_date_changes`, never one's own (the named account may);
+visits for `approve_visits`, never one's own; release for the accountant.
+
+**Jump to…** (`src/components/jump-to.tsx`, matcher `src/lib/jump-search.ts` with tests): under the brand
+and at the top of the phone drawer; ⌘K / Ctrl K anywhere. Offers exactly the pages this viewer's menu
+offers, each Settings page and Notifications, with the old names as keywords; plus every society
+(read in the layout). Arrow keys, Enter, Esc.
+
+Verified in a browser on dev: order, Approvals and Service contents, the Settings page and its lighting
+on inventory setup, jump-to by keyboard (old name "support" → Society requests; "hyde" → the society) and
+by click, the phone drawer with no sideways scroll. 1,630 unit tests, `tsc`/`lint` clean.

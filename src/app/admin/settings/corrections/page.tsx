@@ -31,7 +31,7 @@ export default async function DataCorrectionsPage() {
   return (
     <>
       <PageHeader
-        backHref="/admin"
+        backHref="/admin/settings"
         title="Data corrections"
         subtitle="Temporary, operations-only switches for one-time cleanup work. Off the moment you switch them off, on the moment you switch them back on — no redeploy either way."
       />

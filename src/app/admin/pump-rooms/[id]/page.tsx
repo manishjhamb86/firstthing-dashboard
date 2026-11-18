@@ -6,11 +6,11 @@ import { Card, CardTitle, PageHeader } from "@/components/ui";
 import { PumpMetricBlock } from "@/components/pump-metric-block";
 import { PumpDayTable } from "@/components/pump-day-table";
 import { formatInstant } from "@/lib/format-date";
-import { TYPICAL_SPECIFIC_ENERGY, dayRows, isReporting, periodTotals, trendData } from "@/lib/pump-room-view";
+import { TYPICAL_SPECIFIC_ENERGY, recentReadings, dayRows, isReporting, periodTotals, trendData } from "@/lib/pump-room-view";
 import { AssignControl } from "./assign-control";
 import { ReassignButton } from "./reassign-button";
 import { IngestHistory } from "./ingest-history";
-import { BaselineForm } from "./baseline-form";
+import { BaselineButton } from "./baseline-button";
 import { PumpSavingsPanel } from "@/components/pump-savings-panel";
 import { loadPumpSavings } from "@/lib/pump-savings-loader";
 import { documentType } from "@/lib/document-catalog";
@@ -53,7 +53,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
     label: `${documentType(d.docType)?.label ?? d.docType} · ${d.period} · ${d.fileName}${d.version > 1 ? ` (v${d.version})` : ""}`,
   }));
 
-  const trend = trendData(meter.readings);
+  const trend = trendData(recentReadings(meter.readings));
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
   const rows = dayRows(trend);
   const totals = periodTotals(trend);
@@ -72,6 +72,18 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
         subtitle={`${meter.roomType ? `${meter.roomType} pump room` : "Pump room — not classified"} · EMS daily report`}
         action={
           meter.society ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {isOps && (
+                <BaselineButton
+                  meterId={meter.id}
+                  documents={documentOptions}
+                  current={
+                    savings
+                      ? { kwhPerKl: savings.baseline.kwhPerKl, periodFrom: isoDate(savings.baseline.periodFrom), periodTo: isoDate(savings.baseline.periodTo), savingsFrom: isoDate(savings.baseline.savingsFrom) }
+                      : null
+                  }
+                />
+              )}
             <ReassignButton
               roomLabel={meter.vendorSubjectLabel}
               meterId={meter.id}
@@ -79,6 +91,7 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
               currentRoomType={meter.roomType}
               societies={societies}
             />
+            </div>
           ) : undefined
         }
       />
@@ -107,42 +120,6 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
         </Card>
       )}
 
-      {meter.society && (
-        <Card className="mb-4 p-5 sm:p-6">
-          <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-            <CardTitle className="mb-0">Before-FirsThing baseline</CardTitle>
-            {savings && (
-              <span className="num text-[13px]" style={{ color: "var(--text-muted)" }}>
-                <strong style={{ color: "var(--text)" }}>{savings.baseline.kwhPerKl.toFixed(2)} kWh/KL</strong> · savings counted from {isoDate(savings.baseline.savingsFrom)}
-              </span>
-            )}
-          </div>
-          <p className="mb-3 text-[12.5px] leading-snug" style={{ color: "var(--text-muted)" }}>
-            The kWh per kilolitre the pump ran at before the automation. Every saving the society sees is measured against it, so it is recorded once from a filed document, with its period stated — never typed from memory.
-          </p>
-          {isOps ? (
-            <BaselineForm
-              meterId={meter.id}
-              documents={documentOptions}
-              current={
-                savings
-                  ? { kwhPerKl: savings.baseline.kwhPerKl, periodFrom: isoDate(savings.baseline.periodFrom), periodTo: isoDate(savings.baseline.periodTo), savingsFrom: isoDate(savings.baseline.savingsFrom) }
-                  : null
-              }
-            />
-          ) : (
-            <p className="text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-              {savings ? "Only an operations lead can replace the baseline." : "No baseline recorded yet — an operations lead records it."}
-            </p>
-          )}
-        </Card>
-      )}
-
-      {savings && (
-        <div className="mb-4">
-          <PumpSavingsPanel view={savings} />
-        </div>
-      )}
 
       {trend.days.length === 0 ? (
         <Card className="p-5 sm:p-6">
@@ -197,6 +174,12 @@ export default async function PumpRoomPage({ params }: { params: Promise<{ id: s
               />
             )}
           </div>
+
+          {savings && (
+            <div className="mt-4">
+              <PumpSavingsPanel view={savings} />
+            </div>
+          )}
 
           <div className={`mt-4 grid gap-4 ${savings ? "" : "lg:grid-cols-3"}`}>
             {!savings && (

@@ -4,7 +4,7 @@ import { PumpMetricBlock } from "@/components/pump-metric-block";
 import { PumpDayTable } from "@/components/pump-day-table";
 import { PumpSavingsPanel } from "@/components/pump-savings-panel";
 import { loadPumpSavings } from "@/lib/pump-savings-loader";
-import { TYPICAL_SPECIFIC_ENERGY, dayRows, periodTotals, trendData } from "@/lib/pump-room-view";
+import { TYPICAL_SPECIFIC_ENERGY, recentReadings, dayRows, periodTotals, trendData } from "@/lib/pump-room-view";
 
 /**
  * The resident's single pump room (one per society for now — see
@@ -41,7 +41,7 @@ export async function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typ
   }
 
   const savings = await loadPumpSavings(meter.id);
-  const trend = trendData(meter.readings);
+  const trend = trendData(recentReadings(meter.readings));
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
   const rows = dayRows(trend);
   const totals = periodTotals(trend);
@@ -59,7 +59,6 @@ export async function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typ
 
   return (
     <div className="flex flex-col gap-4">
-      {savings && <PumpSavingsPanel view={savings} />}
       {trend.days.length > 0 && (
         <div className={`grid gap-4 ${hasWater ? "lg:grid-cols-3" : ""}`}>
           <PumpMetricBlock label="Electricity" unit="kWh" decimals={0} days={trend.days} points={trend.kwh} kind="bars" color="var(--chart-mark)" approximateFirst={rows[rows.length - 1]?.approximate} />
@@ -83,6 +82,7 @@ export async function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typ
           )}
         </div>
       )}
+      {savings && <PumpSavingsPanel view={savings} />}
       {/* Without a baseline the plain day table is the readout; with one, the savings panel's own table carries every figure. */}
       {!savings && trend.days.length > 0 && (
         <Card className="p-4 sm:p-5">

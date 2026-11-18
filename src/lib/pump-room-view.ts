@@ -42,6 +42,20 @@ export function isReporting(lastReadingAt: Date | null, now: Date = new Date()):
   return lastReadingAt !== null && now.getTime() - lastReadingAt.getTime() < REPORTING_WITHIN_MS;
 }
 
+/**
+ * The days the three metric cards chart: the last `days` calendar days up to
+ * the newest stored day (2026-11-18, user-caught: once a report's June and
+ * July days were stored, the cards ran 24 Jun → 17 Nov with four empty
+ * months squashed between two bars). The long history lives in the savings
+ * table, month by month. `readings` arrives newest-first, as every caller
+ * fetches it.
+ */
+export function recentReadings<T extends { date: Date }>(readings: T[], days = 30): T[] {
+  if (readings.length === 0) return readings;
+  const from = readings[0].date.getTime() - (days - 1) * 86_400_000;
+  return readings.filter((r) => r.date.getTime() >= from);
+}
+
 /** `readings` arrives newest-first (every caller fetches it that way); this reverses once, here, rather than in every page. */
 export function trendData(readings: PumpRoomReadingRow[]): TrendData {
   const ordered = [...readings].reverse();

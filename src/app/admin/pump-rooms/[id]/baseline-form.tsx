@@ -19,13 +19,18 @@ export function BaselineForm({
   meterId,
   documents,
   current,
+  inModal = false,
+  onSaved,
 }: {
   meterId: string;
   documents: DocumentOption[];
   current: { kwhPerKl: number; periodFrom: string; periodTo: string; savingsFrom: string } | null;
+  /** Rendered inside the header button's modal: the form is always open and saving closes the modal. */
+  inModal?: boolean;
+  onSaved?: () => void;
 }) {
   const router = useRouter();
-  const [open, setOpen] = useState(current === null);
+  const [open, setOpen] = useState(inModal || current === null);
   const [periodFrom, setPeriodFrom] = useState(current?.periodFrom ?? "");
   const [periodTo, setPeriodTo] = useState(current?.periodTo ?? "");
   const [kwh, setKwh] = useState("");
@@ -53,7 +58,7 @@ export function BaselineForm({
       try {
         const r = await recordPumpBaseline({ meterId, periodFrom, periodTo, kwh: kwhN, kl: klN, savingsFrom, sourceDocumentId: docId || null, note, reason });
         if (r.error) setError(r.error);
-        else { setDone(`Recorded — ${r.kwhPerKl!.toFixed(2)} kWh/KL.`); setOpen(false); router.refresh(); }
+        else { setDone(`Recorded — ${r.kwhPerKl!.toFixed(2)} kWh/KL.`); if (!inModal) setOpen(false); router.refresh(); onSaved?.(); }
       } catch { setError("Could not save — the page may be out of date. Reload and try again."); }
     });
   }
@@ -76,7 +81,7 @@ export function BaselineForm({
 
   return (
     <div className="flex flex-col gap-4">
-      {!open && (
+      {!open && !inModal && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           {done ? <p className="text-[13px]" style={{ color: "var(--ok-fg)" }}>{done}</p> : <span />}
           <button type="button" className="btn-secondary" onClick={() => setOpen(true)}>
@@ -133,7 +138,7 @@ export function BaselineForm({
           {error && <ErrorText>{error}</ErrorText>}
           <div className="flex flex-wrap items-center gap-2">
             <button type="submit" className="btn-primary" disabled={pending}>{pending ? "Saving…" : "Record the baseline"}</button>
-            {current && <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>Cancel</button>}
+            {current && !inModal && <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>Cancel</button>}
           </div>
         </form>
       )}

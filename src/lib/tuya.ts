@@ -359,6 +359,29 @@ export async function syncTankDevices(cfg: TuyaConfig, accountId: string = "sing
       },
     });
   }
+  // A device removed from the Smart Life account no longer comes back in the
+  // listing, so the loop above never touches its row again (2026-11-19: a
+  // meter deleted in the app stayed on the list under its old name). Remove
+  // such a row when it left nothing behind — no readings, alerts or society.
+  // One with history stays, shown offline, so a society's record never
+  // vanishes. Skipped when the listing is empty or may have been cut short
+  // by the page cap, so a bad read can never empty the list.
+  if (devices.length > 0 && devices.length < 500) {
+    const listed = new Set(devices.map((d) => d.tuyaDeviceId));
+    const gone = await db.waterTank.findMany({
+      where: { tankApiConfigId, tuyaDeviceId: { notIn: [...listed] } },
+      select: { id: true, name: true, tuyaDeviceId: true, societyId: true, _count: { select: { readings: true, alerts: true } } },
+    });
+    for (const g of gone) {
+      if (!g.societyId && g._count.readings === 0 && g._count.alerts === 0) {
+        await db.waterTank.delete({ where: { id: g.id } });
+        logger.info("tank.removed_from_account", { deviceId: g.tuyaDeviceId, name: g.name, deleted: true });
+      } else {
+        await db.waterTank.update({ where: { id: g.id }, data: { lastOnline: false } });
+        logger.info("tank.removed_from_account", { deviceId: g.tuyaDeviceId, name: g.name, deleted: false });
+      }
+    }
+  }
   await db.tankApiConfig.updateMany({
     where: { id: accountId },
     data: { lastOkAt: new Date(), lastError: null, lastDeviceCount: devices.length, lastSyncAt: new Date() },

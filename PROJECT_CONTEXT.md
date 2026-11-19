@@ -9674,3 +9674,12 @@ now keeps a known day's own figures — a typed-in day's kWh and KL, an other-me
 rest of each register rise over the days lacking that figure. 9 Jul = (17,001 − 15,882) − 548 = 571 kWh and
 (313,792 − 311,897) − 942 = 953 KL; RG's savings view now has 0 estimated days. Applied on production through
 a temporary copy; the code is committed, not yet deployed.
+
+**A device removed from the Smart Life account leaves the list (2026-11-19, user-caught).** "palm driv s6" (a
+GR2PWS meter, `cz`) stayed on production's water tank list after it was deleted in the Smart Life app. The sync
+refreshes names for every device the account still lists (all 12 refreshed fine). But the listing no longer
+returned that meter, so nothing touched its row again. The row was deleted on production; it had no readings,
+alerts or society. `syncTankDevices` now handles a row of that account whose device is missing from a
+complete listing. If it has no readings, alerts or society, it is deleted. Otherwise it is kept and marked
+offline, so a society's history never vanishes. Both cases are logged `tank.removed_from_account`. Nothing is
+removed when the listing comes back empty or hits the page cap.

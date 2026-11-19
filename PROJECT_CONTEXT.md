@@ -9537,3 +9537,13 @@ that refuse a visitor now send them to `/admin` (not to the retired board), and 
 the intake's header link point at Monthly close. The board's "Run month" button (the readings-based
 run, CON-47 phase two, not used in the live monthly path) went with it; `runCalculation` stays in
 `src/app/admin/billing/actions.ts` for when that phase is built. Verified in a browser on dev.
+
+**Deactivated portal accounts are listed, and can be reactivated (2026-11-19, user-asked)**: the
+society page's Portal accounts card now ends with a collapsed "N deactivated accounts — cannot sign
+in, hidden from the society" list, each with **Reactivate** (`reactivatePortalAccount`,
+`manage_users`, logged `portal_account.reactivated` / `_refused`). Deactivation never deleted the row
+(there is no hard delete for a portal account), so reactivating restores the old password and
+grants. A former office-bearer returns as committee when another account holds the designation —
+one office-bearer per society. The customer portal already showed active accounts only (its account
+list, invoice emails and push recipients all filter `isActive`), so nothing changed there. Verified
+in a browser on dev with two test accounts, removed afterwards.

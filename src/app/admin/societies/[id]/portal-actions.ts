@@ -100,3 +100,38 @@ export async function deactivatePortalAccount(id: string, societyId: string) {
   revalidatePath(`/admin/societies/${societyId}`);
   return {};
 }
+
+/**
+ * Bring a deactivated portal account back (2026-11-19, user-asked: deactivated
+ * accounts stay visible in the back office "so one can activate back").
+ * Deactivation never deleted the row, so this is a flag flip — the account
+ * signs in again with its old password and grants. One rule carries over from
+ * the office-bearer designation: a society has one office-bearer, so a former
+ * office-bearer coming back while another holds it returns as committee, and
+ * the reply says so.
+ */
+export async function reactivatePortalAccount(id: string, societyId: string): Promise<{ error?: string; note?: string }> {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." };
+  if (!admin.permissions.includes("manage_users")) {
+    logger.warn("portal_account.reactivate_refused", { actorId: admin.id, societyId, targetId: id, reason: "permission" });
+    return { error: "Reactivating a portal account is operations' own action." };
+  }
+  const target = await db.profile.findUnique({ where: { id }, select: { id: true, societyId: true, isActive: true, portalAuthority: true } });
+  if (!target || target.societyId !== societyId) return { error: "That account is no longer on record." };
+  if (target.isActive) return {};
+
+  let note: string | undefined;
+  let portalAuthority = target.portalAuthority;
+  if (target.portalAuthority === "office_bearer") {
+    const otherBearer = await db.profile.count({ where: { id: { not: id }, societyId, isActive: true, portalAuthority: "office_bearer" } });
+    if (otherBearer > 0) {
+      portalAuthority = "committee";
+      note = "Another account holds the office-bearer designation, so this one is back as committee.";
+    }
+  }
+  await db.profile.update({ where: { id }, data: { isActive: true, portalAuthority } });
+  logger.info("portal_account.reactivated", { actorId: admin.id, societyId, targetId: id, portalAuthority });
+  revalidatePath(`/admin/societies/${societyId}`);
+  return { note };
+}

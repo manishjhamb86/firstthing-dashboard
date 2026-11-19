@@ -18,6 +18,7 @@ import {
 import { StatusControl } from "./status-control";
 import { AddPortalAccountButton } from "./add-portal-account-button";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
+import { ReactivatePortalButton } from "./reactivate-portal-button";
 import { ResetPortalPasswordButton } from "./reset-portal-password-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
@@ -69,8 +70,9 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   ]);
   const fmCanEdit = !!viewer && (viewer.permissions.includes("manage_users") || viewer.permissions.includes("manage_pipeline"));
 
-  const [accounts, engagements, pipelines, circuitCount, contracts, waterTanks] = await Promise.all([
-    db.profile.findMany({ where: { societyId: id, isActive: true }, orderBy: { name: "asc" } }),
+  const [allAccounts, engagements, pipelines, circuitCount, contracts, waterTanks] = await Promise.all([
+    // Deactivated accounts too (2026-11-19): kept on record and listed apart, so they can be reactivated.
+    db.profile.findMany({ where: { societyId: id }, orderBy: { name: "asc" } }),
     db.engagement.findMany({ where: { societyId: id }, orderBy: { createdAt: "asc" } }),
     // An engagement records that the society is engaged on a service line;
     // the deal that actually moves it (survey → circuits → contract) is the
@@ -111,6 +113,8 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
       orderBy: { name: "asc" },
     }),
   ]);
+  const accounts = allAccounts.filter((a) => a.isActive);
+  const inactiveAccounts = allAccounts.filter((a) => !a.isActive);
   // CON-24 as amended (2026-08-31): a line is delivered in PARTS, each part
   // its own deal — so a line maps to a LIST of deals now, never to one.
   const dealsFor = (line: string) => pipelines.filter((p) => (p.serviceLine as string) === line);
@@ -584,6 +588,29 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                 </li>
               ))}
             </ul>
+          )}
+
+          {inactiveAccounts.length > 0 && (
+            <details className="mt-4 border-t border-[var(--border-subtle)] pt-3">
+              <summary className="cursor-pointer text-sm font-semibold text-[var(--text-muted)]">
+                {inactiveAccounts.length} deactivated account{inactiveAccounts.length === 1 ? "" : "s"} — cannot sign in, hidden from the society
+              </summary>
+              <ul className="mt-3 space-y-3">
+                {inactiveAccounts.map((a) => (
+                  <li key={a.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div className="min-w-0">
+                      <p className="font-medium text-[var(--text-muted)]">
+                        {a.name ?? a.email} <StatusChip tone="neu">Deactivated</StatusChip>
+                      </p>
+                      <p className="text-sm text-[var(--text-muted)]">
+                        {a.portalAuthority ? PORTAL_AUTHORITY_LABEL[a.portalAuthority] : "—"} · {a.email}
+                      </p>
+                    </div>
+                    <ReactivatePortalButton profileId={a.id} societyId={society.id} />
+                  </li>
+                ))}
+              </ul>
+            </details>
           )}
         </Card>
       </div>

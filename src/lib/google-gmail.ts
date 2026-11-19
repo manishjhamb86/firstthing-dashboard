@@ -134,7 +134,14 @@ export async function listMessages(cfg: GmailConfig, q: string, maxResults: numb
   return json.messages ?? [];
 }
 
-export type GmailAttachmentRef = { filename: string; attachmentId: string; mimeType: string };
+/**
+ * `enclosedIn` is the file name of the forwarded email (a message/rfc822
+ * part, e.g. "EMS-Automated daily Report : RG Residency.eml") the
+ * attachment sits inside, when it does — Gmail walks into attached emails
+ * and lists their attachments alongside the outer message's own
+ * (2026-11-19: one email carrying 50 earlier reports as .eml files).
+ */
+export type GmailAttachmentRef = { filename: string; attachmentId: string; mimeType: string; enclosedIn: string | null };
 export type GmailMessage = { id: string; threadId: string; subject: string; receivedAt: Date; attachments: GmailAttachmentRef[] };
 
 type GmailPart = {
@@ -144,12 +151,13 @@ type GmailPart = {
   parts?: GmailPart[];
 };
 
-function collectAttachments(part: GmailPart | undefined, out: GmailAttachmentRef[]): void {
+function collectAttachments(part: GmailPart | undefined, out: GmailAttachmentRef[], enclosedIn: string | null = null): void {
   if (!part) return;
   if (part.filename && part.body?.attachmentId) {
-    out.push({ filename: part.filename, attachmentId: part.body.attachmentId, mimeType: part.mimeType ?? "application/octet-stream" });
+    out.push({ filename: part.filename, attachmentId: part.body.attachmentId, mimeType: part.mimeType ?? "application/octet-stream", enclosedIn });
   }
-  for (const p of part.parts ?? []) collectAttachments(p, out);
+  const inner = part.mimeType === "message/rfc822" && part.filename ? part.filename : enclosedIn;
+  for (const p of part.parts ?? []) collectAttachments(p, out, inner);
 }
 
 /** The message's subject, received instant, and every attachment's reference (not its bytes — see getAttachment). */

@@ -91,7 +91,9 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
     return { checked: 0, applied: 0, needsAssignment: 0, failed: 0 };
   }
 
-  const messages = await listMessages(cfg, `subject:"EMS-Automated daily Report"`, 25);
+  // Either the vendor's own email, or one carrying its emails forwarded as
+  // attachments (their file names keep the subject).
+  const messages = await listMessages(cfg, `{subject:"EMS-Automated daily Report" filename:"EMS-Automated daily Report"}`, 25);
   let checked = 0;
   let needsAssignment = 0;
   let failed = 0;
@@ -110,58 +112,87 @@ export async function sweepPumpRoomEmails(): Promise<SweepResult> {
   for (const m of messages) {
     // The one durable dedupe check, before any heavy work — a DB column,
     // not an in-memory "seen this session" set, so it survives a worker
-    // restart.
-    const already = await db.emsPumpEmailIngest.findUnique({ where: { gmailMessageId: m.id }, select: { id: true } });
+    // restart. A message carrying several reports files each under
+    // `{messageId}:{n}`, so its first report's id is what marks it seen.
+    const already = await db.emsPumpEmailIngest.findFirst({
+      where: { OR: [{ gmailMessageId: m.id }, { gmailMessageId: { startsWith: `${m.id}:` } }] },
+      select: { id: true },
+    });
     if (already) continue;
     checked++;
 
     try {
       const msg = await getMessage(cfg, m.id);
-      const subjectLabel = subjectLabelOf(msg.subject);
-      const attachment = msg.attachments.find((a) => /\.xlsx?$/i.test(a.filename)) ?? msg.attachments[0];
-      if (!attachment) {
+      // Every spreadsheet in the message is a report of its own: an email
+      // forwarding a batch of earlier reports as attached .eml files
+      // (2026-11-19, 50 at once) carries one per forwarded email.
+      const sheets = msg.attachments.filter((a) => /\.xlsx?$/i.test(a.filename));
+      const reports = sheets.length > 0 ? sheets : msg.attachments.slice(0, 1);
+      if (reports.length === 0) {
         logger.warn("job.pump_room_email_sweep_no_attachment", { gmailMessageId: m.id, subject: msg.subject });
         failed++;
         continue;
       }
 
-      const bytes = await getAttachment(cfg, m.id, attachment.attachmentId);
-      const fileHash = createHash("sha256").update(bytes).digest("hex");
-      const s3Key = buildPumpRoomIngestKey({ subjectLabel, gmailMessageId: m.id, receivedAt: msg.receivedAt });
-      // Raw bytes land in S3 before anything interprets them (CON-30) —
-      // durable even if the parse below fails.
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: S3_BUCKET,
-          Key: s3Key,
-          Body: bytes,
-          ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        }),
-      );
+      for (let i = 0; i < reports.length; i++) {
+        const attachment = reports[i];
+        const ingestId = reports.length === 1 ? m.id : `${m.id}:${String(i + 1).padStart(3, "0")}`;
+        try {
+          // The label comes from the forwarded email a spreadsheet sits in
+          // when it sits in one ("EMS-Automated daily Report : RG Residency.eml"),
+          // else from this message's own subject.
+          const subjectLabel = subjectLabelOf(attachment.enclosedIn ? attachment.enclosedIn.replace(/\.eml$/i, "") : msg.subject);
+          const bytes = await getAttachment(cfg, m.id, attachment.attachmentId);
+          const fileHash = createHash("sha256").update(bytes).digest("hex");
 
-      // Exact match on the hand-classified label — deliberately not a fuzzy
-      // match. The same string arrives daily for the life of this room; a
-      // one-time classification solves the matching problem permanently,
-      // where a fuzzy match would carry a small, compounding mismatch risk
-      // every single day.
-      const meter = await db.emsPumpMeter.findUnique({ where: { vendorSubjectLabel: subjectLabel }, select: { id: true } });
+          // The same file forwarded again (a batch resending reports already
+          // received one by one) is recorded once.
+          const sameFile = await db.emsPumpEmailIngest.findFirst({ where: { fileHash }, select: { id: true } });
+          if (sameFile) {
+            logger.info("job.pump_room_email_sweep_same_file", { gmailMessageId: ingestId, filename: attachment.filename, existingIngestId: sameFile.id });
+            continue;
+          }
 
-      await db.emsPumpEmailIngest.create({
-        data: {
-          gmailMessageId: m.id,
-          gmailThreadId: msg.threadId,
-          subjectLabel,
-          receivedAt: msg.receivedAt,
-          pumpMeterId: meter?.id ?? null,
-          s3Key,
-          fileHash,
-          byteSize: bytes.length,
-          status: "needs_assignment",
-        },
-      });
+          const s3Key = buildPumpRoomIngestKey({ subjectLabel, gmailMessageId: ingestId, receivedAt: msg.receivedAt });
+          // Raw bytes land in S3 before anything interprets them (CON-30) —
+          // durable even if the parse below fails.
+          await s3.send(
+            new PutObjectCommand({
+              Bucket: S3_BUCKET,
+              Key: s3Key,
+              Body: bytes,
+              ContentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            }),
+          );
 
-      if (meter) touchedMeterIds.add(meter.id);
-      else needsAssignment++;
+          // Exact match on the hand-classified label — deliberately not a fuzzy
+          // match. The same string arrives daily for the life of this room; a
+          // one-time classification solves the matching problem permanently,
+          // where a fuzzy match would carry a small, compounding mismatch risk
+          // every single day.
+          const meter = await db.emsPumpMeter.findUnique({ where: { vendorSubjectLabel: subjectLabel }, select: { id: true } });
+
+          await db.emsPumpEmailIngest.create({
+            data: {
+              gmailMessageId: ingestId,
+              gmailThreadId: msg.threadId,
+              subjectLabel,
+              receivedAt: msg.receivedAt,
+              pumpMeterId: meter?.id ?? null,
+              s3Key,
+              fileHash,
+              byteSize: bytes.length,
+              status: "needs_assignment",
+            },
+          });
+
+          if (meter) touchedMeterIds.add(meter.id);
+          else needsAssignment++;
+        } catch (err) {
+          logger.warn("job.pump_room_email_sweep_report_failed", { gmailMessageId: ingestId, filename: attachment.filename, error: String(err) });
+          failed++;
+        }
+      }
     } catch (err) {
       logger.warn("job.pump_room_email_sweep_message_failed", { gmailMessageId: m.id, error: String(err) });
       failed++;

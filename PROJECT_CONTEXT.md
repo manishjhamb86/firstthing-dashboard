@@ -9621,3 +9621,19 @@ Existing accounts with no modules (e.g. RG's "karan") are fixed from the dialog.
 modules saved and shown as portal tabs for a committee account, two office-bearers side by side,
 back to committee allowed while another office-bearer exists; fixture removed. The society's own
 transfer act on the portal is unchanged.
+
+## A forwarded batch of EMS emails is ingested report by report (2026-11-19) — user-asked
+
+One email ("Fwd: RG emails") carried 50 earlier EMS reports as attached `.eml` files. Gmail lists the
+attachments of attached emails alongside the outer message's (here 50 `.eml` + their 50 `.xlsx`), but the
+sweep searched only the vendor's subject and took the first spreadsheet. Now: `GmailAttachmentRef.enclosedIn`
+names the forwarded email an attachment sits in; the sweep searches `{subject:"EMS-Automated daily Report"
+filename:"EMS-Automated daily Report"}`, files EVERY spreadsheet in a message as its own ingest
+(`{messageId}:{nnn}`, labelled from the forwarded email's name), and skips a file whose SHA-256 is already
+stored. Run on production the same day: 40 new RG days (17–18 and 22 Jul, 28 Sep – 1 Nov, 18 Nov; 10 files
+byte-identical to reports already held were skipped), the gaps re-spread from the meter's total.
+**Four July files (19, 20, 21, 23 Jul) are from a different meter** — decimal readings, no water column, a
+~76,000 kWh register while RG's read 22,358 on 18 Jul and 24,927 on 22 Jul — so their days were removed and
+their ingests kept as `parse_failed` with that reason; 19–21 Jul and 23 Jul – 27 Sep are now spread days.
+Backup of the readings before the run: `/tmp/ems-readings-backup-*.json` on the production box. Not yet
+deployed (the running worker still has the old sweep; daily vendor emails are unaffected).

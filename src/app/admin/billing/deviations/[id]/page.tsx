@@ -23,7 +23,7 @@ function periodBounds(period: string) {
 
 export default async function DeviationPage({ params }: { params: Promise<{ id: string }> }) {
   const gate = await requireBillingOps();
-  if (!gate.ok) redirect("/admin/billing");
+  if (!gate.ok) redirect("/admin");
   const { id } = await params;
 
   const review = await db.deviationReview.findUnique({

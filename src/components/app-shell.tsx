@@ -172,7 +172,6 @@ export function AppShell({
       // Where each month starts: report → bill → email (2026-11-18).
       showBilling && { href: "/admin/billing/close", label: "Monthly close", icon: Receipt },
       showBilling && { href: "/admin/billing/intake", label: "Invoice intake", icon: Receipt },
-      showBilling && { href: "/admin/billing", label: "Billing board", icon: Receipt },
       showBilling && { href: "/admin/billing/deviations", label: "Deviations", icon: Receipt },
       showBilling && { href: "/admin/retail-customers", label: "Retail customers", icon: Receipt },
     ]),
@@ -202,6 +201,7 @@ export function AppShell({
     "/admin/timeline/requests": "date change requests",
     "/admin/visits/approvals": "visit approvals",
     "/admin/billing/release-queue": "release queue",
+    "/admin/billing/close": "billing board",
     "/admin/societies": "societies",
   };
   const jumpPages: JumpPage[] = [

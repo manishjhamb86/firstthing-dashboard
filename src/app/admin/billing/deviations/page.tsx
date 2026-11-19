@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DeviationsPage() {
   const gate = await requireBillingOps();
-  if (!gate.ok) redirect("/admin/billing");
+  if (!gate.ok) redirect("/admin");
 
   const reviews = await db.deviationReview.findMany({
     include: {
@@ -57,7 +57,7 @@ export default async function DeviationsPage() {
   return (
     <>
       <PageHeader
-        backHref="/admin/billing"
+        backHref="/admin/billing/close"
         title="Deviations"
         subtitle="Out-of-band circuit-months, most urgent first."
         chip={
@@ -175,8 +175,7 @@ export default async function DeviationsPage() {
 
       <p className="mt-4 text-[13px] text-[var(--text-muted)]">
         A decision never changes the month it is about — month 1 never
-        adjusts. It sets what the <Link href="/admin/billing" className="underline">next month&apos;s run</Link>{" "}
-        reads.
+        adjusts. It sets what the next month&apos;s run reads.
       </p>
     </>
   );

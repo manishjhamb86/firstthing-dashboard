@@ -9527,3 +9527,13 @@ now leaves defaulter societies' meter alerts out of both its "Not on time" list 
 and the card says "N more from defaulter societies — Defaulters →". Society requests and the overdue
 list were left alone: each links to its own full list (Society requests, Release queue), which
 includes defaulters, so they already match where they point.
+
+**The billing board is retired (2026-11-19, the user's call: "Monthly close is doing what Billing
+Board was built for")**: the menu item is gone; `/admin/billing` now redirects to
+`/admin/billing/close`, so old links and bookmarks still land somewhere useful, and jump-to still
+finds Monthly close by "billing board". The calculation pages (`/admin/billing/[calculationId]`) are
+unchanged; their back link now goes to that society's monthly close for the same month. Billing pages
+that refuse a visitor now send them to `/admin` (not to the retired board), and their back links and
+the intake's header link point at Monthly close. The board's "Run month" button (the readings-based
+run, CON-47 phase two, not used in the live monthly path) went with it; `runCalculation` stays in
+`src/app/admin/billing/actions.ts` for when that phase is built. Verified in a browser on dev.

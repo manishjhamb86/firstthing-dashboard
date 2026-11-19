@@ -21,7 +21,7 @@ import { ReviewForm } from "./review-form";
 
 export default async function IntakeReviewPage({ params }: { params: Promise<{ intakeId: string }> }) {
   const gate = await requireBillingOps();
-  if (!gate.ok) redirect("/admin/billing");
+  if (!gate.ok) redirect("/admin");
   const { intakeId } = await params;
 
   const intake = await db.invoiceIntake.findUnique({

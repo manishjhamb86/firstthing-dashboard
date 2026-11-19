@@ -16,7 +16,7 @@ export const metadata = { title: "Retail customers" };
  */
 export default async function RetailCustomersPage() {
   const gate = await requireBillingOps();
-  if (!gate.ok) redirect("/admin/billing");
+  if (!gate.ok) redirect("/admin");
   const [customers, societies] = await Promise.all([
     db.retailCustomer.findMany({
       orderBy: { name: "asc" },

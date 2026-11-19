@@ -72,7 +72,7 @@ export default async function IntakePage({
 }) {
   const filters = parseIntakeFilters(await searchParams);
   const gate = await requireBillingOps();
-  if (!gate.ok) redirect("/admin/billing");
+  if (!gate.ok) redirect("/admin");
 
   const intakes = await db.invoiceIntake.findMany({
     where: { status: { not: "discarded" } },
@@ -213,8 +213,8 @@ export default async function IntakePage({
         action={
           <div className="flex flex-wrap items-center gap-2">
             {zoho?.enabled && <ZohoFetchButton />}
-            <Link href="/admin/billing" className="btn-ghost">
-              Billing board
+            <Link href="/admin/billing/close" className="btn-ghost">
+              Monthly close
             </Link>
           </div>
         }

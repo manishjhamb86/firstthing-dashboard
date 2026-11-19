@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ReleaseQueuePage() {
   const acc = await requireAccountant();
-  if (!acc.ok) redirect("/admin/billing");
+  if (!acc.ok) redirect("/admin");
 
   const rows = await loadReleaseQueue();
   const routine = rows.filter((r) => r.triage.routine);
@@ -21,7 +21,7 @@ export default async function ReleaseQueuePage() {
   return (
     <>
       <PageHeader
-        backHref="/admin/billing"
+        backHref="/admin/billing/close"
         title="Release queue"
         subtitle="Months ops has submitted, waiting to be published to their society."
         chip={

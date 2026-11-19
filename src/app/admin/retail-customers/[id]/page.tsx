@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function RetailCustomerPage({ params }: { params: Promise<{ id: string }> }) {
   const gate = await requireBillingOps();
-  if (!gate.ok) redirect("/admin/billing");
+  if (!gate.ok) redirect("/admin");
   const { id } = await params;
   const [customer, societies, people] = await Promise.all([
     db.retailCustomer.findUnique({

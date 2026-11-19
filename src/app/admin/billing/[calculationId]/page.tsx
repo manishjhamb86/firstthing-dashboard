@@ -202,7 +202,7 @@ export default async function CalculationPage({
       )}
 
       <PageHeader
-        backHref={`/admin/billing?period=${calc.period}`}
+        backHref={`/admin/billing/close/${calc.societyId}?period=${calc.period}`}
         title={calc.society.name}
         subtitle={`${calc.period} · ${SERVICE_LINE_LABEL[calc.serviceLine] ?? calc.serviceLine} · version ${calc.version}`}
         chip={<StatusChip tone={meta.tone}>{meta.label}</StatusChip>}

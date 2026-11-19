@@ -218,7 +218,7 @@ async function rederiveOneMonth(calculationId: string, actorId: string, trigger:
 
       // The SAME invoice, unchanged (FEAT-110-AC-5) — only its owning
       // version moves, so every query that reads "the live invoice for a
-      // released month" (the portal, the billing board) keeps finding it.
+      // released month" (the portal, the monthly close) keeps finding it.
       await tx.billingInvoice.update({ where: { id: invoice.id }, data: { monthlyCalculationId: newCalc.id } });
       // Keeps the intake's own audit trail pointed at the current version,
       // for whoever looks up "which upload produced this month" later.

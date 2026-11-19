@@ -188,6 +188,13 @@ export function dayAxis(d: Date | string | null | undefined): string {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", ...UTC });
 }
 
+/** "Wed" — a day list's weekday under its date (the pump room's day list, 2026-11-19). */
+export function weekdayShort(d: Date | string | null | undefined): string {
+  const date = asDate(d);
+  if (!date) return "—";
+  return date.toLocaleDateString("en-GB", { weekday: "short", ...UTC });
+}
+
 /** "Wed 10" — inside a report's day column, where the month is in the masthead. */
 export function dayShort(d: Date | string | null | undefined): string {
   const date = asDate(d);

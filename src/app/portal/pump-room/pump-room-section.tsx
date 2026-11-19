@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { Card, EmptyState } from "@/components/ui";
 import { PumpMetricBlock } from "@/components/pump-metric-block";
 import { PumpDayTable } from "@/components/pump-day-table";
-import { PumpSavingsPanel } from "@/components/pump-savings-panel";
+import { PumpSavingsPortal, type PortalPumpData } from "./pump-savings-portal";
 import { loadPumpSavings } from "@/lib/pump-savings-loader";
 import { TYPICAL_SPECIFIC_ENERGY, recentReadings, dayRows, periodTotals, trendData } from "@/lib/pump-room-view";
 
@@ -41,6 +41,29 @@ export async function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typ
   }
 
   const savings = await loadPumpSavings(meter.id);
+
+  // With a before-FirsThing baseline the page is the phone-first savings view
+  // (2026-11-19): one saved figure, one efficiency sentence, one chart, a day
+  // list. The three metric charts and the plain table remain for a room with
+  // no baseline yet, where there is no saving to lead with.
+  if (savings) {
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const s = savings.summary;
+    const data: PortalPumpData = {
+      tariff: savings.tariff,
+      baselineKwhPerKl: savings.baseline.kwhPerKl,
+      baselineFrom: iso(savings.baseline.periodFrom),
+      baselineTo: iso(savings.baseline.periodTo),
+      savingsFrom: iso(savings.baseline.savingsFrom),
+      yesterday: savings.yesterday,
+      now: savings.now ? { kwhPerKl: savings.now.kwhPerKl, from: savings.now.from } : null,
+      overall: { savedKwh: s.overall.savedKwh, savedValue: s.overall.savedValue },
+      month: { period: s.month.period, savedKwh: s.month.savedKwh, savedValue: s.month.savedValue, days: s.month.days },
+      last: s.yesterday ? { day: s.yesterday.day, savedKwh: s.yesterday.savedKwh, savedValue: s.yesterday.savedValue } : null,
+      days: savings.days.map((d) => ({ day: d.day, kwh: d.kwh, kl: d.kl, savedKwh: d.savedKwh })),
+    };
+    return <PumpSavingsPortal data={data} />;
+  }
   const trend = trendData(recentReadings(meter.readings));
   const hasWater = meter.readings.some((r) => r.dailyKl !== null || r.lastTotalFlow !== null);
   const rows = dayRows(trend);
@@ -82,7 +105,6 @@ export async function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typ
           )}
         </div>
       )}
-      {savings && <PumpSavingsPanel view={savings} forSociety />}
       {/* Without a baseline the plain day table is the readout; with one, the savings panel's own table carries every figure. */}
       {!savings && trend.days.length > 0 && (
         <Card className="p-4 sm:p-5">

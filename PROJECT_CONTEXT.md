@@ -9561,3 +9561,17 @@ normal days (~12.5 kWh, ~61%) and the chart showed one bar. A date is now under 
 circuit's figure stands; the sum and baselines already held only the circuits that counted. Not yet
 checked in a browser: dev has no society with both a good and a bad circuit, so RG on stage or
 production is where it shows.
+
+**The society's pump room page rebuilt for a phone (2026-11-19, user-asked: "mobile design is
+cluttered and most of the info is unreadable"; designed on the canvas "Pump room on a phone",
+https://claude.ai/artifact/D864vJ6LYMoZbWJioLiLTx)**: with a baseline on record, `/portal/pump-room`
+renders `pump-savings-portal.tsx` instead of the three metric charts and the back office's savings
+panel — one large "Saved since the automation started" figure with "<month> so far" and "Yesterday"
+as full-width rows (no truncated tiles); one sentence for efficiency ("29% less electricity for every
+kilolitre of water pumped") with two labelled bars; one 14-day chart with a Saved / Electricity /
+Water switch plus best day and average; the day table as a list (date + weekday, kWh used / KL
+pumped, ₹ saved in green) grouped by month, earlier months collapsed; the method stated once at the
+bottom. No estimate or tariff marks, regular (not monospace) digits, 13–17px text, 44px+ targets. Same
+savings view the back office reads; a room without a baseline keeps the old charts and table. New
+`weekdayShort` in format-date. Verified at 390px and 1440px on a temporary dev fixture (no sideways
+scroll, nothing truncated, no warning text, tabs switch), removed afterwards.

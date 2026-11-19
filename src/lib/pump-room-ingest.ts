@@ -12,7 +12,7 @@
 
 import { createHash } from "node:crypto";
 import type { Prisma } from "@prisma/client";
-import { spreadGap } from "@/lib/pump-gap";
+import { spreadGapAround } from "@/lib/pump-gap";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { db } from "@/lib/db";
 import { s3, S3_BUCKET } from "@/lib/s3";
@@ -236,13 +236,17 @@ export async function applyPendingIngestsForMeter(meterId: string): Promise<{ ap
     select: { id: true, s3Key: true },
   });
 
-  const withDay: { id: string; day: number | null }[] = [];
+  // Reports carrying water go first: a report without water is the room's
+  // other meter once the water meter has days on record, and that judgement
+  // must not depend on which arrived first (2026-11-19).
+  const withDay: { id: string; day: number | null; water: boolean }[] = [];
   for (const p of pending) {
     const read = await readAndParseIngest(p.s3Key);
-    const day = "error" in read ? null : utcDayOf(read.parsed.rows[read.parsed.rows.length - 1].ts).getTime();
-    withDay.push({ id: p.id, day });
+    const last = "error" in read ? null : read.parsed.rows[read.parsed.rows.length - 1];
+    withDay.push({ id: p.id, day: last ? utcDayOf(last.ts).getTime() : null, water: last?.totalFlow != null });
   }
   withDay.sort((a, b) => {
+    if (a.water !== b.water) return a.water ? -1 : 1;
     if (a.day === null) return 1;
     if (b.day === null) return -1;
     return a.day - b.day;
@@ -320,27 +324,18 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
   const closing = parsed.rows[parsed.rows.length - 1]; // latest ts in the file
   const day = utcDayOf(closing.ts);
 
-  // The vendor sends a second meter's reports under the same subject
-  // (2026-11-19, found in RG's forwarded batches: decimal readings, no water
-  // column, a register ~55,000 kWh away from the room's own). Once a room's
-  // reports carry a water reading, a report without one is not this room's
-  // meter — kept on record, never counted.
+  // The room's other, electricity-only meter (2026-11-19, user's call: RG's
+  // original meter reports under the same subject, on days the water meter
+  // does not). Once the water meter has days on record, a report without a
+  // water reading is that meter's: its kWh counts for the day, its registers
+  // are never differenced against the water meter's.
   if (closing.totalFlow === null) {
     const withWater = await db.emsPumpReading.findFirst({
       where: { pumpMeterId: meterId, origin: "ems_email", lastTotalFlow: { not: null } },
-      select: { lastKwh: true },
+      select: { id: true },
     });
     if (withWater) {
-      await db.emsPumpEmailIngest.update({
-        where: { id: ingestId },
-        data: {
-          status: "parse_failed",
-          pumpMeterId: meterId,
-          rowCount: parsed.rows.length,
-          parseError: `Not this pump room's meter: no water reading, and its register reads ${closing.kwh} kWh. This room's reports carry water readings. Kept on record, not counted.`,
-        },
-      });
-      logger.warn("pump_room.ingest_other_meter", { ingestId, meterId, day: day.toISOString().slice(0, 10), kwh: closing.kwh });
+      await applyOtherMeterDay(ingestId, meterId, day, opening, closing, parsed.rows.length);
       return;
     }
   }
@@ -353,7 +348,7 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
       orderBy: { date: "desc" },
       select: { date: true, lastKwh: true, lastTotalFlow: true },
     }),
-    db.emsPumpReading.findUnique({ where: { pumpMeterId_date: { pumpMeterId: meterId, date: day } }, select: { lastTs: true } }),
+    db.emsPumpReading.findUnique({ where: { pumpMeterId_date: { pumpMeterId: meterId, date: day } }, select: { lastTs: true, origin: true } }),
   ]);
 
   // A resend whose closing sample is no later than what's already stored
@@ -361,7 +356,7 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
   // from an earlier failed attempt (2026-11-10, user-caught: a retried,
   // now-successful row kept showing the error text from its first,
   // failed try, because nothing had ever cleared it).
-  if (existingDay?.lastTs && existingDay.lastTs.getTime() >= closing.ts.getTime()) {
+  if (existingDay?.origin === "ems_email" && existingDay.lastTs && existingDay.lastTs.getTime() >= closing.ts.getTime()) {
     logger.info("pump_room.ingest_duplicate_day", { ingestId, meterId, day: day.toISOString() });
     await db.emsPumpEmailIngest.update({
       where: { id: ingestId },
@@ -475,26 +470,93 @@ async function respreadGap(
 ): Promise<void> {
   const inside = { gt: prev.date, lt: next.date };
   await tx.emsPumpReading.deleteMany({ where: { pumpMeterId: meterId, origin: "distributed", date: inside } });
-  const occupied = await tx.emsPumpReading.count({ where: { pumpMeterId: meterId, date: inside } });
+  const occupied = await tx.emsPumpReading.count({ where: { pumpMeterId: meterId, date: inside, origin: { notIn: ["other_meter"] } } });
   if (occupied > 0) return;
-  const spread = spreadGap({
-    prevDate: prev.date,
-    prevClosingKwh: prev.closingKwh,
-    prevClosingFlow: prev.closingFlow,
-    nextDate: next.date,
-    nextOpeningKwh: next.openingKwh,
-    nextOpeningFlow: next.openingFlow,
-  });
-  if (!spread) return;
-  await tx.emsPumpReading.createMany({
-    data: spread.dates.map((date) => ({ pumpMeterId: meterId, date, origin: "distributed" as const, dailyKwh: spread.kwhPerDay, dailyKl: spread.klPerDay })),
-  });
+  const others = await tx.emsPumpReading.findMany({ where: { pumpMeterId: meterId, date: inside, origin: "other_meter" }, select: { id: true, date: true, dailyKwh: true } });
+  const otherKwh = new Map(others.map((o) => [o.date.toISOString().slice(0, 10), o.dailyKwh]));
+  const days = spreadGapAround(
+    { prevDate: prev.date, prevClosingKwh: prev.closingKwh, prevClosingFlow: prev.closingFlow, nextDate: next.date, nextOpeningKwh: next.openingKwh, nextOpeningFlow: next.openingFlow },
+    otherKwh,
+  );
+  if (!days) return;
+  for (const o of others) {
+    const d = days.find((x) => x.date.getTime() === o.date.getTime());
+    await tx.emsPumpReading.update({ where: { id: o.id }, data: { dailyKl: d?.kl ?? null } });
+  }
+  const spread = days.filter((d) => !d.fromOtherMeter && (d.kwh !== null || d.kl !== null));
+  if (spread.length > 0) {
+    await tx.emsPumpReading.createMany({
+      data: spread.map((d) => ({ pumpMeterId: meterId, date: d.date, origin: "distributed" as const, dailyKwh: d.kwh, dailyKl: d.kl })),
+    });
+  }
   logger.info("pump_room.gap_spread", {
     meterId,
     from: prev.date.toISOString().slice(0, 10),
     to: next.date.toISOString().slice(0, 10),
-    days: spread.dates.length,
-    kwhPerDay: spread.kwhPerDay,
-    klPerDay: spread.klPerDay,
+    days: days.length,
+    otherMeterDays: others.length,
+    kwhPerDay: spread[0]?.kwh ?? null,
+    klPerDay: days[0]?.kl ?? null,
+  });
+}
+
+type Sample = { ts: Date; kwh: number; totalFlow: number | null };
+
+/** A day reported only by the room's other, electricity-only meter. */
+async function applyOtherMeterDay(ingestId: string, meterId: string, day: Date, opening: Sample, closing: Sample, rowCount: number): Promise<void> {
+  const done = { status: "applied" as const, appliedAt: new Date(), pumpMeterId: meterId, rowCount, parseError: null };
+  await db.$transaction(async (tx) => {
+    const existing = await tx.emsPumpReading.findUnique({ where: { pumpMeterId_date: { pumpMeterId: meterId, date: day } }, select: { origin: true } });
+    // A water-meter day or a typed-in report day is never replaced by the other meter.
+    if (existing && (existing.origin === "ems_email" || existing.origin === "report")) {
+      await tx.emsPumpEmailIngest.update({ where: { id: ingestId }, data: done });
+      return;
+    }
+    const priorOther = await tx.emsPumpReading.findUnique({
+      where: { pumpMeterId_date: { pumpMeterId: meterId, date: new Date(day.getTime() - DAY_MS) } },
+      select: { origin: true, lastKwh: true },
+    });
+    const fig = deriveDailyFigure(closing.kwh, opening.kwh, priorOther?.origin === "other_meter" ? priorOther.lastKwh : null);
+    const fields = {
+      origin: "other_meter" as const,
+      lastKwh: closing.kwh,
+      openingKwh: opening.kwh,
+      lastTotalFlow: null,
+      openingTotalFlow: null,
+      lastTs: closing.ts,
+      dailyKwh: fig.daily,
+      registerWentBackwards: fig.wentBackwards,
+      dailyKl: null,
+      waterWentBackwards: false,
+      sourceIngestId: ingestId,
+      sourceDocumentId: null,
+    };
+    await tx.emsPumpReading.upsert({ where: { pumpMeterId_date: { pumpMeterId: meterId, date: day } }, create: { pumpMeterId: meterId, date: day, ...fields }, update: fields });
+
+    const nextOther = await tx.emsPumpReading.findUnique({
+      where: { pumpMeterId_date: { pumpMeterId: meterId, date: new Date(day.getTime() + DAY_MS) } },
+      select: { id: true, origin: true, lastKwh: true, openingKwh: true },
+    });
+    if (nextOther?.origin === "other_meter" && nextOther.lastKwh !== null) {
+      const f = deriveDailyFigure(nextOther.lastKwh, nextOther.openingKwh ?? nextOther.lastKwh, closing.kwh);
+      await tx.emsPumpReading.update({ where: { id: nextOther.id }, data: { dailyKwh: f.daily, registerWentBackwards: f.wentBackwards } });
+    }
+
+    // Re-spread the water meter's gap this day sits in, so its water share
+    // is set and the electricity left for the unreported days shrinks.
+    const [prev, next] = await Promise.all([
+      tx.emsPumpReading.findFirst({ where: { pumpMeterId: meterId, date: { lt: day }, origin: "ems_email" }, orderBy: { date: "desc" }, select: { date: true, lastKwh: true, lastTotalFlow: true } }),
+      tx.emsPumpReading.findFirst({
+        where: { pumpMeterId: meterId, date: { gt: day }, origin: "ems_email" },
+        orderBy: { date: "asc" },
+        select: { date: true, lastKwh: true, lastTotalFlow: true, openingKwh: true, openingTotalFlow: true, dailyKwh: true, dailyKl: true },
+      }),
+    ]);
+    if (prev && next) {
+      const nextOpeningKwh = next.openingKwh ?? (next.lastKwh !== null && next.dailyKwh !== null ? next.lastKwh - next.dailyKwh : null);
+      const nextOpeningFlow = next.openingTotalFlow ?? (next.lastTotalFlow !== null && next.dailyKl !== null ? next.lastTotalFlow - next.dailyKl : null);
+      await respreadGap(tx, meterId, { date: prev.date, closingKwh: prev.lastKwh, closingFlow: prev.lastTotalFlow }, { date: next.date, openingKwh: nextOpeningKwh, openingFlow: nextOpeningFlow });
+    }
+    await tx.emsPumpEmailIngest.update({ where: { id: ingestId }, data: done });
   });
 }

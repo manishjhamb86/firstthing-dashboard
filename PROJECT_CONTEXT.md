@@ -9647,3 +9647,22 @@ then rebuilt from every stored report in date order (email and spread days delet
 meter, no day above 708.5 kWh and no backwards register. Who the second meter is (RG's fire or STP room?) is
 still to be confirmed.
 
+**Third and fourth lots, and the "other meter" turned out to be RG's original meter (2026-11-19).** "RG 3rd
+slot" (12 Jun – 8 Aug) and "RG 4th slot" (15 Apr – 12 Jun) brought 98 more reports; together the other,
+electricity-only meter's reports run 15 Apr – 2 Sep, and its rise over RG's baseline period (12 May – 2 Jun) is
+17,428 kWh against the baseline report's 17,270 — it is the pump room's original meter; the water meter began
+24 Jun, and each day's email came from one or the other, never both. **User's call: count its electricity.**
+New `EmsPumpReadingOrigin.other_meter` (migration `20261119120000`): once a room's water meter has days, a
+report with no water reading is stored as an `other_meter` day — its kWh from its own report (differenced
+against the previous day only when that is also an `other_meter` day), never differenced against by the water
+meter's days, never replacing a water-meter or typed-in day. Inside a water-meter gap, `spreadGapAround`
+(`pump-gap.ts`, tested) gives every day a share of the water rise, keeps the other meter's kWh, and divides
+the rest of the electricity rise over days neither meter reported. `applyPendingIngestsForMeter` applies
+water-carrying reports first so the judgement does not depend on arrival order. An older report no longer
+replaces the meter's cached latest reading. RG rebuilt from all 197 distinct reports: 101 water-meter days,
+84 other-meter days, 12 spread, 10 typed-in; estimated days in the savings view 116 → 1; overall since 24 Jun
+₹2,20,876 / 30,508 kWh at ₹7.24. Known blip: 25 Apr's file is a part day (192 kWh) so 26 Apr reads 1,408.
+To run this before a deploy, the enum value was added to production's database directly (`ADD VALUE IF NOT
+EXISTS`, so the migration is a no-op on deploy) and the Prisma client was regenerated on disk there without a
+restart; the code is not yet deployed.
+

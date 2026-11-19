@@ -4051,6 +4051,12 @@ enum EmsPumpReadingOrigin {
   /// equally between them (2026-11-18, user-specified). Never differenced
   /// against; replaced the moment that day's own report arrives.
   distributed
+  /// The room's other, electricity-only meter reported this day and the
+  /// water meter did not (2026-11-19, user's call — RG's original meter,
+  /// whose reports arrive under the same subject). Its kWh is that meter's
+  /// own report; its water is a share of the water meter's rise across the
+  /// gap. Never differenced against by the water meter's days.
+  other_meter
 
   @@map("ems_pump_reading_origin")
 }

@@ -35,3 +35,38 @@ export function spreadGap(input: {
   return { dates, kwhPerDay, klPerDay };
 }
 
+
+export type GapDay = { date: Date; kwh: number | null; kl: number | null; fromOtherMeter: boolean };
+
+/**
+ * The same spread, when some days in the gap carry electricity from the
+ * room's other meter (2026-11-19, user's call: RG's original, electricity-only
+ * meter reported on days the water meter did not). Those days keep their own
+ * kWh; the rest of the register rise is divided over the days neither meter
+ * reported. Water is divided over every day in the gap, since only the water
+ * meter measures it. Totals still equal what the water meter recorded.
+ */
+export function spreadGapAround(
+  input: Parameters<typeof spreadGap>[0],
+  otherMeterKwh: Map<string, number | null>,
+): GapDay[] | null {
+  const n = Math.round((input.nextDate.getTime() - input.prevDate.getTime()) / DAY) - 1;
+  if (n <= 0) return null;
+  const dates = Array.from({ length: n }, (_, i) => new Date(input.prevDate.getTime() + (i + 1) * DAY));
+  const rise = (closing: number | null, opening: number | null) =>
+    closing !== null && opening !== null && opening - closing >= 0 ? opening - closing : null;
+  const kwhRise = rise(input.prevClosingKwh, input.nextOpeningKwh);
+  const klRise = rise(input.prevClosingFlow, input.nextOpeningFlow);
+  const key = (d: Date) => d.toISOString().slice(0, 10);
+  const known = dates.filter((d) => otherMeterKwh.has(key(d)));
+  const knownKwh = known.reduce((s, d) => s + (otherMeterKwh.get(key(d)) ?? 0), 0);
+  const unknownCount = n - known.length;
+  const left = kwhRise === null ? null : kwhRise - knownKwh;
+  const kwhPerUnknown = left !== null && left >= 0 && unknownCount > 0 ? left / unknownCount : null;
+  const klPerDay = klRise === null ? null : klRise / n;
+  return dates.map((date) =>
+    otherMeterKwh.has(key(date))
+      ? { date, kwh: otherMeterKwh.get(key(date)) ?? null, kl: klPerDay, fromOtherMeter: true }
+      : { date, kwh: kwhPerUnknown, kl: klPerDay, fromOtherMeter: false },
+  );
+}

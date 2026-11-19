@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { spreadGap } from "@/lib/pump-gap";
+import { spreadGap, spreadGapAround } from "@/lib/pump-gap";
 
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
 
@@ -21,5 +21,28 @@ describe("spreadGap", () => {
     expect(s.kwhPerDay).toBeNull();
     expect(s.klPerDay).toBeCloseTo(15);
     expect(spreadGap({ prevDate: d("2026-11-01"), prevClosingKwh: 100, prevClosingFlow: null, nextDate: d("2026-11-04"), nextOpeningKwh: 90, nextOpeningFlow: null })).toBeNull();
+  });
+});
+
+describe("spreadGapAround — days the other meter reported", () => {
+  const input = {
+    prevDate: new Date("2026-07-24T00:00:00Z"),
+    prevClosingKwh: 1000,
+    prevClosingFlow: 5000,
+    nextDate: new Date("2026-07-29T00:00:00Z"),
+    nextOpeningKwh: 3400,
+    nextOpeningFlow: 9000,
+  };
+  it("keeps the other meter's kWh and divides the rest over the unreported days; water over all", () => {
+    const days = spreadGapAround(input, new Map([["2026-07-25", 700], ["2026-07-26", 500]]))!;
+    expect(days.map((d) => d.kwh)).toEqual([700, 500, 600, 600]);
+    expect(days.every((d) => d.kl === 1000)).toBe(true);
+    expect(days.reduce((s, d) => s + (d.kwh ?? 0), 0)).toBe(2400);
+    expect(days.map((d) => d.fromOtherMeter)).toEqual([true, true, false, false]);
+  });
+  it("gives no kWh to the unreported days when the other meter already accounts for more than the rise", () => {
+    const days = spreadGapAround(input, new Map([["2026-07-25", 3000]]))!;
+    expect(days[0].kwh).toBe(3000);
+    expect(days.slice(1).every((d) => d.kwh === null)).toBe(true);
   });
 });

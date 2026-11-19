@@ -363,12 +363,12 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
   // Society-wide daily series: for each recorded day, sum the kWh AND the
   // baselines of the circuits that reported it, so every bucket compares
   // like with like.
-  const byDate = new Map<string, { kWh: number; baseline: number; replacedBaseline: number; missingBaseline: boolean; underReview: boolean }>();
+  const byDate = new Map<string, { kWh: number; baseline: number; replacedBaseline: number; missingBaseline: boolean; underReview: boolean; counted: number }>();
   for (const p of perCircuit) {
     const ex = exclusionFromDevices(p.c.devices, "monitoring");
     for (const d of p.monitoring) {
       if (d.excluded) continue;
-      const cur = byDate.get(d.date) ?? { kWh: 0, baseline: 0, replacedBaseline: 0, missingBaseline: false, underReview: false };
+      const cur = byDate.get(d.date) ?? { kWh: 0, baseline: 0, replacedBaseline: 0, missingBaseline: false, underReview: false, counted: 0 };
       // A day under review contributes no figure — it marks the date and is
       // held out of the sum, the same way an excluded day already is, rather
       // than silently blending an unreliable reading into the total.
@@ -383,6 +383,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
         new Date(`${d.date}T00:00:00Z`),
       );
       cur.kWh += d.kWh;
+      cur.counted += 1;
       if (dayBaseline === null) cur.missingBaseline = true;
       else {
         cur.baseline += comparableBaseline(dayBaseline, ex);
@@ -398,7 +399,13 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
       kWh: v.kWh,
       baseline: v.missingBaseline ? null : v.baseline,
       replacedBaseline: v.missingBaseline ? null : v.replacedBaseline,
-      underReview: v.underReview,
+      // Under review only when NO circuit's figure for the day stands. One
+      // circuit's bad reading used to mark the whole date, hiding the other
+      // circuits' good days with it (RG Residency, 2026-11-19: a month of
+      // normal lift-lobby days left the chart with one bar). The sum and the
+      // baselines above already hold only the circuits that counted, so a
+      // day that shows compares like with like.
+      underReview: v.underReview && v.counted === 0,
     }));
 
   // ₹ is FEAT-111's (published-months.ts): the society's rupee figures come

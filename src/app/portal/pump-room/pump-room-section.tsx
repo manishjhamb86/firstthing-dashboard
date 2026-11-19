@@ -82,7 +82,7 @@ export async function PumpRoomSection({ meter }: { meter: Awaited<ReturnType<typ
           )}
         </div>
       )}
-      {savings && <PumpSavingsPanel view={savings} />}
+      {savings && <PumpSavingsPanel view={savings} forSociety />}
       {/* Without a baseline the plain day table is the readout; with one, the savings panel's own table carries every figure. */}
       {!savings && trend.days.length > 0 && (
         <Card className="p-4 sm:p-5">

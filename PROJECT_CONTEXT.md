@@ -9547,3 +9547,17 @@ grants. A former office-bearer returns as committee when another account holds t
 one office-bearer per society. The customer portal already showed active accounts only (its account
 list, invoice emails and push recipients all filter `isActive`), so nothing changed there. Verified
 in a browser on dev with two test accounts, removed afterwards.
+
+**No review warnings or tariff on the customer portal (2026-11-19, user's call)**: the society no
+longer sees "Under review — N days need checking", amber under-review bars on the Live savings
+trend, the "off the top of this scale" note, the pump room's "N of M days are estimated" box,
+"est."/"spread" marks, estimate counts and legend, the dashboard pump card's "N days estimated", or
+"at ₹7.24 / kWh — your recorded tariff". Days still under review are simply left out of the chart
+and the month-so-far figure (they were already excluded from the sums). `PumpSavingsPanel` takes
+`forSociety`; the back office keeps every marking. **A real defect found doing it**: the portal's
+society-wide daily series marked a date "under review" whenever ANY circuit's reading that day was
+untrusted, hiding the other circuits' good days — RG Residency's lift lobby had a month of complete,
+normal days (~12.5 kWh, ~61%) and the chart showed one bar. A date is now under review only when no
+circuit's figure stands; the sum and baselines already held only the circuits that counted. Not yet
+checked in a browser: dev has no society with both a good and a bad circuit, so RG on stage or
+production is where it shows.

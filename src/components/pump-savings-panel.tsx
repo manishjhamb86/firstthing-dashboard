@@ -11,7 +11,14 @@ import { SpreadMark } from "@/components/pump-day-table";
 const inr = (v: number) => `₹${Math.round(v).toLocaleString("en-IN")}`;
 const kwh = (v: number) => Math.round(v).toLocaleString("en-IN");
 
-export function PumpSavingsPanel({ view, reportHref }: { view: PumpSavingsView; reportHref?: string | null }) {
+/**
+ * `forSociety` (2026-11-19, the user's call: "customers don't need to see these
+ * warnings"): the portal's copy drops every estimate and spread marking — the
+ * amber note, the "est." labels and badges, the counts and the legend. The
+ * figures are the same; only the back office is told which days are averaged.
+ */
+export function PumpSavingsPanel({ view, reportHref, forSociety = false }: { view: PumpSavingsView; reportHref?: string | null; forSociety?: boolean }) {
+  const warn = !forSociety;
   const b = view.baseline;
   const now = view.now;
   const changePct = now ? (now.kwhPerKl / b.kwhPerKl - 1) * 100 : null;
@@ -48,7 +55,7 @@ export function PumpSavingsPanel({ view, reportHref }: { view: PumpSavingsView; 
           <div className="flex items-baseline justify-between gap-2">
             <span className="lbl">Saved</span>
             <span className="text-[11px]" style={{ color: "var(--text-muted)" }}>
-              {view.tariff !== null ? `at ₹${view.tariff} / kWh — your recorded tariff` : "no electricity tariff on record yet"}
+              {forSociety ? "" : view.tariff !== null ? `at ₹${view.tariff} / kWh — your recorded tariff` : "no electricity tariff on record yet"}
             </span>
           </div>
           {view.days.length === 0 ? (
@@ -56,11 +63,11 @@ export function PumpSavingsPanel({ view, reportHref }: { view: PumpSavingsView; 
           ) : (
             <>
               <div className="grid grid-cols-3 gap-2">
-                <Tile label={`Yesterday${s.yesterday?.estimated ? " · est." : ""}`} value={s.yesterday ? (s.yesterday.savedValue !== null ? inr(s.yesterday.savedValue) : `${kwh(s.yesterday.savedKwh)} kWh`) : "—"} sub={s.yesterday ? (s.yesterday.savedValue !== null ? `${kwh(s.yesterday.savedKwh)} kWh${s.yesterday.estimated ? " · averaged" : ""}` : s.yesterday.estimated ? "averaged" : "") : ""} muted={!!s.yesterday?.estimated} />
-                <Tile label={monthLabel(s.month.period)} value={s.month.savedValue !== null ? inr(s.month.savedValue) : `${kwh(s.month.savedKwh)} kWh`} sub={`${s.month.savedValue !== null ? `${kwh(s.month.savedKwh)} kWh · ` : ""}${s.month.days} days${s.month.estimatedDays ? `, ${s.month.estimatedDays} est.` : ""}`} />
+                <Tile label={`Yesterday${warn && s.yesterday?.estimated ? " · est." : ""}`} value={s.yesterday ? (s.yesterday.savedValue !== null ? inr(s.yesterday.savedValue) : `${kwh(s.yesterday.savedKwh)} kWh`) : "—"} sub={s.yesterday ? (s.yesterday.savedValue !== null ? `${kwh(s.yesterday.savedKwh)} kWh${warn && s.yesterday.estimated ? " · averaged" : ""}` : warn && s.yesterday.estimated ? "averaged" : "") : ""} muted={warn && !!s.yesterday?.estimated} />
+                <Tile label={monthLabel(s.month.period)} value={s.month.savedValue !== null ? inr(s.month.savedValue) : `${kwh(s.month.savedKwh)} kWh`} sub={`${s.month.savedValue !== null ? `${kwh(s.month.savedKwh)} kWh · ` : ""}${s.month.days} days${warn && s.month.estimatedDays ? `, ${s.month.estimatedDays} est.` : ""}`} />
                 <Tile label="Since we started" value={s.overall.savedValue !== null ? inr(s.overall.savedValue) : `${kwh(s.overall.savedKwh)} kWh`} sub={`${s.overall.savedValue !== null ? `${kwh(s.overall.savedKwh)} kWh · ` : ""}${s.overall.days} days`} good />
               </div>
-              {s.overall.estimatedDays > 0 && view.readAverage && (
+              {warn && s.overall.estimatedDays > 0 && view.readAverage && (
                 <div className="flex items-start gap-2 rounded-[var(--r-sm)] px-3 py-2" style={{ background: "var(--warn-bg)" }}>
                   <span className="mt-1 h-2 w-2 shrink-0 rounded-[2px] border border-dashed" style={{ borderColor: "var(--warn-fg)" }} />
                   <p className="text-[11.5px] leading-snug" style={{ color: "var(--warn-fg)" }}>
@@ -76,7 +83,7 @@ export function PumpSavingsPanel({ view, reportHref }: { view: PumpSavingsView; 
         </section>
       </div>
 
-      {view.days.length > 0 && <DayTable days={view.days} tariff={view.tariff} baseline={b.kwhPerKl} />}
+      {view.days.length > 0 && <DayTable days={view.days} tariff={view.tariff} baseline={b.kwhPerKl} warn={warn} />}
 
       <p className="text-[11.5px] leading-snug" style={{ color: "var(--text-subtle)" }}>
         Baseline: {b.kwh.toLocaleString("en-IN")} kWh over {b.kl.toLocaleString("en-IN")} KL, {formatDate(b.periodFrom)} – {formatDate(b.periodTo)}
@@ -111,7 +118,7 @@ function Tile({ label, value, sub, muted, good }: { label: string; value: string
   );
 }
 
-function DayTable({ days, tariff, baseline }: { days: SavingsDay[]; tariff: number | null; baseline: number }) {
+function DayTable({ days, tariff, baseline, warn }: { days: SavingsDay[]; tariff: number | null; baseline: number; warn: boolean }) {
   const newestFirst = [...days].reverse();
   const months = new Map<string, SavingsDay[]>();
   for (const d of newestFirst) {
@@ -127,7 +134,7 @@ function DayTable({ days, tariff, baseline }: { days: SavingsDay[]; tariff: numb
         <span className="text-[11px]" style={{ color: "var(--text-subtle)" }}>newest first</span>
       </div>
       {groups.map(([m, rows], i) => {
-        const est = rows.filter((r) => r.estimated).length;
+        const est = warn ? rows.filter((r) => r.estimated).length : 0;
         const saved = rows.reduce((a, r) => a + r.savedKwh, 0);
         const body = (
           <div className="overflow-x-auto">
@@ -139,18 +146,18 @@ function DayTable({ days, tariff, baseline }: { days: SavingsDay[]; tariff: numb
               </thead>
               <tbody>
                 {rows.map((r) => (
-                  <tr key={r.day} style={r.estimated || r.spread ? { color: "var(--text-subtle)", fontStyle: "italic" } : undefined}>
+                  <tr key={r.day} style={warn && (r.estimated || r.spread) ? { color: "var(--text-subtle)", fontStyle: "italic" } : undefined}>
                     <Td align="left">
                       {dayAxis(r.day)}
-                      {r.spread && <SpreadMark />}
-                      {r.estimated && <span className="ml-1 rounded px-1 text-[9.5px] font-bold not-italic" style={{ color: "var(--warn-fg)", background: "var(--warn-bg)" }}>est.</span>}
+                      {warn && r.spread && <SpreadMark />}
+                      {warn && r.estimated && <span className="ml-1 rounded px-1 text-[9.5px] font-bold not-italic" style={{ color: "var(--warn-fg)", background: "var(--warn-bg)" }}>est.</span>}
                     </Td>
                     <Td>{r.kwh.toFixed(0)}</Td>
                     <Td>{r.kl.toFixed(0)}</Td>
                     <Td>{r.kwhPerKl === null ? "—" : r.kwhPerKl.toFixed(2)}</Td>
                     <Td muted>{(baseline * r.kl).toFixed(0)}</Td>
-                    <Td good={!r.estimated}>{r.savedKwh.toFixed(0)}</Td>
-                    {tariff !== null && <Td good={!r.estimated}>{inr(r.savedKwh * tariff)}</Td>}
+                    <Td good={!warn || !r.estimated}>{r.savedKwh.toFixed(0)}</Td>
+                    {tariff !== null && <Td good={!warn || !r.estimated}>{inr(r.savedKwh * tariff)}</Td>}
                   </tr>
                 ))}
               </tbody>
@@ -172,10 +179,10 @@ function DayTable({ days, tariff, baseline }: { days: SavingsDay[]; tariff: numb
           </details>
         );
       })}
-      <p className="text-[11px] leading-snug" style={{ color: "var(--text-subtle)" }}>
+      {warn && <p className="text-[11px] leading-snug" style={{ color: "var(--text-subtle)" }}>
         <span className="font-bold" style={{ color: "var(--warn-fg)" }}>spread</span>{" "}no report came for this day — the meter&apos;s total across the missing days is divided evenly between them.{" "}
         <span className="font-bold" style={{ color: "var(--warn-fg)" }}>est.</span> no reading for this day yet — the average of every day read so far is shown and is replaced when the reading arrives. &quot;Now&quot; uses read days only.
-      </p>
+      </p>}
     </section>
   );
 }

@@ -393,11 +393,9 @@ export default async function PortalHomePage() {
           const currentMonthPct = currentMonthDistinct ? energy.totals.savingsPct : null;
           const currentMonthLabel = energy.month ? monthName(energy.month) : null;
           // A day the system's own check can't trust (CON-45 — a dead meter,
-          // or a saving above what a working one can produce) is never
-          // quietly folded into this figure; it is named instead, and an
-          // admin review is what decides what the month actually says
-          // (user-asked, 2026-10-02).
-          const currentMonthUnderReview = currentMonthDistinct ? energy.totals.underReviewDays : 0;
+          // or a saving above what a working one can produce) is never folded
+          // into this figure (2026-10-02); since 2026-11-19 it is simply left
+          // out, with no warning shown to the society.
 
           return (
             <>
@@ -470,20 +468,16 @@ export default async function PortalHomePage() {
                   </Link>
                 </p>
               )}
-              {currentMonthUnderReview > 0 ? (
-                <p className="mb-6 text-[12.5px]" style={{ color: "var(--warn-fg)" }}>
-                  <strong>Under review</strong> — {currentMonthUnderReview} day{currentMonthUnderReview === 1 ? "" : "s"} of{" "}
-                  {currentMonthLabel} need checking before that month&rsquo;s savings are shown.
+              {/* The month so far, from the days whose figures stand. Days
+                  still under review are simply not counted, and no warning is
+                  shown to the society (2026-11-19, the user's call). */}
+              {currentMonthPct !== null && (
+                <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
+                  <strong className="num" style={{ color: "var(--text-muted)" }}>
+                    {currentMonthPct.toFixed(1)}%
+                  </strong>{" "}
+                  so far in {currentMonthLabel} — not yet billed.
                 </p>
-              ) : (
-                currentMonthPct !== null && (
-                  <p className="mb-6 text-[12.5px]" style={{ color: "var(--text-subtle)" }}>
-                    <strong className="num" style={{ color: "var(--text-muted)" }}>
-                      {currentMonthPct.toFixed(1)}%
-                    </strong>{" "}
-                    so far in {currentMonthLabel} — not yet billed.
-                  </p>
-                )
               )}
 
             </>
@@ -546,11 +540,6 @@ export default async function PortalHomePage() {
                 </span>{" "}
                 · {Math.abs((pumpSavings.now.kwhPerKl / pumpSavings.baseline.kwhPerKl - 1) * 100).toFixed(0)}%{" "}
                 {pumpSavings.now.kwhPerKl < pumpSavings.baseline.kwhPerKl ? "less" : "more"} electricity per kilolitre
-              </p>
-            )}
-            {pumpSavings.summary.overall.estimatedDays > 0 && (
-              <p className="mt-1 text-[11.5px]" style={{ color: "var(--warn-fg)" }}>
-                {pumpSavings.summary.overall.estimatedDays} days estimated from the average of read days — see the page.
               </p>
             )}
           </Card>

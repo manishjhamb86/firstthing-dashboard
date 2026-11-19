@@ -66,7 +66,11 @@ function labelFor(key: string, bucket: Bucket): string {
 
 type Bar = { key: string; label: string; kWh: number; baseline: number | null; replacedBaseline: number | null; days: number; underReview: boolean };
 
-function bucketise(days: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: string } {
+function bucketise(allDays: DailyPoint[], bucket: Bucket): { bars: Bar[]; note: string } {
+  // A day still under review is simply left out (2026-11-19, the user's call:
+  // "don't show such warnings to the customer"). The society sees only days
+  // whose figures stand; the back office's own screens still show the rest.
+  const days = allDays.filter((d) => !d.underReview);
   if (days.length === 0) return { bars: [], note: "" };
 
   // "Overall" keeps the whole history and picks whatever bucket keeps the
@@ -442,16 +446,6 @@ export function ConsumptionChart({
         </div>
       </div>
 
-      {!baselineFits && avgBaseline !== null && (
-        <p className="mt-2 text-xs" style={{ color: "var(--text-subtle)" }}>
-          ↑ Before FirsThing this circuit drew about{" "}
-          <span className="num" style={{ color: "var(--text-muted)", fontWeight: 600 }}>
-            {avgBaseline.toFixed(1)} kWh
-          </span>{" "}
-          per {perBucket} — off the top of this scale, which is set to what you use now so the days
-          stay readable.
-        </p>
-      )}
     </div>
   );
 }

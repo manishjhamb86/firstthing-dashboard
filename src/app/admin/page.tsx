@@ -369,6 +369,54 @@ export default async function AdminHomePage() {
               )}
             </Card>
           )}
+          {/* Confirmed benchmarks against CON-20's band — the number the whole
+              commercial model rests on, so it belongs on the home screen. At the foot
+              of the wider left column, two to a line, so the columns end level
+              (2026-11-19, user-asked). */}
+          {canSeeMonitoring && (
+            <Card className="p-6">
+              <CardTitle>Commissioned savings</CardTitle>
+              {benchmarkedCircuits.length === 0 ? (
+                <EmptyState title="No benchmarks yet">
+                  A circuit lands here once its post-installation window produces a measured savings
+                  figure.
+                </EmptyState>
+              ) : (
+                <ul className="grid gap-x-8 gap-y-3.5 sm:grid-cols-2">
+                  {benchmarkedCircuits.map((c) => {
+                    const pct = c.benchmarkSavingsPct ?? 0;
+                    const band = savingsBand(pct);
+                    const meta = SAVINGS_BAND_META[band];
+                    return (
+                      <li key={c.id}>
+                        <div className="flex items-baseline justify-between gap-3">
+                          <Link
+                            href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
+                            className="truncate text-[13px] font-medium hover:underline"
+                          >
+                            {c.society.name} · {c.location || c.lightType}
+                          </Link>
+                          <span className="num shrink-0 text-sm font-semibold" style={{ color: meta.accent }}>
+                            {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                        <div
+                          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-[var(--r-pill)]"
+                          style={{ background: "var(--surface-active)" }}
+                        >
+                          <div
+                            className="h-full rounded-[var(--r-pill)]"
+                            style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: meta.accent }}
+                          />
+                        </div>
+                        <p className="mt-1 text-xs text-[var(--text-subtle)]">{meta.label}</p>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Card>
+          )}
         </div>
 
         {/* ── Right column: what needs a person ──────────────────────── */}
@@ -557,52 +605,6 @@ export default async function AdminHomePage() {
             )}
           </Card>
 
-          {/* Confirmed benchmarks against CON-20's band — the number the whole
-              commercial model rests on, so it belongs on the home screen. */}
-          {canSeeMonitoring && (
-            <Card className="p-6">
-              <CardTitle>Commissioned savings</CardTitle>
-              {benchmarkedCircuits.length === 0 ? (
-                <EmptyState title="No benchmarks yet">
-                  A circuit lands here once its post-installation window produces a measured savings
-                  figure.
-                </EmptyState>
-              ) : (
-                <ul className="space-y-3.5">
-                  {benchmarkedCircuits.map((c) => {
-                    const pct = c.benchmarkSavingsPct ?? 0;
-                    const band = savingsBand(pct);
-                    const meta = SAVINGS_BAND_META[band];
-                    return (
-                      <li key={c.id}>
-                        <div className="flex items-baseline justify-between gap-3">
-                          <Link
-                            href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
-                            className="truncate text-[13px] font-medium hover:underline"
-                          >
-                            {c.society.name} · {c.location || c.lightType}
-                          </Link>
-                          <span className="num shrink-0 text-sm font-semibold" style={{ color: meta.accent }}>
-                            {pct.toFixed(1)}%
-                          </span>
-                        </div>
-                        <div
-                          className="mt-1.5 h-1.5 w-full overflow-hidden rounded-[var(--r-pill)]"
-                          style={{ background: "var(--surface-active)" }}
-                        >
-                          <div
-                            className="h-full rounded-[var(--r-pill)]"
-                            style={{ width: `${Math.min(100, Math.max(0, pct))}%`, background: meta.accent }}
-                          />
-                        </div>
-                        <p className="mt-1 text-xs text-[var(--text-subtle)]">{meta.label}</p>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </Card>
-          )}
         </div>
       </div>
     </>

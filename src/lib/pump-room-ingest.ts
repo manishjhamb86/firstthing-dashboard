@@ -470,20 +470,24 @@ async function respreadGap(
 ): Promise<void> {
   const inside = { gt: prev.date, lt: next.date };
   await tx.emsPumpReading.deleteMany({ where: { pumpMeterId: meterId, origin: "distributed", date: inside } });
-  const occupied = await tx.emsPumpReading.count({ where: { pumpMeterId: meterId, date: inside, origin: { notIn: ["other_meter"] } } });
-  if (occupied > 0) return;
-  const others = await tx.emsPumpReading.findMany({ where: { pumpMeterId: meterId, date: inside, origin: "other_meter" }, select: { id: true, date: true, dailyKwh: true } });
-  const otherKwh = new Map(others.map((o) => [o.date.toISOString().slice(0, 10), o.dailyKwh]));
+  // A day another meter reported, or one typed in from a filed report, keeps
+  // its own figures; the rest of the rise is divided over the days nobody
+  // reported (2026-11-19).
+  const known = await tx.emsPumpReading.findMany({
+    where: { pumpMeterId: meterId, date: inside, origin: { in: ["other_meter", "report"] } },
+    select: { id: true, date: true, origin: true, dailyKwh: true, dailyKl: true },
+  });
+  const knownDays = new Map(known.map((o) => [o.date.toISOString().slice(0, 10), { kwh: o.dailyKwh, kl: o.origin === "report" ? o.dailyKl : null }]));
   const days = spreadGapAround(
     { prevDate: prev.date, prevClosingKwh: prev.closingKwh, prevClosingFlow: prev.closingFlow, nextDate: next.date, nextOpeningKwh: next.openingKwh, nextOpeningFlow: next.openingFlow },
-    otherKwh,
+    knownDays,
   );
   if (!days) return;
-  for (const o of others) {
+  for (const o of known.filter((k) => k.origin === "other_meter")) {
     const d = days.find((x) => x.date.getTime() === o.date.getTime());
     await tx.emsPumpReading.update({ where: { id: o.id }, data: { dailyKl: d?.kl ?? null } });
   }
-  const spread = days.filter((d) => !d.fromOtherMeter && (d.kwh !== null || d.kl !== null));
+  const spread = days.filter((d) => !d.known && (d.kwh !== null || d.kl !== null));
   if (spread.length > 0) {
     await tx.emsPumpReading.createMany({
       data: spread.map((d) => ({ pumpMeterId: meterId, date: d.date, origin: "distributed" as const, dailyKwh: d.kwh, dailyKl: d.kl })),
@@ -494,7 +498,7 @@ async function respreadGap(
     from: prev.date.toISOString().slice(0, 10),
     to: next.date.toISOString().slice(0, 10),
     days: days.length,
-    otherMeterDays: others.length,
+    knownDays: known.length,
     kwhPerDay: spread[0]?.kwh ?? null,
     klPerDay: days[0]?.kl ?? null,
   });

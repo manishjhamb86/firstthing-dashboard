@@ -34,15 +34,26 @@ describe("spreadGapAround — days the other meter reported", () => {
     nextOpeningFlow: 9000,
   };
   it("keeps the other meter's kWh and divides the rest over the unreported days; water over all", () => {
-    const days = spreadGapAround(input, new Map([["2026-07-25", 700], ["2026-07-26", 500]]))!;
+    const days = spreadGapAround(input, new Map([["2026-07-25", { kwh: 700, kl: null }], ["2026-07-26", { kwh: 500, kl: null }]]))!;
     expect(days.map((d) => d.kwh)).toEqual([700, 500, 600, 600]);
     expect(days.every((d) => d.kl === 1000)).toBe(true);
     expect(days.reduce((s, d) => s + (d.kwh ?? 0), 0)).toBe(2400);
-    expect(days.map((d) => d.fromOtherMeter)).toEqual([true, true, false, false]);
+    expect(days.map((d) => d.known)).toEqual([true, true, false, false]);
   });
   it("gives no kWh to the unreported days when the other meter already accounts for more than the rise", () => {
-    const days = spreadGapAround(input, new Map([["2026-07-25", 3000]]))!;
+    const days = spreadGapAround(input, new Map([["2026-07-25", { kwh: 3000, kl: null }]]))!;
     expect(days[0].kwh).toBe(3000);
     expect(days.slice(1).every((d) => d.kwh === null)).toBe(true);
   });
 });
+
+describe("spreadGapAround — a typed-in report day inside the gap (RG, 9 Jul)", () => {
+  it("keeps 8 Jul's report figures and gives 9 Jul the rest of the rise", () => {
+    const days = spreadGapAround(
+      { prevDate: d("2026-07-07"), prevClosingKwh: 15882, prevClosingFlow: 311897, nextDate: d("2026-07-10"), nextOpeningKwh: 17001, nextOpeningFlow: 313792 },
+      new Map([["2026-07-08", { kwh: 548, kl: 942 }]]),
+    )!;
+    expect(days.map((x) => [x.kwh, x.kl, x.known])).toEqual([[548, 942, true], [571, 953, false]]);
+  });
+});
+

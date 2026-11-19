@@ -9666,3 +9666,11 @@ To run this before a deploy, the enum value was added to production's database d
 EXISTS`, so the migration is a no-op on deploy) and the Prisma client was regenerated on disk there without a
 restart; the code is not yet deployed.
 
+
+**A typed-in report day no longer blocks a gap's spread (2026-11-19, user-asked: "why is 9 Jul estimated?").**
+9 Jul sat between 8 Jul (typed in from the paper report, no registers) and 10 Jul (emailed); the water meter's
+gap 7 → 10 Jul held the typed-in day, and `respreadGap` left any gap holding one unspread. `spreadGapAround`
+now keeps a known day's own figures — a typed-in day's kWh and KL, an other-meter day's kWh — and divides the
+rest of each register rise over the days lacking that figure. 9 Jul = (17,001 − 15,882) − 548 = 571 kWh and
+(313,792 − 311,897) − 942 = 953 KL; RG's savings view now has 0 estimated days. Applied on production through
+a temporary copy; the code is committed, not yet deployed.

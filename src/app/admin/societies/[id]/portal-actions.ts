@@ -101,37 +101,65 @@ export async function deactivatePortalAccount(id: string, societyId: string) {
   return {};
 }
 
+const AUTHORITIES: PortalAuthority[] = ["office_bearer", "committee", "manager"];
+
 /**
- * Bring a deactivated portal account back (2026-11-19, user-asked: deactivated
- * accounts stay visible in the back office "so one can activate back").
- * Deactivation never deleted the row, so this is a flag flip — the account
- * signs in again with its old password and grants. One rule carries over from
- * the office-bearer designation: a society has one office-bearer, so a former
- * office-bearer coming back while another holds it returns as committee, and
- * the reply says so.
+ * Set a portal account's type (2026-11-19, user-asked: reactivating turned an
+ * account into committee with no way to change it). Used by Reactivate (which
+ * now asks what the account comes back as) and by "Change type" on an active
+ * account. A society has exactly one office-bearer: making this account the
+ * office-bearer moves the designation — whoever held it becomes committee, as
+ * the society's own transfer does — and the sole office-bearer cannot be made
+ * anything else until another account is made office-bearer.
  */
-export async function reactivatePortalAccount(id: string, societyId: string): Promise<{ error?: string; note?: string }> {
+export async function setPortalAccountType(input: {
+  id: string;
+  societyId: string;
+  authority: PortalAuthority;
+  reactivate?: boolean;
+}): Promise<{ error?: string; note?: string }> {
   const admin = await resolveAdmin();
   if (!admin) return { error: "Your session has ended. Sign in again." };
+  const event = input.reactivate ? "portal_account.reactivate_refused" : "portal_account.type_refused";
   if (!admin.permissions.includes("manage_users")) {
-    logger.warn("portal_account.reactivate_refused", { actorId: admin.id, societyId, targetId: id, reason: "permission" });
-    return { error: "Reactivating a portal account is operations' own action." };
+    logger.warn(event, { actorId: admin.id, societyId: input.societyId, targetId: input.id, reason: "permission" });
+    return { error: "Changing a portal account is operations' own action." };
   }
-  const target = await db.profile.findUnique({ where: { id }, select: { id: true, societyId: true, isActive: true, portalAuthority: true } });
-  if (!target || target.societyId !== societyId) return { error: "That account is no longer on record." };
-  if (target.isActive) return {};
+  if (!AUTHORITIES.includes(input.authority)) return { error: "Choose a type." };
+  const target = await db.profile.findUnique({
+    where: { id: input.id },
+    select: { id: true, societyId: true, isActive: true, portalAuthority: true },
+  });
+  if (!target || target.societyId !== input.societyId) return { error: "That account is no longer on record." };
+
+  const otherBearers = await db.profile.findMany({
+    where: { id: { not: target.id }, societyId: input.societyId, isActive: true, portalAuthority: "office_bearer" },
+    select: { id: true, name: true, email: true },
+  });
+  if (target.isActive && target.portalAuthority === "office_bearer" && input.authority !== "office_bearer" && otherBearers.length === 0) {
+    logger.warn(event, { actorId: admin.id, societyId: input.societyId, targetId: target.id, reason: "sole_office_bearer" });
+    return { error: "This is the society's only office-bearer. Make another account office-bearer first." };
+  }
 
   let note: string | undefined;
-  let portalAuthority = target.portalAuthority;
-  if (target.portalAuthority === "office_bearer") {
-    const otherBearer = await db.profile.count({ where: { id: { not: id }, societyId, isActive: true, portalAuthority: "office_bearer" } });
-    if (otherBearer > 0) {
-      portalAuthority = "committee";
-      note = "Another account holds the office-bearer designation, so this one is back as committee.";
+  await db.$transaction(async (tx) => {
+    if (input.authority === "office_bearer" && otherBearers.length > 0) {
+      await tx.profile.updateMany({ where: { id: { in: otherBearers.map((b) => b.id) } }, data: { portalAuthority: "committee" } });
+      note = `${otherBearers.map((b) => b.name ?? b.email).join(", ")} ${otherBearers.length === 1 ? "is" : "are"} now committee — a society has one office-bearer.`;
     }
-  }
-  await db.profile.update({ where: { id }, data: { isActive: true, portalAuthority } });
-  logger.info("portal_account.reactivated", { actorId: admin.id, societyId, targetId: id, portalAuthority });
-  revalidatePath(`/admin/societies/${societyId}`);
+    await tx.profile.update({
+      where: { id: target.id },
+      data: { portalAuthority: input.authority, ...(input.reactivate ? { isActive: true } : {}) },
+    });
+  });
+  logger.info(input.reactivate ? "portal_account.reactivated" : "portal_account.type_changed", {
+    actorId: admin.id,
+    societyId: input.societyId,
+    targetId: target.id,
+    from: target.portalAuthority,
+    portalAuthority: input.authority,
+    demoted: input.authority === "office_bearer" ? otherBearers.map((b) => b.id) : [],
+  });
+  revalidatePath(`/admin/societies/${input.societyId}`);
   return { note };
 }

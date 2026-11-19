@@ -9593,3 +9593,16 @@ others; live reads on the tank page and the portal use the tank's own account
 Verified on dev against the real account (12 devices, 10 tanks, all 13 rows linked to `singleton`);
 a duplicate Access ID and bad credentials were both refused with nothing saved. A real second account
 needs its own Tuya cloud project's Access ID and secret. 1,630 unit tests, `tsc`/`lint` clean.
+
+## A portal account's type can be chosen on reactivation and changed later (2026-11-19) — user-caught
+
+Reactivating a former office-bearer silently brought it back as committee, and nothing let anyone
+change an account's type afterwards. `setPortalAccountType` (`manage_users`, typed refusals logged
+`portal_account.type_refused` / `reactivate_refused`) replaces `reactivatePortalAccount`. Reactivate
+now opens a dialog asking what the account comes back as (defaulting to its old type), and every
+active account has **Change type**. The one-office-bearer rule moves the designation rather than
+refusing: making an account office-bearer turns whoever held it into committee (the dialog names
+them first), and the sole office-bearer cannot be made anything else until another account is made
+office-bearer. Verified on dev in a browser with test accounts on RG Residency (change to manager;
+reactivate as office-bearer moved the designation; demoting the sole office-bearer refused), RG's
+real accounts restored afterwards.

@@ -18,7 +18,7 @@ import {
 import { StatusControl } from "./status-control";
 import { AddPortalAccountButton } from "./add-portal-account-button";
 import { DeactivatePortalButton } from "./deactivate-portal-button";
-import { ReactivatePortalButton } from "./reactivate-portal-button";
+import { PortalTypeButton } from "./portal-type-button";
 import { ResetPortalPasswordButton } from "./reset-portal-password-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
@@ -115,6 +115,8 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   ]);
   const accounts = allAccounts.filter((a) => a.isActive);
   const inactiveAccounts = allAccounts.filter((a) => !a.isActive);
+  const bearer = accounts.find((a) => a.portalAuthority === "office_bearer");
+  const bearerName = bearer ? bearer.name ?? bearer.email : null;
   // CON-24 as amended (2026-08-31): a line is delivered in PARTS, each part
   // its own deal — so a line maps to a LIST of deals now, never to one.
   const dealsFor = (line: string) => pipelines.filter((p) => (p.serviceLine as string) === line);
@@ -582,6 +584,14 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
+                    <PortalTypeButton
+                      mode="change"
+                      profileId={a.id}
+                      societyId={society.id}
+                      label={a.name ?? a.email}
+                      current={a.portalAuthority}
+                      officeBearer={bearer && bearer.id !== a.id ? bearerName : null}
+                    />
                     <ResetPortalPasswordButton profileId={a.id} societyId={society.id} label={a.name ?? a.email} />
                     <DeactivatePortalButton profileId={a.id} societyId={society.id} />
                   </div>
@@ -606,7 +616,14 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                         {a.portalAuthority ? PORTAL_AUTHORITY_LABEL[a.portalAuthority] : "—"} · {a.email}
                       </p>
                     </div>
-                    <ReactivatePortalButton profileId={a.id} societyId={society.id} />
+                    <PortalTypeButton
+                      mode="reactivate"
+                      profileId={a.id}
+                      societyId={society.id}
+                      label={a.name ?? a.email}
+                      current={a.portalAuthority}
+                      officeBearer={bearerName}
+                    />
                   </li>
                 ))}
               </ul>

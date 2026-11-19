@@ -9606,3 +9606,18 @@ them first), and the sole office-bearer cannot be made anything else until anoth
 office-bearer. Verified on dev in a browser with test accounts on RG Residency (change to manager;
 reactivate as office-bearer moved the designation; demoting the sole office-bearer refused), RG's
 real accounts restored afterwards.
+
+**Same day, corrected (user-caught on production): several office-bearers, and the back office sets
+modules.** Making a second account office-bearer demoted the first, and committee/manager accounts
+saw only the dashboard: accounts created from the back office were stored with no module grants,
+and only the society's own office-bearer could grant them. The user's call: a society may have more
+than one office-bearer, keeping at least one — `setPortalAccountType` no longer demotes anyone, and
+ending/replacing a member refuses only when their account is the last office-bearer (members-flow
+"second office-bearer" refusal removed). The society page's dialog is now **Change access** (type +
+"What they can open" module checkboxes, office-bearers see everything implicitly), the same dialog as
+Reactivate; `createPortalAccount` gives committee/manager a starting set (electricity, water tanks,
+documents, inventory, tickets view). Portal copy that said "exactly one" office-bearer updated.
+Existing accounts with no modules (e.g. RG's "karan") are fixed from the dialog. Verified on dev:
+modules saved and shown as portal tabs for a committee account, two office-bearers side by side,
+back to committee allowed while another office-bearer exists; fixture removed. The society's own
+transfer act on the portal is unchanged.

@@ -186,8 +186,7 @@ export function AccessEditor({
             </div>
             <div className="mt-3">
               <InfoNote label="How this works">
-                A tab only appears for a member when its access is on. The office-bearer designation
-                itself still moves by transfer — exactly one member holds it.
+                A tab only appears for a member when its access is on. Office-bearers see every tab.
               </InfoNote>
             </div>
           </>

@@ -76,12 +76,10 @@ export function CommitteeClient({
           <div className="flex items-center gap-1.5">
             <CardTitle className="mb-0">Committee accounts</CardTitle>
             <InfoNote label="About these accounts">
-              These are the people at your society who can sign in. Exactly one holds the office-bearer
-              designation — the only authority that can accept an offer or sign an agreement. These
-              accounts see only your society&apos;s own data, and nothing else in FirsThing. The
-              office-bearer designation moves by handing it to someone — there is always exactly one, so
-              it is transferred rather than added, and the account holding it cannot be removed until it
-              has been passed on.
+              These are the people at your society who can sign in. Office-bearers are the only accounts
+              that can accept an offer or sign an agreement. These accounts see only your society&apos;s
+              own data, and nothing else in FirsThing. There is always at least one office-bearer, so the
+              last one cannot be removed until someone else holds the designation.
             </InfoNote>
           </div>
           {viewerIsOfficeBearer && !open && (

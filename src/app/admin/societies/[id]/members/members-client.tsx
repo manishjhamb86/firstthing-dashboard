@@ -394,7 +394,7 @@ export function MembersClient({
       >
         {d?.kind === "portal" && (
           <div className="space-y-4">
-            <Field label="Authority" htmlFor="pa-authority" hint="The office-bearer sees everything and makes binding decisions; there is only one per society.">
+            <Field label="Authority" htmlFor="pa-authority" hint="The office-bearer sees everything and makes binding decisions; a society may have more than one.">
               <select id="pa-authority" className="field" value={d.authority} onChange={(e) => setD((x) => (x?.kind === "portal" ? { ...x, authority: e.target.value as "committee" } : x))}>
                 <option value="committee">Committee</option>
                 <option value="manager">Manager</option>

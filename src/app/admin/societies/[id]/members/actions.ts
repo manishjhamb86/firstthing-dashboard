@@ -142,8 +142,8 @@ export async function endMember(memberId: string, input: { endedOn: string; reas
   if (refusal) return { error: refusal };
   if (input.deactivatePortal && m.profileId) {
     const p = await db.profile.findUnique({ where: { id: m.profileId }, select: { portalAuthority: true, isActive: true } });
-    if (p?.isActive && p.portalAuthority === "office_bearer")
-      return { error: "Their portal account holds the office-bearer designation — transfer it to someone else first, or keep their account." };
+    if (p?.isActive && p.portalAuthority === "office_bearer" && (await otherOfficeBearers(m.societyId, m.profileId)) === 0)
+      return { error: "Their portal account is the society's only office-bearer — make someone else office-bearer first, or keep their account." };
   }
   await db.societyMember.update({ where: { id: memberId }, data: { endedOn: day(input.endedOn), endReason: input.reason.trim(), endedById: admin.id } });
   if (input.deactivatePortal) await deactivateLinkedPortal(m.profileId, admin.id);
@@ -171,8 +171,8 @@ export async function replaceMember(
   if (dup) return { error: `${dup.name} is already a current member on this mobile number.` };
   if (input.deactivatePortal && m.profileId) {
     const p = await db.profile.findUnique({ where: { id: m.profileId }, select: { portalAuthority: true, isActive: true } });
-    if (p?.isActive && p.portalAuthority === "office_bearer")
-      return { error: "Their portal account holds the office-bearer designation — transfer it to someone else first, or keep their account." };
+    if (p?.isActive && p.portalAuthority === "office_bearer" && (await otherOfficeBearers(m.societyId, m.profileId)) === 0)
+      return { error: "Their portal account is the society's only office-bearer — make someone else office-bearer first, or keep their account." };
   }
   const positionId = await resolvePosition(input.successor);
   const endedOn = day(input.endedOn)!;
@@ -213,11 +213,6 @@ export async function createMemberPortalAccess(
   if (!["office_bearer", "committee", "manager"].includes(input.authority)) return { error: "Choose their authority." };
   const grants = sanitizeGrants(input.grants);
   if (!grants) return { error: "Unknown access selected." };
-  if (input.authority === "office_bearer") {
-    const existing = await db.profile.findFirst({ where: { societyId: m.societyId, portalAuthority: "office_bearer", isActive: true }, select: { name: true, email: true } });
-    if (existing)
-      return { error: `${existing.name ?? existing.email} already holds the office-bearer designation — it moves by transfer, so give this member committee or manager authority.` };
-  }
   const [p, a] = await Promise.all([db.profile.findUnique({ where: { email: m.email } }), db.adminUser.findUnique({ where: { email: m.email } })]);
   if (p || a) return { error: "That email already has a login — use another, or link the existing account." };
   const password = temporaryPassword();
@@ -261,4 +256,9 @@ export async function setPositionActive(id: string, active: boolean): Promise<Re
   logger.info("member_position.set_active", { actorId: admin.id, id, active });
   revalidatePath("/admin/settings/positions");
   return {};
+}
+
+/** Active office-bearers other than this account — a society keeps at least one. */
+async function otherOfficeBearers(societyId: string, profileId: string): Promise<number> {
+  return db.profile.count({ where: { societyId, isActive: true, portalAuthority: "office_bearer", id: { not: profileId } } });
 }

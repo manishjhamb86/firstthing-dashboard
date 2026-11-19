@@ -445,10 +445,12 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
       }
     }
 
-    await tx.emsPumpMeter.update({
-      where: { id: meterId },
-      data: { lastKwh: closing.kwh, lastTotalFlow: closing.totalFlow, lastReadingAt: closing.ts, lastIngestAt: new Date() },
+    // An older report (a forwarded backlog) never replaces a newer last reading.
+    await tx.emsPumpMeter.updateMany({
+      where: { id: meterId, OR: [{ lastReadingAt: null }, { lastReadingAt: { lte: closing.ts } }] },
+      data: { lastKwh: closing.kwh, lastTotalFlow: closing.totalFlow, lastReadingAt: closing.ts },
     });
+    await tx.emsPumpMeter.update({ where: { id: meterId }, data: { lastIngestAt: new Date() } });
     await tx.emsPumpEmailIngest.update({
       where: { id: ingestId },
       data: { status: "applied", appliedAt: new Date(), pumpMeterId: meterId, rowCount: parsed.rows.length, parseError: null },

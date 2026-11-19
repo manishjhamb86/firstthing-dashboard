@@ -30,6 +30,32 @@ export type TuyaDevice = {
 
 export type TuyaProperty = { code: string; value: unknown; time: number };
 
+/** One stored Tuya account (2026-11-19: more than one is allowed). `id` is
+ *  its TankApiConfig row; "env" for the env-only fallback. */
+export type TuyaAccount = TuyaConfig & { id: string; label: string | null };
+
+/** Every account to sync, the first one ("singleton") first. Falls back to
+ *  the env credentials when none is stored, exactly as before. */
+export async function resolveTuyaAccounts(): Promise<TuyaAccount[]> {
+  const rows = await db.tankApiConfig.findMany({ orderBy: { id: "asc" } });
+  if (rows.length > 0) {
+    return rows
+      .sort((a, b) => (a.id === "singleton" ? -1 : b.id === "singleton" ? 1 : 0))
+      .map((r) => ({ id: r.id, label: r.label, baseUrl: r.baseUrl, accessId: r.accessId, accessSecret: r.accessSecret }));
+  }
+  const env = await resolveTuyaConfig();
+  return env ? [{ ...env, id: "env", label: null }] : [];
+}
+
+/** The credentials to read one tank with: its own account's, else the first. */
+export async function resolveTuyaConfigFor(accountId: string | null | undefined): Promise<TuyaConfig | null> {
+  if (accountId) {
+    const row = await db.tankApiConfig.findUnique({ where: { id: accountId } });
+    if (row) return { baseUrl: row.baseUrl, accessId: row.accessId, accessSecret: row.accessSecret };
+  }
+  return resolveTuyaConfig();
+}
+
 export async function resolveTuyaConfig(): Promise<TuyaConfig | null> {
   const row = await db.tankApiConfig.findUnique({ where: { id: "singleton" } });
   if (row) return { baseUrl: row.baseUrl, accessId: row.accessId, accessSecret: row.accessSecret };
@@ -270,7 +296,9 @@ export async function getLevelMax(
  * device's cached state. Used by the settings page's test/sync, by the
  * half-hourly sampling job, and (best-effort) by live page loads.
  */
-export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: number; tanks: number }> {
+export async function syncTankDevices(cfg: TuyaConfig, accountId: string = "singleton"): Promise<{ devices: number; tanks: number }> {
+  // The env fallback is not a stored row, so a tank synced from it links to none.
+  const tankApiConfigId = accountId === "env" ? null : accountId;
   const devices = await listTuyaDevices(cfg);
   let tanks = 0;
   for (const d of devices) {
@@ -305,12 +333,14 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
         category: d.category,
         hasLevelSignal,
         levelMax,
+        tankApiConfigId,
         lastOnline: d.isOnline,
         lastMotorStatus: motorStatus,
         lastMotorOn: motorOn,
         ...(level ? { lastLevelPercent: level.level, lastReportedAt: new Date(level.time) } : {}),
       },
       update: {
+        tankApiConfigId,
         name: d.name,
         productName: d.productName,
         category: d.category,
@@ -330,7 +360,7 @@ export async function syncTankDevices(cfg: TuyaConfig): Promise<{ devices: numbe
     });
   }
   await db.tankApiConfig.updateMany({
-    where: { id: "singleton" },
+    where: { id: accountId },
     data: { lastOkAt: new Date(), lastError: null, lastDeviceCount: devices.length, lastSyncAt: new Date() },
   });
   return { devices: devices.length, tanks };

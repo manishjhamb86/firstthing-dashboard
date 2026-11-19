@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ErrorText, Field } from "@/components/ui";
-import { saveTankApiConfig } from "../actions";
+import { removeTankApiAccount, saveTankApiConfig } from "../actions";
 
 /**
  * Save-and-test in one act: credentials that never fetched a device list are
@@ -12,10 +12,18 @@ import { saveTankApiConfig } from "../actions";
  */
 export function SettingsForm({
   current,
+  accountId = "singleton",
+  removable = false,
+  onDone,
 }: {
-  current: { baseUrl: string; accessId: string; hasSecret: boolean };
+  current: { baseUrl: string; accessId: string; hasSecret: boolean; label?: string | null };
+  /** Which stored account this edits; "new" adds another (2026-11-19). */
+  accountId?: string;
+  removable?: boolean;
+  onDone?: () => void;
 }) {
   const router = useRouter();
+  const [label, setLabel] = useState(current.label ?? "");
   const [baseUrl, setBaseUrl] = useState(current.baseUrl);
   const [accessId, setAccessId] = useState(current.accessId);
   const [accessSecret, setAccessSecret] = useState("");
@@ -27,12 +35,13 @@ export function SettingsForm({
     setError(undefined);
     setNotice(undefined);
     startTransition(async () => {
-      const result = await saveTankApiConfig({ baseUrl, accessId, accessSecret });
+      const result = await saveTankApiConfig({ accountId, label, baseUrl, accessId, accessSecret }).catch(() => ({ error: "That did not go through — try again." }) as { error?: string; devices?: number; tanks?: number });
       if (result.error) setError(result.error);
       else {
         setNotice(`Connected — ${result.devices} devices, ${result.tanks} with a water level.`);
         setAccessSecret("");
         router.refresh();
+        onDone?.();
       }
     });
   }
@@ -45,13 +54,17 @@ export function SettingsForm({
         submit();
       }}
     >
+      <Field label="Name" htmlFor={`ta-label-${accountId}`} hint="What you call this Smart Life account, e.g. Main or Second account.">
+        <input id={`ta-label-${accountId}`} className="field" value={label} onChange={(e) => setLabel(e.target.value)} disabled={pending} maxLength={60} />
+      </Field>
+
       <Field
         label="Data center"
-        htmlFor="ta-url"
+        htmlFor={`ta-url-${accountId}`}
         hint="Must match the region the Smart Life account was created in."
       >
         <select
-          id="ta-url"
+          id={`ta-url-${accountId}`}
           className="field"
           value={baseUrl}
           onChange={(e) => setBaseUrl(e.target.value)}
@@ -64,9 +77,9 @@ export function SettingsForm({
         </select>
       </Field>
 
-      <Field label="Access ID" htmlFor="ta-id">
+      <Field label="Access ID" htmlFor={`ta-id-${accountId}`}>
         <input
-          id="ta-id"
+          id={`ta-id-${accountId}`}
           className="field num"
           value={accessId}
           onChange={(e) => setAccessId(e.target.value)}
@@ -77,7 +90,7 @@ export function SettingsForm({
 
       <Field
         label="Access secret"
-        htmlFor="ta-secret"
+        htmlFor={`ta-secret-${accountId}`}
         hint={
           current.hasSecret
             ? "Stored server-side only. Leave blank to keep the saved secret."
@@ -85,7 +98,7 @@ export function SettingsForm({
         }
       >
         <input
-          id="ta-secret"
+          id={`ta-secret-${accountId}`}
           type="password"
           className="field"
           value={accessSecret}
@@ -103,9 +116,28 @@ export function SettingsForm({
         </p>
       )}
 
-      <button type="submit" className="btn-primary" disabled={pending}>
-        {pending ? "Testing…" : "Save & test connection"}
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className="btn-primary" disabled={pending}>
+          {pending ? "Testing…" : accountId === "new" ? "Add & test connection" : "Save & test connection"}
+        </button>
+        {removable && (
+          <button
+            type="button"
+            className="btn-ghost"
+            disabled={pending}
+            onClick={() => {
+              if (!window.confirm("Remove this account? Its tanks stay listed with their history, but stop refreshing.")) return;
+              startTransition(async () => {
+                const r = await removeTankApiAccount(accountId);
+                if (r.error) setError(r.error);
+                else router.refresh();
+              });
+            }}
+          >
+            Remove account
+          </button>
+        )}
+      </div>
     </form>
   );
 }

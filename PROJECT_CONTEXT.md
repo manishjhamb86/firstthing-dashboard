@@ -9575,3 +9575,21 @@ bottom. No estimate or tariff marks, regular (not monospace) digits, 13–17px t
 savings view the back office reads; a room without a baseline keeps the old charts and table. New
 `weekdayShort` in format-date. Verified at 390px and 1440px on a temporary dev fixture (no sideways
 scroll, nothing truncated, no warning text, tabs switch), removed afterwards.
+
+## More than one Smart Life (Tuya) account syncs at once (2026-11-19) — user-asked
+
+"Give option to add multiple credentials so more than one account can sync at once." Settings →
+Water tank API now lists every account, each with its own name, credentials (secret write-only) and
+connection status, plus **Add another Smart Life account**. Migration
+`20261119100000_tank_api_accounts` (additive): `TankApiConfig.label`, and `WaterTank.tankApiConfigId`
+(the account a tank came from, `ON DELETE SET NULL`), backfilled to the existing `singleton` row. The
+`singleton` row stays the first account — it carries the alert thresholds and cannot be removed; any
+other account can (its tanks stay listed with their history and stop refreshing). Saving tests the
+connection first and syncs the account; a second account with an Access ID already saved is refused.
+The half-hourly `tank_level_sample` job and "Sync now" loop every account, each in its own try/catch
+so one failing account (logged `job.tank_account_sync_failed`, error on that row) never stops the
+others; live reads on the tank page and the portal use the tank's own account
+(`resolveTuyaConfigFor`). Env credentials still work as a fallback when no account is saved.
+Verified on dev against the real account (12 devices, 10 tanks, all 13 rows linked to `singleton`);
+a duplicate Access ID and bad credentials were both refused with nothing saved. A real second account
+needs its own Tuya cloud project's Access ID and secret. 1,630 unit tests, `tsc`/`lint` clean.

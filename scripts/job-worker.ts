@@ -2,7 +2,7 @@ import "./load-env";
 import { suspensionApplies } from "../src/lib/deal-close";
 import { db } from "../src/lib/db";
 import { logger } from "../src/lib/logger";
-import { resolveTuyaConfig, syncTankDevices } from "../src/lib/tuya";
+import { resolveTuyaAccounts, syncTankDevices } from "../src/lib/tuya";
 import { pollMeters } from "../src/lib/meter-poll";
 import { arrearsStateOf, shouldFireSuspension } from "../src/lib/arrears";
 import { runIntakeExtraction } from "../src/lib/invoice-intake-extract";
@@ -231,14 +231,27 @@ async function runDemoRelockSweep() {
 
 async function runTankLevelSample() {
   try {
-    const cfg = await resolveTuyaConfig();
-    if (!cfg) {
+    const accounts = await resolveTuyaAccounts();
+    if (accounts.length === 0) {
       // Not configured yet is a normal state, not a failure — the chain keeps
       // ticking so sampling starts the moment operations saves credentials.
       logger.info("job.tank_sample_skipped", { reason: "no_config" });
       return;
     }
-    const synced = await syncTankDevices(cfg);
+    // Every account in turn (2026-11-19: more than one Smart Life account).
+    // One account failing is recorded on its own row and does not stop the
+    // others being sampled.
+    const synced = { devices: 0, tanks: 0 };
+    for (const acct of accounts) {
+      try {
+        const r = await syncTankDevices(acct, acct.id);
+        synced.devices += r.devices;
+        synced.tanks += r.tanks;
+      } catch (err) {
+        logger.warn("job.tank_account_sync_failed", { accountId: acct.id, error: String(err) });
+        await db.tankApiConfig.updateMany({ where: { id: acct.id }, data: { lastError: err instanceof Error ? err.message : String(err) } });
+      }
+    }
     const [tanks, thresholds] = await Promise.all([
       db.waterTank.findMany({
         where: { hasLevelSignal: true },

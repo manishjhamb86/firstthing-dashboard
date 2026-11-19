@@ -15,7 +15,8 @@ import {
   levelFromProperties,
   motorOnFromProperties,
   motorStatusFromProperties,
-  resolveTuyaConfig,
+  resolveTuyaConfigFor,
+  type TuyaConfig,
 } from "@/lib/tuya";
 import { ValveStatus } from "@/components/valve-status";
 import { logger } from "@/lib/logger";
@@ -87,11 +88,17 @@ export default async function PortalTanksPage() {
   // Live refresh, best-effort and bounded: the page renders from the mirror
   // when Tuya is slow or down — residents get the last sample, honestly
   // timestamped, not an error page.
-  const cfg = await resolveTuyaConfig();
+  // Each tank is read with the Tuya account it was listed in (2026-11-19).
+  const cfgByAccount = new Map<string, TuyaConfig | null>();
+  for (const key of new Set(tanks.map((t) => t.tankApiConfigId ?? ""))) {
+    cfgByAccount.set(key, await resolveTuyaConfigFor(key || null));
+  }
   const live = new Map<string, { level: number; reportedAt: Date; motorOn: boolean | null; motorStatus: string | null }>();
-  if (cfg && tanks.length > 0) {
+  if (tanks.length > 0) {
     await Promise.allSettled(
       tanks.map(async (t) => {
+        const cfg = cfgByAccount.get(t.tankApiConfigId ?? "");
+        if (!cfg) return;
         try {
           const props = await getTuyaShadow(cfg, t.tuyaDeviceId);
           const level = levelFromProperties(props, t.levelMax);

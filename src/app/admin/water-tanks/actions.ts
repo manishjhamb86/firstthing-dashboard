@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
 import { logger } from "@/lib/logger";
-import { resolveTuyaConfig, listTuyaDevices, syncTankDevices, type TuyaConfig } from "@/lib/tuya";
+import { resolveTuyaAccounts, listTuyaDevices, syncTankDevices, type TuyaConfig } from "@/lib/tuya";
 
 /**
  * Assign tanks to a society — the act that makes them visible in that
@@ -67,11 +67,14 @@ export async function assignTanks(input: {
  * this is the account the whole feature reads from.
  */
 export async function saveTankApiConfig(input: {
+  /** The account to save: "singleton" (the first), another row's id, or "new" to add one (2026-11-19). */
+  accountId?: string;
+  label?: string;
   baseUrl: string;
   accessId: string;
   /** Empty string means "keep the stored secret" on an edit. */
   accessSecret: string;
-}): Promise<{ error?: string; devices?: number; tanks?: number }> {
+}): Promise<{ error?: string; devices?: number; tanks?: number; accountId?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
   if (!isOperations(actor.team)) {
@@ -86,9 +89,19 @@ export async function saveTankApiConfig(input: {
   }
   if (!accessId) return { error: "Access ID is required." };
 
+  const accountCount = await db.tankApiConfig.count();
+  // The first account is always "singleton" (it also carries the alert thresholds).
+  const accountId = input.accountId === "new" || !input.accountId ? (accountCount === 0 ? "singleton" : `acct-${Date.now().toString(36)}`) : input.accountId;
+  const label = input.label?.trim() || null;
+  const isNew = input.accountId === "new" || !(await db.tankApiConfig.findUnique({ where: { id: accountId }, select: { id: true } }));
+
+  // The same project twice would list every device twice and fight over which account each belongs to.
+  const sameProject = await db.tankApiConfig.findFirst({ where: { accessId, id: { not: accountId } }, select: { label: true, id: true } });
+  if (sameProject) return { error: `That Access ID is already saved as ${sameProject.label ? `"${sameProject.label}"` : sameProject.id === "singleton" ? "the first account" : "another account"}.` };
+
   let accessSecret = input.accessSecret.trim();
   if (!accessSecret) {
-    const existing = await db.tankApiConfig.findUnique({ where: { id: "singleton" } });
+    const existing = isNew ? null : await db.tankApiConfig.findUnique({ where: { id: accountId } });
     if (!existing) return { error: "Access secret is required." };
     accessSecret = existing.accessSecret;
   }
@@ -106,15 +119,38 @@ export async function saveTankApiConfig(input: {
   }
 
   await db.tankApiConfig.upsert({
-    where: { id: "singleton" },
-    create: { id: "singleton", baseUrl, accessId, accessSecret, updatedById: actor.id },
-    update: { baseUrl, accessId, accessSecret, updatedById: actor.id },
+    where: { id: accountId },
+    create: { id: accountId, label, baseUrl, accessId, accessSecret, updatedById: actor.id },
+    update: { label, baseUrl, accessId, accessSecret, updatedById: actor.id },
   });
-  const synced = await syncTankDevices(cfg);
-  logger.info("tank.config_saved", { actorId: actor.id, devices: synced.devices });
+  const synced = await syncTankDevices(cfg, accountId);
+  logger.info("tank.config_saved", { actorId: actor.id, accountId, created: isNew, devices: synced.devices });
   revalidatePath("/admin/water-tanks");
   revalidatePath("/admin/water-tanks/settings");
-  return synced;
+  return { ...synced, accountId };
+}
+
+/**
+ * Remove a further Tuya account (2026-11-19). The first account stays — it
+ * carries the alert thresholds — so it is replaced by editing, never removed.
+ * Its tanks stay listed with their history; they are simply not refreshed
+ * until an account that lists them is saved again.
+ */
+export async function removeTankApiAccount(accountId: string): Promise<{ error?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team)) {
+    logger.warn("tank.account_remove_refused", { actorId: actor.id, accountId });
+    return { error: "The tank API configuration is an operations action." };
+  }
+  if (accountId === "singleton") return { error: "The first account cannot be removed — edit its credentials instead." };
+  const row = await db.tankApiConfig.findUnique({ where: { id: accountId }, select: { id: true } });
+  if (!row) return {};
+  await db.tankApiConfig.delete({ where: { id: accountId } });
+  logger.info("tank.account_removed", { actorId: actor.id, accountId });
+  revalidatePath("/admin/water-tanks");
+  revalidatePath("/admin/water-tanks/settings");
+  return {};
 }
 
 /**
@@ -152,21 +188,26 @@ export async function syncTanksNow(): Promise<{ error?: string; devices?: number
   if (!actor.permissions.includes("manage_users")) {
     return { error: "Syncing the device list is a society-management action (Manage users)." };
   }
-  const cfg = await resolveTuyaConfig();
-  if (!cfg) return { error: "The tank API is not configured yet — set it up under API settings." };
-  try {
-    const synced = await syncTankDevices(cfg);
-    logger.info("tank.synced", { actorId: actor.id, ...synced });
-    revalidatePath("/admin/water-tanks");
-    revalidatePath("/admin/water-tanks/settings");
-    return synced;
-  } catch (err) {
-    await db.tankApiConfig.updateMany({
-      where: { id: "singleton" },
-      data: { lastError: err instanceof Error ? err.message : String(err) },
-    });
-    return { error: `Sync failed: ${err instanceof Error ? err.message : "unknown error"}` };
+  const accounts = await resolveTuyaAccounts();
+  if (accounts.length === 0) return { error: "The tank API is not configured yet — set it up under API settings." };
+  // Every account; one failing is recorded on its row and named, the rest still sync.
+  const total = { devices: 0, tanks: 0 };
+  const failed: string[] = [];
+  for (const acct of accounts) {
+    try {
+      const r = await syncTankDevices(acct, acct.id);
+      total.devices += r.devices;
+      total.tanks += r.tanks;
+    } catch (err) {
+      failed.push(`${acct.label ?? (acct.id === "singleton" ? "First account" : acct.id)}: ${err instanceof Error ? err.message : "unknown error"}`);
+      await db.tankApiConfig.updateMany({ where: { id: acct.id }, data: { lastError: err instanceof Error ? err.message : String(err) } });
+    }
   }
+  logger.info("tank.synced", { actorId: actor.id, ...total, failed: failed.length });
+  revalidatePath("/admin/water-tanks");
+  revalidatePath("/admin/water-tanks/settings");
+  if (failed.length === accounts.length) return { error: `Sync failed — ${failed.join("; ")}` };
+  return failed.length ? { ...total, error: `Some accounts failed — ${failed.join("; ")}` } : total;
 }
 
 /**

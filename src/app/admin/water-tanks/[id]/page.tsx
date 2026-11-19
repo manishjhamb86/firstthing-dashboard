@@ -7,7 +7,7 @@ import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { TankVisual } from "@/components/tank-visual";
 import { ValveStatus } from "@/components/valve-status";
 import { formatDate, formatInstant, timeAgo } from "@/lib/format-date";
-import { getTuyaShadow, levelFromProperties, resolveTuyaConfig } from "@/lib/tuya";
+import { getTuyaShadow, levelFromProperties, resolveTuyaConfigFor } from "@/lib/tuya";
 import { logger } from "@/lib/logger";
 import { AssignControl } from "./assign-control";
 import { ReassignButton } from "./reassign-button";
@@ -51,7 +51,7 @@ export default async function TankStatusPage({
     online: tank.lastOnline,
     fresh: false,
   };
-  const cfg = await resolveTuyaConfig();
+  const cfg = await resolveTuyaConfigFor(tank.tankApiConfigId);
   if (cfg && tank.hasLevelSignal) {
     try {
       const props = await getTuyaShadow(cfg, tank.tuyaDeviceId);

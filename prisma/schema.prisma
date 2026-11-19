@@ -3803,8 +3803,14 @@ model CircuitDevice {
 /// The one Tuya cloud project the sensors live in. A singleton row, editable
 /// only by operations. The secret is write-only from the UI: it is stored
 /// here and used server-side, but no action ever returns it to the browser.
+/// One row per Smart Life / Tuya cloud project the tank sensors live in
+/// (2026-11-19, user-asked: "give option for 2 accounts"). The row with id
+/// "singleton" is the first account and also carries the alert thresholds;
+/// further accounts are rows of their own, each synced independently.
 model TankApiConfig {
   id              String    @id @default("singleton")
+  /// What the operator calls this account ("Main", "Noida projects").
+  label           String?
   baseUrl         String    @default("https://openapi.tuyain.com") @map("base_url")
   accessId        String    @map("access_id")
   accessSecret    String    @map("access_secret")
@@ -3823,6 +3829,7 @@ model TankApiConfig {
   highLevelPct    Int       @default(90) @map("high_level_pct")
 
   updatedBy AdminUser? @relation("TankApiConfigUpdatedBy", fields: [updatedById], references: [id])
+  tanks     WaterTank[]
 
   @@map("tank_api_config")
 }
@@ -3843,6 +3850,11 @@ model WaterTank {
   /// is what the Smart Life app shows and what we showed as 45% until this
   /// was found (2026-08-25). Every stored level is normalised through it.
   levelMax         Int        @default(100) @map("level_max")
+  /// The Tuya account this device was listed in, so its live reads use that
+  /// account's credentials (2026-11-19). Null on a device synced from the
+  /// env-only fallback; read with the first account then.
+  tankApiConfigId  String?    @map("tank_api_config_id")
+  tankApiConfig    TankApiConfig? @relation(fields: [tankApiConfigId], references: [id], onDelete: SetNull)
   /// Which supply this tank serves — Domestic / Flush / STP — so the portal
   /// can group tanks the way a resident thinks about them. Null until the
   /// back office classifies it; the portal states that rather than guessing.

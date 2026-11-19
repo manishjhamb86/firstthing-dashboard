@@ -320,6 +320,31 @@ export async function applyIngestToMeter(ingestId: string, meterId: string): Pro
   const closing = parsed.rows[parsed.rows.length - 1]; // latest ts in the file
   const day = utcDayOf(closing.ts);
 
+  // The vendor sends a second meter's reports under the same subject
+  // (2026-11-19, found in RG's forwarded batches: decimal readings, no water
+  // column, a register ~55,000 kWh away from the room's own). Once a room's
+  // reports carry a water reading, a report without one is not this room's
+  // meter — kept on record, never counted.
+  if (closing.totalFlow === null) {
+    const withWater = await db.emsPumpReading.findFirst({
+      where: { pumpMeterId: meterId, origin: "ems_email", lastTotalFlow: { not: null } },
+      select: { lastKwh: true },
+    });
+    if (withWater) {
+      await db.emsPumpEmailIngest.update({
+        where: { id: ingestId },
+        data: {
+          status: "parse_failed",
+          pumpMeterId: meterId,
+          rowCount: parsed.rows.length,
+          parseError: `Not this pump room's meter: no water reading, and its register reads ${closing.kwh} kWh. This room's reports carry water readings. Kept on record, not counted.`,
+        },
+      });
+      logger.warn("pump_room.ingest_other_meter", { ingestId, meterId, day: day.toISOString().slice(0, 10), kwh: closing.kwh });
+      return;
+    }
+  }
+
   const [prior, existingDay] = await Promise.all([
     // Only a register-bearing day can be differenced against — a day typed
     // in from a report carries no registers at all (2026-11-13).

@@ -9637,3 +9637,13 @@ byte-identical to reports already held were skipped), the gaps re-spread from th
 their ingests kept as `parse_failed` with that reason; 19–21 Jul and 23 Jul – 27 Sep are now spread days.
 Backup of the readings before the run: `/tmp/ems-readings-backup-*.json` on the production box. Not yet
 deployed (the running worker still has the old sweep; daily vendor emails are unaffected).
+
+**Second batch, same day ("Fwd: RG second lot", 50 reports, 9 Aug – 2 Oct), and the other meter handled in
+code.** 14 more files were the second meter (no water column, register ~91,000–105,000 kWh), so
+`applyIngestToMeter` now refuses, as `parse_failed` "Not this pump room's meter", a report with no water
+reading once the room's own reports carry one (logged `pump_room.ingest_other_meter`). RG's pump days were
+then rebuilt from every stored report in date order (email and spread days deleted, the typed-in report days
+24 Jun – 8 Jul kept): 80 read days between 17 Jul and 18 Nov, 45 spread days, 18 reports set aside as the other
+meter, no day above 708.5 kWh and no backwards register. Who the second meter is (RG's fire or STP room?) is
+still to be confirmed.
+

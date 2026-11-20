@@ -88,6 +88,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     g.qty += b.quantity;
     g.value += (b.unitCost ?? 0) * b.quantity;
   }
+  // A supplier's legal name crowds the row ("SUNQOR INNOVATIONS LLP"):
+  // initials in the table, the full name on hover (2026-11-20, user-asked).
+  const supplierInitials = (name: string) => {
+    const words = name.replace(/[.,()]/g, " ").split(/\s+/).filter((w) => w && !/^(llp|pvt|private|ltd|limited|inc|co|corp|the|and|&)$/i.test(w));
+    return (words.length ? words : [name]).map((w) => w[0]!.toUpperCase()).join("").slice(0, 4);
+  };
   const categoryLabel = (c: string) => (c ? c.charAt(0).toUpperCase() + c.slice(1).replace(/_/g, " ") : "Other");
 
   return (
@@ -275,7 +281,13 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         <td>
                           {b.purchase ? (
                             <>
-                              <span className="font-mono">{b.purchase.invoiceNumber}</span> <span style={{ color: "var(--text-subtle)" }}>· {b.purchase.supplier.name}</span>
+                              <span className="font-mono">{b.purchase.invoiceNumber}</span>{" "}
+                              <span style={{ color: "var(--text-subtle)" }}>
+                                ·{" "}
+                                <abbr title={b.purchase.supplier.name} className="cursor-help no-underline">
+                                  {supplierInitials(b.purchase.supplier.name)}
+                                </abbr>
+                              </span>
                             </>
                           ) : (
                             <span style={{ color: "var(--text-subtle)" }}>Existing stock</span>

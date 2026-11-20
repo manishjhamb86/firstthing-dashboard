@@ -2,7 +2,7 @@
 
 import { FileDrop } from "@/components/file-drop";
 import { useState, useTransition } from "react";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, formatInstant } from "@/lib/format-date";
 import { Card, CardTitle, ErrorText, Field, StatusChip } from "@/components/ui";
 import { REVIEW_LEAD_HOURS } from "@/lib/installation-gate";
 import { approveBatch, disputeBatch } from "./installation-actions";
@@ -36,6 +36,9 @@ export function BatchReviewCard({
   totalDays,
   canReview,
   onlookerName,
+  workDateIso,
+  nextDayNumber,
+  nextDayDateIso,
 }: {
   batches: ReviewBatch[];
   deadlineIso: string | null;
@@ -45,6 +48,10 @@ export function BatchReviewCard({
   totalDays: number;
   canReview: boolean;
   onlookerName: string;
+  /** The day the work was done — the card names it rather than saying "today" (2026-11-20, user-caught). */
+  workDateIso: string | null;
+  nextDayNumber: number | null;
+  nextDayDateIso: string | null;
 }) {
   const [error, setError] = useState<string | undefined>();
   const [disputing, setDisputing] = useState(false);
@@ -58,12 +65,20 @@ export function BatchReviewCard({
   const todayTotal = batches.reduce((n, b) => n + b.installedCount, 0);
   const deadline = deadlineIso ? new Date(deadlineIso) : null;
   const overdue = deadline ? new Date() >= deadline : false;
+  // Name the days by number and date, never "today"/"tomorrow": a day is
+  // usually reviewed the day after it was worked, and a day recorded after
+  // the fact can be weeks old.
+  const workDate = workDateIso ? formatDate(workDateIso) : null;
+  const thisDay = `day ${dayNumber}`;
+  const nextDay = nextDayNumber ? `Day ${nextDayNumber}${nextDayDateIso ? ` (${formatDate(nextDayDateIso)})` : ""}` : null;
 
   return (
     <Card className="p-6">
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-4">
         <div>
-          <CardTitle>Today&apos;s installation — please confirm</CardTitle>
+          <CardTitle>
+            Day {dayNumber} installation{workDate ? `, ${workDate}` : ""} — please confirm
+          </CardTitle>
           <p className="text-sm text-[var(--text-muted)]">
             Day {dayNumber} of {totalDays} · {totalInstalledToDate} of {totalPlanned} fittings installed so far
           </p>
@@ -71,14 +86,14 @@ export function BatchReviewCard({
         {deadline && (
           <StatusChip tone={overdue ? "bad" : "warn"}>
             {overdue
-              ? "Tomorrow's work is on hold"
-              : `Approve by ${deadline.toISOString().slice(11, 16)} UTC on ${formatDate(deadline)}`}
+              ? `${nextDay ? `Day ${nextDayNumber}` : "The next day"} is on hold`
+              : `Approve by ${formatInstant(deadline)}`}
           </StatusChip>
         )}
       </div>
 
       <p className="text-[28px] font-bold leading-none num">{todayTotal}</p>
-      <p className="text-sm text-[var(--text-muted)] mb-4">fittings installed today</p>
+      <p className="text-sm text-[var(--text-muted)] mb-4">fittings installed{workDate ? ` on ${workDate}` : ` on ${thisDay}`}</p>
 
       <div className="space-y-3 mb-5">
         {batches.map((b) => (
@@ -124,7 +139,7 @@ export function BatchReviewCard({
           className="mb-4 rounded-[var(--r-md)] border p-4 text-sm"
           style={{ borderColor: "var(--bad-line)", background: "var(--bad-bg)", color: "var(--bad-fg)" }}
         >
-          Tomorrow&apos;s work is on hold until this is approved. Approving now still clears it.
+          {nextDay ?? "The next day"} is on hold until {thisDay} is approved. Approving now still clears it.
         </div>
       )}
 
@@ -176,7 +191,7 @@ export function BatchReviewCard({
           <Field label="What is wrong" htmlFor="dispute-note">
             <textarea id="dispute-note" className="field" rows={2} value={note} onChange={(e) => setNote(e.target.value)} required />
           </Field>
-          <Field label="Where" htmlFor="dispute-location" hint="Floor, wing or corridor — it has to be findable tomorrow.">
+          <Field label="Where" htmlFor="dispute-location" hint="Floor, wing or corridor — the crew has to be able to find it.">
             <input id="dispute-location" className="field" value={location} onChange={(e) => setLocation(e.target.value)} required />
           </Field>
           <Field label="Photo" htmlFor="dispute-photo" hint="Required.">
@@ -214,16 +229,17 @@ export function BatchReviewCard({
                 })
               }
             >
-              {pending ? "Approving…" : "Approve today's work"}
+              {pending ? "Approving…" : `Approve day ${dayNumber}'s work`}
             </button>
             <button type="button" className="btn-secondary" disabled={busy} onClick={() => setDisputing(true)}>
               Something is wrong
             </button>
           </div>
-          <p className="mt-3 text-sm text-[var(--text-muted)]">
-            Approval is needed at least {REVIEW_LEAD_HOURS} hours before tomorrow&apos;s start, or the crew cannot
-            begin.
-          </p>
+          {nextDay && (
+            <p className="mt-3 text-sm text-[var(--text-muted)]">
+              {nextDay} can start only once {thisDay} is approved, at least {REVIEW_LEAD_HOURS} hours before its start.
+            </p>
+          )}
           {error && <ErrorText>{error}</ErrorText>}
         </>
       )}

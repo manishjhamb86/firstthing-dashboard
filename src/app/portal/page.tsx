@@ -281,6 +281,9 @@ export default async function PortalHomePage() {
               )
             }
             onlookerName={installation.onlooker.name ?? installation.onlooker.email}
+            workDateIso={installation.plannedDays.find((d) => d.id === dayBatches[0]?.plannedDayId)?.plannedDate?.toISOString() ?? null}
+            nextDayNumber={nextPlannedDay?.day ?? null}
+            nextDayDateIso={nextPlannedDay?.plannedDate?.toISOString() ?? null}
             batches={dayBatches.map((b) => ({
               id: b.id,
               day: b.day,

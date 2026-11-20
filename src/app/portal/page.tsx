@@ -82,7 +82,13 @@ export default async function PortalHomePage() {
     // Same rule for installations: two parts can be mid-install at once,
     // and each day's CON-21 gate belongs to its own project.
     db.installationProject.findMany({
-      where: { societyId, state: "published" },
+      // A project completed early (a partial certificate starts billing
+      // before the last days are done) can still log days afterwards, and
+      // each still needs the society's sign-off — so a complete project with
+      // a day awaiting review stays here until it is answered (2026-11-20,
+      // user-caught on Amrapali Princely Estate: day 4 awaited the society
+      // with no approval card anywhere on the portal).
+      where: { societyId, OR: [{ state: "published" }, { state: "complete", batches: { some: { state: "awaiting_review" } } }] },
       include: {
         onlooker: true,
         plannedDays: { orderBy: { day: "asc" } },

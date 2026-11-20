@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { Fragment } from "react";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
-import { formatDate } from "@/lib/format-date";
+import { formatDate, monthLabel } from "@/lib/format-date";
 import { loadStockHoldings, rupees } from "@/lib/inventory-holdings";
 import { warrantyView } from "@/lib/inventory-warranty-view";
 import { requireInventoryPage } from "./access";
@@ -15,9 +16,9 @@ export const metadata = { title: "Stock" };
  * Inventory overview (2026-09-25): find any unit by its printed code, see
  * what is where in what quantity, and what is about to fall out of warranty.
  */
-export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
+export default async function InventoryPage({ searchParams }: { searchParams: Promise<{ code?: string; item?: string }> }) {
   await requireInventoryPage();
-  const { code } = await searchParams;
+  const { code, item } = await searchParams;
   if (code?.trim()) {
     const c = code.trim().toUpperCase();
     const unit = await db.inventoryUnit.findFirst({ where: { OR: [{ code: c }, { serialNumber: { equals: code.trim(), mode: "insensitive" } }] }, select: { code: true } });
@@ -44,7 +45,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     loadStockHoldings(),
     db.inventoryBatch.findMany({
       orderBy: { createdAt: "desc" },
-      include: { itemType: { select: { name: true, unit: true } }, purchase: { select: { invoiceNumber: true, supplier: { select: { name: true } } } } },
+      include: { itemType: { select: { id: true, name: true, unit: true, category: true } }, purchase: { select: { invoiceNumber: true, supplier: { select: { name: true } } } } },
     }),
     db.inventoryUnit.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
@@ -63,6 +64,31 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     .map((b) => ({ b, w: warrantyView({ warrantyMonths: b.warrantyMonths, basis: "purchase", purchaseDate: b.purchase?.invoiceDate ?? b.receivedOn, deployedOn: null, now }) }))
     .filter(({ w }) => w.until && w.until <= soon)
     .sort((a, z) => a.w.until!.getTime() - z.w.until!.getTime());
+
+  // The batch listing (2026-11-20 redesign): full width, one line per batch,
+  // grouped by the month received, filterable by item.
+  const chipMap = new Map<string, { id: string; name: string; n: number }>();
+  for (const b of batches) {
+    const c = chipMap.get(b.itemType.id) ?? { id: b.itemType.id, name: b.itemType.name, n: 0 };
+    c.n++;
+    chipMap.set(b.itemType.id, c);
+  }
+  const itemChips = [...chipMap.values()].sort((a, z) => z.n - a.n || a.name.localeCompare(z.name));
+  const shown = item ? batches.filter((b) => b.itemType.id === item) : batches;
+  const shownQty = shown.reduce((n, b) => n + b.quantity, 0);
+  const shownValue = shown.reduce((n, b) => n + (b.unitCost ?? 0) * b.quantity, 0);
+  const shownUnits = new Set(shown.map((b) => b.itemType.unit));
+  const shownUnitLabel = shownUnits.size === 1 ? [...shownUnits][0] : "units";
+  const groups: { month: string; label: string; rows: typeof shown; qty: number; value: number }[] = [];
+  for (const b of [...shown].sort((a, z) => z.receivedOn.getTime() - a.receivedOn.getTime() || z.code.localeCompare(a.code))) {
+    const month = b.receivedOn.toISOString().slice(0, 7);
+    let g = groups.find((x) => x.month === month);
+    if (!g) groups.push((g = { month, label: monthLabel(month), rows: [], qty: 0, value: 0 }));
+    g.rows.push(b);
+    g.qty += b.quantity;
+    g.value += (b.unitCost ?? 0) * b.quantity;
+  }
+  const categoryLabel = (c: string) => (c ? c.charAt(0).toUpperCase() + c.slice(1).replace(/_/g, " ") : "Other");
 
   return (
     <>
@@ -119,112 +145,158 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
       <StatRow>
         <Stat label="In stock" value={count("in_stock").toLocaleString("en-IN")} detail="working, at offices" />
         <Stat label="Deployed" value={count("deployed").toLocaleString("en-IN")} detail="working, at societies" />
-        <Stat label="Faulty" value={count("faulty").toLocaleString("en-IN")} detail="not working — ready to send for fixing" />
-        <Stat label="Sent for repair" value={count("sent_for_repair").toLocaleString("en-IN")} detail="away on a warranty claim" />
-        <Stat label="Stock value" value={rupees(officeValue)} detail={uncosted > 0 ? `at cost, held at offices · ${uncosted.toLocaleString("en-IN")} without a cost` : "at cost, held at offices"} />
-        <Stat label="Warranty ending ≤ 60 days" value={expiring.reduce((n, e) => n + e.b._count.units, 0).toLocaleString("en-IN")} detail="units still in use" />
+        <Stat
+          label="Faulty or in repair"
+          value={(count("faulty") + count("sent_for_repair")).toLocaleString("en-IN")}
+          detail={`${count("faulty").toLocaleString("en-IN")} faulty · ${count("sent_for_repair").toLocaleString("en-IN")} away on a claim`}
+        />
+        <Stat label="Stock value" value={rupees(officeValue)} detail={uncosted > 0 ? `at cost, before GST · ${uncosted.toLocaleString("en-IN")} without a cost` : "at cost, before GST, held at offices"} />
       </StatRow>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_340px]">
-        <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-baseline justify-between gap-2 p-5 pb-2">
-            <CardTitle>Batches</CardTitle>
-            <span className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
-              {batches.length.toLocaleString("en-IN")} {batches.length === 1 ? "batch" : "batches"}, newest first
-            </span>
+      <div className="mt-5 grid gap-5 lg:grid-cols-2">
+        <Card className="p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle>What is where</CardTitle>
+            <Link href="/admin/inventory/where" className="text-[13px] font-semibold">
+              Every item by location →
+            </Link>
           </div>
-          {batches.length === 0 ? (
-            <div className="p-5">
-              <EmptyState title="No batches yet">Receive a delivery against its supplier invoice to start.</EmptyState>
-            </div>
+          {usedLocations.length === 0 ? (
+            <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>No stock held anywhere yet.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="tbl tbl-compact">
-                <thead>
-                  <tr>
-                    <th>Batch</th>
-                    <th>Item</th>
-                    <th className="text-right">Quantity</th>
-                    <th>Supplier · invoice</th>
-                    <th>Received</th>
-                    <th className="text-right">Cost each</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {batches.map((b) => (
-                    <tr key={b.id}>
-                      <td>
-                        <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold">
-                          {b.code}
-                        </Link>
-                      </td>
-                      <td>
-                        {b.itemType.name}
-                        {b.historical && (
-                          <>
-                            {" "}
-                            <StatusChip tone="neu">Pre-existing</StatusChip>
-                          </>
-                        )}
-                      </td>
-                      <td className="num text-right">
-                        {b.quantity.toLocaleString("en-IN")} {b.itemType.unit}
-                      </td>
-                      <td style={{ color: "var(--text-muted)" }}>{b.purchase ? `${b.purchase.supplier.name} · ${b.purchase.invoiceNumber}` : "Existing stock"}</td>
-                      <td className="whitespace-nowrap">{formatDate(b.receivedOn)}</td>
-                      <td className="num text-right">{b.unitCost != null ? `₹${b.unitCost.toLocaleString("en-IN")}` : "—"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ul className="mt-1 space-y-3">
+              {usedLocations.map((l) => {
+                const v = values.get(l.id)?.value ?? 0;
+                const units = holdings.usedItems.reduce((n, i) => n + holdings.held(l.id, i.id), 0);
+                return (
+                  <li key={l.id} className="space-y-1.5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 text-[13.5px]">
+                      <span className="font-medium">{l.name}</span>
+                      <span className="num font-semibold">
+                        {rupees(v)} <span className="font-normal" style={{ color: "var(--text-subtle)" }}>· {units.toLocaleString("en-IN")} units</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full" style={{ background: "var(--border-subtle)" }}>
+                      <div className="h-full" style={{ width: `${totalValue > 0 ? Math.round((v / totalValue) * 100) : 0}%`, background: "var(--accent)" }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </Card>
-        <div className="space-y-5">
-          <Card className="p-5">
-            <CardTitle>What is where</CardTitle>
-            {usedLocations.length === 0 ? (
-              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>No stock held anywhere yet.</p>
-            ) : (
-              <ul className="space-y-1.5 text-[13px]">
-                {usedLocations.map((l) => (
-                  <li key={l.id} className="flex items-baseline justify-between gap-3">
-                    <span>{l.name}</span>
-                    <span className="num">{rupees(values.get(l.id)?.value ?? 0)}</span>
-                  </li>
-                ))}
-                <li className="flex items-baseline justify-between gap-3 border-t pt-1.5 font-semibold" style={{ borderColor: "var(--border)" }}>
-                  <span>Total at cost</span>
-                  <span className="num">{rupees(totalValue)}</span>
+        <Card className="p-5">
+          <CardTitle>Warranty ending soon</CardTitle>
+          {expiring.length === 0 ? (
+            <p className="text-[13.5px]" style={{ color: "var(--text-muted)" }}>Nothing ends in the next 60 days.</p>
+          ) : (
+            <ul className="space-y-2 text-[13px]">
+              {expiring.map(({ b, w }) => (
+                <li key={b.id}>
+                  <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold">
+                    {b.code}
+                  </Link>{" "}
+                  · {b.itemType.name} · {b._count.units} units <StatusChip tone={w.tone}>{w.label}</StatusChip>
                 </li>
-              </ul>
-            )}
-            <Link href="/admin/inventory/where" className="btn-secondary btn-sm mt-4 inline-flex">
-              See every item by location →
-            </Link>
-          </Card>
-          <Card className="p-5">
-            <CardTitle>Warranty ending soon</CardTitle>
-            {expiring.length === 0 ? (
-              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>Nothing ends in the next 60 days.</p>
-            ) : (
-              <ul className="space-y-2 text-[13px]">
-                {expiring.map(({ b, w }) => (
-                  <li key={b.id}>
-                    <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold">
-                      {b.code}
-                    </Link>{" "}
-                    · {b.itemType.name} · {b._count.units} units <StatusChip tone={w.tone}>{w.label}</StatusChip>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <p className="mt-2 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
-              Warranties that run from installation are shown on each unit.
-            </p>
-          </Card>
-        </div>
+              ))}
+            </ul>
+          )}
+          <p className="mt-2 text-[12px]" style={{ color: "var(--text-subtle)" }}>
+            Warranties that run from installation are shown on each unit.
+          </p>
+        </Card>
       </div>
+
+      <Card className="mt-5 overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-3 p-5">
+          <div className="flex flex-wrap items-baseline gap-x-2.5">
+            <CardTitle>Batches</CardTitle>
+            <span className="num text-[13px]" style={{ color: "var(--text-muted)" }}>
+              {shown.length.toLocaleString("en-IN")} {shown.length === 1 ? "batch" : "batches"} · {shownQty.toLocaleString("en-IN")} {shownUnitLabel} · {rupees(shownValue)}
+            </span>
+          </div>
+          {itemChips.length > 1 && (
+            <nav className="flex flex-wrap gap-2" aria-label="Filter batches by item">
+              <Link href="/admin/inventory" className={`chip-filter${!item ? " is-on" : ""}`} aria-current={!item ? "true" : undefined}>
+                All items · {batches.length}
+              </Link>
+              {itemChips.map((c) => (
+                <Link key={c.id} href={`/admin/inventory?item=${c.id}`} className={`chip-filter${item === c.id ? " is-on" : ""}`} aria-current={item === c.id ? "true" : undefined}>
+                  {c.name} · {c.n}
+                </Link>
+              ))}
+            </nav>
+          )}
+        </div>
+        {shown.length === 0 ? (
+          <div className="px-5 pb-5">
+            <EmptyState title="No batches yet">Receive a delivery against its supplier invoice to start.</EmptyState>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="tbl batch-tbl">
+              <thead>
+                <tr>
+                  <th>Batch</th>
+                  <th>Item</th>
+                  <th>Supplier invoice</th>
+                  <th>Received</th>
+                  <th className="text-right">Quantity</th>
+                  <th className="text-right">Cost each</th>
+                  <th className="text-right">Value</th>
+                  <th>Warranty</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groups.map((g) => (
+                  <Fragment key={g.month}>
+                    <tr className="batch-grp">
+                      <td colSpan={8}>
+                        <span className="font-semibold">{g.label}</span>{" "}
+                        <span className="num" style={{ color: "var(--text-subtle)" }}>
+                          · {g.rows.length} {g.rows.length === 1 ? "batch" : "batches"} · {g.qty.toLocaleString("en-IN")} {new Set(g.rows.map((r) => r.itemType.unit)).size === 1 ? g.rows[0].itemType.unit : "units"} · {rupees(g.value)}
+                        </span>
+                      </td>
+                    </tr>
+                    {g.rows.map((b) => (
+                      <tr key={b.id}>
+                        <td>
+                          <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold">
+                            {b.code}
+                          </Link>
+                        </td>
+                        <td>
+                          <span className="inline-flex items-center gap-2">
+                            <span className="font-medium">{b.itemType.name}</span>
+                            <StatusChip tone={b.itemType.category === "light" ? "info" : "neu"}>{categoryLabel(b.itemType.category)}</StatusChip>
+                            {b.historical && <StatusChip tone="neu">Pre-existing</StatusChip>}
+                          </span>
+                        </td>
+                        <td>
+                          {b.purchase ? (
+                            <>
+                              <span className="font-mono">{b.purchase.invoiceNumber}</span> <span style={{ color: "var(--text-subtle)" }}>· {b.purchase.supplier.name}</span>
+                            </>
+                          ) : (
+                            <span style={{ color: "var(--text-subtle)" }}>Existing stock</span>
+                          )}
+                        </td>
+                        <td className="num">{formatDate(b.receivedOn)}</td>
+                        <td className="num text-right font-semibold">
+                          {b.quantity.toLocaleString("en-IN")} <span className="font-normal" style={{ color: "var(--text-subtle)" }}>{b.itemType.unit}</span>
+                        </td>
+                        <td className="num text-right">{b.unitCost != null ? `₹${b.unitCost.toLocaleString("en-IN")}` : "—"}</td>
+                        <td className="num text-right font-semibold">{b.unitCost != null ? rupees(b.unitCost * b.quantity) : "—"}</td>
+                        <td style={{ color: b.warrantyMonths ? undefined : "var(--warn-fg)" }}>{b.warrantyMonths ? `${b.warrantyMonths} months` : "Not recorded"}</td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
   );
 }

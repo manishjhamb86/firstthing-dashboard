@@ -880,6 +880,58 @@ textarea.field {
   background: var(--surface-hover);
 }
 
+/* The Stock page's batch listing (2026-11-20, user-caught "distorted"): one
+   line per batch at any width — a narrow screen scrolls the table, never
+   wraps a cell onto three lines. Month bands separate the groups. */
+.batch-tbl td,
+.batch-tbl thead th {
+  white-space: nowrap;
+  font-size: 13.5px;
+}
+.batch-tbl thead th {
+  font-size: 11px;
+}
+.batch-tbl tr > *:first-child {
+  padding-left: 20px;
+}
+.batch-tbl tr > *:last-child {
+  padding-right: 20px;
+}
+.batch-tbl tr.batch-grp td {
+  background: var(--surface);
+  padding-top: 18px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+.batch-tbl tbody tr.batch-grp:hover {
+  background: transparent;
+}
+
+/* A filter chip that is a link (the Stock page's item filter). */
+.chip-filter {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.chip-filter:hover {
+  background: var(--surface-hover);
+}
+.chip-filter.is-on {
+  border-color: var(--accent-line);
+  background: var(--accent-subtle);
+  color: var(--accent-deep);
+  font-weight: 600;
+}
+
 /* A listing row that navigates.
  *
  * The first version used an absolutely-positioned ::after on the anchor,

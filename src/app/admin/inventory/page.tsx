@@ -249,7 +249,6 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                   <th>Received</th>
                   <th className="text-right">Quantity</th>
                   <th className="text-right">Cost each</th>
-                  <th className="text-right">Value</th>
                   <th>Warranty</th>
                 </tr>
               </thead>
@@ -257,7 +256,7 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                 {groups.map((g) => (
                   <Fragment key={g.month}>
                     <tr className="batch-grp">
-                      <td colSpan={8}>
+                      <td colSpan={7}>
                         <span className="font-semibold">{g.label}</span>{" "}
                         <span className="num" style={{ color: "var(--text-subtle)" }}>
                           · {g.rows.length} {g.rows.length === 1 ? "batch" : "batches"} · {g.qty.toLocaleString("en-IN")} {new Set(g.rows.map((r) => r.itemType.unit)).size === 1 ? g.rows[0].itemType.unit : "units"} · {rupees(g.value)}
@@ -297,8 +296,12 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
                         <td className="num text-right font-semibold">
                           {b.quantity.toLocaleString("en-IN")} <span className="font-normal" style={{ color: "var(--text-subtle)" }}>{b.itemType.unit}</span>
                         </td>
-                        <td className="num text-right">{b.unitCost != null ? `₹${b.unitCost.toLocaleString("en-IN")}` : "—"}</td>
-                        <td className="num text-right font-semibold">{b.unitCost != null ? rupees(b.unitCost * b.quantity) : "—"}</td>
+                        <td
+                          className={`num text-right${b.unitCost != null ? " cursor-help" : ""}`}
+                          title={b.unitCost != null ? `Value ${rupees(b.unitCost * b.quantity)} (${b.quantity.toLocaleString("en-IN")} × ₹${b.unitCost.toLocaleString("en-IN")})` : undefined}
+                        >
+                          {b.unitCost != null ? `₹${b.unitCost.toLocaleString("en-IN")}` : "—"}
+                        </td>
                         <td style={{ color: b.warrantyMonths ? undefined : "var(--warn-fg)" }}>{b.warrantyMonths ? `${b.warrantyMonths} months` : "Not recorded"}</td>
                       </tr>
                     ))}

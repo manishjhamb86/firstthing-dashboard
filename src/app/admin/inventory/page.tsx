@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
-import { valueHoldings } from "@/lib/inventory";
+import { loadStockHoldings, rupees } from "@/lib/inventory-holdings";
 import { warrantyView } from "@/lib/inventory-warranty-view";
 import { requireInventoryPage } from "./access";
 import { normaliseInvoiceNumber } from "@/lib/invoice-number";
@@ -40,53 +40,15 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
     if (all.length === 1) redirect(`/admin/inventory/batches/${all[0].id}`);
   }
 
-  const [items, locations, unitGroups, qtyMoves, batches, statusCounts] = await Promise.all([
-    db.inventoryItemType.findMany({ orderBy: [{ category: "asc" }, { name: "asc" }], select: { id: true, name: true, unit: true, tracking: true } }),
-    db.stockLocation.findMany({ where: { active: true }, orderBy: [{ kind: "asc" }, { name: "asc" }], select: { id: true, name: true, kind: true } }),
-    db.inventoryUnit.groupBy({ by: ["locationId", "itemTypeId", "batchId"], where: { locationId: { not: null } }, _count: { _all: true } }),
-    db.stockMovement.findMany({ where: { unitId: null }, select: { itemTypeId: true, batchId: true, quantity: true, fromLocationId: true, toLocationId: true } }),
+  const [holdings, batches, statusCounts] = await Promise.all([
+    loadStockHoldings(),
     db.inventoryBatch.findMany({
       orderBy: { createdAt: "desc" },
-      take: 12,
-      include: { itemType: { select: { name: true, unit: true } }, purchase: { select: { invoiceNumber: true, invoiceDate: true, supplier: { select: { name: true } } } } },
+      include: { itemType: { select: { name: true, unit: true } }, purchase: { select: { invoiceNumber: true, supplier: { select: { name: true } } } } },
     }),
     db.inventoryUnit.groupBy({ by: ["status"], _count: { _all: true } }),
   ]);
-
-  // What is where: serial units counted, quantities summed from the ledger.
-  const cell = new Map<string, number>();
-  for (const g of unitGroups) cell.set(`${g.locationId}|${g.itemTypeId}`, (cell.get(`${g.locationId}|${g.itemTypeId}`) ?? 0) + g._count._all);
-  for (const m of qtyMoves) {
-    if (m.toLocationId) cell.set(`${m.toLocationId}|${m.itemTypeId}`, (cell.get(`${m.toLocationId}|${m.itemTypeId}`) ?? 0) + m.quantity);
-    if (m.fromLocationId) cell.set(`${m.fromLocationId}|${m.itemTypeId}`, (cell.get(`${m.fromLocationId}|${m.itemTypeId}`) ?? 0) - m.quantity);
-  }
-  // Stock value at cost (2026-09-25): the same holdings, per batch, priced at
-  // the batch's cost. Units that left (scrapped, lost, returned to supplier)
-  // have no location and so carry no value.
-  const costs = new Map(
-    (await db.inventoryBatch.findMany({ select: { id: true, unitCost: true } })).map((b) => [b.id, b.unitCost]),
-  );
-  const perBatch = new Map<string, number>();
-  for (const g of unitGroups) perBatch.set(`${g.locationId}|${g.batchId}`, g._count._all);
-  for (const m of qtyMoves) {
-    if (!m.batchId) continue;
-    if (m.toLocationId) perBatch.set(`${m.toLocationId}|${m.batchId}`, (perBatch.get(`${m.toLocationId}|${m.batchId}`) ?? 0) + m.quantity);
-    if (m.fromLocationId) perBatch.set(`${m.fromLocationId}|${m.batchId}`, (perBatch.get(`${m.fromLocationId}|${m.batchId}`) ?? 0) - m.quantity);
-  }
-  const values = valueHoldings(
-    [...perBatch.entries()].map(([k, quantity]) => {
-      const [locationId, batchId] = k.split("|");
-      return { locationId, quantity, unitCost: costs.get(batchId) ?? null };
-    }),
-  );
-  const officeIds = new Set(locations.filter((l) => l.kind === "office").map((l) => l.id));
-  const officeValue = [...values.entries()].filter(([id]) => officeIds.has(id)).reduce((n, [, v]) => n + v.value, 0);
-  const totalValue = [...values.values()].reduce((n, v) => n + v.value, 0);
-  const uncosted = [...values.values()].reduce((n, v) => n + v.uncosted, 0);
-  const rupees = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
-
-  const usedItems = items.filter((i) => locations.some((l) => (cell.get(`${l.id}|${i.id}`) ?? 0) > 0));
-  const usedLocations = locations.filter((l) => usedItems.some((i) => (cell.get(`${l.id}|${i.id}`) ?? 0) > 0));
+  const { usedLocations, values, officeValue, totalValue, uncosted } = holdings;
   const count = (s: string) => statusCounts.find((x) => x.status === s)?._count._all ?? 0;
 
   // Warranty ending within 60 days, for units still in use.
@@ -163,66 +125,84 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
         <Stat label="Warranty ending ≤ 60 days" value={expiring.reduce((n, e) => n + e.b._count.units, 0).toLocaleString("en-IN")} detail="units still in use" />
       </StatRow>
 
-      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_360px]">
+      <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_340px]">
         <Card className="overflow-hidden">
-          <div className="p-5 pb-2">
-            <CardTitle>What is where</CardTitle>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 p-5 pb-2">
+            <CardTitle>Batches</CardTitle>
+            <span className="text-[12.5px]" style={{ color: "var(--text-muted)" }}>
+              {batches.length.toLocaleString("en-IN")} {batches.length === 1 ? "batch" : "batches"}, newest first
+            </span>
           </div>
-          {usedLocations.length === 0 ? (
+          {batches.length === 0 ? (
             <div className="p-5">
-              <EmptyState title="No stock recorded yet">Receive a delivery against its supplier invoice to start.</EmptyState>
+              <EmptyState title="No batches yet">Receive a delivery against its supplier invoice to start.</EmptyState>
             </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="tbl tbl-compact">
                 <thead>
                   <tr>
-                    <th>Location</th>
-                    {usedItems.map((i) => (
-                      <th key={i.id} className="text-right">
-                        {i.name}
-                      </th>
-                    ))}
-                    <th className="text-right">Value at cost</th>
+                    <th>Batch</th>
+                    <th>Item</th>
+                    <th className="text-right">Quantity</th>
+                    <th>Supplier · invoice</th>
+                    <th>Received</th>
+                    <th className="text-right">Cost each</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {usedLocations.map((l) => (
-                    <tr key={l.id}>
+                  {batches.map((b) => (
+                    <tr key={b.id}>
                       <td>
-                        <span className="font-medium">{l.name}</span> <StatusChip tone={l.kind === "office" ? "info" : "neu"}>{l.kind === "office" ? "Office" : "Site"}</StatusChip>
+                        <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold">
+                          {b.code}
+                        </Link>
                       </td>
-                      {usedItems.map((i) => {
-                        const n = Math.round((cell.get(`${l.id}|${i.id}`) ?? 0) * 1000) / 1000;
-                        return (
-                          <td key={i.id} className="num text-right">
-                            {n > 0 ? `${n.toLocaleString("en-IN")}${i.unit === "m" ? " m" : ""}` : "—"}
-                          </td>
-                        );
-                      })}
-                      <td className="num text-right font-semibold">
-                        {rupees(values.get(l.id)?.value ?? 0)}
-                        {(values.get(l.id)?.uncosted ?? 0) > 0 && (
-                          <span className="block text-[11px] font-normal" style={{ color: "var(--warn-fg)" }}>
-                            + {values.get(l.id)!.uncosted.toLocaleString("en-IN")} without a cost
-                          </span>
+                      <td>
+                        {b.itemType.name}
+                        {b.historical && (
+                          <>
+                            {" "}
+                            <StatusChip tone="neu">Pre-existing</StatusChip>
+                          </>
                         )}
                       </td>
+                      <td className="num text-right">
+                        {b.quantity.toLocaleString("en-IN")} {b.itemType.unit}
+                      </td>
+                      <td style={{ color: "var(--text-muted)" }}>{b.purchase ? `${b.purchase.supplier.name} · ${b.purchase.invoiceNumber}` : "Existing stock"}</td>
+                      <td className="whitespace-nowrap">{formatDate(b.receivedOn)}</td>
+                      <td className="num text-right">{b.unitCost != null ? `₹${b.unitCost.toLocaleString("en-IN")}` : "—"}</td>
                     </tr>
                   ))}
-                  <tr>
-                    <td className="font-semibold">Total</td>
-                    {usedItems.map((i) => (
-                      <td key={i.id} />
-                    ))}
-                    <td className="num text-right font-bold">{rupees(totalValue)}</td>
-                  </tr>
                 </tbody>
               </table>
             </div>
           )}
         </Card>
         <div className="space-y-5">
+          <Card className="p-5">
+            <CardTitle>What is where</CardTitle>
+            {usedLocations.length === 0 ? (
+              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>No stock held anywhere yet.</p>
+            ) : (
+              <ul className="space-y-1.5 text-[13px]">
+                {usedLocations.map((l) => (
+                  <li key={l.id} className="flex items-baseline justify-between gap-3">
+                    <span>{l.name}</span>
+                    <span className="num">{rupees(values.get(l.id)?.value ?? 0)}</span>
+                  </li>
+                ))}
+                <li className="flex items-baseline justify-between gap-3 border-t pt-1.5 font-semibold" style={{ borderColor: "var(--border)" }}>
+                  <span>Total at cost</span>
+                  <span className="num">{rupees(totalValue)}</span>
+                </li>
+              </ul>
+            )}
+            <Link href="/admin/inventory/where" className="btn-secondary btn-sm mt-4 inline-flex">
+              See every item by location →
+            </Link>
+          </Card>
           <Card className="p-5">
             <CardTitle>Warranty ending soon</CardTitle>
             {expiring.length === 0 ? (
@@ -242,33 +222,6 @@ export default async function InventoryPage({ searchParams }: { searchParams: Pr
             <p className="mt-2 text-[11.5px]" style={{ color: "var(--text-subtle)" }}>
               Warranties that run from installation are shown on each unit.
             </p>
-          </Card>
-          <Card className="p-5">
-            <CardTitle>Recent batches</CardTitle>
-            {batches.length === 0 ? (
-              <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>None yet.</p>
-            ) : (
-              <ul className="space-y-2 text-[13px]">
-                {batches.map((b) => (
-                  <li key={b.id}>
-                    <Link href={`/admin/inventory/batches/${b.id}`} className="font-mono font-semibold">
-                      {b.code}
-                    </Link>{" "}
-                    · {b.itemType.name} · {b.quantity} {b.itemType.unit}
-                    {b.historical && (
-                      <>
-                        {" "}
-                        <StatusChip tone="neu">Pre-existing</StatusChip>
-                      </>
-                    )}
-                    <span style={{ color: "var(--text-subtle)" }}>
-                      {" "}
-                      · {b.purchase ? `${b.purchase.supplier.name}, invoice ${b.purchase.invoiceNumber}` : "existing stock"}, {formatDate(b.receivedOn)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
           </Card>
         </div>
       </div>

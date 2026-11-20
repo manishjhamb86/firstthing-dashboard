@@ -180,7 +180,7 @@ export function AppShell({
       showTanks && { href: "/admin/pump-rooms", label: "Pump rooms", icon: Droplets },
     ]),
     ...group("inventory", "Inventory", Package, [
-      (showField || showPipeline) && { href: "/admin/inventory", label: "Stock", icon: Package, exact: true },
+      (showField || showPipeline) && { href: "/admin/inventory", label: "Stock", icon: Package, exact: true, alsoMatches: ["/admin/inventory/where", "/admin/inventory/batches", "/admin/inventory/units"] },
       (showField || showPipeline) && { href: "/admin/inventory/receive", label: "Receive stock", icon: Package },
       (showField || showPipeline) && { href: "/admin/inventory/scan", label: "Scan", icon: Package },
     ]),

@@ -167,7 +167,8 @@ export default async function IntakePage({
       uploadedAtMs: i.uploadedAt.getTime(),
       uploadedAgo: timeAgo(i.uploadedAt),
       uploadedBy: i.uploadedBy.name ?? i.uploadedBy.email,
-      note: i.extractionError ?? null,
+      // A submitted invoice has nothing left to read: an old reader error must not sit beside "Released".
+      note: i.status === "submitted" ? null : (i.extractionError ?? null),
       calculationId: i.monthlyCalculationId,
       // The actual filed StoredDocument's own id — "View document" opens
       // THIS document (2026-10-02, user-caught: the link only carried the

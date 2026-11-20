@@ -12,7 +12,7 @@ import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { extractInvoice, type ExtractedInvoice } from "@/lib/invoice-extract";
-import { quotaKind, readWithOneRetry as readWithOneModelRetry } from "@/lib/gemini-models";
+import { isBusy, quotaKind, readWithOneRetry as readWithOneModelRetry } from "@/lib/gemini-models";
 import {
   classifyLine,
   parseInvoiceMonth,
@@ -106,6 +106,9 @@ export function friendlyExtractionError(raw: string): string {
     // endpoint does not say whether that is the minute's window or the day's
     // 20-read cap on a free key, so the message covers both honestly.
     return "The document reader refused on every model it can use. Wait a minute and Retry; if it refuses again, today's free allowance (20 reads a day per model on a free key) is used up — enter the lines by hand, read it tomorrow, or move the key to a billed plan to lift the cap.";
+  }
+  if (isBusy(raw)) {
+    return "Google's document reader is overloaded right now (every model answered \"high demand\"). This passes on its own — Retry in a few minutes, or enter the lines by hand.";
   }
   if (/GEMINI_API_KEY/.test(raw)) return "The document reader is not configured on this server.";
   return "The invoice could not be read automatically — retry, or enter its lines by hand.";

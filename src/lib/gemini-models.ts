@@ -39,7 +39,19 @@ export function quotaKind(raw: string): QuotaKind {
   return /429|RESOURCE_EXHAUSTED|too_many_requests|quota/i.test(raw) ? "quota" : "none";
 }
 
-/** Run `attempt` against each model in turn; a quota refusal moves on, anything else is the answer. */
+/**
+ * Whether Gemini answered "busy" rather than "no": a 503 UNAVAILABLE ("model
+ * is currently experiencing high demand… try again later"). Every intake
+ * read that failed on production through 2026-11-20 was this, never a quota
+ * refusal — and because only a 429 moved to the next model, a busy first
+ * model failed the whole read, on every Retry (user-caught: Zoho invoices
+ * FT/2026-27/106 and 107 stuck at "Could not read").
+ */
+export function isBusy(raw: string): boolean {
+  return /\b503\b|UNAVAILABLE|overloaded|high demand/i.test(raw);
+}
+
+/** Run `attempt` against each model in turn; a quota refusal or a busy model moves on, anything else is the answer. */
 export async function withModelFallback<T>(
   attempt: (model: string) => Promise<T>,
   onSkip?: (model: string, raw: string) => void,
@@ -52,7 +64,7 @@ export async function withModelFallback<T>(
     } catch (err) {
       lastErr = err;
       const raw = err instanceof Error ? err.message : String(err);
-      if (quotaKind(raw) !== "quota") throw err;
+      if (quotaKind(raw) !== "quota" && !isBusy(raw)) throw err;
       onSkip?.(model, raw);
     }
   }
@@ -72,6 +84,11 @@ export async function readWithOneRetry<T>(read: () => Promise<T>): Promise<T> {
     return await read();
   } catch (err) {
     const raw = err instanceof Error ? err.message : String(err);
+    // Every model busy: demand spikes pass in seconds, so wait once and read again.
+    if (isBusy(raw)) {
+      await new Promise((r) => setTimeout(r, 10_000));
+      return await read();
+    }
     const m = raw.match(/retry in ([\d.]+)(ms|s)/i);
     if (quotaKind(raw) !== "quota" || !m) throw err;
     const waitMs = Math.min(m[2].toLowerCase() === "ms" ? Number(m[1]) : Number(m[1]) * 1000, 65_000);

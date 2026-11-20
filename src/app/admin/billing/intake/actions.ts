@@ -340,6 +340,7 @@ async function fileNonServiceInvoice(
     where: { id: intake.id },
     data: {
       status: "submitted",
+      extractionError: null,
       review: review as unknown as Prisma.InputJsonValue,
       societyId,
       period,
@@ -612,6 +613,7 @@ export async function submitIntake(intakeId: string, review: Review): Promise<Re
       where: { id: intakeId },
       data: {
         status: "submitted",
+        extractionError: null,
         review: review as unknown as Prisma.InputJsonValue,
         societyId,
         period,
@@ -897,6 +899,7 @@ async function fileRetailInvoice(
       where: { id: intake.id },
       data: {
         status: "submitted",
+        extractionError: null,
         review: review as unknown as Prisma.InputJsonValue,
         societyId: null,
         period: review.period,

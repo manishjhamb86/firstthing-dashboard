@@ -9691,3 +9691,13 @@ switch_5 = 75%, switch_2 = 100% — the same codes as the IT56WLCW controllers).
 reported last: the highest wet float switch when the switches changed more recently, else the analogue channel. On the
 other tanks the analogue channel is the newer one, so they are unchanged. Its `switch_6` is named "开关6" (Switch 6), not
 "Motor", so the valve status this device shows is not a motor reading.
+
+**A gate pass is filed by its date and time, not a month (2026-11-21, user-asked).** A society can have several gate passes
+in a month, even in a day, and the month slot made every one after the first "version 2" of it. `StoredDocument.issuedAt`
+(migration `20261121090000_gate_pass_issued_at`) holds the date and time printed on the pass (typed, wall clock, UTC-read);
+the catalog's `issuedAt` flag puts a datetime field on the upload form in place of the month, and the month is taken from it.
+A gate pass's slot is (society, type, issued_at), so each timestamp is its own document and the same timestamp again files a
+new version; the plain unique index became two partial ones (period slot where issued_at is null, issued slot where set).
+An identical file is refused across all of the society's gate passes; a future date is refused; the read-the-pass check
+compares to the day. Verified on dev: two passes on 20-Nov at 10:15 and 15:40 both filed as v1, the first file again at
+18:00 refused as a duplicate, a 2030 date refused. Every other document type is unchanged.

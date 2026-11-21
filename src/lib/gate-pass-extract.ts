@@ -107,6 +107,8 @@ export function gatePassMismatch(input: {
   chosenPeriod: string;
 }): boolean {
   const societyMismatch = input.matchedSocietyId !== null && input.matchedSocietyId !== input.chosenSocietyId;
-  const dateMismatch = input.readDate !== "" && input.readDate.slice(0, 7) !== input.chosenPeriod;
+  // `chosenPeriod` is a month (YYYY-MM) or, for a pass filed by its own
+  // date and time, a day (YYYY-MM-DD) — compared at whatever precision was chosen.
+  const dateMismatch = input.readDate !== "" && input.readDate.slice(0, input.chosenPeriod.length) !== input.chosenPeriod;
   return societyMismatch || dateMismatch;
 }

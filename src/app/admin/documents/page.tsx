@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, PageHeader } from "@/components/ui";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
-import { formatInstant } from "@/lib/format-date";
+import { formatDateTime, formatInstant } from "@/lib/format-date";
 import { DocumentUploadClient } from "./upload-client";
 import { WithdrawButton } from "./withdraw-button";
 
@@ -70,6 +70,7 @@ export default async function DocumentsPage({
               context: t.context,
               needsPeriod: t.needsPeriod,
               periodHint: t.periodHint,
+              issuedAt: Boolean(t.issuedAt),
               acceptedExtensions: t.acceptedExtensions,
               maxMb: Math.round(t.maxBytes / (1024 * 1024)),
               uploadHere: t.uploadHere,
@@ -108,7 +109,7 @@ export default async function DocumentsPage({
                     {label(d.docType)} <span className="num">v{d.version}</span> →
                   </Link>
                   <p style={{ color: "var(--text-muted)" }}>
-                    {d.society.name} · <span className="num">{d.period}</span>
+                    {d.society.name} · <span className="num">{d.issuedAt ? formatDateTime(d.issuedAt) : d.period}</span>
                   </p>
                   <p className="text-[11px]" style={{ color: "var(--text-subtle)" }}>
                     {d.fileName} · {formatInstant(d.uploadedAt)} · {d.uploadedBy.name ?? d.uploadedBy.email}

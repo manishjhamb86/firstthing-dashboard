@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
-import { formatDate, formatInstant } from "@/lib/format-date";
+import { formatDate, formatDateTime, formatInstant } from "@/lib/format-date";
 import { DOCUMENT_TYPES } from "@/lib/document-catalog";
 import { publicS3Url } from "@/lib/s3";
 import { EXTRACTABLE_TYPES, type ExtractedDocument } from "@/lib/document-extract";
@@ -87,7 +87,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
       <PageHeader
         backHref="/admin/documents"
         title={doc.society.name}
-        subtitle={`${label} · filed under ${doc.period} · version ${doc.version}${
+        subtitle={`${label} · ${doc.issuedAt ? `issued ${formatDateTime(doc.issuedAt)}` : `filed under ${doc.period}`} · version ${doc.version}${
           doc.coversFrom || doc.coversTo
             ? ` · covers ${doc.coversFrom ? formatDate(doc.coversFrom) : "?"} – ${doc.coversTo ? formatDate(doc.coversTo) : "?"}`
             : ""
@@ -182,6 +182,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
             {(
               [
                 ["Society", doc.society.name],
+                ...(doc.issuedAt ? ([["Issued", formatDateTime(doc.issuedAt)]] as [string, string][]) : []),
                 ["Filed under", doc.period],
                 [
                   "Covers",

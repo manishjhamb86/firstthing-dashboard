@@ -4691,6 +4691,11 @@ model StoredDocument {
   /// "versioning is first priority"). A re-upload into the same slot — same
   /// society, same type, same period — is a NEW VERSION; the previous one
   /// stays exactly as it was filed. Nothing here is ever overwritten.
+  /// The date and time printed on a gate pass (typed, wall clock). Set only
+  /// for types filed by timestamp (document-catalog `issuedAt`); null for
+  /// every month-filed type. 2026-11-21.
+  issuedAt DateTime? @map("issued_at")
+
   version       Int    @default(1)
   /// SHA-256 of what actually landed in S3, hashed server-side from the
   /// stored object rather than trusted from the browser. It is what makes
@@ -4733,7 +4738,10 @@ model StoredDocument {
 
   /// A version number is used once per slot — the structural guarantee that
   /// two concurrent uploads cannot both become "version 3".
-  @@unique([societyId, docType, period, version])
+  // Enforced by two partial unique indexes in the migration
+  // (20261121090000_gate_pass_issued_at): (society, type, period, version)
+  // where issued_at is null, and (society, type, issued_at, version) where it
+  // is set — a gate pass's slot is its timestamp, every other type's its month.
   @@index([societyId, docType])
   @@map("stored_documents")
 }

@@ -32,3 +32,10 @@ describe("gatePassMismatch", () => {
     ).toBe(false);
   });
 });
+
+describe("gatePassMismatch — a pass filed by its own date", () => {
+  it("compares to the day when a date was chosen", () => {
+    expect(gatePassMismatch({ matchedSocietyId: "s", readDate: "2026-11-21", chosenSocietyId: "s", chosenPeriod: "2026-11-21" })).toBe(false);
+    expect(gatePassMismatch({ matchedSocietyId: "s", readDate: "2026-11-20", chosenSocietyId: "s", chosenPeriod: "2026-11-21" })).toBe(true);
+  });
+});

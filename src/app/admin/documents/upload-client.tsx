@@ -15,6 +15,8 @@ type TypeOption = {
   context: "society" | "pipeline" | "circuit";
   needsPeriod: boolean;
   periodHint: string;
+  /** Filed by the date and time printed on it (a gate pass), not a month. */
+  issuedAt: boolean;
   acceptedExtensions: string[];
   maxMb: number;
   uploadHere: boolean;
@@ -69,7 +71,9 @@ export function DocumentUploadClient({
   // of them until a survey has run — with an empty dropdown and no way on.
   const [societyId, setSocietyId] = useState(initialSocietyId ?? "");
   const [contextId, setContextId] = useState("");
-  const [period, setPeriod] = useState("");
+  const [periodPicked, setPeriod] = useState("");
+  // A gate pass is filed by its date and time; its month follows from it.
+  const [issuedAt, setIssuedAt] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ message: string; href?: string } | null>(null);
@@ -83,6 +87,7 @@ export function DocumentUploadClient({
   const societiesById = useMemo(() => new Map(societies.map((s) => [s.id, s.label])), [societies]);
 
   const spec = useMemo(() => types.find((t) => t.id === typeId) ?? null, [types, typeId]);
+  const period = spec?.issuedAt ? issuedAt.slice(0, 7) : periodPicked;
   const scoped: Scoped[] =
     spec?.context === "circuit" ? circuits : spec?.context === "pipeline" ? pipelines : [];
   const withinSociety = scoped.filter((o) => o.societyId === societyId);
@@ -215,7 +220,26 @@ export function DocumentUploadClient({
             </Field>
           )}
 
-          {spec.needsPeriod && (
+          {spec.issuedAt && (
+            <Field
+              label="Issued on"
+              htmlFor="doc-issued-at"
+              hint={`${spec.periodHint} Each gate pass is its own document — several in a day are fine. Filing under the exact same date and time replaces that pass as a new version.`}
+            >
+              <input
+                id="doc-issued-at"
+                type="datetime-local"
+                className="field field-auto"
+                value={issuedAt}
+                onChange={(e) => {
+                  setIssuedAt(e.target.value);
+                  setGatePassWarning(null);
+                }}
+              />
+            </Field>
+          )}
+
+          {spec.needsPeriod && !spec.issuedAt && (
             <Field
               label="Month it belongs to"
               htmlFor="doc-period"
@@ -281,7 +305,7 @@ export function DocumentUploadClient({
                 <div>
                   <p className="text-[11.5px] uppercase tracking-wide opacity-80">You selected</p>
                   <p>{societyName || "No society chosen"}</p>
-                  <p>{period || "No month chosen"}</p>
+                  <p>{spec.issuedAt ? (issuedAt ? issuedAt.replace("T", " · ") : "No date chosen") : period || "No month chosen"}</p>
                 </div>
                 <div>
                   <p className="text-[11.5px] uppercase tracking-wide opacity-80">The document reads</p>
@@ -309,7 +333,10 @@ export function DocumentUploadClient({
                   disabled={!gatePassWarning.societyId && !gatePassWarning.date}
                   onClick={() => {
                     if (gatePassWarning.societyId) setSocietyId(gatePassWarning.societyId);
-                    if (gatePassWarning.date) setPeriod(gatePassWarning.date.slice(0, 7));
+                    if (gatePassWarning.date) {
+                      if (spec.issuedAt) setIssuedAt(`${gatePassWarning.date}T${issuedAt.slice(11, 16) || "09:00"}`);
+                      else setPeriod(gatePassWarning.date.slice(0, 7));
+                    }
                     setGatePassWarning(null);
                   }}
                 >
@@ -317,7 +344,7 @@ export function DocumentUploadClient({
                 </button>
               </div>
               <p className="mt-2 text-[12px] opacity-80">
-                Either way, the society and month above can still be changed by hand before filing.
+                Either way, the society and {spec.issuedAt ? "date" : "month"} above can still be changed by hand before filing.
               </p>
             </div>
           )}
@@ -325,7 +352,7 @@ export function DocumentUploadClient({
           <button
             type="button"
             className="btn-primary"
-            disabled={pending || !file || !effectiveContextId}
+            disabled={pending || !file || !effectiveContextId || (spec.issuedAt && !issuedAt)}
             onClick={() =>
               start(async () => {
                 if (!file) return;
@@ -344,6 +371,7 @@ export function DocumentUploadClient({
                     byteSize: file.size,
                     headBase64: toBase64(head),
                     clientSha256: await sha256Of(file),
+                    issuedAt: spec.issuedAt ? issuedAt : undefined,
                   });
                   if ("error" in presigned) return setError(presigned.error);
 
@@ -365,7 +393,7 @@ export function DocumentUploadClient({
                       s3Key,
                       fileName: file.name,
                       chosenSocietyId: effectiveContextId,
-                      chosenPeriod: period,
+                      chosenPeriod: spec.issuedAt ? issuedAt.slice(0, 10) : period,
                     });
                     if (check.check?.mismatch) {
                       setGatePassPendingKey(s3Key);
@@ -383,6 +411,7 @@ export function DocumentUploadClient({
                   contentType: file.type || "application/octet-stream",
                   byteSize: file.size,
                   period,
+                  issuedAt: spec.issuedAt ? issuedAt : undefined,
                 });
                 if (filed.error) return setError(filed.error);
                 setDone({ message: filed.message ?? "Filed.", href: filed.href });

@@ -3,6 +3,7 @@
 import { refuseFullInstallationCount } from "@/lib/light-population";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
+import { formatDateTime } from "@/lib/format-date";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
@@ -46,6 +47,8 @@ export async function presignDocument(input: {
   headBase64: string;
   /** SHA-256 of the whole file, computed in the browser — see below. */
   clientSha256?: string;
+  /** "YYYY-MM-DDTHH:mm" — the date and time on a gate pass (types with `issuedAt`). */
+  issuedAt?: string;
 }): Promise<Presigned | { error: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -61,7 +64,16 @@ export async function presignDocument(input: {
     logger.warn("document.upload_refused", { actorId: actor.id, docTypeId: spec.id, reason: "permission" });
     return { error: `Uploading a ${spec.label.toLowerCase()} needs the ${spec.permission.replace("_", " ")} permission.` };
   }
-  if (spec.needsPeriod && !/^\d{4}-\d{2}$/.test(input.period)) {
+  // A gate pass is filed by its own date and time; its month follows from it.
+  let issued: Date | null = null;
+  let period = input.period;
+  if (spec.issuedAt) {
+    const r = parseIssuedAt(input.issuedAt);
+    if ("error" in r) return r;
+    issued = r.at;
+    period = r.period;
+  }
+  if (spec.needsPeriod && !/^\d{4}-\d{2}$/.test(period)) {
     // INV-04 — always an explicit selection, never inferred from the file.
     return { error: "Choose the period this document belongs to (YYYY-MM)." };
   }
@@ -114,27 +126,31 @@ export async function presignDocument(input: {
         where: {
           societyId: input.contextId,
           docType: spec.id,
-          period: input.period,
+          // A gate pass's identical file is a duplicate whatever time it is
+          // filed under; a month-filed type compares within its own month.
+          ...(issued ? {} : { period }),
           contentSha256: input.clientSha256,
           voidedAt: null,
         },
-        select: { version: true },
+        select: { version: true, issuedAt: true },
       });
       if (same) {
         return {
-          error: `That is the same file as version ${same.version} already on record — nothing to file. Upload it only if it has actually changed.`,
+          error: same.issuedAt
+            ? `That is the same file as the ${spec.label.toLowerCase()} already filed for ${formatDateTime(same.issuedAt)} — nothing to file.`
+            : `That is the same file as version ${same.version} already on record — nothing to file. Upload it only if it has actually changed.`,
         };
       }
     }
     // Every version gets its own object. Reusing one key would overwrite the
     // previous version's bytes, which is the one thing versioning exists to
     // prevent — the row would say v1 and v2 while the bucket held only v2.
-    const next = await nextVersion(input.contextId, spec.id, input.period);
+    const next = await nextVersion(input.contextId, spec.id, period, issued);
     const key = buildDocumentKey({
       society: society.name,
-      month: input.period,
+      month: period,
       docType: spec.id as DocType,
-      dateLabel: input.period,
+      dateLabel: issued ? input.issuedAt!.replace("T", "_").replace(":", "") : period,
       identifier: `v${next}`,
       extension: extensionOf(input.fileName) || "bin",
     });
@@ -166,11 +182,25 @@ async function presign(key: string, contentType: string, actorId: string, docTyp
   return { uploadUrl, key };
 }
 
-async function nextVersion(societyId: string, docType: string, period: string): Promise<number> {
+/**
+ * "YYYY-MM-DDTHH:mm" (a datetime-local value) → the instant stored, read as
+ * UTC like every person-typed time here, plus the month it files under.
+ */
+function parseIssuedAt(raw: string | undefined): { at: Date; period: string } | { error: string } {
+  if (!raw || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw)) return { error: "Enter the date and time printed on the pass." };
+  const at = new Date(`${raw}:00Z`);
+  if (Number.isNaN(at.getTime())) return { error: "That date and time is not valid." };
+  // India's wall clock, in the same UTC-read form as the typed value.
+  if (at.getTime() > Date.now() + 5.5 * 3600_000 + 60_000) return { error: "A gate pass cannot be dated in the future." };
+  return { at, period: raw.slice(0, 7) };
+}
+
+async function nextVersion(societyId: string, docType: string, period: string, issuedAt: Date | null = null): Promise<number> {
   // Counts VOIDED versions too: a withdrawn v2 must not let a later upload
   // become v2 again, or the history would read as if it had been rewritten.
+  // A gate pass's slot is its own date and time; every other type's, its month.
   const latest = await db.storedDocument.findFirst({
-    where: { societyId, docType, period },
+    where: issuedAt ? { societyId, docType, issuedAt } : { societyId, docType, period, issuedAt: null },
     orderBy: { version: "desc" },
     select: { version: true },
   });
@@ -203,29 +233,37 @@ export async function fileStoredDocumentForSociety(input: {
   byteSize: number;
   period: string;
   actorId: string;
+  /** Set for a type filed by its date and time (a gate pass). */
+  issuedAt?: Date | null;
 }): Promise<{ error?: string; message?: string; documentId?: string; version?: number }> {
   const contentSha256 = await sha256OfStoredObject(input.s3Key);
+  const issuedAt = input.issuedAt ?? null;
 
   const identical = await db.storedDocument.findFirst({
     where: {
       societyId: input.societyId,
       docType: input.docType,
-      period: input.period,
+      ...(issuedAt ? {} : { period: input.period }),
       contentSha256,
       voidedAt: null,
     },
-    select: { version: true },
+    select: { version: true, issuedAt: true },
   });
   if (identical) {
-    return { error: `That is the same file as version ${identical.version} already on record — nothing was filed.` };
+    return {
+      error: identical.issuedAt
+        ? `That is the same file as the one already filed for ${formatDateTime(identical.issuedAt)} — nothing was filed.`
+        : `That is the same file as version ${identical.version} already on record — nothing was filed.`,
+    };
   }
 
-  const version = await nextVersion(input.societyId, input.docType, input.period);
+  const version = await nextVersion(input.societyId, input.docType, input.period, issuedAt);
   const filed = await db.storedDocument.create({
     data: {
       docType: input.docType,
       societyId: input.societyId,
       period: input.period,
+      issuedAt,
       version,
       contentSha256,
       s3Key: input.s3Key,
@@ -247,7 +285,9 @@ export async function fileStoredDocumentForSociety(input: {
     version,
     message:
       version === 1
-        ? "filed against the society."
+        ? issuedAt
+          ? `filed against the society for ${formatDateTime(issuedAt)}.`
+          : "filed against the society."
         : `filed as version ${version}. Version ${version - 1} is kept as it was.`,
   };
 }
@@ -345,6 +385,7 @@ export async function finalizeDocument(input: {
   contentType: string;
   byteSize: number;
   period?: string;
+  issuedAt?: string;
 }): Promise<{ error?: string; message?: string; href?: string }> {
   const actor = await resolveAdmin();
   if (!actor) return { error: "Your session is no longer valid. Sign in again." };
@@ -352,6 +393,14 @@ export async function finalizeDocument(input: {
   if (!spec || !spec.uploadHere) return { error: "That document type is not filed from here." };
 
   if (spec.context === "society") {
+    let issued: Date | null = null;
+    let period = input.period ?? "";
+    if (spec.issuedAt) {
+      const r = parseIssuedAt(input.issuedAt);
+      if ("error" in r) return r;
+      issued = r.at;
+      period = r.period;
+    }
     const filed = await fileStoredDocumentForSociety({
       societyId: input.contextId,
       docType: spec.id,
@@ -359,7 +408,8 @@ export async function finalizeDocument(input: {
       fileName: input.fileName,
       contentType: input.contentType,
       byteSize: input.byteSize,
-      period: input.period ?? "",
+      period,
+      issuedAt: issued,
       actorId: actor.id,
     });
     if (filed.error) return { error: filed.error };

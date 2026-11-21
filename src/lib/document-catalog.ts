@@ -40,6 +40,12 @@ export type DocumentTypeSpec = {
    * rule per type is answerable at the moment of filing.
    */
   periodHint: string;
+  /**
+   * Filed by the date and time printed on it instead of a month (2026-11-21,
+   * user-asked: a society can have several gate passes in a month, even in a
+   * day). Each timestamp is its own document; the month is taken from it.
+   */
+  issuedAt?: boolean;
   acceptedKinds: FileKind[];
   acceptedExtensions: string[];
   maxBytes: number;
@@ -62,7 +68,7 @@ const HISTORICAL_PERIOD_HINT: Partial<Record<DocumentTypeId, string>> = {
   preDemoReport: "The month the demo's readings start.",
   postDemoReport: "The month the post-installation readings start.",
   savingsReport: "The month the report's period starts.",
-  gatePass: "The month the pass was issued.",
+  gatePass: "The date and time printed on the pass.",
   inspectionReport: "The month of the inspection.",
 };
 
@@ -202,6 +208,7 @@ export const DOCUMENT_TYPES: DocumentTypeSpec[] = [
     context: "society" as const,
     needsPeriod: true,
     periodHint: HISTORICAL_PERIOD_HINT[id as DocumentTypeId] ?? "The month this document belongs to.",
+    issuedAt: id === "gatePass",
     acceptedKinds: [...kinds] as FileKind[],
     acceptedExtensions: [...exts],
     maxBytes: mb * MB,

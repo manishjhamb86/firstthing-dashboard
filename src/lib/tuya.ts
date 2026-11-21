@@ -205,8 +205,39 @@ export function levelFromProperties(
   max = 100,
 ): { level: number; raw: number; time: number } | null {
   const p = props.find((x) => x.code === "liquid_level_percent");
-  if (!p || typeof p.value !== "number") return null;
-  return { level: normaliseLevel(p.value, max), raw: p.value, time: p.time };
+  const analog = p && typeof p.value === "number" ? { level: normaliseLevel(p.value, max), raw: p.value, time: p.time } : null;
+  const floats = levelFromFloatSwitches(props);
+  // Whichever reported last is the truth. Most controllers here keep the
+  // analogue channel live and their float switches go quiet (seen August);
+  // Palm Drive S6's model is the reverse — its `liquid_level_percent` has
+  // read 0 since 27-May-2026 while its four float switches track the tank
+  // exactly as the Smart Life app draws it (2026-11-21, user-caught: the
+  // app showed 50%, the dashboard a flat 0%).
+  if (floats && (!analog || floats.time > analog.time)) return floats;
+  return analog;
+}
+
+/**
+ * The level from the four float switches these controllers carry: the
+ * highest one that is wet. The thing models on this account name them
+ * switch_3 = 25% (Level 1), switch_4 = 50% (Level 2), switch_5 = 75%
+ * (Level 3), switch_2 = 100% (Level 4) — the same codes on both models
+ * seen, under different labels. `time` is the latest switch change, so a
+ * freshly-dropped probe counts as a reading. Null when the device has none.
+ */
+const FLOAT_SWITCHES: [code: string, level: number][] = [
+  ["switch_3", 25],
+  ["switch_4", 50],
+  ["switch_5", 75],
+  ["switch_2", 100],
+];
+export function levelFromFloatSwitches(props: TuyaProperty[]): { level: number; raw: number; time: number } | null {
+  const found = FLOAT_SWITCHES.map(([code, level]) => ({ level, p: props.find((x) => x.code === code) })).filter(
+    (f): f is { level: number; p: TuyaProperty } => !!f.p && typeof f.p.value === "boolean",
+  );
+  if (found.length < FLOAT_SWITCHES.length) return null;
+  const level = Math.max(0, ...found.filter((f) => f.p.value === true).map((f) => f.level));
+  return { level, raw: level, time: Math.max(...found.map((f) => f.p.time)) };
 }
 
 /**

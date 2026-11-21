@@ -9683,3 +9683,11 @@ alerts or society. `syncTankDevices` now handles a row of that account whose dev
 complete listing. If it has no readings, alerts or society, it is deleted. Otherwise it is kept and marked
 offline, so a society's history never vanishes. Both cases are logged `tank.removed_from_account`. Nothing is
 removed when the listing comes back empty or hits the page cap.
+
+**A tank whose percentage sensor is stuck reads its float switches (2026-11-21, user-caught).** Palm Drive S6 (a different
+"WATER LEVEL INDICATOR" model) showed 0% while the Smart Life app showed 50%: its `liquid_level_percent` has read 0 since
+27-May-2026, and its level lives in four float switches the model labels Level 1–4 (switch_3 = 25%, switch_4 = 50%,
+switch_5 = 75%, switch_2 = 100% — the same codes as the IT56WLCW controllers). `levelFromProperties` now takes whichever
+reported last: the highest wet float switch when the switches changed more recently, else the analogue channel. On the
+other tanks the analogue channel is the newer one, so they are unchanged. Its `switch_6` is named "开关6" (Switch 6), not
+"Motor", so the valve status this device shows is not a motor reading.

@@ -12,8 +12,8 @@ import { renameDealAndCircuit } from "@/lib/circuit-name";
  * user-asked, for the yogesh account only). The card names a deal by its demo
  * circuit, so the name is written to both: the circuit's own name (what the
  * survey shows) and the deal's scope (what every other screen shows). A deal
- * with several circuits is renamed circuit by circuit on its survey instead;
- * a deal with none has only its scope. Two deals of one line at a society
+ * with several circuits has only the deal renamed (each circuit keeps its own
+ * name); a deal with none has only its scope. Two deals of one line at a society
  * must stay tellable apart, so a name another one already uses is refused.
  */
 export async function renameDeal(pipelineId: string, name: string): Promise<{ error?: string }> {
@@ -27,7 +27,7 @@ export async function renameDeal(pipelineId: string, name: string): Promise<{ er
   const refusal = await db.$transaction((tx) => renameDealAndCircuit(tx, pipelineId, name));
   if (refusal) return { error: refusal };
   const next = name.trim().replace(/\s+/g, " ");
-  logger.info("pipeline.renamed", { actorId: actor.id, pipelineId: deal.id, from: deal.dealScope, to: next, via: "society_card" });
+  logger.info("pipeline.renamed", { actorId: actor.id, pipelineId: deal.id, from: deal.dealScope, to: next, via: "back_office" });
   revalidatePath(`/admin/societies/${deal.societyId}`);
   revalidatePath(`/admin/pipeline/${deal.id}`);
   revalidatePath(`/admin/pipeline/${deal.id}/survey`);

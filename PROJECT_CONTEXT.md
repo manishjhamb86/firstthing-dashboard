@@ -9797,3 +9797,7 @@ inside the band. The benchmark is shown exact (66.72%), never rounded where it m
 note claiming the rupee figure was never computed on the page was removed. Verified on dev with a fixture: one A4
 page with zero and Safari-like margins, no page errors; fixture removed. The emailed PDF (`savings-report-pdf.ts`)
 does not carry the section yet.
+**Same day, user-asked:** the deal page header gets the same "Edit name" (main admin account), and the society card
+offers it for every deal, multi-circuit ones too (only the deal is renamed there; each circuit keeps its own name).
+Amrapali's lift-lobby deal was set back to "Lift Lobby Tower G" on production (deal and circuit) at the user's word —
+the migration had taken the deal's stored "Tower D".

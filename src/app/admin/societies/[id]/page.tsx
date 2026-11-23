@@ -430,7 +430,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                             <Link href={`/admin/pipeline/${d.id}`} className="link-arrow">
                               {dealName(d) ?? (lineDeals.length > 1 ? "Unnamed part" : "Open the deal")} →
                             </Link>
-                            {canRenameDeals && (d.siteSurvey?.circuits.length ?? 0) <= 1 && <DealNameEdit pipelineId={d.id} name={dealName(d) ?? ""} />}
+                            {canRenameDeals && <DealNameEdit pipelineId={d.id} name={dealName(d) ?? ""} />}
                           </span>
                           <span>
                             <StatusChip tone={meta.tone}>{meta.label}</StatusChip>

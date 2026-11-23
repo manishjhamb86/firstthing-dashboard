@@ -6,7 +6,7 @@ import { demoLightsInstalled, totalLights } from "@/lib/light-population";
 import { circuitLightCountHistoryByCircuit, describeLightCountChange, filterCustomerRelevant } from "@/lib/circuit-light-history";
 import { deviceLabel, fittingLabel, installedCount, meteredOf } from "@/lib/inventory-display";
 import { formatDate } from "@/lib/format-date";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow } from "@/components/ui";
 import { LightHistoryList } from "@/components/light-history-list";
 import { InstalledStockEditor } from "@/components/installed-stock-editor";
@@ -49,7 +49,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
       select: {
         id: true,
         location: true,
-        lightType: true,
+        lightType: true, name: true,
         demos: {
           where: { voidedAt: null },
           orderBy: { sequence: "asc" },
@@ -77,7 +77,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
     db.meterDevice.findMany({
       where: { societyId },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, productModel: true, circuit: { select: { location: true, lightType: true } } },
+      select: { id: true, name: true, productModel: true, circuit: { select: { location: true, lightType: true, name: true } } },
     }),
     db.waterTank.findMany({
       where: { societyId },
@@ -181,7 +181,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
                     return (
                       <div key={c.id}>
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                          <p className="text-[13.5px] font-semibold">{circuitLabelOf(c.location, c.lightType)}</p>
+                          <p className="text-[13.5px] font-semibold">{circuitName(c)}</p>
                           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                             {standsIn ? (
                               <>
@@ -270,7 +270,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
                       <p className="text-[13.5px] font-semibold">{deviceLabel(`${m.productModel} energy meter`, m.name)}</p>
                       <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
                         {m.circuit
-                          ? `${circuitLabelOf(m.circuit.location, m.circuit.lightType)} · reads power, voltage and daily kWh`
+                          ? `${circuitName(m.circuit)} · reads power, voltage and daily kWh`
                           : "reads power, voltage and daily kWh"}
                       </p>
                     </div>

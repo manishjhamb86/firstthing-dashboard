@@ -15,6 +15,7 @@ type Circuit = {
   serviceLine: string;
   location: string | null;
   lightType: string;
+  name: string;
   meteredLightCount: number;
   /** The full installation — not counting the demo lights (2026-09-27). */
   representedLightCount: number;
@@ -53,7 +54,7 @@ function CircuitRow({
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div>
           <Link href={`/admin/societies/${societyId}/circuits/${c.id}`} className="font-medium hover:underline">
-            {demoOrdinal ? `Demo ${demoOrdinal}` : c.location || c.lightType}
+            {demoOrdinal ? `Demo ${demoOrdinal}` : c.name}
           </Link>
           <p className="text-[var(--text-muted)]">
             {c.lightType} · {SERVICE_LINE_LABEL[c.serviceLine] ?? c.serviceLine} ·{" "}
@@ -96,7 +97,7 @@ function CircuitRow({
         {editingId !== c.id && (
           <RemoveCircuitButton
             circuitId={c.id}
-            label={c.location || c.lightType}
+            label={c.name}
             canRemove={c.canRemove}
             blockLabel={c.blockLabel}
           />

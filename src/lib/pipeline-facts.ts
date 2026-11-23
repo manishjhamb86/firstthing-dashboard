@@ -45,6 +45,7 @@ export const DEAL_CANDIDATE_SELECT = {
   state: true,
   location: true,
   lightType: true,
+  name: true,
   // The replacement belongs to the demo now (2026-09-26): the current one —
   // the latest demo that is neither withdrawn nor rejected.
   demos: {

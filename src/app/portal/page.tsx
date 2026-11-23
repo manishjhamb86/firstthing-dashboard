@@ -1,6 +1,6 @@
 import { termPricedLights } from "@/lib/offer";
 import { greetingName } from "@/lib/greeting";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { redirect } from "next/navigation";
 import { dealLabel } from "@/lib/deal-scope";
 import { oldRecordReviewer } from "@/lib/onlooker";
@@ -192,7 +192,7 @@ export default async function PortalHomePage() {
   const reportDemos = await db.circuitDemo.findMany({
     where: { id: { in: [...new Set(sharedReports.flatMap((r) => r.demoIds))] }, voidedAt: null, circuit: { societyId, voidedAt: null } },
     orderBy: { sequence: "asc" },
-    select: { id: true, sequence: true, lightReplacementDate: true, circuit: { select: { location: true, lightType: true } } },
+    select: { id: true, sequence: true, lightReplacementDate: true, circuit: { select: { location: true, lightType: true, name: true } } },
   });
   const first = greetingName(viewer.name, society.name);
   // Who is signed in (2026-09-26, user-asked): the name, with the email the
@@ -872,7 +872,7 @@ export default async function PortalHomePage() {
                 {reportDemos
                   .filter((d) => report.demoIds.includes(d.id))
                   .map((d, _j, ds) => {
-                    const which = ds.length > 1 ? ` — ${circuitLabelOf(d.circuit.location, d.circuit.lightType)}, demo ${d.sequence}` : "";
+                    const which = ds.length > 1 ? ` — ${circuitName(d.circuit)}, demo ${d.sequence}` : "";
                     return (
                       <span key={d.id} className="contents">
                         <Link href={`/portal/reports/pre-install/${d.id}`} className="btn-secondary">

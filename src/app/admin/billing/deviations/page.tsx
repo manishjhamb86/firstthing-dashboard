@@ -21,7 +21,7 @@ export default async function DeviationsPage() {
       assignedTo: { select: { name: true, email: true } },
       feeLine: {
         include: {
-          circuit: { select: { lightType: true, location: true } },
+          circuit: { select: { lightType: true, name: true, location: true } },
           calculation: {
             select: { id: true, period: true, coverageOfDays: true, society: { select: { name: true } } },
           },
@@ -125,11 +125,11 @@ export default async function DeviationsPage() {
                     <td>
                       <span className="font-medium">{r.feeLine.calculation.society.name}</span>
                       <p className="text-[13px] text-[var(--text-muted)] md:hidden">
-                        {r.feeLine.circuit.location || r.feeLine.circuit.lightType}
+                        {r.feeLine.circuit.name}
                       </p>
                     </td>
                     <td className="hidden md:table-cell">
-                      {r.feeLine.circuit.location || r.feeLine.circuit.lightType}
+                      {r.feeLine.circuit.name}
                     </td>
                     <td className="num">{r.feeLine.calculation.period}</td>
                     <td className="num text-right">

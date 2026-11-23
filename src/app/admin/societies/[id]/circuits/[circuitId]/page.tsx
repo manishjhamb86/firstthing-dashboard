@@ -43,7 +43,7 @@ import { demoLockState } from "@/lib/demo-lock";
 import { changedSince, type AcceptanceDay } from "@/lib/demo-acceptance";
 import { missingDays } from "@/lib/demo-readings-fill";
 import { periodOfDay, suggestedPeriod } from "@/lib/demo-periods";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 
 function GatePassCard({
   gatePass,
@@ -299,12 +299,12 @@ export default async function CircuitDetailPage({
   const meters = await db.meterDevice.findMany({
     where: { hasEnergySignal: true, removedFromAccountAt: null },
     orderBy: { name: "asc" },
-    select: { id: true, name: true, circuit: { select: { id: true, location: true, lightType: true, society: { select: { name: true } } } } },
+    select: { id: true, name: true, circuit: { select: { id: true, location: true, lightType: true, name: true, society: { select: { name: true } } } } },
   });
   const meterOptions = meters.map((m) => ({
     id: m.id,
     label: m.name,
-    sublabel: m.circuit ? (m.circuit.id === circuit.id ? "on this circuit" : `now on ${m.circuit.society.name} · ${circuitLabelOf(m.circuit.location, m.circuit.lightType)}`) : "not on any circuit",
+    sublabel: m.circuit ? (m.circuit.id === circuit.id ? "on this circuit" : `now on ${m.circuit.society.name} · ${circuitName(m.circuit)}`) : "not on any circuit",
   }));
   const fieldCandidates = await db.adminUser.findMany({
     where: { team: { in: teamsFor("survey") }, permissions: { has: "manage_survey" }, isActive: true, deletedAt: null },
@@ -395,7 +395,7 @@ export default async function CircuitDetailPage({
       <PageHeader
         backHref={`/admin/societies/${id}/circuits`}
         title={circuit.society.name}
-        subtitle={`${circuit.location || circuit.lightType} · ${circuit.lightType} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLights)}`}
+        subtitle={`${circuit.name} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLights)}`}
         chip={<StatusChip tone={state.tone}>{state.label}</StatusChip>}
       />
 

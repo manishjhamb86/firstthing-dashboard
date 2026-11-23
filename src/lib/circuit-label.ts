@@ -18,5 +18,18 @@ export function circuitLabelOf(location: string | null, lightType: string): stri
   // for (user-caught 2026-09-15 — the candidate form had no location field).
   if (place === "") return lightType.trim();
   if (place.toLowerCase() === lightType.trim().toLowerCase()) return place;
+  // "Tower G · Lift Lobby Tower G" read as a stutter: when one already
+  // contains the other, the longer says it all.
+  if (lightType.trim().toLowerCase().includes(place.toLowerCase())) return lightType.trim();
+  if (place.toLowerCase().includes(lightType.trim().toLowerCase())) return place;
   return `${place} · ${lightType}`;
+}
+
+/**
+ * The circuit's name as every screen shows it (2026-11-23, user-asked: one
+ * name everywhere) — the stored `name`, which for a single-circuit deal is
+ * the deal's own name.
+ */
+export function circuitName(c: { name: string }): string {
+  return c.name.trim();
 }

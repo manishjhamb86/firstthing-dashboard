@@ -3,7 +3,7 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { Prisma } from "@prisma/client";
 import { s3, S3_BUCKET } from "./s3";
 import { buildDocumentKey } from "./document-keys";
-import { circuitLabelOf } from "./circuit-label";
+import { circuitName } from "./circuit-label";
 import { istWallClock } from "./field-today";
 import {
   refuseInspectionFinalize,
@@ -48,12 +48,12 @@ export async function fileInspection(
   if (input.circuitId) {
     const circuit = await tx.circuit.findUnique({
       where: { id: input.circuitId },
-      select: { societyId: true, location: true, lightType: true, voidedAt: true },
+      select: { societyId: true, location: true, lightType: true, name: true, voidedAt: true },
     });
     if (!circuit || circuit.societyId !== input.societyId || circuit.voidedAt) {
       return { error: "That circuit is not available for this society." };
     }
-    area = circuitLabelOf(circuit.location, circuit.lightType);
+    area = circuitName(circuit);
   }
 
   const inspectedAt = new Date(`${input.inspectedAt}:00Z`);

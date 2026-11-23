@@ -64,7 +64,7 @@ export async function notifyReplacementAssigned(input: { demoId: string; toId: s
   await safely("replacement", async () => {
     const d = await db.circuitDemo.findUnique({
       where: { id: input.demoId },
-      select: { circuit: { select: { location: true, lightType: true, siteSurvey: { select: { pipeline: { select: { society: { select: { name: true } } } } } } } } },
+      select: { circuit: { select: { location: true, lightType: true, name: true, siteSurvey: { select: { pipeline: { select: { society: { select: { name: true } } } } } } } } },
     });
     const society = d?.circuit.siteSurvey?.pipeline.society.name;
     if (!d || !society) return;
@@ -72,7 +72,7 @@ export async function notifyReplacementAssigned(input: { demoId: string; toId: s
       [toId],
       assignmentMessage({
         kind: "replacement",
-        what: [society, d.circuit.location || d.circuit.lightType].filter(Boolean).join(" — "),
+        what: [society, d.circuit.name].filter(Boolean).join(" — "),
         by: await nameOf(input.byId),
         url: `/field/demo/${input.demoId}`,
         ref: input.demoId,
@@ -144,13 +144,13 @@ export async function notifyReplacementFollowUpCompleted(input: { followUpId: st
   await safely("replacement_followup_completed", async () => {
     const circuit = await db.circuit.findUnique({
       where: { id: input.circuitId },
-      select: { societyId: true, location: true, lightType: true, society: { select: { name: true } } },
+      select: { societyId: true, location: true, lightType: true, name: true, society: { select: { name: true } } },
     });
     if (!circuit) return;
     await sendPush(
       [input.raisedById],
       replacementFollowUpCompletedMessage({
-        what: `${circuit.society.name} · ${circuit.location || circuit.lightType}`,
+        what: `${circuit.society.name} · ${circuit.name}`,
         url: `/admin/societies/${circuit.societyId}/circuits/${input.circuitId}`,
         ref: input.followUpId,
       }),

@@ -6,7 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { keptAtDemoOf } from "@/lib/circuit-load";
 import { alreadyInstalledCount } from "@/lib/installation-scope";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { loadDealProgress } from "@/lib/pipeline-facts";
@@ -73,7 +73,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     orderBy: { createdAt: "asc" },
     select: {
       location: true,
-      lightType: true,
+      lightType: true, name: true,
       devices: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -94,7 +94,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
       .filter((d) => keptAtDemoOf(d) > 0)
       .map((d) => ({
         deviceId: d.id,
-        circuitLabel: circuitLabelOf(c.location, c.lightType),
+        circuitLabel: circuitName(c),
         name: d.deviceType.name,
         kept: keptAtDemoOf(d),
         recorded: d.keptRecordedAt ? { replaced: d.keptReplacedCount ?? 0, removed: d.keptRemovedCount ?? 0 } : null,

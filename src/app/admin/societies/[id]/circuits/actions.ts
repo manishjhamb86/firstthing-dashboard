@@ -1,5 +1,7 @@
 "use server";
 
+import { renameDealAndCircuit } from "@/lib/circuit-name";
+
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { refuseFullInstallationCount } from "@/lib/light-population";
@@ -29,6 +31,12 @@ export async function updateCircuitConfiguration(
      * elsewhere, so renaming it carries no staleness risk.
      */
     lightType?: string;
+    /**
+     * The name every screen shows (2026-11-23). For a deal with one circuit
+     * this renames the deal too — one name everywhere; a name another deal
+     * of the line at the society uses is refused.
+     */
+    name?: string;
   }
 ) {
   await requireAdminPermission("manage_survey");
@@ -36,6 +44,9 @@ export async function updateCircuitConfiguration(
 
   if (input.lightType !== undefined && !input.lightType.trim()) {
     return { error: "Light type can't be blank." };
+  }
+  if (input.name !== undefined && !input.name.trim()) {
+    return { error: "The name can't be blank." };
   }
 
   // FEAT-040-AC-3 — zero/negative light count or wattage refused outright
@@ -90,39 +101,33 @@ export async function updateCircuitConfiguration(
     },
   });
 
+  if (input.name !== undefined && input.name.trim() !== circuit.name) {
+    const survey = circuit.siteSurveyId
+      ? await db.siteSurvey.findUnique({ where: { id: circuit.siteSurveyId }, select: { pipelineId: true, circuits: { where: { voidedAt: null }, select: { id: true } } } })
+      : null;
+    if (survey && survey.circuits.length === 1) {
+      const refusal = await db.$transaction((tx) => renameDealAndCircuit(tx, survey.pipelineId, input.name!));
+      if (refusal) return { error: refusal };
+      logger.info("pipeline.renamed", { actorId: session.user.id, pipelineId: survey.pipelineId, circuitId, from: circuit.name, to: input.name.trim(), via: "circuit" });
+    } else {
+      await db.circuit.update({ where: { id: circuitId }, data: { name: input.name.trim() } });
+    }
+  }
+
   logger.info("circuit.configuration_updated", {
     actorId: session.user.id,
     circuitId,
     workingHoursChanged,
     lightTypeChanged: input.lightType !== undefined,
+    nameChanged: input.name !== undefined,
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits`);
-  if (input.lightType !== undefined && circuit.siteSurveyId) {
-    const survey = await db.siteSurvey.findUnique({
-      where: { id: circuit.siteSurveyId },
-      select: { pipelineId: true, pipeline: { select: { id: true, societyId: true, serviceLine: true, dealScope: true } }, circuits: { where: { voidedAt: null }, select: { id: true } } },
-    });
+  if (input.name !== undefined && circuit.siteSurveyId) {
+    const survey = await db.siteSurvey.findUnique({ where: { id: circuit.siteSurveyId }, select: { pipelineId: true } });
     if (survey) {
-      // The deal is named after its one demo circuit, so a rename carries to
-      // the deal's own name too (2026-11-23, user-caught) — every screen that
-      // labels the deal then says the same as the survey. Not when the deal
-      // has several circuits, and never onto a name another deal of the same
-      // line at this society already uses (two deals must stay tellable apart).
-      const next = input.lightType.trim();
-      const p = survey.pipeline;
-      if (survey.circuits.length === 1 && next && p.dealScope?.trim() !== next) {
-        const clash = await db.pipeline.findFirst({
-          where: { societyId: p.societyId, serviceLine: p.serviceLine, id: { not: p.id }, dealScope: { equals: next, mode: "insensitive" } },
-          select: { id: true },
-        });
-        if (!clash) {
-          await db.pipeline.update({ where: { id: p.id }, data: { dealScope: next } });
-          logger.info("pipeline.scope_follows_circuit_name", { actorId: session.user.id, pipelineId: p.id, from: p.dealScope, to: next });
-          revalidatePath(`/admin/pipeline/${p.id}`);
-          revalidatePath(`/admin/societies/${p.societyId}`);
-        }
-      }
+      revalidatePath(`/admin/pipeline/${survey.pipelineId}`);
       revalidatePath(`/admin/pipeline/${survey.pipelineId}/survey`);
+      revalidatePath(`/admin/societies/${circuit.societyId}`);
     }
   }
   return {};

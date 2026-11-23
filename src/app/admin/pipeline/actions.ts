@@ -619,6 +619,11 @@ export async function updateLeadDetails(
       ...(loggedAt ? { createdAt: loggedAt } : {}),
     },
   });
+  // One name per deal and its single circuit (2026-11-23, user-asked).
+  if (nextScope && nextScope !== pipeline.dealScope) {
+    const live = await db.circuit.findMany({ where: { siteSurvey: { pipelineId }, voidedAt: null }, select: { id: true } });
+    if (live.length === 1) await db.circuit.update({ where: { id: live[0]!.id }, data: { name: nextScope } });
+  }
 
   // Keep the meeting on the calendar in step with the record it belongs to —
   // including whether it is still ahead. Moving a meeting back to a past date

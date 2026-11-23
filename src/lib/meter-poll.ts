@@ -6,7 +6,7 @@ import { evaluateCapacity, evaluateMeterHealth, outageMessage, outageMinutes } f
 import { resolveMeterProvider, type MeterProvider } from "@/lib/meter-provider";
 import { syncCircuitBandAlert } from "@/lib/savings-band-alerts";
 import { LIVE_MONITORING_WHERE } from "@/lib/live-monitoring";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 
 /**
  * One pass over every metering device in the account. It answers exactly two
@@ -94,7 +94,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       circuit: {
         select: {
           location: true,
-          lightType: true,
+          lightType: true, name: true,
           devices: { select: { count: true, wattage: true, hoursPerDay: true } },
         },
       },
@@ -198,7 +198,7 @@ export async function pollMeters(opts?: { meterId?: string; provider?: MeterProv
       },
     });
 
-    const circuitLabel = m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null;
+    const circuitLabel = m.circuit ? circuitName(m.circuit) : null;
     const meterName = m.name;
 
     // Every meter is SAMPLED; only a bound one is ALERTED on. An unassigned

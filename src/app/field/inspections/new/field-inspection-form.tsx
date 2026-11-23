@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { monthLabel } from "@/lib/format-date";
 import { parseInspectionPayload, SENSOR_STATUSES, type FieldInspectionPayload, type SensorStatus } from "@/lib/field-sync";
 import { refuseInspectionFinalize, SENSOR_STATUS_META } from "@/lib/inspection";
@@ -194,7 +194,7 @@ export function FieldInspectionForm({
               <option value="">No specific circuit (whole society)</option>
               {societyCircuits.map((c) => (
                 <option key={c.id} value={c.id}>
-                  {circuitLabelOf(c.location, c.lightType)} — {c.representedLightCount} lights
+                  {circuitName(c)} — {c.representedLightCount} lights
                 </option>
               ))}
             </select>

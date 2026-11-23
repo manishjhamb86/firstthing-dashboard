@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { loadShowcaseAdmin } from "@/lib/star-showcase-loader";
 import { db } from "@/lib/db";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import { isCircuitInactive } from "@/lib/circuit-standing";
 import {
   notificationCategory,
@@ -113,7 +113,7 @@ const include = {
       circuitId: true,
       societyId: true,
       society: { select: { name: true } },
-      circuit: { select: { id: true, societyId: true, location: true, lightType: true, voidedAt: true, ...circuitStandingSelect } },
+      circuit: { select: { id: true, societyId: true, location: true, lightType: true, name: true, voidedAt: true, ...circuitStandingSelect } },
       owner: { select: { name: true, email: true } },
     },
   },
@@ -124,7 +124,7 @@ const include = {
       id: true,
       societyId: true,
       location: true,
-      lightType: true,
+      lightType: true, name: true,
       voidedAt: true,
       ...circuitStandingSelect,
       society: { select: { name: true } },
@@ -542,7 +542,7 @@ const openReplacementFollowUpNotifications = cache(async (): Promise<Notificatio
     orderBy: { raisedAt: "asc" },
     include: {
       circuit: {
-        select: { id: true, societyId: true, location: true, lightType: true, voidedAt: true, ...circuitStandingSelect, society: { select: { name: true } } },
+        select: { id: true, societyId: true, location: true, lightType: true, name: true, voidedAt: true, ...circuitStandingSelect, society: { select: { name: true } } },
       },
     },
   });
@@ -553,7 +553,7 @@ const openReplacementFollowUpNotifications = cache(async (): Promise<Notificatio
     .map((f) => {
       const remaining = Array.isArray(f.remaining) ? (f.remaining as { remainingCount?: number }[]) : [];
       const total = remaining.reduce((n, l) => n + (Number(l.remainingCount) || 0), 0);
-      const label = circuitLabelOf(f.circuit.location, f.circuit.lightType);
+      const label = circuitName(f.circuit);
       return {
         id: f.id,
         kind: "replacement_followup_open",
@@ -604,10 +604,10 @@ function toNotification(a: Row): Notification {
     closedReason: a.closedReason,
     acknowledgedAt: a.acknowledgedAt?.toISOString() ?? null,
     raiseCount: a.raiseCount,
-    subject: a.meter?.name ?? (circuit ? circuitLabelOf(circuit.location, circuit.lightType) : "Unknown"),
+    subject: a.meter?.name ?? (circuit ? circuitName(circuit) : "Unknown"),
     societyName: a.meter?.society?.name ?? a.circuit?.society?.name ?? null,
     societyId: circuit?.societyId ?? a.meter?.societyId ?? null,
-    circuitLabel: circuit ? circuitLabelOf(circuit.location, circuit.lightType) : null,
+    circuitLabel: circuit ? circuitName(circuit) : null,
     ownerLabel: owner ? (owner.name ?? owner.email) : null,
     // A commercial shortfall belongs on the monitoring screen where the
     // figures are; a hardware fault belongs on the meter. A demo still mid-

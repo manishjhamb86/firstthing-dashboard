@@ -6,7 +6,7 @@ import { formatDate, formatInstant } from "@/lib/format-date";
 import { MOVE_LABEL, STATUS_LABEL, type MoveKind, type UnitStatus } from "@/lib/inventory";
 import { moveContext } from "@/lib/inventory-loader";
 import { warrantyView } from "@/lib/inventory-warranty-view";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { requireInventoryPage } from "../../access";
 import { MoveUnitsForm } from "../../move-forms";
 import { DeploySerialCheck } from "@/components/deploy-serial-check";
@@ -29,7 +29,7 @@ export default async function UnitPage({ params }: { params: Promise<{ code: str
   if (!unit) notFound();
   const [ctx, circuit, people] = await Promise.all([
     moveContext(),
-    unit.circuitId ? db.circuit.findUnique({ where: { id: unit.circuitId }, select: { location: true, lightType: true } }) : null,
+    unit.circuitId ? db.circuit.findUnique({ where: { id: unit.circuitId }, select: { location: true, lightType: true, name: true } }) : null,
     db.adminUser.findMany({ where: { id: { in: [...new Set(unit.movements.map((m) => m.recordedById))] } }, select: { id: true, name: true, email: true } }),
   ]);
   const who = new Map(people.map((p) => [p.id, p.name ?? p.email]));
@@ -53,7 +53,7 @@ export default async function UnitPage({ params }: { params: Promise<{ code: str
             {unit.batch.historical && <StatusChip tone="neu">Pre-existing</StatusChip>}
           </span>
         }
-        subtitle={`${unit.itemType.name}${unit.location ? ` · at ${unit.location.name}` : ""}${circuit ? ` · ${circuitLabelOf(circuit.location, circuit.lightType)}` : ""}`}
+        subtitle={`${unit.itemType.name}${unit.location ? ` · at ${unit.location.name}` : ""}${circuit ? ` · ${circuitName(circuit)}` : ""}`}
       />
       <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
         <div className="space-y-5">

@@ -75,8 +75,8 @@ export default async function CircuitReadingHistory({
         title={circuit.society.name}
         subtitle={
           circuit.location
-            ? `${circuit.lightType} readings · ${circuit.location} · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
-            : `${circuit.lightType} readings · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
+            ? `${circuit.name} readings · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
+            : `${circuit.name} readings · ${circuit.meteredLightCount} metered · ${describeLights(circuit.representedLightCount, demoLightsInstalled(circuit))}`
         }
         action={
           <Link href="/admin/readings" className="btn-secondary">

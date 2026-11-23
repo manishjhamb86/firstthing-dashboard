@@ -107,7 +107,7 @@ export async function lockedDemosTouched(
   for (const r of ranges) {
     const demos = await db.circuitDemo.findMany({
       where: { circuitId: r.circuitId, voidedAt: null },
-      select: { id: true, sequence: true, preFrom: true, preTo: true, postFrom: true, postTo: true, unlockedUntil: true, circuit: { select: { location: true, lightType: true, siteSurvey: { select: { pipelineId: true } } } } },
+      select: { id: true, sequence: true, preFrom: true, preTo: true, postFrom: true, postTo: true, unlockedUntil: true, circuit: { select: { location: true, lightType: true, name: true, siteSurvey: { select: { pipelineId: true } } } } },
     });
     for (const d of demos) {
       const spans = [
@@ -120,7 +120,7 @@ export async function lockedDemosTouched(
         ? (await db.demoReport.count({ where: { pipelineId: d.circuit.siteSurvey.pipelineId, status: "shared", demoIds: { has: d.id } } })) > 0
         : false;
       if (!demoLockState({ sharedInReport: shared, unlockedUntil: d.unlockedUntil, demoMode, now }).editable) {
-        names.push(`demo ${d.sequence} on ${d.circuit.location || d.circuit.lightType}`);
+        names.push(`demo ${d.sequence} on ${d.circuit.name}`);
       }
     }
   }

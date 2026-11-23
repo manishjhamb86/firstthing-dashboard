@@ -9,7 +9,7 @@ import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { hasGrant } from "@/lib/portal-access";
 import { Card, CardTitle, EmptyState, InfoNote, PageHeader } from "@/components/ui";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import { CompactTile, KpiBubble } from "../kpi-tiles";
 import { Droplets, Lightbulb, Zap } from "lucide-react";
 import { loadSiteStock } from "@/lib/stock-workflow-loader";
@@ -38,7 +38,7 @@ export default async function PortalInventoryPage() {
         id: true,
         siteSurveyId: true,
         location: true,
-        lightType: true,
+        lightType: true, name: true,
         // When the lights went in: the latest counted demo's replacement day
         // (2026-09-26 — the replacement belongs to the demo now).
         // Every live demo, first by sequence: the first is the initial demo
@@ -71,7 +71,7 @@ export default async function PortalInventoryPage() {
     db.meterDevice.findMany({
       where: { societyId },
       orderBy: { name: "asc" },
-      select: { id: true, name: true, productModel: true, circuit: { select: { location: true, lightType: true } } },
+      select: { id: true, name: true, productModel: true, circuit: { select: { location: true, lightType: true, name: true } } },
     }),
     db.waterTank.findMany({
       where: { societyId },
@@ -264,7 +264,7 @@ export default async function PortalInventoryPage() {
                         </p>
                       ) : (
                         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                          <p className="text-[13.5px] font-semibold">{circuitLabelOf(c.location, c.lightType)}</p>
+                          <p className="text-[13.5px] font-semibold">{circuitName(c)}</p>
                           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
                             {standsIn ? (
                               <>
@@ -407,7 +407,7 @@ export default async function PortalInventoryPage() {
                       </p>
                       <p className="text-xs" style={{ color: "var(--text-subtle)" }}>
                         {m.circuit
-                          ? `${circuitLabelOf(m.circuit.location, m.circuit.lightType)} · reads power, voltage and daily kWh`
+                          ? `${circuitName(m.circuit)} · reads power, voltage and daily kWh`
                           : "reads power, voltage and daily kWh"}
                       </p>
                     </div>

@@ -254,12 +254,12 @@ async function describePlan(plan: SpanPlan): Promise<SpanPreview> {
   const circuitIds = [...new Set(plan.changes.map((c) => c.stay.circuitId))];
   const [meters, circuits] = await Promise.all([
     db.meterDevice.findMany({ where: { id: { in: meterIds } }, select: { id: true, name: true } }),
-    db.circuit.findMany({ where: { id: { in: circuitIds } }, select: { id: true, location: true, lightType: true, society: { select: { name: true } } } }),
+    db.circuit.findMany({ where: { id: { in: circuitIds } }, select: { id: true, location: true, lightType: true, name: true, society: { select: { name: true } } } }),
   ]);
   const name = (id: string) => meters.find((m) => m.id === id)?.name ?? id;
   const label = (id: string) => {
     const c = circuits.find((x) => x.id === id);
-    return c ? `${c.society.name} · ${c.location || c.lightType}` : id;
+    return c ? `${c.society.name} · ${c.name}` : id;
   };
   const span = (a: Date, b: Date | null) => `${formatDate(a)} → ${b ? formatDate(b) : "now"}`;
   const moved = movedRanges(plan);

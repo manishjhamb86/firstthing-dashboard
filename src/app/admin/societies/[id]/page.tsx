@@ -97,7 +97,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
         // The deal is named here by its circuits (2026-11-23, user-caught: the
         // card said "Lift Lobby Tower D" while the demo circuit was "Lift
         // Lobby Tower G") — the same name the survey's demo-circuit step shows.
-        siteSurvey: { select: { circuits: { where: { voidedAt: null }, orderBy: { createdAt: "asc" }, select: { lightType: true } } } },
+        siteSurvey: { select: { circuits: { where: { voidedAt: null }, orderBy: { createdAt: "asc" }, select: { name: true } } } },
       },
     }),
     db.circuit.count({ where: { societyId: id, voidedAt: null } }),
@@ -125,11 +125,12 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   const inactiveAccounts = allAccounts.filter((a) => !a.isActive);
   // CON-24 as amended (2026-08-31): a line is delivered in PARTS, each part
   // its own deal — so a line maps to a LIST of deals now, never to one.
-  // A deal's name on the service-lines card: its demo circuits' own names,
-  // as the survey shows them; the deal's typed scope only when it has none.
+  // A deal's name: its own (one name everywhere — the user's call,
+  // 2026-11-23); its circuits' names only for a deal that has none yet.
   const dealName = (d: (typeof pipelines)[number]): string | null => {
-    const names = [...new Set((d.siteSurvey?.circuits ?? []).map((c) => c.lightType.trim()).filter(Boolean))];
-    return names.length ? names.join(" · ") : (d.dealScope?.trim() || null);
+    if (d.dealScope?.trim()) return d.dealScope.trim();
+    const names = [...new Set((d.siteSurvey?.circuits ?? []).map((c) => c.name.trim()).filter(Boolean))];
+    return names.length ? names.join(" · ") : null;
   };
   const dealsFor = (line: string) => pipelines.filter((p) => (p.serviceLine as string) === line);
 

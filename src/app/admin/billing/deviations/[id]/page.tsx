@@ -37,7 +37,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
             select: {
               id: true,
               societyId: true,
-              lightType: true,
+              lightType: true, name: true,
               location: true,
               preInstallBaseline: true,
               rescaleEvents: { orderBy: { effectiveDate: "asc" } },
@@ -157,7 +157,7 @@ export default async function DeviationPage({ params }: { params: Promise<{ id: 
       <PageHeader
         backHref="/admin/billing/deviations"
         title={calc.society.name}
-        subtitle={`${line.circuit.location || line.circuit.lightType} · ${calc.period} · ${tolerancePct}% contracted band`}
+        subtitle={`${line.circuit.name} · ${calc.period} · ${tolerancePct}% contracted band`}
         chip={
           <StatusChip tone={review.state === "closed" ? "ok" : review.rootCause ? "neu" : "warn"}>
             {STATE_LABEL[review.state]}

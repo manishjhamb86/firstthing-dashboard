@@ -1,4 +1,4 @@
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
@@ -37,7 +37,7 @@ export default async function DocumentsPage({
     db.circuit.findMany({
       where: { voidedAt: null },
       orderBy: [{ societyId: "asc" }],
-      select: { id: true, societyId: true, location: true, lightType: true, society: { select: { name: true } } },
+      select: { id: true, societyId: true, location: true, lightType: true, name: true, society: { select: { name: true } } },
     }),
     db.storedDocument.findMany({
       // Every version, newest slot first — a withdrawn one still shows, or
@@ -85,7 +85,7 @@ export default async function DocumentsPage({
             circuits={circuits.map((c) => ({
               id: c.id,
               societyId: c.societyId,
-              label: circuitLabelOf(c.location, c.lightType),
+              label: circuitName(c),
             }))}
           />
         </Card>

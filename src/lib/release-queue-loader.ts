@@ -12,7 +12,7 @@
 import { db } from "@/lib/db";
 import { triageInvoiceMonth, type Triage } from "@/lib/release-triage";
 import { weightedSavingsPct } from "@/lib/published-months";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { periodBounds } from "@/lib/invoice-month-loader";
 import { classifyDay } from "@/lib/invoice-month";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
@@ -46,7 +46,7 @@ export async function computeQueueRow(calculationId: string): Promise<QueueRow |
     where: { id: calculationId },
     include: {
       society: { select: { name: true } },
-      feeLines: { select: { circuitId: true, basis: true, measuredSavingsPct: true, savedKwh: true, circuit: { select: { location: true, lightType: true } } } },
+      feeLines: { select: { circuitId: true, basis: true, measuredSavingsPct: true, savedKwh: true, circuit: { select: { location: true, lightType: true, name: true } } } },
       invoices: { where: { voidedAt: null }, select: { id: true, number: true, amount: true, status: true } },
     },
   });
@@ -126,7 +126,7 @@ export async function computeQueueRow(calculationId: string): Promise<QueueRow |
     savingsPct: weightedSavingsPct(c.feeLines.map((l) => ({ savedKwh: l.savedKwh, pct: l.measuredSavingsPct }))),
     lines: c.feeLines.map((l) => ({
       circuitId: l.circuitId,
-      label: circuitLabelOf(l.circuit.location, l.circuit.lightType),
+      label: circuitName(l.circuit),
       basis: l.basis,
       savingsPct: l.measuredSavingsPct,
     })),

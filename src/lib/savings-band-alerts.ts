@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger";
 import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, periodSavingsSummary } from "@/lib/circuit-load";
 import { evaluateCompliance } from "@/lib/monthly-calculation";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 
 /**
  * CON-01a's band, watched continuously rather than only at billing time.
@@ -80,7 +80,7 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
       id: true,
       voidedAt: true,
       location: true,
-      lightType: true,
+      lightType: true, name: true,
       preInstallBaseline: true,
       benchmarkSavingsPct: true,
       rescaleEvents: true,
@@ -141,7 +141,7 @@ export async function evaluateCircuitBand(circuitId: string): Promise<BandVerdic
   };
   if (complianceResult === "in_band") return { state: "in_band", ...common };
 
-  const label = circuitLabelOf(circuit.location, circuit.lightType);
+  const label = circuitName(circuit);
   return {
     state: "out_of_band",
     ...common,

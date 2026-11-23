@@ -53,7 +53,7 @@ export default async function DemoReportPage({ params }: { params: Promise<{ id:
           )
           .map((c) => ({
             id: c.id,
-            label: c.location ? `${c.lightType}, ${c.location}` : c.lightType,
+            label: c.name ?? c.lightType,
             why:
               c.benchmarkSavingsPct === null
                 ? "still commissioning — it needs a confirmed benchmark"

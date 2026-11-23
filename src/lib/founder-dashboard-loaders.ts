@@ -21,7 +21,7 @@ import {
 import { installationOpenReason, type InstallationOpenReason } from "@/lib/installation-open";
 import { evaluateDayGateChain, type BatchGateInput, type DayGateStatus } from "@/lib/installation-gate";
 import { reviewUrgency } from "@/lib/demo-result-review";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 
 // ---------------------------------------------------------------------------
 // Payments
@@ -254,7 +254,7 @@ export const demoBoard = cache(async (now: Date = new Date()): Promise<DemoBoard
   const [openReviews, demos] = await Promise.all([
     db.demoResultReview.findMany({
       where: { state: "open", circuit: { voidedAt: null } },
-      include: { circuit: { select: { id: true, location: true, lightType: true, society: { select: { name: true } } } } },
+      include: { circuit: { select: { id: true, location: true, lightType: true, name: true, society: { select: { name: true } } } } },
       orderBy: [{ occurrence: "desc" }, { raisedAt: "asc" }],
     }),
     db.circuitDemo.findMany({
@@ -268,7 +268,7 @@ export const demoBoard = cache(async (now: Date = new Date()): Promise<DemoBoard
         savingsPct: true,
         replacementAssignedAt: true,
         lightReplacementDate: true,
-        circuit: { select: { location: true, lightType: true, society: { select: { name: true } } } },
+        circuit: { select: { location: true, lightType: true, name: true, society: { select: { name: true } } } },
       },
     }),
   ]);
@@ -277,7 +277,7 @@ export const demoBoard = cache(async (now: Date = new Date()): Promise<DemoBoard
     reviewId: r.id,
     circuitId: r.circuit.id,
     societyName: r.circuit.society.name,
-    circuitLabel: circuitLabelOf(r.circuit.location, r.circuit.lightType),
+    circuitLabel: circuitName(r.circuit),
     urgency: reviewUrgency({ raisedAt: r.raisedAt, occurrence: r.occurrence, now }),
   }));
 
@@ -294,17 +294,17 @@ export const demoBoard = cache(async (now: Date = new Date()): Promise<DemoBoard
     if (preOpen) {
       preWindow += 1;
       const l = demoWindowLateness({ openedAt: d.preFrom as Date, now });
-      if (l) delays.push({ demoId: d.id, circuitId: d.circuitId, societyName: d.circuit.society.name, circuitLabel: circuitLabelOf(d.circuit.location, d.circuit.lightType), lateness: l, kind: "pre_window" });
+      if (l) delays.push({ demoId: d.id, circuitId: d.circuitId, societyName: d.circuit.society.name, circuitLabel: circuitName(d.circuit), lateness: l, kind: "pre_window" });
     }
     if (postOpen) {
       postWindow += 1;
       const l = demoWindowLateness({ openedAt: d.postFrom as Date, now });
-      if (l) delays.push({ demoId: d.id, circuitId: d.circuitId, societyName: d.circuit.society.name, circuitLabel: circuitLabelOf(d.circuit.location, d.circuit.lightType), lateness: l, kind: "post_window" });
+      if (l) delays.push({ demoId: d.id, circuitId: d.circuitId, societyName: d.circuit.society.name, circuitLabel: circuitName(d.circuit), lateness: l, kind: "post_window" });
     }
     if (awaitingReplacementNow) {
       awaitingReplacement += 1;
       const l = demoReplacementLateness({ assignedAt: d.replacementAssignedAt as Date, now });
-      if (l) delays.push({ demoId: d.id, circuitId: d.circuitId, societyName: d.circuit.society.name, circuitLabel: circuitLabelOf(d.circuit.location, d.circuit.lightType), lateness: l, kind: "replacement" });
+      if (l) delays.push({ demoId: d.id, circuitId: d.circuitId, societyName: d.circuit.society.name, circuitLabel: circuitName(d.circuit), lateness: l, kind: "replacement" });
     }
   }
 

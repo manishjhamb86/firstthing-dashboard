@@ -43,7 +43,7 @@ export default async function CalculationPage({
       feeLines: {
         orderBy: { amount: "desc" },
         include: {
-          circuit: { select: { id: true, lightType: true, location: true, societyId: true } },
+          circuit: { select: { id: true, lightType: true, name: true, location: true, societyId: true } },
           deviationReview: { include: { owner: { select: { name: true, email: true } } } },
         },
       },
@@ -398,7 +398,7 @@ export default async function CalculationPage({
                         href={`/admin/societies/${l.circuit.societyId}/circuits/${l.circuit.id}`}
                         className="font-medium hover:underline"
                       >
-                        {l.circuit.location || l.circuit.lightType}
+                        {l.circuit.name}
                       </Link>
                       <p className="text-[13px] text-[var(--text-muted)]">
                         {l.meteredLightCount} metered of {l.representedLightCount} represented ·{" "}
@@ -515,7 +515,7 @@ export default async function CalculationPage({
                 {outOfBand.map((l) => (
                   <li key={l.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
                     <span>
-                      <span className="font-medium">{l.circuit.location || l.circuit.lightType}</span>{" "}
+                      <span className="font-medium">{l.circuit.name}</span>{" "}
                       <span className="num text-[var(--text-muted)]">
                         {l.measuredSavingsPct.toFixed(2)}% against {l.benchmarkSavingsPct.toFixed(2)}%
                       </span>

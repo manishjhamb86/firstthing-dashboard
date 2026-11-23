@@ -7,6 +7,7 @@ export type InspectionCircuitChoice = {
   societyId: string;
   location: string | null;
   lightType: string;
+  name: string;
   meteredLightCount: number;
   /** Every light installed on it — full installation + demo lights (2026-09-27). */
   representedLightCount: number;
@@ -32,6 +33,7 @@ export async function loadInspectionChoices(): Promise<{
         societyId: true,
         location: true,
         lightType: true,
+        name: true,
         representedLightCount: true,
         ...DEMO_LIGHTS_SELECT,
       },
@@ -42,6 +44,7 @@ export async function loadInspectionChoices(): Promise<{
     societyId: c.societyId,
     location: c.location,
     lightType: c.lightType,
+    name: c.name,
     meteredLightCount,
     representedLightCount: totalLights(
       c.representedLightCount,

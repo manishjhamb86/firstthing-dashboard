@@ -546,11 +546,12 @@ export default async function SiteSurveyPage({
                 <div key={c.id} className="p-4 text-sm">
                   <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                     <span>
-                      <span className="font-medium">{c.lightType}</span>{" "}
+                      <span className="font-medium">{c.name}</span>{" "}
                       {canApproveException && (
                         <EditCircuitNameForm
                           circuitId={c.id}
                           lightType={c.lightType}
+                          name={c.name}
                           location={c.location}
                           meteredLightCount={c.meteredLightCount}
                           representedLightCount={c.representedLightCount}
@@ -578,7 +579,7 @@ export default async function SiteSurveyPage({
                       <StatusChip tone={state.tone}>{state.label}</StatusChip>
                       <RemoveCircuitButton
                         circuitId={c.id}
-                        label={c.location || c.lightType}
+                        label={c.name}
                         canRemove={removal.get(c.id)?.canRemove ?? false}
                         blockLabel={removal.get(c.id)?.blockLabel ?? null}
                       />

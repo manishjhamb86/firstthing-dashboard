@@ -4,7 +4,7 @@ import Link from "next/link";
 import { requireAdminPage } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { DailyBars, MeterAlerts, MeterDemoCard, MeterHourlyChart, MeterReadout, MeterStateChip } from "@/components/meter-ui";
-import { circuitLabelOf, meterDemoContext, meterHourly, meterRow } from "@/lib/meter-view";
+import { circuitName, meterDemoContext, meterHourly, meterRow } from "@/lib/meter-view";
 import { db } from "@/lib/db";
 import { MeterDetailActions } from "./meter-detail-client";
 import { MeterHistoryEditor } from "./meter-history-editor";
@@ -56,7 +56,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         startInferred: true,
         removalNote: true,
         society: { select: { id: true, name: true } },
-        circuit: { select: { id: true, location: true, lightType: true, societyId: true } },
+        circuit: { select: { id: true, location: true, lightType: true, name: true, societyId: true } },
         installedBy: { select: { name: true, email: true } },
         removedBy: { select: { name: true, email: true } },
       },
@@ -116,13 +116,13 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
         await db.circuit.findMany({
           where: { voidedAt: null },
           orderBy: [{ society: { name: "asc" } }, { createdAt: "asc" }],
-          select: { id: true, location: true, lightType: true, society: { select: { name: true } } },
+          select: { id: true, location: true, lightType: true, name: true, society: { select: { name: true } } },
         })
-      ).map((c) => ({ id: c.id, label: `${c.society.name} · ${circuitLabelOf(c.location, c.lightType)}` }))
+      ).map((c) => ({ id: c.id, label: `${c.society.name} · ${circuitName(c)}` }))
     : [];
   const stayDTOs = stays.map((st) => ({
     id: st.id,
-    label: `${st.society.name} · ${circuitLabelOf(st.circuit.location, st.circuit.lightType)}`,
+    label: `${st.society.name} · ${circuitName(st.circuit)}`,
     from: iso(st.installedAt),
     to: st.removedAt ? iso(new Date(st.removedAt.getTime() - 86_400_000)) : null,
   }));
@@ -268,7 +268,7 @@ export default async function MeterDetailPage({ params }: { params: Promise<{ id
                       </StatusChip>
                     </div>
                     <div className="text-[var(--text-muted)]">
-                      {circuitLabelOf(st.circuit.location, st.circuit.lightType)}
+                      {circuitName(st.circuit)}
                     </div>
                     <div className="num mt-1">
                       {formatDate(st.installedAt)}

@@ -14,7 +14,7 @@ import { updateCircuitConfiguration } from "@/app/admin/societies/[id]/circuits/
  */
 export function EditCircuitNameForm({
   circuitId,
-  lightType,
+  name,
   location,
   meteredLightCount,
   representedLightCount,
@@ -23,6 +23,8 @@ export function EditCircuitNameForm({
 }: {
   circuitId: string;
   lightType: string;
+  /** The name every screen shows — what this control edits (2026-11-23). */
+  name: string;
   location: string | null;
   meteredLightCount: number;
   representedLightCount: number;
@@ -30,7 +32,7 @@ export function EditCircuitNameForm({
   workingHours: number | null;
 }) {
   const [open, setOpen] = useState(false);
-  const [value, setValue] = useState(lightType);
+  const [value, setValue] = useState(name);
   const [error, setError] = useState<string | undefined>();
   const [pending, start] = useTransition();
 
@@ -59,7 +61,7 @@ export function EditCircuitNameForm({
           start(async () => {
             setError(undefined);
             const r = await updateCircuitConfiguration(circuitId, {
-              lightType: value,
+              name: value,
               location: location ?? "",
               meteredLightCount,
               representedLightCount,

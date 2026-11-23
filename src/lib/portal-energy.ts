@@ -5,7 +5,7 @@ import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { effectiveBaselineAt, lastVerifiedAt } from "@/lib/benchmark-rescale";
 import { lightCountStages, type LightStage } from "@/lib/light-count-history";
 import { comparableBaseline, EXCLUSION_DEVICE_SELECT, excludedKwhAt, keptStory, exclusionFromDevices, type Exclusion, periodSavingsSummary, savingsBand, type SavingsBand } from "@/lib/circuit-load";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import { classifyDay } from "@/lib/invoice-month";
 
 export type MonthTotal = {
@@ -177,7 +177,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
     select: {
       id: true,
       location: true,
-      lightType: true,
+      lightType: true, name: true,
       meteredLightCount: true,
       representedLightCount: true,
       benchmarkSavingsPct: true,
@@ -318,7 +318,7 @@ export const societyEnergy = cache(async (societyId: string): Promise<PortalEner
     }
     return {
       id: c.id,
-      label: circuitLabelOf(c.location, c.lightType),
+      label: circuitName(c),
       lightCount: c.meteredLightCount,
       representedLightCount: totalLights(c.representedLightCount, demoLights),
       fullInstallation: c.representedLightCount,

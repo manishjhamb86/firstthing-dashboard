@@ -5,7 +5,7 @@ import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, savingsBand, savingsPct,
 import { effectiveBaselineAt, lastVerifiedAt, type RescaleEvent } from "@/lib/benchmark-rescale";
 import { evaluateMeterHealth, outageMessage, outageMinutes, type MeterState } from "@/lib/meter-health";
 import { freshnessLabel, isStale } from "@/lib/meter-live";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitLabelOf, circuitName } from "@/lib/circuit-label";
 import { isCircuitInactive } from "@/lib/circuit-standing";
 import { monthLabel } from "@/lib/format-date";
 
@@ -90,14 +90,14 @@ export type MeterRow = {
 // Client Component importing this pure formatter from here pulled the whole
 // Prisma/pg client into the browser bundle. Re-exported so every existing
 // call site (`from "@/lib/meter-view"`) keeps working unchanged.
-export { circuitLabelOf };
+export { circuitLabelOf, circuitName };
 
 const meterInclude = {
   circuit: {
     select: {
       id: true,
       location: true,
-      lightType: true,
+      lightType: true, name: true,
       voidedAt: true,
       devices: { select: { count: true, wattage: true, hoursPerDay: true } },
       // Whether the circuit's own DEAL is still live (2026-10-21, user-caught:
@@ -179,7 +179,7 @@ function toRow(
     consecutiveFailures: m.consecutiveFailures,
     now,
   });
-  const circuitLabel = m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null;
+  const circuitLabel = m.circuit ? circuitName(m.circuit) : null;
   const devices = m.circuit?.devices ?? [];
 
   return {

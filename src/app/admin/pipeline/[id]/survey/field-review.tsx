@@ -35,7 +35,7 @@ export async function FieldSurveyReview({ pipelineId, surveyId, canQuery }: { pi
       sections: true,
       photos: { orderBy: { createdAt: "asc" } },
       typeOutcomes: { include: { recordedBy: { select: { name: true, email: true } } } },
-      circuits: { where: { voidedAt: null, typicalityNote: { not: null } }, select: { id: true, location: true, lightType: true, typicalityNote: true } },
+      circuits: { where: { voidedAt: null, typicalityNote: { not: null } }, select: { id: true, location: true, lightType: true, name: true, typicalityNote: true } },
       pipeline: { select: { societyId: true } },
     },
   });
@@ -135,7 +135,7 @@ export async function FieldSurveyReview({ pipelineId, surveyId, canQuery }: { pi
           <p className="lbl">Circuits</p>
           {survey.circuits.map((c) => (
             <div key={c.id}>
-              <p className="font-medium">{c.lightType} — {c.location}</p>
+              <p className="font-medium">{c.name}</p>
               <p className="text-[var(--text-muted)]">Typical because: {c.typicalityNote}</p>
               <p className="flex flex-wrap gap-2">
                 {photosOf("circuit", c.id).map((p, i) => (

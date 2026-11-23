@@ -9765,3 +9765,35 @@ deal's scope and to its one demo circuit together; a deal with several circuits 
 survey), and a name another deal of the same line at the society uses is refused. Verified on dev: renamed both,
 card updated; refused by the server when the account stopped being the main admin behind the open form
 (`pipeline.rename_refused`); another admin is not offered it. Restored.
+
+## One name per deal and circuit, everywhere (2026-11-23) — user-caught, the user's call
+
+Amrapali showed "Lift Lobby Tower D" on the deal header, "Lift Lobby Tower G" on the society card and survey, and
+"Tower G · Lift Lobby Tower G" on the circuit page. 33 production deals had a deal name different from their
+circuit's, and the circuit field was mostly the light type ("basement", "Tube lights"), so the user chose: **the
+deal's name everywhere**.
+
+`Circuit.name` (migration `20261123130000_circuit_name`, NOT NULL) is the name every screen shows: backfilled to the
+deal's name where the deal has exactly one live circuit, otherwise the old label with a "Tower G · Lift Lobby Tower
+G" stutter collapsed. `20261123131000_deal_scope_from_circuit` names a deal that had no name after its single
+circuit. `lightType` stays the light type the inventory and offer matching read. Every display (47 former
+`circuitLabelOf` sites plus the `location || lightType` ones — circuit page, live monitoring, readings, billing,
+deviations, reports, portal, notifications, alerts) now reads `name`. Renames keep the two equal
+(`src/lib/circuit-name.ts`): the survey's Edit name and the society card's Edit name rename the deal and its single
+circuit together (refused when another deal of the line at the society has the name); a lead edit's new deal name
+carries to its single circuit; a new circuit takes the deal's name when it is the first, and a nameless deal takes
+its first circuit's. A deal with several circuits names each circuit apart. Frozen documents (published reports,
+offer snapshots) keep what they were issued with. Amrapali's deal still says "Lift Lobby Tower D" after the
+migration — fix with Edit name once.
+
+## The monthly savings report says how the saving is worked out (2026-11-23) — user-asked
+
+A "How the saving is calculated" section on the report sheet (`monthly-sheet.tsx`, snapshot `basis`, absent on
+copies published before): consumption before FirsThing for all the society's lights (demo kWh/day ÷ demo lights ×
+total lights × days), kWh saved at the benchmark, × the contract's unit rate = "Saved this month", the arithmetic in
+one line, and in bold that the saving is on the agreed benchmark, not the month's meter reading, changing only if
+the measured saving moves more than the contract's ± tolerance — with this month's measured figure and whether it is
+inside the band. The benchmark is shown exact (66.72%), never rounded where it multiplies. The stale screen-only
+note claiming the rupee figure was never computed on the page was removed. Verified on dev with a fixture: one A4
+page with zero and Safari-like margins, no page errors; fixture removed. The emailed PDF (`savings-report-pdf.ts`)
+does not carry the section yet.

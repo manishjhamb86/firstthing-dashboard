@@ -60,7 +60,7 @@ export default async function LiveMonitoringPage() {
     };
     row.circuits.push({
       id: c.id,
-      label: c.location || c.lightType,
+      label: c.name,
       serviceLine: c.serviceLine,
       benchmarkPct: c.benchmarkSavingsPct,
       measuredPct: summary.savingsPct,

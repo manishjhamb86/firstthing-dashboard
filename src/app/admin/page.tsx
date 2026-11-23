@@ -5,7 +5,7 @@ import { db } from "@/lib/db";
 import { loadSocietyStandings } from "@/lib/society-standing-loader";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow, StatusChip } from "@/components/ui";
 import { YourTasks } from "./your-tasks";
-import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
+import { allMeterRows, circuitName } from "@/lib/meter-view";
 import { PIPELINE_STAGE, statusMeta } from "@/lib/status-maps";
 import { SAVINGS_BAND_META, savingsBand } from "@/lib/circuit-load";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -116,7 +116,7 @@ export default async function AdminHomePage() {
             raiseCount: true,
             detail: true,
             circuit: {
-              select: { id: true, location: true, lightType: true, society: { select: { name: true } } },
+              select: { id: true, location: true, lightType: true, name: true, society: { select: { name: true } } },
             },
           },
         })
@@ -169,7 +169,7 @@ export default async function AdminHomePage() {
     ...(canSeeMonitoring
       ? circuitsNeedingAttention.map((c) => ({
           id: `ckt-${c.id}`,
-          label: `${c.society.name} · ${c.location || c.lightType}`,
+          label: `${c.society.name} · ${c.name}`,
           detail:
             c.state === "surveyed"
               ? "Awaiting a light-count exception decision before it can be commissioned."
@@ -444,7 +444,7 @@ export default async function AdminHomePage() {
                       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                         <span className="text-[13px] font-semibold">
                           {a.circuit?.society.name ?? "Unknown"}
-                          {a.circuit && ` · ${circuitLabelOf(a.circuit.location, a.circuit.lightType)}`}
+                          {a.circuit && ` · ${circuitName(a.circuit)}`}
                         </span>
                         {d.measuredPct !== undefined && d.benchmarkPct !== undefined && (
                           <span className="num text-[13px]">
@@ -583,7 +583,7 @@ export default async function AdminHomePage() {
                             href={`/admin/societies/${c.societyId}/circuits/${c.id}`}
                             className="truncate text-[13px] font-medium hover:underline"
                           >
-                            {c.society.name} · {c.location || c.lightType}
+                            {c.society.name} · {c.name}
                           </Link>
                           <span className="num shrink-0 text-sm font-semibold" style={{ color: meta.accent }}>
                             {pct.toFixed(1)}%

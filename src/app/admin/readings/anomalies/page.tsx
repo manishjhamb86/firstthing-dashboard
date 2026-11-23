@@ -31,7 +31,7 @@ export default async function AnomalyReviewPage({
   const anomalies = await db.readingAnomaly.findMany({
     where: { period },
     include: {
-      circuit: { select: { id: true, lightType: true, location: true, society: { select: { name: true } } } },
+      circuit: { select: { id: true, lightType: true, name: true, location: true, society: { select: { name: true } } } },
       resolvedBy: { select: { name: true, email: true } },
     },
     orderBy: [{ status: "asc" }, { date: "asc" }],
@@ -146,7 +146,7 @@ export default async function AnomalyReviewPage({
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 mb-4">
                   <div>
                     <CardTitle>
-                      {circuit.society.name} — {circuit.lightType}
+                      {circuit.society.name} — {circuit.name}
                       {circuit.location ? ` (${circuit.location})` : ""}
                     </CardTitle>
                     <p className="text-sm text-[var(--text-muted)]">

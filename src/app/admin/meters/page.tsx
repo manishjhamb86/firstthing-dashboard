@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { Card, CardTitle, EmptyState, PageHeader, StatusChip } from "@/components/ui";
 import { isAuthorised } from "@/lib/ewelink";
-import { allMeterRows, circuitLabelOf } from "@/lib/meter-view";
+import { allMeterRows, circuitName } from "@/lib/meter-view";
 import { MetersListClient } from "./meters-list-client";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,7 @@ export default async function MetersPage() {
         id: true,
         societyId: true,
         location: true,
-        lightType: true,
+        lightType: true, name: true,
         state: true,
         meterDevice: { select: { id: true } },
       },
@@ -210,7 +210,7 @@ export default async function MetersPage() {
             circuits={circuits.map((c) => ({
               id: c.id,
               societyId: c.societyId,
-              label: circuitLabelOf(c.location, c.lightType),
+              label: circuitName(c),
               state: c.state,
               takenBy: c.meterDevice?.id ?? null,
             }))}

@@ -12,7 +12,7 @@ import { monthName } from "../portal-widgets";
 import { inspectionSummary } from "@/lib/inspection";
 import { InspectionFindingsSummary } from "./inspection-findings";
 import { FileText } from "lucide-react";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Documents" };
@@ -107,7 +107,7 @@ export default async function PortalDocumentsPage({
   const demos = await db.circuitDemo.findMany({
     where: { id: { in: [...new Set(latestShared.flatMap((r) => r.demoIds))] }, voidedAt: null, circuit: { societyId, voidedAt: null } },
     orderBy: { sequence: "asc" },
-    select: { id: true, sequence: true, lightReplacementDate: true, circuit: { select: { location: true, lightType: true } } },
+    select: { id: true, sequence: true, lightReplacementDate: true, circuit: { select: { location: true, lightType: true, name: true } } },
   });
 
   return (
@@ -135,7 +135,7 @@ export default async function PortalDocumentsPage({
                 {demos
                   .filter((d) => r.demoIds.includes(d.id))
                   .map((d, _j, ds) => {
-                    const which = ds.length > 1 ? ` — ${circuitLabelOf(d.circuit.location, d.circuit.lightType)}, demo ${d.sequence}` : "";
+                    const which = ds.length > 1 ? ` — ${circuitName(d.circuit)}, demo ${d.sequence}` : "";
                     return (
                       <span key={d.id} className="contents">
                         <Link href={`/portal/reports/pre-install/${d.id}`} className="btn-secondary btn-sm">

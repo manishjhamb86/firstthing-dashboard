@@ -2,7 +2,7 @@ import type { MeterAlertKind, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
 import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, expectedDailyKwh } from "@/lib/circuit-load";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import { sharedInReport } from "@/lib/demo-step-core";
 import { currentDemoOf, demoFacts, demoFactsInclude } from "@/lib/circuit-figures";
 import { demoMonitoringPeriod, judgePostInstallDay, judgePreInstallDay, readingDueDate } from "@/lib/demo-monitoring";
@@ -141,7 +141,7 @@ export async function syncDemoMonitoringAlerts(circuitId: string, now = new Date
       id: true,
       societyId: true,
       location: true,
-      lightType: true,
+      lightType: true, name: true,
       voidedAt: true,
       state: true,
       wattage: true,
@@ -211,7 +211,7 @@ export async function syncDemoMonitoringAlerts(circuitId: string, now = new Date
   const otherKind: DemoAlertKind = period === "pre" ? "demo_post_variance" : "demo_pre_variance";
   await syncAlert(circuitId, otherKind, null);
 
-  const label = circuitLabelOf(circuit.location, circuit.lightType);
+  const label = circuitName(circuit);
   const society = circuit.society.name;
   const { doerId, assignerId } = await responsibleParties(
     period,

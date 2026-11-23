@@ -13,6 +13,8 @@ export type DemoReportCircuitInput = {
   id: string;
   lightType: string;
   location: string | null;
+  /** The name every screen shows (2026-11-23). */
+  name?: string;
   meteredLightCount: number;
   representedLightCount: number;
   wattage: number;

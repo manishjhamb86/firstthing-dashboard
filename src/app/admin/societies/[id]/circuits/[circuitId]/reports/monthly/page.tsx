@@ -81,7 +81,7 @@ export default async function MonthlyReportPage({
               <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
                 {society.location}
                 <br />
-                {circuit.location || circuit.lightType} circuit
+                {circuit.name} circuit
               </p>
             </div>
           </header>

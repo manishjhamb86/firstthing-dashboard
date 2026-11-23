@@ -86,6 +86,8 @@ export type CandidateFacts = {
   state: string;
   location: string | null;
   lightType: string;
+  /** The name every screen shows (2026-11-23); older callers may not pass it. */
+  name?: string;
   /**
    * Whether the light replacement has been handed to a crew AND booked with
    * the society. The circuit STATE cannot say — `awaiting_installation`
@@ -142,7 +144,7 @@ export function mostAdvancedCandidate(candidates: CandidateFacts[]): CandidateFa
 }
 
 export function candidateLabel(c: CandidateFacts): string {
-  return c.location || c.lightType;
+  return c.name?.trim() || c.location || c.lightType;
 }
 
 /**

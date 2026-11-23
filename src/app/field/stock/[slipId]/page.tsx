@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { formatDate } from "@/lib/format-date";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { loadOpenSlips } from "@/lib/stock-workflow-loader";
 import { requireFieldPage } from "../../access";
 import { SlipForm } from "./slip-form";
@@ -26,7 +26,7 @@ export default async function SlipPage({ params, searchParams }: { params: Promi
   const [custody, offices, circuits] = await Promise.all([
     db.stockLocation.findUnique({ where: { adminUserId: me.id }, select: { id: true } }),
     db.stockLocation.findMany({ where: { kind: "office", active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
-    db.circuit.findMany({ where: { societyId: slip.society.id, voidedAt: null }, select: { id: true, location: true, lightType: true }, orderBy: { createdAt: "asc" } }),
+    db.circuit.findMany({ where: { societyId: slip.society.id, voidedAt: null }, select: { id: true, location: true, lightType: true, name: true }, orderBy: { createdAt: "asc" } }),
   ]);
   const issued = await db.stockMovement.findMany({ where: { issueSlipId: slip.id, kind: "issue", unitId: { not: null } }, select: { unitId: true } });
   const units = custody
@@ -53,7 +53,7 @@ export default async function SlipPage({ params, searchParams }: { params: Promi
         lines={slip.lines.filter((l) => l.held > 0).map((l) => ({ itemTypeId: l.itemTypeId, name: l.item.name, unit: l.item.unit, tracking: l.item.tracking, held: l.held }))}
         units={units}
         offices={offices}
-        circuits={circuits.map((c) => ({ id: c.id, label: circuitLabelOf(c.location, c.lightType) }))}
+        circuits={circuits.map((c) => ({ id: c.id, label: circuitName(c) }))}
         initialMode={mode === "return" ? "return" : "install"}
       />
     </>

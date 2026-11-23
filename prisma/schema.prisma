@@ -1275,6 +1275,12 @@ model Circuit {
   serviceLine                   ServiceLine @map("service_line")
   location                      String? // FEAT-040 — physical area/location, set during registry configuration
   lightType                     String      @map("light_type") // basement | stilt | lift-lobby | staircase | external — CON-11
+  /// The one name every screen shows for this circuit (2026-11-23, user-asked:
+  /// "the name should be same everywhere"). For a deal with a single circuit it
+  /// IS the deal's name and the two are kept equal on every rename; a deal
+  /// with several circuits names each one apart. lightType stays the light
+  /// type the inventory and offer matching read.
+  name                          String
   meteredLightCount             Int         @map("metered_light_count")
   representedLightCount         Int         @map("represented_light_count") // scoped to this lightType only — CON-11
   // The survey page's own record of this candidate (2026-10-05, user-asked):

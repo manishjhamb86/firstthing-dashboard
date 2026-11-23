@@ -37,7 +37,7 @@ export default async function ReadingsPage({
       where: { voidedAt: null, state: { in: ["benchmark_confirmed", "active_billing"] } },
       select: {
         id: true,
-        lightType: true,
+        lightType: true, name: true,
         location: true,
         state: true,
         society: { select: { id: true, name: true } },
@@ -47,7 +47,7 @@ export default async function ReadingsPage({
     db.rawReadingFile.findMany({
       where: { period },
       include: {
-        circuit: { select: { id: true, lightType: true, society: { select: { name: true } } } },
+        circuit: { select: { id: true, lightType: true, name: true, society: { select: { name: true } } } },
         uploadedBy: { select: { name: true, email: true } },
         _count: { select: { readings: true, anomalies: true } },
       },
@@ -132,7 +132,7 @@ export default async function ReadingsPage({
           period={period}
           circuits={circuits.map((c) => ({
             id: c.id,
-            label: `${c.society.name} — ${c.lightType}${c.location ? ` (${c.location})` : ""}`,
+            label: `${c.society.name} — ${c.name}`,
             alreadyHasReadings: committedCircuitIds.has(c.id),
           }))}
         />
@@ -167,7 +167,7 @@ export default async function ReadingsPage({
                   <tr key={c.id}>
                     <td className="font-medium">{c.society.name}</td>
                     <td className="text-[var(--text-muted)]">
-                      {c.lightType}
+                      {c.name}
                       {c.location ? ` · ${c.location}` : ""}
                     </td>
                     <td className="text-right">
@@ -217,7 +217,7 @@ export default async function ReadingsPage({
                     <tr key={u.id}>
                       <td>
                         {u.circuit.society.name}
-                        <span className="text-[var(--text-muted)]"> — {u.circuit.lightType}</span>
+                        <span className="text-[var(--text-muted)]"> — {u.circuit.name}</span>
                       </td>
                       <td className="max-w-[220px] truncate" title={u.fileName}>
                         {u.fileName}

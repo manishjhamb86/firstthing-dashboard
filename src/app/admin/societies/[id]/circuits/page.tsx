@@ -137,7 +137,7 @@ export default async function CircuitRegistryPage({ params }: { params: Promise<
               <div key={c.id} className="p-4 text-sm flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                 <div style={{ opacity: 0.7 }}>
                   <span className="font-medium" style={{ textDecoration: "line-through" }}>
-                    {c.location || c.lightType}
+                    {c.name}
                   </span>
                   <p className="text-[var(--text-muted)] text-xs mt-1">
                     Removed by {c.voidedBy?.name ?? c.voidedBy?.email ?? "—"} — {c.voidReason}

@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { StatusChip } from "@/components/ui";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { expectedDisplayedLoadW } from "@/lib/circuit-load";
 import { LOAD_TOLERANCE_PCT } from "@/lib/circuit-figures";
 import { demoLockState } from "@/lib/demo-lock";
@@ -40,7 +40,7 @@ export default async function FieldDemoPage({ params }: { params: Promise<{ demo
         select: {
           id: true,
           location: true,
-          lightType: true,
+          lightType: true, name: true,
           wattage: true,
           voidedAt: true,
           society: { select: { name: true, location: true } },
@@ -86,7 +86,7 @@ export default async function FieldDemoPage({ params }: { params: Promise<{ demo
   }).watts;
   const visit = demo.scheduledEvents[0] ?? null;
   const today = isoDate(istWallClock(new Date()));
-  const label = circuitLabelOf(demo.circuit.location, demo.circuit.lightType);
+  const label = circuitName(demo.circuit);
 
   return (
     <>

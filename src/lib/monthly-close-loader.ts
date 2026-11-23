@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 import { periodBounds } from "@/lib/invoice-month-loader";
 import { loadSocietyStandings } from "@/lib/society-standing-loader";
@@ -70,7 +70,7 @@ export async function loadCloseRows(period: string, onlySocietyId?: string): Pro
         id: true,
         name: true,
         location: true,
-        circuits: { where: { voidedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, location: true, lightType: true } },
+        circuits: { where: { voidedAt: null }, orderBy: { createdAt: "asc" }, select: { id: true, location: true, lightType: true, name: true } },
       },
     }),
     db.publishedSavingsReport.findMany({
@@ -115,7 +115,7 @@ export async function loadCloseRows(period: string, onlySocietyId?: string): Pro
         .filter((c) => withMonth.has(c.id))
         .map((c) => {
           const p = published.find((r) => r.circuitId === c.id) ?? null;
-          return { id: c.id, label: circuitLabelOf(c.location, c.lightType), publishedId: p?.id ?? null, publishedVersion: p?.version ?? null };
+          return { id: c.id, label: circuitName(c), publishedId: p?.id ?? null, publishedVersion: p?.version ?? null };
         });
       const report = reportState(circuits.length, circuits.filter((c) => c.publishedId).length);
       const calc = calcs.find((c) => c.societyId === s.id) ?? null;

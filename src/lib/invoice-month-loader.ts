@@ -18,7 +18,7 @@ import { servedUntil } from "@/lib/deal-close";
 import { db } from "@/lib/db";
 import { effectiveBaselineAt, effectiveLightCountAt } from "@/lib/benchmark-rescale";
 import { DEMO_LIGHTS_SELECT, demoLightsInstalled, totalLights } from "@/lib/light-population";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import type { CircuitMonthReadings, InvoiceMonthPart } from "@/lib/invoice-month";
 import type { CircuitOption } from "@/lib/invoice-intake";
 import type { ServiceLine } from "@prisma/client";
@@ -81,7 +81,7 @@ export async function loadInvoiceMonthContext(input: {
 
   const circuitOptions: CircuitOption[] = circuits.map((c) => ({
     circuitId: c.id,
-    label: circuitLabelOf(c.location, c.lightType),
+    label: circuitName(c),
     lightCount: lightsOf(c),
     lightType: c.lightType,
   }));
@@ -161,7 +161,7 @@ export async function loadInvoiceMonthContext(input: {
 
   for (const c of circuits) {
     if (!claimed.has(c.id)) {
-      notes.push(`${circuitLabelOf(c.location, c.lightType)} is not on an active contract for ${input.period}.`);
+      notes.push(`${circuitName(c)} is not on an active contract for ${input.period}.`);
     }
   }
 

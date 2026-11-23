@@ -28,7 +28,7 @@ import {
   findMatchingLocation,
   type FindingInput,
 } from "@/lib/inspection";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import type { InspectionSensorStatus } from "@prisma/client";
 
 function isUniqueConstraintViolation(err: unknown): boolean {
@@ -70,12 +70,12 @@ export async function startInspection(
   if (input.circuitId) {
     const circuit = await db.circuit.findUnique({
       where: { id: input.circuitId },
-      select: { societyId: true, location: true, lightType: true, voidedAt: true },
+      select: { societyId: true, location: true, lightType: true, name: true, voidedAt: true },
     });
     if (!circuit || circuit.societyId !== input.societyId || circuit.voidedAt) {
       return { error: "That circuit is not available for this society." };
     }
-    area = circuitLabelOf(circuit.location, circuit.lightType);
+    area = circuitName(circuit);
   }
 
   // input.inspectedAt is an <input type="datetime-local"> value with no

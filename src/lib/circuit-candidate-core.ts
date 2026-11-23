@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { logger } from "@/lib/logger";
+import { initialCircuitName, nameDealAfterFirstCircuit } from "@/lib/circuit-name";
 import { refuseFullInstallationCount } from "@/lib/light-population";
 import {
   CON16_HARD_CRITERIA,
@@ -165,6 +166,7 @@ export async function recordCandidateAs(actor: { id: string; permissions: string
         siteSurveyId: input.siteSurveyId,
         serviceLine: input.serviceLine as never,
         lightType: input.lightType.trim(),
+        name: await initialCircuitName(tx, input.siteSurveyId, input.location, input.lightType),
         location: input.location?.trim() || null,
         meteredLightCount,
         representedLightCount: input.representedLightCount,
@@ -197,6 +199,7 @@ export async function recordCandidateAs(actor: { id: string; permissions: string
         excludedFromCalculation: l.excludedFromCalculation ?? false,
       })),
     });
+    await nameDealAfterFirstCircuit(tx, input.siteSurveyId);
     return created;
   });
 

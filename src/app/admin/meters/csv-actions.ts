@@ -6,7 +6,7 @@ import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
 import { matchKnownFormat } from "@/lib/reading-formats";
 import { hourlyPoints, type HourlyPoint } from "@/lib/reading-normalize";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { buildMeterImportKey } from "@/lib/ingest-keys";
@@ -130,7 +130,7 @@ export async function analyseMeterCsv(input: {
       id: true,
       name: true,
       society: { select: { name: true } },
-      circuit: { select: { location: true, lightType: true } },
+      circuit: { select: { location: true, lightType: true, name: true } },
     },
   });
   const first = minDay(points);
@@ -147,7 +147,7 @@ export async function analyseMeterCsv(input: {
   const candidates: Candidate[] = meters.map((m) => ({
     meterId: m.id,
     meterName: m.name,
-    circuitLabel: m.circuit ? circuitLabelOf(m.circuit.location, m.circuit.lightType) : null,
+    circuitLabel: m.circuit ? circuitName(m.circuit) : null,
     societyName: m.society?.name ?? null,
     stored: byMeter.get(m.id) ?? [],
   }));
@@ -214,7 +214,7 @@ export async function commitMeterCsv(input: {
       name: true,
       circuitId: true,
       societyId: true,
-      circuit: { select: { location: true, lightType: true, societyId: true } },
+      circuit: { select: { location: true, lightType: true, name: true, societyId: true } },
     },
   });
   if (!meter) return { error: "That meter is no longer in the mirror." };
@@ -310,7 +310,7 @@ export async function commitMeterCsv(input: {
   const lastExclusive = new Date(last.getTime() + 86_400_000);
   const stays = await db.meterInstallation.findMany({
     where: { meterId: meter.id, installedAt: { lt: lastExclusive }, OR: [{ removedAt: null }, { removedAt: { gt: first } }] },
-    select: { circuitId: true, installedAt: true, removedAt: true, circuit: { select: { societyId: true, location: true, lightType: true } } },
+    select: { circuitId: true, installedAt: true, removedAt: true, circuit: { select: { societyId: true, location: true, lightType: true, name: true } } },
   });
   await afterHistoryChange(stays.map((s) => s.circuitId), actor.id);
   const covered = new Set<number>();
@@ -320,7 +320,7 @@ export async function commitMeterCsv(input: {
   const allDays = new Set(points.map((p) => p.day.getTime()));
   const circuits = [...new Map(stays.map((st) => [st.circuitId, st])).values()].map((st) => ({
     href: `/admin/societies/${st.circuit.societyId}/circuits/${st.circuitId}`,
-    label: circuitLabelOf(st.circuit.location, st.circuit.lightType),
+    label: circuitName(st.circuit),
   }));
 
   revalidatePath(`/admin/meters/${meter.id}`);

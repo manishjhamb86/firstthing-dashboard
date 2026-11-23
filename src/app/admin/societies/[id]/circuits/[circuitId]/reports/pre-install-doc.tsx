@@ -45,7 +45,7 @@ export function PreInstallDoc({ report, backHref, canInvestigate = false }: { re
             <p className="mt-1.5 text-[13.5px] leading-relaxed text-[var(--text-muted)]">
               {society.location}
               <br />
-              {circuit.location || circuit.lightType} circuit ·{" "}
+              {circuit.name} circuit ·{" "}
               {(report.demo?.meteredLightCount ?? circuit.meteredLightCount).toLocaleString("en-IN")} metered lights of{" "}
               {describeLights(circuit.representedLightCount, report.demoLights)} across the society
             </p>
@@ -206,7 +206,7 @@ export function PreInstallDoc({ report, backHref, canInvestigate = false }: { re
             FirsThing · every figure traces to stored daily readings and the recorded inventory.
           </span>
           <span className="num report-colophon">
-            {society.name} · {circuit.location || circuit.lightType} · pre-installation
+            {society.name} · {circuit.name} · pre-installation
           </span>
         </footer>
       </article>

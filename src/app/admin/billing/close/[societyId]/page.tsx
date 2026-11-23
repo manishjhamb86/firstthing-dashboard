@@ -37,7 +37,7 @@ export default async function CloseSocietyPage({
     db.publishedSavingsReport.findMany({
       where: { societyId, period },
       orderBy: { publishedAt: "desc" },
-      select: { id: true, version: true, publishedAt: true, voidedAt: true, circuit: { select: { location: true, lightType: true } }, publishedBy: { select: { name: true, email: true } } },
+      select: { id: true, version: true, publishedAt: true, voidedAt: true, circuit: { select: { location: true, lightType: true, name: true } }, publishedBy: { select: { name: true, email: true } } },
     }),
     db.monthlyCloseEmail.findMany({
       where: { societyId, period },
@@ -46,7 +46,7 @@ export default async function CloseSocietyPage({
     }),
   ]);
   const record = [
-    ...reports.map((r) => ({ at: r.publishedAt, what: `Savings report v${r.version} (${r.circuit.location || r.circuit.lightType}) published by ${r.publishedBy.name ?? r.publishedBy.email}${r.voidedAt ? " — later withdrawn" : ""}.` })),
+    ...reports.map((r) => ({ at: r.publishedAt, what: `Savings report v${r.version} (${r.circuit.name}) published by ${r.publishedBy.name ?? r.publishedBy.email}${r.voidedAt ? " — later withdrawn" : ""}.` })),
     ...emails.map((e) => ({ at: e.sentAt, what: `Report and invoice emailed to ${e.recipients.length} member${e.recipients.length === 1 ? "" : "s"} by ${e.sentBy.name ?? e.sentBy.email}.` })),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());
 

@@ -19,6 +19,7 @@ import { extensionOf } from "@/lib/file-signature";
 import { logger } from "@/lib/logger";
 import { findDuplicateCircuit } from "@/lib/circuit-duplicate";
 import { recordKycDocument } from "@/app/admin/pipeline/[id]/kyc/actions";
+import { initialCircuitName, nameDealAfterFirstCircuit } from "@/lib/circuit-name";
 import type { KycDocumentType } from "@prisma/client";
 
 type Presigned = { uploadUrl: string; key: string };
@@ -753,6 +754,7 @@ export async function createCircuitFromDocument(input: {
         siteSurveyId: survey.id,
         serviceLine: "lighting",
         lightType,
+        name: await initialCircuitName(tx, survey.id, input.location, lightType),
         // The area the operator gave, not the filename. A file name in the
         // location field reads as a place and is not one (user-reported
         // 2026-08-26); the document's own provenance is on every device line.
@@ -796,6 +798,7 @@ export async function createCircuitFromDocument(input: {
         recordedById: actor.id,
       })),
     });
+    await nameDealAfterFirstCircuit(tx, survey.id);
     await tx.documentExtraction.update({
       where: { documentId: doc.id },
       data: {

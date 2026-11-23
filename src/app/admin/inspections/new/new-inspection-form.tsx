@@ -6,7 +6,7 @@ import { ErrorText, Field } from "@/components/ui";
 import { SearchSelect } from "@/components/search-select";
 import { ClickToEdit } from "@/components/click-to-edit";
 import { discardInspectionDraft, startInspection, type ExistingDraft } from "../actions";
-import { circuitLabelOf } from "@/lib/circuit-label";
+import { circuitName } from "@/lib/circuit-label";
 import { formatDateTime, monthLabel, timeAgo } from "@/lib/format-date";
 
 type Society = { id: string; name: string; location: string };
@@ -15,6 +15,7 @@ type Circuit = {
   societyId: string;
   location: string | null;
   lightType: string;
+  name: string;
   meteredLightCount: number;
   representedLightCount: number;
 };
@@ -65,7 +66,7 @@ export function NewInspectionForm({
       // No specific circuit → a whole-society check, area left empty; the
       // circuit already states its own location, so there is nothing left
       // to type either way (2026-09-12).
-      area: selectedCircuit ? circuitLabelOf(selectedCircuit.location, selectedCircuit.lightType) : "",
+      area: selectedCircuit ? circuitName(selectedCircuit) : "",
       period,
       inspectedAt,
     });
@@ -182,7 +183,7 @@ export function NewInspectionForm({
           <option value="">No specific circuit (whole society)</option>
           {societyCircuits.map((c) => (
             <option key={c.id} value={c.id}>
-              {circuitLabelOf(c.location, c.lightType)} — {c.meteredLightCount} metered
+              {circuitName(c)} — {c.meteredLightCount} metered
             </option>
           ))}
         </select>

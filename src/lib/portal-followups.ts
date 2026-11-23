@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { circuitLabelOf } from "@/lib/meter-view";
+import { circuitName } from "@/lib/meter-view";
 import type { RemainingLine } from "@/lib/demo-replacement-followup";
 
 export type PortalFollowUpRow = {
@@ -19,13 +19,13 @@ export async function openReplacementFollowUps(societyId: string): Promise<Porta
   const rows = await db.demoReplacementFollowUp.findMany({
     where: { societyId, plan: "society_completes", completedAt: null, voidedAt: null },
     orderBy: { raisedAt: "asc" },
-    select: { id: true, reason: true, remaining: true, raisedAt: true, circuit: { select: { location: true, lightType: true } } },
+    select: { id: true, reason: true, remaining: true, raisedAt: true, circuit: { select: { location: true, lightType: true, name: true } } },
   });
   return rows.map((r) => {
     const remaining = (r.remaining as unknown as RemainingLine[] | null) ?? [];
     return {
       id: r.id,
-      circuitLabel: circuitLabelOf(r.circuit.location, r.circuit.lightType),
+      circuitLabel: circuitName(r.circuit),
       remainingTotal: remaining.reduce((n, l) => n + l.remainingCount, 0),
       reason: r.reason,
       raisedAt: r.raisedAt.toISOString(),

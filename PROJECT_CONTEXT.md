@@ -9797,7 +9797,9 @@ inside the band. The benchmark is shown exact (66.72%), never rounded where it m
 note claiming the rupee figure was never computed on the page was removed. Verified on dev with a fixture: one A4
 page with zero and Safari-like margins, no page errors; fixture removed. The emailed PDF (`savings-report-pdf.ts`)
 does not carry the section yet.
-**Same day, user-asked:** the deal page header gets the same "Edit name" (main admin account), and the society card
-offers it for every deal, multi-circuit ones too (only the deal is renamed there; each circuit keeps its own name).
+**Same day, user's correction:** the deal name is edited in ONE place — Lead details → Edit → "Deal name" (operations;
+it was already there, labelled "Which part does this deal cover?"). The Lead details card now shows the deal name,
+and the separate "Edit name" controls on the society card and the deal header were removed. Saving it renames the
+deal's single circuit too (`updateLeadDetails`); the survey's per-circuit Edit name stays for naming circuits apart.
 Amrapali's lift-lobby deal was set back to "Lift Lobby Tower G" on production (deal and circuit) at the user's word —
 the migration had taken the deal's stored "Tower D".

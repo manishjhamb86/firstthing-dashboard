@@ -176,9 +176,9 @@ export function LeadDetailsForm({
 
       {(current.serviceLine === "lighting" || current.serviceLine === "pumps") && (
         <Field
-          label="Which part does this deal cover?"
+          label="Deal name"
           htmlFor="ld-scope"
-          hint="Naming the parts is what lets two deals on one service line be told apart."
+          hint="The part this deal covers. It is the name shown everywhere for the deal and its circuit."
         >
           <input
             id="ld-scope"

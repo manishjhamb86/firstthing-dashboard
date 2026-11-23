@@ -10,8 +10,6 @@ import { ProposalForm } from "./proposal-form";
 import { ProposalDateForm } from "./proposal-date-form";
 import { ApproveLeadButton } from "./approve-lead-button";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
-import { isSuperAdmin } from "@/lib/super-admin";
-import { DealNameEdit } from "@/app/admin/societies/[id]/deal-name-edit";
 import { isOperations, mayAct, teamMeta, teamsFor, whoseTurn } from "@/lib/admin-teams";
 import { AssignSurvey } from "./assign-survey";
 import { LeadDetailsForm } from "./lead-details-form";
@@ -171,13 +169,7 @@ export default async function PipelineDetailPage({
         // The map's own current step, not Pipeline.stage — see the phase
         // field in deal-progress.ts for why the two used to disagree.
         chip={<StatusChip tone={progress.phase.tone}>{progress.phase.label}</StatusChip>}
-        subtitle={
-          <>
-            {dealLabel(pipeline.serviceLine, pipeline.dealScope)} · {pipeline.society.location}
-            {/* The deal's name — one name with its circuit (2026-11-23). */}
-            {isSuperAdmin(actor?.email) && <DealNameEdit pipelineId={pipeline.id} name={pipeline.dealScope ?? ""} />}
-          </>
-        }
+        subtitle={`${dealLabel(pipeline.serviceLine, pipeline.dealScope)} · ${pipeline.society.location}`}
         action={
           isOps && pipeline.stage !== "closed_lost" && closeDialog ? (
             <CloseDealDialog mode="deal" id={pipeline.id} today={todayIso} {...closeDialog} />
@@ -333,6 +325,14 @@ export default async function PipelineDetailPage({
               />
             ) : (
               <dl className="space-y-2.5 text-sm">
+                {/* The deal's name — shown here as well as edited here
+                    (2026-11-23, user-caught: the field was in the form but
+                    nowhere on the card). It is the one name the deal and its
+                    circuit go by everywhere. */}
+                <div className="flex justify-between gap-4">
+                  <dt className="text-[var(--text-muted)]">Deal name</dt>
+                  <dd className="text-right">{pipeline.dealScope?.trim() || <span className="text-[var(--text-subtle)]">Not named</span>}</dd>
+                </div>
                 <div className="flex justify-between gap-4">
                   <dt className="text-[var(--text-muted)]">Contact</dt>
                   <dd>

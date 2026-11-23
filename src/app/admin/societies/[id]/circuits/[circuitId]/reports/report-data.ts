@@ -100,7 +100,7 @@ export async function loadCircuitReport(circuitId: string, demoId?: string | nul
           pipeline: {
             select: {
               contract: {
-                select: { versions: { orderBy: { version: "desc" }, take: 1, select: { unitElectricityRate: true, tolerancePct: true } } },
+                select: { versions: { orderBy: { version: "desc" }, take: 1, select: { unitElectricityRate: true } } },
               },
             },
           },
@@ -290,25 +290,6 @@ export type SavingsReportSnapshot = {
   days: ReportDay[];
   summary: ReturnType<typeof summarize>;
   fee: CircuitFeeLineForMonth | null;
-  /**
-   * How "Saved this month" is worked out (2026-11-23, user-asked: say on the
-   * report that it is the benchmark figure, and show the 2,208 lights'
-   * consumption before FirsThing). Absent on copies published before then.
-   */
-  basis?: {
-    demoBaselineKwhPerDay: number;
-    demoLightCount: number;
-    perLightKwhPerDay: number;
-    totalLights: number;
-    daysInMonth: number;
-    previousKwhPerDay: number;
-    previousKwh: number;
-    savedKwh: number;
-    unitRate: number;
-    benchmarkPct: number;
-    /** The agreed band around the benchmark, in percentage points; null when the contract has none. */
-    tolerancePct: number | null;
-  };
   generatedAt: string;
 };
 
@@ -335,8 +316,7 @@ export async function buildMonthlySnapshot(
   // comes only from a released fee line (never computed here), so this
   // changes what the report SAYS was saved without touching what the
   // society is invoiced.
-  const terms = report.circuit.siteSurvey?.pipeline.contract?.versions[0] ?? null;
-  const unitRate = terms?.unitElectricityRate ?? null;
+  const unitRate = report.circuit.siteSurvey?.pipeline.contract?.versions[0]?.unitElectricityRate ?? null;
   const demoLightCount = report.demo?.meteredLightCount ?? null;
   const estimate =
     report.circuit.preInstallBaseline !== null &&
@@ -372,23 +352,6 @@ export async function buildMonthlySnapshot(
     days,
     summary: summarize(baselineAt, days, report.monitoringExclusion),
     fee,
-    ...(estimate && demoLightCount && report.circuit.preInstallBaseline !== null && report.circuit.benchmarkSavingsPct !== null && unitRate !== null
-      ? {
-          basis: {
-            demoBaselineKwhPerDay: report.circuit.preInstallBaseline,
-            demoLightCount,
-            perLightKwhPerDay: report.circuit.preInstallBaseline / demoLightCount,
-            totalLights: totalLights(report.circuit.representedLightCount, report.demoLights),
-            daysInMonth: daysInPeriod(month),
-            previousKwhPerDay: estimate.baselineKwh / daysInPeriod(month),
-            previousKwh: estimate.baselineKwh,
-            savedKwh: estimate.savedKwh,
-            unitRate,
-            benchmarkPct: report.circuit.benchmarkSavingsPct,
-            tolerancePct: terms?.tolerancePct ?? null,
-          },
-        }
-      : {}),
     generatedAt: new Date().toISOString(),
   };
 }

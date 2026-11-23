@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { isOperations } from "@/lib/admin-teams";
+import { refuseTankInterval } from "@/lib/tank-sample-interval";
 import { logger } from "@/lib/logger";
 import { resolveTuyaAccounts, listTuyaDevices, syncTankDevices, type TuyaConfig } from "@/lib/tuya";
 
@@ -107,7 +108,7 @@ export async function saveTankApiConfig(input: {
   }
 
   // Prove the credentials before storing them as the truth: a bad secret
-  // saved silently would kill the half-hourly sampler with nothing on screen.
+  // saved silently would kill the level sampler with nothing on screen.
   const cfg: TuyaConfig = { baseUrl, accessId, accessSecret };
   try {
     await listTuyaDevices(cfg);
@@ -177,6 +178,33 @@ export async function saveTankAlertThresholds(input: { lowPct: number; highPct: 
   if (!existing) return { error: "Set up the API connection first — there is nothing to tune thresholds on yet." };
   await db.tankApiConfig.update({ where: { id: "singleton" }, data: { lowLevelPct: low, highLevelPct: high, updatedById: actor.id } });
   logger.info("tank.thresholds_saved", { actorId: actor.id, low, high });
+  revalidatePath("/admin/water-tanks/settings");
+  return {};
+}
+
+/**
+ * How often every tank's level is read (2026-11-23, user-asked: 10 minutes,
+ * configurable). The worker reads it on each reschedule; a pending pass
+ * further away than the new interval is brought forward so a shorter
+ * interval takes effect now rather than after the old wait.
+ */
+export async function saveTankSampleInterval(minutes: number): Promise<{ error?: string }> {
+  const actor = await resolveAdmin();
+  if (!actor) return { error: "Your session is no longer valid. Sign in again." };
+  if (!isOperations(actor.team)) {
+    logger.warn("tank.sample_interval_refused", { actorId: actor.id, actorTeam: actor.team });
+    return { error: "The sampling interval is an operations action." };
+  }
+  const refusal = refuseTankInterval(minutes);
+  if (refusal) return { error: refusal };
+  const existing = await db.tankApiConfig.findUnique({ where: { id: "singleton" }, select: { sampleIntervalMinutes: true } });
+  if (!existing) return { error: "Set up the API connection first — there is nothing to sample yet." };
+  const soonest = new Date(Date.now() + minutes * 60_000);
+  await db.$transaction([
+    db.tankApiConfig.update({ where: { id: "singleton" }, data: { sampleIntervalMinutes: minutes, updatedById: actor.id } }),
+    db.job.updateMany({ where: { type: "tank_level_sample", status: "pending", runAt: { gt: soonest } }, data: { runAt: soonest } }),
+  ]);
+  logger.info("tank.sample_interval_saved", { actorId: actor.id, from: existing.sampleIntervalMinutes, to: minutes });
   revalidatePath("/admin/water-tanks/settings");
   return {};
 }

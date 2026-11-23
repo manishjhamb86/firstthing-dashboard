@@ -380,7 +380,7 @@ export function TankHistory({
           canGoBack ? (
             "There is older history — step back with \u2039."
           ) : (
-            "Levels are recorded every half hour."
+            "Levels are recorded every few minutes."
           )
         ) : hover !== null && buckets[hover] ? (
           // The summary line doubles as the hover readout rather than a

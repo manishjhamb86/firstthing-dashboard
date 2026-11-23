@@ -325,7 +325,7 @@ export async function getLevelMax(
 /**
  * Mirror the account into water_tanks and refresh each level-bearing
  * device's cached state. Used by the settings page's test/sync, by the
- * half-hourly sampling job, and (best-effort) by live page loads.
+ * level sampling job, and (best-effort) by live page loads.
  */
 export async function syncTankDevices(cfg: TuyaConfig, accountId: string = "singleton"): Promise<{ devices: number; tanks: number }> {
   // The env fallback is not a stored row, so a tank synced from it links to none.

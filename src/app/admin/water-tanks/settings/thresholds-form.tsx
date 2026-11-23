@@ -7,7 +7,7 @@ import { saveTankAlertThresholds } from "../actions";
 
 /**
  * The two numbers that decide "critically low" / "critically high" for the
- * push alerts the half-hourly sampler raises (2026-10-14). Separate from
+ * push alerts the level sampler raises (2026-10-14). Separate from
  * the credentials form beside it — this never tests a connection, it just
  * stores thresholds.
  */

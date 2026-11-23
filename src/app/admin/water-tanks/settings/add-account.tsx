@@ -23,7 +23,7 @@ export function AddAccount() {
         </button>
       </div>
       <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-        Its devices are listed with the others and sampled every 30 minutes with this account&apos;s keys.
+        Its devices are listed with the others and sampled on the same schedule with this account&apos;s keys.
       </p>
       <SettingsForm accountId="new" current={{ baseUrl: "https://openapi.tuyain.com", accessId: "", hasSecret: false }} onDone={() => setOpen(false)} />
     </Card>

@@ -21,7 +21,7 @@ export const metadata = { title: "Water tanks" };
 // device appears (nothing in the account is invisible), level-bearing
 // sensors are assignable to the society they serve, and that assignment is
 // what scopes the portal (INV-05). The page reads the mirror, not Tuya —
-// the half-hourly sampling job keeps the mirror fresh.
+// the level sampling job keeps the mirror fresh.
 export default async function WaterTanksPage() {
   await requireAdminPage();
   const actor = await resolveAdmin();

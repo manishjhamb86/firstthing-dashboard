@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { describeTankInterval } from "@/lib/tank-sample-interval";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { BackButton } from "@/components/back-button";
 import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
@@ -52,6 +53,7 @@ export default async function TankStatusPage({
     fresh: false,
   };
   const cfg = await resolveTuyaConfigFor(tank.tankApiConfigId);
+  const sampleEvery = describeTankInterval((await db.tankApiConfig.findUnique({ where: { id: "singleton" }, select: { sampleIntervalMinutes: true } }))?.sampleIntervalMinutes ?? 10);
   if (cfg && tank.hasLevelSignal) {
     try {
       const props = await getTuyaShadow(cfg, tank.tuyaDeviceId);
@@ -199,7 +201,7 @@ export default async function TankStatusPage({
             </div>
           </div>
           <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Sampled every 30 minutes into FirsThing&apos;s own store — the chart reads history, not the
+            Sampled {sampleEvery} into FirsThing&apos;s own store — the chart reads history, not the
             live device.
             {lo !== null && (
               <>
@@ -368,7 +370,7 @@ export default async function TankStatusPage({
             </div>
           </div>
           <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Sampled every 30 minutes into FirsThing&apos;s own store — the chart reads history, not the
+            Sampled {sampleEvery} into FirsThing&apos;s own store — the chart reads history, not the
             live device.
             {lo !== null && (
               <>

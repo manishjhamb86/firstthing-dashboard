@@ -9736,3 +9736,16 @@ Permissions revoked behind an open Issue form → refused by the server, nothing
 **Known limits, stated**: lights installed through the stock flow do not change the portal's light counts
 (those stay the installation record's, by the user's call); overdue slips are not yet on the Founders' page;
 no Play-Store-style push when stock is issued. `pnpm build` not run locally (the user's rule) — the deploy builds.
+
+## Water levels read every 10 minutes, and the interval is a setting (2026-11-23) — user-asked
+
+`TankApiConfig.sampleIntervalMinutes` (migration `20261123110000_tank_sample_interval`, default 10, was a 30-minute
+constant in the worker). The worker reads it from the singleton row on every reschedule, so a change takes effect
+on the next pass without a restart; it is clamped to 5 min – 24 h (`src/lib/tank-sample-interval.ts`, tested).
+Settings → Water tank API has a "How often levels are read" card (operations only, like the thresholds); saving a
+shorter interval also brings an already-scheduled pass forward. Copy that said "every 30 minutes" now reads the
+setting or says "every few minutes". The portal's tank history sends the last two days at full detail and thins
+older days to one reading per half hour, keeping every change of level (`thinHistory`), so the page is no
+heavier than at half-hourly sampling. Verified on dev in a browser (shows 10, refuses 3, stores 15, pulls the
+pending job forward), restored to 10. The running worker on each server picks this up only after the deploy
+restarts it.

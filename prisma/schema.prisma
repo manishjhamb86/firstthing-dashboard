@@ -3811,25 +3811,30 @@ model CircuitDevice {
 /// "singleton" is the first account and also carries the alert thresholds;
 /// further accounts are rows of their own, each synced independently.
 model TankApiConfig {
-  id              String    @id @default("singleton")
+  id                    String    @id @default("singleton")
   /// What the operator calls this account ("Main", "Noida projects").
-  label           String?
-  baseUrl         String    @default("https://openapi.tuyain.com") @map("base_url")
-  accessId        String    @map("access_id")
-  accessSecret    String    @map("access_secret")
-  updatedById     String?   @map("updated_by_id")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  label                 String?
+  baseUrl               String    @default("https://openapi.tuyain.com") @map("base_url")
+  accessId              String    @map("access_id")
+  accessSecret          String    @map("access_secret")
+  updatedById           String?   @map("updated_by_id")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
   /// The last successful token + device-list round trip, and what it saw.
-  lastOkAt        DateTime? @map("last_ok_at")
-  lastError       String?   @map("last_error")
-  lastDeviceCount Int?      @map("last_device_count")
-  lastSyncAt      DateTime? @map("last_sync_at")
+  lastOkAt              DateTime? @map("last_ok_at")
+  lastError             String?   @map("last_error")
+  lastDeviceCount       Int?      @map("last_device_count")
+  lastSyncAt            DateTime? @map("last_sync_at")
   /// Alert thresholds, operator-tunable without a redeploy (2026-10-14).
   /// A tank at or below this is "critically low"; at or above this,
   /// "critically high / overflow risk". Defaults are a starting point, not
   /// a researched figure — this is deliberately the one place to revisit.
-  lowLevelPct     Int       @default(20) @map("low_level_pct")
-  highLevelPct    Int       @default(90) @map("high_level_pct")
+  lowLevelPct           Int       @default(20) @map("low_level_pct")
+  highLevelPct          Int       @default(90) @map("high_level_pct")
+  /// How often the background job reads every tank's level, in minutes
+  /// (2026-11-23, user-asked: 10, and configurable). Read from this row on
+  /// every reschedule, so a change takes effect without a restart. Only the
+  /// singleton row's value is used — it applies to every account.
+  sampleIntervalMinutes Int       @default(10) @map("sample_interval_minutes")
 
   updatedBy AdminUser?  @relation("TankApiConfigUpdatedBy", fields: [updatedById], references: [id])
   tanks     WaterTank[]

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
+import { thinHistory } from "@/lib/tank-sample-interval";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
 import { Card, PageHeader, StatusChip } from "@/components/ui";
@@ -117,9 +118,11 @@ export default async function PortalTanksPage() {
   }
 
   // 45 days: enough to answer "the whole month" and still step back past it,
-  // at half-hourly sampling (~2,160 points per tank) — small enough to send
-  // whole and let the card window it, rather than a round trip per arrow
-  // press. The back arrow stops at the oldest reading actually held.
+  // sent whole so the card windows it without a round trip per arrow press.
+  // Levels are read every few minutes (a setting, 10 by default); the last two
+  // days go at full detail and older days are thinned to one reading per half
+  // hour — every change of level kept — so the page stays as light as it was
+  // at half-hourly sampling. The back arrow stops at the oldest reading held.
   const now = requestNow();
   const since = new Date(now - 45 * 24 * 60 * 60 * 1000);
   const readings = await db.tankLevelReading.findMany({
@@ -133,6 +136,7 @@ export default async function PortalTanksPage() {
     list.push([r.recordedAt.getTime(), r.levelPercent]);
     historyByTank.set(r.tankId, list);
   }
+  for (const [id, list] of historyByTank) historyByTank.set(id, thinHistory(list, now - 2 * 24 * 60 * 60 * 1000));
 
   // One row of facts per tank, so the header chip and the cards are decided
   // by the same values rather than by two separate readings of them.
@@ -150,7 +154,7 @@ export default async function PortalTanksPage() {
     // into our own system — NOT reportedAt, which is the device's own
     // self-reported instant and can be well behind the last time we checked.
     // When this render's own live shadow read succeeded, that moment is
-    // right now; otherwise it's the half-hourly sampling job's own last
+    // right now; otherwise it's the level sampling job's own last
     // successful fetch (syncedAt).
     const updatedAt = l ? new Date(now) : t.syncedAt;
     // The live read when it succeeded this render, else the mirror's own
@@ -361,7 +365,7 @@ export default async function PortalTanksPage() {
                         <p className="lbl mb-2">Level history</p>
                         <p className="text-[11px] leading-relaxed" style={{ color: "var(--text-subtle)" }}>
                           A history appears here once this tank has been sampled — levels are
-                          recorded every half hour.
+                          recorded every few minutes.
                         </p>
                       </>
                     )}

@@ -1,4 +1,5 @@
 import "./load-env";
+import { clampTankInterval } from "../src/lib/tank-sample-interval";
 import { suspensionApplies } from "../src/lib/deal-close";
 import { db } from "../src/lib/db";
 import { logger } from "../src/lib/logger";
@@ -34,7 +35,15 @@ const GATEPASS_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 // "record the water levels every half an hour and keep that record") — the
 // history charts and portal sparklines read the resulting store, so stats
 // survive a sensor going offline.
-const TANK_SAMPLE_INTERVAL_MS = 30 * 60 * 1000;
+// The tank sampling interval is a setting (TankApiConfig.sampleIntervalMinutes,
+// default 10 — 2026-11-23, user-asked), read on every reschedule so a change
+// takes effect on the next pass without restarting the worker.
+const TANK_SAMPLE_DEFAULT_MINUTES = 10;
+async function tankSampleIntervalMs(): Promise<number> {
+  const row = await db.tankApiConfig.findUnique({ where: { id: "singleton" }, select: { sampleIntervalMinutes: true } }).catch(() => null);
+  const minutes = clampTankInterval(row?.sampleIntervalMinutes ?? TANK_SAMPLE_DEFAULT_MINUTES);
+  return minutes * 60 * 1000;
+}
 /** Hourly, per the user's own cadence for meter readings (2026-08-26). */
 const METER_POLL_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -323,7 +332,7 @@ async function runTankLevelSample() {
   } finally {
     // Reschedule even after a failed pass — a Tuya outage must not kill the
     // chain, only skip the sample.
-    await scheduleTankSample(new Date(Date.now() + TANK_SAMPLE_INTERVAL_MS));
+    await scheduleTankSample(new Date(Date.now() + (await tankSampleIntervalMs())));
   }
 }
 

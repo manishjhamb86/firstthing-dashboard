@@ -7,13 +7,15 @@ import { Card, CardTitle, PageHeader, StatusChip } from "@/components/ui";
 import { formatInstant } from "@/lib/format-date";
 import { SettingsForm } from "./settings-form";
 import { ThresholdsForm } from "./thresholds-form";
+import { IntervalForm } from "./interval-form";
+import { describeTankInterval } from "@/lib/tank-sample-interval";
 import { AddAccount } from "./add-account";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Water tank API" };
 
 // Operations only: this is the account the whole feature reads from, and a
-// wrong secret here silently kills the half-hourly sampler.
+// wrong secret here silently kills the level sampler.
 export default async function TankApiSettingsPage() {
   await requireAdminPage();
   const actor = await resolveAdmin();
@@ -95,9 +97,13 @@ export default async function TankApiSettingsPage() {
 
         {accounts.length > 0 && <AddAccount />}
 
-        <p className="text-xs" style={{ color: "var(--text-muted)" }}>
-          The background job samples every tank&apos;s level every 30 minutes, each with the account it is listed in — history charts read that store.
-        </p>
+        <Card className="p-6">
+          <CardTitle>How often levels are read</CardTitle>
+          <p className="mb-4 text-[13px]" style={{ color: "var(--text-muted)" }}>
+            The background job reads every tank&apos;s level {describeTankInterval(config?.sampleIntervalMinutes ?? 10)}, each with the account it is listed in. The history charts and the alerts read those readings. It applies to every account.
+          </p>
+          {config ? <IntervalForm current={config.sampleIntervalMinutes} /> : <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>Set up the API connection first.</p>}
+        </Card>
 
         <Card className="p-6">
           <CardTitle>Alert thresholds</CardTitle>

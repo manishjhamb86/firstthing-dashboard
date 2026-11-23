@@ -98,8 +98,32 @@ export async function updateCircuitConfiguration(
   });
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits`);
   if (input.lightType !== undefined && circuit.siteSurveyId) {
-    const survey = await db.siteSurvey.findUnique({ where: { id: circuit.siteSurveyId }, select: { pipelineId: true } });
-    if (survey) revalidatePath(`/admin/pipeline/${survey.pipelineId}/survey`);
+    const survey = await db.siteSurvey.findUnique({
+      where: { id: circuit.siteSurveyId },
+      select: { pipelineId: true, pipeline: { select: { id: true, societyId: true, serviceLine: true, dealScope: true } }, circuits: { where: { voidedAt: null }, select: { id: true } } },
+    });
+    if (survey) {
+      // The deal is named after its one demo circuit, so a rename carries to
+      // the deal's own name too (2026-11-23, user-caught) — every screen that
+      // labels the deal then says the same as the survey. Not when the deal
+      // has several circuits, and never onto a name another deal of the same
+      // line at this society already uses (two deals must stay tellable apart).
+      const next = input.lightType.trim();
+      const p = survey.pipeline;
+      if (survey.circuits.length === 1 && next && p.dealScope?.trim() !== next) {
+        const clash = await db.pipeline.findFirst({
+          where: { societyId: p.societyId, serviceLine: p.serviceLine, id: { not: p.id }, dealScope: { equals: next, mode: "insensitive" } },
+          select: { id: true },
+        });
+        if (!clash) {
+          await db.pipeline.update({ where: { id: p.id }, data: { dealScope: next } });
+          logger.info("pipeline.scope_follows_circuit_name", { actorId: session.user.id, pipelineId: p.id, from: p.dealScope, to: next });
+          revalidatePath(`/admin/pipeline/${p.id}`);
+          revalidatePath(`/admin/societies/${p.societyId}`);
+        }
+      }
+      revalidatePath(`/admin/pipeline/${survey.pipelineId}/survey`);
+    }
   }
   return {};
 }

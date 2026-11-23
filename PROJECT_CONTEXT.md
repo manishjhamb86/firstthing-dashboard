@@ -9749,3 +9749,13 @@ older days to one reading per half hour, keeping every change of level (`thinHis
 heavier than at half-hourly sampling. Verified on dev in a browser (shows 10, refuses 3, stores 15, pulls the
 pending job forward), restored to 10. The running worker on each server picks this up only after the deploy
 restarts it.
+
+## A deal is named by its demo circuit on the society page (2026-11-23) — user-caught
+
+Amrapali Princely Estate's service-lines card said "Lift Lobby Tower D" (the deal's scope, typed when the lead was
+logged) while the survey's demo circuit was "Lift Lobby Tower G". The card now names each deal by its live demo
+circuits' own names, as the survey shows them, falling back to the typed scope only for a deal with no circuit.
+Renaming a circuit from the survey also renames its deal when the deal has exactly one live circuit and no other
+deal of the same line at the society uses that name (logged `pipeline.scope_follows_circuit_name`), so the deal's
+label elsewhere follows. The survey's wattage shows at most two decimals ("14.25W", not 14.24793388429752W).
+Verified on dev (card shows the circuit name; a rename carries to the deal and the card), restored.

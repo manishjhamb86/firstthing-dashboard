@@ -566,7 +566,7 @@ export default async function SiteSurveyPage({
                             correctly, for billing; this screen does not
                             follow it (2026-10-05, user-asked). */}
                         · <span className="num">{c.lightCountAtDemoLock ?? c.meteredLightCount}</span> lights ·{" "}
-                        <span className="num">{c.wattage}</span>W
+                        <span className="num">{Number(c.wattage.toFixed(2))}</span>W
                         {c.lightCountAtDemoLock !== null && (
                           <span className="ml-1 text-xs" title="Recorded during the survey and demo — a later rescale or correction doesn't change this">
                             (as recorded)

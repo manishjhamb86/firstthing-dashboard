@@ -22,6 +22,8 @@ import { PortalTypeButton } from "./portal-type-button";
 import { ResetPortalPasswordButton } from "./reset-portal-password-button";
 import { EnrollServiceLineButton } from "./enroll-service-line-form";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
+import { isSuperAdmin } from "@/lib/super-admin";
+import { DealNameEdit } from "./deal-name-edit";
 import { isOperations } from "@/lib/admin-teams";
 import { formatDate, formatInstant, monthLabel } from "@/lib/format-date";
 import { monitoringStart } from "@/lib/monitoring";
@@ -44,6 +46,8 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
   // Correcting a recorded fact is an operations act — "make sure all these
   // edit options are for admin only" (the user, 2026-08-25).
   const viewer = await resolveAdmin();
+  // The main admin account may rename a deal from the Service lines card (2026-11-23).
+  const canRenameDeals = isSuperAdmin(viewer?.email);
   const canCorrect =
     viewer !== null && isOperations(viewer.team) && viewer.permissions.includes("manage_pipeline");
 
@@ -425,6 +429,7 @@ export default async function SocietyDetailPage({ params }: { params: Promise<{ 
                             <Link href={`/admin/pipeline/${d.id}`} className="link-arrow">
                               {dealName(d) ?? (lineDeals.length > 1 ? "Unnamed part" : "Open the deal")} →
                             </Link>
+                            {canRenameDeals && (d.siteSurvey?.circuits.length ?? 0) <= 1 && <DealNameEdit pipelineId={d.id} name={dealName(d) ?? ""} />}
                           </span>
                           <span>
                             <StatusChip tone={meta.tone}>{meta.label}</StatusChip>

@@ -9759,3 +9759,9 @@ Renaming a circuit from the survey also renames its deal when the deal has exact
 deal of the same line at the society uses that name (logged `pipeline.scope_follows_circuit_name`), so the deal's
 label elsewhere follows. The survey's wattage shows at most two decimals ("14.25W", not 14.24793388429752W).
 Verified on dev (card shows the circuit name; a rename carries to the deal and the card), restored.
+**Same day, user-asked:** the main admin account (yogesh, `isSuperAdmin`) gets an inline "Edit name" beside each
+deal on the Service lines card (`renameDeal`, `societies/[id]/deal-name-actions.ts`). It writes the name to the
+deal's scope and to its one demo circuit together; a deal with several circuits is not offered it (rename on the
+survey), and a name another deal of the same line at the society uses is refused. Verified on dev: renamed both,
+card updated; refused by the server when the account stopped being the main admin behind the open form
+(`pipeline.rename_refused`); another admin is not offered it. Restored.

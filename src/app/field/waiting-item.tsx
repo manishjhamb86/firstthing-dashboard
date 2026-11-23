@@ -30,6 +30,8 @@ export function WaitingItem({ item }: { item: OutboxItem }) {
       "inspection.file": "Discard this inspection? It has not reached the office, and it (with its photo) will be deleted from this phone.",
       "inspection.photo": "Discard this photo? It will be deleted from this phone.",
       "stock.move": "Discard this move? It has not reached the office, and nothing will be moved.",
+      "stock.install": "Discard this install? It has not reached the office — the stock stays with you.",
+      "stock.return": "Discard this return? It has not reached the office — the stock stays with you.",
       "demo.meter": "Discard this meter install? It has not reached the office.",
       "demo.replacement": "Discard this light replacement? It has not reached the office.",
       "installation.day": "Discard this day's record? It has not reached the office, and its photos will be deleted from this phone.",

@@ -30,7 +30,12 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // The person's own on-site jobs are kept on the phone too, so the demo they
   // are walking to opens in a basement even if it was never opened before.
   const work = await loadFieldWork(admin.id, true);
-  const jobUrls = work.flatMap((r) => r.fieldPages ?? (r.fieldHref ? [r.fieldHref] : []));
+  // Stock they hold, too — install and return work with no signal (2026-11-23).
+  const slips = await db.issueSlip.findMany({ where: { employeeId: admin.id, closedAt: null }, select: { id: true } });
+  const jobUrls = [
+    ...work.flatMap((r) => r.fieldPages ?? (r.fieldHref ? [r.fieldHref] : [])),
+    ...(slips.length ? ["/field/stock", ...slips.map((s) => `/field/stock/${s.id}`)] : []),
+  ];
   // The Help sheet offers the person's own open tasks, so a blocker can name one.
   const open = await db.scheduledEvent.findMany({
     where: { assigneeId: admin.id, status: "scheduled" },

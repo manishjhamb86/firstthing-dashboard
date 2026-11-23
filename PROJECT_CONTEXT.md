@@ -9701,3 +9701,38 @@ new version; the plain unique index became two partial ones (period slot where i
 An identical file is refused across all of the society's gate passes; a future date is refused; the read-the-pass check
 compares to the day. Verified on dev: two passes on 20-Nov at 10:15 and 15:40 both filed as v1, the first file again at
 18:00 refused as a duplicate, a 2030 date refused. Every other document type is unchanged.
+
+## The stock workflow: plan, buy, issue, install, return (2026-11-23) — user-asked, designed first
+
+Built from the ChatGPT prototype the user pointed at, after a design canvas
+(https://claude.ai/artifact/KyjfSBxjimi4yhDjnPqXK6, 8 screens). Decisions and the model are in
+`docs/engineering/17-inventory-lifecycle.md` § Stock workflow. The user's answers: lights required from the deal,
+everything else typed by hand; stock received against a purchase requirement is not reserved, only counted as
+on order; the portal's per-item counts come from the records (lights) plus stock (everything else); and,
+mid-build, a way to set what is already installed at societies that predate stock tracking.
+
+**Migration** `20261123090000_stock_workflow`, additive: `StockRequirement`, `PurchaseRequirement` (+ lines,
+`InventoryBatch.purchaseRequirementId`), `IssueSlip` (+ `StockMovement.issueSlipId`), `StockLocation.kind
+employee` with `adminUserId`, movement kind `issue`, unit status `written_off`.
+
+**Code**: pure rules `src/lib/stock-plan.ts` (16 cases); shared core `src/lib/stock-workflow.ts` (issue, install,
+return, installed-count correction, PR status), used by the back office's `workflow-actions.ts` and the field
+sync route; reads in `stock-workflow-loader.ts`; lights by fitting `src/lib/lights-by-fitting.ts`.
+`receiveHistoricalStock` now goes through the shared `recordHistoricalBatch`. Screens: Inventory → Procurement
+planning, Purchase requirements, Issue stock, Who holds what; Receive stock can be received against a
+requirement; the society's admin Inventory page gains "Lights by fitting" and an editable "Other equipment
+installed"; the portal Inventory gains "By item"; the field app's Scan tab became **Stock** (My stock, then a
+slip's Install / Return, both queued for no signal; Scan is linked from there).
+
+**Verified on dev**, 24/24 through the browser plus the server refusal: typed requirement and the planning
+row (required 4, free 3, buy 1); PR generated at the shortfall, below-shortfall refused, sent, receive form
+preselected; over-issue blocked; slip in custody (10 battens, 40 m); due date moved; the phone's install (6 +
+36 m) and return (3) reached the office through the outbox; a faulty return arrived faulty; the slip closed at
+zero; a society's router count raised to 2, lowering blocked without a reason, then lowered to 1
+(`written_off`); the portal listed "WiFi router 1 · LAN wire 36 m" with no sideways scroll at 390px.
+Permissions revoked behind an open Issue form → refused by the server, nothing written,
+`stock.issue_refused` logged. Fixtures removed by their own ids; counts back to before.
+
+**Known limits, stated**: lights installed through the stock flow do not change the portal's light counts
+(those stay the installation record's, by the user's call); overdue slips are not yet on the Founders' page;
+no Play-Store-style push when stock is issued. `pnpm build` not run locally (the user's rule) — the deploy builds.

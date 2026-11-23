@@ -181,7 +181,10 @@ export function AppShell({
     ]),
     ...group("inventory", "Inventory", Package, [
       (showField || showPipeline) && { href: "/admin/inventory", label: "Stock", icon: Package, exact: true, alsoMatches: ["/admin/inventory/where", "/admin/inventory/batches", "/admin/inventory/units"] },
+      (showField || showPipeline) && { href: "/admin/inventory/planning", label: "Procurement planning", icon: Package, alsoMatches: ["/admin/inventory/purchase-requirements"] },
       (showField || showPipeline) && { href: "/admin/inventory/receive", label: "Receive stock", icon: Package },
+      (showField || showPipeline) && { href: "/admin/inventory/issue", label: "Issue stock", icon: Package },
+      (showField || showPipeline) && { href: "/admin/inventory/custody", label: "Who holds what", icon: Package },
       (showField || showPipeline) && { href: "/admin/inventory/scan", label: "Scan", icon: Package },
     ]),
     ...(settings.length > 0

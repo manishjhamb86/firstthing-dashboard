@@ -45,7 +45,7 @@ export default async function WhatIsWherePage() {
                 {usedLocations.map((l) => (
                   <tr key={l.id}>
                     <td>
-                      <span className="font-medium">{l.name}</span> <StatusChip tone={l.kind === "office" ? "info" : "neu"}>{l.kind === "office" ? "Office" : "Site"}</StatusChip>
+                      <span className="font-medium">{l.name}</span> <StatusChip tone={l.kind === "office" ? "info" : l.kind === "employee" ? "warn" : "neu"}>{l.kind === "office" ? "Office" : l.kind === "employee" ? "With employee" : "Site"}</StatusChip>
                     </td>
                     {usedItems.map((i) => {
                       const n = held(l.id, i.id);

@@ -9,6 +9,9 @@ import { formatDate } from "@/lib/format-date";
 import { circuitLabelOf } from "@/lib/meter-view";
 import { Card, CardTitle, EmptyState, PageHeader, Stat, StatRow } from "@/components/ui";
 import { LightHistoryList } from "@/components/light-history-list";
+import { InstalledStockEditor } from "@/components/installed-stock-editor";
+import { loadSiteStock } from "@/lib/stock-workflow-loader";
+import { lightsByFitting } from "@/lib/lights-by-fitting";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Inventory" };
@@ -33,6 +36,7 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
     (session.user.adminPermissions?.includes("manage_survey") ?? false) &&
     (session.user.adminPermissions?.includes("manage_pipeline") ?? false);
   const demoMode = await isDemoMode();
+  const canEditStock = canView;
 
   const { id: societyId } = await params;
   const society = await db.society.findUnique({ where: { id: societyId }, select: { id: true, name: true } });
@@ -115,7 +119,10 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
   const fullLights = installedRows.reduce((s, c) => s + c.representedLightCount, 0);
   const sensors = tanks.filter((t) => t.hasLevelSignal);
 
-  const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0;
+  const siteStock = await loadSiteStock(societyId);
+  const equipment = siteStock.filter((s) => !s.item.deviceTypeId);
+  const fittings = lightsByFitting(circuits);
+  const empty = circuits.length === 0 && meters.length === 0 && tanks.length === 0 && equipment.every((e) => e.installed === 0);
   const SETUP_LABEL: Record<string, string> = { domestic: "Domestic", flush: "Flush", stp: "STP" };
 
   return (
@@ -145,6 +152,21 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
             <Stat label="Smart meters" value={String(meters.length)} detail="watching circuits" />
             <Stat label="Tank level sensors" value={String(sensors.length)} detail="on water tanks" />
           </StatRow>
+
+          {fittings.length > 0 && (
+            <Card className="mt-5 p-6">
+              <CardTitle>Lights by fitting</CardTitle>
+              <ul className="flex flex-col divide-y divide-[var(--border-subtle)]">
+                {fittings.map((f) => (
+                  <li key={f.fitting} className="flex items-center justify-between gap-3 py-2.5">
+                    <span className="text-[13.5px] font-medium">{f.fitting}</span>
+                    <span className="num text-[15px] font-bold">{f.count.toLocaleString("en-IN")}</span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-[var(--text-subtle)]">From the installation record — the full installation plus the demo lights, the figure the bill uses. Correct a light count on its circuit.</p>
+            </Card>
+          )}
 
           {circuits.some((c) => c.devices.length > 0) && (
             <Card className="mb-5 mt-5 p-6">
@@ -284,6 +306,28 @@ export default async function SocietyInventoryPage({ params }: { params: Promise
           )}
         </>
       )}
+      <Card className="mt-5 p-6">
+        <CardTitle>Other equipment installed</CardTitle>
+        <p className="-mt-2 mb-3 text-[13px] text-[var(--text-muted)]">
+          Routers, SIM cards, meters, valves and wire at this society, as recorded in stock. For a society installed before stock was tracked, set each count here; it shows on the society&apos;s portal.
+        </p>
+        {canEditStock ? (
+          <InstalledStockEditor
+            societyId={societyId}
+            rows={equipment.filter((e) => e.installed > 0).map((e) => ({ itemTypeId: e.item.id, name: e.item.name, unit: e.item.unit, tracking: e.item.tracking, installed: e.installed }))}
+            items={equipment.filter((e) => e.item.active).map((e) => ({ itemTypeId: e.item.id, name: e.item.name, unit: e.item.unit, tracking: e.item.tracking, installed: e.installed }))}
+          />
+        ) : (
+          <ul className="flex flex-col divide-y divide-[var(--border-subtle)]">
+            {equipment.filter((e) => e.installed > 0).map((e) => (
+              <li key={e.item.id} className="flex justify-between gap-3 py-2.5 text-[13.5px]">
+                <span>{e.item.name}</span>
+                <span className="num font-bold">{e.installed.toLocaleString("en-IN")}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </>
   );
 }

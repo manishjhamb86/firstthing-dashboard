@@ -14,6 +14,7 @@ import { logger } from "@/lib/logger";
 import { s3, S3_BUCKET } from "@/lib/s3";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { retailNameKey } from "@/lib/retail-customer";
+import { recordHistoricalBatch, refreshPrStatus } from "@/lib/stock-workflow";
 import { applyUnitMove, moveDestination, siteFor, type MoveResult as UnitMoveResult } from "@/lib/inventory-move";
 import {
   MOVE_LABEL,
@@ -348,6 +349,8 @@ export async function receiveDelivery(input: {
   receivedOn: string;
   notes: string;
   lines: ReceiveLine[];
+  /** The purchase requirement this delivery arrived against (2026-11-23), if any. */
+  purchaseRequirementId?: string | null;
 }): Promise<Result<{ batchIds: string[] }>> {
   const admin = await requireStockStaff();
   if (!admin) return { error: REFUSED };
@@ -371,6 +374,14 @@ export async function receiveDelivery(input: {
     // Say where it went, so nobody is left wondering whether the stock exists.
     const codes = dup.batches.map((b) => b.code).join(", ");
     return { error: `Invoice ${input.invoiceNumber.trim()} from this supplier was already received on ${formatDate(dup.createdAt)}${codes ? ` as ${codes}` : ""} — open it from Inventory rather than receiving it again.` };
+  }
+
+  const prId = input.purchaseRequirementId || null;
+  if (prId) {
+    const pr = await db.purchaseRequirement.findUnique({ where: { id: prId }, select: { status: true, code: true } });
+    if (!pr) return { error: "That purchase requirement is no longer on record." };
+    if (pr.status !== "sent" && pr.status !== "partly_received")
+      return { error: pr.status === "draft" ? `${pr.code} has not been sent to a supplier yet — mark it sent first.` : `${pr.code} is ${pr.status === "received" ? "already fully received" : "cancelled"}.` };
   }
 
   let upload: { id: string; s3Key: string; fileName: string } | null = null;
@@ -431,6 +442,7 @@ export async function receiveDelivery(input: {
             manufacturedOn: day(l.manufacturedOn),
             warrantyMonths: l.warrantyMonths ?? t.defaultWarrantyMonths,
             warrantyBasis: l.warrantyBasis,
+            purchaseRequirementId: prId,
             createdById: admin.id,
           },
         });
@@ -481,6 +493,7 @@ export async function receiveDelivery(input: {
           data: { status: "processed", purchaseId: purchase.id },
         });
       }
+      if (prId) await refreshPrStatus(tx, prId);
       return ids;
     },
     { timeout: 60_000 },
@@ -492,6 +505,7 @@ export async function receiveDelivery(input: {
     batches: batchIds.length,
     officeId: office.id,
     uploadId: upload?.id ?? null,
+    purchaseRequirementId: prId,
   });
   revalidatePath("/admin/inventory");
   revalidatePath("/admin/inventory/receive");
@@ -660,71 +674,9 @@ export async function receiveHistoricalStock(input: {
     locationId = office.id;
   }
 
-  const prefix = batchCode(since, 0).slice(0, 5);
-  const monthCodes = (await db.inventoryBatch.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } })).map((b) => b.code);
-  const seq = nextBatchSeq(monthCodes);
-  const code = batchCode(since, seq);
   const reason = input.notes.trim() || "Existing inventory — already in place before FirsThing, no supplier invoice on record.";
-
   const batchId = await db.$transaction(
-    async (tx) => {
-      const batch = await tx.inventoryBatch.create({
-        data: {
-          code,
-          itemTypeId: type.id,
-          purchaseId: null,
-          historical: true,
-          receivedAtLocationId: locationId,
-          receivedOn: since,
-          quantity: input.count,
-          unitCost: null,
-          warrantyMonths: null,
-          warrantyBasis: "install",
-          notes: reason,
-          createdById: admin.id,
-        },
-      });
-      if (type.tracking === "serial") {
-        const status: "deployed" | "in_stock" = deploy ? "deployed" : "in_stock";
-        const units = Array.from({ length: input.count }, (_, i) => ({
-          id: `${batch.id}-${i + 1}`,
-          code: unitCode(code, i + 1),
-          batchId: batch.id,
-          itemTypeId: type.id,
-          status,
-          locationId,
-          deployedOn: deploy ? since : null,
-        }));
-        await tx.inventoryUnit.createMany({ data: units });
-        await tx.stockMovement.createMany({
-          data: units.map((u) => ({
-            kind: "receive" as const,
-            on: since,
-            itemTypeId: type.id,
-            batchId: batch.id,
-            unitId: u.id,
-            quantity: 1,
-            toLocationId: locationId,
-            reason,
-            recordedById: admin.id,
-          })),
-        });
-      } else {
-        await tx.stockMovement.create({
-          data: {
-            kind: "receive",
-            on: since,
-            itemTypeId: type.id,
-            batchId: batch.id,
-            quantity: input.count,
-            toLocationId: locationId,
-            reason,
-            recordedById: admin.id,
-          },
-        });
-      }
-      return batch.id;
-    },
+    (tx) => recordHistoricalBatch(tx, admin.id, { itemTypeId: type.id, tracking: type.tracking, count: input.count, since, locationId, deploy, reason }),
     { timeout: 60_000 },
   );
   logger.info("inventory.historical_received", { actorId: admin.id, batchId, itemTypeId: type.id, count: input.count, locationId, deployed: deploy });

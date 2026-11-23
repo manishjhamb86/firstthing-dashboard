@@ -18,11 +18,14 @@ import {
   type OutboxKind,
   parseInspectionPayload,
   parseMovePayload,
+  parseSlipInstallPayload,
+  parseSlipReturnPayload,
   parsePhotoPayload,
   type Envelope,
 } from "@/lib/field-sync";
 import { recordDemoMeterAs, recordDemoReplacementAs } from "@/lib/demo-step-core";
 import { applyUnitMove } from "@/lib/inventory-move";
+import { installFromSlipAs, returnFromSlipAs } from "@/lib/stock-workflow";
 import { fileInspection } from "@/lib/inspection-file";
 import {
   addInventoryRowAs,
@@ -79,6 +82,24 @@ async function apply(
     const r = await applyUnitMove(tx, actor.id, input);
     if ("error" in r) return r;
     return { done: r.done, failed: r.failed };
+  }
+
+  // stock.install / stock.return — stock off the employee's own issue slip
+  // (2026-11-23). Same rules as the back office (stock-workflow.ts); a code
+  // not held on the slip is named in the result and the rest still move.
+  if (env.kind === "stock.install") {
+    const input = parseSlipInstallPayload(env.payload);
+    if ("error" in input) return input;
+    const r = await installFromSlipAs(tx, actor, input);
+    if ("error" in r) return r;
+    return { done: r.done, failed: r.failed, held: r.held };
+  }
+  if (env.kind === "stock.return") {
+    const input = parseSlipReturnPayload(env.payload);
+    if ("error" in input) return input;
+    const r = await returnFromSlipAs(tx, actor, input);
+    if ("error" in r) return r;
+    return { done: r.done, failed: r.failed, held: r.held };
   }
 
   // installation.blocker — one insert, so it commits with its receipt.

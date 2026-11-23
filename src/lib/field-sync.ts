@@ -23,6 +23,8 @@ export const OUTBOX_KINDS = [
   "inspection.file",
   "inspection.photo",
   "stock.move",
+  "stock.install",
+  "stock.return",
   "demo.meter",
   "demo.replacement",
   "installation.day",
@@ -521,4 +523,43 @@ export function isStaleKeptPage(keptAt: number | null, inCurrentWork: boolean, n
 /** After a refusal: keep trying, or block the queue and say so. */
 export function afterRefusal(refusals: number): "retry" | "block" {
   return refusals >= BLOCK_AFTER_REFUSALS ? "block" : "retry";
+}
+
+/** Stock installed from, or returned off, an issue slip (2026-11-23; stock-workflow.ts). */
+export type FieldSlipLine = { itemTypeId: string; quantity: number; codes: string[] };
+export type FieldSlipInstallPayload = { slipId: string; on: string; circuitId: string; lines: FieldSlipLine[] };
+export type FieldSlipReturnPayload = { slipId: string; on: string; toOfficeId: string; lines: FieldSlipLine[]; faulty: Array<{ code: string; reason: string }> };
+
+function slipLines(v: unknown): FieldSlipLine[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => (x ?? {}) as Record<string, unknown>)
+    .map((x) => ({
+      itemTypeId: str(x.itemTypeId),
+      quantity: typeof x.quantity === "number" && Number.isFinite(x.quantity) ? x.quantity : 0,
+      codes: Array.isArray(x.codes) ? x.codes.filter((c): c is string => typeof c === "string" && c.trim() !== "").slice(0, 500) : [],
+    }))
+    .filter((l) => l.itemTypeId && (l.quantity > 0 || l.codes.length > 0));
+}
+
+export function parseSlipInstallPayload(p: unknown): FieldSlipInstallPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.slipId)) return { error: "That slip is no longer on record." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.on))) return { error: "Enter the day it was installed." };
+  const lines = slipLines(o.lines);
+  if (lines.length === 0) return { error: "Scan or count what was installed." };
+  return { slipId: str(o.slipId), on: str(o.on), circuitId: str(o.circuitId), lines };
+}
+
+export function parseSlipReturnPayload(p: unknown): FieldSlipReturnPayload | { error: string } {
+  const o = (p ?? {}) as Record<string, unknown>;
+  if (!str(o.slipId)) return { error: "That slip is no longer on record." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(str(o.on))) return { error: "Enter the day it was returned." };
+  if (!str(o.toOfficeId)) return { error: "Choose the office it goes back to." };
+  const faulty = Array.isArray(o.faulty)
+    ? o.faulty.map((x) => (x ?? {}) as Record<string, unknown>).map((x) => ({ code: str(x.code), reason: str(x.reason) })).filter((f) => f.code)
+    : [];
+  const lines = slipLines(o.lines);
+  if (lines.length === 0 && faulty.length === 0) return { error: "Enter what is coming back." };
+  return { slipId: str(o.slipId), on: str(o.on), toOfficeId: str(o.toOfficeId), lines, faulty };
 }

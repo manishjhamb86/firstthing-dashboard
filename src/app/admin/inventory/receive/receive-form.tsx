@@ -38,6 +38,10 @@ type Line = {
   rawDescription: string;
 };
 
+export type OpenPr = { id: string; code: string; supplierId: string | null; supplierName: string | null; remaining: { itemTypeId: string; quantity: number }[] };
+const prLines = (pr: OpenPr): Line[] =>
+  pr.remaining.length ? pr.remaining.map((r) => ({ ...blankLine(), itemTypeId: r.itemTypeId, quantity: String(r.quantity) })) : [blankLine()];
+
 const blankLine = (): Line => ({
   itemTypeId: "",
   quantity: "",
@@ -70,6 +74,8 @@ export function ReceiveForm({
   today,
   pendingUploads,
   resumeUploadId,
+  openPrs = [],
+  initialPrId = null,
 }: {
   suppliers: { id: string; name: string }[];
   offices: { id: string; name: string }[];
@@ -77,9 +83,14 @@ export function ReceiveForm({
   today: string;
   pendingUploads: PendingUpload[];
   resumeUploadId: string | null;
+  /** Purchase requirements sent and not yet fully received (2026-11-23). */
+  openPrs?: OpenPr[];
+  initialPrId?: string | null;
 }) {
   const router = useRouter();
-  const [head, setHead] = useState({ supplierId: "", invoiceNumber: "", invoiceDate: today, total: "", officeId: offices[0]?.id ?? "", receivedOn: today, notes: "" });
+  const initialPr = openPrs.find((p) => p.id === initialPrId) ?? null;
+  const [prId, setPrId] = useState<string>(initialPr?.id ?? "");
+  const [head, setHead] = useState({ supplierId: initialPr?.supplierId ?? "", invoiceNumber: "", invoiceDate: today, total: "", officeId: offices[0]?.id ?? "", receivedOn: today, notes: "" });
   const [file, setFile] = useState<File | null>(null);
   const [linking, setLinking] = useState<string | null>(null);
   async function linkToReceived(uploadId: string, purchaseId: string) {
@@ -98,7 +109,16 @@ export function ReceiveForm({
   // Set when the chosen file's content hash matches an upload already on
   // record — a duplicate is never re-uploaded or re-read, only pointed at.
   const [duplicate, setDuplicate] = useState<{ id: string; fileName: string; status: PendingUpload["status"]; uploadedAt: string; firstBatchId: string | null } | null>(null);
-  const [lines, setLines] = useState<Line[]>([blankLine()]);
+  const [lines, setLines] = useState<Line[]>(initialPr ? prLines(initialPr) : [blankLine()]);
+  // Choosing a requirement fills in what is still to arrive, unless lines have
+  // already been entered or read from the invoice.
+  function choosePr(id: string) {
+    setPrId(id);
+    const pr = openPrs.find((p) => p.id === id);
+    if (!pr) return;
+    if (pr.supplierId) setHead((h) => ({ ...h, supplierId: h.supplierId || pr.supplierId! }));
+    setLines((ls) => (ls.every((l) => !l.itemTypeId && !l.quantity) ? prLines(pr) : ls));
+  }
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const setLine = (i: number, p: Partial<Line>) => setLines((ls) => ls.map((l, j) => (j === i ? { ...l, ...p } : l)));
@@ -224,6 +244,7 @@ export function ReceiveForm({
           receivedAtLocationId: head.officeId,
           receivedOn: head.receivedOn,
           notes: head.notes,
+          purchaseRequirementId: prId || null,
           lines: lines.map((l) => ({
             itemTypeId: l.itemTypeId,
             quantity: Number(l.quantity),
@@ -314,6 +335,19 @@ export function ReceiveForm({
               ))}
             </select>
           </Field>
+          {openPrs.length > 0 && (
+            <Field label="Against purchase requirement (optional)" htmlFor="rc-pr">
+              <select id="rc-pr" className="field" value={prId} onChange={(e) => choosePr(e.target.value)}>
+                <option value="">None</option>
+                {openPrs.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.code}
+                    {p.supplierName ? ` · ${p.supplierName}` : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="Supplier's invoice number" htmlFor="rc-inv">
             <input id="rc-inv" className="field" value={head.invoiceNumber} onChange={(e) => setHead((h) => ({ ...h, invoiceNumber: e.target.value }))} />
           </Field>

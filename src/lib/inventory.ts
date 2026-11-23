@@ -1,7 +1,7 @@
 // Inventory & device lifecycle rules (2026-09-25) — pure, one place.
 // docs/engineering/17-inventory-lifecycle.md holds the decisions.
 
-export type UnitStatus = "in_stock" | "deployed" | "faulty" | "sent_for_repair" | "returned_to_supplier" | "scrapped" | "lost";
+export type UnitStatus = "in_stock" | "deployed" | "faulty" | "sent_for_repair" | "returned_to_supplier" | "scrapped" | "lost" | "written_off";
 export type MoveKind =
   | "receive"
   | "transfer"
@@ -13,7 +13,8 @@ export type MoveKind =
   | "return_to_supplier"
   | "scrap"
   | "lost"
-  | "adjust";
+  | "adjust"
+  | "issue";
 
 export const MOVE_LABEL: Record<MoveKind, string> = {
   receive: "Received",
@@ -27,6 +28,7 @@ export const MOVE_LABEL: Record<MoveKind, string> = {
   scrap: "Scrapped",
   lost: "Lost",
   adjust: "Stock corrected",
+  issue: "Issued to an employee",
 };
 
 export const STATUS_LABEL: Record<UnitStatus, string> = {
@@ -37,6 +39,7 @@ export const STATUS_LABEL: Record<UnitStatus, string> = {
   returned_to_supplier: "Returned to supplier",
   scrapped: "Scrapped",
   lost: "Lost",
+  written_off: "Taken off by a count correction",
 };
 
 /** B{YYMM}-{nnn} — the batch code printed on every unit of the batch. */
@@ -65,7 +68,7 @@ export type Transition = { status: UnitStatus; to: "office" | "site" | "keep" | 
  * rather than written and corrected afterwards.
  */
 export function nextState(status: UnitStatus, kind: MoveKind): Transition | { error: string } {
-  const terminal: UnitStatus[] = ["returned_to_supplier", "scrapped", "lost"];
+  const terminal: UnitStatus[] = ["returned_to_supplier", "scrapped", "lost", "written_off"];
   if (terminal.includes(status)) return { error: `It is ${STATUS_LABEL[status].toLowerCase()} — nothing further can be recorded against it.` };
   switch (kind) {
     case "transfer":

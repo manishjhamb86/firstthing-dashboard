@@ -3,14 +3,34 @@ import { db } from "@/lib/db";
 import { PageHeader } from "@/components/ui";
 import { requireInventoryPage } from "../access";
 import { ReceiveForm } from "./receive-form";
+import { receivedPerLine } from "@/lib/stock-plan";
 import { normaliseInvoiceNumber } from "@/lib/invoice-number";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Receive stock" };
 
-export default async function ReceivePage({ searchParams }: { searchParams: Promise<{ upload?: string }> }) {
+export default async function ReceivePage({ searchParams }: { searchParams: Promise<{ upload?: string; pr?: string }> }) {
   await requireInventoryPage();
-  const { upload } = await searchParams;
+  const { upload, pr } = await searchParams;
+  const openPrRows = await db.purchaseRequirement.findMany({
+    where: { status: { in: ["sent", "partly_received"] } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, code: true, supplierId: true, supplier: { select: { name: true } }, lines: { select: { id: true, itemTypeId: true, quantity: true } }, batches: { select: { itemTypeId: true, quantity: true } } },
+  });
+  const openPrs = openPrRows.map((p) => {
+    const got = new Map<string, number>();
+    for (const b of p.batches) got.set(b.itemTypeId, (got.get(b.itemTypeId) ?? 0) + b.quantity);
+    const per = receivedPerLine(p.lines, got);
+    const remaining = new Map<string, number>();
+    for (const l of p.lines) remaining.set(l.itemTypeId, (remaining.get(l.itemTypeId) ?? 0) + Math.max(0, l.quantity - (per.get(l.id) ?? 0)));
+    return {
+      id: p.id,
+      code: p.code,
+      supplierId: p.supplierId,
+      supplierName: p.supplier?.name ?? null,
+      remaining: [...remaining.entries()].filter(([, q]) => q > 0).map(([itemTypeId, quantity]) => ({ itemTypeId, quantity })),
+    };
+  });
   const [suppliers, offices, items, pendingUploads] = await Promise.all([
     db.supplier.findMany({ select: { id: true, name: true }, orderBy: { name: "asc" } }),
     db.stockLocation.findMany({ where: { kind: "office", active: true }, select: { id: true, name: true }, orderBy: { name: "asc" } }),
@@ -76,6 +96,8 @@ export default async function ReceivePage({ searchParams }: { searchParams: Prom
             alreadyReceived: receivedAs(u.extraction),
           }))}
           resumeUploadId={upload ?? null}
+          openPrs={openPrs}
+          initialPrId={pr ?? null}
         />
       )}
     </>

@@ -13,7 +13,7 @@ import { HelpButton, type HelpTask } from "./help-button";
 const TABS = [
   { href: "/field", label: "Today", icon: CalendarCheck, exact: true },
   { href: "/field/work", label: "Work", icon: ClipboardList },
-  { href: "/field/scan", label: "Scan", icon: ScanLine },
+  { href: "/field/stock", label: "Stock", icon: ScanLine },
   { href: "/field/more", label: "More", icon: Menu },
 ] as const;
 
@@ -121,7 +121,7 @@ function ShellFrame({ children, helpTasks }: { children: ReactNode; helpTasks: H
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {TABS.map((t) => {
-          const on = active(t.href, "exact" in t ? t.exact : false);
+          const on = active(t.href, "exact" in t ? t.exact : false) || (t.href === "/field/stock" && active("/field/scan"));
           const Icon = t.icon;
           return (
             <Link

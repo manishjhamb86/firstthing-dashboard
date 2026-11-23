@@ -55,3 +55,29 @@ the browser. Error-correction level M, so a scuffed sticker still scans.
 Supplier invoices are stored under the **private** `Ingest/`-style prefix `Inventory/` and served
 by a short-lived presigned GET — they are commercial documents, not society-facing ones, so they
 do not belong in the public-read `Documents/` tree.
+
+## Stock workflow: plan → buy → issue → install → return (2026-11-23)
+
+Designed on the canvas "Stock workflow" (https://claude.ai/artifact/KyjfSBxjimi4yhDjnPqXK6), built the same day.
+The user's decisions:
+
+- **Required quantities**: lights come from the deal — the accepted offer's full installation per circuit, in the
+  light model the demo used, mapped to the stock item linked to that catalog light. Every other item (meters,
+  routers, SIMs, wire, valves) is typed by operations per society (`StockRequirement`); a typed line for a light
+  replaces the deal figure.
+- **Purchase requirements** (`PurchaseRequirement`, PR-YYMM-nnn): generated from a society's shortfall, draft →
+  sent → partly received → received (status from batches received against it). Received stock is **not
+  reserved** for the society it was ordered for; planning only counts it as on order.
+- **Custody**: issuing moves stock from an office into the employee's own custody location
+  (`StockLocation.kind = employee`) on an `IssueSlip` (IS-YYMM-nnn) with an expected installation date. A unit
+  in custody stays `in_stock`. The employee installs it at the slip's society or returns it (unused, or faulty
+  with a reason) from the field app — queued items `stock.install` / `stock.return`, same rules as the back
+  office (`src/lib/stock-workflow.ts`). A slip closes when nothing is left; past its date it reads overdue.
+- **Planning formula**: to buy = required − installed at the society − held by crews for it − on order − free
+  office stock, with free stock shared across societies oldest accepted deal first (`allocatePlan`).
+- **Installed stock at a society**: for societies installed before stock was tracked, the society's admin
+  inventory page sets each item's installed count. Raising records a pre-existing batch installed there;
+  lowering needs a reason and takes units off as `written_off` (quantities by an `adjust` movement).
+- **Portal**: Inventory lists per item. Lights by fitting from the installation record (the billed figure);
+  routers, SIMs, valves, wire from stock installed at the society; connected meters and tank sensors from their
+  devices unless stock records that kind of item there.

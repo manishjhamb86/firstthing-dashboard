@@ -396,20 +396,23 @@ model Society {
   installationProjects InstallationProject[]
 
   // MS-08
-  monthlyCalculations     MonthlyCalculation[]
-  storedDocuments         StoredDocument[]
-  retailCustomers         RetailCustomer[]
-  stockLocations          StockLocation[]
-  members                 SocietyMember[]
-  publishedSavingsReports PublishedSavingsReport[]
-  tickets                 Ticket[]
-  inspections             Inspection[]
-  fmEngagements           SocietyFmEngagement[]
-  dateChangeRequests      DateChangeRequest[]
-  pendingApprovals        PendingApproval[]
-  replacementFollowUps    DemoReplacementFollowUp[]
-  showcaseConsents        ShowcaseConsent[]
-  starListings            StarListing[]
+  monthlyCalculations      MonthlyCalculation[]
+  storedDocuments          StoredDocument[]
+  retailCustomers          RetailCustomer[]
+  stockLocations           StockLocation[]
+  stockRequirements        StockRequirement[]
+  purchaseRequirementLines PurchaseRequirementLine[]
+  issueSlips               IssueSlip[]
+  members                  SocietyMember[]
+  publishedSavingsReports  PublishedSavingsReport[]
+  tickets                  Ticket[]
+  inspections              Inspection[]
+  fmEngagements            SocietyFmEngagement[]
+  dateChangeRequests       DateChangeRequest[]
+  pendingApprovals         PendingApproval[]
+  replacementFollowUps     DemoReplacementFollowUp[]
+  showcaseConsents         ShowcaseConsent[]
+  starListings             StarListing[]
 
   monthlyCloseEmails MonthlyCloseEmail[]
 
@@ -3828,7 +3831,7 @@ model TankApiConfig {
   lowLevelPct     Int       @default(20) @map("low_level_pct")
   highLevelPct    Int       @default(90) @map("high_level_pct")
 
-  updatedBy AdminUser? @relation("TankApiConfigUpdatedBy", fields: [updatedById], references: [id])
+  updatedBy AdminUser?  @relation("TankApiConfigUpdatedBy", fields: [updatedById], references: [id])
   tanks     WaterTank[]
 
   @@map("tank_api_config")
@@ -3838,27 +3841,27 @@ model TankApiConfig {
 /// including ones with no water-level signal — so nothing in the account is
 /// invisible from the product; only level-bearing devices can be assigned.
 model WaterTank {
-  id               String     @id @default(cuid())
-  tuyaDeviceId     String     @unique @map("tuya_device_id")
+  id               String         @id @default(cuid())
+  tuyaDeviceId     String         @unique @map("tuya_device_id")
   name             String
-  productName      String     @map("product_name")
+  productName      String         @map("product_name")
   category         String
-  hasLevelSignal   Boolean    @default(false) @map("has_level_signal")
+  hasLevelSignal   Boolean        @default(false) @map("has_level_signal")
   /// The declared MAXIMUM of this device's level datapoint, from its thing
   /// model. It is not always 100: the IT56WLCW controllers on this account
   /// declare `liquid_level_percent` as 0-60, so a raw 45 is 75% full — which
   /// is what the Smart Life app shows and what we showed as 45% until this
   /// was found (2026-08-25). Every stored level is normalised through it.
-  levelMax         Int        @default(100) @map("level_max")
+  levelMax         Int            @default(100) @map("level_max")
   /// The Tuya account this device was listed in, so its live reads use that
   /// account's credentials (2026-11-19). Null on a device synced from the
   /// env-only fallback; read with the first account then.
-  tankApiConfigId  String?    @map("tank_api_config_id")
+  tankApiConfigId  String?        @map("tank_api_config_id")
   tankApiConfig    TankApiConfig? @relation(fields: [tankApiConfigId], references: [id], onDelete: SetNull)
   /// Which supply this tank serves — Domestic / Flush / STP — so the portal
   /// can group tanks the way a resident thinks about them. Null until the
   /// back office classifies it; the portal states that rather than guessing.
-  setupType        TankSetup? @map("setup_type")
+  setupType        TankSetup?     @map("setup_type")
   /// The tower or building this tank serves — "Tower D", "Block B" — typed
   /// by the back office, same pattern as setupType (a free label, not an
   /// enum, since building names vary by society). Null reads as "not yet
@@ -3866,22 +3869,22 @@ model WaterTank {
   /// (researched 2026-09-11/12 for the multi-tower dashboard redesign — a
   /// device name like "RG Residency Tower D Tank" is not a reliable parse
   /// target, and the resident needs a real grouping key, not a substring).
-  location         String?    @map("location")
+  location         String?        @map("location")
   /// The assignment that scopes portal visibility (INV-05): a society's
   /// portal accounts see exactly the tanks whose societyId is theirs.
-  societyId        String?    @map("society_id")
-  assignedAt       DateTime?  @map("assigned_at")
-  assignedById     String?    @map("assigned_by_id")
+  societyId        String?        @map("society_id")
+  assignedAt       DateTime?      @map("assigned_at")
+  assignedById     String?        @map("assigned_by_id")
   /// Cache of the sensor's last known state, refreshed by the sampling job
   /// and opportunistically by live page loads.
-  lastLevelPercent Int?       @map("last_level_percent")
-  lastOnline       Boolean    @default(false) @map("last_online")
-  lastReportedAt   DateTime?  @map("last_reported_at")
+  lastLevelPercent Int?           @map("last_level_percent")
+  lastOnline       Boolean        @default(false) @map("last_online")
+  lastReportedAt   DateTime?      @map("last_reported_at")
   /// Whether the motor is actually ON, from the controller's own `switch_6`
   /// datapoint (named "Motor" in the device's own thing model, confirmed
   /// 2026-10-16) — a plain boolean, the real on/off signal. Null for a
   /// device with no motor output on its shadow at all.
-  lastMotorOn      Boolean?   @map("last_motor_on")
+  lastMotorOn      Boolean?       @map("last_motor_on")
   /// The controller's own `motor_status` datapoint — a FAULT/HEALTH flag
   /// ("Normal" | "Dryrun"), shown verbatim rather than translated through an
   /// invented enum (no documentation of other values this model can report).
@@ -3891,9 +3894,9 @@ model WaterTank {
   /// plain level sensor with no motor output on its shadow at all — the
   /// same "don't fabricate a field that doesn't exist for this device" rule
   /// hasLevelSignal already follows.
-  lastMotorStatus  String?    @map("last_motor_status")
-  syncedAt         DateTime   @default(now()) @map("synced_at")
-  createdAt        DateTime   @default(now()) @map("created_at")
+  lastMotorStatus  String?        @map("last_motor_status")
+  syncedAt         DateTime       @default(now()) @map("synced_at")
+  createdAt        DateTime       @default(now()) @map("created_at")
 
   society    Society?           @relation(fields: [societyId], references: [id], onDelete: SetNull)
   assignedBy AdminUser?         @relation("WaterTankAssignedBy", fields: [assignedById], references: [id])
@@ -5055,6 +5058,10 @@ enum WarrantyBasis {
 enum StockLocationKind {
   office
   site // a society's premises — one per society, created on first deployment
+  /// An employee's custody (2026-11-23) — stock issued to them and not yet
+  /// installed at a society or brought back. One per employee, created on
+  /// first issue; `adminUserId` says whose.
+  employee
 
   @@map("stock_location_kind")
 }
@@ -5072,6 +5079,9 @@ enum InventoryUnitStatus {
   returned_to_supplier
   scrapped
   lost
+  /// Taken off a society's installed count by a correction (2026-11-23) —
+  /// the count was entered too high. Terminal; the unit keeps its history.
+  written_off
 
   @@map("inventory_unit_status")
 }
@@ -5088,6 +5098,8 @@ enum StockMovementKind {
   scrap
   lost
   adjust
+  /// Office → an employee's custody, on an issue slip (2026-11-23).
+  issue
 
   @@map("stock_movement_kind")
 }
@@ -5108,9 +5120,11 @@ model InventoryItemType {
   active                Boolean           @default(true)
   createdAt             DateTime          @default(now()) @map("created_at")
 
-  batches   InventoryBatch[]
-  units     InventoryUnit[]
-  movements StockMovement[]
+  batches       InventoryBatch[]
+  units         InventoryUnit[]
+  movements     StockMovement[]
+  requirements  StockRequirement[]
+  purchaseLines PurchaseRequirementLine[]
 
   @@map("inventory_item_types")
 }
@@ -5126,7 +5140,8 @@ model Supplier {
   address   String?
   createdAt DateTime @default(now()) @map("created_at")
 
-  purchases InventoryPurchase[]
+  purchases            InventoryPurchase[]
+  purchaseRequirements PurchaseRequirement[]
 
   @@map("suppliers")
 }
@@ -5140,6 +5155,9 @@ model StockLocation {
   societyId String?           @unique @map("society_id")
   active    Boolean           @default(true)
   createdAt DateTime          @default(now()) @map("created_at")
+
+  /// The employee whose custody this is (kind = employee).
+  adminUserId String? @unique @map("admin_user_id")
 
   society       Society?         @relation(fields: [societyId], references: [id], onDelete: SetNull)
   units         InventoryUnit[]
@@ -5214,41 +5232,44 @@ model SupplierInvoiceUpload {
 
 /// One line of a delivery — a lot with its own printed code.
 model InventoryBatch {
-  id                   String        @id @default(cuid())
+  id                    String        @id @default(cuid())
   /// Printed on every unit: B{YYMM}-{nnn}.
-  code                 String        @unique
-  itemTypeId           String        @map("item_type_id")
+  code                  String        @unique
+  itemTypeId            String        @map("item_type_id")
   /// Null for a historical entry (2026-10-12) — stock that was already in
   /// place before this system existed has no supplier invoice to trace to.
   /// A CHECK constraint (`inventory_batches_purchase_requires_non_historical`,
   /// not expressible here) enforces that null is legal ONLY when
   /// `historical` is true — not just a convention `receiveHistoricalStock`
   /// happens to follow.
-  purchaseId           String?       @map("purchase_id")
+  purchaseId            String?       @map("purchase_id")
   /// True for exactly that case — surfaced wherever a batch is shown, so a
   /// pre-system count is never mistaken for a real, invoiced delivery.
-  historical           Boolean       @default(false)
+  historical            Boolean       @default(false)
   /// The office it arrived at, or — for a historical, already-deployed entry
   /// — the society's own site.
-  receivedAtLocationId String        @map("received_at_location_id")
-  receivedOn           DateTime      @map("received_on")
+  receivedAtLocationId  String        @map("received_at_location_id")
+  receivedOn            DateTime      @map("received_on")
   /// Units, metres or pieces received.
-  quantity             Float
-  unitCost             Float?        @map("unit_cost")
+  quantity              Float
+  unitCost              Float?        @map("unit_cost")
   /// The manufacturer's own lot / batch reference, if printed.
-  supplierLot          String?       @map("supplier_lot")
-  manufacturedOn       DateTime?     @map("manufactured_on")
-  warrantyMonths       Int?          @map("warranty_months")
-  warrantyBasis        WarrantyBasis @default(purchase) @map("warranty_basis")
-  notes                String?
-  createdAt            DateTime      @default(now()) @map("created_at")
-  createdById          String        @map("created_by_id")
+  supplierLot           String?       @map("supplier_lot")
+  /// The purchase requirement this delivery was received against (2026-11-23).
+  purchaseRequirementId String?       @map("purchase_requirement_id")
+  manufacturedOn        DateTime?     @map("manufactured_on")
+  warrantyMonths        Int?          @map("warranty_months")
+  warrantyBasis         WarrantyBasis @default(purchase) @map("warranty_basis")
+  notes                 String?
+  createdAt             DateTime      @default(now()) @map("created_at")
+  createdById           String        @map("created_by_id")
 
-  itemType   InventoryItemType  @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
-  purchase   InventoryPurchase? @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
-  receivedAt StockLocation      @relation(fields: [receivedAtLocationId], references: [id], onDelete: Restrict)
-  units      InventoryUnit[]
-  movements  StockMovement[]
+  itemType            InventoryItemType    @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+  purchase            InventoryPurchase?   @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  receivedAt          StockLocation        @relation(fields: [receivedAtLocationId], references: [id], onDelete: Restrict)
+  purchaseRequirement PurchaseRequirement? @relation(fields: [purchaseRequirementId], references: [id], onDelete: SetNull)
+  units               InventoryUnit[]
+  movements           StockMovement[]
 
   @@map("inventory_batches")
 }
@@ -5297,18 +5318,133 @@ model StockMovement {
   reason         String?
   recordedAt     DateTime          @default(now()) @map("recorded_at")
   recordedById   String            @map("recorded_by_id")
+  /// The issue slip this movement belongs to — the issue itself, and each
+  /// install or return against it (2026-11-23).
+  issueSlipId    String?           @map("issue_slip_id")
 
-  itemType InventoryItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
-  batch    InventoryBatch?   @relation(fields: [batchId], references: [id], onDelete: Restrict)
-  unit     InventoryUnit?    @relation(fields: [unitId], references: [id], onDelete: Restrict)
-  from     StockLocation?    @relation("MovementFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
-  to       StockLocation?    @relation("MovementTo", fields: [toLocationId], references: [id], onDelete: Restrict)
+  itemType  InventoryItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+  batch     InventoryBatch?   @relation(fields: [batchId], references: [id], onDelete: Restrict)
+  unit      InventoryUnit?    @relation(fields: [unitId], references: [id], onDelete: Restrict)
+  issueSlip IssueSlip?        @relation(fields: [issueSlipId], references: [id], onDelete: Restrict)
+  from      StockLocation?    @relation("MovementFrom", fields: [fromLocationId], references: [id], onDelete: Restrict)
+  to        StockLocation?    @relation("MovementTo", fields: [toLocationId], references: [id], onDelete: Restrict)
 
   @@index([unitId])
   @@index([batchId])
   @@index([toLocationId])
   @@index([fromLocationId])
+  @@index([issueSlipId])
   @@map("stock_movements")
+}
+
+// ---------------------------------------------------------------------------
+// Stock workflow (2026-11-23) — plan, buy, issue, install, return.
+// ---------------------------------------------------------------------------
+
+/// A requirement typed by operations for one item at one society. For a
+/// light it REPLACES the figure worked out from the deal; for anything else
+/// (meters, routers, SIMs, wire) it is the only source — the user's call.
+model StockRequirement {
+  id          String   @id @default(cuid())
+  societyId   String   @map("society_id")
+  itemTypeId  String   @map("item_type_id")
+  quantity    Float
+  note        String?
+  updatedById String   @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  society  Society           @relation(fields: [societyId], references: [id], onDelete: Cascade)
+  itemType InventoryItemType @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([societyId, itemTypeId])
+  @@map("stock_requirements")
+}
+
+enum PurchaseRequirementStatus {
+  draft
+  sent
+  partly_received
+  received
+  cancelled
+
+  @@map("purchase_requirement_status")
+}
+
+/// What to buy — generated from a society's shortfall, sent to a supplier,
+/// received as ordinary batches. Received stock is NOT reserved for the
+/// society (the user's call): the requirement only stops it being ordered twice.
+model PurchaseRequirement {
+  id           String                    @id @default(cuid())
+  /// PR-{YYMM}-{nnn}.
+  code         String                    @unique
+  status       PurchaseRequirementStatus @default(draft)
+  supplierId   String?                   @map("supplier_id")
+  sentOn       DateTime?                 @map("sent_on")
+  poNumber     String?                   @map("po_number")
+  notes        String?
+  cancelReason String?                   @map("cancel_reason")
+  createdById  String                    @map("created_by_id")
+  createdAt    DateTime                  @default(now()) @map("created_at")
+
+  supplier Supplier?                 @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  lines    PurchaseRequirementLine[]
+  batches  InventoryBatch[]
+
+  @@map("purchase_requirements")
+}
+
+model PurchaseRequirementLine {
+  id                    String  @id @default(cuid())
+  purchaseRequirementId String  @map("purchase_requirement_id")
+  itemTypeId            String  @map("item_type_id")
+  /// The society it was ordered for, when it came from one's shortfall.
+  societyId             String? @map("society_id")
+  shortfall             Float
+  quantity              Float
+
+  purchaseRequirement PurchaseRequirement @relation(fields: [purchaseRequirementId], references: [id], onDelete: Cascade)
+  itemType            InventoryItemType   @relation(fields: [itemTypeId], references: [id], onDelete: Restrict)
+  society             Society?            @relation(fields: [societyId], references: [id], onDelete: SetNull)
+
+  @@index([purchaseRequirementId])
+  @@map("purchase_requirement_lines")
+}
+
+enum IssuePurpose {
+  full_installation
+  demo_installation
+  replacement
+  spare_on_site
+
+  @@map("issue_purpose")
+}
+
+/// Stock handed from an office to an employee for one society's job. The
+/// items stay in the employee's custody until installed there or returned;
+/// past `dueOn` what is still held reads as overdue.
+model IssueSlip {
+  id             String       @id @default(cuid())
+  /// IS-{YYMM}-{nnn}.
+  code           String       @unique
+  employeeId     String       @map("employee_id")
+  fromLocationId String       @map("from_location_id")
+  societyId      String       @map("society_id")
+  purpose        IssuePurpose
+  issuedOn       DateTime     @map("issued_on")
+  dueOn          DateTime     @map("due_on")
+  note           String?
+  /// Set when nothing is left on it.
+  closedAt       DateTime?    @map("closed_at")
+  createdById    String       @map("created_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+
+  society   Society         @relation(fields: [societyId], references: [id], onDelete: Restrict)
+  movements StockMovement[]
+
+  @@index([employeeId, closedAt])
+  @@index([societyId])
+  @@map("issue_slips")
 }
 
 /// The list an item's category is chosen from (2026-09-25, user-asked: pick

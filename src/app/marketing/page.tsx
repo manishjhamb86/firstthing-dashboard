@@ -7,6 +7,7 @@ import { ContactForm } from "./contact-form";
 import styles from "./marketing.module.css";
 import { loadHomepageSocieties, loadPublishedTestimonials } from "@/lib/homepage-content-loader";
 import { rupeesShort } from "@/lib/homepage-content";
+import { publicS3Url } from "@/lib/s3";
 
 const IMPACT_IMAGES = [
   "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1000&q=80",
@@ -273,13 +274,32 @@ export default async function MarketingHomePage() {
               <div className={`${styles.grid} ${testimonials.length >= 3 ? styles.three : ""}`}>
                 {testimonials.map((t) => (
                   <figure key={t.id} className={styles.quoteCard}>
-                    <blockquote>&ldquo;{t.quote}&rdquo;</blockquote>
-                    <figcaption>
-                      <strong>{t.authorName}</strong>
-                      {[t.authorRole, t.place].filter(Boolean).length > 0 && (
-                        <span>{[t.authorRole, t.place].filter(Boolean).join(" · ")}</span>
-                      )}
-                    </figcaption>
+                    {t.buildingPhotoKey && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className={styles.quoteBuilding} src={publicS3Url(t.buildingPhotoKey)} alt={t.place ? `${t.place}` : "The society's building"} />
+                    )}
+                    <div className={styles.quoteBody}>
+                      <blockquote>&ldquo;{t.quote}&rdquo;</blockquote>
+                      <figcaption>
+                        {t.authorPhotoKey ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img className={styles.quoteAvatar} src={publicS3Url(t.authorPhotoKey)} alt={t.authorName} />
+                        ) : (
+                          <span className={styles.quoteAvatar} aria-hidden>
+                            {t.authorName
+                              .split(/\s+/)
+                              .filter(Boolean)
+                              .slice(0, 2)
+                              .map((w) => w[0]!.toUpperCase())
+                              .join("")}
+                          </span>
+                        )}
+                        <span className={styles.quoteWho}>
+                          <strong>{t.authorName}</strong>
+                          {[t.authorRole, t.place].filter(Boolean).length > 0 && <span>{[t.authorRole, t.place].filter(Boolean).join(" · ")}</span>}
+                        </span>
+                      </figcaption>
+                    </div>
                   </figure>
                 ))}
               </div>

@@ -42,6 +42,6 @@ export async function loadPublishedTestimonials() {
     where: { status: "published" },
     orderBy: [{ priority: "asc" }, { reviewedAt: "desc" }],
     take: 12,
-    select: { id: true, quote: true, authorName: true, authorRole: true, place: true, society: { select: { name: true } } },
+    select: { id: true, quote: true, authorName: true, authorRole: true, place: true, authorPhotoKey: true, buildingPhotoKey: true, society: { select: { name: true } } },
   });
 }

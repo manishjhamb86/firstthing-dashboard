@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { resolveAdmin } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
-import { refuseTestimonial } from "@/lib/homepage-content";
+import { refusePhotoKey, refuseTestimonial } from "@/lib/homepage-content";
+import { presignTestimonialPhoto, testimonialPhotoScope } from "@/lib/testimonial-photo";
 
 // The back office's say over the public homepage (2026-11-25, user-asked).
 // Pipeline access, the same as Website enquiries — this is marketing content.
@@ -21,6 +22,14 @@ function refresh() {
   revalidatePath("/admin/homepage/societies");
   revalidatePath("/marketing");
   revalidatePath("/");
+}
+
+/** A URL to upload a testimonial photo, in the society's folder (or General). */
+export async function getAdminTestimonialPhotoUploadUrl(input: { role: "author" | "building"; contentType: string; size: number; societyId: string }) {
+  const admin = await staff();
+  if (!admin) return { error: "Uploading needs pipeline access." };
+  const society = input.societyId ? await db.society.findUnique({ where: { id: input.societyId }, select: { name: true } }) : null;
+  return presignTestimonialPhoto({ scope: testimonialPhotoScope(society?.name), role: input.role === "building" ? "building" : "author", contentType: input.contentType, size: input.size });
 }
 
 /** Publish, hold or reject a testimonial. Rejecting needs a reason. */
@@ -43,15 +52,26 @@ export async function reviewTestimonial(id: string, status: "published" | "held"
 }
 
 /** Correct a testimonial's words or how it is attributed, and its order. */
-export async function updateTestimonial(id: string, input: { quote: string; authorName: string; authorRole: string; place: string; priority: number }): Promise<Result> {
+export async function updateTestimonial(id: string, input: { quote: string; authorName: string; authorRole: string; place: string; priority: number; authorPhotoKey?: string | null; buildingPhotoKey?: string | null }): Promise<Result> {
   const admin = await staff();
   if (!admin) return { error: "Editing testimonials needs pipeline access." };
   const refusal = refuseTestimonial({ quote: input.quote, authorName: input.authorName });
   if (refusal) return { error: refusal };
   if (!Number.isInteger(input.priority) || input.priority < 0 || input.priority > 999) return { error: "Order is a whole number from 0 to 999." };
+  const photoRefusal = refusePhotoKey(input.authorPhotoKey) ?? refusePhotoKey(input.buildingPhotoKey);
+  if (photoRefusal) return { error: photoRefusal };
   await db.testimonial.update({
     where: { id },
-    data: { quote: input.quote.trim(), authorName: input.authorName.trim(), authorRole: input.authorRole.trim() || null, place: input.place.trim() || null, priority: input.priority },
+    data: {
+      quote: input.quote.trim(),
+      authorName: input.authorName.trim(),
+      authorRole: input.authorRole.trim() || null,
+      place: input.place.trim() || null,
+      priority: input.priority,
+      // undefined leaves a photo as it is; null removes it.
+      ...(input.authorPhotoKey !== undefined ? { authorPhotoKey: input.authorPhotoKey } : {}),
+      ...(input.buildingPhotoKey !== undefined ? { buildingPhotoKey: input.buildingPhotoKey } : {}),
+    },
   });
   logger.info("testimonial.edited", { actorId: admin.id, id });
   refresh();
@@ -59,10 +79,10 @@ export async function updateTestimonial(id: string, input: { quote: string; auth
 }
 
 /** Add one from the back office (a quote given by email or phone). It starts on hold. */
-export async function addTestimonial(input: { quote: string; authorName: string; authorRole: string; place: string; societyId: string }): Promise<Result> {
+export async function addTestimonial(input: { quote: string; authorName: string; authorRole: string; place: string; societyId: string; authorPhotoKey?: string | null; buildingPhotoKey?: string | null }): Promise<Result> {
   const admin = await staff();
   if (!admin) return { error: "Adding testimonials needs pipeline access." };
-  const refusal = refuseTestimonial({ quote: input.quote, authorName: input.authorName });
+  const refusal = refuseTestimonial({ quote: input.quote, authorName: input.authorName }) ?? refusePhotoKey(input.authorPhotoKey) ?? refusePhotoKey(input.buildingPhotoKey);
   if (refusal) return { error: refusal };
   const t = await db.testimonial.create({
     data: {
@@ -71,6 +91,8 @@ export async function addTestimonial(input: { quote: string; authorName: string;
       authorRole: input.authorRole.trim() || null,
       place: input.place.trim() || null,
       societyId: input.societyId || null,
+      authorPhotoKey: input.authorPhotoKey || null,
+      buildingPhotoKey: input.buildingPhotoKey || null,
       status: "held",
       source: "back_office",
       reviewedById: admin.id,

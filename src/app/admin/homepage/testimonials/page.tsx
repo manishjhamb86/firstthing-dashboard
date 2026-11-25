@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { Card, EmptyState, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { formatDate } from "@/lib/format-date";
 import { requireHomepageStaff } from "../access";
+import { publicS3Url } from "@/lib/s3";
 import { AddTestimonial, TestimonialRow } from "./testimonial-controls";
 
 export const dynamic = "force-dynamic";
@@ -80,6 +81,9 @@ export default async function TestimonialsPage({ searchParams }: { searchParams:
                       place: t.place ?? "",
                       priority: t.priority,
                       status: t.status,
+                      societyId: t.societyId ?? "",
+                      authorPhotoUrl: t.authorPhotoKey ? publicS3Url(t.authorPhotoKey) : null,
+                      buildingPhotoUrl: t.buildingPhotoKey ? publicS3Url(t.buildingPhotoKey) : null,
                     }}
                     meta={
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-[var(--text-muted)]">

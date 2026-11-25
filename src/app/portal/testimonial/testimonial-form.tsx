@@ -4,18 +4,21 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Card, ErrorText, Field } from "@/components/ui";
 import { QUOTE_MAX, QUOTE_MIN } from "@/lib/homepage-content";
-import { submitTestimonial } from "./actions";
+import { TestimonialPhotoPicker, uploadTestimonialPhoto } from "@/components/testimonial-photo-picker";
+import { getTestimonialPhotoUploadUrl, submitTestimonial } from "./actions";
 
 /**
  * On submit the form goes behind a spinner, then a thank-you replaces it
  * (2026-11-25, user-asked for every form) — with a way to share another.
  */
-export function TestimonialForm({ defaultName, defaultRole, societyName }: { defaultName: string; defaultRole: string; societyName: string }) {
+export function TestimonialForm({ societyName }: { societyName: string }) {
   const router = useRouter();
   const [quote, setQuote] = useState("");
-  const [authorName, setAuthorName] = useState(defaultName);
-  const [authorRole, setAuthorRole] = useState(defaultRole);
+  const [authorName, setAuthorName] = useState("");
+  const [authorRole, setAuthorRole] = useState("");
   const [consent, setConsent] = useState(false);
+  const [authorPhoto, setAuthorPhoto] = useState<File | null>(null);
+  const [buildingPhoto, setBuildingPhoto] = useState<File | null>(null);
   const [error, setError] = useState<string>();
   const [sent, setSent] = useState(false);
   const [pending, start] = useTransition();
@@ -60,13 +63,22 @@ export function TestimonialForm({ defaultName, defaultRole, societyName }: { def
           e.preventDefault();
           start(async () => {
             setError(undefined);
-            const r = await submitTestimonial({ quote, authorName, authorRole, consent });
-            if (r.error) setError(r.error);
-            else {
-              setQuote("");
-              setConsent(false);
-              setSent(true);
-              router.refresh();
+            try {
+              // Photos go up only once the form is actually being sent.
+              const authorPhotoKey = authorPhoto ? await uploadTestimonialPhoto(authorPhoto, (i) => getTestimonialPhotoUploadUrl({ role: "author", ...i })) : null;
+              const buildingPhotoKey = buildingPhoto ? await uploadTestimonialPhoto(buildingPhoto, (i) => getTestimonialPhotoUploadUrl({ role: "building", ...i })) : null;
+              const r = await submitTestimonial({ quote, authorName, authorRole, consent, authorPhotoKey, buildingPhotoKey });
+              if (r.error) setError(r.error);
+              else {
+                setQuote("");
+                setConsent(false);
+                setAuthorPhoto(null);
+                setBuildingPhoto(null);
+                setSent(true);
+                router.refresh();
+              }
+            } catch (err) {
+              setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
             }
           });
         }}
@@ -77,17 +89,24 @@ export function TestimonialForm({ defaultName, defaultRole, societyName }: { def
         <p className="-mt-2 text-right text-xs" style={{ color: left < 0 ? "var(--bad-fg)" : "var(--text-subtle)" }}>
           {left} characters left
         </p>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Name to show" htmlFor="tm-name">
-            <input id="tm-name" className="field" value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Your full name" htmlFor="tm-name" hint="As it should appear on the website.">
+            <input id="tm-name" className="field" value={authorName} onChange={(e) => setAuthorName(e.target.value)} placeholder="e.g. Ravi Sharma" autoComplete="name" />
           </Field>
           <Field label="Your role (optional)" htmlFor="tm-role">
             <input id="tm-role" className="field" value={authorRole} onChange={(e) => setAuthorRole(e.target.value)} placeholder="e.g. Secretary" />
           </Field>
+          <Field label="Society" htmlFor="tm-society">
+            <input id="tm-society" className="field" value={societyName} readOnly disabled />
+          </Field>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TestimonialPhotoPicker id="tm-author-photo" label="Your photo (optional)" hint="A clear photo of your face. JPG, PNG or WebP, up to 5 MB." round file={authorPhoto} onFile={setAuthorPhoto} />
+          <TestimonialPhotoPicker id="tm-building-photo" label="Photo of your society (optional)" hint="The building or its entrance. Up to 5 MB." file={buildingPhoto} onFile={setBuildingPhoto} />
         </div>
         <label className="flex items-start gap-2.5 text-[13.5px]">
           <input type="checkbox" className="mt-1" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-          <span>I agree that FirsThing may show this on its website with the name above{societyName ? ` and ${societyName}` : ""}.</span>
+          <span>I agree that FirsThing may show this on its website with my name{societyName ? `, ${societyName}` : ""} and any photos I have added.</span>
         </label>
         {error && <ErrorText>{error}</ErrorText>}
         <button type="submit" className="btn-primary self-start" disabled={pending}>

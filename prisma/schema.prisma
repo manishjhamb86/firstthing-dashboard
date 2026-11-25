@@ -6005,6 +6005,10 @@ model Testimonial {
   societyId            String?           @map("society_id")
   /// The society as shown under the quote; "Gurugram" for an unnamed one.
   place                String?
+  /// Photos for the homepage (2026-11-25, user-asked): the person, and their
+  /// building. S3 keys under the public Documents/Testimonials/ prefix.
+  authorPhotoKey       String?           @map("author_photo_key")
+  buildingPhotoKey     String?           @map("building_photo_key")
   status               TestimonialStatus @default(pending)
   source               TestimonialSource
   submittedByProfileId String?           @map("submitted_by_profile_id")

@@ -9829,3 +9829,13 @@ Verified on dev, 19/19 in a browser plus a server refusal (pipeline access revok
 nothing published, `testimonial.review_refused`): default ranking, ₹ on each card, equal field heights, spinner →
 thank-you → another, consent required, pending → published (on the homepage) → held (gone), reject needs a reason,
 pin and hold reorder the homepage. Fixtures removed.
+**Same day, user-asked — real people, with photos.** A testimonial carries the person's photo and their building's
+photo (`authorPhotoKey`/`buildingPhotoKey`, migration `20261125120000_testimonial_photos`; uploaded by presigned PUT
+under the public `Documents/Testimonials/{Society}/` prefix, images only, up to 5 MB, keys checked server-side — a
+portal member can only attach keys from their own society's folder). Both the portal form and the back office (add
+and edit) upload them, uploading only when the form is sent. A role typed as the name ("RWA office-bearer",
+"Secretary") is refused — "Full name" and "Role" are separate fields. In the portal only the society is filled in
+(read-only); name and role start empty with placeholders, since a login is often named after its society. The
+homepage card shows the building photo across the top and the person's photo (or initials) by their name.
+Verified on dev 10/10 including real uploads; fixtures removed (the two tiny test images stay in the bucket —
+PutObject-only credentials).

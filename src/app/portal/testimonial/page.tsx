@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { STALE_SESSION_EXIT } from "@/lib/admin-permissions";
 import { resolvePortalViewer } from "@/lib/portal-viewer";
-import { PORTAL_AUTHORITY_LABEL } from "@/lib/status-maps";
 import { formatDate } from "@/lib/format-date";
 import { Card, PageHeader, StatusChip, type ChipTone } from "@/components/ui";
 import { TestimonialForm } from "./testimonial-form";
@@ -30,7 +29,10 @@ export default async function TestimonialPage() {
       <PageHeader title="Share your experience" subtitle="Tell other societies what working with FirsThing has been like. We read every one, and may show it on our website." />
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1">
-          <TestimonialForm defaultName={viewer.name ?? ""} defaultRole={PORTAL_AUTHORITY_LABEL[viewer.role] ?? ""} societyName={society?.name ?? ""} />
+          {/* Only the society is filled in; the person types their own name and
+              role (2026-11-25, user-asked — a login is often named after the
+              society, so it is never offered as the person's name). */}
+          <TestimonialForm societyName={society?.name ?? ""} />
         </div>
         {mine.length > 0 && (
           <Card className="p-5 lg:w-[360px] lg:shrink-0">

@@ -9803,3 +9803,29 @@ and the separate "Edit name" controls on the society card and the deal header we
 deal's single circuit too (`updateLeadDetails`); the survey's per-circuit Edit name stays for naming circuits apart.
 Amrapali's lift-lobby deal was set back to "Lift Lobby Tower G" on production (deal and circuit) at the user's word —
 the migration had taken the deal's stored "Tower D".
+
+## Homepage testimonials and results from the back office; clearer form submits (2026-11-25) — user-asked
+
+**Testimonials** (`Testimonial`, migration `20261125090000_homepage_content`): a society member writes one in the
+portal (new nav item "Share your experience", every member, no grant; consent to being shown with their name and
+society is required and stamped; 3 a day per member). It arrives `pending`; Deals → **Testimonials** reviews it —
+publish, hold ("Take off the homepage"), reject with a reason, edit the words or attribution, set an order — or adds
+one by hand (starts on hold). The homepage shows only `published` ones, by order (section hidden when none). The
+three quotes the earlier homepage carried were generic, unattributed placeholders, so they were imported **held**:
+nothing shows until someone publishes it.
+
+**Homepage results** ("Real Buildings. Measurable Results."): no longer hard-coded. Every society with a released
+month is ranked from the figures its own portal shows (`publishedMonthsFor` — savings weighted by kWh, ₹ saved to
+date); the homepage shows the top 3 (`HOMEPAGE_SOCIETY_LIMIT`): pinned societies first (by their order), then the rest
+by savings %, then ₹ saved; held ones never (`HomepageSocietyStat`, Deals → **Homepage results**). Rules in
+`src/lib/homepage-content.ts` (tested); one loader feeds the homepage and the back office so both show the same order.
+A failed read leaves the section out rather than breaking the public page.
+
+**Forms**: the homepage's "Request an Assessment" form now goes behind a spinner on submit, then a thank-you panel
+(naming what was sent and the number we will call) with "Request another assessment"; the portal testimonial form
+does the same. Homepage inputs and dropdowns are one height (Safari ignored a native select's padding).
+
+Verified on dev, 19/19 in a browser plus a server refusal (pipeline access revoked behind the open page — refused,
+nothing published, `testimonial.review_refused`): default ranking, ₹ on each card, equal field heights, spinner →
+thank-you → another, consent required, pending → published (on the homepage) → held (gone), reject needs a reason,
+pin and hold reorder the homepage. Fixtures removed.

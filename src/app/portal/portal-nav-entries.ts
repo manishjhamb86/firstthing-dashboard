@@ -6,6 +6,7 @@ import {
   Gauge,
   LayoutDashboard,
   LifeBuoy,
+  MessageSquareQuote,
   Receipt,
   ShieldCheck,
   Zap,
@@ -38,6 +39,7 @@ export const PORTAL_NAV_ICONS = {
   support: LifeBuoy,
   admin: ShieldCheck,
   billing: Receipt,
+  testimonial: MessageSquareQuote,
 } as const;
 
 /**
@@ -82,5 +84,7 @@ export function portalNavEntries(grants: Set<PortalGrant>): PortalNavEntry[] {
     ...(grants.has("society_admin")
       ? [{ key: "admin" as const, href: "/portal/admin", label: "Society admin" }]
       : []),
+    // Every member may share their experience (2026-11-25) — no grant.
+    { key: "testimonial" as const, href: "/portal/testimonial", label: "Share your experience" },
   ];
 }

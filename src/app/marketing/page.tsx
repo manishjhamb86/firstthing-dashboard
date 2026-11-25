@@ -5,6 +5,16 @@ import { Calculator } from "./calculator";
 import { MobileNav } from "./mobile-nav";
 import { ContactForm } from "./contact-form";
 import styles from "./marketing.module.css";
+import { loadHomepageSocieties, loadPublishedTestimonials } from "@/lib/homepage-content-loader";
+import { rupeesShort } from "@/lib/homepage-content";
+
+const IMPACT_IMAGES = [
+  "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1000&q=80",
+  "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80",
+  // The first again, cropped from the other side — a third apartment block
+  // rather than the villa the page's own image set offers.
+  "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&crop=right&w=1000&q=80",
+];
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +40,12 @@ export default async function MarketingHomePage() {
   const loggedIn = !!session?.user && isRole(role);
   const dashboardHref = loggedIn ? ROLE_HOME[role!] : "/login";
   const loginLabel = loggedIn ? "Dashboard" : "Customer Login";
+  // Both from the back office (2026-11-25). A failed read must not take the
+  // public homepage down: the section is simply left out.
+  const [impact, testimonials] = await Promise.all([
+    loadHomepageSocieties().then((r) => r.filter((x) => x.shown)).catch(() => []),
+    loadPublishedTestimonials().catch(() => []),
+  ]);
 
   return (
     <div className={styles.page}>
@@ -210,47 +226,66 @@ export default async function MarketingHomePage() {
           </div>
         </section>
 
+        {impact.length > 0 && (
         <section id="impact">
           <div className={styles.container}>
             <div className={styles.sectionHead}>
               <p className={styles.eyebrow}>Our impact</p>
               <h2>Real Buildings. Measurable Results.</h2>
               <p>
-                Examples of previously reported lighting performance. Final reports and customer
-                publication permissions should be confirmed.
+                Lighting savings our customers have seen, from the monthly reports we release to each
+                society.
               </p>
             </div>
-            <div className={styles.grid}>
-              <article className={styles.case}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1000&q=80"
-                  alt="Illustrative residential buildings"
-                />
-                <div className={styles.caseBody}>
-                  <h3>Princely Estate</h3>
-                  <strong>61.52%</strong>
-                  <p>Previously reported lighting energy savings</p>
-                </div>
-              </article>
-              <article className={styles.case}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?auto=format&fit=crop&w=1000&q=80"
-                  alt="Illustrative apartment buildings"
-                />
-                <div className={styles.caseBody}>
-                  <h3>French Apartment</h3>
-                  <strong>62.19%</strong>
-                  <p>Previously reported lighting energy savings</p>
-                </div>
-              </article>
+            {/* From the back office (2026-11-25, user-asked): the top savings by
+                default, pinned societies first, held ones never — Admin →
+                Deals → Homepage results. */}
+            <div className={`${styles.grid} ${impact.length === 3 ? styles.three : ""}`}>
+              {impact.map((s, i) => (
+                <article key={s.societyId} className={styles.case}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={IMPACT_IMAGES[i % IMPACT_IMAGES.length]} alt="Illustrative residential buildings" />
+                  <div className={styles.caseBody}>
+                    <h3>{s.name}</h3>
+                    <strong>{s.savingsPct!.toFixed(2)}%</strong>
+                    <p>
+                      Lighting energy saved · {rupeesShort(s.savedValue)} saved over {s.months} month
+                      {s.months === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </article>
+              ))}
             </div>
             <p className={styles.disclaimer} style={{ marginTop: 14 }}>
               Images are illustrative and do not depict the named societies.
             </p>
           </div>
         </section>
+        )}
+
+        {testimonials.length > 0 && (
+          <section id="testimonials" className={styles.soft}>
+            <div className={styles.container}>
+              <div className={styles.sectionHead}>
+                <p className={styles.eyebrow}>In their words</p>
+                <h2>What Societies Say.</h2>
+              </div>
+              <div className={`${styles.grid} ${testimonials.length >= 3 ? styles.three : ""}`}>
+                {testimonials.map((t) => (
+                  <figure key={t.id} className={styles.quoteCard}>
+                    <blockquote>&ldquo;{t.quote}&rdquo;</blockquote>
+                    <figcaption>
+                      <strong>{t.authorName}</strong>
+                      {[t.authorRole, t.place].filter(Boolean).length > 0 && (
+                        <span>{[t.authorRole, t.place].filter(Boolean).join(" · ")}</span>
+                      )}
+                    </figcaption>
+                  </figure>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
 
         <section className={styles.soft}>
           <div className={styles.container}>

@@ -165,6 +165,8 @@ export function AppShell({
       showPipeline && { href: "/admin/pipeline", label: "Leads & pipeline", icon: Target },
       // The public homepage's "Request an Assessment" form (2026-10-16).
       showPipeline && { href: "/admin/marketing-enquiries", label: "Website enquiries", icon: Target },
+      showPipeline && { href: "/admin/homepage/testimonials", label: "Testimonials", icon: Target },
+      showPipeline && { href: "/admin/homepage/societies", label: "Homepage results", icon: Target },
       // The field team's own list — they do not get the deal (2026-08-24).
       showField && { href: "/admin/field", label: "Field work", icon: Target },
     ]),
@@ -199,6 +201,8 @@ export function AppShell({
     "/admin": "portfolio dashboard",
     "/admin/tickets": "support tickets complaints",
     "/admin/marketing-enquiries": "marketing enquiries assessment",
+    "/admin/homepage/testimonials": "testimonials reviews quotes homepage website",
+    "/admin/homepage/societies": "homepage results societies impact savings website",
     "/admin/defaulters": "defaulter societies",
     "/admin/approvals": "pending approvals",
     "/admin/timeline/requests": "date change requests",

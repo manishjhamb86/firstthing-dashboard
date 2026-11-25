@@ -416,7 +416,9 @@ model Society {
 
   monthlyCloseEmails MonthlyCloseEmail[]
 
-  customerVisits CustomerVisit[]
+  customerVisits       CustomerVisit[]
+  testimonials         Testimonial[]
+  homepageSocietyStats HomepageSocietyStat[]
 
   @@map("societies")
 }
@@ -5968,4 +5970,79 @@ model CustomerVisit {
   @@index([period, societyId])
   @@index([status])
   @@map("customer_visits")
+}
+
+// ---------------------------------------------------------------------------
+// Homepage content from the back office (2026-11-25, user-asked)
+// ---------------------------------------------------------------------------
+
+enum TestimonialStatus {
+  pending
+  published
+  held
+  rejected
+
+  @@map("testimonial_status")
+}
+
+enum TestimonialSource {
+  portal
+  imported
+  back_office
+
+  @@map("testimonial_source")
+}
+
+/// A customer's words for the public homepage. Written in the society
+/// portal (or added by the back office), reviewed there, and shown on the
+/// homepage only while `published`.
+model Testimonial {
+  id                   String            @id @default(cuid())
+  quote                String
+  authorName           String            @map("author_name")
+  /// "Secretary", "Facility manager" — free text, as the author wrote it.
+  authorRole           String?           @map("author_role")
+  societyId            String?           @map("society_id")
+  /// The society as shown under the quote; "Gurugram" for an unnamed one.
+  place                String?
+  status               TestimonialStatus @default(pending)
+  source               TestimonialSource
+  submittedByProfileId String?           @map("submitted_by_profile_id")
+  /// When the author agreed to it being shown publicly with their name.
+  consentAt            DateTime?         @map("consent_at")
+  /// Lower shows first among published ones.
+  priority             Int               @default(100)
+  reviewedById         String?           @map("reviewed_by_id")
+  reviewedAt           DateTime?         @map("reviewed_at")
+  reviewNote           String?           @map("review_note")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  society Society? @relation(fields: [societyId], references: [id], onDelete: SetNull)
+
+  @@index([status, priority])
+  @@map("testimonials")
+}
+
+enum HomepageStatMode {
+  auto
+  pinned
+  held
+
+  @@map("homepage_stat_mode")
+}
+
+/// How a society's savings appear in the homepage's results section. With no
+/// row a society is `auto` — ranked by its published savings. `pinned` puts it
+/// first (lower priority first); `held` keeps it off the homepage.
+model HomepageSocietyStat {
+  societyId   String           @id @map("society_id")
+  mode        HomepageStatMode @default(auto)
+  priority    Int              @default(100)
+  updatedById String           @map("updated_by_id")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
+
+  @@map("homepage_society_stats")
 }

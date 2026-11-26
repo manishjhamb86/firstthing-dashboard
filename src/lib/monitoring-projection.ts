@@ -17,7 +17,7 @@ import { effectiveBaselineAt } from "@/lib/benchmark-rescale";
 import { EXCLUSION_DEVICE_SELECT, exclusionFromDevices, savingsPct, SAVINGS_SUSPECT_ABOVE } from "@/lib/circuit-load";
 import { mergeMonitoringDay, monitoringStart, type Origin } from "@/lib/monitoring";
 import { dayMs } from "@/lib/demo-periods";
-import { classifyDayHours, inferOperatingHours, OPERATING_HOURS_WINDOW_DAYS } from "@/lib/day-validity";
+import { classifyDayHours, inferOperatingHours, OPERATING_HOURS_WINDOW_DAYS, scheduleOf } from "@/lib/day-validity";
 import { buildHourlyProfiles, classifyDay as classifyHourlyDay } from "@/lib/hourly-anomaly";
 
 export const PARTIAL_REASON_PREFIX = "Partial day — ";
@@ -155,6 +155,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
     select: {
       id: true,
       voidedAt: true,
+      workingHours: true,
       preInstallBaseline: true,
       rescaleEvents: true,
       devices: { select: EXCLUSION_DEVICE_SELECT },
@@ -245,6 +246,9 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       excludedReason: true,
       validOverrideAt: true,
       hourlyNormalCount: true,
+      dayClass: true,
+      dayClassHoursExpected: true,
+      dayClassHoursPresent: true,
     },
   });
   const existingByDay = new Map(existing.map((r) => [dayMs(r.date), r]));
@@ -267,7 +271,8 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
     // circuit's own learned operating hours, not a blanket 24 — a
     // shorter-than-24h circuit's real off-hours reading zero is never
     // counted as a gap.
-    const hourClass = classifyDayHours({ hourlyPresent: d.present, intervalCount: null }, operating);
+    // A 12-hour circuit is valid on 8 to 15 hours with a reading (2026-11-26).
+    const hourClass = classifyDayHours({ hourlyPresent: d.present, intervalCount: null }, operating, scheduleOf(circuit.workingHours));
     const partial = hourClass.dayClass === "partial";
     const overridden = overrideByDay.has(t);
     const pct = !partial && baseline !== null ? savingsPct(baseline, kWh, exclusion) : null;
@@ -291,7 +296,7 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
     // outright — re-projecting must never silently undo a stated exception.
     const partialData =
       partial && !overridden
-        ? { excludedAt: now, excludedById: actorId, excludedReason: `${PARTIAL_REASON_PREFIX}${hourClass.hoursPresent} of ${hourClass.hoursExpected} expected hours` }
+        ? { excludedAt: now, excludedById: actorId, excludedReason: `${PARTIAL_REASON_PREFIX}${hourClass.reason ?? `${hourClass.hoursPresent} of ${hourClass.hoursExpected} expected hours`}` }
         : {};
     const dayClassData = {
       dayClass: hourClass.dayClass,
@@ -332,7 +337,15 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
       // a row written before hourly-anomaly.ts existed — still be missing
       // its per-hour counts entirely; either case is worth a write even
       // though the figure itself didn't move.
-      if (action.why === "unchanged" && prior && (prior.intervalCount !== d.hours || prior.hourlyNormalCount === null)) {
+      // A rule change (a circuit switched between 24 and 12 hours, 2026-11-26)
+      // re-judges a day whose reading did not move — so a changed class, or a
+      // changed reason, is worth the write too.
+      const classMoved =
+        !!prior &&
+        (prior.dayClass !== hourClass.dayClass ||
+          prior.dayClassHoursExpected !== hourClass.hoursExpected ||
+          prior.dayClassHoursPresent !== hourClass.hoursPresent);
+      if (action.why === "unchanged" && prior && (prior.intervalCount !== d.hours || prior.hourlyNormalCount === null || classMoved)) {
         const wasAuto = prior.excludedReason?.startsWith(PARTIAL_REASON_PREFIX) ?? false;
         await db.meterReading.update({
           where: { id: prior.id },
@@ -341,7 +354,9 @@ export async function projectCircuitMonitoring(circuitId: string, actorId: strin
             dataHours: d.dataHours,
             ...dayClassData,
             ...hourlyData,
-            ...(partial && !overridden ? (prior.excludedAt ? {} : partialData) : wasAuto ? { excludedAt: null, excludedById: null, excludedReason: null } : {}),
+            // An automatic exclusion is restated under the new rule; one an
+            // operator made by hand is left alone.
+            ...(partial && !overridden ? (prior.excludedAt && !wasAuto ? {} : partialData) : wasAuto ? { excludedAt: null, excludedById: null, excludedReason: null } : {}),
           },
         });
       }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyDayHours, inferOperatingHours, MIN_SAMPLE_DAYS } from "@/lib/day-validity";
+import { classifyDayHours, inferOperatingHours, MIN_SAMPLE_DAYS, scheduleOf } from "@/lib/day-validity";
 
 const TODAY = new Date("2026-10-05T00:00:00Z");
 
@@ -91,5 +91,41 @@ describe("classifyDayHours", () => {
   it("no interval count at all on a non-hourly row reads as 0 present, not a thrown error", () => {
     const r = classifyDayHours({ hourlyPresent: null, intervalCount: null }, allDay);
     expect(r).toEqual({ dayClass: "partial", hoursExpected: 24, hoursPresent: 0 });
+  });
+});
+
+describe("12-hour circuits (2026-11-26)", () => {
+  const op = { hours: new Set<number>(), confident: false };
+  const day = (n: number) => Array.from({ length: 24 }, (_, i) => i < n);
+  it("is chosen by working hours of 12 or fewer", () => {
+    expect(scheduleOf(12)).toBe("half_day");
+    expect(scheduleOf(24)).toBe("full_day");
+    expect(scheduleOf(null)).toBe("full_day");
+  });
+  it("is valid from 8 to 15 hours with a reading", () => {
+    expect(classifyDayHours({ hourlyPresent: day(8), intervalCount: null }, op, "half_day").dayClass).toBe("complete");
+    expect(classifyDayHours({ hourlyPresent: day(15), intervalCount: null }, op, "half_day").dayClass).toBe("complete");
+    expect(classifyDayHours({ hourlyPresent: day(13), intervalCount: null }, op, "half_day").dayClass).toBe("complete");
+  });
+  it("is invalid below 8 or above 15, saying why", () => {
+    const low = classifyDayHours({ hourlyPresent: day(7), intervalCount: null }, op, "half_day");
+    expect(low.dayClass).toBe("partial");
+    expect(low.reason).toMatch(/needs at least 8/);
+    const high = classifyDayHours({ hourlyPresent: day(16), intervalCount: null }, op, "half_day");
+    expect(high.dayClass).toBe("partial");
+    expect(high.reason).toMatch(/more than 15/);
+  });
+  it("an uploaded row is judged on its hours with data, not its row count", () => {
+    expect(classifyDayHours({ hourlyPresent: null, intervalCount: 24, dataHours: 12 }, op, "half_day").dayClass).toBe("complete");
+  });
+  it("a 24-hour circuit keeps the old rule", () => {
+    expect(classifyDayHours({ hourlyPresent: day(23), intervalCount: null }, op, "full_day").dayClass).toBe("partial");
+  });
+});
+
+describe("12-hour circuits — unknown hours", () => {
+  it("an older uploaded row with only a row count is not judged", () => {
+    const op = { hours: new Set<number>(), confident: false };
+    expect(classifyDayHours({ hourlyPresent: null, intervalCount: 24 }, op, "half_day").dayClass).toBe("complete");
   });
 });

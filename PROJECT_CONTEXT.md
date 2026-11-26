@@ -9926,3 +9926,20 @@ follows); the separate "Correct the dates" button is gone; date checks compare e
 `changeOnlooker` (same correction authority, logged) with a Change control beside the onlooker — days awaiting review
 pass to the new onlooker. Note for CSS: rules placed beside `.tbl` land in a lower layer than the `.btn-*` rules, so a
 rule meant to override a button must sit beside the button rules.
+
+## 12-hour circuits: a day counts on 8 to 15 hours with a reading (2026-11-26) — user-specified
+
+The readings validation learned each circuit's working hours from its own history; nothing let anyone say a circuit
+runs 12 hours. `Circuit.workingHours` already held 24 or 12 (on production 24 at 24, 6 lift lobbies at 12, 23 unset),
+so it is the switch: `scheduleOf(workingHours)` — 12 or fewer is a 12-hour circuit. `classifyDayHours` (tested) judges a
+12-hour circuit on the hours that carried a reading: valid from 8 to 15, invalid below 8 (the meter missed most of it)
+or above 15 (lights ran when they should not have), with the reason in words on the automatic exclusion. A 24-hour or
+unset circuit keeps the learned rule unchanged. An older uploaded row whose hours-with-data are unknown (only its row
+count, 24 whether or not those hours read zero) is not judged. Applied by the meter projection, the monthly upload
+(now passing hours with data) and the backfill script. **A defect found by testing it:** re-projection skipped days
+whose reading had not changed, so a new rule never reached existing days — it now re-judges a day when its class,
+expected or present hours moved, and restates an automatic exclusion under the new rule (a hand exclusion is left
+alone). The live monitoring page has a 24-hour / 12-hour switch (operations lead, logged, re-checks the circuit's days
+at once); the registry's edit form re-checks them too when working hours change; the readings list labels an invalid
+12-hour day "Too few hours — 7h (12-hour circuit: 8–15)" / "Too many hours — 16h …". Verified on dev with 181 real
+hourly days: 24-hour 14 valid; 12-hour exactly the 2 days with 8–15 hours valid, 0 misclassified; back to 24 restores.

@@ -89,8 +89,11 @@ function statusRank(r: StoredReadingDTO): number {
 export function ReadingsExplorer({
   readings,
   canEdit = false,
+  halfDay = false,
 }: {
   readings: StoredReadingDTO[];
+  /** A 12-hour circuit — a day counts on 8 to 15 hours with a reading (2026-11-26). */
+  halfDay?: boolean;
   /** Offers the one correction this screen owns: post-hoc exclusion. */
   canEdit?: boolean;
 }) {
@@ -404,7 +407,11 @@ export function ReadingsExplorer({
                       {r.excluded && !r.validOverride && (
                         <span title={r.excludedReason ?? undefined} style={{ color: "var(--warn-fg)" }}>
                           {r.dayClass === "partial" && r.dayClassHoursExpected != null && r.dayClassHoursPresent != null
-                            ? `Partial — ${r.dayClassHoursPresent} of ${r.dayClassHoursExpected} hours`
+                            ? halfDay
+                              ? r.dayClassHoursPresent > 15
+                                ? `Too many hours — ${r.dayClassHoursPresent}h (12-hour circuit: 8–15)`
+                                : `Too few hours — ${r.dayClassHoursPresent}h (12-hour circuit: 8–15)`
+                              : `Partial — ${r.dayClassHoursPresent} of ${r.dayClassHoursExpected} hours`
                             : "Excluded"}
                         </span>
                       )}

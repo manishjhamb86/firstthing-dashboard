@@ -7,6 +7,9 @@ import { db } from "@/lib/db";
 import { refuseFullInstallationCount } from "@/lib/light-population";
 import { requireAdminPermission } from "@/lib/admin-permissions";
 import { logger } from "@/lib/logger";
+import { resolveAdmin } from "@/lib/admin-permissions";
+import { logChange } from "@/lib/change-log";
+import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
 
 // FEAT-040: circuit registry & configuration. Editing is PER-01-only
 // (FEAT-040-AC-4) — same "hold both permissions" proxy already established
@@ -121,6 +124,9 @@ export async function updateCircuitConfiguration(
     lightTypeChanged: input.lightType !== undefined,
     nameChanged: input.name !== undefined,
   });
+  // A change between a 24- and a 12-hour circuit changes which of its days
+  // are valid (2026-11-26) — re-check them now rather than on the next poll.
+  if (workingHoursChanged) await reprojectQuietly(circuitId, session.user.id);
   revalidatePath(`/admin/societies/${circuit.societyId}/circuits`);
   if (input.name !== undefined && circuit.siteSurveyId) {
     const survey = await db.siteSurvey.findUnique({ where: { id: circuit.siteSurveyId }, select: { pipelineId: true } });
@@ -131,4 +137,41 @@ export async function updateCircuitConfiguration(
     }
   }
   return {};
+}
+
+async function reprojectQuietly(circuitId: string, actorId: string) {
+  try {
+    await projectCircuitMonitoring(circuitId, actorId);
+  } catch (err) {
+    logger.error("circuit.schedule_reproject_failed", { circuitId, error: String(err) });
+  }
+}
+
+/**
+ * Mark a circuit as a 24-hour or a 12-hour circuit (2026-11-26, user-asked)
+ * — its working hours, which decide how a day's readings are validated: a
+ * 24-hour circuit by the hours it is expected to run, a 12-hour circuit on 8 to
+ * 15 hours with a reading. Its days are re-checked straight away. Operations
+ * lead only, as for every circuit configuration change; logged.
+ */
+export async function setCircuitSchedule(circuitId: string, hours: 24 | 12) {
+  const admin = await resolveAdmin();
+  if (!admin) return { error: "Your session has ended. Sign in again." };
+  if (!(admin.permissions.includes("manage_pipeline") && admin.permissions.includes("manage_survey"))) {
+    logger.warn("circuit.schedule_refused", { actorId: admin.id, circuitId });
+    return { error: "Changing a circuit's hours is an operations lead action." };
+  }
+  if (hours !== 24 && hours !== 12) return { error: "Choose 24 or 12 hours." };
+  const circuit = await db.circuit.findUnique({ where: { id: circuitId }, select: { workingHours: true, societyId: true, voidedAt: true } });
+  if (!circuit || circuit.voidedAt) return { error: "That circuit is no longer on record." };
+  if (circuit.workingHours === hours) return { ok: true as const };
+  await db.$transaction(async (tx) => {
+    await tx.circuit.update({ where: { id: circuitId }, data: { workingHours: hours, workingHoursEffectiveAt: new Date() } });
+    await logChange(tx, { entity: "circuit", entityId: circuitId, circuitId, kind: "edit", field: "workingHours", oldValue: circuit.workingHours, newValue: hours, reason: null, actorId: admin.id });
+  });
+  logger.info("circuit.schedule_set", { actorId: admin.id, circuitId, from: circuit.workingHours, to: hours });
+  await reprojectQuietly(circuitId, admin.id);
+  revalidatePath(`/admin/live-monitoring/${circuitId}`);
+  revalidatePath(`/admin/societies/${circuit.societyId}/circuits/${circuitId}`);
+  return { ok: true as const };
 }

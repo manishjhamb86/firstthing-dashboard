@@ -29,7 +29,7 @@
  */
 import "./load-env";
 import { db } from "../src/lib/db";
-import { classifyDayHours, inferOperatingHours } from "../src/lib/day-validity";
+import { classifyDayHours, inferOperatingHours, scheduleOf } from "../src/lib/day-validity";
 import { circuitHourlySamples, projectCircuitMonitoring } from "../src/lib/monitoring-projection";
 
 const dryRun = process.argv.includes("--dry-run");
@@ -76,9 +76,10 @@ async function main() {
       select: { meterId: true, installedAt: true, removedAt: true },
     });
     const operating = inferOperatingHours(await circuitHourlySamples(meterInstallations, now), now);
+    const schedule = scheduleOf((await db.circuit.findUnique({ where: { id: circuitId }, select: { workingHours: true } }))?.workingHours);
 
     for (const row of remaining) {
-      const hourClass = classifyDayHours({ hourlyPresent: null, intervalCount: row.intervalCount }, operating);
+      const hourClass = classifyDayHours({ hourlyPresent: null, intervalCount: row.intervalCount }, operating, schedule);
       await db.meterReading.update({
         where: { id: row.id },
         data: {

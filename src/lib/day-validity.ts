@@ -76,7 +76,27 @@ export function inferOperatingHours(
   return { hours, confident: true };
 }
 
-export type DayHourClass = { dayClass: "complete" | "partial"; hoursExpected: number; hoursPresent: number };
+export type DayHourClass = {
+  dayClass: "complete" | "partial";
+  hoursExpected: number;
+  hoursPresent: number;
+  /** Why a day is not valid, in words — set by the 12-hour rule. */
+  reason?: string;
+};
+
+/**
+ * The circuit's schedule (2026-11-26, user-specified), from its recorded
+ * working hours: a circuit set to 12 hours or fewer is a 12-hour circuit, valid
+ * on a day with 8 to 15 hours carrying a reading — fewer means the meter missed
+ * most of it, more means the lights ran when they should not have (or the
+ * readings are not this circuit's). Every other circuit keeps the 24-hour rule.
+ */
+export const HALF_DAY_MIN_HOURS = 8;
+export const HALF_DAY_MAX_HOURS = 15;
+export type ReadingSchedule = "full_day" | "half_day";
+export function scheduleOf(workingHours: number | null | undefined): ReadingSchedule {
+  return workingHours != null && workingHours > 0 && workingHours <= 12 ? "half_day" : "full_day";
+}
 
 /**
  * One day's completeness against the circuit's own expected hours.
@@ -84,12 +104,28 @@ export type DayHourClass = { dayClass: "complete" | "partial"; hoursExpected: nu
  * `hourlyPresent[h]` true means hour `h` carried a non-zero reading — only
  * available for a meter-projected day. A monthly-upload row carries no
  * per-hour breakdown, so it is judged by COUNT against the circuit's own
- * learned number of expected hours, not the specific mask.
+ * learned number of expected hours, not the specific mask. A 12-hour circuit
+ * is judged on the hours that carried a reading, whichever they were.
  */
 export function classifyDayHours(
-  input: { hourlyPresent: boolean[] | null; intervalCount: number | null },
+  input: { hourlyPresent: boolean[] | null; intervalCount: number | null; dataHours?: number | null },
   operating: OperatingHours,
+  schedule: ReadingSchedule = "full_day",
 ): DayHourClass {
+  if (schedule === "half_day") {
+    const known = input.hourlyPresent ? input.hourlyPresent.filter(Boolean).length : (input.dataHours ?? null);
+    // A row whose hours with data are unknown (an older upload stores only its
+    // row count, which is 24 whether or not the hours read zero) is not judged.
+    if (known === null) return { dayClass: "complete", hoursExpected: 12, hoursPresent: input.intervalCount ?? 0 };
+    const hoursPresent = known;
+    const reason =
+      hoursPresent < HALF_DAY_MIN_HOURS
+        ? `${hoursPresent} hours with a reading — a 12-hour circuit needs at least ${HALF_DAY_MIN_HOURS}`
+        : hoursPresent > HALF_DAY_MAX_HOURS
+          ? `${hoursPresent} hours with a reading — more than ${HALF_DAY_MAX_HOURS} for a 12-hour circuit`
+          : undefined;
+    return { dayClass: reason ? "partial" : "complete", hoursExpected: 12, hoursPresent, reason };
+  }
   if (input.hourlyPresent) {
     const expected = operating.confident ? [...operating.hours] : [...ALL_24_HOURS.hours];
     const hoursExpected = expected.length;

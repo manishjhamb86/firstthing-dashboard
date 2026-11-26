@@ -17,6 +17,8 @@ import {
 } from "@/lib/circuit-load";
 import { deriveBenchmark } from "@/lib/circuit-demos";
 import { ReadingsExplorer, type StoredReadingDTO } from "@/components/readings-explorer";
+import { scheduleOf } from "@/lib/day-validity";
+import { ScheduleSwitch } from "./schedule-switch";
 import { circuitMonitoringStart } from "@/lib/monitoring-projection";
 
 // Live monitoring for one circuit — the monthly readings that feed billing.
@@ -388,7 +390,8 @@ export default async function LiveMonitoringCircuitPage({
             {/* The readings are what this screen is FOR — they open at the
                 top, latest first, with the recording flow behind the header
                 button rather than a card pushing them below the fold. */}
-            <ReadingsExplorer readings={monitoringDays} canEdit={canIngest} />
+            <ScheduleSwitch circuitId={circuit.id} hours={circuit.workingHours} canEdit={canIngest} />
+            <ReadingsExplorer readings={monitoringDays} canEdit={canIngest} halfDay={scheduleOf(circuit.workingHours) === "half_day"} />
           </section>
         </>
       )}

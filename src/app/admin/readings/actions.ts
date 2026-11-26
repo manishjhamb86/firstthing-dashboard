@@ -17,7 +17,7 @@ import {
 } from "@/lib/reading-normalize";
 import { detectAnomalies } from "@/lib/reading-anomaly";
 import { coverageOf } from "@/lib/reading-coverage";
-import { classifyDayHours, inferOperatingHours } from "@/lib/day-validity";
+import { classifyDayHours, inferOperatingHours, scheduleOf } from "@/lib/day-validity";
 import { circuitHourlySamples } from "@/lib/monitoring-projection";
 
 const PATH = "/admin/readings";
@@ -392,12 +392,13 @@ export async function commitUpload(
     select: { meterId: true, installedAt: true, removedAt: true },
   });
   const operating = inferOperatingHours(await circuitHourlySamples(meterInstallations, now), now);
+  const schedule = scheduleOf((await db.circuit.findUnique({ where: { id: file.circuitId! }, select: { workingHours: true } }))?.workingHours);
 
   await db.$transaction(async (tx) => {
     for (const day of parsed.days) {
       const key = utcDayOf(day.date).getTime();
       const existing = storedByDay.get(key);
-      const hourClass = classifyDayHours({ hourlyPresent: null, intervalCount: day.intervalCount }, operating);
+      const hourClass = classifyDayHours({ hourlyPresent: null, intervalCount: day.intervalCount, dataHours: day.dataHours }, operating, schedule);
       // Meter wins (2026-09-26): a day the circuit's meter covers keeps the
       // meter's figure, and this upload's value is kept beside it, never lost.
       const action = mergeMonitoringDay(

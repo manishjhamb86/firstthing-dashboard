@@ -261,23 +261,9 @@ export default async function WorkCompletionCertificatePage({
                     )}
                   </tbody>
                   <tfoot>
-                    {/* Full installation + the demo's lights = everything in
-                        (2026-11-26, user-asked). */}
                     <tr>
-                      <td colSpan={showArea ? 3 : 2}>Full installation</td>
-                      <td className="num" style={{ textAlign: "right" }}>{n(tally.installed)}</td>
-                      {showReviews && <td />}
-                    </tr>
-                    {tally.demo > 0 && (
-                      <tr>
-                        <td colSpan={showArea ? 3 : 2}>Demo lights</td>
-                        <td className="num" style={{ textAlign: "right" }}>{n(tally.demo)}</td>
-                        {showReviews && <td />}
-                      </tr>
-                    )}
-                    <tr>
-                      <td colSpan={showArea ? 3 : 2} className="font-semibold">Total installed</td>
-                      <td className="num font-semibold" style={{ textAlign: "right" }}>{n(tally.totalInstalled)}</td>
+                      <td colSpan={showArea ? 3 : 2} className="font-semibold">Full installation total</td>
+                      <td className="num font-semibold" style={{ textAlign: "right" }}>{n(tally.installed)}</td>
                       {showReviews && <td />}
                     </tr>
                   </tfoot>
@@ -285,9 +271,12 @@ export default async function WorkCompletionCertificatePage({
               </div>
             </section>
 
-            {phaseRows.length > 1 ? (
+            {phaseRows.length > 1 || (tally.demo > 0 && phaseRows.length > 0) ? (
               <section className="mt-6">
-                <h2 className="text-[15px] font-semibold">Completed in {phaseRows.length} phases</h2>
+                <h2 className="text-[15px] font-semibold">
+                  {phaseRows.length > 1 ? `Completed in ${phaseRows.length} phases` : "Completed"}
+                  {tally.demo > 0 ? ", after the demo" : ""}
+                </h2>
                 <div className="print-table-scroll mt-2">
                   <table className="tbl tbl-compact">
                     <thead>
@@ -301,12 +290,25 @@ export default async function WorkCompletionCertificatePage({
                       </tr>
                     </thead>
                     <tbody>
+                      {/* The demo's lights went in first and are billed from
+                          phase 1's start (2026-11-26, user-asked); totals and
+                          sign-off belong to the phases. */}
+                      {tally.demo > 0 && (
+                        <tr>
+                          <td className="whitespace-nowrap">Demo</td>
+                          <td className="num" style={{ textAlign: "right" }}>{n(tally.demo)}</td>
+                          <td />
+                          <td />
+                          <td />
+                          <td className="num whitespace-nowrap">{phaseRows[0] ? formatDate(phaseRows[0].rec.billingStartDate) : "—"}</td>
+                        </tr>
+                      )}
                       {phaseRows.map((f, i) => (
                         <tr key={f.number}>
-                          <td className="whitespace-nowrap">{f.isFinal ? `Phase ${f.number} (final)` : `Phase ${f.number}`}</td>
+                          <td className="whitespace-nowrap">{f.isFinal ? (phaseRows.length > 1 ? `Phase ${f.number} (final)` : "Full installation") : `Phase ${f.number}`}</td>
                           {/* This phase's own lights (phase 1 carries the demo's), then the running total. */}
                           <td className="num" style={{ textAlign: "right" }}>
-                            {n(i === 0 ? f.derived + tally.demo : f.derived - phaseRows[i - 1].derived)}
+                            {n(i === 0 ? f.derived : f.derived - phaseRows[i - 1].derived)}
                           </td>
                           <td className="num" style={{ textAlign: "right" }}>{n(f.derived + tally.demo)}</td>
                           <td className="num" style={{ textAlign: "right" }}>{n(f.cumulative + tally.demo)}</td>

@@ -5,7 +5,8 @@ import { formatDate, monthLabel } from "@/lib/format-date";
 import { PURPOSE_LABEL } from "@/lib/customer-visits";
 import { istToday, loadVisitBoard, type BoardRow } from "@/lib/customer-visits-loader";
 import { MonthPicker, recentMonths, validPeriod } from "@/app/admin/billing/close/close-ui";
-import { MonthStateChip } from "./visit-ui";
+import { db } from "@/lib/db";
+import { MonthStateChip, VisitStatusChip } from "./visit-ui";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Customer visits" };
@@ -18,8 +19,18 @@ const VIEWS = [
 ] as const;
 type View = (typeof VIEWS)[number]["id"];
 
+/** A visit of any purpose still waiting for someone to approve it. */
+const waitingVisit = (r: BoardRow) =>
+  r.feedback?.status === "pending" ? r.feedback : (r.others.find((o) => o.status === "pending") ?? null);
+
 const inView = (r: BoardRow, v: View) =>
-  v === "all" ? true : v === "done" ? r.state === "approved" : v === "pending" ? r.state === "pending" : r.state === "missing" || r.state === "sent_back";
+  v === "all"
+    ? true
+    : v === "done"
+      ? r.state === "approved"
+      : v === "pending"
+        ? waitingVisit(r) !== null
+        : r.state === "missing" || r.state === "sent_back";
 
 /**
  * Customer visits (2026-11-18, user-specified): every billing society's
@@ -36,6 +47,12 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
   const board = await loadVisitBoard(period);
   const rows = board.rows.filter((r) => inView(r, view));
   const canApprove = actor?.permissions.includes("approve_visits") ?? false;
+  // Who can approve: shown when visits wait and this viewer cannot act on
+  // them, so "waiting" never reads as a step with no route (2026-11-26).
+  const approvers =
+    board.counts.waiting > 0 && !canApprove
+      ? await db.adminUser.findMany({ where: { isActive: true, permissions: { has: "approve_visits" } }, select: { name: true, email: true } })
+      : [];
   const q = (v: View) => `/admin/visits?period=${period}${v === "all" ? "" : `&view=${v}`}`;
 
   return (
@@ -53,7 +70,11 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
 
       <StatRow>
         <Stat label="Feedback visits approved" value={`${board.counts.approved} of ${board.counts.societies}`} />
-        <Stat label="Waiting for approval" value={board.counts.waiting} detail={canApprove && board.counts.waiting > 0 ? "Review them in Visit approvals" : undefined} />
+        <Stat
+          label="Waiting for approval"
+          value={board.counts.waiting}
+          detail={board.counts.waiting > 0 ? (canApprove ? "Review them below or in Visit approvals" : "Needs an admin with Approve visits") : undefined}
+        />
         <Stat
           label="No feedback visit yet"
           value={board.counts.missing}
@@ -66,6 +87,36 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
           detail={`${board.counts.leads} upsell lead${board.counts.leads === 1 ? "" : "s"}${board.counts.averageRating !== null ? ` · rating ${board.counts.averageRating.toFixed(1)} / 5` : ""}`}
         />
       </StatRow>
+
+      {board.counts.waiting > 0 && (
+        <div className="card mt-5 flex flex-wrap items-center justify-between gap-3 p-4">
+          <p className="text-[14px]">
+            {canApprove ? (
+              <>
+                <span className="font-semibold">{board.counts.waiting} visit{board.counts.waiting === 1 ? "" : "s"} waiting for your approval.</span>{" "}
+                <span className="text-[var(--text-muted)]">A visit counts only once someone other than the person who logged it approves it.</span>
+              </>
+            ) : approvers.length > 0 ? (
+              <>
+                <span className="font-semibold">{board.counts.waiting} visit{board.counts.waiting === 1 ? "" : "s"} waiting for approval</span>{" "}
+                <span className="text-[var(--text-muted)]">by {approvers.map((a) => a.name ?? a.email).join(", ")}.</span>
+              </>
+            ) : (
+              <>
+                <span className="font-semibold">No one can approve visits yet.</span>{" "}
+                <span className="text-[var(--text-muted)]">
+                  Give the &ldquo;Approve visits&rdquo; permission to whoever should sign them off, in Settings → Admin users. It cannot be the person who logged the visit.
+                </span>
+              </>
+            )}
+          </p>
+          {canApprove ? (
+            <Link href="/admin/visits/approvals" className="btn-primary">Review visits</Link>
+          ) : approvers.length === 0 && actor?.permissions.includes("manage_admins") ? (
+            <Link href="/admin/users" className="btn-secondary">Admin users</Link>
+          ) : null}
+        </div>
+      )}
 
       <section className="card mt-5 overflow-hidden">
         <div className="flex flex-wrap gap-2 border-b border-[var(--border)] p-4" role="group" aria-label="Filter societies">
@@ -119,19 +170,41 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                       </div>
                     </td>
                     <td className="text-[13px]">
-                      {r.others.length === 0 ? "—" : `${r.others.length} · ${[...new Set(r.others.map((o) => PURPOSE_LABEL[o.purpose].toLowerCase()))].join(", ")}`}
+                      {r.others.length === 0 ? (
+                        "—"
+                      ) : (
+                        <ul className="flex flex-col gap-1.5">
+                          {r.others.map((o) => (
+                            <li key={o.id} className="flex flex-wrap items-center gap-2">
+                              <Link href={`/admin/visits/${o.id}`} className="underline underline-offset-2">
+                                {PURPOSE_LABEL[o.purpose]} · {formatDate(o.visitedAt)}
+                              </Link>
+                              <VisitStatusChip status={o.status} />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </td>
                     <td className="num text-[13px]">{r.lastVisitAt ? formatDate(r.lastVisitAt) : "Never"}</td>
                     <td style={{ textAlign: "right" }}>
-                      {r.feedback ? (
-                        <Link href={`/admin/visits/${r.feedback.id}`} className="btn-secondary" style={{ display: "inline-flex", minHeight: 40, alignItems: "center" }}>
-                          {r.state === "pending" && canApprove ? "Review" : "Open"}
-                        </Link>
-                      ) : (
-                        <Link href={`/admin/visits/new?societyId=${r.societyId}`} className="btn-secondary" style={{ display: "inline-flex", minHeight: 40, alignItems: "center" }}>
-                          Log a visit
-                        </Link>
-                      )}
+                      {(() => {
+                        // One action per row, and only when there is something
+                        // to act on: logging a visit is the header's button.
+                        const w = waitingVisit(r);
+                        if (w && canApprove)
+                          return (
+                            <Link href={`/admin/visits/${w.id}`} className="btn-secondary" style={{ display: "inline-flex", minHeight: 40, alignItems: "center" }}>
+                              Review
+                            </Link>
+                          );
+                        if (r.feedback)
+                          return (
+                            <Link href={`/admin/visits/${r.feedback.id}`} className="btn-secondary" style={{ display: "inline-flex", minHeight: 40, alignItems: "center" }}>
+                              Open
+                            </Link>
+                          );
+                        return null;
+                      })()}
                     </td>
                   </tr>
                 ))}

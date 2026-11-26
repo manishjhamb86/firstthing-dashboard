@@ -628,6 +628,12 @@ textarea.field {
   background: transparent;
   color: var(--accent);
 }
+/* The installation Days table's row menu (2026-11-26): its actions read as a
+   left-aligned list, not centred buttons. Beside the button rules so it wins. */
+.row-menu > span.inline-flex, .row-menu > span { display: flex; flex-direction: column; align-items: stretch; gap: 2px; }
+.row-menu.row-menu button, .row-menu.row-menu .btn-ghost { display: flex; justify-content: flex-start; text-align: left; width: 100%; white-space: nowrap; margin: 0; padding: 8px 10px; border-radius: var(--r-sm); }
+.row-menu.row-menu button:hover { background: var(--surface-hover); }
+.row-menu form { min-width: 320px; }
 .btn-ghost:hover:not(:disabled) {
   background: var(--accent-subtle);
 }
@@ -890,7 +896,8 @@ textarea.field {
 .tbl tbody tr.phase-band td { background: var(--accent-subtle); color: var(--accent-ink, var(--text)); font-size: 13px; font-weight: 600; padding: 8px 14px; border-bottom: 1px solid var(--accent-line); }
 .tbl tbody tr.phase-band:hover { background: transparent; }
 .tbl.days-table { table-layout: fixed; min-width: 960px; }
-.tbl.days-table td { overflow-wrap: anywhere; }
+.tbl.days-table td { overflow-wrap: anywhere; vertical-align: middle; }
+.tbl.days-table tr.day-details td { background: var(--surface-sunken, var(--card2, transparent)); }
 
 /* The Stock page's batch listing (2026-11-20, user-caught "distorted"): one
    line per batch at any width — a narrow screen scrolls the table, never

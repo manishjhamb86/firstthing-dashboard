@@ -548,15 +548,15 @@ export function PlannedDayActions({
         {logged ? "Planned date" : "Correct the date"}
       </button>
       <button type="button" className="btn-ghost btn-sm" onClick={() => { setCount(String(plannedCount)); setOpen("count"); }}>
-        {logged ? "Planned" : "Correct the count"}
+        {logged ? "Planned count" : "Correct the count"}
       </button>
       {logged && (
         <button type="button" className="btn-ghost btn-sm" onClick={() => { setInstalled(String(logged.installedCount)); setOpen("installed"); }}>
-          Installed
+          Installed count
         </button>
       )}
-      <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen("delete")}>
-        Delete
+      <button type="button" className="btn-ghost btn-sm" style={{ color: "var(--bad-fg)" }} onClick={() => setOpen("delete")}>
+        Delete day
       </button>
 
       {logged && (

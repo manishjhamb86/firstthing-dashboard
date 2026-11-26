@@ -413,6 +413,36 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     ].filter(Boolean).join(" · ");
   };
 
+  // A phase's band (2026-11-26): what was signed off — or, for the phase in
+  // progress, the two sign-offs, closing it at its latest logged day.
+  const phaseBand = (n: number) => {
+    const open = n === phaseRecords.length + 1;
+    return (
+      <tr key={`band-${n}`} className="phase-band">
+        <td colSpan={9}>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <span>{describePhase(n)}</span>
+            {open && signoffDay !== null && isOps && (
+              <span className="inline-flex flex-wrap items-center gap-2 font-normal">
+                <span className="text-[12px] text-[var(--text-muted)]">At day {signoffDay}:</span>
+                <PhaseSignoffControl
+                  pipelineId={pipeline.id}
+                  throughDay={signoffDay}
+                  phaseNumber={n}
+                  canClosePhase={n < MAX_PHASES}
+                  workedOn={(loggedBatches.filter((b) => b.day === signoffDay).map((b) => b.submittedAt!).sort((x, y) => y.getTime() - x.getTime())[0] ?? new Date()).toISOString().slice(0, 10)}
+                  today={todayIso}
+                  loggedSoFar={loggedThrough(phaseDays, signoffDay)}
+                  demoLights={alreadyInstalled}
+                />
+              </span>
+            )}
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <>
       {header}
@@ -514,8 +544,9 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                 <col style={{ width: 96 }} />
                 <col style={{ width: 96 }} />
                 <col style={{ width: 96 }} />
-                <col style={{ width: 140 }} />
-                <col style={{ width: 160 }} />
+                <col style={{ width: 130 }} />
+                <col style={{ width: 130 }} />
+                <col style={{ width: 150 }} />
               </colgroup>
               <thead>
                 <tr>
@@ -527,6 +558,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   <th>Photos</th>
                   <th>Society</th>
                   <th>Can start</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -534,7 +566,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   // INV-06 — every list surface defines its empty state. This
                   // one rendered a header row over nothing at all.
                   <tr>
-                    <td colSpan={8} className="text-[var(--text-muted)]">
+                    <td colSpan={9} className="text-[var(--text-muted)]">
                       No days planned yet — publish a batch plan and each day appears here with its
                       review gate.
                     </td>
@@ -559,11 +591,11 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   const thisPhase = phaseOfDay(dayNo, phaseRecords);
                   const prevPhase = rowIndex === 0 ? 0 : phaseOfDay(dayOf(all[rowIndex - 1]), phaseRecords);
                   const bands =
-                    phaseRecords.length > 0 && thisPhase !== prevPhase
+                    (phaseRecords.length > 0 || signoffDay !== null) && thisPhase !== prevPhase
                       ? Array.from({ length: thisPhase - prevPhase }, (_, k) => prevPhase + 1 + k)
                       : [];
                   const trailing =
-                    rowIndex === all.length - 1 && phaseRecords.length > 0
+                    rowIndex === all.length - 1 && (phaseRecords.length > 0 || signoffDay !== null)
                       ? phaseRecords.map((ph) => ph.number).filter((n) => n > thisPhase)
                       : [];
                   const gate = d ? dayGates.get(d.day)! : null;
@@ -571,13 +603,16 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   const batchMeta = batch ? statusMeta(BATCH_STATE, batch.state) : null;
                   const logged = batch && batch.state !== "draft" ? batch : null;
                   const photos = (logged?.photoKeys as string[] | null) ?? [];
-                  const actions = [
+                  const primary = [
                     d && !batch && isField && gate!.canStart && (
                       <StartBatchButton key="start" pipelineId={pipeline.id} plannedDayId={d.id} />
                     ),
                     d && !batch && gate && !gate.canStart && (gate.outstanding.length > 0 || gate.disputed.length > 0) && isOps && !project.gateSkipUsedAt && (
                       <SkipGateForm key="skip" pipelineId={pipeline.id} plannedDayId={d.id} />
                     ),
+                    logged?.state === "disputed" && isField && <ReopenBatchControl key="reopen" pipelineId={pipeline.id} batchId={logged.id} />,
+                  ].filter(Boolean);
+                  const menuItems = [
                     d && canCorrectDates && (
                       <PlannedDayActions
                         key="plan"
@@ -600,20 +635,6 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                         approvedOn={logged.review?.reviewedAt.toISOString().slice(0, 10) ?? null}
                         today={todayIso}
                         live={!demoMode}
-                      />
-                    ),
-                    logged?.state === "disputed" && isField && <ReopenBatchControl key="reopen" pipelineId={pipeline.id} batchId={logged.id} />,
-                    logged?.submittedAt && dayNo === signoffDay && isOps && (
-                      <PhaseSignoffControl
-                        key="phase"
-                        pipelineId={pipeline.id}
-                        throughDay={dayNo}
-                        phaseNumber={phaseRecords.length + 1}
-                        canClosePhase={phaseRecords.length + 1 < MAX_PHASES}
-                        workedOn={logged.submittedAt.toISOString().slice(0, 10)}
-                        today={todayIso}
-                        loggedSoFar={loggedThrough(phaseDays, dayNo)}
-                        demoLights={alreadyInstalled}
                       />
                     ),
                   ].filter(Boolean);
@@ -655,11 +676,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     ) : null;
                   return (
                     <Fragment key={d?.id ?? batch!.id}>
-                      {bands.map((n) => (
-                        <tr key={`band-${n}`} className="phase-band">
-                          <td colSpan={8}>{describePhase(n)}</td>
-                        </tr>
-                      ))}
+                      {bands.map((n) => phaseBand(n))}
                       <DayRow
                         day={dayNo}
                         cells={
@@ -692,15 +709,12 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                         <td>{gateMeta ? <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip> : "—"}</td>
                           </>
                         }
-                        actions={actions.length > 0 ? <div className="flex flex-wrap items-start gap-x-3 gap-y-1">{actions}</div> : null}
+                        primary={primary.length > 0 ? <>{primary}</> : null}
+                        menu={menuItems.length > 0 ? <>{menuItems}</> : null}
                         details={info}
                         note={gate?.reason ? <p className="text-[13px] text-[var(--text-muted)]">{gate.reason}</p> : null}
                       />
-                      {trailing.map((n) => (
-                        <tr key={`band-${n}`} className="phase-band">
-                          <td colSpan={8}>{describePhase(n)}</td>
-                        </tr>
-                      ))}
+                      {trailing.map((n) => phaseBand(n))}
                     </Fragment>
                   );
                 })}

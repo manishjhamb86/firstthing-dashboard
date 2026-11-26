@@ -391,18 +391,25 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   const signoffDay = finished
     ? null
     : (loggedBatches.map((b) => b.day).filter((x) => x >= openFrom).sort((x, y) => y - x)[0] ?? null);
+  // Two figures per phase (2026-11-26, user-caught): the lights INSTALLED by
+  // then (the logged days, demo in phase 1) and the lights BILLED from then
+  // (the signed-off count). They differ when a sign-off bills fewer than were
+  // in — ATS One Hamlet: 1,048 installed, billing started on 1,000.
+  const phaseInstalled = (f: (typeof figures)[number]) => f.derived + alreadyInstalled;
+  const phaseBilled = (f: (typeof figures)[number]) => f.cumulative + alreadyInstalled;
   const describePhase = (n: number): string => {
     const f = figures.find((x) => x.number === n);
     const rec = project.phases.find((x) => x.number === n);
     if (!f || !rec) return `Phase ${n} — in progress`;
-    const total = f.cumulative + alreadyInstalled;
-    const added = n === 1 ? total : f.added;
+    const installed = phaseInstalled(f);
+    const billed = phaseBilled(f);
     return [
       `Phase ${n}${f.isFinal ? " — the full installation" : " complete"}`,
-      `${total.toLocaleString("en-IN")} lights in total${n > 1 ? ` (+${added.toLocaleString("en-IN")} this phase)` : ""}${f.lightsOverride !== null ? ` — as signed off; the logged days show ${(f.derived + alreadyInstalled).toLocaleString("en-IN")}` : ""}`,
+      `${installed.toLocaleString("en-IN")} lights installed`,
+      billed === installed ? null : `billing on ${billed.toLocaleString("en-IN")}`,
       `signed off ${day(rec.signedAt)} by ${rec.signatoryName} (${rec.signatoryRole})`,
-      `billing for these lights from ${day(rec.billingStartDate)}`,
-    ].join(" · ");
+      `billing from ${day(rec.billingStartDate)}`,
+    ].filter(Boolean).join(" · ");
   };
 
   return (
@@ -856,6 +863,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       <th>Phase</th>
                       <th>Days</th>
                       <th>Lights installed</th>
+                      <th>Lights billed</th>
                       <th>Signed off</th>
                       <th>Billing for these lights from</th>
                       {canCorrectDates && <th />}
@@ -865,24 +873,29 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     {figures.map((f, i) => {
                       const rec = project.phases.find((x) => x.number === f.number)!;
                       const prevThrough = i === 0 ? 0 : figures[i - 1].throughDay;
-                      const total = f.cumulative + alreadyInstalled;
                       return (
                         <tr key={f.number}>
                           <td className="font-semibold">
                             {f.isFinal ? `Phase ${f.number} — full installation` : `Phase ${f.number}`}
                           </td>
-                          <td className="num">
+                          <td className="num whitespace-nowrap">
                             {f.throughDay === prevThrough ? `rest of day ${f.throughDay}` : prevThrough + 1 === f.throughDay ? `day ${f.throughDay}` : `days ${prevThrough + 1}–${f.throughDay}`}
                           </td>
                           <td>
-                            <span className="num">{total.toLocaleString("en-IN")}</span>
+                            <span className="num">{phaseInstalled(f).toLocaleString("en-IN")}</span>
                             <span className="block text-[12px] text-[var(--text-muted)]">
                               {f.number === 1
                                 ? alreadyInstalled > 0
-                                  ? `${f.cumulative.toLocaleString("en-IN")} + ${alreadyInstalled} demo`
-                                  : "full installation"
-                                : `+${f.added.toLocaleString("en-IN")} this phase`}
-                              {f.lightsOverride !== null && ` · as signed off (logged days: ${(f.derived + alreadyInstalled).toLocaleString("en-IN")})`}
+                                  ? `${f.derived.toLocaleString("en-IN")} + ${alreadyInstalled} demo`
+                                  : "from the logged days"
+                                : `+${(f.derived - figures[i - 1].derived).toLocaleString("en-IN")} this phase`}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="num">{phaseBilled(f).toLocaleString("en-IN")}</span>
+                            <span className="block text-[12px] text-[var(--text-muted)]">
+                              {f.lightsOverride !== null ? "as signed off" : "all installed"}
+                              {f.number > 1 && ` · +${f.added.toLocaleString("en-IN")} from phase ${f.number - 1}`}
                             </span>
                           </td>
                           <td>

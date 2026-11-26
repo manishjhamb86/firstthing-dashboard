@@ -1344,16 +1344,16 @@ export function PhaseSignoffControl({
           </div>
           <div className="rounded-[var(--r-md)] border border-[var(--border)] p-3 text-sm">
             <p>
-              Lights installed so far: <strong className="num">{withDemo.toLocaleString("en-IN")}</strong>
-              {phaseNumber === 1 && demoLights > 0 ? ` (${lights.toLocaleString("en-IN")} full installation + ${demoLights} demo)` : " (full installation)"}
-              {!override && " — from the logged days"}
+              Lights installed so far: <strong className="num">{(loggedSoFar + (phaseNumber === 1 ? demoLights : 0)).toLocaleString("en-IN")}</strong>
+              {phaseNumber === 1 && demoLights > 0 ? ` (${loggedSoFar.toLocaleString("en-IN")} + ${demoLights} demo)` : ""}
+              {" · "}billing on <strong className="num">{withDemo.toLocaleString("en-IN")}</strong>
             </p>
             <label className="mt-2 flex items-center gap-2">
               <input type="checkbox" checked={override} onChange={(e) => { setOverride(e.target.checked); setCount(String(loggedSoFar)); }} />
-              The sign-off states a different count
+              Billing starts on fewer lights than installed
             </label>
             {override && (
-              <Field label="Full-installation lights installed so far (excluding demo)" htmlFor="ph-count">
+              <Field label="Lights billed — full installation, excluding demo" htmlFor="ph-count">
                 <input id="ph-count" className="field" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} required />
               </Field>
             )}
@@ -1736,20 +1736,21 @@ export function CorrectPhaseControl({
           <div className="rounded-[var(--r-md)] border border-[var(--border)] p-3 text-sm space-y-2">
             <label className="flex items-center gap-2">
               <input type="radio" checked={useLogged} onChange={() => setUseLogged(true)} />
-              From the logged days: {loggedCount.toLocaleString("en-IN")} full installation
+              Bill all installed: {loggedCount.toLocaleString("en-IN")} full installation
             </label>
             <label className="flex items-center gap-2">
               <input type="radio" checked={!useLogged} onChange={() => setUseLogged(false)} />
-              As signed off
+              Bill a different number, as signed off
             </label>
             {!useLogged && (
-              <Field label="Full-installation lights installed by this phase (excluding demo)" htmlFor={`pc-count-${number}`}>
+              <Field label="Lights billed — full installation, excluding demo" htmlFor={`pc-count-${number}`}>
                 <input id={`pc-count-${number}`} className="field" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} required />
               </Field>
             )}
             <p className="text-[var(--text-muted)]">
-              Phase {number} then shows <strong className="num">{shown.toLocaleString("en-IN")}</strong> lights
-              {number === 1 && demoLights > 0 ? ` (including the ${demoLights} demo lights)` : ""}.
+              Phase {number} then bills <strong className="num">{shown.toLocaleString("en-IN")}</strong> lights
+              {number === 1 && demoLights > 0 ? ` (including the ${demoLights} demo lights)` : ""}; lights installed stay{" "}
+              {(loggedCount + (number === 1 ? demoLights : 0)).toLocaleString("en-IN")}.
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">

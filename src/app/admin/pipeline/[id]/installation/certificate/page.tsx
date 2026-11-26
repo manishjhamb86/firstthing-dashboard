@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
@@ -189,35 +190,61 @@ export default async function WorkCompletionCertificatePage({
             <section className="mt-6">
               <h2 className="text-[15px] font-semibold">Full installation, day by day</h2>
               <div className="print-table-scroll mt-2">
-                <table className="tbl tbl-compact">
+                <table className="tbl tbl-compact wcc-days">
                   <thead>
                     <tr>
-                      <th>Day</th>
-                      <th>Date</th>
+                      <th style={{ width: 44 }}>Day</th>
+                      <th style={{ width: 112 }}>Date</th>
                       <th>Area</th>
-                      <th style={{ textAlign: "right" }}>Lights installed</th>
-                      {showReviews && <th>Reviewed and signed off by</th>}
+                      <th style={{ textAlign: "right", width: 64 }}>Lights</th>
+                      {showReviews && <th style={{ width: 170 }}>Signed off by</th>}
                     </tr>
                   </thead>
                   <tbody>
-                    {project.batches.map((b) => (
-                      <tr key={b.id}>
-                        <td className="num">{b.day}</td>
-                        <td className="num">{formatDate(b.submittedAt)}</td>
-                        <td>
-                          {b.areaKey}
-                          {b.locationDetail ? <span className="text-[var(--text-muted)]"> · {b.locationDetail}</span> : null}
-                        </td>
-                        <td className="num" style={{ textAlign: "right" }}>{n(b.installedCount)}</td>
-                        {showReviews && (
-                          <td>
-                            {b.review
-                              ? `${b.review.decision === "approved" ? "" : "Disputed — "}${b.review.reviewedBy.name ?? b.review.reviewedBy.email}, ${formatDate(b.review.reviewedAt)}`
-                              : "—"}
-                          </td>
-                        )}
-                      </tr>
-                    ))}
+                    {project.batches.map((b, i) => {
+                      // A detail that only repeats the area adds nothing
+                      // (2026-11-26, user-caught: "basement · basement").
+                      const detail = b.locationDetail?.trim();
+                      const showDetail = !!detail && detail.toLowerCase() !== b.areaKey.trim().toLowerCase();
+                      const phase = phaseRows.length > 1 ? phaseRows.find((f) => b.day <= f.throughDay) : null;
+                      const prev = i > 0 ? project.batches[i - 1] : null;
+                      const startsPhase = phase && (!prev || !(prev.day <= phase.throughDay && (phaseRows.find((f) => prev.day <= f.throughDay)?.number === phase.number)));
+                      return (
+                        <Fragment key={b.id}>
+                          {startsPhase && (
+                            <tr className="phase-band">
+                              <td colSpan={showReviews ? 5 : 4}>
+                                Phase {phase.number}{phase.isFinal ? " — full installation" : ""} · signed off {formatDate(phase.rec.signedAt)}
+                              </td>
+                            </tr>
+                          )}
+                          <tr>
+                            <td className="num">{b.day}</td>
+                            <td className="num whitespace-nowrap">{formatDate(b.submittedAt)}</td>
+                            <td>
+                              {b.areaKey}
+                              {showDetail && <span className="block text-[12px] leading-snug text-[var(--text-muted)]">{detail}</span>}
+                            </td>
+                            <td className="num" style={{ textAlign: "right" }}>{n(b.installedCount)}</td>
+                            {showReviews && (
+                              <td>
+                                {b.review ? (
+                                  <>
+                                    <span className="block">
+                                      {b.review.decision === "approved" ? "" : "Disputed — "}
+                                      {b.review.reviewedBy.name ?? b.review.reviewedBy.email}
+                                    </span>
+                                    <span className="num block whitespace-nowrap text-[12px] text-[var(--text-muted)]">{formatDate(b.review.reviewedAt)}</span>
+                                  </>
+                                ) : (
+                                  "—"
+                                )}
+                              </td>
+                            )}
+                          </tr>
+                        </Fragment>
+                      );
+                    })}
                     {project.batches.length === 0 && (
                       <tr><td colSpan={showReviews ? 5 : 4} className="text-[var(--text-muted)]">No days logged.</td></tr>
                     )}
@@ -241,18 +268,23 @@ export default async function WorkCompletionCertificatePage({
                     <thead>
                       <tr>
                         <th>Phase</th>
-                        <th style={{ textAlign: "right" }}>Lights installed by then</th>
+                        <th style={{ textAlign: "right" }}>Installed</th>
+                        <th style={{ textAlign: "right" }}>Billed</th>
                         <th>Signed off</th>
-                        <th>Billing for these lights from</th>
+                        <th>Billing from</th>
                       </tr>
                     </thead>
                     <tbody>
                       {phaseRows.map((f) => (
                         <tr key={f.number}>
-                          <td>{f.isFinal ? `Phase ${f.number} — full installation` : `Phase ${f.number}`}</td>
+                          <td className="whitespace-nowrap">{f.isFinal ? `Phase ${f.number} (final)` : `Phase ${f.number}`}</td>
+                          <td className="num" style={{ textAlign: "right" }}>{n(f.derived + tally.demo)}</td>
                           <td className="num" style={{ textAlign: "right" }}>{n(f.cumulative + tally.demo)}</td>
-                          <td>{formatDate(f.rec.signedAt)} · {f.rec.signatoryName} ({f.rec.signatoryRole})</td>
-                          <td className="num">{formatDate(f.rec.billingStartDate)}</td>
+                          <td>
+                            <span className="num block whitespace-nowrap">{formatDate(f.rec.signedAt)}</span>
+                            <span className="block text-[12px] text-[var(--text-muted)]">{f.rec.signatoryName}, {f.rec.signatoryRole}</span>
+                          </td>
+                          <td className="num whitespace-nowrap">{formatDate(f.rec.billingStartDate)}</td>
                         </tr>
                       ))}
                     </tbody>

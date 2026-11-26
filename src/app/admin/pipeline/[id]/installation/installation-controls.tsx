@@ -1725,7 +1725,7 @@ export function CorrectPhaseControl({
                 lightsOverride: useLogged ? null : Number(count),
                 signatoryName: name,
                 signatoryRole: role,
-                signedAt: number > 1 ? on : undefined,
+                signedAt: on,
                 reason,
               });
               if (r && "error" in r) setError(r.error);
@@ -1754,11 +1754,9 @@ export function CorrectPhaseControl({
             </p>
           </div>
           <div className="grid gap-3 sm:grid-cols-3">
-            {number > 1 && (
-              <Field label="Signed off on" htmlFor={`pc-on-${number}`}>
-                <input id={`pc-on-${number}`} className="field" type="date" max={today} value={on} onChange={(e) => setOn(e.target.value)} required />
-              </Field>
-            )}
+            <Field label="Signed off on" htmlFor={`pc-on-${number}`}>
+              <input id={`pc-on-${number}`} className="field" type="date" max={today} value={on} onChange={(e) => setOn(e.target.value)} required />
+            </Field>
             <Field label="Signed off by (society)" htmlFor={`pc-name-${number}`}>
               <input id={`pc-name-${number}`} className="field" value={name} onChange={(e) => setName(e.target.value)} required />
             </Field>
@@ -1766,7 +1764,11 @@ export function CorrectPhaseControl({
               <input id={`pc-role-${number}`} className="field" value={role} onChange={(e) => setRole(e.target.value)} required />
             </Field>
           </div>
-          {number === 1 && <p className="text-[13px] text-[var(--text-muted)]">Phase 1&apos;s date moves with the certificate, under &ldquo;Correct the dates&rdquo;.</p>}
+          {number === 1 && on !== signedOn && (
+            <p className="text-[13px] text-[var(--text-muted)]">
+              Phase 1&apos;s date is the deal&apos;s first billing day — billing will start {formatDate(prorateFirstMonth(new Date(`${on}T00:00:00.000Z`)).billingStart)}.
+            </p>
+          )}
           <Field label={live ? "Why this is being corrected" : "Why this is being corrected (optional)"} htmlFor={`pc-reason-${number}`}>
             <input id={`pc-reason-${number}`} className="field" value={reason} onChange={(e) => setReason(e.target.value)} required={live} />
           </Field>

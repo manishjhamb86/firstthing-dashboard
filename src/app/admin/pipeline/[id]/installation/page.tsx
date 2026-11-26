@@ -931,24 +931,6 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   day in the Days table.
                 </p>
               )}
-              {project.certificate && canCorrectDates && (
-                <CorrectDatesControl
-                  kind="certificate"
-                  pipelineId={pipeline.id}
-                  signedOn={project.certificate.signedAt.toISOString().slice(0, 10)}
-                  days={project.batches
-                    .filter((b) => b.submittedAt)
-                    .sort((a, b) => a.day - b.day)
-                    .map((b) => ({
-                      batchId: b.id,
-                      day: b.day,
-                      workedOn: b.submittedAt!.toISOString().slice(0, 10),
-                      approvedOn: b.review?.reviewedAt.toISOString().slice(0, 10) ?? null,
-                    }))}
-                  today={todayIso}
-                  live={!demoMode}
-                />
-              )}
               {project.certificate?.waiverReason && (
                 <p className="mt-4 text-sm" style={{ color: "var(--warn-fg)" }}>
                   Signed with a waived blocker: {project.certificate.waiverReason}

@@ -517,8 +517,33 @@ function parseDay(s: string | undefined, label: string): Date | { error: string 
 async function loadDates(pipelineId: string) {
   return db.installationProject.findUnique({
     where: { pipelineId },
-    include: { batches: { include: { review: true } }, certificate: true },
+    include: { batches: { include: { review: true } }, certificate: true, phases: { orderBy: { number: "asc" } } },
   });
+}
+
+/**
+ * The certificate's signature is phase 1's (2026-11-26): it must come after
+ * phase 1's own days' work and approvals, and no later than phase 2's
+ * sign-off — later phases' days are rightly after it. Before phases existed
+ * every day was phase 1's.
+ */
+function refuseCertificateOrder(
+  project: { phases: { number: number; throughDay: number; signedAt: Date }[] },
+  batches: { day: number; submittedOn: Date | null; reviewedOn: Date | null }[],
+  signedOn: Date,
+): string | null {
+  const p1 = project.phases.find((ph) => ph.number === 1);
+  const p2 = project.phases.find((ph) => ph.number === 2);
+  const today = new Date();
+  const order = refuseInstallationDates({ today, batches, signedOn: null });
+  if (order) return order;
+  const own = p1 ? batches.filter((b) => b.day <= p1.throughDay) : batches;
+  const signedCheck = refuseInstallationDates({ today, batches: own, signedOn });
+  if (signedCheck) return signedCheck.replace("The certificate", p1 ? "Phase 1's sign-off" : "The certificate");
+  if (p2 && startOfDayUTC(signedOn).getTime() > startOfDayUTC(p2.signedAt).getTime()) {
+    return `Phase 1 cannot be signed off after phase 2 (${formatDate(p2.signedAt)}).`;
+  }
+  return null;
 }
 
 export async function correctBatchDates(
@@ -542,15 +567,14 @@ export async function correctBatchDates(
 
   const newWorked = worked ?? batch.submittedAt;
   const newApproved = approved ?? batch.review?.reviewedAt ?? null;
-  const refusal = refuseInstallationDates({
-    today: new Date(),
-    batches: project.batches.map((b) =>
-      b.id === batchId
-        ? { day: b.day, submittedOn: newWorked, reviewedOn: newApproved }
-        : { day: b.day, submittedOn: b.submittedAt, reviewedOn: b.review?.reviewedAt ?? null },
-    ),
-    signedOn: project.certificate?.signedAt ?? null,
-  });
+  const proposed = project.batches.map((b) =>
+    b.id === batchId
+      ? { day: b.day, submittedOn: newWorked, reviewedOn: newApproved }
+      : { day: b.day, submittedOn: b.submittedAt, reviewedOn: b.review?.reviewedAt ?? null },
+  );
+  const refusal = project.certificate
+    ? refuseCertificateOrder(project, proposed, project.certificate.signedAt)
+    : refuseInstallationDates({ today: new Date(), batches: proposed, signedOn: null });
   if (refusal) {
     logger.warn("installation.date_correction_refused", { actorId: who.actorId, pipelineId, batchId, refusal });
     return { error: refusal };
@@ -947,11 +971,11 @@ export async function correctCertificateDate(
   );
   if (!certMoves && !dayMoves) return { error: "Nothing has changed." };
 
-  const refusal = refuseInstallationDates({
-    today: new Date(),
-    batches: next.map((b) => ({ day: b.day, submittedOn: b.submittedOn, reviewedOn: b.reviewedOn })),
-    signedOn: signed,
-  });
+  const refusal = refuseCertificateOrder(
+    project,
+    next.map((b) => ({ day: b.day, submittedOn: b.submittedOn, reviewedOn: b.reviewedOn })),
+    signed,
+  );
   if (refusal) {
     logger.warn("installation.date_correction_refused", { actorId: who.actorId, pipelineId, refusal });
     return { error: refusal };
@@ -1195,6 +1219,14 @@ export async function correctPhase(
   if (refusal) {
     logger.warn("installation.phase_correction_refused", { actorId: who.actorId, pipelineId, number, refusal });
     return { error: refusal };
+  }
+
+  // Phase 1's date is the certificate's — the deal's first billing day — so it
+  // moves through the certificate's own correction, which carries billing,
+  // monitoring and published months with it.
+  if (number === 1 && input.signedAt && input.signedAt !== phase.signedAt.toISOString().slice(0, 10)) {
+    const moved = await correctCertificateDate(pipelineId, { signedOn: input.signedAt, reason: input.reason });
+    if ("error" in moved) return moved;
   }
 
   let dateData: { signedAt: Date; billingStartDate: Date; proratedDays: number; daysInMonth: number } | null = null;

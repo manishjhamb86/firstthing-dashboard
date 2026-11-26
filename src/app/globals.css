@@ -850,6 +850,7 @@ textarea.field {
    report's per-circuit table). */
 .tbl-compact thead th,
 .tbl-compact tbody td,
+.tbl-compact tfoot td,
 .tbl-compact tbody th {
   padding-left: 8px;
   padding-right: 8px;
@@ -862,6 +863,30 @@ textarea.field {
 }
 .tbl-compact tr > *:last-child {
   padding-right: 12px;
+}
+
+/* The work completion certificate on paper (2026-11-26, user-caught: it
+   printed on two pages). One line per day and tighter spacing, so an ordinary
+   installation fits one A4 page at full size; the one-page guard scales only a
+   much longer one. */
+@media print {
+  /* !important here: these elements carry Tailwind utilities, which sit in a
+     later layer than this file's rules. Print only. */
+  .wcc { font-size: 12.5px; padding: 0 !important; }
+  .wcc header h1 { font-size: 20px !important; margin-top: 2px !important; }
+  .wcc header p { font-size: 11px !important; margin-top: 0 !important; }
+  .wcc > p { font-size: 12.5px !important; line-height: 1.45 !important; margin-top: 10px !important; }
+  .wcc > section { margin-top: 12px !important; }
+  .wcc h2 { font-size: 13px !important; }
+  .wcc .wcc-summary { gap: 8px !important; }
+  .wcc .wcc-summary > div { padding: 5px 10px !important; }
+  .wcc .wcc-summary p { font-size: 11px !important; }
+  .wcc .wcc-summary p.num { font-size: 17px !important; margin-top: 0 !important; }
+  .wcc .print-table-scroll { margin-top: 4px !important; }
+  .wcc .tbl thead th { padding-top: 5px; padding-bottom: 5px; font-size: 10px; }
+  .wcc .tbl tbody td, .wcc .tbl tfoot td { padding-top: 4px; padding-bottom: 4px; font-size: 12px; line-height: 1.3; }
+  .wcc .tbl tr.phase-band td { padding-top: 4px; padding-bottom: 4px; font-size: 11.5px; }
+  .wcc > section.wcc-sign { margin-top: 28px !important; }
 }
 
 /* A header inside tbody is a band label (the readings review uses one), not a

@@ -207,8 +207,8 @@ export default async function WorkCompletionCertificatePage({
                       <th style={{ width: 44 }}>Day</th>
                       <th style={{ width: 112 }}>Date</th>
                       {showArea && <th>Area</th>}
-                      <th style={{ textAlign: "right", width: showArea ? 64 : undefined }}>Lights</th>
-                      {showReviews && <th style={{ width: 170 }}>Signed off by</th>}
+                      <th style={{ textAlign: "right", width: 72 }}>Lights</th>
+                      {showReviews && <th style={{ width: showArea ? 230 : undefined, paddingLeft: 24 }}>Signed off by</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -240,15 +240,13 @@ export default async function WorkCompletionCertificatePage({
                             )}
                             <td className="num" style={{ textAlign: "right" }}>{n(b.installedCount)}</td>
                             {showReviews && (
-                              <td>
+                              <td style={{ paddingLeft: 24 }}>
                                 {b.review ? (
-                                  <>
-                                    <span className="block">
-                                      {b.review.decision === "approved" ? "" : "Disputed — "}
-                                      {b.review.reviewedBy.name ?? b.review.reviewedBy.email}
-                                    </span>
-                                    <span className="num block whitespace-nowrap text-[12px] text-[var(--text-muted)]">{formatDate(b.review.reviewedAt)}</span>
-                                  </>
+                                  <span className="whitespace-nowrap">
+                                    {b.review.decision === "approved" ? "" : "Disputed — "}
+                                    {b.review.reviewedBy.name ?? b.review.reviewedBy.email}
+                                    <span className="num text-[var(--text-muted)]"> · {formatDate(b.review.reviewedAt)}</span>
+                                  </span>
                                 ) : (
                                   "—"
                                 )}
@@ -263,9 +261,23 @@ export default async function WorkCompletionCertificatePage({
                     )}
                   </tbody>
                   <tfoot>
+                    {/* Full installation + the demo's lights = everything in
+                        (2026-11-26, user-asked). */}
                     <tr>
-                      <td colSpan={showArea ? 3 : 2} className="font-semibold">Full installation total</td>
-                      <td className="num font-semibold" style={{ textAlign: "right" }}>{n(tally.installed)}</td>
+                      <td colSpan={showArea ? 3 : 2}>Full installation</td>
+                      <td className="num" style={{ textAlign: "right" }}>{n(tally.installed)}</td>
+                      {showReviews && <td />}
+                    </tr>
+                    {tally.demo > 0 && (
+                      <tr>
+                        <td colSpan={showArea ? 3 : 2}>Demo lights</td>
+                        <td className="num" style={{ textAlign: "right" }}>{n(tally.demo)}</td>
+                        {showReviews && <td />}
+                      </tr>
+                    )}
+                    <tr>
+                      <td colSpan={showArea ? 3 : 2} className="font-semibold">Total installed</td>
+                      <td className="num font-semibold" style={{ textAlign: "right" }}>{n(tally.totalInstalled)}</td>
                       {showReviews && <td />}
                     </tr>
                   </tfoot>
@@ -282,15 +294,20 @@ export default async function WorkCompletionCertificatePage({
                       <tr>
                         <th>Phase</th>
                         <th style={{ textAlign: "right" }}>Installed</th>
+                        <th style={{ textAlign: "right" }}>Total installed</th>
                         <th style={{ textAlign: "right" }}>Billed</th>
                         <th>Signed off</th>
                         <th>Billing from</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {phaseRows.map((f) => (
+                      {phaseRows.map((f, i) => (
                         <tr key={f.number}>
                           <td className="whitespace-nowrap">{f.isFinal ? `Phase ${f.number} (final)` : `Phase ${f.number}`}</td>
+                          {/* This phase's own lights (phase 1 carries the demo's), then the running total. */}
+                          <td className="num" style={{ textAlign: "right" }}>
+                            {n(i === 0 ? f.derived + tally.demo : f.derived - phaseRows[i - 1].derived)}
+                          </td>
                           <td className="num" style={{ textAlign: "right" }}>{n(f.derived + tally.demo)}</td>
                           <td className="num" style={{ textAlign: "right" }}>{n(f.cumulative + tally.demo)}</td>
                           <td>
@@ -314,7 +331,7 @@ export default async function WorkCompletionCertificatePage({
               )
             )}
 
-            <section className="mt-14 grid grid-cols-2 gap-12 text-sm">
+            <section className="wcc-sign mt-14 grid grid-cols-2 gap-12 text-sm">
               <div>
                 <div className="border-t pt-2" style={{ borderColor: "var(--text)" }}>
                   For FirsThing

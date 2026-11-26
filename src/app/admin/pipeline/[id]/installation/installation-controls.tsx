@@ -1096,14 +1096,14 @@ export function CompletionForm({ pipelineId }: { pipelineId: string }) {
       }}
     >
       <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Signature date" htmlFor="signed-at">
+        <Field label="Completed and signed off on" htmlFor="signed-at">
           <input id="signed-at" className="field" type="date" value={signedAt} onChange={(e) => setSignedAt(e.target.value)} required />
         </Field>
-        <Field label="Who signed" htmlFor="signatory-name">
-          <input id="signatory-name" className="field" value={name} onChange={(e) => setName(e.target.value)} required />
+        <Field label="Signed off by (society)" htmlFor="signatory-name">
+          <input id="signatory-name" className="field" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} required />
         </Field>
         <Field label="In what capacity" htmlFor="signatory-role">
-          <input id="signatory-role" className="field" value={role} onChange={(e) => setRole(e.target.value)} required />
+          <input id="signatory-role" className="field" placeholder="e.g. Estate manager, Secretary" value={role} onChange={(e) => setRole(e.target.value)} required />
         </Field>
       </div>
 
@@ -1118,7 +1118,7 @@ export function CompletionForm({ pipelineId }: { pipelineId: string }) {
       </div>
 
       <button type="submit" className="btn-primary" disabled={pending}>
-        {pending ? "Recording…" : "Record the signed certificate"}
+        {pending ? "Recording…" : "Mark the installation complete"}
       </button>
       {error && <ErrorText>{error}</ErrorText>}
     </form>

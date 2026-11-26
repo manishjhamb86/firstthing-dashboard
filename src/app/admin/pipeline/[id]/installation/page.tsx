@@ -6,6 +6,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { keptAtDemoOf } from "@/lib/circuit-load";
 import { alreadyInstalledCount } from "@/lib/installation-scope";
+import { describeTally, installationTally } from "@/lib/installation-tally";
 import { circuitName } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -333,6 +334,21 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     }),
   });
   const totalInstalled = project.batches.reduce((n, b) => n + b.installedCount, 0);
+  // A logged day counts what was installed; only days not yet logged count
+  // their plan (2026-11-26, user-caught — see installation-tally.ts).
+  const tally = installationTally(
+    [
+      ...project.plannedDays.map((d) => {
+        const b = project.batches.find((x) => x.plannedDayId === d.id && x.state !== "draft");
+        return { plannedCount: d.plannedCount, installedCount: b ? b.installedCount : null };
+      }),
+      ...project.batches
+        .filter((b) => !b.plannedDayId && b.state !== "draft")
+        .map((b) => ({ plannedCount: 0, installedCount: b.installedCount })),
+    ],
+    alreadyInstalled,
+    project.contractedLightCount,
+  );
   const totalSkipped = project.batches.reduce((n, b) => n + b.skippedCount, 0);
   const openBlockers = project.blockers.filter((b) => b.status === "open");
   // Same standard as every other step page: say plainly that it is finished,
@@ -438,23 +454,14 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
         <Card className="p-5">
           <CardTitle>Days</CardTitle>
           {(() => {
-            // Always visible, not just right after a correction (2026-10-17,
-            // user-asked: "validate the count... show count issue if there
-            // are any") — a published plan can drift from its own contracted
-            // scope one day-correction at a time, and this is the one place
-            // that states whether it still adds up, on every page load. The
-            // demo circuit's own lights are counted in, not netted out of
-            // Contracted — same accounting as ProjectSetupForm's own total.
-            const totalPlanned = project.plannedDays.reduce((n, d) => n + d.plannedCount, 0);
-            const accountedTotal = totalPlanned + alreadyInstalled;
-            const gap = accountedTotal - project.contractedLightCount;
+            // Always visible: whether the installation still adds up to its
+            // contracted scope. Logged days count what was installed, not
+            // what was planned (2026-11-26, user-caught: a day planned at 300
+            // that installed 100 does not leave 200 owed on top of the next
+            // day's own fresh plan).
             return (
-              <p className="mt-1 mb-3 text-[13px]" style={{ color: gap === 0 ? "var(--text-muted)" : "var(--warn-fg)" }}>
-                {alreadyInstalled > 0
-                  ? `${totalPlanned} planned + ${alreadyInstalled} already installed on the demo circuit = ${accountedTotal}`
-                  : `${totalPlanned} planned`}{" "}
-                against {project.contractedLightCount} contracted —{" "}
-                {gap === 0 ? "reconciled" : gap > 0 ? `${gap} over` : `${-gap} short`}
+              <p className="mt-1 mb-3 text-[13px]" style={{ color: tally.gap === 0 ? "var(--text-muted)" : "var(--warn-fg)" }}>
+                {describeTally(tally)}
               </p>
             );
           })()}
@@ -772,7 +779,20 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
 
         {/* ── FEAT-037 completion ── */}
         <Card className="p-5">
-          <CardTitle>Completion & billing start</CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+            <CardTitle>Installation complete</CardTitle>
+            {project.certificate && (
+              <Link href={`/admin/pipeline/${pipeline.id}/installation/certificate`} className="btn-tone-info">
+                Work completion certificate
+              </Link>
+            )}
+          </div>
+          {!project.certificate && (
+            <p className="mb-3 text-sm text-[var(--text-muted)]">
+              Record that the installation under this agreement is complete. It generates the work completion
+              certificate, and billing starts the day after it is signed.
+            </p>
+          )}
           {project.certificate ? (
             <>
               <p className="text-sm">
@@ -792,8 +812,25 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   </dd>
                 </div>
                 <div>
-                  <dt className="lbl">Certified installed</dt>
-                  <dd className="num">{project.certificate.totalInstalledCount}</dd>
+                  {project.certificate.isPartial ? (
+                    <>
+                      <dt className="lbl">Certified installed</dt>
+                      <dd className="num">{project.certificate.totalInstalledCount}</dd>
+                    </>
+                  ) : (
+                    // The lights actually in, from the logged days + the demo
+                    // (2026-11-26): the count frozen at signing went stale
+                    // when days were logged after it (850 against 1,201).
+                    <>
+                      <dt className="lbl">Installed in total</dt>
+                      <dd className="num">{tally.totalInstalled.toLocaleString("en-IN")}</dd>
+                      {tally.demo > 0 && (
+                        <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">
+                          {tally.installed.toLocaleString("en-IN")} full installation + {tally.demo.toLocaleString("en-IN")} demo
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
               </dl>
               {project.certificate.isPartial && (

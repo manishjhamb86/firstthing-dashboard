@@ -9839,3 +9839,23 @@ and edit) upload them, uploading only when the form is sent. A role typed as the
 homepage card shows the building photo across the top and the person's photo (or initials) by their name.
 Verified on dev 10/10 including real uploads; fixtures removed (the two tiny test images stay in the bucket —
 PutObject-only credentials).
+
+## Installation counts by what was installed, and a work completion certificate (2026-11-26) — user-asked
+
+**The count.** The Days card summed every day's plan ("1653 planned + 50 demo = 1703 against 1200 — 503 over")
+while 1,151 had been installed. A plan is only a plan: a day planned at 300 that installs 100 does not leave 200
+owed on top of the next day's fresh plan. `src/lib/installation-tally.ts` (pure, tested): a logged day counts its
+installed lights, only days not yet logged count their plan; the card now reads e.g. "1,151 installed in 12 logged
+days + 50 on the demo circuit = 1,201 against 1,200 contracted — 1 over". The completion card shows "Installed in
+total" from the logged days + demo (the count frozen at signing went stale when days were logged after it — 850);
+a partial certificate keeps its certified figure.
+
+**The certificate.** The completion card is now "Installation complete" (form: completed and signed off on, signed
+off by (society), capacity; button "Mark the installation complete") — still the existing signing act, which starts
+billing the day after. Once signed, "Work completion certificate" opens
+`/admin/pipeline/[id]/installation/certificate`: letterhead, one A4 page; certificate number, a certifying
+statement, summary tiles (demo · full installation · total · contracted), the demo circuits with their replacement
+dates, the day-by-day table (date, area, lights installed, and optionally who reviewed and signed off each day —
+toggled with "Hide/Show who reviewed each day", `?reviews=0`), the society's sign-off and two signature lines.
+Rendered from the rows on every open. Verified on a dev fixture (fixture removed); one page with zero and
+Safari-like margins. The society's portal does not show the certificate yet.

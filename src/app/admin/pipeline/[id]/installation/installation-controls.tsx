@@ -11,7 +11,7 @@ import { prorateFirstMonth } from "@/lib/billing-start";
 import { BLOCKER_TYPE_LABEL } from "@/lib/status-maps";
 import {
   addPlannedDay,
-  completeRemainingInstallation,
+  signPhase,
   correctBatchDates,
   correctBatchInstalledCount,
   correctCertificateDate,
@@ -1254,26 +1254,122 @@ export function PartialCompletionForm({ pipelineId }: { pipelineId: string }) {
 }
 
 /** The rest has been confirmed installed — bill the full agreed count from here (2026-10-14). */
-export function CompleteRemainingButton({ pipelineId }: { pipelineId: string }) {
+/**
+ * On the latest logged day of the open phase (2026-11-26, user-specified):
+ * mark phase N complete — the next planned day then starts phase N+1 — or
+ * mark the installation finished. Either starts billing for the lights
+ * installed by then, from the day after the sign-off.
+ */
+export function PhaseSignoffControl({
+  pipelineId,
+  throughDay,
+  phaseNumber,
+  canClosePhase,
+  workedOn,
+  today,
+  loggedSoFar,
+  demoLights,
+}: {
+  pipelineId: string;
+  throughDay: number;
+  phaseNumber: number;
+  /** false on phase 5, which must be the full installation. */
+  canClosePhase: boolean;
+  workedOn: string;
+  today: string;
+  /** Full-installation lights logged up to this day (demo excluded). */
+  loggedSoFar: number;
+  demoLights: number;
+}) {
+  const [mode, setMode] = useState<"phase" | "final" | null>(null);
+  const [on, setOn] = useState(workedOn);
+  const [name, setName] = useState("");
+  const [role, setRole] = useState("");
+  const [override, setOverride] = useState(false);
+  const [count, setCount] = useState(String(loggedSoFar));
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
+  const start = on ? prorateFirstMonth(new Date(`${on}T00:00:00.000Z`)).billingStart : null;
+  const lights = override ? Number(count) || 0 : loggedSoFar;
+  const withDemo = phaseNumber === 1 ? lights + demoLights : lights;
+  const close = () => { setMode(null); setError(undefined); };
 
   return (
-    <div className="mt-1">
-      <button
-        type="button"
-        className="btn-primary btn-sm"
-        disabled={pending}
-        onClick={() => startTransition(async () => setError((await completeRemainingInstallation(pipelineId))?.error))}
-      >
-        {pending ? "Confirming…" : "Confirm the rest is now installed"}
-      </button>
-      {error && (
-        <p className="mt-2 text-sm" style={{ color: "var(--bad-fg)" }}>
-          {error}
-        </p>
+    <>
+      {canClosePhase && (
+        <button type="button" className="btn-ghost btn-sm" onClick={() => setMode("phase")}>
+          Mark phase {phaseNumber} complete
+        </button>
       )}
-    </div>
+      <button type="button" className="btn-ghost btn-sm" onClick={() => setMode("final")}>
+        Mark installation finished
+      </button>
+      <Modal open={mode !== null} onClose={close} title={mode === "final" ? "Mark the installation finished" : `Mark phase ${phaseNumber} complete`}>
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(undefined);
+            if (override && (!Number.isInteger(Number(count)) || Number(count) <= 0)) return setError("Enter a positive whole number.");
+            startTransition(async () => {
+              const r = await signPhase(pipelineId, {
+                throughDay,
+                signedAt: on,
+                signatoryName: name,
+                signatoryRole: role,
+                lightsOverride: override ? Number(count) : null,
+                isFinal: mode === "final",
+              });
+              if (r && "error" in r) setError(r.error);
+              else close();
+            });
+          }}
+        >
+          <p className="text-[13px] text-[var(--text-muted)]">
+            {mode === "final"
+              ? `Closes the installation at day ${throughDay}. The work completion certificate is generated from it.`
+              : `Closes phase ${phaseNumber} at day ${throughDay}. The next planned day starts phase ${phaseNumber + 1}.`}
+          </p>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field label="Signed off on" htmlFor="ph-on">
+              <input id="ph-on" className="field" type="date" max={today} value={on} onChange={(e) => setOn(e.target.value)} required />
+            </Field>
+            <Field label="Signed off by (society)" htmlFor="ph-name">
+              <input id="ph-name" className="field" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} required />
+            </Field>
+            <Field label="In what capacity" htmlFor="ph-role">
+              <input id="ph-role" className="field" placeholder="e.g. Estate manager" value={role} onChange={(e) => setRole(e.target.value)} required />
+            </Field>
+          </div>
+          <div className="rounded-[var(--r-md)] border border-[var(--border)] p-3 text-sm">
+            <p>
+              Lights installed so far: <strong className="num">{withDemo.toLocaleString("en-IN")}</strong>
+              {phaseNumber === 1 && demoLights > 0 ? ` (${lights.toLocaleString("en-IN")} full installation + ${demoLights} demo)` : " (full installation)"}
+              {!override && " — from the logged days"}
+            </p>
+            <label className="mt-2 flex items-center gap-2">
+              <input type="checkbox" checked={override} onChange={(e) => { setOverride(e.target.checked); setCount(String(loggedSoFar)); }} />
+              The sign-off states a different count
+            </label>
+            {override && (
+              <Field label="Full-installation lights installed so far (excluding demo)" htmlFor="ph-count">
+                <input id="ph-count" className="field" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} required />
+              </Field>
+            )}
+          </div>
+          {start && <p className="text-sm">Billing for these lights starts {formatDate(start)}, the day after.</p>}
+          {error && <ErrorText>{error}</ErrorText>}
+          <div className="flex gap-2">
+            <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+              {pending ? "Recording…" : mode === "final" ? "Mark installation finished" : `Mark phase ${phaseNumber} complete`}
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={close}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 }
 

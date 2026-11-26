@@ -632,6 +632,7 @@ model AdminUser {
   gateSkipsApproved     InstallationProject[]    @relation("GateSkipApprovedBy")
   plannedDaysAssigned   InstallationPlannedDay[] @relation("PlannedDayAssignee")
   batchesSubmitted      InstallationBatch[]      @relation("BatchSubmittedBy")
+  phasesRecorded        InstallationPhase[]      @relation("PhaseRecordedBy")
   blockersRaised        InstallationBlocker[]    @relation("BlockerRaisedBy")
   blockersResolved      InstallationBlocker[]    @relation("BlockerResolvedBy")
   certificatesRecorded  CompletionCertificate[]  @relation("CertificateRecordedBy")
@@ -2445,6 +2446,7 @@ model InstallationProject {
   skipApprover AdminUser?               @relation("GateSkipApprovedBy", fields: [gateSkipApprovedBy], references: [id])
   plannedDays  InstallationPlannedDay[]
   batches      InstallationBatch[]
+  phases       InstallationPhase[]
   blockers     InstallationBlocker[]
   certificate  CompletionCertificate?
 
@@ -6049,4 +6051,35 @@ model HomepageSocietyStat {
   society Society @relation(fields: [societyId], references: [id], onDelete: Cascade)
 
   @@map("homepage_society_stats")
+}
+
+/// An installation's sign-offs, 1 to 5 (2026-11-26, user-specified). Each
+/// phase is closed at a day — it holds every day after the previous phase up
+/// to `throughDay` — and starts billing for the lights installed by then.
+/// Phase 1 is also the CompletionCertificate (its signature and billing start
+/// are the deal's first billing day, which every billing reader takes); the
+/// final phase is the full installation.
+model InstallationPhase {
+  id               String   @id @default(cuid())
+  projectId        String   @map("project_id")
+  number           Int
+  throughDay       Int      @map("through_day")
+  signedAt         DateTime @map("signed_at")
+  signatoryName    String   @map("signatory_name")
+  signatoryRole    String   @map("signatory_role")
+  /// Cumulative full-installation lights (demo excluded) when the sign-off
+  /// states its own figure; null means "from the logged days".
+  lightsOverride   Int?     @map("lights_override")
+  isFinal          Boolean  @default(false) @map("is_final")
+  billingStartDate DateTime @map("billing_start_date")
+  proratedDays     Int      @map("prorated_days")
+  daysInMonth      Int      @map("days_in_month")
+  recordedById     String   @map("recorded_by_id")
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+
+  project    InstallationProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  recordedBy AdminUser           @relation("PhaseRecordedBy", fields: [recordedById], references: [id])
+
+  @@unique([projectId, number])
+  @@map("installation_phases")
 }

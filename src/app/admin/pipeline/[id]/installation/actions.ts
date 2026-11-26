@@ -22,7 +22,8 @@ import {
 } from "@/lib/installation-gate";
 import { prorateFirstMonth } from "@/lib/billing-start";
 import {
-  completeRemainingInstallationAs,
+  signPhaseAs,
+  type PhaseInput,
   raiseBlockerAs,
   signCertificateAs,
   startBatchAs,
@@ -460,13 +461,19 @@ export async function signCompletionCertificate(pipelineId: string, input: Certi
 }
 
 /** The exceptional-billing follow-up (2026-10-14): the rest is now confirmed installed. */
-export async function completeRemainingInstallation(pipelineId: string) {
+/**
+ * Mark phase N complete, or the installation finished, at a logged day
+ * (2026-11-26, user-specified). Operations lead only — a sign-off starts
+ * billing.
+ */
+export async function signPhase(pipelineId: string, input: PhaseInput) {
   const ops = await requireOps();
   if ("error" in ops) return { error: ops.error };
-  const r = await completeRemainingInstallationAs({ id: ops.session.user.id }, pipelineId);
+  const r = await signPhaseAs({ id: ops.session.user.id }, pipelineId, input);
   if ("error" in r) return { error: r.error };
   revalidatePath(pathFor(pipelineId));
   revalidatePath(`/admin/pipeline/${pipelineId}`);
+  revalidatePath("/portal");
   return { ok: true as const };
 }
 
@@ -482,11 +489,13 @@ async function dateCorrector(reason: string, pipelineId: string, what: string) {
   const perms = admin.permissions;
   // Any installation admin until the completion certificate is generated;
   // after it, the main admin account only (2026-11-26, user's rule).
-  const cert = await db.completionCertificate.findFirst({ where: { project: { pipelineId } }, select: { id: true } });
+  // Locked once the installation is marked finished — its last phase signed
+  // off and the work completion certificate generated.
+  const finished = await db.installationPhase.findFirst({ where: { project: { pipelineId }, isFinal: true }, select: { id: true } });
   const refusal = refuseInstallationCorrector({
     demo: await isDemoMode(),
     canOpenInstallation: perms.includes("manage_survey") || perms.includes("manage_pipeline"),
-    certified: !!cert,
+    certified: !!finished,
     superAdmin: isSuperAdmin(admin.email),
     reason,
   });
@@ -988,6 +997,11 @@ export async function correctCertificateDate(
     if (certMoves) {
       await tx.completionCertificate.update({
         where: { id: cert.id },
+        data: { signedAt: signed, billingStartDate: proration.billingStart, proratedDays: proration.proratedDays, daysInMonth: proration.daysInMonth },
+      });
+      // Phase 1 is the certificate's own sign-off — they move together.
+      await tx.installationPhase.updateMany({
+        where: { projectId: project.id, number: 1 },
         data: { signedAt: signed, billingStartDate: proration.billingStart, proratedDays: proration.proratedDays, daysInMonth: proration.daysInMonth },
       });
       await logChange(tx, {

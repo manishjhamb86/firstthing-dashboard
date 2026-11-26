@@ -5,12 +5,12 @@ import { logger } from "@/lib/logger";
 import { startOfDayUTC } from "@/lib/step-dates";
 import {
   completionBlockers,
-  partialCompletionBlockers,
   describeCompletionBlocker,
   evaluateDayGateChain,
   type BatchGateInput,
 } from "@/lib/installation-gate";
 import { prorateFirstMonth } from "@/lib/billing-start";
+import { loggedThrough, refusePhaseSignoff, type PhaseDay, type PhaseRecord } from "@/lib/installation-phases";
 import { buildDocumentKey } from "@/lib/document-keys";
 import type { Prisma } from "@prisma/client";
 
@@ -329,8 +329,34 @@ export type CertificateInput = {
   partialReason?: string;
 };
 
-/** The caller has already checked that the actor is the operations lead. */
-export async function signCertificateAs(actor: Actor, pipelineId: string, input: CertificateInput): Promise<CoreResult> {
+export type PhaseInput = {
+  /** The day the phase closes at; every day after the previous phase up to it is in this phase. */
+  throughDay: number;
+  signedAt: string;
+  signatoryName: string;
+  signatoryRole: string;
+  /** Cumulative full-installation lights (demo excluded) when the sign-off states its own figure. */
+  lightsOverride: number | null;
+  /** true: the installation is finished; false: phase N is complete and the next day starts phase N+1. */
+  isFinal: boolean;
+  signatureKey?: string | null;
+};
+
+/**
+ * Sign off an installation phase (2026-11-26, user-specified) — 1 to 5 per
+ * installation, each starting billing for the lights installed by then.
+ *
+ * Phase 1 also creates the completion certificate: its signature and billing
+ * start are the deal's first billing day, which every billing and monitoring
+ * reader already takes, so nothing downstream changes for a single-phase
+ * installation. Each later phase, and a final phase after earlier ones, moves
+ * the circuit's billed light count to the lights installed so far, from that
+ * phase's billing month (RepresentedCountChange) — earlier months keep theirs.
+ * A single phase that is the whole installation leaves the count as agreed,
+ * as signing the certificate always has. The caller has checked the actor is
+ * the operations lead.
+ */
+export async function signPhaseAs(actor: Actor, pipelineId: string, input: PhaseInput): Promise<CoreResult> {
   const project = await db.installationProject.findUnique({
     where: { pipelineId },
     include: {
@@ -338,205 +364,155 @@ export async function signCertificateAs(actor: Actor, pipelineId: string, input:
       blockers: true,
       plannedDays: true,
       certificate: true,
+      phases: true,
     },
   });
   if (!project) return { error: "No installation project for this deal." };
-  if (project.certificate) return { error: "This project already has a signed completion certificate." };
   if (!input.signatoryName.trim() || !input.signatoryRole.trim()) {
-    return { error: "Record who signed and in what capacity — the signature is the society's evidence, not a system action." };
+    return { error: "Record who signed off and in what capacity — the signature is the society's evidence, not a system action." };
   }
-
   const signedAt = new Date(`${input.signedAt}T00:00:00.000Z`);
-  if (Number.isNaN(signedAt.getTime())) return { error: "Unreadable signature date." };
-  if (signedAt.getTime() > startOfDayUTC(new Date()).getTime()) return { error: "The certificate cannot be dated in the future." };
+  if (Number.isNaN(signedAt.getTime())) return { error: "Unreadable sign-off date." };
 
-  const partialReason = input.partialReason?.trim() || null;
-  const daysWithBatches = new Set(project.batches.map((b) => b.day)).size;
+  const logged = project.batches.filter((b) => b.submittedAt && b.state !== "draft");
+  const dayNumbers = [...new Set([...project.plannedDays.map((d) => d.day), ...logged.map((b) => b.day)])].sort((x, y) => x - y);
+  const days: PhaseDay[] = dayNumbers.map((day) => {
+    const bs = logged.filter((b) => b.day === day);
+    return {
+      day,
+      installedCount: bs.length ? bs.reduce((n, b) => n + b.installedCount, 0) : null,
+      workedOn: bs.map((b) => b.submittedAt!).sort((x, y) => y.getTime() - x.getTime())[0] ?? null,
+    };
+  });
+  const phases: PhaseRecord[] = project.phases.map((p) => ({
+    number: p.number, throughDay: p.throughDay, signedAt: p.signedAt, lightsOverride: p.lightsOverride, isFinal: p.isFinal,
+  }));
+  const refusal = refusePhaseSignoff({ phases, days, throughDay: input.throughDay, isFinal: input.isFinal, signedOn: signedAt, today: new Date(), lightsOverride: input.lightsOverride });
+  if (refusal) {
+    logger.warn("installation.phase_refused", { actorId: actor.id, pipelineId, throughDay: input.throughDay, isFinal: input.isFinal, refusal });
+    return { error: refusal };
+  }
+
+  // The society's review gate, over the days this phase closes (or, for the
+  // full installation, every day): nothing disputed, awaiting or blocked.
+  const scoped = project.batches.filter((b) => b.day <= input.throughDay);
   const gateInput = {
-    batches: project.batches.map(toGateInput),
+    batches: (input.isFinal ? project.batches : scoped).map(toGateInput),
     openBlockerCount: project.blockers.filter((b) => b.status === "open").length,
-    plannedDayCount: new Set(project.plannedDays.map((d) => d.day)).size,
-    daysWithBatches,
+    plannedDayCount: new Set(project.plannedDays.filter((d) => input.isFinal || d.day <= input.throughDay).map((d) => d.day)).size,
+    daysWithBatches: new Set((input.isFinal ? project.batches : scoped).map((b) => b.day)).size,
   };
-  const blocks = partialReason ? partialCompletionBlockers(gateInput) : completionBlockers(gateInput);
+  const blocks = completionBlockers(gateInput);
   if (blocks.length > 0) {
-    logger.warn("installation.completion_refused", {
-      actorId: actor.id,
-      pipelineId,
-      partial: !!partialReason,
-      reasons: blocks.map((b) => b.kind),
-    });
-    return { error: `Not ready to complete. ${blocks.map(describeCompletionBlocker).join(" ")}` };
-  }
-  if (partialReason && completionBlockers(gateInput).length === 0) {
-    // The ORDINARY gate was already clear — nothing was actually exempted,
-    // so this is not the exceptional case being asked for.
-    return { error: "Nothing is actually outstanding — sign the ordinary completion certificate instead." };
+    logger.warn("installation.phase_refused", { actorId: actor.id, pipelineId, reasons: blocks.map((b) => b.kind) });
+    return { error: `Not ready to sign off. ${blocks.map(describeCompletionBlocker).join(" ")}` };
   }
 
-  // The one circuit this partial count applies to. A deal spanning more
-  // than one light type/circuit cannot have its single combined installed
-  // count safely split between them without guessing which lights are
-  // whose — refused rather than apportioned (2026-10-14).
-  let circuit: { id: string; representedLightCount: number } | null = null;
-  if (partialReason) {
-    const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId }, select: { siteSurvey: { select: { id: true } } } });
-    const circuits = pipeline?.siteSurvey
-      ? await db.circuit.findMany({
-          where: { siteSurveyId: pipeline.siteSurvey.id, voidedAt: null },
-          select: { id: true, representedLightCount: true },
-        })
-      : [];
-    if (circuits.length !== 1) {
-      return {
-        error:
-          circuits.length === 0
-            ? "No circuit is on record for this deal yet — a partial certificate needs one to bill against."
-            : "This deal has more than one circuit — billing a partial count cannot be split between them automatically. Handle each circuit's billing start separately.",
-      };
-    }
-    circuit = circuits[0];
-  }
-
+  const number = phases.length + 1;
+  const cumulative = input.lightsOverride ?? loggedThrough(days, input.throughDay);
   const proration = prorateFirstMonth(signedAt);
-  const totalInstalled = project.batches.reduce((n, b) => n + b.installedCount, 0);
-  const waived = project.blockers.filter((b) => b.status === "waived");
   const billingMonth = proration.billingStart.toISOString().slice(0, 7);
+  const singleWholeInstallation = number === 1 && input.isFinal;
+
+  const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId }, select: { siteSurvey: { select: { id: true } } } });
+  const circuits = pipeline?.siteSurvey
+    ? await db.circuit.findMany({ where: { siteSurveyId: pipeline.siteSurvey.id, voidedAt: null }, select: { id: true, representedLightCount: true } })
+    : [];
+  // A phase's billed count can only be applied to a deal with one circuit —
+  // a combined count cannot be split between circuits without guessing.
+  if (!singleWholeInstallation && circuits.length > 1) {
+    return { error: "This deal has more than one circuit — a phase's billed count cannot be split between them automatically." };
+  }
+  const circuit = circuits[0] ?? null;
+  const waived = project.blockers.filter((b) => b.status === "waived");
 
   await db.$transaction(async (tx) => {
-    await tx.completionCertificate.create({
+    if (number === 1) {
+      await tx.completionCertificate.create({
+        data: {
+          projectId: project.id,
+          signedAt,
+          signatoryName: input.signatoryName.trim(),
+          signatoryRole: input.signatoryRole.trim(),
+          signatureKey: input.signatureKey ?? null,
+          totalInstalledCount: cumulative,
+          billingStartDate: proration.billingStart,
+          proratedDays: proration.proratedDays,
+          daysInMonth: proration.daysInMonth,
+          waivedBlockerIds: waived.length > 0 ? waived.map((b) => b.id) : undefined,
+          waiverReason: waived.length > 0 ? waived.map((b) => b.resolution).join(" | ") : null,
+          isPartial: !input.isFinal,
+          partialReason: input.isFinal ? null : "Installed in phases",
+          fullLightCount: circuit && !input.isFinal ? circuit.representedLightCount : null,
+          recordedById: actor.id,
+        },
+      });
+      await tx.installationProject.update({ where: { id: project.id }, data: { state: "complete" } });
+      await tx.pipeline.update({ where: { id: pipelineId }, data: { stage: "active_billing" } });
+    } else if (input.isFinal && project.certificate) {
+      await tx.completionCertificate.update({ where: { id: project.certificate.id }, data: { completedAt: signedAt, completedById: actor.id } });
+    }
+    await tx.installationPhase.create({
       data: {
         projectId: project.id,
+        number,
+        throughDay: input.throughDay,
         signedAt,
         signatoryName: input.signatoryName.trim(),
         signatoryRole: input.signatoryRole.trim(),
-        signatureKey: input.signatureKey,
-        totalInstalledCount: totalInstalled,
+        lightsOverride: input.lightsOverride,
+        isFinal: input.isFinal,
         billingStartDate: proration.billingStart,
         proratedDays: proration.proratedDays,
         daysInMonth: proration.daysInMonth,
-        waivedBlockerIds: waived.length > 0 ? waived.map((b) => b.id) : undefined,
-        waiverReason: waived.length > 0 ? waived.map((b) => b.resolution).join(" | ") : null,
-        isPartial: !!partialReason,
-        partialReason,
-        fullLightCount: circuit ? circuit.representedLightCount : null,
         recordedById: actor.id,
       },
     });
-    await tx.installationProject.update({ where: { id: project.id }, data: { state: "complete" } });
-    await tx.pipeline.update({ where: { id: pipelineId }, data: { stage: "active_billing" } });
-
-    if (circuit && circuit.representedLightCount !== totalInstalled) {
-      await tx.circuit.update({ where: { id: circuit.id }, data: { representedLightCount: totalInstalled } });
+    if (!singleWholeInstallation && circuit && circuit.representedLightCount !== cumulative) {
+      await tx.circuit.update({ where: { id: circuit.id }, data: { representedLightCount: cumulative } });
       await tx.representedCountChange.create({
         data: {
           circuitId: circuit.id,
           previousCount: circuit.representedLightCount,
-          nextCount: totalInstalled,
+          nextCount: cumulative,
           effectiveFrom: billingMonth,
-          reason: `Partial completion certificate — billing started on ${totalInstalled} of ${circuit.representedLightCount} agreed lights while the rest was delayed. ${partialReason}`,
+          reason: input.isFinal
+            ? `Phase ${number} — the full installation — signed off on ${input.signedAt}: billing covers the ${cumulative} lights installed, from ${billingMonth}.`
+            : `Phase ${number} signed off on ${input.signedAt}: billing covers the ${cumulative} lights installed so far, from ${billingMonth}.`,
           recordedById: actor.id,
         },
       });
     }
   });
 
-  logger.info("installation.completed", {
-    actorId: actor.id,
-    pipelineId,
-    projectId: project.id,
-    signedAt: signedAt.toISOString(),
-    billingStartDate: proration.billingStart.toISOString(),
-    proratedDays: proration.proratedDays,
-    daysInMonth: proration.daysInMonth,
-    totalInstalledCount: totalInstalled,
-    isPartial: !!partialReason,
+  logger.info("installation.phase_signed", {
+    actorId: actor.id, pipelineId, projectId: project.id, number, throughDay: input.throughDay, isFinal: input.isFinal,
+    cumulative, override: input.lightsOverride !== null, billingStartDate: proration.billingStart.toISOString(),
   });
   return { ok: true };
 }
 
 /**
- * The remaining lights are now confirmed installed (2026-10-14, user-asked):
- * bump the circuit back to its originally-agreed count, effective the
- * calendar month of the most recently SUBMITTED batch (when the crew
- * actually did the work, not merely what was scheduled for it) —
- * "from the day they were installed," not backdated to the original
- * certificate's own billing start, and not simply today's date either.
- * Only valid once every ordinary completion gate is clear, including the
- * one the partial certificate was exempted from.
+ * The phone's completion certificate (and any caller from before phases):
+ * a sign-off at the last logged day — the full installation, or phase 1 of
+ * several when a partial reason is given.
  */
-export async function completeRemainingInstallationAs(actor: Actor, pipelineId: string): Promise<CoreResult> {
-  const project = await db.installationProject.findUnique({
-    where: { pipelineId },
-    include: {
-      batches: { include: { review: true } },
-      blockers: true,
-      plannedDays: true,
-      certificate: true,
-    },
+export async function signCertificateAs(actor: Actor, pipelineId: string, input: CertificateInput): Promise<CoreResult> {
+  const last = await db.installationBatch.findFirst({
+    where: { project: { pipelineId }, submittedAt: { not: null }, state: { not: "draft" } },
+    orderBy: { day: "desc" },
+    select: { day: true },
   });
-  if (!project) return { error: "No installation project for this deal." };
-  const cert = project.certificate;
-  if (!cert) return { error: "No completion certificate has been signed yet." };
-  if (!cert.isPartial) return { error: "This project's certificate was not a partial one — there is nothing left to complete." };
-  if (cert.completedAt) return { error: "The rest of the installation has already been confirmed." };
-
-  const daysWithBatches = new Set(project.batches.map((b) => b.day)).size;
-  const blocks = completionBlockers({
-    batches: project.batches.map(toGateInput),
-    openBlockerCount: project.blockers.filter((b) => b.status === "open").length,
-    plannedDayCount: new Set(project.plannedDays.map((d) => d.day)).size,
-    daysWithBatches,
+  if (!last) return { error: "Not ready to complete. No installation work has been logged yet." };
+  return signPhaseAs(actor, pipelineId, {
+    throughDay: last.day,
+    signedAt: input.signedAt,
+    signatoryName: input.signatoryName,
+    signatoryRole: input.signatoryRole,
+    lightsOverride: null,
+    isFinal: !input.partialReason?.trim(),
+    signatureKey: input.signatureKey,
   });
-  if (blocks.length > 0) {
-    logger.warn("installation.completion_topup_refused", { actorId: actor.id, pipelineId, reasons: blocks.map((b) => b.kind) });
-    return { error: `Not ready to confirm the rest is installed. ${blocks.map(describeCompletionBlocker).join(" ")}` };
-  }
-  if (cert.fullLightCount === null) {
-    return { error: "No circuit was recorded against the partial certificate — nothing to restore." };
-  }
-
-  // submittedAt — when the crew actually did the work, not plannedDate
-  // (what was merely scheduled; CorrectDatesControl's own "workedOn" reads
-  // the same field, for the same reason: a day recorded after the fact can
-  // genuinely differ from what was planned).
-  const latestDay = project.batches
-    .map((b) => b.submittedAt)
-    .filter((d): d is Date => !!d)
-    .sort((a, b) => b.getTime() - a.getTime())[0];
-  if (!latestDay) return { error: "No dated batch is on record to say when the remaining lights were installed." };
-  const effectiveFrom = latestDay.toISOString().slice(0, 7);
-
-  const pipeline = await db.pipeline.findUnique({ where: { id: pipelineId }, select: { siteSurvey: { select: { id: true } } } });
-  const circuits = pipeline?.siteSurvey
-    ? await db.circuit.findMany({ where: { siteSurveyId: pipeline.siteSurvey.id, voidedAt: null }, select: { id: true, representedLightCount: true } })
-    : [];
-  if (circuits.length !== 1) return { error: "The circuit this partial certificate was recorded against is no longer unique on this deal." };
-  const circuit = circuits[0];
-
-  await db.$transaction(async (tx) => {
-    await tx.circuit.update({ where: { id: circuit.id }, data: { representedLightCount: cert.fullLightCount! } });
-    await tx.representedCountChange.create({
-      data: {
-        circuitId: circuit.id,
-        previousCount: circuit.representedLightCount,
-        nextCount: cert.fullLightCount!,
-        effectiveFrom,
-        reason: `The remaining lights were confirmed installed — billing now covers the full ${cert.fullLightCount} agreed, effective the month they went in.`,
-        recordedById: actor.id,
-      },
-    });
-    await tx.completionCertificate.update({ where: { id: cert.id }, data: { completedAt: new Date(), completedById: actor.id } });
-  });
-
-  logger.info("installation.remaining_completed", {
-    actorId: actor.id,
-    pipelineId,
-    circuitId: circuit.id,
-    fullLightCount: cert.fullLightCount,
-    effectiveFrom,
-  });
-  return { ok: true };
 }
 
 /** The most photos one day may carry from the phone. */

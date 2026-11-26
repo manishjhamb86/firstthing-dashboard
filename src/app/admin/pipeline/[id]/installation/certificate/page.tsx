@@ -6,6 +6,7 @@ import { circuitName } from "@/lib/circuit-label";
 import { reportTitle } from "@/lib/report-title";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { installationTally } from "@/lib/installation-tally";
+import { phaseFigures } from "@/lib/installation-phases";
 import { Letterhead } from "@/components/letterhead";
 import { BackButton } from "@/components/back-button";
 import { PrintButton } from "@/app/admin/societies/[id]/circuits/[circuitId]/reports/report-shared";
@@ -50,6 +51,7 @@ export default async function WorkCompletionCertificatePage({
       installationProject: {
         include: {
           certificate: { include: { recordedBy: true } },
+          phases: { orderBy: { number: "asc" } },
           plannedDays: { orderBy: { day: "asc" } },
           batches: {
             where: { state: { not: "draft" } },
@@ -62,7 +64,8 @@ export default async function WorkCompletionCertificatePage({
   });
   const project = pipeline?.installationProject;
   if (!pipeline || !project) notFound();
-  const cert = project.certificate;
+  // Generated once the installation is marked finished — its last phase.
+  const cert = project.phases.some((ph) => ph.isFinal) ? project.certificate : null;
 
   const circuits = await db.circuit.findMany({
     where: { siteSurvey: { pipelineId: id }, voidedAt: null },
@@ -95,6 +98,11 @@ export default async function WorkCompletionCertificatePage({
     demo,
     project.contractedLightCount,
   );
+  const phaseRows = phaseFigures(
+    project.batches.map((b) => ({ day: b.day, installedCount: b.installedCount, workedOn: b.submittedAt })),
+    project.phases.map((ph) => ({ number: ph.number, throughDay: ph.throughDay, signedAt: ph.signedAt, lightsOverride: ph.lightsOverride, isFinal: ph.isFinal })),
+  ).map((f) => ({ ...f, rec: project.phases.find((ph) => ph.number === f.number)! }));
+  const finalPhase = phaseRows.at(-1) ?? null;
   const workDays = project.batches.filter((b) => b.submittedAt);
   const first = workDays[0]?.submittedAt ?? null;
   const last = workDays[workDays.length - 1]?.submittedAt ?? null;
@@ -119,7 +127,7 @@ export default async function WorkCompletionCertificatePage({
         <div className="card p-6">
           <h1 className="text-lg font-semibold">No certificate yet</h1>
           <p className="mt-2 text-sm text-[var(--text-muted)]">
-            The work completion certificate is generated once the installation is marked complete.{" "}
+            The work completion certificate is generated once the installation is marked finished.{" "}
             <Link href={`/admin/pipeline/${id}/installation`} className="underline">Open the installation</Link>
           </p>
         </div>
@@ -225,13 +233,41 @@ export default async function WorkCompletionCertificatePage({
               </div>
             </section>
 
-            <p className="mt-6 text-[14px] leading-relaxed">
-              The completed installation was signed off on <strong>{formatDate(cert.signedAt)}</strong> by{" "}
-              <strong>{cert.signatoryName}</strong> ({cert.signatoryRole}) for {pipeline.society.name}.
-              {cert.isPartial && !cert.completedAt
-                ? ` Billing started on ${n(cert.totalInstalledCount)} of ${n(cert.fullLightCount ?? tally.contracted)} agreed lights while the rest was delayed: ${cert.partialReason}`
-                : ` Billing under the agreement starts on ${formatDate(cert.billingStartDate)}.`}
-            </p>
+            {phaseRows.length > 1 ? (
+              <section className="mt-6">
+                <h2 className="text-[15px] font-semibold">Completed in {phaseRows.length} phases</h2>
+                <div className="print-table-scroll mt-2">
+                  <table className="tbl tbl-compact">
+                    <thead>
+                      <tr>
+                        <th>Phase</th>
+                        <th style={{ textAlign: "right" }}>Lights installed by then</th>
+                        <th>Signed off</th>
+                        <th>Billing for these lights from</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {phaseRows.map((f) => (
+                        <tr key={f.number}>
+                          <td>{f.isFinal ? `Phase ${f.number} — full installation` : `Phase ${f.number}`}</td>
+                          <td className="num" style={{ textAlign: "right" }}>{n(f.cumulative + tally.demo)}</td>
+                          <td>{formatDate(f.rec.signedAt)} · {f.rec.signatoryName} ({f.rec.signatoryRole})</td>
+                          <td className="num">{formatDate(f.rec.billingStartDate)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : (
+              finalPhase && (
+                <p className="mt-6 text-[14px] leading-relaxed">
+                  The completed installation was signed off on <strong>{formatDate(finalPhase.rec.signedAt)}</strong> by{" "}
+                  <strong>{finalPhase.rec.signatoryName}</strong> ({finalPhase.rec.signatoryRole}) for {pipeline.society.name}. Billing
+                  under the agreement starts on {formatDate(finalPhase.rec.billingStartDate)}.
+                </p>
+              )
+            )}
 
             <section className="mt-14 grid grid-cols-2 gap-12 text-sm">
               <div>
@@ -243,7 +279,9 @@ export default async function WorkCompletionCertificatePage({
               <div>
                 <div className="border-t pt-2" style={{ borderColor: "var(--text)" }}>
                   For {pipeline.society.name}
-                  <p className="text-[12px] text-[var(--text-muted)]">{cert.signatoryName}, {cert.signatoryRole}</p>
+                  <p className="text-[12px] text-[var(--text-muted)]">
+                    {finalPhase ? `${finalPhase.rec.signatoryName}, ${finalPhase.rec.signatoryRole}` : `${cert.signatoryName}, ${cert.signatoryRole}`}
+                  </p>
                 </div>
               </div>
             </section>

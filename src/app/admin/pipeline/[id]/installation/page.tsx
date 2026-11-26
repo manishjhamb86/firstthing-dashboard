@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { keptAtDemoOf } from "@/lib/circuit-load";
 import { alreadyInstalledCount } from "@/lib/installation-scope";
 import { describeTally, installationTally } from "@/lib/installation-tally";
+import { MAX_PHASES, loggedThrough, phaseFigures, phaseOfDay, type PhaseDay, type PhaseRecord } from "@/lib/installation-phases";
 import { circuitName } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
@@ -25,7 +26,6 @@ import {
 } from "@/lib/status-maps";
 import {
   completionBlockers,
-  partialCompletionBlockers,
   describeCompletionBlocker,
   evaluateDayGateChain,
   type BatchGateInput,
@@ -34,9 +34,7 @@ import { publicS3Url } from "@/lib/s3";
 import {
   AddPlannedDayForm,
   BatchCaptureForm,
-  CompletionForm,
-  PartialCompletionForm,
-  CompleteRemainingButton,
+  PhaseSignoffControl,
   PlannedDayActions,
   ProjectSetupForm,
   RaiseBlockerForm,
@@ -124,6 +122,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
             include: { review: { include: { reviewedBy: true } }, submittedBy: true },
           },
           blockers: { orderBy: { raisedAt: "desc" }, include: { raisedBy: true, resolvedBy: true } },
+          phases: { orderBy: { number: "asc" } },
         },
       },
     },
@@ -367,13 +366,43 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
     daysWithBatches: new Set(project.batches.map((b) => b.day)).size,
   };
   const blocks = completionBlockers(gateInput);
-  // The exceptional path (2026-10-14, user-asked) is only offered when
-  // "more planned days remain" is the SOLE thing outstanding — every other
-  // reason (a dispute, an open blocker, nothing logged) blocks it too.
-  const onlyUnplannedDaysLeft = blocks.length > 0 && partialCompletionBlockers(gateInput).length === 0;
-  // Confirming the rest is installed needs the SAME full gate clear,
-  // including unplanned-days this time — it is the genuine completion.
-  const readyToCompleteTheRest = project.certificate?.isPartial && !project.certificate.completedAt && blocks.length === 0;
+
+  // Installation phases (2026-11-26, user-specified): 1 to 5 sign-offs, each
+  // closed at a day and starting billing for the lights installed by then.
+  const loggedBatches = project.batches.filter((b) => b.submittedAt && b.state !== "draft");
+  const phaseDays: PhaseDay[] = [...new Set([...project.plannedDays.map((d) => d.day), ...loggedBatches.map((b) => b.day)])]
+    .sort((x, y) => x - y)
+    .map((dayNo) => {
+      const bs = loggedBatches.filter((b) => b.day === dayNo);
+      return {
+        day: dayNo,
+        installedCount: bs.length ? bs.reduce((n, b) => n + b.installedCount, 0) : null,
+        workedOn: bs.map((b) => b.submittedAt!).sort((x, y) => y.getTime() - x.getTime())[0] ?? null,
+      };
+    });
+  const phaseRecords: PhaseRecord[] = project.phases.map((ph) => ({
+    number: ph.number, throughDay: ph.throughDay, signedAt: ph.signedAt, lightsOverride: ph.lightsOverride, isFinal: ph.isFinal,
+  }));
+  const figures = phaseFigures(phaseDays, phaseRecords);
+  const finished = phaseRecords.some((ph) => ph.isFinal);
+  const lastPhase = figures.at(-1) ?? null;
+  const openFrom = lastPhase ? (lastPhase.derived > lastPhase.cumulative ? lastPhase.throughDay : lastPhase.throughDay + 1) : 1;
+  const signoffDay = finished
+    ? null
+    : (loggedBatches.map((b) => b.day).filter((x) => x >= openFrom).sort((x, y) => y - x)[0] ?? null);
+  const describePhase = (n: number): string => {
+    const f = figures.find((x) => x.number === n);
+    const rec = project.phases.find((x) => x.number === n);
+    if (!f || !rec) return `Phase ${n} — in progress`;
+    const total = f.cumulative + alreadyInstalled;
+    const added = n === 1 ? total : f.added;
+    return [
+      `Phase ${n}${f.isFinal ? " — the full installation" : " complete"}`,
+      `${total.toLocaleString("en-IN")} lights in total${n > 1 ? ` (+${added.toLocaleString("en-IN")} this phase)` : ""}${f.lightsOverride !== null ? ` — as signed off; the logged days show ${(f.derived + alreadyInstalled).toLocaleString("en-IN")}` : ""}`,
+      `signed off ${day(rec.signedAt)} by ${rec.signatoryName} (${rec.signatoryRole})`,
+      `billing for these lights from ${day(rec.billingStartDate)}`,
+    ].join(" · ");
+  };
 
   return (
     <>
@@ -381,15 +410,11 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
 
       {/* One card, not two stacked — see the same merge on the KYC step. */}
       {(() => {
-        const doneLine = installationDone
-          ? `Installation complete — the completion certificate is signed${
-              project.certificate?.billingStartDate
-                ? `, and billing started ${project.certificate.billingStartDate
-                    .toISOString()
-                    .slice(0, 10)}, the day after.`
-                : "."
-            }`
-          : undefined;
+        const doneLine = finished
+          ? `Installation finished${figures.length > 1 ? ` in ${figures.length} phases` : ""} — billing started ${day(project.certificate?.billingStartDate)}, the day after the first sign-off.`
+          : installationDone
+            ? `Phase ${figures.length} signed off — billing started ${day(project.certificate?.billingStartDate)} for the lights installed by then. Phase ${figures.length + 1} is in progress.`
+            : undefined;
         if (afterInstall) return <NextStepCallout next={afterInstall} done={doneLine} />;
         return doneLine ? <StepComplete title={doneLine} /> : null;
       })()}
@@ -505,8 +530,21 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   ...project.batches
                     .filter((b) => !b.plannedDayId && b.state !== "draft")
                     .map((b) => ({ d: null, batch: b })),
-                ].map(({ d, batch }) => {
+                ].map(({ d, batch }, rowIndex, all) => {
                   const dayNo = d?.day ?? batch!.day;
+                  // A band opens each phase (2026-11-26) — signed off, or in
+                  // progress — once the installation has any phase at all.
+                  const dayOf = (r: (typeof all)[number]) => r.d?.day ?? r.batch!.day;
+                  const thisPhase = phaseOfDay(dayNo, phaseRecords);
+                  const prevPhase = rowIndex === 0 ? 0 : phaseOfDay(dayOf(all[rowIndex - 1]), phaseRecords);
+                  const bands =
+                    phaseRecords.length > 0 && thisPhase !== prevPhase
+                      ? Array.from({ length: thisPhase - prevPhase }, (_, k) => prevPhase + 1 + k)
+                      : [];
+                  const trailing =
+                    rowIndex === all.length - 1 && phaseRecords.length > 0
+                      ? phaseRecords.map((ph) => ph.number).filter((n) => n > thisPhase)
+                      : [];
                   const gate = d ? dayGates.get(d.day)! : null;
                   const gateMeta = gate ? statusMeta(DAY_GATE_STATUS, gate.status) : null;
                   const batchMeta = batch ? statusMeta(BATCH_STATE, batch.state) : null;
@@ -544,6 +582,19 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       />
                     ),
                     logged?.state === "disputed" && isField && <ReopenBatchControl key="reopen" pipelineId={pipeline.id} batchId={logged.id} />,
+                    logged?.submittedAt && dayNo === signoffDay && isOps && (
+                      <PhaseSignoffControl
+                        key="phase"
+                        pipelineId={pipeline.id}
+                        throughDay={dayNo}
+                        phaseNumber={phaseRecords.length + 1}
+                        canClosePhase={phaseRecords.length + 1 < MAX_PHASES}
+                        workedOn={logged.submittedAt.toISOString().slice(0, 10)}
+                        today={todayIso}
+                        loggedSoFar={loggedThrough(phaseDays, dayNo)}
+                        demoLights={alreadyInstalled}
+                      />
+                    ),
                   ].filter(Boolean);
                   // Everything after the corrections in ONE line (2026-11-26,
                   // user-caught: a day ran to four rows): where, who logged
@@ -584,6 +635,11 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     ) : null;
                   return (
                     <Fragment key={d?.id ?? batch!.id}>
+                      {bands.map((n) => (
+                        <tr key={`band-${n}`} className="phase-band">
+                          <td colSpan={8}>{describePhase(n)}</td>
+                        </tr>
+                      ))}
                       <tr className={actions.length || info ? "day-main" : undefined}>
                         <td className="num">{dayNo}</td>
                         <td>
@@ -627,6 +683,11 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                           <td colSpan={7}>{info}</td>
                         </tr>
                       )}
+                      {trailing.map((n) => (
+                        <tr key={`band-${n}`} className="phase-band">
+                          <td colSpan={8}>{describePhase(n)}</td>
+                        </tr>
+                      ))}
                     </Fragment>
                   );
                 })}
@@ -766,94 +827,87 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
           </Card>
         )}
 
-        {/* ── FEAT-037 completion ── */}
+        {/* ── Sign-offs: the installation's phases (2026-11-26) ── */}
         <Card className="p-5">
           <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <CardTitle>Installation complete</CardTitle>
-            {project.certificate && (
+            {finished && (
               <Link href={`/admin/pipeline/${pipeline.id}/installation/certificate`} className="btn-tone-info">
                 Work completion certificate
               </Link>
             )}
           </div>
-          {!project.certificate && (
-            <p className="mb-3 text-sm text-[var(--text-muted)]">
-              Record that the installation under this agreement is complete. It generates the work completion
-              certificate, and billing starts the day after it is signed.
-            </p>
-          )}
-          {project.certificate ? (
-            <>
-              <p className="text-sm">
-                Signed {day(project.certificate.signedAt)} by {project.certificate.signatoryName} (
-                {project.certificate.signatoryRole}), recorded by{" "}
-                {project.certificate.recordedBy.name ?? project.certificate.recordedBy.email}.
-              </p>
-              <dl className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-3 text-sm">
-                <div>
-                  <dt className="lbl">Billing starts</dt>
-                  <dd className="num">{day(project.certificate.billingStartDate)}</dd>
-                </div>
-                <div>
-                  <dt className="lbl">First month</dt>
-                  <dd className="num">
-                    {project.certificate.proratedDays} of {project.certificate.daysInMonth} days
-                  </dd>
-                </div>
-                <div>
-                  {project.certificate.isPartial ? (
-                    <>
-                      <dt className="lbl">Certified installed</dt>
-                      <dd className="num">{project.certificate.totalInstalledCount}</dd>
-                    </>
-                  ) : (
-                    // The lights actually in, from the logged days + the demo
-                    // (2026-11-26): the count frozen at signing went stale
-                    // when days were logged after it (850 against 1,201).
-                    <>
-                      <dt className="lbl">Installed in total</dt>
-                      <dd className="num">{tally.totalInstalled.toLocaleString("en-IN")}</dd>
-                      {tally.demo > 0 && (
-                        <p className="mt-0.5 text-[12px] text-[var(--text-muted)]">
-                          {tally.installed.toLocaleString("en-IN")} full installation + {tally.demo.toLocaleString("en-IN")} demo
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
-              </dl>
-              {project.certificate.isPartial && (
-                <div
-                  className="mt-4 rounded-[var(--r-md)] border p-4 text-sm"
-                  style={{ borderColor: "var(--warn-line)", background: "var(--warn-bg)", color: "var(--warn-fg)" }}
-                >
-                  {project.certificate.completedAt ? (
-                    <p>
-                      Billing started on {project.certificate.totalInstalledCount} of{" "}
-                      {project.certificate.fullLightCount} agreed lights ({project.certificate.partialReason}); the
-                      rest was confirmed installed on {day(project.certificate.completedAt)} by{" "}
-                      {project.certificate.completedBy?.name ?? project.certificate.completedBy?.email}, now billing
-                      the full {project.certificate.fullLightCount}.
-                    </p>
-                  ) : (
-                    <>
-                      <p className="mb-2">
-                        <strong>Exceptional — billing only {project.certificate.totalInstalledCount} of{" "}
-                        {project.certificate.fullLightCount} agreed lights so far.</strong> {project.certificate.partialReason}
-                      </p>
-                      {readyToCompleteTheRest ? (
-                        <CompleteRemainingButton pipelineId={pipeline.id} />
-                      ) : (
-                        <p>
-                          The rest of the installation is not yet ready to confirm:{" "}
-                          {blocks.map(describeCompletionBlocker).join(" ")}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </div>
+          {figures.length === 0 ? (
+            <p className="text-sm text-[var(--text-muted)]">
+              Signed off from the Days table above: on the day a phase ends, mark that phase complete — billing starts the
+              next day for the lights installed so far — or, on the last day, mark the installation finished. Up to{" "}
+              {MAX_PHASES} phases.{!isOps && " Signing off is an operations lead action."}
+              {blocks.length > 0 && figures.length === 0 && (
+                <span className="mt-2 block">Still open: {blocks.map(describeCompletionBlocker).join(" ")}</span>
               )}
-              {canCorrectDates && (
+            </p>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Phase</th>
+                      <th>Days</th>
+                      <th>Lights installed</th>
+                      <th>Signed off</th>
+                      <th>Billing for these lights from</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {figures.map((f, i) => {
+                      const rec = project.phases.find((x) => x.number === f.number)!;
+                      const prevThrough = i === 0 ? 0 : figures[i - 1].throughDay;
+                      const total = f.cumulative + alreadyInstalled;
+                      return (
+                        <tr key={f.number}>
+                          <td className="font-semibold">
+                            {f.isFinal ? `Phase ${f.number} — full installation` : `Phase ${f.number}`}
+                          </td>
+                          <td className="num">
+                            {f.throughDay === prevThrough ? `rest of day ${f.throughDay}` : prevThrough + 1 === f.throughDay ? `day ${f.throughDay}` : `days ${prevThrough + 1}–${f.throughDay}`}
+                          </td>
+                          <td>
+                            <span className="num">{total.toLocaleString("en-IN")}</span>
+                            <span className="block text-[12px] text-[var(--text-muted)]">
+                              {f.number === 1
+                                ? alreadyInstalled > 0
+                                  ? `${f.cumulative.toLocaleString("en-IN")} + ${alreadyInstalled} demo`
+                                  : "full installation"
+                                : `+${f.added.toLocaleString("en-IN")} this phase`}
+                              {f.lightsOverride !== null && ` · as signed off (logged days: ${(f.derived + alreadyInstalled).toLocaleString("en-IN")})`}
+                            </span>
+                          </td>
+                          <td>
+                            <span className="num">{day(rec.signedAt)}</span>
+                            <span className="block text-[12px] text-[var(--text-muted)]">
+                              {rec.signatoryName} ({rec.signatoryRole})
+                            </span>
+                          </td>
+                          <td>
+                            <span className="num">{day(rec.billingStartDate)}</span>
+                            <span className="block text-[12px] text-[var(--text-muted)]">
+                              first month {rec.proratedDays} of {rec.daysInMonth} days
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {!finished && (
+                <p className="mt-3 text-sm text-[var(--text-muted)]">
+                  Phase {figures.length + 1} is in progress — mark it complete, or the installation finished, from its last
+                  day in the Days table.
+                </p>
+              )}
+              {project.certificate && canCorrectDates && (
                 <CorrectDatesControl
                   kind="certificate"
                   pipelineId={pipeline.id}
@@ -871,42 +925,12 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   live={!demoMode}
                 />
               )}
-              {project.certificate.waiverReason && (
+              {project.certificate?.waiverReason && (
                 <p className="mt-4 text-sm" style={{ color: "var(--warn-fg)" }}>
                   Signed with a waived blocker: {project.certificate.waiverReason}
                 </p>
               )}
             </>
-          ) : blocks.length > 0 ? (
-            // FEAT-037-AC-2 — what's outstanding, named, rather than a
-            // disabled button with no explanation.
-            <div>
-              <p className="text-sm text-[var(--text-muted)] mb-3">Not ready to complete:</p>
-              <ul className="text-sm space-y-1">
-                {blocks.map((b) => (
-                  <li key={b.kind}>• {describeCompletionBlocker(b)}</li>
-                ))}
-              </ul>
-              {/* Exceptional billing (2026-10-14, user-asked): when more
-                  planned days are the ONLY thing outstanding, offer to bill
-                  what's actually installed now and the rest once it's done. */}
-              {onlyUnplannedDaysLeft && isOps && (
-                <div className="mt-4 border-t pt-4" style={{ borderColor: "var(--border-subtle)" }}>
-                  <p className="text-sm text-[var(--text-muted)] mb-3">
-                    If the rest is genuinely delayed, billing can start now on what is already installed and
-                    approved — the rest bills from whenever it is actually finished.
-                  </p>
-                  <PartialCompletionForm pipelineId={pipeline.id} />
-                </div>
-              )}
-            </div>
-          ) : isOps ? (
-            <CompletionForm pipelineId={pipeline.id} />
-          ) : (
-            <p className="text-sm text-[var(--text-muted)]">
-              Everything is settled. Recording the signed certificate is an operations lead action — the
-              society&apos;s signature is captured as evidence, not as a system action they perform.
-            </p>
           )}
         </Card>
       </div>

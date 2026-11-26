@@ -70,7 +70,7 @@ export function refuseInstallationCorrector(i: {
   reason: string;
 }): string | null {
   if (i.certified && !i.superAdmin) {
-    return "The completion certificate has been generated — after that only Yogesh can correct this installation.";
+    return "The installation is marked finished and its work completion certificate generated — after that only Yogesh can correct it.";
   }
   if (!i.canOpenInstallation && !i.superAdmin) return "Correcting an installation needs pipeline or field access.";
   if (!i.demo && !i.reason.trim()) return "Say why this is being corrected — it is kept with the old value.";

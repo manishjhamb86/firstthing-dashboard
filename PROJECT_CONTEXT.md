@@ -9869,3 +9869,39 @@ access until the completion certificate exists, then only the main admin account
 reason is required. Verified 8/8 on dev, including the server refusal with the certificate generated behind an open
 form (`installation.date_correction_refused`). Also on production (data, 2026-11-26): ATS One Hamlet's days 10 and
 11 (1 light each) deleted and day 12 renumbered to 10, at the user's word, logged in the change log.
+
+## Installation phases: 1 to 5 sign-offs, each starting billing for the lights installed by then (2026-11-26) — user-specified
+
+**The ask.** ATS One Hamlet was signed off in two steps — 850 lights on 14-Nov (billing from 15-Nov), the full
+installation on 23-Nov (billing from 24-Nov) — and the system had one certificate. Asked for: any number of phases from
+1 to 5; after each logged day, "Mark phase X complete" or "Mark installation finished"; days after a closed phase fall
+into the next phase on their own.
+
+**Model.** `InstallationPhase` (migration `20261126100000_installation_phases`): number, `throughDay` (a phase holds every
+day after the previous phase up to it), sign-off date and signatory, `lightsOverride` (cumulative full-installation
+lights, demo excluded; null = from the logged days), `isFinal`, its own billing start. Rules in
+`src/lib/installation-phases.ts` (pure, tested): which phase a day is in, each phase's figures, and the refusals — nothing
+after a finished installation, at most 5 (phase 5 must be final), every day in the phase logged, finishing refused while
+planned days remain after it, sign-off not before the phase's last work, not before the previous phase, not in the future,
+an override above the previous phase. A phase may close on the same day as the previous one when that phase billed fewer
+lights than its days hold (Prateek Laurel: 2,000 of 2,445 at day 7). The society's review gate applies to the phase's days.
+
+**The user's answers.** Count from the logged days automatically, with an override (ATS phase 1 = 850); demo lights counted
+once, in phase 1; each phase moves the circuit's billed count to the lights installed so far from its billing month
+(`RepresentedCountChange`) — a single phase that is the whole installation leaves the count as agreed, as before; one
+circuit per deal for a phased billed count (refused otherwise); Amrapali Tower G = phase 1 with phase 2 pending.
+
+**Nothing existing moves.** Phase 1 IS the completion certificate: its signature and billing start stay the deal's first
+billing day, which every billing and monitoring reader already takes. The migration turns each certificate into phase 1,
+keeping its recorded count as an override where it differs from the logged days; a certificate with work logged after
+its sign-off, or a partial one, is marked partial (installation open). Dry-run on production: 18 deals unchanged and
+final; Prateek Laurel and Amrapali Tower G phase 1 with phase 2 pending; ATS One Hamlet split afterwards by
+`scripts/fix-ats-one-hamlet-phases.ts` (run once, after deploy).
+
+**Screens.** The Days table carries a band per phase ("Phase 1 complete · 1,048 lights · signed off … · billing from …",
+"Phase 2 — in progress"), and the latest logged day of the open phase offers the two sign-offs (operations lead) in a
+dialog: date (defaults to the day's work date), signed off by, capacity, the count from the logged days with "the sign-off
+states a different count". "Installation complete" lists the phases. The work completion certificate is generated once the
+installation is finished and lists every phase. Correcting installation rows is locked to Yogesh once the installation is
+finished (was: once any certificate existed). Verified 13/13 in a browser on a one-circuit dev deal (fixture removed,
+circuit restored).

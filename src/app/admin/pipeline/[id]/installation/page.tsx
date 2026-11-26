@@ -35,6 +35,7 @@ import {
   AddPlannedDayForm,
   BatchCaptureForm,
   PhaseSignoffControl,
+  CorrectPhaseControl,
   PlannedDayActions,
   ProjectSetupForm,
   RaiseBlockerForm,
@@ -857,6 +858,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       <th>Lights installed</th>
                       <th>Signed off</th>
                       <th>Billing for these lights from</th>
+                      {canCorrectDates && <th />}
                     </tr>
                   </thead>
                   <tbody>
@@ -895,6 +897,22 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                               first month {rec.proratedDays} of {rec.daysInMonth} days
                             </span>
                           </td>
+                          {canCorrectDates && (
+                            <td>
+                              <CorrectPhaseControl
+                                pipelineId={pipeline.id}
+                                number={f.number}
+                                loggedCount={f.derived}
+                                lightsOverride={f.lightsOverride}
+                                signatoryName={rec.signatoryName}
+                                signatoryRole={rec.signatoryRole}
+                                signedOn={rec.signedAt.toISOString().slice(0, 10)}
+                                today={todayIso}
+                                demoLights={alreadyInstalled}
+                                live={!demoMode}
+                              />
+                            </td>
+                          )}
                         </tr>
                       );
                     })}

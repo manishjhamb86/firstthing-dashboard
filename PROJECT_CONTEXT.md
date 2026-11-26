@@ -9905,3 +9905,11 @@ states a different count". "Installation complete" lists the phases. The work co
 installation is finished and lists every phase. Correcting installation rows is locked to Yogesh once the installation is
 finished (was: once any certificate existed). Verified 13/13 in a browser on a one-circuit dev deal (fixture removed,
 circuit restored).
+
+**Same day — a recorded phase can be corrected (user-asked: "phase 1 is actually 1,000 lights").** Each row of the
+phases table has **Correct**: the count (from the logged days, or as signed off), who signed off and their capacity, and
+for phase 2 onward the date (its billing start follows; phase 1's date moves with the certificate under "Correct the
+dates"). `refusePhaseCountCorrection` (tested) keeps phases in order — above the phase before, below the phase after.
+Phase 1's correction also updates the certificate's recorded count and signatory; correcting the latest phase moves the
+circuit's billed count from its billing month. Same authority as every installation correction (Yogesh once finished),
+logged in the change log. Verified 5/5 in a browser (fixture removed).

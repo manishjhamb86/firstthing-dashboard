@@ -12,6 +12,7 @@ import { BLOCKER_TYPE_LABEL } from "@/lib/status-maps";
 import {
   addPlannedDay,
   signPhase,
+  correctPhase,
   correctBatchDates,
   correctBatchInstalledCount,
   correctCertificateDate,
@@ -1668,5 +1669,117 @@ export function KeptOutcomeCard({ pipelineId, lines, live }: { pipelineId: strin
         </form>
       )}
     </div>
+  );
+}
+
+/** Correct a recorded phase's count, signatory and (phase 2 onward) date — 2026-11-26. */
+export function CorrectPhaseControl({
+  pipelineId,
+  number,
+  loggedCount,
+  lightsOverride,
+  signatoryName,
+  signatoryRole,
+  signedOn,
+  today,
+  demoLights,
+  live,
+}: {
+  pipelineId: string;
+  number: number;
+  /** Full-installation lights logged up to the phase's last day (demo excluded). */
+  loggedCount: number;
+  lightsOverride: number | null;
+  signatoryName: string;
+  signatoryRole: string;
+  signedOn: string;
+  today: string;
+  demoLights: number;
+  live: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [useLogged, setUseLogged] = useState(lightsOverride === null);
+  const [count, setCount] = useState(String(lightsOverride ?? loggedCount));
+  const [name, setName] = useState(signatoryName);
+  const [role, setRole] = useState(signatoryRole);
+  const [on, setOn] = useState(signedOn);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+  const shown = (useLogged ? loggedCount : Number(count) || 0) + (number === 1 ? demoLights : 0);
+
+  return (
+    <>
+      <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(true)}>
+        Correct
+      </button>
+      <Modal open={open} onClose={() => { setOpen(false); setError(undefined); }} title={`Correct phase ${number}`}>
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(undefined);
+            if (!useLogged && (!Number.isInteger(Number(count)) || Number(count) <= 0)) return setError("Enter a positive whole number.");
+            startTransition(async () => {
+              const r = await correctPhase(pipelineId, number, {
+                lightsOverride: useLogged ? null : Number(count),
+                signatoryName: name,
+                signatoryRole: role,
+                signedAt: number > 1 ? on : undefined,
+                reason,
+              });
+              if (r && "error" in r) setError(r.error);
+              else setOpen(false);
+            });
+          }}
+        >
+          <div className="rounded-[var(--r-md)] border border-[var(--border)] p-3 text-sm space-y-2">
+            <label className="flex items-center gap-2">
+              <input type="radio" checked={useLogged} onChange={() => setUseLogged(true)} />
+              From the logged days: {loggedCount.toLocaleString("en-IN")} full installation
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" checked={!useLogged} onChange={() => setUseLogged(false)} />
+              As signed off
+            </label>
+            {!useLogged && (
+              <Field label="Full-installation lights installed by this phase (excluding demo)" htmlFor={`pc-count-${number}`}>
+                <input id={`pc-count-${number}`} className="field" type="number" min={1} value={count} onChange={(e) => setCount(e.target.value)} required />
+              </Field>
+            )}
+            <p className="text-[var(--text-muted)]">
+              Phase {number} then shows <strong className="num">{shown.toLocaleString("en-IN")}</strong> lights
+              {number === 1 && demoLights > 0 ? ` (including the ${demoLights} demo lights)` : ""}.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {number > 1 && (
+              <Field label="Signed off on" htmlFor={`pc-on-${number}`}>
+                <input id={`pc-on-${number}`} className="field" type="date" max={today} value={on} onChange={(e) => setOn(e.target.value)} required />
+              </Field>
+            )}
+            <Field label="Signed off by (society)" htmlFor={`pc-name-${number}`}>
+              <input id={`pc-name-${number}`} className="field" value={name} onChange={(e) => setName(e.target.value)} required />
+            </Field>
+            <Field label="In what capacity" htmlFor={`pc-role-${number}`}>
+              <input id={`pc-role-${number}`} className="field" value={role} onChange={(e) => setRole(e.target.value)} required />
+            </Field>
+          </div>
+          {number === 1 && <p className="text-[13px] text-[var(--text-muted)]">Phase 1&apos;s date moves with the certificate, under &ldquo;Correct the dates&rdquo;.</p>}
+          <Field label={live ? "Why this is being corrected" : "Why this is being corrected (optional)"} htmlFor={`pc-reason-${number}`}>
+            <input id={`pc-reason-${number}`} className="field" value={reason} onChange={(e) => setReason(e.target.value)} required={live} />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+          <div className="flex gap-2">
+            <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+              {pending ? "Saving…" : "Save"}
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
   );
 }

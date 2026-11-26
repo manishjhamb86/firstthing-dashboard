@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loggedThrough, phaseFigures, phaseOfDay, refusePhaseSignoff, type PhaseDay, type PhaseRecord } from "@/lib/installation-phases";
+import { loggedThrough, phaseFigures, phaseOfDay, refusePhaseCountCorrection, refusePhaseSignoff, type PhaseDay, type PhaseRecord } from "@/lib/installation-phases";
 
 const d = (s: string) => new Date(`${s}T00:00:00.000Z`);
 // ATS One Hamlet's shape: days 1–9 by 13-Nov (998 lights), day 10 on 23-Nov (151).
@@ -56,5 +56,13 @@ describe("installation phases", () => {
 
   it("an override must be above the previous phase", () => {
     expect(refusePhaseSignoff({ ...base, phases: [phase1], throughDay: 10, isFinal: true, signedOn: d("2026-11-23"), lightsOverride: 800 })).toMatch(/more than phase 1's 850/);
+  });
+
+  it("a phase's count can be corrected while the phases stay in order", () => {
+    const final: PhaseRecord = { number: 2, throughDay: 10, signedAt: d("2026-11-23"), lightsOverride: null, isFinal: true };
+    expect(refusePhaseCountCorrection({ days, phases: [phase1, final], number: 1, lightsOverride: 1000 })).toBeNull();
+    expect(refusePhaseCountCorrection({ days, phases: [phase1, final], number: 1, lightsOverride: null })).toBeNull();
+    expect(refusePhaseCountCorrection({ days, phases: [phase1, final], number: 1, lightsOverride: 1200 })).toMatch(/fewer lights than phase 2's 1149/);
+    expect(refusePhaseCountCorrection({ days, phases: [phase1, final], number: 2, lightsOverride: 800 })).toMatch(/more lights than phase 1's 850/);
   });
 });

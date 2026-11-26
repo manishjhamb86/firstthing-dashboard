@@ -6,10 +6,12 @@ import { db } from "@/lib/db";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdmin, requireAdminPermission, resolveAdmin } from "@/lib/admin-permissions";
 import { logChange } from "@/lib/change-log";
+import { formatDate } from "@/lib/format-date";
 import { keptAtDemoOf } from "@/lib/circuit-load";
 import { alreadyInstalledCount } from "@/lib/installation-scope";
 import { refuseDateCorrector, refuseInstallationCorrector, refuseInstallationDates } from "@/lib/installation-dates";
 import { isSuperAdmin } from "@/lib/super-admin";
+import { phaseFigures, refusePhaseCountCorrection } from "@/lib/installation-phases";
 import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
 import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
@@ -1159,5 +1161,94 @@ export async function recordKeptOutcome(
   revalidatePath(pathFor(pipelineId));
   revalidatePath("/portal");
   revalidatePath("/portal/electricity");
+  return { ok: true as const };
+}
+
+/**
+ * Correct a recorded phase (2026-11-26, user-asked): its light count (or back
+ * to the logged days), who signed it off, and — for phase 2 onward — its
+ * date; phase 1's date moves with the certificate under "Correct the dates".
+ * Same authority as every installation correction. When the corrected phase
+ * is the latest one, the circuit's billed count follows from its billing
+ * month; earlier phases keep the billed history they already set.
+ */
+export async function correctPhase(
+  pipelineId: string,
+  number: number,
+  input: { lightsOverride: number | null; signatoryName: string; signatoryRole: string; signedAt?: string; reason: string },
+) {
+  const who = await dateCorrector(input.reason, pipelineId, "phase");
+  if ("error" in who) return who;
+  const project = await db.installationProject.findUnique({
+    where: { pipelineId },
+    include: { phases: true, batches: true, certificate: true, pipeline: { select: { siteSurvey: { select: { id: true } } } } },
+  });
+  const phase = project?.phases.find((p) => p.number === number);
+  if (!project || !phase) return { error: "That phase is no longer on record." };
+  if (!input.signatoryName.trim() || !input.signatoryRole.trim()) return { error: "Record who signed off and in what capacity." };
+
+  const days = project.batches
+    .filter((b) => b.submittedAt && b.state !== "draft")
+    .map((b) => ({ day: b.day, installedCount: b.installedCount, workedOn: b.submittedAt }));
+  const records = project.phases.map((p) => ({ number: p.number, throughDay: p.throughDay, signedAt: p.signedAt, lightsOverride: p.lightsOverride, isFinal: p.isFinal }));
+  const refusal = refusePhaseCountCorrection({ days, phases: records, number, lightsOverride: input.lightsOverride });
+  if (refusal) {
+    logger.warn("installation.phase_correction_refused", { actorId: who.actorId, pipelineId, number, refusal });
+    return { error: refusal };
+  }
+
+  let dateData: { signedAt: Date; billingStartDate: Date; proratedDays: number; daysInMonth: number } | null = null;
+  if (number > 1 && input.signedAt && input.signedAt !== phase.signedAt.toISOString().slice(0, 10)) {
+    const signed = new Date(`${input.signedAt}T00:00:00.000Z`);
+    if (Number.isNaN(signed.getTime())) return { error: "Unreadable sign-off date." };
+    if (signed.getTime() > Date.now()) return { error: "A phase cannot be signed off in the future." };
+    const prev = project.phases.find((p) => p.number === number - 1)!;
+    const nextP = project.phases.find((p) => p.number === number + 1);
+    if (signed < prev.signedAt) return { error: `Phase ${number} cannot be signed off before phase ${number - 1} (${formatDate(prev.signedAt)}).` };
+    if (nextP && signed > nextP.signedAt) return { error: `Phase ${number} cannot be signed off after phase ${number + 1} (${formatDate(nextP.signedAt)}).` };
+    const pr = prorateFirstMonth(signed);
+    dateData = { signedAt: signed, billingStartDate: pr.billingStart, proratedDays: pr.proratedDays, daysInMonth: pr.daysInMonth };
+  }
+
+  const fig = phaseFigures(days, records.map((p) => (p.number === number ? { ...p, lightsOverride: input.lightsOverride } : p))).find((p) => p.number === number)!;
+  const isLatest = number === Math.max(...project.phases.map((p) => p.number));
+  const singleWhole = project.phases.length === 1 && phase.isFinal;
+  const circuits = project.pipeline.siteSurvey
+    ? await db.circuit.findMany({ where: { siteSurveyId: project.pipeline.siteSurvey.id, voidedAt: null }, select: { id: true, representedLightCount: true } })
+    : [];
+  const reason = input.reason.trim() || null;
+
+  await db.$transaction(async (tx) => {
+    await tx.installationPhase.update({
+      where: { id: phase.id },
+      data: { lightsOverride: input.lightsOverride, signatoryName: input.signatoryName.trim(), signatoryRole: input.signatoryRole.trim(), ...(dateData ?? {}) },
+    });
+    await logChange(tx, {
+      entity: "installation_phase", entityId: phase.id, kind: "edit", field: "phase",
+      oldValue: { lightsOverride: phase.lightsOverride, signatoryName: phase.signatoryName, signatoryRole: phase.signatoryRole, signedAt: phase.signedAt },
+      newValue: { lightsOverride: input.lightsOverride, signatoryName: input.signatoryName.trim(), signatoryRole: input.signatoryRole.trim(), signedAt: dateData?.signedAt ?? phase.signedAt },
+      reason, actorId: who.actorId,
+    });
+    if (number === 1 && project.certificate) {
+      await tx.completionCertificate.update({
+        where: { id: project.certificate.id },
+        data: { totalInstalledCount: fig.cumulative, signatoryName: input.signatoryName.trim(), signatoryRole: input.signatoryRole.trim() },
+      });
+    }
+    if (isLatest && !singleWhole && circuits.length === 1 && circuits[0].representedLightCount !== fig.cumulative) {
+      const billingMonth = (dateData?.billingStartDate ?? phase.billingStartDate).toISOString().slice(0, 7);
+      await tx.circuit.update({ where: { id: circuits[0].id }, data: { representedLightCount: fig.cumulative } });
+      await tx.representedCountChange.create({
+        data: {
+          circuitId: circuits[0].id, previousCount: circuits[0].representedLightCount, nextCount: fig.cumulative, effectiveFrom: billingMonth,
+          reason: `Phase ${number}'s count corrected to ${fig.cumulative}${reason ? ` — ${reason}` : ""}.`, recordedById: who.actorId,
+        },
+      });
+    }
+  });
+
+  logger.info("installation.phase_corrected", { actorId: who.actorId, pipelineId, number, lightsOverride: input.lightsOverride, cumulative: fig.cumulative, dateMoved: !!dateData });
+  revalidatePath(pathFor(pipelineId));
+  revalidatePath(`/admin/pipeline/${pipelineId}`);
   return { ok: true as const };
 }

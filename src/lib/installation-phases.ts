@@ -125,3 +125,32 @@ export function refusePhaseSignoff(i: {
   }
   return null;
 }
+
+/**
+ * Why a recorded phase's count cannot be corrected to `lightsOverride`
+ * (2026-11-26): it must stay above the phase before and below the phase
+ * after, so the phases still read in order. null = back to the logged days.
+ */
+export function refusePhaseCountCorrection(i: {
+  days: readonly PhaseDay[];
+  phases: readonly PhaseRecord[];
+  number: number;
+  lightsOverride: number | null;
+}): string | null {
+  const sorted = [...i.phases].sort((a, b) => a.number - b.number);
+  const idx = sorted.findIndex((p) => p.number === i.number);
+  if (idx < 0) return "That phase is no longer on record.";
+  if (i.lightsOverride !== null && (!Number.isInteger(i.lightsOverride) || i.lightsOverride <= 0)) {
+    return "The lights installed must be a positive whole number.";
+  }
+  const next = sorted.map((p, k) => (k === idx ? { ...p, lightsOverride: i.lightsOverride } : p));
+  const figs = phaseFigures(i.days, next);
+  const me = figs[idx];
+  if (idx > 0 && me.cumulative <= figs[idx - 1].cumulative) {
+    return `Phase ${i.number} must have more lights than phase ${figs[idx - 1].number}'s ${figs[idx - 1].cumulative}.`;
+  }
+  if (idx < figs.length - 1 && me.cumulative >= figs[idx + 1].cumulative) {
+    return `Phase ${i.number} must have fewer lights than phase ${figs[idx + 1].number}'s ${figs[idx + 1].cumulative}.`;
+  }
+  return null;
+}

@@ -35,7 +35,7 @@ export function refuseInstallationDates(s: InstallationDates): string | null {
     for (const b of s.batches) {
       const last = [b.submittedOn, b.reviewedOn].filter((x): x is Date => x !== null).sort((a, b2) => d(b2) - d(a))[0];
       if (last && d(last) > d(s.signedOn)) {
-        return `The certificate (${formatDate(s.signedOn)}) cannot be signed before day ${b.day}'s work was done and approved (${formatDate(last)}). Change them together under Completion & billing start → Correct the dates.`;
+        return `The certificate (${formatDate(s.signedOn)}) cannot be signed before day ${b.day}'s work was done and approved (${formatDate(last)}). Change them together under Installation complete → Correct the dates.`;
       }
     }
   }
@@ -52,5 +52,27 @@ export function refuseDateCorrector(i: { demo: boolean; isField: boolean; isOps:
   if (i.demo) return i.isField ? null : "Correcting installation dates needs field or operations access.";
   if (!i.isOps) return "Once live, installation dates are corrected by operations only — ask an operations lead.";
   if (!i.reason.trim()) return "Say why the date is being corrected — it is kept with the old date.";
+  return null;
+}
+
+/**
+ * Who may correct an installation's rows — a day's dates, its planned or
+ * installed count, the contracted scope (2026-11-26, user's rule): any admin
+ * who works on installations until the completion certificate is generated;
+ * after that, only the main admin account (Yogesh). Once live, every
+ * correction says why; the old value is kept in the change log either way.
+ */
+export function refuseInstallationCorrector(i: {
+  demo: boolean;
+  canOpenInstallation: boolean;
+  certified: boolean;
+  superAdmin: boolean;
+  reason: string;
+}): string | null {
+  if (i.certified && !i.superAdmin) {
+    return "The completion certificate has been generated — after that only Yogesh can correct this installation.";
+  }
+  if (!i.canOpenInstallation && !i.superAdmin) return "Correcting an installation needs pipeline or field access.";
+  if (!i.demo && !i.reason.trim()) return "Say why this is being corrected — it is kept with the old value.";
   return null;
 }

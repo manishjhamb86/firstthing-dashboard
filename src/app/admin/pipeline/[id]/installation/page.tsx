@@ -10,6 +10,7 @@ import { describeTally, installationTally } from "@/lib/installation-tally";
 import { circuitName } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
 import { requireAdminPage } from "@/lib/admin-permissions";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { loadDealProgress } from "@/lib/pipeline-facts";
 import { AddPortalAccountButton } from "@/components/add-portal-account-button";
 import { NextStepCallout, StepComplete } from "@/components/deal-stepper";
@@ -66,7 +67,10 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   // Correcting a recorded date (2026-09-27): data entry before go-live, an
   // operations act with a reason after it.
   const demoMode = await isDemoMode();
-  const canCorrectDates = demoMode ? isField : isOps;
+  // Correcting any row (2026-11-26, user's rule): every admin who works on
+  // installations until the completion certificate is generated, then only
+  // the main admin account. Settled once the project is loaded, below.
+  let canCorrectDates = perms.includes("manage_survey") || perms.includes("manage_pipeline");
   const todayIso = new Date().toISOString().slice(0, 10);
   // Every line on this deal's circuits that kept fixtures at the demo.
   const keptCircuits = await db.circuit.findMany({
@@ -128,6 +132,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
   if (!pipeline) notFound();
 
   const project = pipeline.installationProject;
+  if (project?.certificate) canCorrectDates = isSuperAdmin(session.user.email);
   const surveyed = (pipeline.siteSurvey?.areas ?? []).reduce((n, a) => n + a.count, 0);
   // A demo circuit's own lights are replaced before the full crew ever
   // arrives (2026-10-17, user-asked, then corrected): shown as its own
@@ -537,8 +542,9 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                               !project.gateSkipUsedAt && (
                                 <SkipGateForm pipelineId={pipeline.id} plannedDayId={d.id} />
                               )}
-                            {canCorrectDates && !batch?.submittedAt && (
+                            {canCorrectDates && (
                               <PlannedDayActions
+                                logged={batch?.submittedAt ? { batchId: batch.id, installedCount: batch.installedCount } : null}
                                 pipelineId={pipeline.id}
                                 plannedDayId={d.id}
                                 plannedDate={isoDate(d.plannedDate)}
@@ -664,7 +670,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       {b.state === "disputed" && isField && (
                         <ReopenBatchControl pipelineId={pipeline.id} batchId={b.id} />
                       )}
-                      {canCorrectDates && b.submittedAt && !project.certificate && (
+                      {canCorrectDates && b.submittedAt && (
                         <CorrectDatesControl
                           kind="batch"
                           pipelineId={pipeline.id}

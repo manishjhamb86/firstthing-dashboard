@@ -514,6 +514,7 @@ export function PlannedDayActions({
   plannedDate,
   startTime,
   plannedCount,
+  logged = null,
 }: {
   pipelineId: string;
   plannedDayId: string;
@@ -522,8 +523,11 @@ export function PlannedDayActions({
   /** HH:MM */
   startTime: string;
   plannedCount: number;
+  /** The work logged against this day, when it has been submitted. */
+  logged?: { batchId: string; installedCount: number } | null;
 }) {
-  const [open, setOpen] = useState<"date" | "count" | "delete" | null>(null);
+  const [open, setOpen] = useState<"date" | "count" | "installed" | "delete" | null>(null);
+  const [installed, setInstalled] = useState(String(logged?.installedCount ?? ""));
   const [date, setDate] = useState(plannedDate);
   const [time, setTime] = useState(startTime);
   const [count, setCount] = useState(String(plannedCount));
@@ -543,11 +547,51 @@ export function PlannedDayActions({
         Correct the date
       </button>
       <button type="button" className="btn-ghost btn-sm" onClick={() => { setCount(String(plannedCount)); setOpen("count"); }}>
-        Correct the count
+        {logged ? "Planned" : "Correct the count"}
       </button>
+      {logged && (
+        <button type="button" className="btn-ghost btn-sm" onClick={() => { setInstalled(String(logged.installedCount)); setOpen("installed"); }}>
+          Installed
+        </button>
+      )}
       <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen("delete")}>
         Delete
       </button>
+
+      {logged && (
+        <Modal open={open === "installed"} onClose={close} title="Correct the lights installed">
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setError(undefined);
+              const n = Number(installed);
+              if (!Number.isInteger(n) || n <= 0) return setError("Enter a positive whole number.");
+              startTransition(async () => {
+                const r = await correctBatchInstalledCount(pipelineId, logged.batchId, { installedCount: n, reason });
+                if (r && "error" in r) setError(r.error);
+                else close();
+              });
+            }}
+          >
+            <Field label="Lights installed that day" htmlFor={`pd-inst-${plannedDayId}`}>
+              <input id={`pd-inst-${plannedDayId}`} className="field" type="number" min={1} value={installed} onChange={(e) => setInstalled(e.target.value)} required />
+            </Field>
+            <Field label="Why this is being corrected" htmlFor={`pd-inst-reason-${plannedDayId}`}>
+              <input id={`pd-inst-reason-${plannedDayId}`} className="field" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="The count was entered wrong." />
+            </Field>
+            {error && <ErrorText>{error}</ErrorText>}
+            <div className="flex gap-2">
+              <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+                {pending ? "Saving…" : "Save"}
+              </button>
+              <button type="button" className="btn-ghost btn-sm" onClick={close}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       <Modal open={open === "count"} onClose={close} title="Correct the planned count">
         <form
@@ -642,8 +686,10 @@ export function PlannedDayActions({
           }}
         >
           <p className="text-[13px]" style={{ color: "var(--text-muted)" }}>
-            Removes this row entirely. Re-enter it with &ldquo;Add a planned day&rdquo; below the
-            table if it was set up wrong rather than genuinely not needed.
+            Removes this row entirely
+            {logged ? `, with the ${logged.installedCount} light${logged.installedCount === 1 ? "" : "s"} logged against it and the society's approval` : ""}
+            . Re-enter it with &ldquo;Add a planned day&rdquo; below the table if it was set up wrong rather than
+            genuinely not needed.
           </p>
           <Field label="Why this day is being removed" htmlFor={`pd-del-reason-${plannedDayId}`}>
             <input id={`pd-del-reason-${plannedDayId}`} className="field" value={reason} onChange={(e) => setReason(e.target.value)} required />

@@ -9859,3 +9859,13 @@ dates, the day-by-day table (date, area, lights installed, and optionally who re
 toggled with "Hide/Show who reviewed each day", `?reviews=0`), the society's sign-off and two signature lines.
 Rendered from the rows on every open. Verified on a dev fixture (fixture removed); one page with zero and
 Safari-like margins. The society's portal does not show the certificate yet.
+
+**Same day — any row can be corrected, and the certificate locks it to Yogesh (user's rule).** Every day row on the
+installation page offers Correct the date, Planned, Installed (once logged) and Delete — including days already
+submitted (the old "already submitted" refusals on planned date/count were lifted; deleting a submitted day removes
+its logged work and approval with it, logged, and lowers the certificate's total). `refuseInstallationCorrector`
+(`src/lib/installation-dates.ts`, tested) gates every installation correction: any admin with pipeline or field
+access until the completion certificate exists, then only the main admin account (`isSuperAdmin`); once live a
+reason is required. Verified 8/8 on dev, including the server refusal with the certificate generated behind an open
+form (`installation.date_correction_refused`). Also on production (data, 2026-11-26): ATS One Hamlet's days 10 and
+11 (1 light each) deleted and day 12 renumbered to 10, at the user's word, logged in the change log.

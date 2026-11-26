@@ -8,7 +8,8 @@ import { requireAdmin, requireAdminPermission, resolveAdmin } from "@/lib/admin-
 import { logChange } from "@/lib/change-log";
 import { keptAtDemoOf } from "@/lib/circuit-load";
 import { alreadyInstalledCount } from "@/lib/installation-scope";
-import { refuseDateCorrector, refuseInstallationDates } from "@/lib/installation-dates";
+import { refuseDateCorrector, refuseInstallationCorrector, refuseInstallationDates } from "@/lib/installation-dates";
+import { isSuperAdmin } from "@/lib/super-admin";
 import { projectCircuitMonitoring } from "@/lib/monitoring-projection";
 import { rederiveInvoiceMonthsAfterRescale } from "@/lib/invoice-rederive";
 import { logger } from "@/lib/logger";
@@ -479,10 +480,14 @@ async function dateCorrector(reason: string, pipelineId: string, what: string) {
   const admin = await resolveAdmin();
   if (!admin) return { error: "Your session has ended. Sign in again." as const };
   const perms = admin.permissions;
-  const refusal = refuseDateCorrector({
+  // Any installation admin until the completion certificate is generated;
+  // after it, the main admin account only (2026-11-26, user's rule).
+  const cert = await db.completionCertificate.findFirst({ where: { project: { pipelineId } }, select: { id: true } });
+  const refusal = refuseInstallationCorrector({
     demo: await isDemoMode(),
-    isField: perms.includes("manage_survey"),
-    isOps: perms.includes("manage_survey") && perms.includes("manage_pipeline"),
+    canOpenInstallation: perms.includes("manage_survey") || perms.includes("manage_pipeline"),
+    certified: !!cert,
+    superAdmin: isSuperAdmin(admin.email),
     reason,
   });
   if (refusal) {
@@ -588,9 +593,6 @@ export async function correctPlannedDayDate(
     include: { project: { select: { pipelineId: true } }, batches: { select: { id: true, submittedAt: true } } },
   });
   if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is no longer on record." };
-  if (day.batches.some((b) => b.submittedAt)) {
-    return { error: "This day has already been submitted — correct its work date instead of the plan." };
-  }
 
   const newDate = parseDay(input.plannedDate, "planned date");
   if (newDate && "error" in newDate) return newDate;
@@ -642,9 +644,6 @@ export async function correctPlannedDayCount(
     },
   });
   if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is no longer on record." };
-  if (day.batches.some((b) => b.submittedAt)) {
-    return { error: "This day has already been submitted — it is the record of what happened, not a plan to revise." };
-  }
   if (!Number.isInteger(input.plannedCount) || input.plannedCount <= 0) {
     return { error: "Planned count must be a positive whole number." };
   }
@@ -801,13 +800,30 @@ export async function deletePlannedDay(pipelineId: string, plannedDayId: string,
     include: { project: { select: { pipelineId: true } }, batches: { select: { id: true, submittedAt: true } } },
   });
   if (!day || day.project.pipelineId !== pipelineId) return { error: "That planned day is no longer on record." };
-  if (day.batches.some((b) => b.submittedAt)) {
-    return { error: "This day has already been submitted — it is the record of what happened, not a plan to delete." };
-  }
+  // A day entered in error may be deleted even after work was logged
+  // against it (2026-11-26, user-asked): its logged work goes with it, kept
+  // in the change log, and the certificate's total follows.
+  const logged = await db.installationBatch.findMany({ where: { plannedDayId }, include: { review: true } });
+  const cert = await db.completionCertificate.findFirst({ where: { projectId: day.projectId } });
 
   await db.$transaction(async (tx) => {
-    // Batches, Field visits (SetNull on both) survive — only ever reachable
-    // here because neither has been submitted/logged against this day.
+    for (const b of logged) {
+      await logChange(tx, {
+        entity: "installation_batch", entityId: b.id, kind: "delete",
+        oldValue: { day: b.day, installedCount: b.installedCount, state: b.state, submittedAt: b.submittedAt, review: b.review },
+        reason: reason.trim() || "Deleted with its planned day", actorId: who.actorId,
+      });
+    }
+    if (logged.length) await tx.installationBatch.deleteMany({ where: { id: { in: logged.map((b) => b.id) } } });
+    const removed = logged.filter((b) => b.submittedAt).reduce((n, b) => n + b.installedCount, 0);
+    if (cert && removed > 0) {
+      await tx.completionCertificate.update({ where: { id: cert.id }, data: { totalInstalledCount: cert.totalInstalledCount - removed } });
+      await logChange(tx, {
+        entity: "completion_certificate", entityId: cert.id, kind: "edit", field: "totalInstalledCount",
+        oldValue: cert.totalInstalledCount, newValue: cert.totalInstalledCount - removed,
+        reason: `Day ${day.day} was deleted — the certificate's total follows.`, actorId: who.actorId,
+      });
+    }
     await tx.installationPlannedDay.delete({ where: { id: plannedDayId } });
     await logChange(tx, {
       entity: "installation_planned_day", entityId: plannedDayId, kind: "edit", field: "deleted",

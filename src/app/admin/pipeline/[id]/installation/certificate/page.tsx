@@ -35,13 +35,17 @@ export default async function WorkCompletionCertificatePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ reviews?: string }>;
+  searchParams: Promise<{ reviews?: string; area?: string }>;
 }) {
   const session = await requireAdminPage();
   const perms = session.user.adminPermissions ?? [];
   if (!perms.includes("manage_pipeline") && !perms.includes("manage_survey")) redirect("/admin");
   const { id } = await params;
-  const showReviews = (await searchParams).reviews !== "0";
+  const sp = await searchParams;
+  const showReviews = sp.reviews !== "0";
+  // The area is optional (2026-11-26, user-asked): hidden unless asked for.
+  const showArea = sp.area === "1";
+  const cols = 3 + (showArea ? 1 : 0) + (showReviews ? 1 : 0);
 
   const pipeline = await db.pipeline.findUnique({
     where: { id },
@@ -108,7 +112,11 @@ export default async function WorkCompletionCertificatePage({
   const first = workDays[0]?.submittedAt ?? null;
   const last = workDays[workDays.length - 1]?.submittedAt ?? null;
   const certNo = `WCC-${(cert?.signedAt ?? new Date()).toISOString().slice(0, 4)}-${project.id.slice(-6).toUpperCase()}`;
-  const toggleHref = `/admin/pipeline/${id}/installation/certificate${showReviews ? "?reviews=0" : ""}`;
+  const hrefWith = (reviews: boolean, area: boolean) => {
+    const q = [reviews ? null : "reviews=0", area ? "area=1" : null].filter(Boolean).join("&");
+    return `/admin/pipeline/${id}/installation/certificate${q ? `?${q}` : ""}`;
+  };
+  const toggleHref = hrefWith(!showReviews, showArea);
 
   return (
     <div className="print-doc mx-auto max-w-[900px] p-4 sm:p-8">
@@ -116,6 +124,9 @@ export default async function WorkCompletionCertificatePage({
         <BackButton fallbackHref={`/admin/pipeline/${id}/installation`} />
         {cert && (
           <div className="flex flex-wrap items-center gap-3">
+            <Link href={hrefWith(showReviews, !showArea)} className="text-sm font-semibold underline underline-offset-2">
+              {showArea ? "Hide area" : "Show area"}
+            </Link>
             <Link href={toggleHref} className="text-sm font-semibold underline underline-offset-2">
               {showReviews ? "Hide who reviewed each day" : "Show who reviewed each day"}
             </Link>
@@ -195,8 +206,8 @@ export default async function WorkCompletionCertificatePage({
                     <tr>
                       <th style={{ width: 44 }}>Day</th>
                       <th style={{ width: 112 }}>Date</th>
-                      <th>Area</th>
-                      <th style={{ textAlign: "right", width: 64 }}>Lights</th>
+                      {showArea && <th>Area</th>}
+                      <th style={{ textAlign: "right", width: showArea ? 64 : undefined }}>Lights</th>
                       {showReviews && <th style={{ width: 170 }}>Signed off by</th>}
                     </tr>
                   </thead>
@@ -213,7 +224,7 @@ export default async function WorkCompletionCertificatePage({
                         <Fragment key={b.id}>
                           {startsPhase && (
                             <tr className="phase-band">
-                              <td colSpan={showReviews ? 5 : 4}>
+                              <td colSpan={cols}>
                                 Phase {phase.number}{phase.isFinal ? " — full installation" : ""} · signed off {formatDate(phase.rec.signedAt)}
                               </td>
                             </tr>
@@ -221,10 +232,12 @@ export default async function WorkCompletionCertificatePage({
                           <tr>
                             <td className="num">{b.day}</td>
                             <td className="num whitespace-nowrap">{formatDate(b.submittedAt)}</td>
-                            <td>
-                              {b.areaKey}
-                              {showDetail && <span className="block text-[12px] leading-snug text-[var(--text-muted)]">{detail}</span>}
-                            </td>
+                            {showArea && (
+                              <td>
+                                {b.areaKey}
+                                {showDetail && <span className="block text-[12px] leading-snug text-[var(--text-muted)]">{detail}</span>}
+                              </td>
+                            )}
                             <td className="num" style={{ textAlign: "right" }}>{n(b.installedCount)}</td>
                             {showReviews && (
                               <td>
@@ -246,12 +259,12 @@ export default async function WorkCompletionCertificatePage({
                       );
                     })}
                     {project.batches.length === 0 && (
-                      <tr><td colSpan={showReviews ? 5 : 4} className="text-[var(--text-muted)]">No days logged.</td></tr>
+                      <tr><td colSpan={cols} className="text-[var(--text-muted)]">No days logged.</td></tr>
                     )}
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={3} className="font-semibold">Full installation total</td>
+                      <td colSpan={showArea ? 3 : 2} className="font-semibold">Full installation total</td>
                       <td className="num font-semibold" style={{ textAlign: "right" }}>{n(tally.installed)}</td>
                       {showReviews && <td />}
                     </tr>

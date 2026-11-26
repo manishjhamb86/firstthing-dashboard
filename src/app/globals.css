@@ -889,6 +889,8 @@ textarea.field {
 .tbl tbody tr.day-main:hover, .tbl tbody tr.day-sub:hover { background: transparent; }
 .tbl tbody tr.phase-band td { background: var(--accent-subtle); color: var(--accent-ink, var(--text)); font-size: 13px; font-weight: 600; padding: 8px 14px; border-bottom: 1px solid var(--accent-line); }
 .tbl tbody tr.phase-band:hover { background: transparent; }
+.tbl.days-table { table-layout: fixed; min-width: 960px; }
+.tbl.days-table td { overflow-wrap: anywhere; }
 
 /* The Stock page's batch listing (2026-11-20, user-caught "distorted"): one
    line per batch at any width — a narrow screen scrolls the table, never

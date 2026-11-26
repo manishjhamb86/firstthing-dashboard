@@ -504,7 +504,19 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
             );
           })()}
           <div className="overflow-x-auto">
-            <table className="tbl">
+            {/* Fixed column widths (2026-11-26, user-caught): opening a day's
+                details must not re-flow the columns of every other row. */}
+            <table className="tbl days-table">
+              <colgroup>
+                <col style={{ width: 64 }} />
+                <col style={{ width: 170 }} />
+                <col />
+                <col style={{ width: 96 }} />
+                <col style={{ width: 96 }} />
+                <col style={{ width: 96 }} />
+                <col style={{ width: 140 }} />
+                <col style={{ width: 160 }} />
+              </colgroup>
               <thead>
                 <tr>
                   <th>Day</th>

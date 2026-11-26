@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { keptAtDemoOf } from "@/lib/circuit-load";
 import { alreadyInstalledCount } from "@/lib/installation-scope";
 import { describeTally, installationTally } from "@/lib/installation-tally";
+import { DayRow } from "./day-row";
 import { MAX_PHASES, loggedThrough, phaseFigures, phaseOfDay, type PhaseDay, type PhaseRecord } from "@/lib/installation-phases";
 import { circuitName } from "@/lib/circuit-label";
 import { demoBypass, isDemoMode } from "@/lib/demo-mode";
@@ -629,7 +630,6 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     if (logged.photosWaivedReason)
                       infoParts.push(<span key="waive" style={{ color: "var(--warn-fg)" }}>No photos — recorded after the fact: {logged.photosWaivedReason}</span>);
                   }
-                  if (gate?.reason) infoParts.push(<span key="gate">{gate.reason}</span>);
                   const info =
                     infoParts.length > 0 ? (
                       <p className="text-[13px] text-[var(--text-muted)]">
@@ -648,8 +648,10 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                           <td colSpan={8}>{describePhase(n)}</td>
                         </tr>
                       ))}
-                      <tr className={actions.length || info ? "day-main" : undefined}>
-                        <td className="num">{dayNo}</td>
+                      <DayRow
+                        day={dayNo}
+                        cells={
+                          <>
                         <td>
                           {d ? (
                             <>
@@ -676,21 +678,12 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                         </td>
                         <td>{batchMeta ? <StatusChip tone={batchMeta.tone}>{batchMeta.label}</StatusChip> : "—"}</td>
                         <td>{gateMeta ? <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip> : "—"}</td>
-                      </tr>
-                      {actions.length > 0 && (
-                        <tr className="day-sub">
-                          <td />
-                          <td colSpan={7}>
-                            <div className="flex flex-wrap items-start gap-x-3 gap-y-1">{actions}</div>
-                          </td>
-                        </tr>
-                      )}
-                      {info && (
-                        <tr className="day-sub">
-                          <td />
-                          <td colSpan={7}>{info}</td>
-                        </tr>
-                      )}
+                          </>
+                        }
+                        actions={actions.length > 0 ? <div className="flex flex-wrap items-start gap-x-3 gap-y-1">{actions}</div> : null}
+                        details={info}
+                        note={gate?.reason ? <p className="text-[13px] text-[var(--text-muted)]">{gate.reason}</p> : null}
+                      />
                       {trailing.map((n) => (
                         <tr key={`band-${n}`} className="phase-band">
                           <td colSpan={8}>{describePhase(n)}</td>

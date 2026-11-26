@@ -37,6 +37,7 @@ import {
   BatchCaptureForm,
   PhaseSignoffControl,
   CorrectPhaseControl,
+  ChangeOnlookerControl,
   PlannedDayActions,
   ProjectSetupForm,
   RaiseBlockerForm,
@@ -506,8 +507,11 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
             </p>
           )}
           <p className="mt-4 text-sm text-[var(--text-muted)]">
-            Onlooker: <strong>{project.onlooker.name ?? project.onlooker.email}</strong>. They review each day&apos;s
-            work; the next day cannot start until they have.
+            Onlooker: <strong>{project.onlooker.name ?? project.onlooker.email}</strong>
+            {canCorrectDates && (
+              <ChangeOnlookerControl pipelineId={pipeline.id} currentId={project.onlookerId} accounts={accounts} live={!demoMode} />
+            )}
+            . They review each day&apos;s work; the next day cannot start until they have.
           </p>
           {project.gateSkipUsedAt && (
             <p className="mt-2 text-sm" style={{ color: "var(--warn-fg)" }}>

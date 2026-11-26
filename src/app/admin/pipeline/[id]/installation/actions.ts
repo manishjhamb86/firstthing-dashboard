@@ -1284,3 +1284,35 @@ export async function correctPhase(
   revalidatePath(`/admin/pipeline/${pipelineId}`);
   return { ok: true as const };
 }
+
+/**
+ * Change the society's onlooker (2026-11-26, user-asked) — the portal account
+ * that reviews each day. Days still awaiting review pass to the new onlooker,
+ * since every review check reads the installation's onlooker. Same authority
+ * as every installation correction; the old onlooker is kept in the change log.
+ */
+export async function changeOnlooker(pipelineId: string, input: { onlookerId: string; reason: string }) {
+  const who = await dateCorrector(input.reason, pipelineId, "onlooker");
+  if ("error" in who) return who;
+  const project = await db.installationProject.findUnique({ where: { pipelineId }, select: { id: true, societyId: true, onlookerId: true } });
+  if (!project) return { error: "No installation project is set up for this deal yet." };
+  if (input.onlookerId === project.onlookerId) return { error: "That account is already the onlooker." };
+  const onlooker = await db.profile.findUnique({ where: { id: input.onlookerId }, select: { societyId: true, isActive: true, name: true, email: true } });
+  if (!onlooker || onlooker.societyId !== project.societyId) {
+    logger.warn("installation.onlooker_rejected", { actorId: who.actorId, pipelineId, onlookerId: input.onlookerId });
+    return { error: "That account does not belong to this society." };
+  }
+  if (!onlooker.isActive) return { error: "That portal account is deactivated." };
+
+  await db.$transaction(async (tx) => {
+    await tx.installationProject.update({ where: { id: project.id }, data: { onlookerId: input.onlookerId } });
+    await logChange(tx, {
+      entity: "installation_project", entityId: project.id, kind: "edit", field: "onlookerId",
+      oldValue: project.onlookerId, newValue: input.onlookerId, reason: input.reason.trim() || null, actorId: who.actorId,
+    });
+  });
+  logger.info("installation.onlooker_changed", { actorId: who.actorId, pipelineId, from: project.onlookerId, to: input.onlookerId });
+  revalidatePath(pathFor(pipelineId));
+  revalidatePath("/portal");
+  return { ok: true as const };
+}

@@ -9913,3 +9913,16 @@ dates"). `refusePhaseCountCorrection` (tested) keeps phases in order — above t
 Phase 1's correction also updates the certificate's recorded count and signatory; correcting the latest phase moves the
 circuit's billed count from its billing month. Same authority as every installation correction (Yogesh once finished),
 logged in the change log. Verified 5/5 in a browser (fixture removed).
+
+**Same day — the Days table redesigned, and the onlooker can be changed (user-asked).** Each day is one line: day,
+date, area, planned, logged, photos, society review, gate, then the day's next step (Start this day / skip the gate /
+reopen a disputed day) and a ⋯ menu holding its corrections (planned date, planned count, installed count, work &
+approval dates, delete day). The menu is fixed to the viewport so the table's scroll box cannot clip it, and opens
+upwards near the bottom. Fixed column widths (`table-layout: fixed`) so opening a day's details never re-flows the
+table. The phase sign-offs moved into the open phase's band ("Phase 2 — in progress · At day 3: Mark phase 2 complete ·
+Mark installation finished"). The phases table shows installed and billed separately ("+151 new · +48 held over from
+phase 1"). Phase 1's date is corrected in its own Correct dialog (through the certificate's date correction, so billing
+follows); the separate "Correct the dates" button is gone; date checks compare each sign-off with its own phase's days.
+`changeOnlooker` (same correction authority, logged) with a Change control beside the onlooker — days awaiting review
+pass to the new onlooker. Note for CSS: rules placed beside `.tbl` land in a lower layer than the `.btn-*` rules, so a
+rule meant to override a button must sit beside the button rules.

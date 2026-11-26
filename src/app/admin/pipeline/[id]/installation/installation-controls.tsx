@@ -12,6 +12,7 @@ import { BLOCKER_TYPE_LABEL } from "@/lib/status-maps";
 import {
   addPlannedDay,
   signPhase,
+  changeOnlooker,
   correctPhase,
   correctBatchDates,
   correctBatchInstalledCount,
@@ -1775,6 +1776,71 @@ export function CorrectPhaseControl({
           {error && <ErrorText>{error}</ErrorText>}
           <div className="flex gap-2">
             <button type="submit" className="btn-primary btn-sm" disabled={pending}>
+              {pending ? "Saving…" : "Save"}
+            </button>
+            <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
+/** Change the society's onlooker — 2026-11-26. */
+export function ChangeOnlookerControl({
+  pipelineId,
+  currentId,
+  accounts,
+  live,
+}: {
+  pipelineId: string;
+  currentId: string;
+  accounts: { id: string; name: string | null; email: string; portalAuthority: string | null }[];
+  live: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [pick, setPick] = useState(currentId);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+  return (
+    <>
+      <button type="button" className="btn-ghost btn-sm" onClick={() => { setPick(currentId); setOpen(true); }}>
+        Change
+      </button>
+      <Modal open={open} onClose={() => { setOpen(false); setError(undefined); }} title="Change the onlooker">
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            setError(undefined);
+            startTransition(async () => {
+              const r = await changeOnlooker(pipelineId, { onlookerId: pick, reason });
+              if (r && "error" in r) setError(r.error);
+              else setOpen(false);
+            });
+          }}
+        >
+          <p className="text-[13px] text-[var(--text-muted)]">
+            The onlooker reviews each day&apos;s work on the society portal. Days still awaiting review pass to the new onlooker.
+          </p>
+          <Field label="Onlooker" htmlFor="onlooker-pick">
+            <select id="onlooker-pick" className="field" value={pick} onChange={(e) => setPick(e.target.value)}>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name ?? a.email}{a.portalAuthority ? ` — ${a.portalAuthority.replace("_", "-")}` : ""}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={live ? "Why it is changing" : "Why it is changing (optional)"} htmlFor="onlooker-reason">
+            <input id="onlooker-reason" className="field" value={reason} onChange={(e) => setReason(e.target.value)} required={live} />
+          </Field>
+          {error && <ErrorText>{error}</ErrorText>}
+          <div className="flex gap-2">
+            <button type="submit" className="btn-primary btn-sm" disabled={pending || pick === currentId}>
               {pending ? "Saving…" : "Save"}
             </button>
             <button type="button" className="btn-ghost btn-sm" onClick={() => setOpen(false)}>

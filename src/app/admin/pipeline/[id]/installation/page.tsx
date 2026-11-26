@@ -855,54 +855,53 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     <tr>
                       <th>Phase</th>
                       <th>Days</th>
-                      <th>Lights installed</th>
-                      <th>Lights billed</th>
+                      <th>Installed</th>
+                      <th>Billed</th>
                       <th>Signed off</th>
-                      <th>Billing for these lights from</th>
+                      <th>Billing from</th>
                       {canCorrectDates && <th />}
                     </tr>
                   </thead>
                   <tbody>
                     {figures.map((f, i) => {
                       const rec = project.phases.find((x) => x.number === f.number)!;
-                      const prevThrough = i === 0 ? 0 : figures[i - 1].throughDay;
+                      const prev = i > 0 ? figures[i - 1] : null;
+                      const prevThrough = prev?.throughDay ?? 0;
+                      const nf = (x: number) => x.toLocaleString("en-IN");
+                      // One short line per figure (2026-11-26, user-caught: notes
+                      // wrapped to three lines). Phase 2 onward: what this phase
+                      // installed, and any lights the previous phase installed but
+                      // did not bill, which this phase now bills.
+                      const newHere = prev ? f.derived - prev.derived : f.derived;
+                      const carried = prev ? prev.derived - prev.cumulative : 0;
+                      const billedNote = !prev
+                        ? f.lightsOverride !== null ? "as signed off" : "all installed"
+                        : [`+${nf(f.cumulative - prev.cumulative - (carried > 0 && f.lightsOverride === null ? carried : 0))} new`, carried > 0 && f.lightsOverride === null ? `+${nf(carried)} held over from phase ${prev.number}` : null]
+                            .filter(Boolean)
+                            .join(" · ");
                       return (
                         <tr key={f.number}>
-                          <td className="font-semibold">
-                            {f.isFinal ? `Phase ${f.number} — full installation` : `Phase ${f.number}`}
-                          </td>
+                          <td className="whitespace-nowrap font-semibold">{f.isFinal ? `Phase ${f.number} (final)` : `Phase ${f.number}`}</td>
                           <td className="num whitespace-nowrap">
                             {f.throughDay === prevThrough ? `rest of day ${f.throughDay}` : prevThrough + 1 === f.throughDay ? `day ${f.throughDay}` : `days ${prevThrough + 1}–${f.throughDay}`}
                           </td>
-                          <td>
-                            <span className="num">{phaseInstalled(f).toLocaleString("en-IN")}</span>
+                          <td className="whitespace-nowrap">
+                            <span className="num">{nf(phaseInstalled(f))}</span>
                             <span className="block text-[12px] text-[var(--text-muted)]">
-                              {f.number === 1
-                                ? alreadyInstalled > 0
-                                  ? `${f.derived.toLocaleString("en-IN")} + ${alreadyInstalled} demo`
-                                  : "from the logged days"
-                                : `+${(f.derived - figures[i - 1].derived).toLocaleString("en-IN")} this phase`}
+                              {!prev ? (alreadyInstalled > 0 ? `${nf(f.derived)} + ${alreadyInstalled} demo` : "from the logged days") : `+${nf(newHere)} this phase`}
                             </span>
                           </td>
-                          <td>
-                            <span className="num">{phaseBilled(f).toLocaleString("en-IN")}</span>
-                            <span className="block text-[12px] text-[var(--text-muted)]">
-                              {f.lightsOverride !== null ? "as signed off" : "all installed"}
-                              {f.number > 1 && ` · +${f.added.toLocaleString("en-IN")} from phase ${f.number - 1}`}
-                            </span>
+                          <td className="whitespace-nowrap">
+                            <span className="num">{nf(phaseBilled(f))}</span>
+                            <span className="block text-[12px] text-[var(--text-muted)]">{billedNote}</span>
                           </td>
-                          <td>
+                          <td className="whitespace-nowrap">
                             <span className="num">{day(rec.signedAt)}</span>
                             <span className="block text-[12px] text-[var(--text-muted)]">
-                              {rec.signatoryName} ({rec.signatoryRole})
+                              {rec.signatoryName}, {rec.signatoryRole}
                             </span>
                           </td>
-                          <td>
-                            <span className="num">{day(rec.billingStartDate)}</span>
-                            <span className="block text-[12px] text-[var(--text-muted)]">
-                              first month {rec.proratedDays} of {rec.daysInMonth} days
-                            </span>
-                          </td>
+                          <td className="num whitespace-nowrap">{day(rec.billingStartDate)}</td>
                           {canCorrectDates && (
                             <td>
                               <CorrectPhaseControl

@@ -880,6 +880,14 @@ textarea.field {
   background: var(--surface-hover);
 }
 
+/* The installation Days table (2026-11-26): each day is a figures row, then
+   its corrections, then what happened — read as one block, divided from the
+   next day only after its last row. */
+.tbl tbody tr.day-main td { border-bottom: none; padding-bottom: 6px; }
+.tbl tbody tr.day-sub td { border-bottom: none; padding-top: 2px; padding-bottom: 6px; }
+.tbl tbody tr.day-sub:not(:has(+ tr.day-sub)) td { border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; }
+.tbl tbody tr.day-main:hover, .tbl tbody tr.day-sub:hover { background: transparent; }
+
 /* The Stock page's batch listing (2026-11-20, user-caught "distorted"): one
    line per batch at any width — a narrow screen scrolls the table, never
    wraps a cell onto three lines. Month bands separate the groups. */

@@ -42,7 +42,6 @@ import {
   RaiseBlockerForm,
   CorrectContractedCountControl,
   CorrectDatesControl,
-  CorrectInstalledCountControl,
   KeptOutcomeCard,
   type KeptLine,
   ReopenBatchControl,
@@ -481,7 +480,6 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   <th>Logged</th>
                   <th>Society</th>
                   <th>Can start</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -495,74 +493,129 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     </td>
                   </tr>
                 )}
-                {project.plannedDays.map((d) => {
-                  const batch = project.batches.find((b) => b.plannedDayId === d.id);
-                  const gate = dayGates.get(d.day)!;
-                  const gateMeta = statusMeta(DAY_GATE_STATUS, gate.status);
+                {/* One table for the plan and the logged work (2026-11-26,
+                    user-asked: the same day was listed twice, here and under
+                    "Logged batches", each with its own edit buttons). Each day
+                    is three rows: the figures, the corrections, then what
+                    happened — who logged it, photos, the society's review and
+                    the gate. */}
+                {[
+                  ...project.plannedDays.map((d) => ({ d, batch: project.batches.find((b) => b.plannedDayId === d.id) ?? null })),
+                  ...project.batches
+                    .filter((b) => !b.plannedDayId && b.state !== "draft")
+                    .map((b) => ({ d: null, batch: b })),
+                ].map(({ d, batch }) => {
+                  const dayNo = d?.day ?? batch!.day;
+                  const gate = d ? dayGates.get(d.day)! : null;
+                  const gateMeta = gate ? statusMeta(DAY_GATE_STATUS, gate.status) : null;
                   const batchMeta = batch ? statusMeta(BATCH_STATE, batch.state) : null;
+                  const logged = batch && batch.state !== "draft" ? batch : null;
+                  const photos = (logged?.photoKeys as string[] | null) ?? [];
+                  const actions = [
+                    d && !batch && isField && gate!.canStart && (
+                      <StartBatchButton key="start" pipelineId={pipeline.id} plannedDayId={d.id} />
+                    ),
+                    d && !batch && gate && !gate.canStart && (gate.outstanding.length > 0 || gate.disputed.length > 0) && isOps && !project.gateSkipUsedAt && (
+                      <SkipGateForm key="skip" pipelineId={pipeline.id} plannedDayId={d.id} />
+                    ),
+                    d && canCorrectDates && (
+                      <PlannedDayActions
+                        key="plan"
+                        logged={logged?.submittedAt ? { batchId: logged.id, installedCount: logged.installedCount } : null}
+                        pipelineId={pipeline.id}
+                        plannedDayId={d.id}
+                        plannedDate={isoDate(d.plannedDate)}
+                        startTime={d.startAt.toISOString().slice(11, 16)}
+                        plannedCount={d.plannedCount}
+                      />
+                    ),
+                    canCorrectDates && logged?.submittedAt && (
+                      <CorrectDatesControl
+                        key="dates"
+                        kind="batch"
+                        label="Work & approval dates"
+                        pipelineId={pipeline.id}
+                        batchId={logged.id}
+                        workedOn={logged.submittedAt.toISOString().slice(0, 10)}
+                        approvedOn={logged.review?.reviewedAt.toISOString().slice(0, 10) ?? null}
+                        today={todayIso}
+                        live={!demoMode}
+                      />
+                    ),
+                    logged?.state === "disputed" && isField && <ReopenBatchControl key="reopen" pipelineId={pipeline.id} batchId={logged.id} />,
+                  ].filter(Boolean);
+                  const info =
+                    logged || gate?.reason ? (
+                      <div className="space-y-1 text-[13px] text-[var(--text-muted)]">
+                        {logged && (
+                          <p>
+                            {logged.locationDetail ? `${logged.locationDetail} · ` : ""}
+                            submitted {day(logged.submittedAt)} by {logged.submittedBy?.name ?? logged.submittedBy?.email ?? "—"}
+                            {photos.length > 0 ? (
+                              <>
+                                {" · "}
+                                {photos.map((k, i) => (
+                                  <a key={k} href={publicS3Url(k)} target="_blank" rel="noreferrer" className="mr-2 underline underline-offset-2">
+                                    Photo {i + 1}
+                                  </a>
+                                ))}
+                              </>
+                            ) : (
+                              " · no photos"
+                            )}
+                            {logged.photosWaivedReason && (
+                              <span style={{ color: "var(--warn-fg)" }}> — recorded after the fact: {logged.photosWaivedReason}</span>
+                            )}
+                          </p>
+                        )}
+                        {logged && logged.skippedCount > 0 && (
+                          <p style={{ color: "var(--warn-fg)" }}>
+                            {logged.skippedCount} skipped — {logged.skippedReason}
+                          </p>
+                        )}
+                        {logged?.review && (
+                          <p className="text-[var(--text)]">
+                            {logged.review.decision === "approved" ? "Approved" : "Disputed"} by{" "}
+                            {logged.review.reviewedBy.name ?? logged.review.reviewedBy.email} on {day(logged.review.reviewedAt)}
+                            {logged.review.note ? ` — ${logged.review.note}` : ""}
+                            {logged.review.evidenceLocation ? ` (${logged.review.evidenceLocation})` : ""}
+                          </p>
+                        )}
+                        {gate?.reason && <p>{gate.reason}</p>}
+                      </div>
+                    ) : null;
                   return (
-                    // A long reason sentence used to live INSIDE the "Can
-                    // start" cell, which forced that whole row tall and
-                    // starved the actions cell's width — the four action
-                    // links then wrapped one per line instead of sitting in
-                    // their usual row (2026-10-17, user-caught: "the listing
-                    // is broken"). It gets its own full-width line below the
-                    // row instead, so every other cell keeps its normal,
-                    // compact height.
-                    <Fragment key={d.id}>
-                      <tr>
-                        <td className="num">{d.day}</td>
+                    <Fragment key={d?.id ?? batch!.id}>
+                      <tr className={actions.length || info ? "day-main" : undefined}>
+                        <td className="num">{dayNo}</td>
                         <td>
-                          {day(d.plannedDate)}
-                          <span className="text-[var(--text-subtle)]"> {time(d.startAt)}</span>
+                          {d ? (
+                            <>
+                              {day(d.plannedDate)}
+                              <span className="text-[var(--text-subtle)]"> {time(d.startAt)}</span>
+                            </>
+                          ) : (
+                            day(batch!.submittedAt)
+                          )}
                         </td>
-                        <td>{d.areaKey}</td>
-                        <td className="num">{d.plannedCount}</td>
-                        <td className="num">{batch ? batch.installedCount : "—"}</td>
+                        <td>{d?.areaKey ?? batch!.areaKey}</td>
+                        <td className="num">{d ? d.plannedCount : "—"}</td>
+                        <td className="num">{logged ? logged.installedCount : "—"}</td>
                         <td>{batchMeta ? <StatusChip tone={batchMeta.tone}>{batchMeta.label}</StatusChip> : "—"}</td>
-                        <td>
-                          <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip>
-                        </td>
-                        <td className="whitespace-nowrap">
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            {!batch && isField && gate.canStart && (
-                              <StartBatchButton pipelineId={pipeline.id} plannedDayId={d.id} />
-                            )}
-                            {/* Only on the day that is itself the blocker — a
-                                day blocked purely by the chain cascading
-                                forward (gate.outstanding/disputed both empty)
-                                has nothing of its OWN to skip; skipReviewGate
-                                re-evaluates per-day and would correctly
-                                refuse it as "not-blocked," so offering the
-                                control here would just be a dead end. */}
-                            {!batch &&
-                              !gate.canStart &&
-                              (gate.outstanding.length > 0 || gate.disputed.length > 0) &&
-                              isOps &&
-                              !project.gateSkipUsedAt && (
-                                <SkipGateForm pipelineId={pipeline.id} plannedDayId={d.id} />
-                              )}
-                            {canCorrectDates && (
-                              <PlannedDayActions
-                                logged={batch?.submittedAt ? { batchId: batch.id, installedCount: batch.installedCount } : null}
-                                pipelineId={pipeline.id}
-                                plannedDayId={d.id}
-                                plannedDate={isoDate(d.plannedDate)}
-                                startTime={d.startAt.toISOString().slice(11, 16)}
-                                plannedCount={d.plannedCount}
-                              />
-                            )}
-                          </div>
-                        </td>
+                        <td>{gateMeta ? <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip> : "—"}</td>
                       </tr>
-                      {/* The gate has always computed a clear reason —
-                          nothing ever rendered it until now (2026-10-17,
-                          user-caught: a blocked day gave no reason at all). */}
-                      {gate.reason && (
-                        <tr>
-                          <td colSpan={8} className="text-xs text-[var(--text-muted)]">
-                            {gate.reason}
+                      {actions.length > 0 && (
+                        <tr className="day-sub">
+                          <td />
+                          <td colSpan={6}>
+                            <div className="flex flex-wrap items-start gap-x-3 gap-y-1">{actions}</div>
                           </td>
+                        </tr>
+                      )}
+                      {info && (
+                        <tr className="day-sub">
+                          <td />
+                          <td colSpan={6}>{info}</td>
                         </tr>
                       )}
                     </Fragment>
@@ -611,85 +664,6 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
               )}
             </Card>
           ))}
-
-        {/* ── Submitted batches ── */}
-        {project.batches.filter((b) => b.state !== "draft").length > 0 && (
-          <Card className="p-5">
-            <CardTitle>Logged batches</CardTitle>
-            <div className="space-y-4">
-              {project.batches
-                .filter((b) => b.state !== "draft")
-                .map((b) => {
-                  const meta = statusMeta(BATCH_STATE, b.state);
-                  const photos = (b.photoKeys as string[]) ?? [];
-                  return (
-                    <div key={b.id} className="border-t border-[var(--border)] pt-4 first:border-0 first:pt-0">
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <strong>
-                          Day {b.day} · {b.areaKey}
-                        </strong>
-                        <StatusChip tone={meta.tone}>{meta.label}</StatusChip>
-                        <span className="num text-sm">{b.installedCount} installed</span>
-                        {b.skippedCount > 0 && (
-                          <span className="num text-sm" style={{ color: "var(--warn-fg)" }}>
-                            {b.skippedCount} skipped — {b.skippedReason}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-1 text-sm text-[var(--text-muted)]">
-                        {b.locationDetail ? `${b.locationDetail} · ` : ""}
-                        submitted {day(b.submittedAt)} by {b.submittedBy?.name ?? b.submittedBy?.email ?? "—"} ·{" "}
-                        {photos.length} photo{photos.length === 1 ? "" : "s"}
-                        {b.photosWaivedReason && (
-                          <span style={{ color: "var(--warn-fg)" }}> — recorded after the fact: {b.photosWaivedReason}</span>
-                        )}
-                      </p>
-                      {photos.length > 0 && (
-                        <p className="mt-1 text-sm">
-                          {photos.map((k, i) => (
-                            <a
-                              key={k}
-                              href={publicS3Url(k)}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="hover:underline mr-3"
-                            >
-                              Photo {i + 1}
-                            </a>
-                          ))}
-                        </p>
-                      )}
-                      {b.review && (
-                        <p className="mt-1 text-sm">
-                          {b.review.decision === "approved" ? "Approved" : "Disputed"} by{" "}
-                          {b.review.reviewedBy.name ?? b.review.reviewedBy.email} on {day(b.review.reviewedAt)}
-                          {b.review.note ? ` — ${b.review.note}` : ""}
-                          {b.review.evidenceLocation ? ` (${b.review.evidenceLocation})` : ""}
-                        </p>
-                      )}
-                      {b.state === "disputed" && isField && (
-                        <ReopenBatchControl pipelineId={pipeline.id} batchId={b.id} />
-                      )}
-                      {canCorrectDates && b.submittedAt && (
-                        <CorrectDatesControl
-                          kind="batch"
-                          pipelineId={pipeline.id}
-                          batchId={b.id}
-                          workedOn={b.submittedAt.toISOString().slice(0, 10)}
-                          approvedOn={b.review?.reviewedAt.toISOString().slice(0, 10) ?? null}
-                          today={todayIso}
-                          live={!demoMode}
-                        />
-                      )}
-                      {canCorrectDates && b.submittedAt && (
-                        <CorrectInstalledCountControl pipelineId={pipeline.id} batchId={b.id} installedCount={b.installedCount} />
-                      )}
-                    </div>
-                  );
-                })}
-            </div>
-          </Card>
-        )}
 
         {/* ── FEAT-036 blockers ──
             Folded to a single line when there is nothing to list: a card

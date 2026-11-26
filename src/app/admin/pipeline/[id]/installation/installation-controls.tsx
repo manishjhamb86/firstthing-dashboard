@@ -544,7 +544,7 @@ export function PlannedDayActions({
   return (
     <span className="inline-flex gap-2">
       <button type="button" className="btn-ghost btn-sm" onClick={() => { setDate(plannedDate); setTime(startTime); setOpen("date"); }}>
-        Correct the date
+        {logged ? "Planned date" : "Correct the date"}
       </button>
       <button type="button" className="btn-ghost btn-sm" onClick={() => { setCount(String(plannedCount)); setOpen("count"); }}>
         {logged ? "Planned" : "Correct the count"}
@@ -1285,7 +1285,7 @@ export function CompleteRemainingButton({ pipelineId }: { pipelineId: string }) 
  */
 export function CorrectDatesControl(
   props:
-    | { kind: "batch"; pipelineId: string; batchId: string; workedOn: string; approvedOn: string | null; today: string; live: boolean }
+    | { kind: "batch"; pipelineId: string; batchId: string; workedOn: string; approvedOn: string | null; today: string; live: boolean; label?: string }
     | {
         kind: "certificate";
         pipelineId: string;
@@ -1311,8 +1311,8 @@ export function CorrectDatesControl(
 
   if (!open) {
     return (
-      <button type="button" className="btn-ghost btn-sm mt-2" onClick={() => setOpen(true)}>
-        Correct the dates
+      <button type="button" className={`btn-ghost btn-sm ${props.kind === "batch" && props.label ? "" : "mt-2"}`} onClick={() => setOpen(true)}>
+        {props.kind === "batch" && props.label ? props.label : "Correct the dates"}
       </button>
     );
   }

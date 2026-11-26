@@ -478,6 +478,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   <th>Area</th>
                   <th>Planned</th>
                   <th>Logged</th>
+                  <th>Photos</th>
                   <th>Society</th>
                   <th>Can start</th>
                 </tr>
@@ -487,7 +488,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                   // INV-06 — every list surface defines its empty state. This
                   // one rendered a header row over nothing at all.
                   <tr>
-                    <td colSpan={7} className="text-[var(--text-muted)]">
+                    <td colSpan={8} className="text-[var(--text-muted)]">
                       No days planned yet — publish a batch plan and each day appears here with its
                       review gate.
                     </td>
@@ -544,45 +545,42 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                     ),
                     logged?.state === "disputed" && isField && <ReopenBatchControl key="reopen" pipelineId={pipeline.id} batchId={logged.id} />,
                   ].filter(Boolean);
+                  // Everything after the corrections in ONE line (2026-11-26,
+                  // user-caught: a day ran to four rows): where, who logged
+                  // it, the society's review, then anything to watch.
+                  const infoParts: React.ReactNode[] = [];
+                  if (logged) {
+                    infoParts.push(
+                      <span key="sub">
+                        {logged.locationDetail ? `${logged.locationDetail} · ` : ""}submitted {day(logged.submittedAt)} by{" "}
+                        {logged.submittedBy?.name ?? logged.submittedBy?.email ?? "—"}
+                      </span>,
+                    );
+                    if (logged.review)
+                      infoParts.push(
+                        <span key="rev" className="text-[var(--text)]">
+                          {logged.review.decision === "approved" ? "Approved" : "Disputed"} by{" "}
+                          {logged.review.reviewedBy.name ?? logged.review.reviewedBy.email} on {day(logged.review.reviewedAt)}
+                          {logged.review.note ? ` — ${logged.review.note}` : ""}
+                          {logged.review.evidenceLocation ? ` (${logged.review.evidenceLocation})` : ""}
+                        </span>,
+                      );
+                    if (logged.skippedCount > 0)
+                      infoParts.push(<span key="skip" style={{ color: "var(--warn-fg)" }}>{logged.skippedCount} skipped — {logged.skippedReason}</span>);
+                    if (logged.photosWaivedReason)
+                      infoParts.push(<span key="waive" style={{ color: "var(--warn-fg)" }}>No photos — recorded after the fact: {logged.photosWaivedReason}</span>);
+                  }
+                  if (gate?.reason) infoParts.push(<span key="gate">{gate.reason}</span>);
                   const info =
-                    logged || gate?.reason ? (
-                      <div className="space-y-1 text-[13px] text-[var(--text-muted)]">
-                        {logged && (
-                          <p>
-                            {logged.locationDetail ? `${logged.locationDetail} · ` : ""}
-                            submitted {day(logged.submittedAt)} by {logged.submittedBy?.name ?? logged.submittedBy?.email ?? "—"}
-                            {photos.length > 0 ? (
-                              <>
-                                {" · "}
-                                {photos.map((k, i) => (
-                                  <a key={k} href={publicS3Url(k)} target="_blank" rel="noreferrer" className="mr-2 underline underline-offset-2">
-                                    Photo {i + 1}
-                                  </a>
-                                ))}
-                              </>
-                            ) : (
-                              " · no photos"
-                            )}
-                            {logged.photosWaivedReason && (
-                              <span style={{ color: "var(--warn-fg)" }}> — recorded after the fact: {logged.photosWaivedReason}</span>
-                            )}
-                          </p>
-                        )}
-                        {logged && logged.skippedCount > 0 && (
-                          <p style={{ color: "var(--warn-fg)" }}>
-                            {logged.skippedCount} skipped — {logged.skippedReason}
-                          </p>
-                        )}
-                        {logged?.review && (
-                          <p className="text-[var(--text)]">
-                            {logged.review.decision === "approved" ? "Approved" : "Disputed"} by{" "}
-                            {logged.review.reviewedBy.name ?? logged.review.reviewedBy.email} on {day(logged.review.reviewedAt)}
-                            {logged.review.note ? ` — ${logged.review.note}` : ""}
-                            {logged.review.evidenceLocation ? ` (${logged.review.evidenceLocation})` : ""}
-                          </p>
-                        )}
-                        {gate?.reason && <p>{gate.reason}</p>}
-                      </div>
+                    infoParts.length > 0 ? (
+                      <p className="text-[13px] text-[var(--text-muted)]">
+                        {infoParts.map((x, i) => (
+                          <Fragment key={i}>
+                            {i > 0 && " · "}
+                            {x}
+                          </Fragment>
+                        ))}
+                      </p>
                     ) : null;
                   return (
                     <Fragment key={d?.id ?? batch!.id}>
@@ -601,13 +599,24 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                         <td>{d?.areaKey ?? batch!.areaKey}</td>
                         <td className="num">{d ? d.plannedCount : "—"}</td>
                         <td className="num">{logged ? logged.installedCount : "—"}</td>
+                        <td>
+                          {photos.length > 0
+                            ? photos.map((k, i) => (
+                                <a key={k} href={publicS3Url(k)} target="_blank" rel="noreferrer" className="mr-2 underline underline-offset-2">
+                                  {photos.length === 1 ? "View" : i + 1}
+                                </a>
+                              ))
+                            : logged
+                              ? <span className="text-[var(--text-subtle)]">None</span>
+                              : "—"}
+                        </td>
                         <td>{batchMeta ? <StatusChip tone={batchMeta.tone}>{batchMeta.label}</StatusChip> : "—"}</td>
                         <td>{gateMeta ? <StatusChip tone={gateMeta.tone}>{gateMeta.label}</StatusChip> : "—"}</td>
                       </tr>
                       {actions.length > 0 && (
                         <tr className="day-sub">
                           <td />
-                          <td colSpan={6}>
+                          <td colSpan={7}>
                             <div className="flex flex-wrap items-start gap-x-3 gap-y-1">{actions}</div>
                           </td>
                         </tr>
@@ -615,7 +624,7 @@ export default async function InstallationPage({ params }: { params: Promise<{ i
                       {info && (
                         <tr className="day-sub">
                           <td />
-                          <td colSpan={6}>{info}</td>
+                          <td colSpan={7}>{info}</td>
                         </tr>
                       )}
                     </Fragment>

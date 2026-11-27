@@ -10050,3 +10050,12 @@ unchanged. **Recently filed** (`recently-filed.tsx`) groups entries by the India
 its type's icon, a Filed / Withdrawn chip, its file, time and who filed it, and a search box. The header counts what
 was filed and withdrawn in the last 7 days. Verified on dev at 1280px and 390px with no console errors: nine tiles
 and no meter tile, the gate pass showing a datetime field with the note in view, and Change bringing the tiles back.
+
+**Same day — a separate All documents page (user-asked: "this list is too long… the all-documents link is not there…
+document listing should be a separate page").** The Documents page now shows only the **five** latest filings, with
+an "All documents (N) →" link on the card and in the header. **`/admin/documents/all`** lists every filed document,
+newest first: All / Filed / Withdrawn chips with counts, a search across society, type, file and who filed it, type and
+society filters, 25 to a page with Newer / Older, and Open / Withdraw on each row. A withdrawn version stays with its
+reason. A document's own page now goes back to this list. **One layout lesson:** a screen-reader-only header label
+(`sr-only` is `position: absolute`) escapes an `overflow-x-auto` box that is not itself positioned, and widened the
+whole page on a phone (scrollWidth 793 at 390px). The scroll box is now `relative`.

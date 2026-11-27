@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { Card, StatusChip } from "@/components/ui";
 import { TONE_STYLE, docTypeDisplay } from "./doc-type-display";
@@ -25,46 +25,32 @@ export type FiledRow = {
 /**
  * The right-hand list on the Documents page (2026-11-27 redesign): grouped
  * by the day it was filed, each with its type's icon and a Filed / Withdrawn
- * chip; a withdrawn version stays, struck through, with its reason. A search
- * narrows by society, type or file name.
+ * chip; a withdrawn version stays, struck through, with its reason. Only the
+ * five latest — everything else is on the All documents page (user-asked,
+ * 2026-11-27: "this list is too long").
  */
-export function RecentlyFiled({ rows }: { rows: FiledRow[] }) {
-  const [q, setQ] = useState("");
+export function RecentlyFiled({ rows, total }: { rows: FiledRow[]; total: number }) {
   const days = useMemo(() => {
-    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
-    const hit = (r: FiledRow) => {
-      const hay = `${r.society} ${r.label} ${r.fileName} ${r.when}`.toLowerCase();
-      return words.every((w) => hay.includes(w));
-    };
     const out: { day: string; rows: FiledRow[] }[] = [];
-    for (const r of rows.filter(hit)) {
+    for (const r of rows) {
       const last = out[out.length - 1];
       if (last && last.day === r.day) last.rows.push(r);
       else out.push({ day: r.day, rows: [r] });
     }
     return out;
-  }, [rows, q]);
+  }, [rows]);
 
   return (
     <Card className="overflow-hidden">
-      <div className="space-y-3 px-5 pb-3 pt-5">
+      <div className="flex items-center justify-between gap-3 px-5 pb-3 pt-5">
         <h2 className="text-[17px] font-bold">Recently filed</h2>
-        <input
-          type="search"
-          className="field w-full text-sm"
-          placeholder="Search society, type or file"
-          aria-label="Search recently filed documents"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
+        <Link href="/admin/documents/all" className="link-arrow text-[13px] font-semibold">
+          All documents{total > 0 ? ` (${total})` : ""} →
+        </Link>
       </div>
       {rows.length === 0 ? (
         <p className="px-5 pb-5 text-[13px]" style={{ color: "var(--text-muted)" }}>
           Nothing filed here yet.
-        </p>
-      ) : days.length === 0 ? (
-        <p className="px-5 pb-5 text-[13px]" style={{ color: "var(--text-muted)" }}>
-          Nothing matches.
         </p>
       ) : (
         days.map((d) => (

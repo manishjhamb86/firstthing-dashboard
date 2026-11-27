@@ -1,4 +1,5 @@
 import { circuitName } from "@/lib/circuit-label";
+import Link from "next/link";
 import { db } from "@/lib/db";
 import { requireAdminPage, resolveAdmin } from "@/lib/admin-permissions";
 import { PageHeader } from "@/components/ui";
@@ -33,7 +34,7 @@ export default async function DocumentsPage({
   const sp = await searchParams;
 
   const weekAgo = sevenDaysAgo();
-  const [societies, pipelines, circuits, recent, filedThisWeek, withdrawnThisWeek] = await Promise.all([
+  const [societies, pipelines, circuits, recent, filedThisWeek, withdrawnThisWeek, totalFiled] = await Promise.all([
     db.society.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, location: true } }),
     db.pipeline.findMany({
       orderBy: { createdAt: "desc" },
@@ -48,11 +49,12 @@ export default async function DocumentsPage({
       // Every version, newest slot first — a withdrawn one still shows, or
       // "withdrawn" would be indistinguishable from "never uploaded".
       orderBy: [{ uploadedAt: "desc" }],
-      take: 40,
+      take: 5,
       include: { society: { select: { name: true } }, uploadedBy: { select: { email: true, name: true } } },
     }),
     db.storedDocument.count({ where: { uploadedAt: { gte: weekAgo } } }),
     db.storedDocument.count({ where: { voidedAt: { gte: weekAgo } } }),
+    db.storedDocument.count(),
   ]);
 
   const label = (id: string) => DOCUMENT_TYPES.find((t) => t.id === id)?.label ?? id;
@@ -61,6 +63,11 @@ export default async function DocumentsPage({
     <>
       <PageHeader
         title="Documents"
+        action={
+          <Link href="/admin/documents/all" className="btn-ghost">
+            All documents →
+          </Link>
+        }
         subtitle="File a document against a society. The system checks the file really is what you say before accepting it."
         chip={
           <span className="flex flex-wrap gap-2 text-[13px] font-normal" style={{ color: "var(--text-muted)" }}>
@@ -110,6 +117,7 @@ export default async function DocumentsPage({
         </div>
         <div className="min-w-0" style={{ flex: "1 1 340px" }}>
           <RecentlyFiled
+            total={totalFiled}
             rows={recent.map((d) => ({
               id: d.id,
               docType: d.docType,

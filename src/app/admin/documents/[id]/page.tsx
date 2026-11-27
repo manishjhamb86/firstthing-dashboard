@@ -85,7 +85,7 @@ export default async function StoredDocumentPage({ params }: { params: Promise<{
   return (
     <>
       <PageHeader
-        backHref="/admin/documents"
+        backHref="/admin/documents/all"
         title={doc.society.name}
         subtitle={`${label} · ${doc.issuedAt ? `issued ${formatDateTime(doc.issuedAt)}` : `filed under ${doc.period}`} · version ${doc.version}${
           doc.coversFrom || doc.coversTo
